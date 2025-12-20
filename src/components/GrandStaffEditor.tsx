@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext } from '../types';
 import { AudioService } from '../services/AudioService';
@@ -763,7 +762,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         });
         return systems;
     }, [layoutData]);
-
+    
     const romanAnalysisBySystem = useMemo(() => {
         if (!isAnalysisEnabled) return [];
         const analysisData: { x: number, analysis: { roman: string, figures: string[] } }[][] = [];
@@ -822,10 +821,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const notePositions = useMemo(() => {
         const map = new Map<string, { x: number; y: number }>();
         if (!layoutData) return map;
-    
+
         const temporalGroups = new Map<string, StaffNote[]>();
         const rests: StaffNote[] = [];
-    
+
         layoutData.positionedNotes.forEach(note => {
             if (note.isRest) {
                 rests.push(note);
@@ -835,42 +834,45 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 temporalGroups.get(key)!.push(note);
             }
         });
-    
+
         temporalGroups.forEach(chord => {
             const trebleChord = chord.filter(n => (n.clef || 'treble') === 'treble').sort((a, b) => a.position - b.position);
             const bassChord = chord.filter(n => n.clef === 'bass').sort((a, b) => a.position - b.position);
-            
-            // Calculate average position to approximate stem direction for the entire chord
-            // Standard middle line for treble is position 6 (B4), for bass is -2 (D3)
-            const trebleAvgPos = trebleChord.length > 0 ? trebleChord.reduce((sum, n) => sum + n.position, 0) / trebleChord.length : 0;
-            let isTrebleStemUp = trebleAvgPos < 6;
-            if (trebleChord.length > 0 && trebleChord[0].manualStemDirection) {
-                isTrebleStemUp = trebleChord[0].manualStemDirection === 'up';
-            }
 
-            const bassAvgPos = bassChord.length > 0 ? bassChord.reduce((sum, n) => sum + n.position, 0) / bassChord.length : 0;
-            let isBassStemUp = bassAvgPos < -2;
-            if (bassChord.length > 0 && bassChord[0].manualStemDirection) {
-                isBassStemUp = bassChord[0].manualStemDirection === 'up';
-            }
-    
-            const trebleOffsets = getChordNoteheadOffsetsById(trebleChord, NOTE_HEAD_RX_NORMAL, isTrebleStemUp);
-            const bassOffsets = getChordNoteheadOffsetsById(bassChord, NOTE_HEAD_RX_NORMAL, isBassStemUp);
-    
-            trebleChord.forEach(note => {
-                const x = (note.xPosition || 0) + (trebleOffsets.get(note.id) || 0);
-                const yInStaff = getNoteY(note.position, TOP_STAFF_TOP, 'treble');
-                map.set(note.id, { x, y: yInStaff });
-            });
-    
-            bassChord.forEach(note => {
-                const x = (note.xPosition || 0) + (bassOffsets.get(note.id) || 0);
-                const yInStaff = getNoteY(note.position, BOTTOM_STAFF_TOP, 'bass');
-                const y = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + yInStaff;
-                map.set(note.id, { x, y });
-            });
+            const processChord = (chord: StaffNote[], clef: 'treble' | 'bass', staffTop: number) => {
+                const avgPos = chord.reduce((sum, n) => sum + n.position, 0) / chord.length;
+                let isStemUp = avgPos < (clef === 'treble' ? 6 : -2);
+
+                const offsets = new Map<string, number>();
+                for (let i = 0; i < chord.length; i++) {
+                    const note = chord[i];
+                    const nextNote = chord[i + 1];
+
+                    if (nextNote && nextNote.position - note.position === 1) {
+                        // Collision detected: Adjust offsets and stem directions
+                        offsets.set(note.id, isStemUp ? -NOTE_HEAD_RX_NORMAL : NOTE_HEAD_RX_NORMAL);
+                        offsets.set(nextNote.id, isStemUp ? NOTE_HEAD_RX_NORMAL : -NOTE_HEAD_RX_NORMAL);
+
+                        // Force stem directions
+                        note.manualStemDirection = isStemUp ? 'up' : 'down';
+                        nextNote.manualStemDirection = isStemUp ? 'down' : 'up';
+                    } else {
+                        offsets.set(note.id, 0);
+                    }
+                }
+
+                chord.forEach(note => {
+                    const x = (note.xPosition || 0) + (offsets.get(note.id) || 0);
+                    const yInStaff = getNoteY(note.position, staffTop, clef);
+                    const y = clef === 'bass' ? TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + yInStaff : yInStaff;
+                    map.set(note.id, { x, y });
+                });
+            };
+
+            processChord(trebleChord, 'treble', TOP_STAFF_TOP);
+            processChord(bassChord, 'bass', BOTTOM_STAFF_TOP);
         });
-    
+
         rests.forEach(rest => {
             const x = rest.xPosition || 0;
             let y: number;
@@ -881,7 +883,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             }
             map.set(rest.id, { x, y });
         });
-    
+
         return map;
     }, [layoutData]);
 
@@ -902,9 +904,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     for (let i = note1Index + 1; i < notes.length; i++) {
                         const potentialNote2 = notes[i];
                         if (potentialNote2.voice === note1.voice) {
-                            if (!potentialNote2.isRest) {
-                                note2 = potentialNote2;
-                            }
+                            note2 = potentialNote2;
                             break;
                         }
                     }
@@ -1324,7 +1324,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         
         const svg = staffContainerRef.current?.querySelectorAll('svg')[systemIndex];
         if (!svg) return;
-        
+
         const pt = svg.createSVGPoint();
         pt.x = e.clientX;
         pt.y = e.clientY;
@@ -1504,10 +1504,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             n => (n.measureIndex ?? 0) === globalMeasureIndex && (n.voice ?? 1) === selectedVoice
         );
         const currentDurationInMeasure = notesInTargetMeasureForVoice.reduce((total, note) => {
-            const durationInBeats = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? 2/3 : 1) * (note.isDotted ? 1.5 : 1);
+            const durationInBeats = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? (2/3) : 1) * (note.isDotted ? 1.5 : 1);
             return total + durationInBeats;
         }, 0);
-        const newElementDuration = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? 2/3 : 1) * (isDotted ? 1.5 : 1);
+        const newElementDuration = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2/3) : 1) * (isDotted ? 1.5 : 1);
         if (currentDurationInMeasure + newElementDuration > beatsPerMeasure + 0.001) {
             console.warn(`Metric validation failed: Measure ${globalMeasureIndex} for voice ${selectedVoice} would exceed capacity.`);
             return; 
@@ -1530,31 +1530,70 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
             const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
             const keyAlterationAmount = (keySignature.type === 'sharp' && sharpNotes.includes(diatonicProps.pitch)) ? 1 : (keySignature.type === 'flat' && flatNotes.includes(diatonicProps.pitch)) ? -1 : 0;
-    
-            let finalMidi: number;
-            let preferredAccidental = activeAccidental;
+
+            let finalNoteProps;
 
             if (activeAccidental) {
                 const naturalMidi = diatonicProps.midi - keyAlterationAmount;
-                const explicitAlterationAmount = activeAccidental === 'sharp' ? 1 
-                    : activeAccidental === 'flat' ? -1 
+                const accidentalOffset = activeAccidental === 'sharp' ? 1
+                    : activeAccidental === 'flat' ? -1
                     : activeAccidental === 'double-sharp' ? 2
                     : activeAccidental === 'double-flat' ? -2
                     : 0;
-                finalMidi = naturalMidi + explicitAlterationAmount;
-            } else {
-                finalMidi = diatonicProps.midi;
-                preferredAccidental = null;
-            }
-            
-            const finalNoteProps = getNotePropertiesFromMidi(finalMidi, keySignature, targetClef, preferredAccidental);
-            
-            if (snapTarget) { const chordId = snapTarget.chordId || snapTarget.id; const notesInChord = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && ((n.chordId === chordId) || (n.id === snapTarget.id))); if (notesInChord.some(n => n.midi === finalMidi)) return; }
+                const finalMidi = naturalMidi + accidentalOffset;
 
-            newElement = { id: crypto.randomUUID(), ...finalNoteProps, duration: selectedInsertion.duration, isRest: false, isTriplet, isDotted, measureIndex: globalMeasureIndex, beat: finalBeat, chordId: chordIdToJoin, clef: targetClef, voice: selectedVoice };
+                finalNoteProps = {
+                    pitch: diatonicProps.pitch,
+                    octave: diatonicProps.octave,
+                    position: diatonicProps.position,
+                    midi: finalMidi,
+                    noteIndex: finalMidi % 12,
+                    clef: targetClef,
+                    explicitAccidental: activeAccidental,
+                    accidental: activeAccidental,
+                    userAccidental: activeAccidental,
+                };
+            } else {
+                finalNoteProps = diatonicProps;
+            }
+
+            if (snapTarget) {
+                const chordId = snapTarget.chordId || snapTarget.id;
+                const notesInChord = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && ((n.chordId === chordId) || (n.id === snapTarget.id)));
+                if (notesInChord.some(n => n.midi === finalNoteProps.midi)) return;
+            }
+
+            newElement = {
+                id: crypto.randomUUID(),
+                ...finalNoteProps,
+                duration: selectedInsertion.duration,
+                isRest: false,
+                isTriplet,
+                isDotted,
+                measureIndex: globalMeasureIndex,
+                beat: finalBeat,
+                chordId: chordIdToJoin,
+                clef: targetClef,
+                voice: selectedVoice,
+            };
             await playNote(newElement);
-        } else { 
-            newElement = { id: crypto.randomUUID(), pitch: 'B', octave: 4, position: 8, midi: 0, noteIndex: 0, duration: selectedInsertion.duration, isRest: true, isTriplet, isDotted, measureIndex: globalMeasureIndex, beat: finalBeat, clef: targetClef, voice: selectedVoice }; 
+        } else {
+            newElement = {
+                id: crypto.randomUUID(),
+                pitch: 'B',
+                octave: 4,
+                position: 8,
+                midi: 0,
+                noteIndex: 0,
+                duration: selectedInsertion.duration,
+                isRest: true,
+                isTriplet,
+                isDotted,
+                measureIndex: globalMeasureIndex,
+                beat: finalBeat,
+                clef: targetClef,
+                voice: selectedVoice,
+            };
         }
         
         if (isTriplet) {
@@ -1721,7 +1760,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     
         let maxBeatInClipboard = 0;
         clipboard.forEach(note => {
-            const duration = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? 2/3 : 1) * (note.isDotted ? 1.5 : 1);
+            const duration = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? (2/3) : 1) * (note.isDotted ? 1.5 : 1);
             const noteEndBeat = (note.measureIndex ?? 0) * beatsPerMeasure + (note.beat ?? 1) + duration;
             if (noteEndBeat > maxBeatInClipboard) maxBeatInClipboard = noteEndBeat;
         });
@@ -1735,7 +1774,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const notesToKeep = prev.filter(note => {
                 if (!voicesInClipboard.has(note.voice || 1)) return true;
                 const noteAbsoluteStart = (note.measureIndex ?? 0) * beatsPerMeasure + (note.beat ?? 1);
-                const duration = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? 2/3 : 1) * (note.isDotted ? 1.5 : 1);
+                const duration = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? (2/3) : 1) * (note.isDotted ? 1.5 : 1);
                 const noteAbsoluteEnd = noteAbsoluteStart + duration;
                 return !(noteAbsoluteStart < endAbsoluteBeat && noteAbsoluteEnd > startAbsoluteBeat);
             });
@@ -1783,9 +1822,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 if (selectedNoteIds.size > 0) {
                     const selectedNotes = notes.filter(n => selectedNoteIds.has(n.id));
                     if (selectedNotes.length > 0) {
-                        selectedNotes.sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 1) - (b.beat ?? 1));
-                        const firstNote = selectedNotes[0];
-                        anchor = { measureIndex: firstNote.measureIndex ?? 0, beat: firstNote.beat ?? 1 };
+                        selectedNotes.sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
+                        const firstSelectedNote = selectedNotes[0];
+                        anchor = { measureIndex: firstSelectedNote.measureIndex ?? 0, beat: firstSelectedNote.beat ?? 1 };
                     }
                 } else if (pasteCaret) {
                     anchor = { measureIndex: pasteCaret.measureIndex, beat: pasteCaret.beat };
@@ -1858,7 +1897,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             setActiveAccidental(prev => {
                 if (prev === 'sharp') return 'double-sharp';
                 if (prev === 'double-sharp') return null;
-                return 'sharp';
+                return 'double-sharp';
             });
             return;
         }
@@ -1889,43 +1928,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             if (e.key === 'Backspace' || e.key === 'Delete') {
                 e.preventDefault();
                 setRawNotes(prev => {
-                    const notesToDelete = prev.filter(note => selectedNoteIds.has(note.id));
-                    const noteIdsToDelete = new Set(notesToDelete.map(n => n.id));
-                    const restsToCreate: StaffNote[] = [];
-                    
-                    const notesAfterDeletion = prev
-                        .filter(note => !noteIdsToDelete.has(note.id))
-                        .map(note => {
-                            if (note.isTiedToNext) {
-                                const fullNoteList = calculateNoteBeats([...prev], timeSignature);
-                                const currentIndex = fullNoteList.findIndex(n => n.id === note.id);
-                                let nextNoteInVoice: StaffNote | undefined;
-                                for (let i = currentIndex + 1; i < fullNoteList.length; i++) {
-                                    if (fullNoteList[i].voice === note.voice) {
-                                        nextNoteInVoice = fullNoteList[i];
-                                        break;
-                                    }
-                                }
-                                if (nextNoteInVoice && noteIdsToDelete.has(nextNoteInVoice.id)) {
-                                    const { isTiedToNext, ...rest } = note;
-                                    return rest;
-                                }
+                    const updatedNotes = prev.map(note => {
+                        if (selectedNoteIds.has(note.id)) {
+                            if (!note.isRest) {
+                                // Replace note with a rest
+                                return {
+                                    ...note,
+                                    id: crypto.randomUUID(),
+                                    isRest: true,
+                                    pitch: 'B',
+                                    octave: 4,
+                                    position: 8,
+                                    midi: 0,
+                                    noteIndex: 0,
+                                };
+                            } else {
+                                // Mark rest for removal
+                                return null;
                             }
-                            return note;
-                        });
-                    
-                    notesToDelete.forEach(note => {
-                        if (!note.isRest) {
-                            restsToCreate.push({
-                                id: crypto.randomUUID(), isRest: true, duration: note.duration,
-                                measureIndex: note.measureIndex, beat: note.beat, voice: note.voice,
-                                clef: note.clef, isTriplet: note.isTriplet, pitch: 'B', 
-                                octave: 4, position: 8, midi: 0, noteIndex: 0,
-                            });
                         }
+                        return note;
                     });
 
-                    return [...notesAfterDeletion, ...restsToCreate];
+                    // Filter out null values (deleted rests)
+                    return updatedNotes.filter(note => note !== null);
                 });
                 setSelectedNoteIds(new Set());
             } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey) {
@@ -1997,46 +2023,90 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const handleDeselectOnClickOutside = (e: React.MouseEvent) => { if (justDraggedRef.current) return; if (e.target === e.currentTarget) setSelectedNoteIds(new Set()); };
     const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>, systemIndex: number) => {
         if (isActuallyDraggingRef.current) { setGhostNote(null); return; }
-        const svg = e.currentTarget; const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+
+        const svg = e.currentTarget;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
         const svgPoint = pt.matrixTransform(svg.getScreenCTM()!.inverse());
         const { x: positionX, y: rawY } = svgPoint;
+
         const isBassStaffClick = rawY > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
         const targetClef: ClefType = isBassStaffClick ? 'bass' : 'treble';
         const expectedVoiceClef = selectedVoice === 3 || selectedVoice === 4 ? 'bass' : 'treble';
         if (targetClef !== expectedVoiceClef) { setGhostNote(null); return; }
+
         const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
         const relativeY = targetClef === 'treble' ? rawY : rawY - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT;
         let position = targetClef === 'bass' ? ((staffTop - relativeY) / (LINE_HEIGHT / 2)) - 2 : ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+        
         const diatonicProps = getNotePropertiesFromDiatonicPosition(Math.round(position), targetClef, keySignature);
 
         if (selectedInsertion.type === 'rest') {
-            const ghost: StaffNote & { systemIndex: number } = { id: 'ghost', pitch: 'B', octave: 4, position: 8, midi: 0, noteIndex: 0, duration: selectedInsertion.duration, isRest: true, isTriplet, isDotted, xPosition: positionX, clef: targetClef, voice: selectedVoice, systemIndex, };
+            const ghost: StaffNote & { systemIndex: number } = {
+                id: 'ghost',
+                pitch: 'B',
+                octave: 4,
+                position: 8,
+                midi: 0,
+                noteIndex: 0,
+                duration: selectedInsertion.duration,
+                isRest: true,
+                isTriplet,
+                isDotted,
+                xPosition: positionX,
+                clef: targetClef,
+                voice: selectedVoice,
+                systemIndex,
+            };
             setGhostNote(ghost);
             return;
         }
 
         const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
         const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
-        const keyAlterationAmount = (keySignature.type === 'sharp' && sharpNotes.includes(diatonicProps.pitch)) ? 1 : (keySignature.type === 'flat' && flatNotes.includes(diatonicProps.pitch)) ? -1 : 0;
+        const keyAlterationAmount = (keySignature.type === 'sharp' && sharpNotes.includes(diatonicProps.pitch))
+        ? 1
+        : (keySignature.type === 'flat' && flatNotes.includes(diatonicProps.pitch)) ? -1 : 0;
 
-        let finalMidi: number;
-        let preferredAccidental = activeAccidental;
+        let finalNoteProps;
+
         if (activeAccidental) {
             const naturalMidi = diatonicProps.midi - keyAlterationAmount;
-            const explicitAlterationAmount = activeAccidental === 'sharp' ? 1 
+            const accidentalOffset = activeAccidental === 'sharp' ? 1
                 : activeAccidental === 'flat' ? -1
                 : activeAccidental === 'double-sharp' ? 2
                 : activeAccidental === 'double-flat' ? -2
                 : 0;
-            finalMidi = naturalMidi + explicitAlterationAmount;
-        } else {
-            finalMidi = diatonicProps.midi;
-            preferredAccidental = null;
-        }
-        
-        const finalNoteProps = getNotePropertiesFromMidi(finalMidi, keySignature, targetClef, preferredAccidental);
+            const finalMidi = naturalMidi + accidentalOffset;
 
-        const ghost: StaffNote & { systemIndex: number } = { id: 'ghost', ...finalNoteProps, duration: selectedInsertion.duration, isRest: false, isTriplet, isDotted, xPosition: positionX, voice: selectedVoice, systemIndex, };
+            finalNoteProps = {
+                pitch: diatonicProps.pitch,
+                octave: diatonicProps.octave,
+                position: diatonicProps.position,
+                midi: finalMidi,
+                noteIndex: finalMidi % 12,
+                clef: targetClef,
+                explicitAccidental: activeAccidental,
+                accidental: activeAccidental,
+                userAccidental: activeAccidental,
+            };
+        } else {
+            finalNoteProps = diatonicProps;
+        }
+
+        const ghost: StaffNote & { systemIndex: number } = {
+            id: 'ghost',
+            ...finalNoteProps,
+            duration: selectedInsertion.duration,
+            isRest: false,
+            isTriplet,
+            isDotted,
+            xPosition: positionX,
+            voice: selectedVoice,
+            systemIndex,
+            manualStemDirection: selectedVoice === 1 || selectedVoice === 3 ? 'up' : 'down', // Updated to use manualStemDirection
+        };
         setGhostNote(ghost);
     }, [selectedInsertion, isTriplet, isDotted, keySignature, activeAccidental, selectedVoice]);
     
@@ -2182,15 +2252,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         onChange={e => setKeySignatureRoot(e.target.value)}
                         className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs"
                     >
-                        <optgroup label="Diesis (♯)">
-                            {sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}
-                        </optgroup>
-                        <optgroup label="Bemolli (♭)">
-                            {flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}
-                        </optgroup>
+                        <optgroup label="Diesis (♯)">{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
+                        <optgroup label="Bemolli (♭)">{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                     </select>
-                     <div className="relative flex p-0.5 bg-gray-900/50 rounded-md">
-                        <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform duration-300 ease-in-out" style={{ transform: `translateX(${isMinorMode ? '100%' : '0%'}) ` }}></div>
+                    <div className="relative flex p-0.5 bg-gray-900/50 rounded-md">
+                        <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${isMinorMode ? '100%' : '0%'}) ` }}></div>
                         <button onClick={() => setIsMinorMode(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>Mag</button>
                         <button onClick={() => setIsMinorMode(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>min</button>
                     </div>
@@ -2207,7 +2273,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     ))}
                 </div>
                 <div className="h-6 w-px bg-slate-600"></div>
-                 <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
+                <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
                     <button onClick={() => { setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' })); }} className="p-1 rounded-md text-gray-300 hover:bg-gray-600 transition-colors" title={selectedInsertion.type === 'note' ? "Nota" : "Pausa"}>
                         {selectedInsertion.type === 'note' ? <QuarterNoteIcon /> : <QuarterRestIcon />}
                     </button>
@@ -2353,7 +2419,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                 )}
                                 {pasteCaret?.systemIndex === systemIndex && (
                                     <div 
-                                        className="absolute w-0.5 bg-blue-500 pointer-events-none z-30 paste-caret"
+                                        className="absolute w-0.5 bg-blue-500 pointer-events-none z-30"
                                         style={{
                                             transform: `translateX(${pasteCaret.x}px)`,
                                             top: TOP_STAFF_TOP,
@@ -2485,11 +2551,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                         const STEM_LENGTH = 35;
                                         const BEAM_THICKNESS = 4;
                                         const getStemProps = (note: StaffNote) => {
-                                            const x = note.xPosition!;
+                                            const x = note.xPosition || 0; // Ensure xPosition is defined
                                             const y = getNoteY(note.position, staffTop, note.clef || 'treble');
                                             const stemX = x + (isGroupStemUp ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5));
                                             return { stemX, y };
                                         };
+
                                         const firstNoteProps = getStemProps(firstNote);
                                         const lastNoteProps = getStemProps(lastNote);
                                         const firstNoteStemEndY = isGroupStemUp ? firstNoteProps.y - STEM_LENGTH : firstNoteProps.y + STEM_LENGTH;
@@ -2500,7 +2567,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                             <g key={`beam-group-${groupIndex}`} transform={`translate(0, ${yOffset})`}>
                                                 {group.map(note => {
                                                     const { stemX, y } = getStemProps(note);
-                                                    const ratio = (group.length > 1 && lastNoteProps.stemX !== firstNoteProps.stemX) ? (stemX - firstNoteProps.stemX) / (lastNoteProps.stemX - firstNoteProps.stemX || 1) : 0;
+                                                    const ratio = (group.length > 1 && lastNoteProps.stemX !== firstNoteProps.stemX) ? (stemX - firstNoteProps.stemX) / (lastNoteProps.stemX - firstNoteProps.stemX || 1) :  0;
                                                     const stemEndY = firstNoteStemEndY + (lastNoteStemEndY - firstNoteStemEndY) * ratio;
                                                     return <line key={`stem-${note.id}`} x1={stemX} y1={y} x2={stemX} y2={stemEndY} stroke="black" strokeWidth="1.5" />;
                                                 })}
@@ -2584,7 +2651,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                         return (
                                             <g key={note.id} transform={`translate(0, ${yOffset})`} onClick={(e) => handleNoteClick(note.id, e)} className={`cursor-pointer ${isPlayingNow ? 'note-glow-strong' : ''}`}>
                                                 {note.explicitAccidental && <Accidental type={note.explicitAccidental} x={x + ACCIDENTAL_OFFSET_NORMAL} y={y} color={noteColor} />}
-                                                <LedgerLines y={y} noteHeadRx={NOTE_HEAD_RX_NORMAL} color={noteColor} staffTop={staffTop} xOffset={x} />
+                                                <LedgerLines 
+                                                    y={y} 
+                                                    noteHeadRx={NOTE_HEAD_RX_NORMAL} 
+                                                    color={effectiveStroke} 
+                                                    staffTop={staffTop} 
+                                                    xOffset={x} 
+                                                />
                                                 <ellipse cx={x} cy={y} rx={NOTE_HEAD_RX_NORMAL} ry={NOTE_HEAD_RY_NORMAL} fill={effectiveFill} stroke={effectiveStroke} strokeWidth={effectiveStrokeWidth} transform={`rotate(-20 ${x} ${y})`} />
                                                 {note.isDotted && <circle cx={x + NOTE_HEAD_RX_NORMAL + 5} cy={(note.position % 2 !== 0) ? y : y - LINE_HEIGHT / 2} r="2.5" fill={noteColor} />}
                                                 {duration !== 'whole' && !isBeamed && ( <line x1={stemX} y1={stemY1} x2={stemX} y2={stemY2} stroke={noteColor} strokeWidth="1.5" /> )}
@@ -2595,32 +2668,42 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                             </g>
                                         );
                                     })}
-                                    {ghostNote && ghostNote.systemIndex === systemIndex && (() => {
-                                        const note = ghostNote, noteColor = 'rgb(56, 189, 248)';
-                                        const yOffset = note.clef === 'treble' ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT;
-                                        const staffTop = note.clef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
-                                        const x = note.xPosition || 0;
-                                        if (note.isRest) return <g opacity="0.5" style={{ pointerEvents: 'none' }}><Rest duration={note.duration || 'quarter'} x={x} y={staffTop + 2 * LINE_HEIGHT + yOffset} color={noteColor} staffTop={staffTop + yOffset} />{note.isDotted && <circle cx={x + 15} cy={staffTop + yOffset + 2.5 * LINE_HEIGHT} r="2.5" fill={noteColor} />}</g>;
-                                        const y = getNoteY(note.position, staffTop, note.clef || 'treble');
-                                        const duration = note.duration || 'quarter';
-                                        let isStemUp = (note.voice === 1 || note.voice === 3) ? true : (note.voice === 2 || note.voice === 4) ? false : note.position < (note.clef === 'bass' ? -2 : 6);
-                                        const stemX = x + (isStemUp ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5));
-                                        const stemY1 = y, stemY2 = isStemUp ? y - 35 : y + 35;
-                                        let effectiveFill = noteColor; if (duration === 'whole' || duration === 'half') effectiveFill = 'none';
-                                        return (
-                                            <g opacity="0.5" style={{ pointerEvents: 'none' }} transform={`translate(0, ${yOffset})`}>
-                                                {note.explicitAccidental && <Accidental type={note.explicitAccidental} x={x + ACCIDENTAL_OFFSET_NORMAL} y={y} color={noteColor} />}
-                                                <LedgerLines y={y} noteHeadRx={NOTE_HEAD_RX_NORMAL} color={noteColor} staffTop={staffTop} xOffset={x} />
-                                                <ellipse cx={x} cy={y} rx={NOTE_HEAD_RX_NORMAL} ry={NOTE_HEAD_RY_NORMAL} fill={effectiveFill} stroke={noteColor} strokeWidth={2} transform={`rotate(-20 ${x} ${y})`} />
-                                                {note.isDotted && <circle cx={x + NOTE_HEAD_RX_NORMAL + 5} cy={(note.position % 2 !== 0) ? y : y - LINE_HEIGHT / 2} r="2.5" fill={noteColor} />}
-                                                {duration !== 'whole' && <line x1={stemX} y1={stemY1} x2={stemX} y2={stemY2} stroke={noteColor} strokeWidth="1.5" />}
-                                                {(duration === 'eighth' || duration === 'sixteenth' || duration === 'thirty-second' || duration === 'sixty-fourth') && (() => {
-                                                    const flagCount = { 'eighth': 1, 'sixteenth': 2, 'thirty-second': 3, 'sixty-fourth': 4 }[duration];
-                                                    return <g stroke={noteColor} strokeWidth="2" fill="none">{Array.from({ length: flagCount }).map((_, i) => <path key={i} d={isStemUp ? `M${stemX} ${stemY2 + i * 5} q 8 5, 6 15` : `M${stemX} ${stemY2 - i * 5} q 8 -5, 6 -15`} />)}</g>;
-                                                })()}
-                                            </g>
-                                        );
-                                    })()}
+                                    {ghostNote && ghostNote.systemIndex === systemIndex && (
+                                        <g opacity="0.5" style={{ pointerEvents: 'none' }} transform={`translate(0, ${ghostNote.clef !== 'bass' ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT})`}>
+                                            {ghostNote.explicitAccidental && <Accidental type={ghostNote.explicitAccidental} x={(ghostNote.xPosition || 0) + ACCIDENTAL_OFFSET_NORMAL} y={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} color={'black'} />}
+                                            <LedgerLines 
+                                                y={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} 
+                                                noteHeadRx={NOTE_HEAD_RX_NORMAL} 
+                                                color={'black'} 
+                                                staffTop={ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP} 
+                                                xOffset={ghostNote.xPosition || 0} 
+                                            />
+                                            <ellipse 
+                                                cx={ghostNote.xPosition || 0} 
+                                                cy={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} 
+                                                rx={NOTE_HEAD_RX_NORMAL} 
+                                                ry={NOTE_HEAD_RY_NORMAL} 
+                                                fill={ghostNote.duration === 'whole' || ghostNote.duration === 'half' ? 'none' : 'black'} 
+                                                stroke={'black'} 
+                                                strokeWidth={2} 
+                                                transform={`rotate(-20 ${(ghostNote.xPosition || 0)} ${getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')})`} 
+                                            />
+                                            {ghostNote.duration !== 'whole' && (
+                                                <line 
+                                                    x1={(ghostNote.xPosition || 0) + (ghostNote.manualStemDirection === 'up' ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5))} 
+                                                    y1={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} 
+                                                    x2={(ghostNote.xPosition || 0) + (ghostNote.manualStemDirection === 'up' ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5))} 
+                                                    y2={ghostNote.manualStemDirection === 'up' ? getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') - 35 : getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') + 35} 
+                                                    stroke={'black'} 
+                                                    strokeWidth="1.5" 
+                                                />
+                                            )}
+                                            {['eighth', 'sixteenth', 'thirty-second', 'sixty-fourth'].includes(ghostNote.duration || '') && (() => {
+                                                const flagCount = { 'eighth': 1, 'sixteenth': 2, 'thirty-second': 3, 'sixty-fourth': 4 }[ghostNote.duration || 'eighth'];
+                                                return <g stroke={'black'} strokeWidth="2" fill="none">{Array.from({ length: flagCount }).map((_, i) => <path key={i} d={ghostNote.manualStemDirection === 'up' ? `M${(ghostNote.xPosition || 0) + NOTE_HEAD_RX_NORMAL - 1.5} ${getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') - 35 + i * 5} q 8 5, 6 15` : `M${(ghostNote.xPosition || 0) - NOTE_HEAD_RX_NORMAL + 1.5} ${getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') + 35 - i * 5} q 8 -5, 6 -15`} />)}</g>;
+                                            })()}
+                                        </g>
+                                    )}
                                     {romanAnalysisBySystem[systemIndex]?.map((analysisItem, index) => {
                                         const yPos = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT + 40;
                                         const { roman, figures } = analysisItem.analysis;
@@ -2724,7 +2807,7 @@ const ModulationContextMenu: React.FC<{
                     <optgroup label="Bemolli (♭)">{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                 </select>
                 <div className="relative flex p-0.5 bg-gray-900/50 rounded-md flex-shrink-0">
-                    <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${tempIsMinor ? '100%' : '0%'})` }}></div>
+                    <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${tempIsMinor ? '100%' : '0%'}) ` }}></div>
                     <button onClick={() => setTempIsMinor(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>Mag</button>
                     <button onClick={() => setTempIsMinor(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>min</button>
                 </div>
