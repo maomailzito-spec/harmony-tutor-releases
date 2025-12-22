@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Formatter, Voice, Accidental } from 'vexflow';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Dot } from 'vexflow';
 import type { StaffNote, TimeSignature, KeySignature } from '../types';
 
 interface VexflowGrandStaffProps {
@@ -17,9 +17,42 @@ interface VexflowGrandStaffProps {
 
 const DEFAULT_WIDTH = 900;
 const DEFAULT_HEIGHT = 250;
-const STAFF_MARGIN = 60;
+// Keep X alignment consistent with GrandStaffEditor layout (START_X = 50)
+const STAFF_MARGIN = 50;
 const TREBLE_Y = 40;
 const BASS_Y = 140;
+
+const durationToVexflow = (duration: StaffNote['duration']): string => {
+  switch (duration) {
+    case 'whole': return 'w';
+    case 'half': return 'h';
+    case 'quarter': return 'q';
+    case 'eighth': return '8';
+    case 'sixteenth': return '16';
+    case 'thirty-second': return '32';
+    case 'sixty-fourth': return '64';
+    default: return 'q';
+  }
+};
+
+const makeVfNote = (n: StaffNote, clef: 'treble' | 'bass') => {
+  const key = `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`;
+  const baseDur = durationToVexflow(n.duration);
+  const duration = n.isRest ? `${baseDur}r` : baseDur;
+  const note = new StaveNote({
+    clef,
+    keys: [key],
+    duration,
+  });
+  if (n.isDotted) {
+    Dot.buildAndAttach([note], { all: true });
+  }
+  if (n.accidental) {
+    note.addModifier(new Accidental(n.accidental), 0);
+  }
+  (note as any).__staffNoteId = n.id;
+  return note;
+};
 
 function keySignatureToVexflowString(keySignature: KeySignature): string {
   const sharpKeys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
@@ -78,98 +111,85 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const trebleNotes = allNotes.filter(n => (n.clef || 'treble') === 'treble');
       const bassNotes = allNotes.filter(n => n.clef === 'bass');
 
-      const vfTrebleNotes = trebleNotes.map((n) => {
-        const key = `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`;
-        const duration = n.duration ? n.duration[0] : 'q';
-        const note = new StaveNote({
-          clef: 'treble',
-          keys: [key],
-          duration,
+      const drawNotesAtX = (staffNotes: StaffNote[], stave: Stave, clef: 'treble' | 'bass') => {
+        staffNotes.forEach((n) => {
+          const vfNote = makeVfNote(n, clef);
+          // Wrap each note in a tagged SVG group so we can reliably detect
+          // whether the user clicked a real note or the ghost note.
+          const group = (context as any).openGroup?.() as SVGGElement | undefined;
+          if (group) {
+            group.setAttribute('data-note-id', n.id);
+            if (n.id === '__ghost__') group.setAttribute('data-is-ghost', '1');
+          }
+
+          if (n.id === '__ghost__') {
+            vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
+            // Tiny alignment tweak: mouse X is measured at cursor point, but VexFlow notehead center
+            // can land slightly to the right when drawing without Formatter/Voice.
+            // Apply only to ghost so real notes (which are beat-aligned) remain unchanged.
+            vfNote.setXShift(-18);
+          } else if (selectedNoteIds.includes(n.id)) {
+            vfNote.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });
+          }
+
+          // `xPosition` arriva in coordinate SVG assolute (come il mouse).
+          // Quando disegniamo senza Formatter/Voice, VexFlow interpreta la TickContext X
+          // come offset relativo a `stave.getNoteStartX()`.
+          const absoluteX = (n.xPosition ?? (stave.getNoteStartX() + 10));
+          const x = absoluteX - stave.getNoteStartX();
+          const tc = new TickContext();
+          tc.addTickable(vfNote);
+          tc.preFormat().setX(x);
+
+          vfNote.setStave(stave);
+          vfNote.setContext(context);
+          vfNote.setTickContext(tc);
+          vfNote.draw();
+
+          (context as any).closeGroup?.();
         });
-        if (n.accidental) {
-          note.addModifier(new Accidental(n.accidental), 0);
-        }
-        if (n.id === '__ghost__') {
-          note.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
-        } else if (selectedNoteIds.includes(n.id)) {
-          note.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });
-        }
-        (note as any).__staffNoteId = n.id;
-        return note;
-      });
-      const vfBassNotes = bassNotes.map((n) => {
-        const key = `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`;
-        const duration = n.duration ? n.duration[0] : 'q';
-        const note = new StaveNote({
-          clef: 'bass',
-          keys: [key],
-          duration,
-        });
-        if (n.accidental) {
-          note.addModifier(new Accidental(n.accidental), 0);
-        }
-        if (n.id === '__ghost__') {
-          note.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
-        } else if (selectedNoteIds.includes(n.id)) {
-          note.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });
-        }
-        (note as any).__staffNoteId = n.id;
-        return note;
-      });
-      if (vfTrebleNotes.length > 0) {
-        const voiceTreble = new Voice({ num_beats: timeSignature.numerator, beat_value: timeSignature.denominator });
-        voiceTreble.setStrict(false);
-        voiceTreble.addTickables(vfTrebleNotes);
-        new Formatter().joinVoices([voiceTreble]).format([voiceTreble], staffWidth - 40);
-        voiceTreble.draw(context, treble);
-      }
-      if (vfBassNotes.length > 0) {
-        const voiceBass = new Voice({ num_beats: timeSignature.numerator, beat_value: timeSignature.denominator });
-        voiceBass.setStrict(false);
-        voiceBass.addTickables(vfBassNotes);
-        new Formatter().joinVoices([voiceBass]).format([voiceBass], staffWidth - 40);
-        voiceBass.draw(context, bass);
-      }
-      if (onNoteClick) {
-        setTimeout(() => {
-          const svg = containerRef.current?.querySelector('svg');
-          if (!svg) return;
-          const noteheads = svg.querySelectorAll('.vf-notehead');
-          const allVfNotes = [...vfTrebleNotes, ...vfBassNotes];
-          noteheads.forEach((el, i) => {
-            const noteObj = allVfNotes[i];
-            const noteId = (noteObj as any).__staffNoteId;
-            if (!noteId) return;
-            el.replaceWith(el.cloneNode(true));
-            const newEl = svg.querySelectorAll('.vf-notehead')[i];
-            if (newEl) {
-              newEl.addEventListener('click', (e: any) => {
-                e.stopPropagation();
-                onNoteClick(noteId);
-              });
-              (newEl as any).style.cursor = 'pointer';
-            }
-          });
-        }, 0);
-      }
+      };
+
+      drawNotesAtX(trebleNotes, treble, 'treble');
+      drawNotesAtX(bassNotes, bass, 'bass');
+
+      // No per-note DOM wiring here: we handle clicks via the global SVG handler below
     }
   }, [notes, timeSignature, keySignature, width, height, onNoteClick, selectedNoteIds, ghostNote]);
 
   useEffect(() => {
-    if (!containerRef.current || !onStaffClick) return;
+    if (!containerRef.current) return;
     const svg = containerRef.current.querySelector('svg');
     if (!svg) return;
     svg.onclick = null;
-    svg.addEventListener('click', (e: MouseEvent) => {
-      if ((e.target as Element).closest('.vf-notehead')) return;
+
+    const onSvgClick = (e: MouseEvent) => {
+      const target = e.target as Element;
+      const tagged = target.closest('[data-note-id]') as HTMLElement | null;
+      const noteId = tagged?.dataset?.noteId;
+      const isGhost = tagged?.dataset?.isGhost === '1';
+
       const rect = svg.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      onStaffClick && onStaffClick(x, y);
-    });
+
+      if (noteId && !isGhost) {
+        onNoteClick?.(noteId);
+        return;
+      }
+
+      // If the click hit the ghost notehead, treat it as a staff click
+      onStaffClick?.(x, y);
+    };
+
+    svg.addEventListener('click', onSvgClick);
     if (onMouseMoveStaff) {
       svg.onmousemove = (e: MouseEvent) => {
-        if ((e.target as Element).closest('.vf-notehead')) return;
+        const target = e.target as Element;
+        const tagged = target.closest('[data-note-id]') as HTMLElement | null;
+        const isGhost = tagged?.dataset?.isGhost === '1';
+        // Allow moving when hovering ghost; block when hovering real note.
+        if (tagged && !isGhost) return;
         const rect = svg.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
@@ -178,9 +198,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     }
     return () => {
       svg.onclick = null;
+      svg.removeEventListener('click', onSvgClick);
       if (svg.onmousemove) svg.onmousemove = null;
     };
-  }, [onStaffClick, onMouseMoveStaff, notes, timeSignature, keySignature, width, height]);
+  }, [onStaffClick, onMouseMoveStaff, onNoteClick, notes, timeSignature, keySignature, width, height]);
 
   return <div ref={containerRef} style={{ background: 'white', width, height }} />;
 };
