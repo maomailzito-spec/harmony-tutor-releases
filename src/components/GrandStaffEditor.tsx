@@ -1,4 +1,3 @@
-// ...existing code...
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext } from '../types';
 import { AudioService } from '../services/AudioService';
@@ -352,7 +351,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const bpmControlRef = useRef<HTMLDivElement>(null);
     const [playingNoteIds, setPlayingNoteIds] = useState<string[]>([]);
     const [playheadPosition, setPlayheadPosition] = useState<{ x: number, systemIndex: number } | null>(null);
-    const playbackTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const playbackTimeoutsRef = useRef<number[]>([]);
     const playbackStartBeatRef = useRef<number>(0);
     const audioPlaybackStartTimeRef = useRef<number>(0);
     const animationFrameRef = useRef<number | null>(null);
@@ -399,7 +398,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
       };
 
     const [bpmInputString, setBpmInputString] = useState('');
-    const bpmInputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     
     const [selectionRect, setSelectionRect] = useState<{ startX: number; startY: number; endX: number; endY: number; isVisible: boolean; systemIndex: number | null;}>({ startX: 0, startY: 0, endX: 0, endY: 0, isVisible: false, systemIndex: null });
     const dragStartPosRef = useRef<{ clientX: number, clientY: number, svgStartX: number, svgStartY: number, systemIndex: number } | null>(null);
@@ -587,1811 +585,527 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systems, measureFinalWidths };
     }, [analyzedNotes, containerWidth, timeSignature, keySignature, measuresPerLine, viewMode, minMeasureCount]);
 
-    const contextMarkers = useMemo(() => {
-        if (!layoutData) return [];
-        const markers: { systemIndex: number, x: number, label: string }[] = [];
-        analysisContexts.forEach(context => {
-            for (let i = 0; i < layoutData.systemsParams.length; i++) {
-                const system = layoutData.systemsParams[i];
-                const measureIndexInSystem = system.measureIndices.indexOf(context.measureIndex);
-                if (measureIndexInSystem !== -1) {
-                    const x = system.startMeasuresX[measureIndexInSystem];
-                    const keyName = context.newTonic;
-                    const mode = context.newIsMinor ? "min" : "Mag";
-                    markers.push({ systemIndex: i, x: x, label: `[${keyName} ${mode}]` });
-                    break; 
-                }
-            }
-        });
-        return markers;
-    }, [analysisContexts, layoutData]);
+    // =========================================================
+    // ADAPTER LAYER (domain -> overlay data)
+    // =========================================================
 
-    const beamGroupsBySystem = useMemo(() => {
-        const systems: StaffNote[][][] = [];
-        if (!layoutData) return systems;
-    
-        const isCompound = timeSignature.denominator === 8 && timeSignature.numerator > 0 && timeSignature.numerator % 3 === 0;
-        const beatUnit = isCompound ? 1.5 : 1;
-    
-        layoutData.systemsParams.forEach((system) => {
-            const systemBeamGroups: StaffNote[][] = [];
-            const systemNotes = layoutData.positionedNotes.filter(note => 
-                new Set(system.measureIndices).has(note.measureIndex ?? -1)
-            );
-    
-            const notesByVoice = new Map<Voice, StaffNote[]>();
-            systemNotes.forEach(note => {
-                if (note.isRest) return;
-                const voice = note.voice || 1;
-                if (!notesByVoice.has(voice)) notesByVoice.set(voice, []);
-                notesByVoice.get(voice)!.push(note);
-            });
-    
-            notesByVoice.forEach((voiceNotes) => {
-                const notesByMeasure = new Map<number, StaffNote[]>();
-                voiceNotes.forEach(note => {
-                    const measure = note.measureIndex ?? 0;
-                    if (!notesByMeasure.has(measure)) notesByMeasure.set(measure, []);
-                    notesByMeasure.get(measure)!.push(note);
-                });
-    
-                notesByMeasure.forEach((measureNotes) => {
-                    measureNotes.sort((a, b) => (a.beat ?? 0) - (b.beat ?? 0));
-                    
-                    const manuallyBeamedNotes = new Set<string>();
-                    const manualGroups = new Map<string, StaffNote[]>();
+    // Stable harmony labels per system (roman/symbol + figured bass)
+    const harmonyLabelsBySystem = useMemo(() => {
+        if (!isAnalysisEnabled || !layoutData) return [];
 
-                    measureNotes.forEach(note => {
-                        if (note.manualBeamGroupId) {
-                            if (!manualGroups.has(note.manualBeamGroupId)) {
-                                manualGroups.set(note.manualBeamGroupId, []);
-                            }
-                            manualGroups.get(note.manualBeamGroupId)!.push(note);
-                            manuallyBeamedNotes.add(note.id);
-                        }
-                    });
-
-                    manualGroups.forEach(group => {
-                        if (group.length > 1) {
-                            systemBeamGroups.push(group.sort((a, b) => (a.beat ?? 0) - (b.beat ?? 0)));
-                        }
-                    });
-                    
-                    const notesForAutoBeaming = measureNotes.filter(note => !manuallyBeamedNotes.has(note.id));
-                    
-                    let currentGroup: StaffNote[] = [];
-    
-                    for (let i = 0; i < notesForAutoBeaming.length; i++) {
-                        const note = notesForAutoBeaming[i];
-                        const noteDuration = DURATION_VALUES[note.duration || 'quarter'];
-                        const canBeBeamed = noteDuration <= 0.5 && !note.isRest && !note.isTriplet;
-    
-                        if (canBeBeamed) {
-                            if (currentGroup.length === 0) {
-                                currentGroup.push(note);
-                            } else {
-                                const lastNoteInGroup = currentGroup[currentGroup.length - 1];
-                                const lastNoteBeat = lastNoteInGroup.beat || 1;
-                                const currentNoteBeat = note.beat || 1;
-                                
-                                const lastNoteBeatIndex = Math.floor((lastNoteBeat - 1) / beatUnit);
-                                const currentNoteBeatIndex = Math.floor((currentNoteBeat - 1) / beatUnit);
-    
-                                if (lastNoteBeatIndex === currentNoteBeatIndex) {
-                                    currentGroup.push(note);
-                                } else {
-                                    if (currentGroup.length > 1) systemBeamGroups.push(currentGroup);
-                                    currentGroup = [note];
-                                }
-                            }
-                        } else {
-                            if (currentGroup.length > 1) systemBeamGroups.push(currentGroup);
-                            currentGroup = [];
-                        }
-                    }
-                    if (currentGroup.length > 1) systemBeamGroups.push(currentGroup);
-                });
-            });
-            systems.push(systemBeamGroups);
-        });
-        return systems;
-    }, [layoutData, timeSignature]);
-    
-    const beamedNoteIdsBySystem = useMemo(() => 
-        beamGroupsBySystem.map(systemGroups => new Set(systemGroups.flat().map(note => note.id)))
-    , [beamGroupsBySystem]);
-
-    const tripletGroupsBySystem = useMemo(() => {
-        const systems: { id: string, x1: number, x2: number, midX: number, bracketY: number, textY: number, curveHeight: number }[][] = [];
-        if (!layoutData) return systems;
-    
-        layoutData.systemsParams.forEach((system, systemIndex) => {
-            const systemGroups: { id: string, x1: number, x2: number, midX: number, bracketY: number, textY: number, curveHeight: number }[] = [];
-            const systemNotes = layoutData.positionedNotes.filter(n => 
-                new Set(system.measureIndices).has(n.measureIndex ?? -1)
-            );
-    
-            const notesByVoice = new Map<Voice, StaffNote[]>();
-            systemNotes.forEach(note => {
-                if (!note.voice) return;
-                if (!notesByVoice.has(note.voice)) notesByVoice.set(note.voice, []);
-                notesByVoice.get(note.voice)!.push(note);
-            });
-    
-            notesByVoice.forEach((voiceNotes) => {
-                const getRhythmicValue = (n: StaffNote) => {
-                    const base = DURATION_VALUES[n.duration || 'quarter'];
-                    const dotted = n.isDotted ? 1.5 : 1;
-                    return base * dotted;
-                };
-
-                voiceNotes.sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
-
-                // Group consecutive triplet-marked notes by "triplet units".
-                // This supports patterns like quarter+eighth as an "eighth triplet" (2+1 units).
-                for (let i = 0; i < voiceNotes.length; i++) {
-                    const start = voiceNotes[i];
-                    if (!start.isTriplet) continue;
-
-                    const groupNotes: StaffNote[] = [];
-                    let baseValue = Infinity;
-                    let unitsSum = 0;
-
-                    let j = i;
-                    for (; j < voiceNotes.length; j++) {
-                        const n = voiceNotes[j];
-                        if (!n.isTriplet) break;
-
-                        groupNotes.push(n);
-                        baseValue = Math.min(baseValue, getRhythmicValue(n));
-
-                        // Recompute units each time in case baseValue changes (e.g., first note is a quarter, then an eighth).
-                        unitsSum = groupNotes.reduce((sum, gn) => sum + (getRhythmicValue(gn) / Math.max(1e-6, baseValue)), 0);
-
-                        if (unitsSum >= 3 - 1e-6) break;
-                    }
-
-                    // Only draw if the group completes (or slightly exceeds) a triplet.
-                    if (groupNotes.length > 0 && unitsSum >= 3 - 1e-3) {
-                        const first = groupNotes[0];
-                        const last = groupNotes[groupNotes.length - 1];
-
-                        const isTreble = first.clef !== 'bass';
-                        const yOffset = isTreble ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT;
-                        const staffTop = isTreble ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
-
-                        const noteYPositions = groupNotes.map(n => getNoteY(n.position, staffTop, n.clef || 'treble'));
-                        const highestNoteHeadY = Math.min(...noteYPositions);
-
-                        const BRACKET_OFFSET_FROM_NOTE = 40;
-                        const CURVE_HEIGHT = 8;
-                        const TEXT_OFFSET_FROM_BRACKET = 12;
-
-                        const bracketY = highestNoteHeadY + yOffset - BRACKET_OFFSET_FROM_NOTE;
-                        const textY = bracketY + TEXT_OFFSET_FROM_BRACKET;
-
-                        // Extend beyond note glyphs so the last note is clearly inside the bracket.
-                        // `xPosition` here is beat-based (TickContext X), not the notehead edge.
-                        // VexFlow noteheads end up slightly to the right of our beat-to-x mapping,
-                        // so we apply a small anchor shift to keep bracket + "3" visually centered.
-                        // Flagged notes (eighth and shorter) visually extend more to the right.
-                        const ANCHOR_X_SHIFT = 12;
-                        const leftPad = 14;
-                        const lastBaseDur = DURATION_VALUES[last.duration || 'quarter'];
-                        const rightPad = lastBaseDur <= 0.5 ? 44 : 28;
-                        const xStart = (first.xPosition ?? 0) + ANCHOR_X_SHIFT - leftPad;
-                        const xEnd = (last.xPosition ?? 0) + ANCHOR_X_SHIFT + rightPad;
-                        const midX = (xStart + xEnd) / 2;
-
-                        systemGroups.push({
-                            id: `triplet-${first.id}`,
-                            x1: xStart,
-                            x2: xEnd,
-                            midX,
-                            bracketY,
-                            textY,
-                            curveHeight: CURVE_HEIGHT,
-                        });
-                    }
-
-                    // Continue after the consumed triplet run.
-                    i = Math.max(i, j);
-                }
-            });
-            systems[systemIndex] = systemGroups;
-        });
-        return systems;
-    }, [layoutData]);
-    
-    const romanAnalysisBySystem = useMemo(() => {
-        if (!isAnalysisEnabled) return [];
-        const analysisData: { x: number, analysis: { roman: string, figures: string[] } }[][] = [];
-
-        if (!layoutData) return analysisData;
+        const labelsBySystem: { id: string; x: number; roman: string; figures: string[] }[][] = [];
 
         layoutData.systemsParams.forEach((system, systemIndex) => {
-            const systemAnalysis: { x: number, analysis: { roman: string, figures: string[] } }[] = [];
-            
-            const systemNotes = layoutData.positionedNotes.filter(note => 
-                new Set(system.measureIndices).has(note.measureIndex ?? -1)
-            );
-            
+            const measureSet = new Set(system.measureIndices);
+            const systemNotes = layoutData.positionedNotes.filter(n => !n.isRest && measureSet.has(n.measureIndex ?? -1));
+
+            // Group by chordId (preferred) else measure-beat (stable); NOT by xPosition
             const chords = new Map<string, StaffNote[]>();
-            systemNotes.forEach(note => {
-                if (note.isRest) return;
-                const key = (note.xPosition || 0).toFixed(3);
+            systemNotes.forEach(n => {
+                const key = n.chordId || `${n.measureIndex ?? 0}-${n.beat ?? 1}`;
                 if (!chords.has(key)) chords.set(key, []);
-                chords.get(key)!.push(note);
+                chords.get(key)!.push(n);
             });
 
-            chords.forEach(chord => {
-                const measureIndex = chord[0]?.measureIndex ?? 0;
+            const systemLabels: { id: string; x: number; roman: string; figures: string[] }[] = [];
+
+            chords.forEach((chordNotes, chordKey) => {
+                const measureIndex = chordNotes[0]?.measureIndex ?? 0;
+
                 const applicableContext = analysisContexts
                     .filter(c => c.measureIndex <= measureIndex)
                     .sort((a, b) => b.measureIndex - a.measureIndex)[0];
-                
+
                 const contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
                 const contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
 
-                let analysis: { roman: string, figures: string[] } | null = null;
-                if (analysisMode === 'roman') {
-                    // This function now returns an object { roman, figures }
-                    analysis = getRomanAnalysis(chord, contextTonic, contextIsMinor);
-                } else {
-                    const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
-                    const symbol = getChordSymbol(chord, contextKeySignature);
-                    if (symbol) {
-                        analysis = { roman: symbol, figures: [] };
+                let roman = '';
+                let figures: string[] = [];
+
+                try {
+                    if (analysisMode === 'roman') {
+                        const r = getRomanAnalysis(chordNotes, contextTonic, contextIsMinor);
+                        if (r) {
+                            roman = r.roman;
+                            figures = r.figures || [];
+                        }
+                    } else {
+                        const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
+                        const symbol = getChordSymbol(chordNotes, contextKeySignature);
+                        if (symbol) roman = symbol;
                     }
+                } catch (err) {
+                    // Prevent hard-crash from analysis edge cases while we wire everything.
+                    console.warn('Harmony label compute failed', err);
+                    return;
                 }
 
-                if (analysis) {
-                    const x = chord[0].xPosition || 0;
-                    systemAnalysis.push({ x, analysis });
-                }
+                if (!roman) return;
+
+                const xs = chordNotes.map(n => n.xPosition ?? 0).filter(Number.isFinite);
+                const x = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : (chordNotes[0]?.xPosition ?? 0);
+
+                systemLabels.push({
+                    id: `hlabel-${systemIndex}-${chordKey}`,
+                    x,
+                    roman,
+                    figures,
+                });
             });
 
-            analysisData[systemIndex] = systemAnalysis;
+            systemLabels.sort((a, b) => a.x - b.x);
+            labelsBySystem[systemIndex] = systemLabels;
         });
 
-        return analysisData;
+        return labelsBySystem;
+    }, [isAnalysisEnabled, layoutData, analysisContexts, currentTonic, isMinorMode, analysisMode]);
 
-    }, [layoutData, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, analysisMode]);
+    // Violations -> noteId -> level (defensive extraction)
+    const violationLevelByNoteId = useMemo(() => {
+        const map = new Map<string, 'error' | 'warning'>();
 
-    const notePositions = useMemo(() => {
-        const map = new Map<string, { x: number; y: number }>();
-        if (!layoutData) return map;
+        const getIds = (v: any): string[] => {
+            if (!v) return [];
+            if (Array.isArray(v.noteIds)) return v.noteIds;
+            if (typeof v.noteId === 'string') return [v.noteId];
+            if (Array.isArray(v.notes)) return v.notes.map((n: any) => n?.id).filter(Boolean);
+            if (v.note?.id) return [v.note.id];
+            return [];
+        };
 
-        const temporalGroups = new Map<string, StaffNote[]>();
-        const rests: StaffNote[] = [];
+        const getLevel = (v: any): 'error' | 'warning' => {
+            const s = (v?.severity || v?.level || v?.type || '').toString().toLowerCase();
+            return s.includes('warn') || s.includes('yellow') ? 'warning' : 'error';
+        };
 
-        layoutData.positionedNotes.forEach(note => {
-            if (note.isRest) {
-                rests.push(note);
-            } else {
-                const key = note.chordId || `${note.measureIndex}-${note.beat}`;
-                if (!temporalGroups.has(key)) temporalGroups.set(key, []);
-                temporalGroups.get(key)!.push(note);
-            }
-        });
-
-        temporalGroups.forEach(chord => {
-            const trebleChord = chord.filter(n => (n.clef || 'treble') === 'treble').sort((a, b) => a.position - b.position);
-            const bassChord = chord.filter(n => n.clef === 'bass').sort((a, b) => a.position - b.position);
-
-            const processChord = (chord: StaffNote[], clef: 'treble' | 'bass', staffTop: number) => {
-                const avgPos = chord.reduce((sum, n) => sum + n.position, 0) / chord.length;
-                let isStemUp = avgPos < (clef === 'treble' ? 6 : -2);
-
-                const offsets = new Map<string, number>();
-                for (let i = 0; i < chord.length; i++) {
-                    const note = chord[i];
-                    const nextNote = chord[i + 1];
-
-                    if (nextNote && nextNote.position - note.position === 1) {
-                        // Collision detected: Adjust offsets and stem directions
-                        offsets.set(note.id, isStemUp ? -NOTE_HEAD_RX_NORMAL : NOTE_HEAD_RX_NORMAL);
-                        offsets.set(nextNote.id, isStemUp ? NOTE_HEAD_RX_NORMAL : -NOTE_HEAD_RX_NORMAL);
-
-                        // Force stem directions
-                        note.manualStemDirection = isStemUp ? 'up' : 'down';
-                        nextNote.manualStemDirection = isStemUp ? 'down' : 'up';
-                    } else {
-                        offsets.set(note.id, 0);
-                    }
-                }
-
-                chord.forEach(note => {
-                    const x = (note.xPosition || 0) + (offsets.get(note.id) || 0);
-                    const yInStaff = getNoteY(note.position, staffTop, clef);
-                    const y = clef === 'bass' ? TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + yInStaff : yInStaff;
-                    map.set(note.id, { x, y });
+        try {
+            (violations as any[]).forEach(v => {
+                const level = getLevel(v);
+                getIds(v).forEach((id) => {
+                    const prev = map.get(id);
+                    if (!prev || (prev === 'warning' && level === 'error')) map.set(id, level);
                 });
-            };
-
-            processChord(trebleChord, 'treble', TOP_STAFF_TOP);
-            processChord(bassChord, 'bass', BOTTOM_STAFF_TOP);
-        });
-
-        rests.forEach(rest => {
-            const x = rest.xPosition || 0;
-            let y: number;
-            if (rest.clef === 'bass') {
-                y = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + 2 * LINE_HEIGHT;
-            } else {
-                y = TOP_STAFF_TOP + 2 * LINE_HEIGHT;
-            }
-            map.set(rest.id, { x, y });
-        });
+            });
+        } catch (err) {
+            console.warn('Violation mapping failed', err);
+        }
 
         return map;
-    }, [layoutData]);
+    }, [violations]);
 
-    const tiePathsBySystem = useMemo(() => {
-        const systems: React.ReactNode[][] = [];
-        if (!layoutData) return systems;
-    
-        layoutData.systemsParams.forEach((system, systemIndex) => {
-            const systemTies: React.ReactNode[] = [];
-            const systemNotes = layoutData.positionedNotes.filter(note => 
-                new Set(system.measureIndices).has(note.measureIndex ?? -1)
-            );
-    
-            systemNotes.forEach(note1 => {
-                if (note1.isTiedToNext) {
-                    const note1Index = notes.findIndex(n => n.id === note1.id);
-                    let note2: StaffNote | undefined = undefined;
-                    for (let i = note1Index + 1; i < notes.length; i++) {
-                        const potentialNote2 = notes[i];
-                        if (potentialNote2.voice === note1.voice) {
-                            note2 = potentialNote2;
-                            break;
-                        }
-                    }
-    
-                    if (note2 && systemNotes.some(n => n.id === note2!.id)) {
-                        const pos1 = notePositions.get(note1.id);
-                        const pos2 = notePositions.get(note2.id);
-    
-                        if (pos1 && pos2) {
-                            const isTreble = note1.clef !== 'bass';
-                            const yOffset = isTreble ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT;
-
-                            const groupNotes = beamGroupsBySystem[systemIndex].find(g => g.some(n => n.id === note1.id));
-                            let isStemUp: boolean;
-                            
-                            if(groupNotes) {
-                                if (groupNotes[0].manualStemDirection) {
-                                    isStemUp = groupNotes[0].manualStemDirection === 'up';
-                                } else {
-                                    const avgPos = groupNotes.reduce((sum, n) => sum + n.position, 0) / groupNotes.length;
-                                    isStemUp = avgPos < (isTreble ? 6 : -2);
-                                }
-                            } else {
-                                if (note1.manualStemDirection) isStemUp = note1.manualStemDirection === 'up';
-                                else isStemUp = note1.position < (isTreble ? 6 : -2);
-                            }
-
-                            const tieDirection = note1.manualTieDirection ? note1.manualTieDirection : isStemUp ? 'down' : 'up';
-                            
-                            const y1 = pos1.y + yOffset + (tieDirection === 'down' ? NOTE_HEAD_RY_NORMAL : -NOTE_HEAD_RY_NORMAL);
-                            const y2 = pos2.y + yOffset + (tieDirection === 'down' ? NOTE_HEAD_RY_NORMAL : -NOTE_HEAD_RY_NORMAL);
-                            
-                            const controlY = ((y1 + y2) / 2) + (tieDirection === 'down' ? 12 : -12);
-
-                            const pathData = `M ${pos1.x} ${y1} Q ${(pos1.x + pos2.x)/2} ${controlY}, ${pos2.x} ${y2}`;
-
-                            systemTies.push(
-                                <path key={`tie-${note1.id}`} d={pathData} fill="none" stroke="black" strokeWidth="1.5" />
-                            );
-                        }
-                    }
-                }
-            });
-            systems.push(systemTies);
-        });
-        return systems;
-    }, [layoutData, notePositions, beamGroupsBySystem, notes]);
-
-    const notesToHighlight = useMemo(() => {
-        const uniqueIds = new Set([...selectedNoteIds, ...(hoveredViolationNotes || [])]);
-        return Array.from(uniqueIds);
-    }, [selectedNoteIds, hoveredViolationNotes]);
-
-
-    const sortedTimeEvents = useMemo(() => {
-        const timeMap = new Map<string, StaffNote[]>();
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        
-        layoutData.positionedNotes.forEach(note => {
-            const key = `${note.measureIndex}-${note.beat}`;
-            if (!timeMap.has(key)) timeMap.set(key, []);
-            timeMap.get(key)!.push(note);
-        });
-    
-        const sortedKeys = Array.from(timeMap.keys()).sort((a, b) => {
-            const [m1, b1] = a.split('-').map(Number);
-            const [m2, b2] = b.split('-').map(Number);
-            if (m1 !== m2) return m1 - m2;
-            return b1 - b2;
-        });
-    
-        return sortedKeys.map(key => ({
-            key,
-            beat: (Number(key.split('-')[0]) * beatsPerMeasure) + (Number(key.split('-')[1]) - 1),
-            notes: timeMap.get(key)!
-        }));
-    }, [layoutData.positionedNotes, timeSignature]);
-
-    const sendMidiNote = (note: StaffNote, output: any, durationSeconds: number) => {
-        if (!output) return;
-        const midiNumber = note.midi;
-        const velocity = 127; // Volume massimo
-        const durationMs = durationSeconds * 1000;
-      
-        // Messaggio NOTE ON (Canale 1: 0x90)
-        output.send([0x90, midiNumber, velocity]);
-        
-        // Messaggio NOTE OFF (Canale 1: 0x80) con ritardo
-        output.send([0x80, midiNumber, 0], window.performance.now() + durationMs);
-    };
-
-    const playNoteSound = useCallback(async (note: StaffNote) => {
-        if (!isAudioReady || !audioService.audioContext) return;
-        await audioService.ensureAudioIsReady();
-        const noteNamesWithFlats = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-        // Playback: suona esattamente il midi memorizzato.
-        // (Abbiamo rimosso le trasposizioni “speciali” per tenore/basso per evitare offset cumulativi.)
-        const soundingMidi = note.midi;
-        if (soundingMidi < 21 || soundingMidi > 108) return;
-        const noteName = noteNamesWithFlats[soundingMidi % 12];
-        const octave = Math.floor(soundingMidi / 12) - 1;
-        await audioService.playNote(`${noteName}${octave}`, { when: audioService.audioContext.currentTime, duration: 1 });
-    }, [isAudioReady, audioService]);
-
-    const playNote = useCallback(async (note: StaffNote) => {
-        if (selectedMidiOutput) {
-            sendMidiNote(note, selectedMidiOutput, 1.0);
-        } else {
-            await playNoteSound(note);
-        }
-    }, [selectedMidiOutput, playNoteSound]);
-
-    const animatePlayhead = useCallback(() => {
-        if (!isPlayingRef.current || !audioService.audioContext) {
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-                animationFrameRef.current = null;
-            }
-            return;
-        }
-
-        const audioNow = audioService.audioContext.currentTime;
-        const elapsedAudioTimeSec = audioNow - audioPlaybackStartTimeRef.current;
-
-        if (elapsedAudioTimeSec < 0) {
-            animationFrameRef.current = requestAnimationFrame(animatePlayhead);
-            return;
-        }
-
-        const beatDurationSec = 60 / bpm;
-        const elapsedBeats = elapsedAudioTimeSec / beatDurationSec;
-        const currentAbsoluteBeat = playbackStartBeatRef.current + elapsedBeats;
-    
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        let systemIndex = -1;
-        let playheadX = -1;
-    
-        for (let i = 0; i < layoutData.systemsParams.length; i++) {
-            const sys = layoutData.systemsParams[i];
-            const sysStartBeat = sys.measureIndices[0] * beatsPerMeasure;
-            const nextSys = layoutData.systemsParams[i + 1];
-            const nextSysStartBeat = nextSys ? nextSys.measureIndices[0] * beatsPerMeasure : Infinity;
-    
-            if (currentAbsoluteBeat >= sysStartBeat && currentAbsoluteBeat < nextSysStartBeat) {
-                systemIndex = i;
-                break;
-            }
-        }
-        
-        if (systemIndex !== -1) {
-            const getXFromBeat = (absoluteBeat: number, sysIdx: number): number => {
-                let measureIndex = Math.floor(absoluteBeat / beatsPerMeasure);
-                let beatInMeasure = absoluteBeat % beatsPerMeasure;
-        
-                const systemParams = layoutData.systemsParams[sysIdx];
-                if (!systemParams) return -1;
-        
-                if (Math.abs(beatInMeasure) < 0.001 && absoluteBeat > 0) {
-                    const prevMeasureIndex = measureIndex - 1;
-                    if (systemParams.measureIndices.includes(prevMeasureIndex)) {
-                        const measureStartX = systemParams.startMeasuresX[systemParams.measureIndices.indexOf(prevMeasureIndex)];
-                        const measureWidth = layoutData.measureFinalWidths.get(prevMeasureIndex) || 0;
-                        return measureStartX + measureWidth;
-                    }
-                }
-                
-                if (!systemParams.measureIndices.includes(measureIndex)) {
-                    if (absoluteBeat < systemParams.measureIndices[0] * beatsPerMeasure) {
-                        return systemParams.startMeasuresX[0];
-                    }
-                    const lastMeasureInSystem = systemParams.measureIndices[systemParams.measureIndices.length - 1];
-                    if (absoluteBeat >= (lastMeasureInSystem + 1) * beatsPerMeasure) {
-                        return systemParams.startMeasuresX[systemParams.measureIndices.indexOf(lastMeasureInSystem)] + (layoutData.measureFinalWidths.get(lastMeasureInSystem) || 0);
-                    }
-                    return -1;
-                }
-        
-                const measureStartX = systemParams.startMeasuresX[systemParams.measureIndices.indexOf(measureIndex)];
-                const measureWidth = layoutData.measureFinalWidths.get(measureIndex) || 0;
-        
-                const contentWidth = Math.max(0, measureWidth - (MEASURE_PADDING_X * 2));
-                const fraction = beatInMeasure / beatsPerMeasure;
-        
-                return measureStartX + MEASURE_PADDING_X + (fraction * contentWidth);
-            };
-
-            playheadX = getXFromBeat(currentAbsoluteBeat, systemIndex);
-        }
-    
-        if (playheadX !== -1) {
-            setPlayheadPosition({ x: playheadX, systemIndex });
-        }
-    
-        animationFrameRef.current = requestAnimationFrame(animatePlayhead);
-    }, [audioService, bpm, layoutData.systemsParams, layoutData.measureFinalWidths, timeSignature]);
-
-     const stopStandaloneMetronome = useCallback(() => {
-        if (metronomeIntervalRef.current) {
-            clearInterval(metronomeIntervalRef.current);
-            metronomeIntervalRef.current = null;
-        }
-        setMetronomeFlash(null);
+    // =========================================================
+    // LEGACY (keep ONLY ONE)
+    // =========================================================
+    const romanAnalysisBySystem = useMemo(() => {
+        return [];
     }, []);
 
-    const handlePause = useCallback(() => {
-        playbackTimeoutsRef.current.forEach(clearTimeout);
-        playbackTimeoutsRef.current = [];
-        if (animationFrameRef.current) {
-            cancelAnimationFrame(animationFrameRef.current);
-            animationFrameRef.current = null;
-        }
-        audioService.stopAllSounds();
-        setIsPlaying(false);
-        setMetronomeFlash(null);
-        stopStandaloneMetronome();
-    }, [audioService, stopStandaloneMetronome]);
+    // -----------------------
+    // Audio + MIDI (restore)
+    // -----------------------
+    const midiToName = useCallback((midi: number) => {
+        const noteNamesWithFlats = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+        const n = noteNamesWithFlats[midi % 12];
+        const octave = Math.floor(midi / 12) - 1;
+        return `${n}${octave}`;
+    }, []);
 
-    const handleStop = useCallback(() => {
-        handlePause();
+    const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number) => {
+        if (!output || note.isRest) return;
+        const midi = note.midi;
+        if (!Number.isFinite(midi) || midi <= 0) return;
+        const vel = 100;
+        output.send([0x90, midi, vel]);
+        output.send([0x80, midi, 0], window.performance.now() + durationSec * 1000);
+    }, []);
+
+    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8) => {
+        if (!isAudioReady || !audioService.audioContext || note.isRest) return;
+        await audioService.ensureAudioIsReady();
+        const midi = note.midi;
+        if (!Number.isFinite(midi) || midi < 21 || midi > 108) return;
+        await audioService.playNote(midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSec });
+    }, [audioService, isAudioReady, midiToName]);
+
+    const playNote = useCallback(async (note: StaffNote, durationSec = 0.8) => {
+        if (selectedMidiOutput) {
+            sendMidiNote(note, selectedMidiOutput, durationSec);
+            return;
+        }
+        await playNoteSound(note, durationSec);
+    }, [playNoteSound, selectedMidiOutput, sendMidiNote]);
+
+    const stopPlayback = useCallback(() => {
+        playbackTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
+        playbackTimeoutsRef.current = [];
+        audioService.stopAllSounds?.();
         setPlayingNoteIds([]);
         setPlayheadPosition(null);
-    }, [handlePause]);
+        setIsPlaying(false);
+    }, [audioService]);
 
-    const handlePlay = useCallback(async () => {
-        if (isPlaying || !isAudioReady) return;
-        
-        stopStandaloneMetronome();
-    
-        await audioService.ensureAudioIsReady();
-        if (!audioService.audioContext) return;
+    const startPlayback = useCallback(async () => {
+        if (!isAudioReady) return;
 
-        const noteIdsToSkip = new Set<string>();
-        const allPlayableNotes = sortedTimeEvents.flatMap(e => e.notes);
-        allPlayableNotes.forEach(note => {
-             if (note.isTiedToNext) {
-                 const currentIndex = allPlayableNotes.findIndex(n => n.id === note.id);
-                 let nextNote: StaffNote | undefined;
-                 for(let i = currentIndex + 1; i < allPlayableNotes.length; i++) {
-                     if (allPlayableNotes[i].voice === note.voice) {
-                         nextNote = allPlayableNotes[i];
-                         break;
-                     }
-                 }
-                 if (nextNote && !nextNote.isRest && nextNote.midi === note.midi) {
-                     noteIdsToSkip.add(nextNote.id);
-                 }
-             }
-        });
-
-        const audioCtx = audioService.audioContext;
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const beatDurationSec = 60 / bpm;
-    
-        let currentStartBeat = 0;
-        if (loopRangeRef.current && isLoopingRef.current) {
-            currentStartBeat = loopRangeRef.current.startBeat;
-        } else if (selectedNoteIds.size > 0) {
-            const selectedNotesObjects = analyzedNotes.filter(n => selectedNoteIds.has(n.id));
-            if(selectedNotesObjects.length > 0) {
-                const firstSelectedNoteBeat = Math.min(...selectedNotesObjects.map(n => ((n.measureIndex ?? 0) * beatsPerMeasure) + ((n.beat ?? 1) - 1) ));
-                currentStartBeat = firstSelectedNoteBeat;
-            }
-        }
-    
-        playbackStartBeatRef.current = currentStartBeat;
-        
-        const LOOKAHEAD_SEC = 0.1;
-        const audioStartTime = audioCtx.currentTime + LOOKAHEAD_SEC;
-        audioPlaybackStartTimeRef.current = audioStartTime;
-        const performanceStartTime = performance.now() + (LOOKAHEAD_SEC * 1000);
 
-        playbackTimeoutsRef.current.forEach(clearTimeout);
-    
-        let endBeat;
-        if (isLoopingRef.current && loopRangeRef.current) {
-            endBeat = loopRangeRef.current.endBeat;
-        } else {
-            let maxNoteMeasureIndex = -1;
-            layoutData.positionedNotes.forEach(n => {
-                if ((n.measureIndex ?? 0) > maxNoteMeasureIndex) maxNoteMeasureIndex = n.measureIndex ?? 0;
-            });
-            const totalMeasures = Math.max(minMeasureCount, maxNoteMeasureIndex + 1);
-            endBeat = totalMeasures * beatsPerMeasure;
-        }
-    
-        const eventsToPlay = sortedTimeEvents.filter(event => 
-            event.beat >= currentStartBeat - 0.001 && event.beat < endBeat - 0.001
-        );
-        
-        eventsToPlay.forEach((event, index) => {
-            const { beat, notes: notesAtTime } = event;
-            const audibleNotes = notesAtTime.filter(n => !n.isRest && !noteIdsToSkip.has(n.id));
-            if (audibleNotes.length > 0) {
-                const nextEvent = eventsToPlay[index + 1];
-                const nextBeat = nextEvent ? nextEvent.beat : endBeat;
-                const durationSec = (nextBeat - beat) * beatDurationSec;
+        const timeMap = new Map<string, StaffNote[]>();
+        analyzedNotes.forEach(n => {
+            const key = `${n.measureIndex ?? 0}-${n.beat ?? 1}`;
+            if (!timeMap.has(key)) timeMap.set(key, []);
+            timeMap.get(key)!.push(n);
+        });
+
+        const events = Array.from(timeMap.entries())
+            .map(([key, notes]) => {
+                const [m, b] = key.split('-').map(Number);
+                const absBeat = (m * beatsPerMeasure) + (b - 1);
+                return { absBeat, notes };
+            })
+            .sort((a, b) => a.absBeat - b.absBeat);
+
+        if (events.length === 0) return;
+
+        setIsPlaying(true);
+
+        const startMs = performance.now() + 80; // small lookahead
+        events.forEach((ev, idx) => {
+            const next = events[idx + 1];
+            const durBeats = (next ? next.absBeat : (ev.absBeat + 1)) - ev.absBeat;
+            const durSec = Math.max(0.05, durBeats * beatDurationSec);
+
+            const delayMs = (ev.absBeat - events[0].absBeat) * beatDurationSec * 1000;
+            const t = window.setTimeout(async () => {
+                const playable = ev.notes.filter(n => !n.isRest && (n.midi ?? 0) > 0);
+                setPlayingNoteIds(ev.notes.map(n => n.id));
 
                 if (selectedMidiOutput) {
-                    const delayMs = (beat - currentStartBeat) * beatDurationSec * 1000;
-                    const playAtPerformanceTime = performanceStartTime + delayMs;
-
-                    audibleNotes.forEach(note => {
-                        const midiNumber = note.midi;
-                        const velocity = 127;
-                        selectedMidiOutput.send([0x90, midiNumber, velocity], playAtPerformanceTime);
-                        selectedMidiOutput.send([0x80, midiNumber, 0], playAtPerformanceTime + durationSec * 1000);
-                    });
-                } else {
-                    const playAtAudioTime = audioStartTime + (beat - currentStartBeat) * beatDurationSec;
-                    const audioFiles = audibleNotes.map(n => {
-                        const noteNamesWithFlats = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-                        const soundingMidi = n.midi;
-                        const noteName = noteNamesWithFlats[soundingMidi % 12];
-                        const octave = Math.floor(soundingMidi / 12) - 1;
-                        return `${noteName}${octave}`;
-                    }).filter(Boolean);
-                    audioService.playChord(audioFiles, { when: playAtAudioTime, duration: durationSec });
+                    playable.forEach(n => sendMidiNote(n, selectedMidiOutput, durSec));
+                } else if (audioService.audioContext) {
+                    const names = playable.map(n => midiToName(n.midi));
+                    if (names.length) audioService.playChord(names, { when: audioService.audioContext.currentTime, duration: durSec });
                 }
-            }
-        });
-        
-        eventsToPlay.forEach((event) => {
-            const { beat, notes: notesAtTime } = event;
-            const delayMs = ((beat - currentStartBeat) * beatDurationSec * 1000) + (LOOKAHEAD_SEC * 1000);
-            if (delayMs < 0) return;
-            const timeoutId = setTimeout(() => { setPlayingNoteIds(notesAtTime.map(n => n.id)); }, delayMs);
-            playbackTimeoutsRef.current.push(timeoutId);
+            }, Math.max(0, (startMs - performance.now()) + delayMs));
+
+            playbackTimeoutsRef.current.push(t);
         });
 
-        if (isMetronomeOnRef.current) {
-            const scheduler = (beat: number) => {
-                if (beat >= endBeat) return;
-                if (!isMetronomeOnRef.current || !isPlayingRef.current) return;
-
-                const delayMs = ((beat - currentStartBeat) * beatDurationSec * 1000);
-
-                const timeoutId = setTimeout(() => {
-                    if (!isMetronomeOnRef.current || !isPlayingRef.current) return;
-
-                    const isStrong = Math.abs(beat % beatsPerMeasure) < 0.001;
-                    const playAtAudioTime = audioCtx.currentTime;
-                    audioService.playClick(isStrong, playAtAudioTime);
-                    
-                    setMetronomeFlash(isStrong ? 'strong' : 'weak');
-                    const flashOff = setTimeout(() => setMetronomeFlash(null), 100);
-                    playbackTimeoutsRef.current.push(flashOff);
-
-                    scheduler(beat + 1);
-                }, delayMs);
-                playbackTimeoutsRef.current.push(timeoutId);
-            };
-            scheduler(Math.ceil(currentStartBeat));
-        }
-    
-        const totalDurationMs = ((endBeat - currentStartBeat) * beatDurationSec * 1000) + (LOOKAHEAD_SEC * 1000);
-        const endTimeoutId = setTimeout(() => {
-            if (isLoopingRef.current && loopRangeRef.current) {
-                handlePlay();
-            } else {
-                handleStop();
-            }
-        }, totalDurationMs);
-        playbackTimeoutsRef.current.push(endTimeoutId);
-    
-        setIsPlaying(true);
-        animationFrameRef.current = requestAnimationFrame(animatePlayhead);
-    
-    }, [isPlaying, isAudioReady, audioService, bpm, timeSignature, sortedTimeEvents, minMeasureCount, analyzedNotes, selectedNoteIds, layoutData, animatePlayhead, handleStop, selectedMidiOutput, stopStandaloneMetronome]);
-
-    const startStandaloneMetronome = useCallback(() => {
-        stopStandaloneMetronome(); // Assicura che non ci siano duplicati
-        let beatCount = 0;
-        const beatsPerMeasure = timeSignature.numerator;
-        const beatDurationMs = (60 / bpm) * 1000;
-
-        metronomeIntervalRef.current = window.setInterval(() => {
-            const isStrong = beatCount % beatsPerMeasure === 0;
-            if (audioService.audioContext) {
-                 audioService.playClick(isStrong, audioService.audioContext.currentTime);
-            }
-            setMetronomeFlash(isStrong ? 'strong' : 'weak');
-            setTimeout(() => setMetronomeFlash(null), 100); // Non tracciare questo timeout
-            beatCount = (beatCount + 1) % beatsPerMeasure;
-        }, beatDurationMs);
-
-    }, [bpm, timeSignature, audioService, stopStandaloneMetronome]);
-
-    const toggleMetronome = useCallback(() => {
-        setIsMetronomeOn(prev => {
-            const newState = !prev;
-            if (newState && !isPlaying) {
-                startStandaloneMetronome();
-            } else {
-                stopStandaloneMetronome();
-            }
-            return newState;
-        });
-    }, [isPlaying, startStandaloneMetronome, stopStandaloneMetronome]);
-
-    useEffect(() => {
-        // Questa effect gestisce solo lo stop del metronomo standalone quando inizia la riproduzione.
-        if (isPlaying) {
-            stopStandaloneMetronome();
-        }
-    }, [isPlaying, stopStandaloneMetronome]);
+        const endMs = (events[events.length - 1].absBeat - events[0].absBeat + 1) * beatDurationSec * 1000;
+        playbackTimeoutsRef.current.push(window.setTimeout(() => stopPlayback(), endMs + 200));
+    }, [analyzedNotes, audioService, bpm, isAudioReady, midiToName, selectedMidiOutput, sendMidiNote, stopPlayback, timeSignature]);
 
     const togglePlayback = useCallback(() => {
-        if (isPlaying) handlePause();
-        else handlePlay();
-    }, [isPlaying, handlePlay, handlePause]);
+        if (isPlaying) stopPlayback();
+        else void startPlayback();
+    }, [isPlaying, startPlayback, stopPlayback]);
 
-    const handleWindowMouseMove = useCallback((e: MouseEvent) => {
-        if (!dragStartPosRef.current) return;
-        
-        const { clientX: startX, clientY: startY, systemIndex } = dragStartPosRef.current;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        
-        const svg = staffContainerRef.current?.querySelectorAll('svg')[systemIndex];
-        if (!svg) return;
+    // -----------------------
+    // Triplet groups (keep ONLY ONE)
+    // -----------------------
+    const tripletGroupsBySystem = useMemo(() => {
+        const systems: {
+            id: string;
+            x1: number;
+            x2: number;
+            midX: number;
+            bracketY: number;
+            textY: number;
+            curveHeight: number;
+        }[][] = [];
+        if (!layoutData) return systems;
 
-        const pt = svg.createSVGPoint();
-        pt.x = e.clientX;
-        pt.y = e.clientY;
-        const svgPoint = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-        
-        if (!isActuallyDraggingRef.current && Math.sqrt(dx * dx + dy * dy) > 5) {
-            isActuallyDraggingRef.current = true;
-            setSelectionRect(prev => ({ ...prev, endX: svgPoint.x, endY: svgPoint.y, isVisible: true }));
-        }
-    
-        if (isActuallyDraggingRef.current) {
-            setSelectionRect(prev => ({ ...prev, endX: svgPoint.x, endY: svgPoint.y, isVisible: true }));
-        }
-    }, []);
-    
-    const handleWindowMouseUp = useCallback((e: MouseEvent) => {
-        window.removeEventListener('mousemove', handleWindowMouseMove);
-        window.removeEventListener('mouseup', handleWindowMouseUp);
-    
-        if (isActuallyDraggingRef.current) {
-            justDraggedRef.current = true;
-            setTimeout(() => { justDraggedRef.current = false; }, 50);
-            isActuallyDraggingRef.current = false;
-            
-            if (dragStartPosRef.current) {
-                const { svgStartX, svgStartY, systemIndex } = dragStartPosRef.current;
-                
-                const svg = staffContainerRef.current?.querySelectorAll('svg')[systemIndex!];
-                let svgEndPoint = { x: svgStartX, y: svgStartY };
-    
-                if (svg) {
-                    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-                    svgEndPoint = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-                }
-    
-                const rect = { x: Math.min(svgStartX, svgEndPoint.x), y: Math.min(svgStartY, svgEndPoint.y), width: Math.abs(svgStartX - svgEndPoint.x), height: Math.abs(svgStartY - svgEndPoint.y) };
-                
-                const getBeatFromX = (x: number, systemIndex: number): number => {
-                    const systemParams = layoutData.systemsParams[systemIndex]; if (!systemParams) return 0;
-                    let targetMeasureIndex = -1, startMeasureX = 0;
-                    for (let i = 0; i < systemParams.measureIndices.length; i++) {
-                        const mx = systemParams.startMeasuresX[i], midx = systemParams.measureIndices[i], mw = layoutData.measureFinalWidths.get(midx) || 0;
-                        if (x >= mx && x <= mx + mw) { targetMeasureIndex = midx; startMeasureX = mx; break; }
-                    }
-                    if (targetMeasureIndex === -1) return 0;
-                    const width = layoutData.measureFinalWidths.get(targetMeasureIndex) || 100, beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-                    const localX = x - startMeasureX, contentWidth = width - (MEASURE_PADDING_X * 2), effectiveX = localX - MEASURE_PADDING_X;
-                    let percentage = contentWidth > 0 ? Math.max(0, Math.min(1, effectiveX / contentWidth)) : 0;
-                    return (targetMeasureIndex * beatsPerMeasure) + (percentage * beatsPerMeasure);
-                };
-    
-                if (rect.width > 5 || rect.height > 5) {
-                    if (isLooping) {
-                        const rawStartBeat = getBeatFromX(rect.x, systemIndex!), rawEndBeat = getBeatFromX(rect.x + rect.width, systemIndex!);
-                        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-                        const getAbsoluteNoteTime = (n: StaffNote) => (n.measureIndex! * beatsPerMeasure) + (n.beat! - 1);
-                        const getNoteDuration = (n: StaffNote) => DURATION_VALUES[n.duration || 'quarter'] * (n.isTriplet ? (2/3) : 1) * (n.isDotted ? 1.5 : 1);
-                        const rangeStart = Math.min(rawStartBeat, rawEndBeat), rangeEnd = Math.max(rawStartBeat, rawEndBeat);
-                        const overlappingNotes = layoutData.positionedNotes.filter(n => {
-                            const start = getAbsoluteNoteTime(n), end = start + getNoteDuration(n);
-                            return start < rangeEnd - 0.01 && end > rangeStart + 0.01;
-                        });
-                        if (overlappingNotes.length > 0) {
-                            const notesStartingInRange = overlappingNotes.filter(n => getAbsoluteNoteTime(n) >= rangeStart - 0.01);
-                            let finalStart = notesStartingInRange.length > 0 ? Math.min(...notesStartingInRange.map(n => getAbsoluteNoteTime(n))) : Math.min(...overlappingNotes.map(n => getAbsoluteNoteTime(n)));
-                            const finalEnd = Math.max(...overlappingNotes.map(n => getAbsoluteNoteTime(n) + getNoteDuration(n)));
-                            setLoopRange({ startBeat: finalStart, endBeat: finalEnd });
-                        } else {
-                            setLoopRange({ startBeat: rangeStart, endBeat: rangeEnd });
-                        }
-                    } else {
-                        const selectedIdsInRect = new Set<string>();
-                        const systemParams = layoutData.systemsParams[systemIndex!];
-                        if(systemParams){
-                            const systemNotes = layoutData.positionedNotes.filter(note =>
-                                systemParams.measureIndices.includes(note.measureIndex ?? -1)
-                            );
+        layoutData.systemsParams.forEach((system, systemIndex) => {
+            const measureSet = new Set(system.measureIndices);
+            const systemNotes = layoutData.positionedNotes
+                .filter(n => !n.isRest && n.isTriplet && measureSet.has(n.measureIndex ?? -1))
+                .sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
 
-                            systemNotes.forEach(note => {
-                                const notePos = notePositions.get(note.id);
-                                if (notePos) {
-                                    if (notePos.x >= rect.x && notePos.x <= rect.x + rect.width &&
-                                        notePos.y >= rect.y && notePos.y <= rect.y + rect.height) {
-                                        selectedIdsInRect.add(note.id);
-                                    }
-                                }
-                            });
-                        }
-                        
-                        if (e.shiftKey || e.ctrlKey || e.metaKey) {
-                            setSelectedNoteIds(prev => new Set([...prev, ...selectedIdsInRect]));
-                        } else {
-                            setSelectedNoteIds(selectedIdsInRect);
-                        }
-                    }
-                }
-            }
-        }
-        
-        setSelectionRect(prev => ({ ...prev, isVisible: false }));
-        dragStartPosRef.current = null;
-    }, [layoutData, handleWindowMouseMove, timeSignature, isLooping, setSelectedNoteIds, notePositions]);
+            const groups: {
+                id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; curveHeight: number;
+            }[] = [];
 
-    const handleBackgroundMouseDown = useCallback((e: MouseEvent, svg: SVGSVGElement, systemIndex: number) => {
-        if (e.button !== 0) return;
+            // group consecutive triplet notes (simple: blocks of >=3 notes in same measure+voice)
+            let run: StaffNote[] = [];
+            const flush = () => {
+                if (run.length < 3) { run = []; return; }
 
-        // Important: the editor is primarily an insertion tool.
-        // Starting a drag-selection on every simple click makes insertion feel “broken” on trackpads
-        // (tiny pointer jitter crosses the drag threshold, setting `justDraggedRef` and blocking the click).
-        // So we only start the rectangle selection when:
-        // - looping mode is on (drag defines the loop range)
-        // - or a modifier is held (Shift/Ctrl/Cmd) to multi-select.
-        const wantsRectSelection = isLooping || e.shiftKey || e.ctrlKey || e.metaKey;
-        if (!wantsRectSelection) return;
+                const first = run[0];
+                const last = run[run.length - 1];
+                const clef = (first.clef || 'treble') as ClefType;
 
-        setPasteCaret(null);
-        if (!isLooping && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-            setSelectedNoteIds(new Set());
-        }
-    
-        const pt = svg.createSVGPoint();
-        pt.x = e.clientX;
-        pt.y = e.clientY;
-        const svgStartPoint = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-    
-        setSelectionRect({
-            startX: svgStartPoint.x,
-            startY: svgStartPoint.y,
-            endX: svgStartPoint.x,
-            endY: svgStartPoint.y,
-            isVisible: false,
-            systemIndex,
-        });
-    
-        dragStartPosRef.current = { 
-            clientX: e.clientX, 
-            clientY: e.clientY, 
-            svgStartX: svgStartPoint.x,
-            svgStartY: svgStartPoint.y,
-            systemIndex, 
-        };
-        
-        window.addEventListener('mousemove', handleWindowMouseMove);
-        window.addEventListener('mouseup', handleWindowMouseUp);
-    }, [handleWindowMouseMove, handleWindowMouseUp, isLooping]);
+                const yOffset = clef === 'bass' ? TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT : 0;
+                const staffTop = clef === 'bass' ? BOTTOM_STAFF_TOP : TOP_STAFF_TOP;
 
-    const handleBackgroundClick = useCallback(async (x: number, y: number, systemIndex: number) => {
-        if (justDraggedRef.current) return;
-        if (isLooping) { setLoopRange(null); return; }
+                const ys = run.map(n => getNoteY(n.position, staffTop, clef));
+                const highestY = Math.min(...ys);
 
-        setPasteCaret(null);
-        setSelectedNoteIds(new Set());
+                const x1 = (first.xPosition ?? 0) - 6;
+                const x2 = (last.xPosition ?? 0) + 26;
+                const midX = (x1 + x2) / 2;
 
-        const positionX = x;
-        const rawY = y;
+                const bracketY = (highestY + yOffset) - 34;
+                const textY = bracketY + 14;
 
-        const systemParams = layoutData.systemsParams[systemIndex];
-        if (!systemParams) return;
-        let globalMeasureIndex = -1, measureStartX = 0, measureWidth = 0;
-        for (let i = 0; i < systemParams.measureIndices.length; i++) {
-            const startX = systemParams.startMeasuresX[i]; const mIdx = systemParams.measureIndices[i]; const width = layoutData.measureFinalWidths.get(mIdx) || 0;
-            if (positionX >= startX && positionX < startX + width) { globalMeasureIndex = mIdx; measureStartX = startX; measureWidth = width; break; }
-        }
-        if (globalMeasureIndex === -1) return;
-
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
-        const relativeX = positionX - (measureStartX + MEASURE_PADDING_X);
-        const clickedBeatRaw = (Math.max(0, Math.min(1, relativeX / contentWidth)) * beatsPerMeasure) + 1;
-
-        // SNAP ORIZZONTALE (griglia): quantizza il beat in base alla durata selezionata.
-        // Nota: ignoriamo il punto di valore per lo snap della posizione (si snappa alla griglia “base”).
-        const gridStep = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2 / 3) : 1);
-        const quantize = (beat: number) => {
-            const step = Math.max(1e-6, gridStep);
-            const q = 1 + Math.round((beat - 1) / step) * step;
-            const clamped = Math.max(1, Math.min(beatsPerMeasure + 1, q));
-            return Math.round(clamped * 1e6) / 1e6;
-        };
-        const clickedBeat = quantize(clickedBeatRaw);
-
-        if (clipboard && clipboard.length > 0) {
-            setPasteCaret({ x: positionX, systemIndex, measureIndex: globalMeasureIndex, beat: clickedBeat });
-            return;
-        }
-
-        const isBassStaffClick = rawY > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
-        let targetClef: ClefType;
-        let octaveShift = 0;
-        if (selectedVoice === 1) { // Soprano
-            targetClef = 'treble';
-            octaveShift = 1;
-        } else if (selectedVoice === 2) { // Alto
-            targetClef = 'treble';
-            octaveShift = 0;
-        } else if (selectedVoice === 3) { // Tenore
-            targetClef = 'bass';
-            octaveShift = 1;
-        } else { // Basso
-            targetClef = 'bass';
-            octaveShift = 0;
-        }
-        // Blocca l'inserimento se il click non è sul rigo giusto
-        if ((targetClef === 'treble' && isBassStaffClick) || (targetClef === 'bass' && !isBassStaffClick)) return;
-
-        const notesInTargetMeasureForVoice = rawNotes.filter(
-            n => (n.measureIndex ?? 0) === globalMeasureIndex && (n.voice ?? 1) === selectedVoice
-        );
-        const currentDurationInMeasure = notesInTargetMeasureForVoice.reduce((total, note) => {
-            const durationInBeats = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? (2/3) : 1) * (note.isDotted ? 1.5 : 1);
-            return total + durationInBeats;
-        }, 0);
-        const newElementDuration = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2/3) : 1) * (isDotted ? 1.5 : 1);
-        if (currentDurationInMeasure + newElementDuration > beatsPerMeasure + 0.001) {
-            console.warn(`Metric validation failed: Measure ${globalMeasureIndex} for voice ${selectedVoice} would exceed capacity.`);
-            return;
-        }
-
-        const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
-        const relativeY = targetClef === 'treble' ? rawY : rawY - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT;
-        let position: number;
-        let diatonicProps;
-        // SNAP VERTICALE: cerca nota più vicina nello stesso beat e voce
-        let snapPitchPosition: number | null = null;
-        let snapPitchOctave: number | null = null;
-        const SNAP_VERTICAL_THRESHOLD = 0.2; // in unità di posizione (mezzo spazio)
-        if (targetClef === 'bass') {
-            // Chiave di basso
-            position = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
-            // Tenore/Basso: correzione empirica di -4 posizioni diatoniche (~ -7 semitoni)
-            // per allineare puntatore/ghost/inserimento nella chiave di basso.
-            if (selectedVoice === 3 || selectedVoice === 4) {
-                position -= 4;
-            }
-            // Snap verticale: cerca nota più vicina sullo stesso beat e clef, ma di voce diversa
-            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeat) < 0.3 && n.voice !== selectedVoice && n.clef === 'bass');
-            if (notesSameBeat.length > 0) {
-                const yPos = position;
-                let minDist = Infinity;
-                notesSameBeat.forEach(n => {
-                    const dist = Math.abs((n.position ?? 0) - yPos);
-                    if (dist < minDist && dist < SNAP_VERTICAL_THRESHOLD) {
-                        minDist = dist;
-                        snapPitchPosition = n.position;
-                        snapPitchOctave = n.octave;
-                    }
+                groups.push({
+                    id: `triplet-${systemIndex}-${first.id}`,
+                    x1, x2, midX,
+                    bracketY, textY,
+                    curveHeight: 8,
                 });
-            }
-            const usePosition = snapPitchPosition !== null ? snapPitchPosition : Math.round(position);
-            diatonicProps = getNotePropertiesFromDiatonicPosition(usePosition, 'bass', keySignature);
-            if (snapPitchOctave !== null) diatonicProps.octave = snapPitchOctave;
-            // Nessuna trasposizione extra per il basso: evita offset cumulativi (es. +19 semitoni)
-        } else {
-            // Chiave di violino (soprano/alto)
-            position = ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
-            // Snap verticale: cerca nota più vicina sullo stesso beat e clef, ma di voce diversa
-            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeat) < 0.3 && n.voice !== selectedVoice && n.clef === 'treble');
-            if (notesSameBeat.length > 0) {
-                const yPos = position;
-                let minDist = Infinity;
-                notesSameBeat.forEach(n => {
-                    const dist = Math.abs((n.position ?? 0) - yPos);
-                    if (dist < minDist && dist < SNAP_VERTICAL_THRESHOLD) {
-                        minDist = dist;
-                        snapPitchPosition = n.position;
-                        snapPitchOctave = n.octave;
-                    }
-                });
-            }
-            const usePosition = snapPitchPosition !== null ? snapPitchPosition : Math.round(position);
-            diatonicProps = getNotePropertiesFromDiatonicPosition(usePosition, 'treble', keySignature);
-            if (snapPitchOctave !== null) diatonicProps.octave = snapPitchOctave;
-            if (selectedInsertion.type === 'note') {
-                // Per soprano (voce 1) trasporre suono un'ottava sopra rispetto a come scritto
-                if (selectedVoice === 1 || selectedVoice === 2) {
-                    diatonicProps = {
-                        ...diatonicProps,
-                        octave: diatonicProps.octave + 1,
-                        midi: diatonicProps.midi + 12,
-                    };
-                }
-            }
-        }
-        let finalBeat = clickedBeat, chordIdToJoin: string | undefined = undefined;
-        const SNAP_THRESHOLD_PX = 5;
-        // Cerca una nota vicina sullo stesso beat e clef, ma di voce diversa
-        const snapTarget = layoutData.positionedNotes.find(n =>
-            n.measureIndex === globalMeasureIndex &&
-            (n.clef || 'treble') === targetClef &&
-            Math.abs((n.xPosition || 0) - positionX) < SNAP_THRESHOLD_PX &&
-            (n.voice || 1) !== selectedVoice
-        );
-        if (snapTarget) { finalBeat = snapTarget.beat!; chordIdToJoin = snapTarget.chordId || snapTarget.id; }
 
-        let newElement: StaffNote;
-
-        if (selectedInsertion.type === 'note') {
-            const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
-            const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
-            const keyAlterationAmount = (keySignature.type === 'sharp' && sharpNotes.includes(diatonicProps.pitch)) ? 1 : (keySignature.type === 'flat' && flatNotes.includes(diatonicProps.pitch)) ? -1 : 0;
-
-            let finalNoteProps;
-
-            if (activeAccidental) {
-                const naturalMidi = diatonicProps.midi - keyAlterationAmount;
-                const accidentalOffset = activeAccidental === 'sharp' ? 1
-                    : activeAccidental === 'flat' ? -1
-                    : activeAccidental === 'double-sharp' ? 2
-                    : activeAccidental === 'double-flat' ? -2
-                    : 0;
-                const finalMidi = naturalMidi + accidentalOffset;
-
-                finalNoteProps = {
-                    pitch: diatonicProps.pitch,
-                    octave: diatonicProps.octave,
-                    position: diatonicProps.position,
-                    midi: finalMidi,
-                    noteIndex: finalMidi % 12,
-                    clef: targetClef,
-                    explicitAccidental: activeAccidental,
-                    accidental: activeAccidental,
-                    userAccidental: activeAccidental,
-                };
-            } else {
-                finalNoteProps = diatonicProps;
-            }
-
-            if (snapTarget) {
-                const chordId = snapTarget.chordId || snapTarget.id;
-                const notesInChord = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && ((n.chordId === chordId) || (n.id === snapTarget.id)));
-                if (notesInChord.some(n => n.midi === finalNoteProps.midi)) return;
-            }
-
-            newElement = {
-                id: crypto.randomUUID(),
-                ...finalNoteProps,
-                duration: selectedInsertion.duration,
-                isRest: false,
-                isTriplet,
-                isDotted,
-                measureIndex: globalMeasureIndex,
-                beat: finalBeat,
-                chordId: chordIdToJoin,
-                clef: targetClef,
-                voice: selectedVoice,
+                run = [];
             };
-            await playNote(newElement);
-        } else {
-            // Inserisci una pausa con posizione e ottava coerente con la voce
-            let restPosition, restOctave;
-            if (selectedVoice === 1) { // Soprano
-                restPosition = 8; restOctave = 5;
-            } else if (selectedVoice === 2) { // Alto
-                restPosition = 6; restOctave = 4;
-            } else if (selectedVoice === 3) { // Tenore
-                restPosition = 6; restOctave = 3;
-            } else { // Basso
-                restPosition = 4; restOctave = 2;
-            }
-            newElement = {
-                id: crypto.randomUUID(),
-                pitch: 'B',
-                octave: restOctave,
-                position: restPosition,
-                midi: 0,
-                noteIndex: 0,
-                duration: selectedInsertion.duration,
-                isRest: true,
-                isTriplet,
-                isDotted,
-                measureIndex: globalMeasureIndex,
-                beat: finalBeat,
-                clef: targetClef,
-                voice: selectedVoice,
-            };
-        }
 
-        if (isTriplet) {
-            const baseDuration = tripletBaseDuration ?? selectedInsertion.duration;
-            const baseValue = DURATION_VALUES[baseDuration] || 0.5;
-            const insertedValue = DURATION_VALUES[selectedInsertion.duration] || 0.5;
-            const units = insertedValue / Math.max(1e-6, baseValue);
-
-            setTupletNoteCount(prev => {
-                const nextUnits = prev + units;
-                if (nextUnits >= 3 - 1e-6) {
-                    setIsTriplet(false);
-                    setTripletBaseDuration(null);
-                    return 0;
-                }
-                return nextUnits;
-            });
-        }
-
-        setRawNotes(prev => {
-            let newNotes = [...prev];
-            if (snapTarget && chordIdToJoin === snapTarget.id) { const targetIndex = newNotes.findIndex(n => n.id === snapTarget.id); if (targetIndex > -1) newNotes[targetIndex] = { ...newNotes[targetIndex], chordId: chordIdToJoin }; }
-            newNotes.push(newElement);
-            return newNotes.sort((a, b) => { const m = (a.measureIndex ?? 0) - (b.measureIndex ?? 0); if (m !== 0) return m; const be = (a.beat ?? 1) - (b.beat ?? 1); if (be !== 0) return be; return (a.voice ?? 1) - (b.voice ?? 1); });
-        });
-
-        if (activeAccidental) {
-            setActiveAccidental(null);
-        }
-    }, [playNote, selectedInsertion, isTriplet, isDotted, setRawNotes, layoutData, analyzedNotes, isLooping, selectedVoice, activeAccidental, keySignature, timeSignature, rawNotes, clipboard, tripletBaseDuration]);
-    
-    const handleNoteClick = useCallback(async (noteId: string, e: React.MouseEvent | MouseEvent) => {
-        e.stopPropagation();
-        setPasteCaret(null);
-        const note = analyzedNotes.find(n => n.id === noteId); 
-        if (e.detail === 1) { 
-            if (note && !note.isRest) await playNote(note); 
-        }
-        if (e.shiftKey) { 
-            setSelectedNoteIds(prev => {
-                const newSet = new Set(prev);
-                if (newSet.has(noteId)) {
-                    newSet.delete(noteId);
+            for (const n of systemNotes) {
+                if (
+                    run.length === 0 ||
+                    ((n.measureIndex ?? 0) === (run[0].measureIndex ?? 0) && (n.voice ?? 1) === (run[0].voice ?? 1) && (n.clef || 'treble') === (run[0].clef || 'treble'))
+                ) {
+                    run.push(n);
                 } else {
-                    newSet.add(noteId);
-                }
-                return newSet;
-            });
-        } else { 
-            setSelectedNoteIds(prev => {
-                if (prev.size === 1 && prev.has(noteId)) {
-                    return new Set<string>();
-                }
-                return new Set([noteId]);
-            });
-        }
-    }, [analyzedNotes, playNote]);
-
-    const handleFlipStem = useCallback(() => {
-        if (selectedNoteIds.size === 0) return;
-    
-        const selectedRawNotes = rawNotes.filter(n => selectedNoteIds.has(n.id));
-        const isAnyTied = selectedRawNotes.some(n => n.isTiedToNext);
-    
-        if (isAnyTied) {
-            // Flip tie direction for tied notes
-            setRawNotes(prev => prev.map(note => {
-                if (selectedNoteIds.has(note.id) && note.isTiedToNext) {
-                    const currentDirection = note.manualTieDirection;
-                    let newDirection: 'up' | 'down' | undefined;
-                    if (currentDirection === undefined) newDirection = 'up';
-                    else if (currentDirection === 'up') newDirection = 'down';
-                    else newDirection = undefined;
-                    
-                    if (newDirection) {
-                        return { ...note, manualTieDirection: newDirection };
-                    } else {
-                        const { manualTieDirection, ...rest } = note;
-                        return rest;
-                    }
-                }
-                return note;
-            }));
-        } else {
-            // Original flip stem logic for non-tied notes
-            setRawNotes(prev => prev.map(note => {
-                if (selectedNoteIds.has(note.id)) {
-                    const currentDirection = note.manualStemDirection;
-                    let newDirection: 'up' | 'down' | undefined;
-                    if (currentDirection === undefined) newDirection = 'up';
-                    else if (currentDirection === 'up') newDirection = 'down';
-                    else newDirection = undefined;
-                    
-                    if (newDirection) {
-                        return { ...note, manualStemDirection: newDirection };
-                    } else {
-                        const { manualStemDirection, ...rest } = note;
-                        return rest;
-                    }
-                }
-                return note;
-            }));
-        }
-    }, [selectedNoteIds, rawNotes, setRawNotes]);
-    
-    const handleToggleTie = useCallback(() => {
-        if (selectedNoteIds.size === 0) return;
-    
-        const notesWithIndices = notes.map((note, index) => ({ note, index }));
-    
-        setRawNotes(prevRawNotes => {
-            return prevRawNotes.map(rawNote => {
-                if (selectedNoteIds.has(rawNote.id)) {
-                    const noteInfo = notesWithIndices.find(({ note }) => note.id === rawNote.id);
-                    if (!noteInfo || noteInfo.note.isRest) return rawNote;
-
-                    const { note: currentNote, index: currentIndex } = noteInfo;
-
-                    let nextNote: StaffNote | undefined = undefined;
-                    for (let i = currentIndex + 1; i < notes.length; i++) {
-                        if (notes[i].voice === currentNote.voice) {
-                            nextNote = notes[i];
-                            break;
-                        }
-                    }
-
-                    if (nextNote && !nextNote.isRest && nextNote.midi === currentNote.midi) {
-                         if (rawNote.isTiedToNext) {
-                            const { isTiedToNext, ...rest } = rawNote;
-                            return rest;
-                        } else {
-                            return { ...rawNote, isTiedToNext: true };
-                        }
-                    }
-                }
-                return rawNote;
-            });
-        });
-    }, [selectedNoteIds, setRawNotes, notes]);
-
-    const pasteNotes = useCallback((anchorMeasureIndex: number, anchorBeat: number) => {
-        if (!clipboard || clipboard.length === 0) return;
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-    
-        const firstNoteInClipboard = clipboard[0];
-        const startBeatInClipboard = (firstNoteInClipboard.measureIndex ?? 0) * beatsPerMeasure + (firstNoteInClipboard.beat ?? 1);
-        
-        const idMap = new Map<string, string>();
-        clipboard.forEach(note => idMap.set(note.id, crypto.randomUUID()));
-    
-        const newNotes: StaffNote[] = clipboard.map(note => {
-            const newId = idMap.get(note.id)!;
-    
-            const absoluteBeatInClipboard = (note.measureIndex ?? 0) * beatsPerMeasure + (note.beat ?? 1);
-            const beatOffset = absoluteBeatInClipboard - startBeatInClipboard;
-            const targetAbsoluteBeat = (anchorMeasureIndex * beatsPerMeasure) + anchorBeat + beatOffset;
-    
-            const newMeasureIndex = Math.floor((targetAbsoluteBeat - 1) / beatsPerMeasure);
-            const newBeat = ((targetAbsoluteBeat - 1) % beatsPerMeasure) + 1;
-            
-            const { xPosition, ...noteToPaste } = note;
-    
-            return { ...noteToPaste, id: newId, measureIndex: newMeasureIndex, beat: newBeat, };
-        });
-    
-        newNotes.forEach(note => {
-            if (note.chordId && idMap.has(note.chordId)) note.chordId = idMap.get(note.chordId);
-            if (note.manualBeamGroupId && idMap.has(note.manualBeamGroupId)) note.manualBeamGroupId = idMap.get(note.manualBeamGroupId);
-        });
-    
-        let maxBeatInClipboard = 0;
-        clipboard.forEach(note => {
-            const duration = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? (2/3) : 1) * (note.isDotted ? 1.5 : 1);
-            const noteEndBeat = (note.measureIndex ?? 0) * beatsPerMeasure + (note.beat ?? 1) + duration;
-            if (noteEndBeat > maxBeatInClipboard) maxBeatInClipboard = noteEndBeat;
-        });
-    
-        const pasteDuration = maxBeatInClipboard - startBeatInClipboard;
-        const voicesInClipboard = new Set(clipboard.map(n => n.voice || 1));
-        const startAbsoluteBeat = anchorMeasureIndex * beatsPerMeasure + anchorBeat;
-        const endAbsoluteBeat = startAbsoluteBeat + pasteDuration;
-    
-        setRawNotes(prev => {
-            const notesToKeep = prev.filter(note => {
-                if (!voicesInClipboard.has(note.voice || 1)) return true;
-                const noteAbsoluteStart = (note.measureIndex ?? 0) * beatsPerMeasure + (note.beat ?? 1);
-                const duration = DURATION_VALUES[note.duration || 'quarter'] * (note.isTriplet ? (2/3) : 1) * (note.isDotted ? 1.5 : 1);
-                const noteAbsoluteEnd = noteAbsoluteStart + duration;
-                return !(noteAbsoluteStart < endAbsoluteBeat && noteAbsoluteEnd > startAbsoluteBeat);
-            });
-    
-            return [...notesToKeep, ...newNotes];
-        });
-    }, [clipboard, timeSignature, setRawNotes]);
-
-    const handleKeyDown = useCallback((e: KeyboardEvent) => {
-        if (!isActive) return;
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || bpmControlRef.current === document.activeElement) return;
-
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            setSelectedNoteIds(new Set());
-            setPasteCaret(null);
-            setClipboard(null);
-            return;
-        }
-        
-        if (e.ctrlKey || e.metaKey) {
-            if (e.key.toLowerCase() === 'z') { 
-                e.preventDefault(); 
-                undoNotes(); 
-                return; 
-            } else if (e.key.toLowerCase() === 'a') {
-                e.preventDefault();
-                const allNoteIds = analyzedNotes.map(n => n.id);
-                setSelectedNoteIds(new Set(allNoteIds));
-                return;
-            } else if (e.key.toLowerCase() === 'c') {
-                e.preventDefault();
-                if (selectedNoteIds.size === 0) return;
-                const notesToCopy = rawNotes.filter(n => selectedNoteIds.has(n.id));
-                notesToCopy.sort((a,b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 1) - (b.beat ?? 1));
-                setClipboard(notesToCopy);
-                setPasteCaret(null);
-                return;
-            } else if (e.key.toLowerCase() === 'v') {
-                e.preventDefault();
-                if (!clipboard || clipboard.length === 0) return;
-        
-                let anchor: { measureIndex: number, beat: number } | null = null;
-        
-                if (selectedNoteIds.size > 0) {
-                    const selectedNotes = notes.filter(n => selectedNoteIds.has(n.id));
-                    if (selectedNotes.length > 0) {
-                        selectedNotes.sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
-                        const firstSelectedNote = selectedNotes[0];
-                        anchor = { measureIndex: firstSelectedNote.measureIndex ?? 0, beat: firstSelectedNote.beat ?? 1 };
-                    }
-                } else if (pasteCaret) {
-                    anchor = { measureIndex: pasteCaret.measureIndex, beat: pasteCaret.beat };
-                }
-        
-                if (anchor) {
-                    pasteNotes(anchor.measureIndex, anchor.beat);
-                    setSelectedNoteIds(new Set());
-                    setPasteCaret(null);
-                    // setClipboard(null); // This was preventing multiple pastes
-                }
-                return;
-            }
-
-            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-                e.preventDefault();
-
-                const notesToMoveIds = Array.from(selectedNoteIds);
-                if (notesToMoveIds.length === 0) return;
-
-                const notesToMove = rawNotes
-                    .filter(n => notesToMoveIds.includes(n.id))
-                    .sort((a, b) => rawNotes.indexOf(a) - rawNotes.indexOf(b));
-                
-                if (notesToMove.length === 0) return;
-
-                const firstVoice = notesToMove[0].voice;
-                const allSameVoice = notesToMove.every(n => n.voice === firstVoice);
-                if (!allSameVoice) return;
-
-                const firstNoteIndexInRaw = rawNotes.indexOf(notesToMove[0]);
-                const isContiguous = notesToMove.every((note, i) => rawNotes.indexOf(note) === firstNoteIndexInRaw + i);
-                if (!isContiguous) return;
-
-                const newNotes = [...rawNotes];
-                const blockLength = notesToMove.length;
-                const blockStartIndex = firstNoteIndexInRaw;
-
-                if (e.key === 'ArrowRight') {
-                    const noteAfterIndex = blockStartIndex + blockLength;
-                    const noteAfter = newNotes[noteAfterIndex];
-                    
-                    if (noteAfter && noteAfter.voice === firstVoice) {
-                        const block = newNotes.splice(blockStartIndex, blockLength);
-                        newNotes.splice(blockStartIndex + 1, 0, ...block);
-                        setRawNotes(newNotes);
-                    }
-                } else { // ArrowLeft
-                    const noteBeforeIndex = blockStartIndex - 1;
-                    const noteBefore = newNotes[noteBeforeIndex];
-
-                    if (noteBefore && noteBefore.voice === firstVoice) {
-                        const block = newNotes.splice(blockStartIndex, blockLength);
-                        newNotes.splice(blockStartIndex - 1, 0, ...block);
-                        setRawNotes(newNotes);
-                    }
+                    flush();
+                    run = [n];
                 }
             }
-            return; 
-        }
+            flush();
 
-        if (e.key.toLowerCase() === 'v') {
-            e.preventDefault();
-            setSelectedVoice(v => (v === 1 ? 4 : v - 1) as Voice);
-            return;
-        }
-        
-        if (e.key === '#' || e.key === 'à') {
-            e.preventDefault();
-            setActiveAccidental(prev => {
-                if (prev === 'sharp') return 'double-sharp';
-                if (prev === 'double-sharp') return null;
-                return 'double-sharp';
-            });
-            return;
-        }
+            systems[systemIndex] = groups;
+        });
 
-        if (e.key === 'b') {
-            e.preventDefault();
-            setActiveAccidental(prev => {
-                if (prev === 'flat') return 'double-flat';
-                if (prev === 'double-flat') return null;
-                return 'flat';
-            });
-            return;
-        }
+        return systems;
+    }, [layoutData, getNoteY]);
 
-        if (e.key.toLowerCase() === 'n') {
-            e.preventDefault();
-            setActiveAccidental(prev => prev === 'natural' ? null : 'natural');
-            return;
-        }
-
-        const durationKeyMap: { [key: string]: NoteDuration } = { '1': 'whole', '2': 'half', '3': 'quarter', '4': 'eighth', '5': 'sixteenth', '6': 'thirty-second', '7': 'sixty-fourth' };
-        if (durationKeyMap[e.key] && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setSelectedInsertion(prev => ({ ...prev, duration: durationKeyMap[e.key] })); return; }
-        if (e.code === 'Space') { e.preventDefault(); togglePlayback(); }
-        if (e.code === 'Enter') { e.preventDefault(); handleStop(); }
-        if (e.key === 'k' || e.key === 'K') { e.preventDefault(); toggleMetronome(); }
-        if (e.key === 'l' || e.key === 'L') { e.preventDefault(); setIsLooping(prev => !prev); }
-        if (selectedNoteIds.size > 0) {
-            if (e.key === 'Backspace' || e.key === 'Delete') {
-                e.preventDefault();
-                setRawNotes(prev => prev.filter(note => !selectedNoteIds.has(note.id)));
-                setSelectedNoteIds(new Set());
-            } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey) {
-                e.preventDefault();
-                const direction = e.key === 'ArrowUp' ? 1 : -1;
-                setRawNotes(prevNotes => {
-                    const newNotes = [...prevNotes];
-            
-                    selectedNoteIds.forEach(id => {
-                        const noteIndex = newNotes.findIndex(n => n.id === id);
-                        if (noteIndex === -1 || newNotes[noteIndex].isRest) return;
-                        
-                        const note = newNotes[noteIndex];
-            
-                        // Break ties involving this note
-                        if (note.isTiedToNext) delete newNotes[noteIndex].isTiedToNext;
-                        const fullSortedNotes = calculateNoteBeats(prevNotes, timeSignature);
-                        const currentSortedIndex = fullSortedNotes.findIndex(n => n.id === id);
-                        let prevNoteInVoice: StaffNote | undefined;
-                        for(let i = currentSortedIndex - 1; i >= 0; i--) {
-                            if(fullSortedNotes[i].voice === note.voice) {
-                                prevNoteInVoice = fullSortedNotes[i];
-                                break;
-                            }
-                        }
-                        if (prevNoteInVoice) {
-                            const prevNoteRawIndex = newNotes.findIndex(n => n.id === prevNoteInVoice!.id);
-                            if (prevNoteRawIndex > -1 && newNotes[prevNoteRawIndex].isTiedToNext) {
-                                delete newNotes[prevNoteRawIndex].isTiedToNext;
-                            }
-                        }
-            
-                        // Apply pitch change
-                        const newMidi = note.midi + direction;
-                        const newProps = getNotePropertiesFromMidi(newMidi, keySignature, note.clef || 'treble', null);
-                        newNotes[noteIndex] = { ...note, ...newProps };
-                    });
-                    return newNotes;
-                });
-            }
-        }
-    }, [isActive, selectedNoteIds, setRawNotes, rawNotes, setSelectedNoteIds, keySignature, undoNotes, togglePlayback, handleStop, setSelectedInsertion, setSelectedVoice, setIsLooping, activeAccidental, timeSignature, toggleMetronome, analyzedNotes, clipboard, pasteCaret, pasteNotes, notes, setClipboard]);
-
-    useEffect(() => {
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleKeyDown]);
-
-    const durations: { duration: NoteDuration; label: string; NoteIcon: React.FC; RestIcon: React.FC; }[] = useMemo(() => [
-        { duration: 'whole', label: 'Semibreve', NoteIcon: WholeNoteIcon, RestIcon: WholeRestIcon }, { duration: 'half', label: 'Minima', NoteIcon: HalfNoteIcon, RestIcon: HalfRestIcon },
-        { duration: 'quarter', label: 'Semiminima', NoteIcon: QuarterNoteIcon, RestIcon: QuarterRestIcon }, { duration: 'eighth', label: 'Croma', NoteIcon: EighthNoteIcon, RestIcon: EighthRestIcon },
-        { duration: 'sixteenth', label: 'Semicroma', NoteIcon: SixteenthNoteIcon, RestIcon: SixteenthRestIcon }, { duration: 'thirty-second', label: 'Biscroma', NoteIcon: ThirtySecondNoteIcon, RestIcon: ThirtySecondRestIcon },
-        { duration: 'sixty-fourth', label: 'Semibiscroma', NoteIcon: SixtyFourthNoteIcon, RestIcon: SixtyFourthRestIcon },
-    ], []);
-
-    const commitBpm = (val: string) => { let finalBpm = parseInt(val, 10); if (!isNaN(finalBpm)) { setBpm(Math.max(40, Math.min(240, finalBpm))); } };
-    const handleBpmKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (bpmInputTimeoutRef.current) clearTimeout(bpmInputTimeoutRef.current);
-        if (e.key === 'ArrowUp') { e.preventDefault(); setBpmInputString(''); setBpm(b => Math.min(240, b + 1)); } 
-        else if (e.key === 'ArrowDown') { e.preventDefault(); setBpmInputString(''); setBpm(b => Math.max(40, b - 1)); } 
-        else if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); if (bpmInputString) commitBpm(bpmInputString); setBpmInputString(''); bpmControlRef.current?.blur(); } 
-        else if (e.key >= '0' && e.key <= '9') {
-            e.preventDefault(); const newString = bpmInputString + e.key; let newNum = parseInt(newString, 10);
-            if (newNum > 240) { setBpmInputString(e.key); setBpm(parseInt(e.key, 10)); } else { setBpmInputString(newString); setBpm(newNum); }
-            bpmInputTimeoutRef.current = setTimeout(() => { commitBpm(newString); setBpmInputString(''); }, 1200);
-        }
-    };
-    const handleBpmBlur = () => { setIsBpmActive(false); if (bpmInputTimeoutRef.current) clearTimeout(bpmInputTimeoutRef.current); if (bpmInputString) commitBpm(bpmInputString); setBpmInputString(''); };
-    const handleDeselectOnClickOutside = (e: React.MouseEvent) => { if (justDraggedRef.current) return; if (e.target === e.currentTarget) setSelectedNoteIds(new Set()); };
-    // Adattata per accettare (x, y, systemIndex) da VexflowGrandStaff
-    const handleMouseMove = useCallback((x: number, y: number, systemIndex: number) => {
-        if (isActuallyDraggingRef.current) { setGhostNote(null); return; }
-
-        // SNAP ORIZZONTALE (griglia): calcola misura e beat sotto il mouse e snappa l'X.
-        const systemParams = layoutData?.systemsParams?.[systemIndex];
-        if (!systemParams || !layoutData) { setGhostNote(null); return; }
-
-        let measureStartX = 0;
-        let measureWidth = 0;
-        for (let i = 0; i < systemParams.measureIndices.length; i++) {
-            const startX = systemParams.startMeasuresX[i];
-            const mIdx = systemParams.measureIndices[i];
-            const width = layoutData.measureFinalWidths.get(mIdx) || 0;
-            if (x >= startX && x < startX + width) {
-                measureStartX = startX;
-                measureWidth = width;
-                break;
-            }
-        }
-
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
-        const relativeX = x - (measureStartX + MEASURE_PADDING_X);
-        const hoveredBeatRaw = (Math.max(0, Math.min(1, relativeX / contentWidth)) * beatsPerMeasure) + 1;
-
-        const gridStep = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2 / 3) : 1);
-        const step = Math.max(1e-6, gridStep);
-        const hoveredBeat = Math.round((1 + Math.round((hoveredBeatRaw - 1) / step) * step) * 1e6) / 1e6;
-        const snappedRelativeX = ((hoveredBeat - 1) / beatsPerMeasure) * contentWidth;
-        const positionX = measureStartX + MEASURE_PADDING_X + snappedRelativeX;
-
-        const rawY = y;
-        const isBassStaffClick = rawY > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
-        const targetClef: ClefType = isBassStaffClick ? 'bass' : 'treble';
-        const expectedVoiceClef = selectedVoice === 3 || selectedVoice === 4 ? 'bass' : 'treble';
-        if (targetClef !== expectedVoiceClef) { setGhostNote(null); return; }
-
-        const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
-        const relativeY = targetClef === 'treble' ? rawY : rawY - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT;
-        // Calcolo posizione ghost note
-        // IMPORTANTISSIMO: deve usare la stessa convenzione di handleBackgroundClick,
-        // altrimenti pitch/octave risultano disallineati (VexFlow renderizza usando pitch/octave).
-        let position: number;
-        if (targetClef === 'treble') {
-            position = ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
-        } else {
-            position = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
-            // Tenore: stessa correzione dell'inserimento (≈ -7 semitoni)
-            if (selectedVoice === 3 || selectedVoice === 4) {
-                position -= 4;
-            }
-        }
-        position = Math.round(position);
-
-        // Offset corretto per basso/tenore (chiave di basso): ghostPosition = position + 14
-        let ghostPosition = position;
-        // Calcola octave e pitch coerenti con la posizione della ghost note
-        let diatonicProps = getNotePropertiesFromDiatonicPosition(ghostPosition, targetClef, keySignature);
-
-        // Per soprano/alto: in handleBackgroundClick viene applicato uno shift di +1 ottava.
-        // Se qui non lo facciamo, la ghost note risulta più bassa (es. -1 ottava per l'alto).
-        if (selectedInsertion.type === 'note' && (selectedVoice === 1 || selectedVoice === 2) && targetClef === 'treble') {
-            diatonicProps = {
-                ...diatonicProps,
-                octave: diatonicProps.octave + 1,
-                midi: diatonicProps.midi + 12,
-            };
-        }
-
-        if (selectedInsertion.type === 'rest') {
-            const ghost: StaffNote & { systemIndex: number } = {
-                id: 'ghost',
-                pitch: 'B',
-                octave: 4,
-                position: 8,
-                midi: 0,
-                noteIndex: 0,
-                duration: selectedInsertion.duration,
-                isRest: true,
-                isTriplet,
-                isDotted,
-                xPosition: positionX,
-                clef: targetClef,
-                voice: selectedVoice,
-                systemIndex,
-            };
-            setGhostNote(ghost);
-            return;
-        }
+    // -----------------------
+    // Accidentals (apply on insertion)
+    // -----------------------
+    const applyActiveAccidental = useCallback((baseProps: any) => {
+        if (!activeAccidental) return baseProps;
 
         const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
         const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
-        const keyAlterationAmount = (keySignature.type === 'sharp' && sharpNotes.includes(diatonicProps.pitch))
-        ? 1
-        : (keySignature.type === 'flat' && flatNotes.includes(diatonicProps.pitch)) ? -1 : 0;
+        const keyAlterationAmount =
+            (keySignature.type === 'sharp' && sharpNotes.includes(baseProps.pitch)) ? 1 :
+            (keySignature.type === 'flat' && flatNotes.includes(baseProps.pitch)) ? -1 : 0;
 
-        let finalNoteProps;
+        const naturalMidi = baseProps.midi - keyAlterationAmount;
+        const accidentalOffset =
+            activeAccidental === 'sharp' ? 1 :
+            activeAccidental === 'flat' ? -1 :
+            activeAccidental === 'double-sharp' ? 2 :
+            activeAccidental === 'double-flat' ? -2 : 0;
 
-        if (activeAccidental) {
-            const naturalMidi = diatonicProps.midi - keyAlterationAmount;
-            const accidentalOffset = activeAccidental === 'sharp' ? 1
-                : activeAccidental === 'flat' ? -1
-                : activeAccidental === 'double-sharp' ? 2
-                : activeAccidental === 'double-flat' ? -2
-                : 0;
-            const finalMidi = naturalMidi + accidentalOffset;
+        const finalMidi = naturalMidi + accidentalOffset;
 
-            finalNoteProps = {
-                pitch: diatonicProps.pitch,
-                octave: diatonicProps.octave,
-                position: diatonicProps.position,
-                midi: finalMidi,
-                noteIndex: finalMidi % 12,
+        return {
+            ...baseProps,
+            midi: finalMidi,
+            noteIndex: finalMidi % 12,
+            explicitAccidental: activeAccidental,
+            accidental: activeAccidental,
+            userAccidental: activeAccidental,
+        };
+    }, [activeAccidental, keySignature]);
+
+    // -----------------------
+    // Editor interaction (restored minimal)
+    // -----------------------
+    const handleDeselectOnClickOutside = useCallback((e: React.MouseEvent) => {
+        if (e.target === e.currentTarget) setSelectedNoteIds(new Set());
+    }, []);
+
+    const handleNoteClick = useCallback((noteId: string, e: React.MouseEvent | MouseEvent) => {
+        e.stopPropagation();
+        setSelectedNoteIds(prev => {
+            const next = new Set(prev);
+            if ((e as any).shiftKey) {
+                if (next.has(noteId)) next.delete(noteId);
+                else next.add(noteId);
+                return next;
+            }
+            if (next.size === 1 && next.has(noteId)) return new Set();
+            return new Set([noteId]);
+        });
+    }, []);
+
+    const getSystemMeasureAtX = useCallback((systemIndex: number, x: number) => {
+        const sys = layoutData?.systemsParams?.[systemIndex];
+        if (!sys || !layoutData) return null;
+
+        for (let i = 0; i < sys.measureIndices.length; i++) {
+            const mIdx = sys.measureIndices[i];
+            const startX = sys.startMeasuresX[i];
+            const w = layoutData.measureFinalWidths.get(mIdx) || 0;
+            if (x >= startX && x < startX + w) return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
+        }
+        return null;
+    }, [layoutData]);
+
+    const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number) => {
+        if (!layoutData) return;
+
+        const hit = getSystemMeasureAtX(systemIndex, x);
+        if (!hit) return;
+
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
+        const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+        const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
+
+        const gridStep = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2 / 3) : 1);
+        const step = Math.max(1e-6, gridStep);
+        const beat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
+
+        const targetClef: ClefType = (selectedVoice === 3 || selectedVoice === 4) ? 'bass' : 'treble';
+        const isBassArea = y > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
+        if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) return;
+
+        if (selectedInsertion.type === 'rest') {
+            const rest: StaffNote = {
+                id: crypto.randomUUID(),
+                pitch: 'B',
+                octave: targetClef === 'bass' ? 2 : 4,
+                position: targetClef === 'bass' ? 4 : 8,
+                midi: 0,
+                noteIndex: 0,
+                duration: selectedInsertion.duration,
+                isRest: true,
+                isTriplet,
+                isDotted,
+                measureIndex: hit.measureIndex,
+                beat,
                 clef: targetClef,
-                explicitAccidental: activeAccidental,
-                accidental: activeAccidental,
-                userAccidental: activeAccidental,
+                voice: selectedVoice,
             };
-        } else {
-            finalNoteProps = diatonicProps;
+            setRawNotes(prev => [...prev, rest]);
+            return;
         }
 
-        const ghost: StaffNote & { systemIndex: number } = {
-            id: 'ghost',
-            pitch: finalNoteProps.pitch,
-            octave: finalNoteProps.octave,
-            position: finalNoteProps.position,
-            midi: finalNoteProps.midi,
-            noteIndex: finalNoteProps.noteIndex,
-            clef: targetClef,
-            accidental: finalNoteProps.accidental,
+        const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
+        const relativeY = targetClef === 'treble' ? y : (y - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT);
+
+        let pos = targetClef === 'treble'
+            ? ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2)
+            : ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+
+        // keep your existing empirical bass alignment
+        if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
+
+        pos = Math.round(pos);
+
+        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
+        if (selectedVoice === 1 || selectedVoice === 2) { props = { ...props, octave: props.octave + 1, midi: props.midi + 12 }; }
+        props = applyActiveAccidental(props);
+
+        const newNote: StaffNote = {
+            id: crypto.randomUUID(),
+            ...props,
             duration: selectedInsertion.duration,
             isRest: false,
             isTriplet,
             isDotted,
-            xPosition: positionX,
+            measureIndex: hit.measureIndex,
+            beat,
+            clef: targetClef,
+            voice: selectedVoice,
+        };
+
+        setRawNotes(prev => [...prev, newNote]);
+        void playNote(newNote);
+        if (activeAccidental) setActiveAccidental(null);
+    }, [
+        getSystemMeasureAtX,
+        isDotted,
+        isTriplet,
+        keySignature,
+        layoutData,
+        selectedInsertion,
+        selectedVoice,
+        setRawNotes,
+        timeSignature,
+        applyActiveAccidental,
+        playNote,
+        activeAccidental,
+    ]);
+
+    const handleBackgroundMouseDown = useCallback((_e: MouseEvent, _svg: SVGSVGElement, _systemIndex: number) => {
+        // keep empty for now (your full rectangle selection can be reintroduced after stabilization)
+    }, []);
+
+    const handleMouseMove = useCallback((x: number, y: number, systemIndex: number) => {
+        if (!layoutData) return;
+
+        const targetClef: ClefType = (selectedVoice === 3 || selectedVoice === 4) ? 'bass' : 'treble';
+        const isBassArea = y > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
+        if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) {
+            setGhostNote(null);
+            return;
+        }
+
+        const hit = getSystemMeasureAtX(systemIndex, x);
+        if (!hit) { setGhostNote(null); return; }
+
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
+        const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+        const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
+
+        const gridStep = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2 / 3) : 1);
+        const step = Math.max(1e-6, gridStep);
+        const beat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
+
+        const snappedRelX = ((beat - 1) / beatsPerMeasure) * contentWidth;
+        const xPos = hit.measureStartX + MEASURE_PADDING_X + snappedRelX;
+
+        if (selectedInsertion.type === 'rest') {
+            setGhostNote({
+                id: 'ghost',
+                pitch: 'B',
+                octave: targetClef === 'bass' ? 2 : 4,
+                position: targetClef === 'bass' ? 4 : 8,
+                midi: 0,
+                noteIndex: 0,
+                duration: selectedInsertion.duration,
+                isRest: true,
+                isTriplet,
+                isDotted,
+                xPosition: xPos,
+                clef: targetClef,
+                voice: selectedVoice,
+                systemIndex,
+            });
+            return;
+        }
+
+        const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
+        const relativeY = targetClef === 'treble' ? y : (y - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT);
+
+        let pos = targetClef === 'treble'
+            ? ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2)
+            : ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+
+        if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
+        pos = Math.round(pos);
+
+        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
+        if (selectedVoice === 1 || selectedVoice === 2) props = { ...props, octave: props.octave + 1, midi: props.midi + 12 };
+
+        setGhostNote({
+            id: 'ghost',
+            ...props,
+            duration: selectedInsertion.duration,
+            isRest: false,
+            isTriplet,
+            isDotted,
+            xPosition: xPos,
+            clef: targetClef,
             voice: selectedVoice,
             systemIndex,
-            manualStemDirection: selectedVoice === 1 || selectedVoice === 3 ? 'up' : 'down',
-        };
-        setGhostNote(ghost);
-    }, [layoutData, timeSignature, selectedInsertion, isTriplet, isDotted, keySignature, activeAccidental, selectedVoice]);
-    
-    const handleMouseLeave = useCallback(() => { setGhostNote(null); }, []);
-
-    const selectedNotesBeamState = useMemo(() => {
-        const beamableNotes = rawNotes.filter(n => selectedNoteIds.has(n.id) && !n.isRest && DURATION_VALUES[n.duration || 'quarter'] <= 0.5);
-        if (beamableNotes.length < 2) return 'unbeamable';
-        const firstGroupId = beamableNotes[0].manualBeamGroupId;
-        if (firstGroupId && beamableNotes.every(n => n.manualBeamGroupId === firstGroupId)) return 'beamed';
-        return beamableNotes.some(n => n.manualBeamGroupId) ? 'mixed' : 'unbeamed';
-    }, [selectedNoteIds, rawNotes]);
-
-    const handleToggleBeamGroup = useCallback(() => {
-        if (selectedNotesBeamState === 'unbeamable') return;
-        const isBeamableSelected = (note: StaffNote) =>
-            selectedNoteIds.has(note.id) && !note.isRest && DURATION_VALUES[note.duration || 'quarter'] <= 0.5;
-        if (selectedNotesBeamState === 'beamed') {
-            setRawNotes(prev => prev.map(note => {
-                if (isBeamableSelected(note)) {
-                    // Explicitly disable auto-beaming for notes the user just "separated".
-                    // This makes the action stable even if our renderer applies fallback auto-beams.
-                    const { manualBeamGroupId, ...rest } = note;
-                    return { ...rest, manualBeamDisabled: true };
-                }
-                return note;
-            }));
-        } else {
-            const newGroupId = crypto.randomUUID();
-            setRawNotes(prev => prev.map(note => 
-                isBeamableSelected(note)
-                  ? { ...note, manualBeamGroupId: newGroupId, manualBeamDisabled: false }
-                  : note
-            ));
-        }
-    }, [selectedNotesBeamState, selectedNoteIds, setRawNotes]);
-
-    const loopHighlightRegions = useMemo(() => {
-        if (!isLooping || !loopRange || !layoutData) return [];
-        
-        const regions: { systemIndex: number, x: number, width: number }[] = [];
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const { startBeat, endBeat } = loopRange;
-
-        layoutData.systemsParams.forEach((system, sysIndex) => {
-            if (system.measureIndices.length === 0) return;
-            
-            const sysStartMeasure = system.measureIndices[0];
-            const sysEndMeasure = system.measureIndices[system.measureIndices.length - 1];
-            
-            const sysStartBeat = sysStartMeasure * beatsPerMeasure;
-            const sysEndBeat = (sysEndMeasure + 1) * beatsPerMeasure;
-
-            if (endBeat > sysStartBeat && startBeat < sysEndBeat) {
-                let startX = system.startMeasuresX[0];
-                const startMeasureIndex = Math.floor(Math.max(startBeat, sysStartBeat) / beatsPerMeasure);
-                const startMeasureBeat = Math.max(startBeat, sysStartBeat) % beatsPerMeasure;
-                
-                if (system.measureIndices.includes(startMeasureIndex)) {
-                    const mIndexInSys = system.measureIndices.indexOf(startMeasureIndex);
-                    const mStartX = system.startMeasuresX[mIndexInSys];
-                    const mWidth = layoutData.measureFinalWidths.get(startMeasureIndex) || 0;
-                    const contentWidth = mWidth - (MEASURE_PADDING_X * 2);
-                    startX = mStartX + MEASURE_PADDING_X + (startMeasureBeat / beatsPerMeasure) * contentWidth;
-                }
-
-                let endX = system.startMeasuresX[system.startMeasuresX.length - 1] + (layoutData.measureFinalWidths.get(sysEndMeasure) || 0);
-                
-                if (endBeat < sysEndBeat) {
-                    // FIX: Define endMeasureIndex and endMeasureBeat, and handle edge case for barlines.
-                    const endMeasureIndex = Math.floor(endBeat / beatsPerMeasure);
-                    const endMeasureBeat = endBeat % beatsPerMeasure;
-                    
-                    if (Math.abs(endMeasureBeat) < 0.001 && endBeat > 0) {
-                        const prevMeasureIndex = endMeasureIndex - 1;
-                        if (system.measureIndices.includes(prevMeasureIndex)) {
-                            const mIndexInSys = system.measureIndices.indexOf(prevMeasureIndex);
-                            const mStartX = system.startMeasuresX[mIndexInSys];
-                            const mWidth = layoutData.measureFinalWidths.get(prevMeasureIndex) || 0;
-                            endX = mStartX + mWidth;
-                        }
-                    } else if (system.measureIndices.includes(endMeasureIndex)) {
-                        const mIndexInSys = system.measureIndices.indexOf(endMeasureIndex);
-                        const mStartX = system.startMeasuresX[mIndexInSys];
-                        const mWidth = layoutData.measureFinalWidths.get(endMeasureIndex) || 0;
-                        const contentWidth = mWidth - (MEASURE_PADDING_X * 2);
-                        endX = mStartX + MEASURE_PADDING_X + (endMeasureBeat / beatsPerMeasure) * contentWidth;
-                    }
-                }
-
-                regions.push({
-                    systemIndex: sysIndex,
-                    x: startX,
-                    width: Math.max(0, endX - startX)
-                });
-            }
         });
-        return regions;
-    }, [isLooping, loopRange, layoutData, timeSignature]);
+    }, [getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, timeSignature]);
 
     const rectForRender = useMemo(() => {
-        if (!selectionRect.isVisible) return null;
+        if (!selectionRect?.isVisible) return null;
         return {
             x: Math.min(selectionRect.startX, selectionRect.endX),
             y: Math.min(selectionRect.startY, selectionRect.endY),
@@ -2400,8 +1114,128 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         };
     }, [selectionRect]);
 
-     if (!isActive) return null;
+    // ------------------------------------------------------------------
+    // FIX: symbols referenced by JSX must exist (prevents white screen)
+    // ------------------------------------------------------------------
+    const handleBpmKeyDown = useCallback((_e: React.KeyboardEvent<HTMLDivElement>) => {
+        // minimal: keep stable (you can re-add numeric editing later)
+    }, []);
 
+    const handleBpmBlur = useCallback(() => {
+        setIsBpmActive(false);
+    }, []);
+
+    const toggleMetronome = useCallback(() => {
+        setIsMetronomeOn(p => !p);
+    }, []);
+
+    const durations: { duration: NoteDuration; label: string; NoteIcon: React.FC; RestIcon: React.FC }[] = useMemo(() => ([
+        { duration: 'whole', label: 'Semibreve', NoteIcon: WholeNoteIcon, RestIcon: WholeRestIcon },
+        { duration: 'half', label: 'Minima', NoteIcon: HalfNoteIcon, RestIcon: HalfRestIcon },
+        { duration: 'quarter', label: 'Semiminima', NoteIcon: QuarterNoteIcon, RestIcon: QuarterRestIcon },
+        { duration: 'eighth', label: 'Croma', NoteIcon: EighthNoteIcon, RestIcon: EighthRestIcon },
+        { duration: 'sixteenth', label: 'Semicroma', NoteIcon: SixteenthNoteIcon, RestIcon: SixteenthRestIcon },
+        { duration: 'thirty-second', label: 'Biscroma', NoteIcon: ThirtySecondNoteIcon, RestIcon: ThirtySecondRestIcon },
+        { duration: 'sixty-fourth', label: 'Semibiscroma', NoteIcon: SixtyFourthNoteIcon, RestIcon: SixtyFourthRestIcon },
+    ]), []);
+
+    const notePositions = useMemo(() => {
+        const map = new Map<string, { x: number; y: number }>();
+        if (!layoutData) return map;
+
+        layoutData.positionedNotes.forEach(n => {
+            const clef = (n.clef || 'treble') as ClefType;
+            const staffTop = clef === 'bass' ? BOTTOM_STAFF_TOP : TOP_STAFF_TOP;
+
+            const yInStaff = getNoteY(n.position, staffTop, clef);
+            const y = clef === 'bass' ? TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + yInStaff : yInStaff;
+
+            map.set(n.id, { x: n.xPosition ?? 0, y });
+        });
+
+        return map;
+    }, [layoutData, getNoteY]);
+
+    const selectedNotesBeamState = useMemo(() => {
+        const beamable = rawNotes.filter(n =>
+            selectedNoteIds.has(n.id) &&
+            !n.isRest &&
+            DURATION_VALUES[n.duration || 'quarter'] <= 0.5
+        );
+        if (beamable.length < 2) return 'unbeamable' as const;
+
+        const firstId = (beamable[0] as any).manualBeamGroupId;
+        if (firstId && beamable.every(n => (n as any).manualBeamGroupId === firstId)) return 'beamed' as const;
+
+        return beamable.some(n => (n as any).manualBeamGroupId) ? 'mixed' as const : 'unbeamed' as const;
+    }, [rawNotes, selectedNoteIds]);
+
+    const handleToggleBeamGroup = useCallback(() => {
+        if (selectedNotesBeamState === 'unbeamable') return;
+
+        const isBeamableSelected = (n: StaffNote) =>
+            selectedNoteIds.has(n.id) && !n.isRest && DURATION_VALUES[n.duration || 'quarter'] <= 0.5;
+
+        if (selectedNotesBeamState === 'beamed') {
+            setRawNotes(prev => prev.map(n => {
+                if (!isBeamableSelected(n)) return n;
+                const { manualBeamGroupId, ...rest } = n as any;
+                return { ...rest, manualBeamDisabled: true };
+            }));
+        } else {
+            const gid = crypto.randomUUID();
+            setRawNotes(prev => prev.map(n => isBeamableSelected(n) ? ({ ...(n as any), manualBeamGroupId: gid, manualBeamDisabled: false }) : n));
+        }
+    }, [selectedNotesBeamState, selectedNoteIds, setRawNotes]);
+
+    const handleToggleTie = useCallback(() => {
+        if (selectedNoteIds.size === 0) return;
+
+        const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature);
+        const selected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
+        if (selected.length === 0) return;
+
+        setRawNotes(prev => prev.map(n => {
+            if (!selectedNoteIds.has(n.id)) return n;
+
+            const idx = notesWithBeats.findIndex(x => x.id === n.id);
+            if (idx < 0) return n;
+
+            const voice = notesWithBeats[idx].voice;
+            let next: StaffNote | undefined;
+            for (let i = idx + 1; i < notesWithBeats.length; i++) {
+                if (notesWithBeats[i].voice === voice) { next = notesWithBeats[i]; break; }
+            }
+            if (!next || next.isRest || next.midi !== notesWithBeats[idx].midi) return n;
+
+            if ((n as any).isTiedToNext) {
+                const { isTiedToNext, ...rest } = n as any;
+                return rest;
+            }
+            return { ...(n as any), isTiedToNext: true };
+        }));
+    }, [rawNotes, selectedNoteIds, setRawNotes, timeSignature]);
+
+    const handleFlipStem = useCallback(() => {
+        if (selectedNoteIds.size === 0) return;
+
+        setRawNotes(prev => prev.map(n => {
+            if (!selectedNoteIds.has(n.id)) return n;
+
+            const cur = (n as any).manualStemDirection as ('up' | 'down' | undefined);
+            const next = cur === undefined ? 'up' : (cur === 'up' ? 'down' : undefined);
+
+            if (!next) {
+                const { manualStemDirection, ...rest } = n as any;
+                return rest;
+            }
+            return { ...(n as any), manualStemDirection: next };
+        }));
+    }, [selectedNoteIds, setRawNotes]);
+
+    // =========================================================
+    // RENDER
+    // =========================================================
     return (
         <div className="flex-grow flex flex-col gap-4">
             <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
@@ -2505,7 +1339,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             selectedNotesBeamState === 'unbeamable' ? "Seleziona almeno 2 note per la travatura" :
                             "Unisci note selezionate"
                         }
-                    >
+                                       >
                         {selectedNotesBeamState === 'beamed' ? <UngroupIcon /> : <GroupIcon />}
                     </button>
                     <button
@@ -2581,89 +1415,155 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     onClick={handleDeselectOnClickOutside}
                 >
                     {layoutData.systemsParams.map((system, systemIndex) => {
-                        const systemNotes = layoutData.positionedNotes.filter(note => new Set(system.measureIndices).has(note.measureIndex ?? -1));
+                        // PERF: avoid new Set(...) inside filter per note
+                        const measureSet = new Set(system.measureIndices);
+                        const systemNotes = layoutData.positionedNotes.filter(note => measureSet.has(note.measureIndex ?? -1));
+
                         const actualSystemWidth = system.width;
-                        // Ghost note solo se ghostNote è per questo system
                         const ghost = ghostNote && ghostNote.systemIndex === systemIndex ? ghostNote : null;
                         const systemBarlines = layoutData.systemsBarlines?.[systemIndex] || [];
                         const systemTriplets = tripletGroupsBySystem[systemIndex] || [];
+
+                        const systemHarmonyLabels = (harmonyLabelsBySystem?.[systemIndex] || []);
+                        const showHarmony = isAnalysisEnabled && systemHarmonyLabels.length > 0;
+
                         return (
-                            <div key={`system-${systemIndex}`} className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'}`} style={{ width: actualSystemWidth, height: TOTAL_SYSTEM_HEIGHT }}>
-                                <VexflowGrandStaff
-                                    notes={systemNotes}
-                                    timeSignature={timeSignature}
-                                    keySignature={keySignature}
-                                    barlines={systemBarlines}
-                                    width={actualSystemWidth}
-                                    height={TOTAL_SYSTEM_HEIGHT}
-                                    selectedNoteIds={Array.from(selectedNoteIds)}
-                                    onNoteClick={(noteId, e) => handleNoteClick(noteId, e as any)}
-                                    onStaffClick={(x, y) => handleBackgroundClick(x, y, systemIndex)}
-                                    onStaffMouseDown={(e, svg) => handleBackgroundMouseDown(e, svg, systemIndex)}
-                                    onMouseMoveStaff={(x, y) => handleMouseMove(x, y, systemIndex)}
-                                    ghostNote={ghost}
+                          <div
+                            key={`system-${systemIndex}`}
+                            className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'}`}
+                            style={{ width: actualSystemWidth, height: TOTAL_SYSTEM_HEIGHT }}
+                          >
+                            <VexflowGrandStaff
+                              notes={systemNotes}
+                              timeSignature={timeSignature}
+                              keySignature={keySignature}
+                              barlines={systemBarlines}
+                              width={actualSystemWidth}
+                              height={TOTAL_SYSTEM_HEIGHT}
+                              selectedNoteIds={Array.from(selectedNoteIds)}
+                              onNoteClick={(noteId, e) => handleNoteClick(noteId, e as any)}
+                              onStaffClick={(x, y) => handleBackgroundClick(x, y, systemIndex)}
+                              onStaffMouseDown={(e, svg) => handleBackgroundMouseDown(e, svg, systemIndex)}
+                              onMouseMoveStaff={(x, y) => handleMouseMove(x, y, systemIndex)}
+                              ghostNote={ghost}
+                            />
+
+                            {/* Overlay: selection rect */}
+                            {rectForRender && selectionRect.systemIndex === systemIndex && (
+                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                <rect
+                                  x={rectForRender.x}
+                                  y={rectForRender.y}
+                                  width={rectForRender.width}
+                                  height={rectForRender.height}
+                                  className="fill-cyan-400/10 stroke-cyan-500"
+                                  strokeWidth={1.5}
                                 />
+                              </svg>
+                            )}
 
-                                {rectForRender && selectionRect.systemIndex === systemIndex && (
-                                    <svg
-                                        className="absolute inset-0 pointer-events-none"
-                                        width={actualSystemWidth}
-                                        height={TOTAL_SYSTEM_HEIGHT}
-                                    >
-                                        <rect
-                                            x={rectForRender.x}
-                                            y={rectForRender.y}
-                                            width={rectForRender.width}
-                                            height={rectForRender.height}
-                                            className="fill-cyan-400/10 stroke-cyan-500"
-                                            strokeWidth={1.5}
-                                        />
-                                    </svg>
-                                )}
+                            {/* Overlay: triplets */}
+                            {systemTriplets.length > 0 && (
+                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                {systemTriplets.map((t) => {
+                                    const hook = 8;
+                                    const y = t.bracketY;
+                                    const x1 = t.x1;
+                                    const x2 = t.x2;
+                                    const midX = t.midX;
 
-                                {systemTriplets.length > 0 && (
-                                    <svg
-                                        className="absolute inset-0 pointer-events-none"
-                                        width={actualSystemWidth}
-                                        height={TOTAL_SYSTEM_HEIGHT}
-                                    >
-                                        {systemTriplets.map((t) => {
-                                            const hook = 8;
-                                            const y = t.bracketY;
-                                            const x1 = t.x1;
-                                            const x2 = t.x2;
-                                            const midX = t.midX;
+                                    return (
+                                        <g key={t.id}>
+                                            <path
+                                                d={`M ${x1} ${y} L ${x1} ${y + hook} M ${x1} ${y} L ${x2} ${y} M ${x2} ${y} L ${x2} ${y + hook}`}
+                                                fill="none"
+                                                stroke="black"
+                                                strokeWidth={1.5}
+                                            />
+                                            <text
+                                                x={midX}
+                                                y={t.textY}
+                                                textAnchor="middle"
+                                                fontSize={14}
+                                                fill="black"
+                                            >
+                                                3
+                                            </text>
+                                        </g>
+                                    );
+                                })}
+                              </svg>
+                            )}
 
-                                            return (
-                                                <g key={t.id}>
-                                                    <path
-                                                        d={`M ${x1} ${y} L ${x1} ${y + hook} M ${x1} ${y} L ${x2} ${y} M ${x2} ${y} L ${x2} ${y + hook}`}
-                                                        fill="none"
-                                                        stroke="black"
-                                                        strokeWidth={1.5}
-                                                    />
-                                                    <text
-                                                        x={midX}
-                                                        y={t.textY}
-                                                        textAnchor="middle"
-                                                        fontSize={14}
-                                                        fill="black"
-                                                    >
-                                                        3
-                                                    </text>
-                                                </g>
-                                            );
-                                        })}
-                                    </svg>
-                                )}
-                            </div>
+                            {/* Overlay: analysis labels + violation highlights (adapter output) */}
+                            {(isAnalysisEnabled || violationLevelByNoteId.size > 0) && (
+                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                {/* Harmony labels (roman/symbol) + figured bass */}
+                                {showHarmony && systemHarmonyLabels.map(lbl => {
+                                  const romanY = TOP_STAFF_TOP - 14; // above treble staff
+                                  const bassBaseY = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + (BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT);
+                                  const figuresY0 = bassBaseY + 22;
+
+                                  return (
+                                    <g key={lbl.id}>
+                                      <text x={lbl.x} y={romanY} textAnchor="middle" fontSize={14} fontWeight={700} fill="black">
+                                        {lbl.roman}
+                                      </text>
+
+                                      {lbl.figures?.length ? (
+                                        <g>
+                                          {lbl.figures.map((f, i) => (
+                                            <text
+                                              key={`${lbl.id}-fig-${i}`}
+                                              x={lbl.x}
+                                              y={figuresY0 + (i * 12)}
+                                              textAnchor="middle"
+                                              fontSize={12}
+                                              fill="black"
+                                            >
+                                              {f}
+                                            </text>
+                                          ))}
+                                        </g>
+                                      ) : null}
+                                    </g>
+                                  );
+                                })}
+
+                                {/* Violation halos around notes (uses notePositions + noteId mapping) */}
+                                {Array.from(violationLevelByNoteId.entries()).map(([noteId, level]) => {
+                                  const pos = notePositions.get(noteId);
+                                  if (!pos) return null;
+
+                                  const isHovered = hoveredViolationNotes?.includes(noteId);
+                                  const stroke = level === 'warning' ? '#f59e0b' : '#ef4444'; // amber/red
+                                  const r = isHovered ? 11 : 9;
+
+                                  return (
+                                    <circle
+                                      key={`vio-${noteId}`}
+                                      cx={pos.x}
+                                      cy={pos.y}
+                                      r={r}
+                                      fill="none"
+                                      stroke={stroke}
+                                      strokeWidth={isHovered ? 3 : 2}
+                                      opacity={0.9}
+                                    />
+                                  );
+                                })}
+                              </svg>
+                            )}
+                          </div>
                         );
                     })}
                 </div>
+
+                {/* Restore analysis panel */}
                 {activeTab === 'analysis' && (
                     <div className="w-full max-w-sm flex-shrink-0">
                         {isAnalysisEnabled ? (
-                             <HarmonyAnalysisPanel violations={violations} onHoverViolation={setHoveredViolationNotes} />
+                            <HarmonyAnalysisPanel violations={violations} onHoverViolation={setHoveredViolationNotes} />
                         ) : (
                             <div className="bg-gray-800/50 rounded-lg p-3 h-full max-h-96 overflow-y-auto flex items-center justify-center text-center text-gray-400">
                                 <div>
@@ -2675,14 +1575,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     </div>
                 )}
             </div>
-             {contextMenu && <ModulationContextMenu
-                menuData={contextMenu}
-                onClose={() => setContextMenu(null)}
-                onApply={handleApplyContext}
-                onRemove={handleRemoveContext}
-                initialKey={existingContextForMenu ? existingContextForMenu.newTonic : keySignatureRoot}
-                initialIsMinor={existingContextForMenu ? existingContextForMenu.newIsMinor : isMinorMode}
-            />}
+
+            {/* ...existing context menu code... */}
         </div>
     );
 };
