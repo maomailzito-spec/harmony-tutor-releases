@@ -339,6 +339,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [isDotted, setIsDotted] = useState(false);
     const [isTriplet, setIsTriplet] = useState(false);
     const [tupletNoteCount, setTupletNoteCount] = useState(0);
+    const [tripletBaseDuration, setTripletBaseDuration] = useState<NoteDuration | null>(null);
     const [activeAccidental, setActiveAccidental] = useState<AccidentalType | null>(null);
     const [selectedVoice, setSelectedVoice] = useState<Voice>(1);
     const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
@@ -718,46 +719,76 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             });
     
             notesByVoice.forEach((voiceNotes) => {
-                voiceNotes.sort((a,b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
-    
-                for (let i = 0; i < voiceNotes.length - 2; i++) {
-                    const note1 = voiceNotes[i];
-                    const note2 = voiceNotes[i+1];
-                    const note3 = voiceNotes[i+2];
-    
-                    if (note1.isTriplet && note2.isTriplet && note3.isTriplet) {
-                        const groupNotes = [note1, note2, note3];
-    
-                        const isTreble = note1.clef !== 'bass';
+                const getRhythmicValue = (n: StaffNote) => {
+                    const base = DURATION_VALUES[n.duration || 'quarter'];
+                    const dotted = n.isDotted ? 1.5 : 1;
+                    return base * dotted;
+                };
+
+                voiceNotes.sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
+
+                // Group consecutive triplet-marked notes by "triplet units".
+                // This supports patterns like quarter+eighth as an "eighth triplet" (2+1 units).
+                for (let i = 0; i < voiceNotes.length; i++) {
+                    const start = voiceNotes[i];
+                    if (!start.isTriplet) continue;
+
+                    const groupNotes: StaffNote[] = [];
+                    let baseValue = Infinity;
+                    let unitsSum = 0;
+
+                    let j = i;
+                    for (; j < voiceNotes.length; j++) {
+                        const n = voiceNotes[j];
+                        if (!n.isTriplet) break;
+
+                        groupNotes.push(n);
+                        baseValue = Math.min(baseValue, getRhythmicValue(n));
+
+                        // Recompute units each time in case baseValue changes (e.g., first note is a quarter, then an eighth).
+                        unitsSum = groupNotes.reduce((sum, gn) => sum + (getRhythmicValue(gn) / Math.max(1e-6, baseValue)), 0);
+
+                        if (unitsSum >= 3 - 1e-6) break;
+                    }
+
+                    // Only draw if the group completes (or slightly exceeds) a triplet.
+                    if (groupNotes.length > 0 && unitsSum >= 3 - 1e-3) {
+                        const first = groupNotes[0];
+                        const last = groupNotes[groupNotes.length - 1];
+
+                        const isTreble = first.clef !== 'bass';
                         const yOffset = isTreble ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT;
                         const staffTop = isTreble ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
-                        
-                        const x1 = note1.xPosition!;
-                        const x3 = note3.xPosition!;
-                        const midX = (x1 + x3) / 2;
-    
+
                         const noteYPositions = groupNotes.map(n => getNoteY(n.position, staffTop, n.clef || 'treble'));
                         const highestNoteHeadY = Math.min(...noteYPositions);
-                        
+
                         const BRACKET_OFFSET_FROM_NOTE = 40;
                         const CURVE_HEIGHT = 8;
                         const TEXT_OFFSET_FROM_BRACKET = 12;
 
                         const bracketY = highestNoteHeadY + yOffset - BRACKET_OFFSET_FROM_NOTE;
                         const textY = bracketY + TEXT_OFFSET_FROM_BRACKET;
-                        
+
+                        // Extend slightly beyond noteheads so the last note is clearly inside the bracket.
+                        const BRACKET_X_PADDING = 12;
+                        const xStart = (first.xPosition ?? 0) - BRACKET_X_PADDING;
+                        const xEnd = (last.xPosition ?? 0) + BRACKET_X_PADDING;
+                        const midX = (xStart + xEnd) / 2;
+
                         systemGroups.push({
-                            id: `triplet-${note1.id}`,
-                            x1,
-                            x2: x3,
+                            id: `triplet-${first.id}`,
+                            x1: xStart,
+                            x2: xEnd,
                             midX,
-                            bracketY: bracketY,
-                            textY: textY,
+                            bracketY,
+                            textY,
                             curveHeight: CURVE_HEIGHT,
                         });
-                        
-                        i += 2;
                     }
+
+                    // Continue after the consumed triplet run.
+                    i = Math.max(i, j);
                 }
             });
             systems[systemIndex] = systemGroups;
@@ -1698,13 +1729,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         }
 
         if (isTriplet) {
+            const baseDuration = tripletBaseDuration ?? selectedInsertion.duration;
+            const baseValue = DURATION_VALUES[baseDuration] || 0.5;
+            const insertedValue = DURATION_VALUES[selectedInsertion.duration] || 0.5;
+            const units = insertedValue / Math.max(1e-6, baseValue);
+
             setTupletNoteCount(prev => {
-                const newCount = prev + 1;
-                if (newCount >= 3) {
+                const nextUnits = prev + units;
+                if (nextUnits >= 3 - 1e-6) {
                     setIsTriplet(false);
+                    setTripletBaseDuration(null);
                     return 0;
                 }
-                return newCount;
+                return nextUnits;
             });
         }
 
@@ -1718,7 +1755,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         if (activeAccidental) {
             setActiveAccidental(null);
         }
-    }, [playNote, selectedInsertion, isTriplet, isDotted, setRawNotes, layoutData, analyzedNotes, isLooping, selectedVoice, activeAccidental, keySignature, timeSignature, rawNotes, clipboard]);
+    }, [playNote, selectedInsertion, isTriplet, isDotted, setRawNotes, layoutData, analyzedNotes, isLooping, selectedVoice, activeAccidental, keySignature, timeSignature, rawNotes, clipboard, tripletBaseDuration]);
     
     const handleNoteClick = useCallback(async (noteId: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -2419,6 +2456,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             const newTripletState = !t;
                             if (newTripletState) {
                                 setTupletNoteCount(0);
+                                setTripletBaseDuration(selectedInsertion.duration);
+                            } else {
+                                setTupletNoteCount(0);
+                                setTripletBaseDuration(null);
                             }
                             return newTripletState;
                         });
