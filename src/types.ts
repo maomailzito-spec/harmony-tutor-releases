@@ -163,6 +163,7 @@ export type StaffNote = {
   errorType?: 'error' | 'warning' | 'exception' | null;
   voice?: Voice;
   manualBeamGroupId?: string;
+  manualBeamDisabled?: boolean;
   manualStemDirection?: 'up' | 'down';
   manualTieDirection?: 'up' | 'down';
 };

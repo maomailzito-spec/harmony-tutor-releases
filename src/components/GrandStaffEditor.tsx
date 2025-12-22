@@ -772,12 +772,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                         // Extend beyond note glyphs so the last note is clearly inside the bracket.
                         // `xPosition` here is beat-based (TickContext X), not the notehead edge.
+                        // VexFlow noteheads end up slightly to the right of our beat-to-x mapping,
+                        // so we apply a small anchor shift to keep bracket + "3" visually centered.
                         // Flagged notes (eighth and shorter) visually extend more to the right.
+                        const ANCHOR_X_SHIFT = 12;
                         const leftPad = 14;
                         const lastBaseDur = DURATION_VALUES[last.duration || 'quarter'];
                         const rightPad = lastBaseDur <= 0.5 ? 44 : 28;
-                        const xStart = (first.xPosition ?? 0) - leftPad;
-                        const xEnd = (last.xPosition ?? 0) + rightPad;
+                        const xStart = (first.xPosition ?? 0) + ANCHOR_X_SHIFT - leftPad;
+                        const xEnd = (last.xPosition ?? 0) + ANCHOR_X_SHIFT + rightPad;
                         const midX = (xStart + xEnd) / 2;
 
                         systemGroups.push({
@@ -1466,15 +1469,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         dragStartPosRef.current = null;
     }, [layoutData, handleWindowMouseMove, timeSignature, isLooping, setSelectedNoteIds, notePositions]);
 
-    const handleBackgroundMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>, systemIndex: number) => {
+    const handleBackgroundMouseDown = useCallback((e: MouseEvent, svg: SVGSVGElement, systemIndex: number) => {
         if (e.button !== 0) return;
+
+        // Important: the editor is primarily an insertion tool.
+        // Starting a drag-selection on every simple click makes insertion feel “broken” on trackpads
+        // (tiny pointer jitter crosses the drag threshold, setting `justDraggedRef` and blocking the click).
+        // So we only start the rectangle selection when:
+        // - looping mode is on (drag defines the loop range)
+        // - or a modifier is held (Shift/Ctrl/Cmd) to multi-select.
+        const wantsRectSelection = isLooping || e.shiftKey || e.ctrlKey || e.metaKey;
+        if (!wantsRectSelection) return;
 
         setPasteCaret(null);
         if (!isLooping && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
             setSelectedNoteIds(new Set());
         }
     
-        const svg = e.currentTarget;
         const pt = svg.createSVGPoint();
         pt.x = e.clientX;
         pt.y = e.clientY;
@@ -1761,7 +1772,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         }
     }, [playNote, selectedInsertion, isTriplet, isDotted, setRawNotes, layoutData, analyzedNotes, isLooping, selectedVoice, activeAccidental, keySignature, timeSignature, rawNotes, clipboard, tripletBaseDuration]);
     
-    const handleNoteClick = useCallback(async (noteId: string, e: React.MouseEvent) => {
+    const handleNoteClick = useCallback(async (noteId: string, e: React.MouseEvent | MouseEvent) => {
         e.stopPropagation();
         setPasteCaret(null);
         const note = analyzedNotes.find(n => n.id === noteId); 
@@ -2294,18 +2305,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
     const handleToggleBeamGroup = useCallback(() => {
         if (selectedNotesBeamState === 'unbeamable') return;
+        const isBeamableSelected = (note: StaffNote) =>
+            selectedNoteIds.has(note.id) && !note.isRest && DURATION_VALUES[note.duration || 'quarter'] <= 0.5;
         if (selectedNotesBeamState === 'beamed') {
             setRawNotes(prev => prev.map(note => {
-                if (selectedNoteIds.has(note.id)) {
+                if (isBeamableSelected(note)) {
+                    // Explicitly disable auto-beaming for notes the user just "separated".
+                    // This makes the action stable even if our renderer applies fallback auto-beams.
                     const { manualBeamGroupId, ...rest } = note;
-                    return rest;
+                    return { ...rest, manualBeamDisabled: true };
                 }
                 return note;
             }));
         } else {
             const newGroupId = crypto.randomUUID();
             setRawNotes(prev => prev.map(note => 
-                selectedNoteIds.has(note.id) ? { ...note, manualBeamGroupId: newGroupId } : note
+                isBeamableSelected(note)
+                  ? { ...note, manualBeamGroupId: newGroupId, manualBeamDisabled: false }
+                  : note
             ));
         }
     }, [selectedNotesBeamState, selectedNoteIds, setRawNotes]);
@@ -2580,11 +2597,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                     width={actualSystemWidth}
                                     height={TOTAL_SYSTEM_HEIGHT}
                                     selectedNoteIds={Array.from(selectedNoteIds)}
-                                    onNoteClick={(noteId) => handleNoteClick(noteId, { stopPropagation: () => {} } as any)}
+                                    onNoteClick={(noteId, e) => handleNoteClick(noteId, e as any)}
                                     onStaffClick={(x, y) => handleBackgroundClick(x, y, systemIndex)}
+                                    onStaffMouseDown={(e, svg) => handleBackgroundMouseDown(e, svg, systemIndex)}
                                     onMouseMoveStaff={(x, y) => handleMouseMove(x, y, systemIndex)}
                                     ghostNote={ghost}
                                 />
+
+                                {rectForRender && selectionRect.systemIndex === systemIndex && (
+                                    <svg
+                                        className="absolute inset-0 pointer-events-none"
+                                        width={actualSystemWidth}
+                                        height={TOTAL_SYSTEM_HEIGHT}
+                                    >
+                                        <rect
+                                            x={rectForRender.x}
+                                            y={rectForRender.y}
+                                            width={rectForRender.width}
+                                            height={rectForRender.height}
+                                            className="fill-cyan-400/10 stroke-cyan-500"
+                                            strokeWidth={1.5}
+                                        />
+                                    </svg>
+                                )}
 
                                 {systemTriplets.length > 0 && (
                                     <svg
