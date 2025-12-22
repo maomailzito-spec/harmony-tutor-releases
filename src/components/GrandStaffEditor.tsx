@@ -770,10 +770,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         const bracketY = highestNoteHeadY + yOffset - BRACKET_OFFSET_FROM_NOTE;
                         const textY = bracketY + TEXT_OFFSET_FROM_BRACKET;
 
-                        // Extend slightly beyond noteheads so the last note is clearly inside the bracket.
-                        const BRACKET_X_PADDING = 12;
-                        const xStart = (first.xPosition ?? 0) - BRACKET_X_PADDING;
-                        const xEnd = (last.xPosition ?? 0) + BRACKET_X_PADDING;
+                        // Extend beyond note glyphs so the last note is clearly inside the bracket.
+                        // `xPosition` here is beat-based (TickContext X), not the notehead edge.
+                        // Flagged notes (eighth and shorter) visually extend more to the right.
+                        const leftPad = 14;
+                        const lastBaseDur = DURATION_VALUES[last.duration || 'quarter'];
+                        const rightPad = lastBaseDur <= 0.5 ? 44 : 28;
+                        const xStart = (first.xPosition ?? 0) - leftPad;
+                        const xEnd = (last.xPosition ?? 0) + rightPad;
                         const midX = (xStart + xEnd) / 2;
 
                         systemGroups.push({
