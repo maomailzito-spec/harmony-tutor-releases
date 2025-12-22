@@ -1467,8 +1467,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     }, [handleWindowMouseMove, handleWindowMouseUp, isLooping]);
 
     const handleBackgroundClick = useCallback(async (x: number, y: number, systemIndex: number) => {
-            console.log('[DEBUG] handleBackgroundClick - selectedVoice:', selectedVoice);
-            // ...existing code...
         if (justDraggedRef.current) return;
         if (isLooping) { setLoopRange(null); return; }
 
@@ -1478,9 +1476,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const positionX = x;
         const rawY = y;
 
-        // DEBUG: Log input and computed values
-        console.log('[handleBackgroundClick]', { x, y, systemIndex });
-
         const systemParams = layoutData.systemsParams[systemIndex];
         if (!systemParams) return;
         let globalMeasureIndex = -1, measureStartX = 0, measureWidth = 0;
@@ -1488,17 +1483,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const startX = systemParams.startMeasuresX[i]; const mIdx = systemParams.measureIndices[i]; const width = layoutData.measureFinalWidths.get(mIdx) || 0;
             if (positionX >= startX && positionX < startX + width) { globalMeasureIndex = mIdx; measureStartX = startX; measureWidth = width; break; }
         }
-        console.log('[handleBackgroundClick] globalMeasureIndex:', globalMeasureIndex, 'measureStartX:', measureStartX, 'measureWidth:', measureWidth);
         if (globalMeasureIndex === -1) return;
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
         const relativeX = positionX - (measureStartX + MEASURE_PADDING_X);
         const clickedBeatRaw = (Math.max(0, Math.min(1, relativeX / contentWidth)) * beatsPerMeasure) + 1;
-        console.log('[handleBackgroundClick] relativeX:', relativeX, 'clickedBeatRaw:', clickedBeatRaw);
+
+        // SNAP ORIZZONTALE (griglia): quantizza il beat in base alla durata selezionata.
+        // Nota: ignoriamo il punto di valore per lo snap della posizione (si snappa alla griglia “base”).
+        const gridStep = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2 / 3) : 1);
+        const quantize = (beat: number) => {
+            const step = Math.max(1e-6, gridStep);
+            const q = 1 + Math.round((beat - 1) / step) * step;
+            const clamped = Math.max(1, Math.min(beatsPerMeasure + 1, q));
+            return Math.round(clamped * 1e6) / 1e6;
+        };
+        const clickedBeat = quantize(clickedBeatRaw);
 
         if (clipboard && clipboard.length > 0) {
-            setPasteCaret({ x: positionX, systemIndex, measureIndex: globalMeasureIndex, beat: clickedBeatRaw });
+            setPasteCaret({ x: positionX, systemIndex, measureIndex: globalMeasureIndex, beat: clickedBeat });
             return;
         }
 
@@ -1543,8 +1547,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         let snapPitchOctave: number | null = null;
         const SNAP_VERTICAL_THRESHOLD = 0.2; // in unità di posizione (mezzo spazio)
         if (targetClef === 'bass') {
-                        console.log('[DEBUG] handleBackgroundClick - notesSameBeat (bass):', analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.clef === 'bass'));
-                        console.log('[DEBUG] handleBackgroundClick - notesSameBeat (treble):', analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.clef === 'treble'));
             // Chiave di basso
             position = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
             // Tenore/Basso: correzione empirica di -4 posizioni diatoniche (~ -7 semitoni)
@@ -1553,7 +1555,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 position -= 4;
             }
             // Snap verticale: cerca nota più vicina sullo stesso beat e clef, ma di voce diversa
-            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.voice !== selectedVoice && n.clef === 'bass');
+            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeat) < 0.3 && n.voice !== selectedVoice && n.clef === 'bass');
             if (notesSameBeat.length > 0) {
                 const yPos = position;
                 let minDist = Infinity;
@@ -1574,7 +1576,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             // Chiave di violino (soprano/alto)
             position = ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
             // Snap verticale: cerca nota più vicina sullo stesso beat e clef, ma di voce diversa
-            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.voice !== selectedVoice && n.clef === 'treble');
+            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeat) < 0.3 && n.voice !== selectedVoice && n.clef === 'treble');
             if (notesSameBeat.length > 0) {
                 const yPos = position;
                 let minDist = Infinity;
@@ -1601,10 +1603,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 }
             }
         }
-        console.log('[handleBackgroundClick] staffTop:', staffTop, 'relativeY:', relativeY, 'position:', position, 'selectedVoice:', selectedVoice);
-        console.log('[handleBackgroundClick] diatonicProps:', diatonicProps);
-
-        let finalBeat = clickedBeatRaw, chordIdToJoin: string | undefined = undefined;
+        let finalBeat = clickedBeat, chordIdToJoin: string | undefined = undefined;
         const SNAP_THRESHOLD_PX = 5;
         // Cerca una nota vicina sullo stesso beat e clef, ma di voce diversa
         const snapTarget = layoutData.positionedNotes.find(n =>
@@ -1613,7 +1612,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             Math.abs((n.xPosition || 0) - positionX) < SNAP_THRESHOLD_PX &&
             (n.voice || 1) !== selectedVoice
         );
-        console.log('[DEBUG] handleBackgroundClick - snapTarget:', snapTarget);
         if (snapTarget) { finalBeat = snapTarget.beat!; chordIdToJoin = snapTarget.chordId || snapTarget.id; }
 
         let newElement: StaffNote;
@@ -2103,7 +2101,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const handleMouseMove = useCallback((x: number, y: number, systemIndex: number) => {
         if (isActuallyDraggingRef.current) { setGhostNote(null); return; }
 
-        const positionX = x;
+        // SNAP ORIZZONTALE (griglia): calcola misura e beat sotto il mouse e snappa l'X.
+        const systemParams = layoutData?.systemsParams?.[systemIndex];
+        if (!systemParams || !layoutData) { setGhostNote(null); return; }
+
+        let measureStartX = 0;
+        let measureWidth = 0;
+        for (let i = 0; i < systemParams.measureIndices.length; i++) {
+            const startX = systemParams.startMeasuresX[i];
+            const mIdx = systemParams.measureIndices[i];
+            const width = layoutData.measureFinalWidths.get(mIdx) || 0;
+            if (x >= startX && x < startX + width) {
+                measureStartX = startX;
+                measureWidth = width;
+                break;
+            }
+        }
+
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
+        const relativeX = x - (measureStartX + MEASURE_PADDING_X);
+        const hoveredBeatRaw = (Math.max(0, Math.min(1, relativeX / contentWidth)) * beatsPerMeasure) + 1;
+
+        const gridStep = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2 / 3) : 1);
+        const step = Math.max(1e-6, gridStep);
+        const hoveredBeat = Math.round((1 + Math.round((hoveredBeatRaw - 1) / step) * step) * 1e6) / 1e6;
+        const snappedRelativeX = ((hoveredBeat - 1) / beatsPerMeasure) * contentWidth;
+        const positionX = measureStartX + MEASURE_PADDING_X + snappedRelativeX;
+
         const rawY = y;
         const isBassStaffClick = rawY > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
         const targetClef: ClefType = isBassStaffClick ? 'bass' : 'treble';
@@ -2112,15 +2137,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
         const relativeY = targetClef === 'treble' ? rawY : rawY - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT;
-        console.log("--- DEBUG GHOST NOTE ---");
-console.log({
-    rawY: rawY,
-    staffTop: staffTop,
-    relativeY: relativeY,
-    LINE_HEIGHT: LINE_HEIGHT,
-    targetClef: targetClef
-});
-
         // Calcolo posizione ghost note
         // IMPORTANTISSIMO: deve usare la stessa convenzione di handleBackgroundClick,
         // altrimenti pitch/octave risultano disallineati (VexFlow renderizza usando pitch/octave).
@@ -2150,9 +2166,6 @@ console.log({
                 midi: diatonicProps.midi + 12,
             };
         }
-
-        // Log dettagliato per debug allineamento
-        console.log('[GHOST DEBUG] selectedVoice:', selectedVoice, 'targetClef:', targetClef, 'mouseY:', rawY, 'relativeY:', relativeY, 'position:', position, 'ghostPosition:', ghostPosition, 'diatonicProps.position:', diatonicProps.position);
 
         if (selectedInsertion.type === 'rest') {
             const ghost: StaffNote & { systemIndex: number } = {
@@ -2226,7 +2239,7 @@ console.log({
             manualStemDirection: selectedVoice === 1 || selectedVoice === 3 ? 'up' : 'down',
         };
         setGhostNote(ghost);
-    }, [selectedInsertion, isTriplet, isDotted, keySignature, activeAccidental, selectedVoice]);
+    }, [layoutData, timeSignature, selectedInsertion, isTriplet, isDotted, keySignature, activeAccidental, selectedVoice]);
     
     const handleMouseLeave = useCallback(() => { setGhostNote(null); }, []);
 
@@ -2510,12 +2523,15 @@ console.log({
                         const actualSystemWidth = system.width;
                         // Ghost note solo se ghostNote è per questo system
                         const ghost = ghostNote && ghostNote.systemIndex === systemIndex ? ghostNote : null;
+                        const systemBarlines = layoutData.systemsBarlines?.[systemIndex] || [];
+                        const systemTriplets = tripletGroupsBySystem[systemIndex] || [];
                         return (
                             <div key={`system-${systemIndex}`} className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'}`} style={{ width: actualSystemWidth, height: TOTAL_SYSTEM_HEIGHT }}>
                                 <VexflowGrandStaff
                                     notes={systemNotes}
                                     timeSignature={timeSignature}
                                     keySignature={keySignature}
+                                    barlines={systemBarlines}
                                     width={actualSystemWidth}
                                     height={TOTAL_SYSTEM_HEIGHT}
                                     selectedNoteIds={Array.from(selectedNoteIds)}
@@ -2524,6 +2540,42 @@ console.log({
                                     onMouseMoveStaff={(x, y) => handleMouseMove(x, y, systemIndex)}
                                     ghostNote={ghost}
                                 />
+
+                                {systemTriplets.length > 0 && (
+                                    <svg
+                                        className="absolute inset-0 pointer-events-none"
+                                        width={actualSystemWidth}
+                                        height={TOTAL_SYSTEM_HEIGHT}
+                                    >
+                                        {systemTriplets.map((t) => {
+                                            const hook = 8;
+                                            const y = t.bracketY;
+                                            const x1 = t.x1;
+                                            const x2 = t.x2;
+                                            const midX = t.midX;
+
+                                            return (
+                                                <g key={t.id}>
+                                                    <path
+                                                        d={`M ${x1} ${y} L ${x1} ${y + hook} M ${x1} ${y} L ${x2} ${y} M ${x2} ${y} L ${x2} ${y + hook}`}
+                                                        fill="none"
+                                                        stroke="black"
+                                                        strokeWidth={1.5}
+                                                    />
+                                                    <text
+                                                        x={midX}
+                                                        y={t.textY}
+                                                        textAnchor="middle"
+                                                        fontSize={14}
+                                                        fill="black"
+                                                    >
+                                                        3
+                                                    </text>
+                                                </g>
+                                            );
+                                        })}
+                                    </svg>
+                                )}
                             </div>
                         );
                     })}

@@ -1,11 +1,12 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Dot } from 'vexflow';
-import type { StaffNote, TimeSignature, KeySignature } from '../types';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext } from 'vexflow';
+import type { AccidentalType, Barline, KeySignature, StaffNote, TimeSignature } from '../types';
 
 interface VexflowGrandStaffProps {
   notes: StaffNote[];
   timeSignature: TimeSignature;
   keySignature: KeySignature;
+  barlines?: Barline[];
   width?: number;
   height?: number;
   onNoteClick?: (noteId: string) => void;
@@ -35,20 +36,63 @@ const durationToVexflow = (duration: StaffNote['duration']): string => {
   }
 };
 
+const accidentalTypeToVexflow = (accidental: AccidentalType | string | null | undefined): string | null => {
+  if (!accidental) return null;
+
+  // Normalize common glyphs/legacy tokens into VexFlow accidentals.
+  switch (accidental) {
+    case 'sharp':
+    case '#':
+    case '♯':
+      return '#';
+    case 'flat':
+    case 'b':
+    case '♭':
+      return 'b';
+    case 'natural':
+    case 'n':
+    case '♮':
+      return 'n';
+    case 'double-sharp':
+    case '##':
+    case '𝄪':
+      return '##';
+    case 'double-flat':
+    case 'bb':
+    case '𝄫':
+      return 'bb';
+    default:
+      return null;
+  }
+};
+
 const makeVfNote = (n: StaffNote, clef: 'treble' | 'bass') => {
   const key = `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`;
   const baseDur = durationToVexflow(n.duration);
-  const duration = n.isRest ? `${baseDur}r` : baseDur;
+  // Keep the duration string free of dots.
+  // We render the dotted glyph ourselves as an SVG circle (more reliable when drawing
+  // notes one-by-one without Voice/Formatter).
+  const duration = `${baseDur}${n.isRest ? 'r' : ''}`;
   const note = new StaveNote({
     clef,
     keys: [key],
     duration,
   });
-  if (n.isDotted) {
-    Dot.buildAndAttach([note], { all: true });
-  }
-  if (n.accidental) {
-    note.addModifier(new Accidental(n.accidental), 0);
+  // Display rule:
+  // - If `explicitAccidental` is present:
+  //   - `null` means “do not show” (implied by key signature)
+  //   - otherwise show that explicit accidental
+  // - If `explicitAccidental` is undefined (legacy notes), fall back to `accidental`.
+  const accidentalToShow: AccidentalType | null =
+    n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
+  const vfAccidental = accidentalTypeToVexflow(accidentalToShow);
+  if (vfAccidental) {
+    try {
+      note.addModifier(new Accidental(vfAccidental), 0);
+    } catch {
+      // Never crash rendering due to a bad/unknown accidental value.
+      // If VexFlow rejects it, we just skip the modifier.
+    }
   }
   (note as any).__staffNoteId = n.id;
   return note;
@@ -68,6 +112,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   notes,
   timeSignature,
   keySignature,
+  barlines = [],
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
   onNoteClick,
@@ -106,6 +151,24 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     lineLeft.setType(StaveConnector.type.SINGLE_LEFT);
     lineLeft.setContext(context).draw();
 
+    // Draw measure barlines using the actual stave metrics so the line starts/ends
+    // exactly on the top/bottom staff lines (avoids pixel drift vs. a separate overlay).
+    if (barlines.length > 0) {
+      const yTop = treble.getYForLine(0);
+      const yBottom = bass.getYForLine(4);
+      const ctxAny = context as any;
+      ctxAny.save?.();
+      ctxAny.setLineWidth?.(1);
+      barlines.forEach((bar) => {
+        const x = bar.xPosition;
+        ctxAny.beginPath?.();
+        ctxAny.moveTo?.(x, yTop);
+        ctxAny.lineTo?.(x, yBottom);
+        ctxAny.stroke?.();
+      });
+      ctxAny.restore?.();
+    }
+
     const allNotes = ghostNote ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes;
     if (allNotes && allNotes.length > 0) {
       const trebleNotes = allNotes.filter(n => (n.clef || 'treble') === 'treble');
@@ -132,19 +195,129 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             vfNote.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });
           }
 
+          const dotFill = n.id === '__ghost__'
+            ? 'rgba(56,189,248,0.4)'
+            : (selectedNoteIds.includes(n.id) ? '#38bdf8' : 'black');
+
           // `xPosition` arriva in coordinate SVG assolute (come il mouse).
           // Quando disegniamo senza Formatter/Voice, VexFlow interpreta la TickContext X
           // come offset relativo a `stave.getNoteStartX()`.
           const absoluteX = (n.xPosition ?? (stave.getNoteStartX() + 10));
           const x = absoluteX - stave.getNoteStartX();
-          const tc = new TickContext();
-          tc.addTickable(vfNote);
-          tc.preFormat().setX(x);
 
+          // IMPORTANT: attach to stave/context BEFORE preFormat.
+          // Some modifiers (including dots from dotted durations) need stave metrics
+          // during preFormat; doing it earlier can make them vanish.
           vfNote.setStave(stave);
           vfNote.setContext(context);
-          vfNote.setTickContext(tc);
-          vfNote.draw();
+
+          const tc = new TickContext();
+          tc.addTickable(vfNote);
+          let didDraw = false;
+          try {
+            // Ensure the note is actually formatted before modifiers try to query positions.
+            // In our per-note (no Voice/Formatter) rendering path, VexFlow can otherwise
+            // throw: "UnformattedNote: Can't call GetModifierStartXY on an unformatted note".
+            tc.preFormat();
+            tc.setX(x);
+            vfNote.setTickContext(tc);
+            (vfNote as any).preFormat?.();
+            (vfNote as any).postFormat?.();
+            vfNote.draw();
+            didDraw = true;
+          } catch {
+            // If this is the ghost note, fall back to drawing it without accidentals
+            // rather than crashing the whole app.
+            if (n.id === '__ghost__') {
+              try {
+                const fallbackNote = makeVfNote(
+                  {
+                    ...n,
+                    explicitAccidental: null,
+                    accidental: undefined,
+                    userAccidental: undefined,
+                  } as StaffNote,
+                  clef
+                );
+                fallbackNote.setStave(stave);
+                fallbackNote.setContext(context);
+                fallbackNote.setXShift((vfNote as any).x_shift ?? 0);
+                fallbackNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
+
+                const tc2 = new TickContext();
+                tc2.addTickable(fallbackNote);
+                tc2.preFormat();
+                tc2.setX(x);
+                fallbackNote.setTickContext(tc2);
+                (fallbackNote as any).preFormat?.();
+                (fallbackNote as any).postFormat?.();
+                fallbackNote.draw();
+                didDraw = true;
+              } catch {
+                // If even the fallback fails, skip rendering the ghost.
+              }
+            }
+          }
+
+          if (!didDraw) {
+            (context as any).closeGroup?.();
+            return;
+          }
+
+          // Dotted notes: draw the dot ourselves as an SVG circle inside the note's group.
+          // This avoids VexFlow dot modifiers, which can be unstable when not using Voice/Formatter.
+          if (n.isDotted && group) {
+            try {
+              const svgNS = 'http://www.w3.org/2000/svg';
+              const ys: number[] | undefined = (vfNote as any).getYs?.();
+              const dotYs = (ys && ys.length > 0 ? ys : [stave.getYForLine(2)]).map((y) => {
+                const halfSpace = stave.getSpacingBetweenLines() / 2;
+                const topLineY = stave.getYForLine(0);
+                const middleLineY = stave.getYForLine(2);
+
+                // Snap to the nearest half-space step to align with staff geometry.
+                const step = Math.round((y - topLineY) / halfSpace);
+                let snappedY = topLineY + step * halfSpace;
+
+                // Dots should never sit on staff lines: if on a line, move into the nearest space.
+                // Use a conventional rule: for notes on/above the middle line, place dot above;
+                // for notes below the middle line, place dot below.
+                if (step % 2 === 0) {
+                  snappedY += (snappedY <= middleLineY ? -halfSpace : halfSpace);
+                }
+                return snappedY;
+              });
+
+              // Place the dot just to the right of the notehead (not the full glyph width).
+              // `getNoteHeadEndX()` is the most reliable when available.
+              const dotGap = 4.8; // +60% vs previous to avoid being too close
+              const headEndX = (vfNote as any).getNoteHeadEndX?.();
+              const absX = (vfNote as any).getAbsoluteX?.();
+              const xShift = (vfNote as any).x_shift ?? 0;
+
+              let dotBaseX: number;
+              if (typeof headEndX === 'number') {
+                dotBaseX = headEndX;
+              } else if (typeof absX === 'number') {
+                dotBaseX = absX + xShift;
+              } else {
+                dotBaseX = (stave.getNoteStartX() + x) + xShift;
+              }
+
+              const dotX = dotBaseX + dotGap;
+
+              dotYs.forEach((dotY) => {
+                const circle = document.createElementNS(svgNS, 'circle');
+                circle.setAttribute('cx', String(dotX));
+                circle.setAttribute('cy', String(dotY));
+                circle.setAttribute('r', '1.9');
+                circle.setAttribute('fill', dotFill);
+                group.appendChild(circle);
+              });
+            } catch {
+              // If anything goes wrong, skip the dot rather than crashing.
+            }
+          }
 
           (context as any).closeGroup?.();
         });
@@ -155,7 +328,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
       // No per-note DOM wiring here: we handle clicks via the global SVG handler below
     }
-  }, [notes, timeSignature, keySignature, width, height, onNoteClick, selectedNoteIds, ghostNote]);
+  }, [notes, timeSignature, keySignature, barlines, width, height, onNoteClick, selectedNoteIds, ghostNote]);
 
   useEffect(() => {
     if (!containerRef.current) return;

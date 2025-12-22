@@ -802,9 +802,11 @@ export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignat
         let tripletContext: { notesInTriplet: number; beatsForTriplet: number; notesProcessed: number } | null = null;
 
         for (const note of voiceNotes) {
-            let durationInBeats = DURATION_VALUES[note.duration || 'quarter'];
+            // Base duration in beats (quarter note = 1). Include dotted notes.
+            let durationInBeats = DURATION_VALUES[note.duration || 'quarter'] * (note.isDotted ? 1.5 : 1);
 
             if (note.isTriplet && !tripletContext) {
+                // 3 notes in the time of 2 of the same value.
                 tripletContext = { notesInTriplet: 3, beatsForTriplet: durationInBeats * 2, notesProcessed: 0 };
             }
 
