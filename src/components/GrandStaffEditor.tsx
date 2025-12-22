@@ -1,3 +1,4 @@
+// ...existing code...
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext } from '../types';
 import { AudioService } from '../services/AudioService';
@@ -14,6 +15,7 @@ import { NOTE_NAMES, DURATION_VALUES } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
 import { UngroupIcon } from './icons/UngroupIcon';
 import { FlipStemIcon } from './icons/FlipStemIcon';
+import VexflowGrandStaff from './VexflowGrandStaff';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -996,11 +998,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         output.send([0x80, midiNumber, 0], window.performance.now() + durationMs);
     };
 
-    const playNoteSound = useCallback(async (midi: number) => {
+    const playNoteSound = useCallback(async (note: StaffNote) => {
         if (!isAudioReady || !audioService.audioContext) return;
         await audioService.ensureAudioIsReady();
         const noteNamesWithFlats = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-        const soundingMidi = midi - 12;
+        // Playback: suona esattamente il midi memorizzato.
+        // (Abbiamo rimosso le trasposizioni “speciali” per tenore/basso per evitare offset cumulativi.)
+        const soundingMidi = note.midi;
         if (soundingMidi < 21 || soundingMidi > 108) return;
         const noteName = noteNamesWithFlats[soundingMidi % 12];
         const octave = Math.floor(soundingMidi / 12) - 1;
@@ -1011,7 +1015,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         if (selectedMidiOutput) {
             sendMidiNote(note, selectedMidiOutput, 1.0);
         } else {
-            await playNoteSound(note.midi);
+            await playNoteSound(note);
         }
     }, [selectedMidiOutput, playNoteSound]);
 
@@ -1175,7 +1179,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const performanceStartTime = performance.now() + (LOOKAHEAD_SEC * 1000);
 
         playbackTimeoutsRef.current.forEach(clearTimeout);
-        playbackTimeoutsRef.current = [];
     
         let endBeat;
         if (isLoopingRef.current && loopRangeRef.current) {
@@ -1215,7 +1218,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     const playAtAudioTime = audioStartTime + (beat - currentStartBeat) * beatDurationSec;
                     const audioFiles = audibleNotes.map(n => {
                         const noteNamesWithFlats = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-                        const soundingMidi = n.midi - 12; 
+                        const soundingMidi = n.midi;
                         const noteName = noteNamesWithFlats[soundingMidi % 12];
                         const octave = Math.floor(soundingMidi / 12) - 1;
                         return `${noteName}${octave}`;
@@ -1463,18 +1466,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         window.addEventListener('mouseup', handleWindowMouseUp);
     }, [handleWindowMouseMove, handleWindowMouseUp, isLooping]);
 
-    const handleBackgroundClick = useCallback(async (e: React.MouseEvent<SVGSVGElement>, systemIndex: number) => {
-        e.stopPropagation();
+    const handleBackgroundClick = useCallback(async (x: number, y: number, systemIndex: number) => {
+            console.log('[DEBUG] handleBackgroundClick - selectedVoice:', selectedVoice);
+            // ...existing code...
         if (justDraggedRef.current) return;
         if (isLooping) { setLoopRange(null); return; }
 
         setPasteCaret(null);
         setSelectedNoteIds(new Set());
 
-        const svg = e.currentTarget;
-        const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-        const svgPoint = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-        const { x: positionX, y: rawY } = svgPoint;
+        const positionX = x;
+        const rawY = y;
+
+        // DEBUG: Log input and computed values
+        console.log('[handleBackgroundClick]', { x, y, systemIndex });
 
         const systemParams = layoutData.systemsParams[systemIndex];
         if (!systemParams) return;
@@ -1483,22 +1488,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const startX = systemParams.startMeasuresX[i]; const mIdx = systemParams.measureIndices[i]; const width = layoutData.measureFinalWidths.get(mIdx) || 0;
             if (positionX >= startX && positionX < startX + width) { globalMeasureIndex = mIdx; measureStartX = startX; measureWidth = width; break; }
         }
+        console.log('[handleBackgroundClick] globalMeasureIndex:', globalMeasureIndex, 'measureStartX:', measureStartX, 'measureWidth:', measureWidth);
         if (globalMeasureIndex === -1) return;
-        
+
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
         const relativeX = positionX - (measureStartX + MEASURE_PADDING_X);
         const clickedBeatRaw = (Math.max(0, Math.min(1, relativeX / contentWidth)) * beatsPerMeasure) + 1;
-        
+        console.log('[handleBackgroundClick] relativeX:', relativeX, 'clickedBeatRaw:', clickedBeatRaw);
+
         if (clipboard && clipboard.length > 0) {
             setPasteCaret({ x: positionX, systemIndex, measureIndex: globalMeasureIndex, beat: clickedBeatRaw });
             return;
         }
 
         const isBassStaffClick = rawY > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
-        const targetClef: ClefType = isBassStaffClick ? 'bass' : 'treble';
-        const expectedVoiceClef = selectedVoice === 3 || selectedVoice === 4 ? 'bass' : 'treble';
-        if (targetClef !== expectedVoiceClef) return;
+        let targetClef: ClefType;
+        let octaveShift = 0;
+        if (selectedVoice === 1) { // Soprano
+            targetClef = 'treble';
+            octaveShift = 1;
+        } else if (selectedVoice === 2) { // Alto
+            targetClef = 'treble';
+            octaveShift = 0;
+        } else if (selectedVoice === 3) { // Tenore
+            targetClef = 'bass';
+            octaveShift = 1;
+        } else { // Basso
+            targetClef = 'bass';
+            octaveShift = 0;
+        }
+        // Blocca l'inserimento se il click non è sul rigo giusto
+        if ((targetClef === 'treble' && isBassStaffClick) || (targetClef === 'bass' && !isBassStaffClick)) return;
 
         const notesInTargetMeasureForVoice = rawNotes.filter(
             n => (n.measureIndex ?? 0) === globalMeasureIndex && (n.voice ?? 1) === selectedVoice
@@ -1510,20 +1531,91 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const newElementDuration = DURATION_VALUES[selectedInsertion.duration] * (isTriplet ? (2/3) : 1) * (isDotted ? 1.5 : 1);
         if (currentDurationInMeasure + newElementDuration > beatsPerMeasure + 0.001) {
             console.warn(`Metric validation failed: Measure ${globalMeasureIndex} for voice ${selectedVoice} would exceed capacity.`);
-            return; 
+            return;
         }
 
         const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
         const relativeY = targetClef === 'treble' ? rawY : rawY - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT;
-        let position = targetClef === 'bass' ? ((staffTop - relativeY) / (LINE_HEIGHT / 2)) - 2 : ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
-        
-        const diatonicProps = getNotePropertiesFromDiatonicPosition(Math.round(position), targetClef, keySignature);
+        let position: number;
+        let diatonicProps;
+        // SNAP VERTICALE: cerca nota più vicina nello stesso beat e voce
+        let snapPitchPosition: number | null = null;
+        let snapPitchOctave: number | null = null;
+        const SNAP_VERTICAL_THRESHOLD = 0.2; // in unità di posizione (mezzo spazio)
+        if (targetClef === 'bass') {
+                        console.log('[DEBUG] handleBackgroundClick - notesSameBeat (bass):', analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.clef === 'bass'));
+                        console.log('[DEBUG] handleBackgroundClick - notesSameBeat (treble):', analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.clef === 'treble'));
+            // Chiave di basso
+            position = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+            // Tenore/Basso: correzione empirica di -4 posizioni diatoniche (~ -7 semitoni)
+            // per allineare puntatore/ghost/inserimento nella chiave di basso.
+            if (selectedVoice === 3 || selectedVoice === 4) {
+                position -= 4;
+            }
+            // Snap verticale: cerca nota più vicina sullo stesso beat e clef, ma di voce diversa
+            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.voice !== selectedVoice && n.clef === 'bass');
+            if (notesSameBeat.length > 0) {
+                const yPos = position;
+                let minDist = Infinity;
+                notesSameBeat.forEach(n => {
+                    const dist = Math.abs((n.position ?? 0) - yPos);
+                    if (dist < minDist && dist < SNAP_VERTICAL_THRESHOLD) {
+                        minDist = dist;
+                        snapPitchPosition = n.position;
+                        snapPitchOctave = n.octave;
+                    }
+                });
+            }
+            const usePosition = snapPitchPosition !== null ? snapPitchPosition : Math.round(position);
+            diatonicProps = getNotePropertiesFromDiatonicPosition(usePosition, 'bass', keySignature);
+            if (snapPitchOctave !== null) diatonicProps.octave = snapPitchOctave;
+            // Nessuna trasposizione extra per il basso: evita offset cumulativi (es. +19 semitoni)
+        } else {
+            // Chiave di violino (soprano/alto)
+            position = ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+            // Snap verticale: cerca nota più vicina sullo stesso beat e clef, ma di voce diversa
+            const notesSameBeat = analyzedNotes.filter(n => n.measureIndex === globalMeasureIndex && Math.abs((n.beat ?? 1) - clickedBeatRaw) < 0.3 && n.voice !== selectedVoice && n.clef === 'treble');
+            if (notesSameBeat.length > 0) {
+                const yPos = position;
+                let minDist = Infinity;
+                notesSameBeat.forEach(n => {
+                    const dist = Math.abs((n.position ?? 0) - yPos);
+                    if (dist < minDist && dist < SNAP_VERTICAL_THRESHOLD) {
+                        minDist = dist;
+                        snapPitchPosition = n.position;
+                        snapPitchOctave = n.octave;
+                    }
+                });
+            }
+            const usePosition = snapPitchPosition !== null ? snapPitchPosition : Math.round(position);
+            diatonicProps = getNotePropertiesFromDiatonicPosition(usePosition, 'treble', keySignature);
+            if (snapPitchOctave !== null) diatonicProps.octave = snapPitchOctave;
+            if (selectedInsertion.type === 'note') {
+                // Per soprano (voce 1) trasporre suono un'ottava sopra rispetto a come scritto
+                if (selectedVoice === 1 || selectedVoice === 2) {
+                    diatonicProps = {
+                        ...diatonicProps,
+                        octave: diatonicProps.octave + 1,
+                        midi: diatonicProps.midi + 12,
+                    };
+                }
+            }
+        }
+        console.log('[handleBackgroundClick] staffTop:', staffTop, 'relativeY:', relativeY, 'position:', position, 'selectedVoice:', selectedVoice);
+        console.log('[handleBackgroundClick] diatonicProps:', diatonicProps);
 
         let finalBeat = clickedBeatRaw, chordIdToJoin: string | undefined = undefined;
-        const SNAP_THRESHOLD_PX = 15;
-        const snapTarget = layoutData.positionedNotes.find(n => n.measureIndex === globalMeasureIndex && (n.clef || 'treble') === targetClef && Math.abs((n.xPosition || 0) - positionX) < SNAP_THRESHOLD_PX && (n.voice || 1) === selectedVoice);
+        const SNAP_THRESHOLD_PX = 5;
+        // Cerca una nota vicina sullo stesso beat e clef, ma di voce diversa
+        const snapTarget = layoutData.positionedNotes.find(n =>
+            n.measureIndex === globalMeasureIndex &&
+            (n.clef || 'treble') === targetClef &&
+            Math.abs((n.xPosition || 0) - positionX) < SNAP_THRESHOLD_PX &&
+            (n.voice || 1) !== selectedVoice
+        );
+        console.log('[DEBUG] handleBackgroundClick - snapTarget:', snapTarget);
         if (snapTarget) { finalBeat = snapTarget.beat!; chordIdToJoin = snapTarget.chordId || snapTarget.id; }
-        
+
         let newElement: StaffNote;
 
         if (selectedInsertion.type === 'note') {
@@ -1578,11 +1670,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             };
             await playNote(newElement);
         } else {
+            // Inserisci una pausa con posizione e ottava coerente con la voce
+            let restPosition, restOctave;
+            if (selectedVoice === 1) { // Soprano
+                restPosition = 8; restOctave = 5;
+            } else if (selectedVoice === 2) { // Alto
+                restPosition = 6; restOctave = 4;
+            } else if (selectedVoice === 3) { // Tenore
+                restPosition = 6; restOctave = 3;
+            } else { // Basso
+                restPosition = 4; restOctave = 2;
+            }
             newElement = {
                 id: crypto.randomUUID(),
                 pitch: 'B',
-                octave: 4,
-                position: 8,
+                octave: restOctave,
+                position: restPosition,
                 midi: 0,
                 noteIndex: 0,
                 duration: selectedInsertion.duration,
@@ -1595,7 +1698,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 voice: selectedVoice,
             };
         }
-        
+
         if (isTriplet) {
             setTupletNoteCount(prev => {
                 const newCount = prev + 1;
@@ -1613,7 +1716,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             newNotes.push(newElement);
             return newNotes.sort((a, b) => { const m = (a.measureIndex ?? 0) - (b.measureIndex ?? 0); if (m !== 0) return m; const be = (a.beat ?? 1) - (b.beat ?? 1); if (be !== 0) return be; return (a.voice ?? 1) - (b.voice ?? 1); });
         });
-        
+
         if (activeAccidental) {
             setActiveAccidental(null);
         }
@@ -1927,32 +2030,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         if (selectedNoteIds.size > 0) {
             if (e.key === 'Backspace' || e.key === 'Delete') {
                 e.preventDefault();
-                setRawNotes(prev => {
-                    const updatedNotes = prev.map(note => {
-                        if (selectedNoteIds.has(note.id)) {
-                            if (!note.isRest) {
-                                // Replace note with a rest
-                                return {
-                                    ...note,
-                                    id: crypto.randomUUID(),
-                                    isRest: true,
-                                    pitch: 'B',
-                                    octave: 4,
-                                    position: 8,
-                                    midi: 0,
-                                    noteIndex: 0,
-                                };
-                            } else {
-                                // Mark rest for removal
-                                return null;
-                            }
-                        }
-                        return note;
-                    });
-
-                    // Filter out null values (deleted rests)
-                    return updatedNotes.filter(note => note !== null);
-                });
+                setRawNotes(prev => prev.filter(note => !selectedNoteIds.has(note.id)));
                 setSelectedNoteIds(new Set());
             } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey) {
                 e.preventDefault();
@@ -2021,16 +2099,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     };
     const handleBpmBlur = () => { setIsBpmActive(false); if (bpmInputTimeoutRef.current) clearTimeout(bpmInputTimeoutRef.current); if (bpmInputString) commitBpm(bpmInputString); setBpmInputString(''); };
     const handleDeselectOnClickOutside = (e: React.MouseEvent) => { if (justDraggedRef.current) return; if (e.target === e.currentTarget) setSelectedNoteIds(new Set()); };
-    const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>, systemIndex: number) => {
+    // Adattata per accettare (x, y, systemIndex) da VexflowGrandStaff
+    const handleMouseMove = useCallback((x: number, y: number, systemIndex: number) => {
         if (isActuallyDraggingRef.current) { setGhostNote(null); return; }
 
-        const svg = e.currentTarget;
-        const pt = svg.createSVGPoint();
-        pt.x = e.clientX;
-        pt.y = e.clientY;
-        const svgPoint = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-        const { x: positionX, y: rawY } = svgPoint;
-
+        const positionX = x;
+        const rawY = y;
         const isBassStaffClick = rawY > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
         const targetClef: ClefType = isBassStaffClick ? 'bass' : 'treble';
         const expectedVoiceClef = selectedVoice === 3 || selectedVoice === 4 ? 'bass' : 'treble';
@@ -2038,9 +2112,47 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         const staffTop = targetClef === 'treble' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
         const relativeY = targetClef === 'treble' ? rawY : rawY - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT;
-        let position = targetClef === 'bass' ? ((staffTop - relativeY) / (LINE_HEIGHT / 2)) - 2 : ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
-        
-        const diatonicProps = getNotePropertiesFromDiatonicPosition(Math.round(position), targetClef, keySignature);
+        console.log("--- DEBUG GHOST NOTE ---");
+console.log({
+    rawY: rawY,
+    staffTop: staffTop,
+    relativeY: relativeY,
+    LINE_HEIGHT: LINE_HEIGHT,
+    targetClef: targetClef
+});
+
+        // Calcolo posizione ghost note
+        // IMPORTANTISSIMO: deve usare la stessa convenzione di handleBackgroundClick,
+        // altrimenti pitch/octave risultano disallineati (VexFlow renderizza usando pitch/octave).
+        let position: number;
+        if (targetClef === 'treble') {
+            position = ((staffTop + 5 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+        } else {
+            position = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+            // Tenore: stessa correzione dell'inserimento (≈ -7 semitoni)
+            if (selectedVoice === 3 || selectedVoice === 4) {
+                position -= 4;
+            }
+        }
+        position = Math.round(position);
+
+        // Offset corretto per basso/tenore (chiave di basso): ghostPosition = position + 14
+        let ghostPosition = position;
+        // Calcola octave e pitch coerenti con la posizione della ghost note
+        let diatonicProps = getNotePropertiesFromDiatonicPosition(ghostPosition, targetClef, keySignature);
+
+        // Per soprano/alto: in handleBackgroundClick viene applicato uno shift di +1 ottava.
+        // Se qui non lo facciamo, la ghost note risulta più bassa (es. -1 ottava per l'alto).
+        if (selectedInsertion.type === 'note' && (selectedVoice === 1 || selectedVoice === 2) && targetClef === 'treble') {
+            diatonicProps = {
+                ...diatonicProps,
+                octave: diatonicProps.octave + 1,
+                midi: diatonicProps.midi + 12,
+            };
+        }
+
+        // Log dettagliato per debug allineamento
+        console.log('[GHOST DEBUG] selectedVoice:', selectedVoice, 'targetClef:', targetClef, 'mouseY:', rawY, 'relativeY:', relativeY, 'position:', position, 'ghostPosition:', ghostPosition, 'diatonicProps.position:', diatonicProps.position);
 
         if (selectedInsertion.type === 'rest') {
             const ghost: StaffNote & { systemIndex: number } = {
@@ -2097,7 +2209,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         const ghost: StaffNote & { systemIndex: number } = {
             id: 'ghost',
-            ...finalNoteProps,
+            pitch: finalNoteProps.pitch,
+            octave: finalNoteProps.octave,
+            position: finalNoteProps.position,
+            midi: finalNoteProps.midi,
+            noteIndex: finalNoteProps.noteIndex,
+            clef: targetClef,
+            accidental: finalNoteProps.accidental,
             duration: selectedInsertion.duration,
             isRest: false,
             isTriplet,
@@ -2105,7 +2223,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             xPosition: positionX,
             voice: selectedVoice,
             systemIndex,
-            manualStemDirection: selectedVoice === 1 || selectedVoice === 3 ? 'up' : 'down', // Updated to use manualStemDirection
+            manualStemDirection: selectedVoice === 1 || selectedVoice === 3 ? 'up' : 'down',
         };
         setGhostNote(ghost);
     }, [selectedInsertion, isTriplet, isDotted, keySignature, activeAccidental, selectedVoice]);
@@ -2388,355 +2506,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     onClick={handleDeselectOnClickOutside}
                 >
                     {layoutData.systemsParams.map((system, systemIndex) => {
-                        const systemNoteIds = new Set(layoutData.positionedNotes.filter(note => new Set(system.measureIndices).has(note.measureIndex ?? -1)).map(n => n.id));
-                        const systemErrorConnections = errorConnections.filter(conn => systemNoteIds.has(conn.noteId1) && systemNoteIds.has(conn.noteId2));
                         const systemNotes = layoutData.positionedNotes.filter(note => new Set(system.measureIndices).has(note.measureIndex ?? -1));
-                        const barlines = layoutData.systemsBarlines[systemIndex];
                         const actualSystemWidth = system.width;
-                        const primaryColor = 'black';
-                        
-                        const playheadTop = TOP_STAFF_TOP;
-                        const playheadHeight = (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + STAFF_LINES_HEIGHT) - TOP_STAFF_TOP;
-                        
-                        const systemLoopRegions = loopHighlightRegions.filter(region => region.systemIndex === systemIndex);
-                        const isViolationHovered = (connection: ErrorConnection) => hoveredViolationNotes ? hoveredViolationNotes.includes(connection.noteId1) && hoveredViolationNotes.includes(connection.noteId2) : false;
-
-                        const currentBeamedNoteIds = beamedNoteIdsBySystem[systemIndex] || new Set();
-
+                        // Ghost note solo se ghostNote è per questo system
+                        const ghost = ghostNote && ghostNote.systemIndex === systemIndex ? ghostNote : null;
                         return (
                             <div key={`system-${systemIndex}`} className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'}`} style={{ width: actualSystemWidth, height: TOTAL_SYSTEM_HEIGHT }}>
-                                <GrandStaffBrace height={TOTAL_SYSTEM_HEIGHT} />
-                                 {contextMarkers.filter(m => m.systemIndex === systemIndex).map((marker, idx) => (
-                                    <div key={`marker-${idx}`} className="absolute text-sm font-bold text-blue-500 pointer-events-none" style={{ left: marker.x, top: TOP_STAFF_TOP - 30 }}>
-                                        {marker.label}
-                                    </div>
-                                ))}
-                                {systemLoopRegions.map((r, idx) => (
-                                    <div key={`loop-region-${idx}`} className="absolute bg-green-500/20 z-0 pointer-events-none" style={{ left: r.x, width: r.width, top: 0, bottom: 0 }} />
-                                ))}
-                                {playheadPosition?.systemIndex === systemIndex && isPlaying && (
-                                    <div className="absolute w-0.5 bg-red-500/80 pointer-events-none z-30" style={{ transform: `translateX(${playheadPosition.x}px)`, top: playheadTop, height: playheadHeight }} />
-                                )}
-                                {pasteCaret?.systemIndex === systemIndex && (
-                                    <div 
-                                        className="absolute w-0.5 bg-blue-500 pointer-events-none z-30"
-                                        style={{
-                                            transform: `translateX(${pasteCaret.x}px)`,
-                                            top: TOP_STAFF_TOP,
-                                            height: playheadHeight
-                                        }}
-                                    />
-                                )}
-                                <svg 
-                                    width={actualSystemWidth} 
-                                    height={TOTAL_SYSTEM_HEIGHT} 
-                                    viewBox={`0 0 ${actualSystemWidth} ${TOTAL_SYSTEM_HEIGHT}`} 
-                                    className={`absolute top-0 left-0 ${isLooping || clipboard ? 'cursor-crosshair' : ''}`} 
-                                    onMouseDown={(e) => handleBackgroundMouseDown(e, systemIndex)} 
-                                    onClick={(e) => handleBackgroundClick(e, systemIndex)}
-                                    onMouseMove={(e) => handleMouseMove(e, systemIndex)}
-                                    onMouseLeave={handleMouseLeave}
-                                >
-                                    <rect x="0" y="0" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT} fill="transparent" />
-                                    {rectForRender && selectionRect.systemIndex === systemIndex && (
-                                        <rect x={rectForRender.x} y={rectForRender.y} width={rectForRender.width} height={rectForRender.height} fill={isLooping ? 'rgb(34, 197, 94)' : 'rgb(56, 189, 248)'} fillOpacity="0.2" stroke={isLooping ? 'rgb(34, 197, 94)' : 'rgb(56, 189, 248)'} strokeWidth="1" />
-                                    )}
-                                    <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-20" preserveAspectRatio="none">
-                                        {systemErrorConnections.map((conn, index) => {
-                                            const pos1 = notePositions.get(conn.noteId1);
-                                            const pos2 = notePositions.get(conn.noteId2);
-
-                                            const conn_notes = [conn.noteId1, conn.noteId2];
-                                            let violationForConnection = violations.find(v => {
-                                                const vSet = new Set(v.noteIds);
-                                                const cSet = new Set(conn_notes);
-                                                if(vSet.size !== cSet.size) return false;
-                                                for(const id of cSet) if(!vSet.has(id)) return false;
-                                                return true;
-                                            });
-                                            
-                                            if (!violationForConnection) {
-                                                const relatedViolations = violations.filter(v => 
-                                                    v.noteIds.includes(conn.noteId1) || v.noteIds.includes(conn.noteId2)
-                                                );
-                                                if(relatedViolations.length > 0) {
-                                                    const severityOrder = { 'exception': 0, 'warning': 1, 'error': 2 };
-                                                    violationForConnection = relatedViolations.reduce((max, current) => 
-                                                        severityOrder[current.severity] > severityOrder[max.severity] ? current : max
-                                                    );
-                                                }
-                                            }
-
-                                            let strokeColor = 'rgb(239, 68, 68)';
-                                            if (violationForConnection) {
-                                                switch(violationForConnection.severity) {
-                                                    case 'warning': strokeColor = 'rgb(251, 146, 60)'; break;
-                                                    case 'exception': strokeColor = 'rgb(34, 197, 94)'; break;
-                                                    case 'error':
-                                                    default: strokeColor = 'rgb(239, 68, 68)'; break;
-                                                }
-                                            }
-
-                                            const isHovered = isViolationHovered(conn);
-                                            if (pos1 && pos2) {
-                                                if (conn.type === 'vertical') {
-                                                    return <line key={`error-line-${index}`} x1={pos1.x} y1={pos1.y} x2={pos2.x} y2={pos2.y} stroke={strokeColor} strokeWidth={isHovered ? 3 : 1.5} style={{ transition: 'stroke-width 0.2s' }} />;
-                                                } else { // horizontal
-                                                    const midX = (pos1.x + pos2.x) / 2;
-                                                    const pathData = `M ${pos1.x} ${pos1.y} H ${midX} V ${pos2.y} H ${pos2.x}`;
-                                                    return <path key={`error-path-${index}`} d={pathData} stroke={strokeColor} strokeWidth={isHovered ? 3 : 1.5} fill="none" strokeDasharray="4 2" style={{ transition: 'stroke-width 0.2s' }} />;
-                                                }
-                                            }
-                                            return null;
-                                        })}
-                                    </svg>
-                                    {tiePathsBySystem[systemIndex]}
-                                    {Array.from({ length: 5 }).map((_, i) => <line key={`t-line-${i}`} x1="10" y1={TOP_STAFF_TOP + i * LINE_HEIGHT} x2={actualSystemWidth - 10} y2={TOP_STAFF_TOP + i * LINE_HEIGHT} stroke="gray" strokeWidth="1" />)}
-                                    {Array.from({ length: 5 }).map((_, i) => <line key={`b-line-${i}`} x1="10" y1={TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + i * LINE_HEIGHT} x2={actualSystemWidth - 10} y2={TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + i * LINE_HEIGHT} stroke="gray" strokeWidth="1" />)}
-                                    { (systemIndex === 0 || viewMode === 'linear') && <g> 
-                                        <text x="30" y={TOP_STAFF_TOP + 4.6 * LINE_HEIGHT} fontSize="100" fontFamily="serif" fill={primaryColor} textAnchor="middle">𝄞</text> 
-                                        <text x="30" y={TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + 3.9 * LINE_HEIGHT} fontSize="80" fontFamily="serif" fill={primaryColor} textAnchor="middle">𝄢</text>
-                                        <KeySignatureDisplay signature={keySignature} color={primaryColor} clef='treble' staffTop={TOP_STAFF_TOP} />
-                                        <KeySignatureDisplay signature={keySignature} color={primaryColor} clef='bass' staffTop={TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP} />
-                                        {timeSignature && <g>
-                                            <TimeSignatureDisplay signature={timeSignature} x={START_X + (keySignature.count * 14) + 15} color={primaryColor} staffTop={TOP_STAFF_TOP} />
-                                            <TimeSignatureDisplay signature={timeSignature} x={START_X + (keySignature.count * 14) + 15} color={primaryColor} staffTop={TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP} />
-                                        </g>}
-                                    </g> }
-                                    {barlines.map(bar => {
-                                        const measureIndex = parseInt(bar.id.split('-')[1]);
-                                        return (
-                                            <line
-                                                key={bar.id}
-                                                x1={bar.xPosition} y1={TOP_STAFF_TOP}
-                                                x2={bar.xPosition} y2={TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT}
-                                                stroke="black" strokeWidth="1.5"
-                                                onContextMenu={(e) => handleBarlineRightClick(e, measureIndex)}
-                                                className="cursor-pointer hover:stroke-blue-500"
-                                            />
-                                        );
-                                    })}
-                                    {tripletGroupsBySystem[systemIndex]?.map(group => {
-                                        return (
-                                            <g key={group.id} className="pointer-events-none">
-                                                <path d={`M ${group.x1},${group.bracketY} Q ${group.midX},${group.bracketY - group.curveHeight} ${group.x2},${group.bracketY}`} fill="none" stroke="black" strokeWidth="1.5" />
-                                                <text x={group.midX} y={group.textY} textAnchor="middle" dominantBaseline="middle" fontSize="14" fontWeight="bold" fill="black">3</text>
-                                            </g>
-                                        )
-                                    })}
-                                    {beamGroupsBySystem[systemIndex]?.map((group, groupIndex) => {
-                                        if (group.length < 2) return null;
-                                        const firstNote = group[0];
-                                        const lastNote = group[group.length - 1];
-                                        const isTreble = firstNote.clef !== 'bass';
-                                        const staffTop = isTreble ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
-                                        const yOffset = isTreble ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT;
-                                        
-                                        let isGroupStemUp: boolean;
-                                        if (firstNote.manualStemDirection) {
-                                            isGroupStemUp = firstNote.manualStemDirection === 'up';
-                                        } else {
-                                            const firstNoteVoice = firstNote.voice;
-                                            if (firstNoteVoice === 1 || firstNoteVoice === 3) {
-                                                isGroupStemUp = true;
-                                            } else if (firstNoteVoice === 2 || firstNoteVoice === 4) {
-                                                isGroupStemUp = false;
-                                            } else {
-                                                const middleLinePos = isTreble ? 6 : -2;
-                                                const avgPos = group.reduce((sum, n) => sum + n.position, 0) / group.length;
-                                                isGroupStemUp = avgPos < middleLinePos;
-                                            }
-                                        }
-
-                                        const STEM_LENGTH = 35;
-                                        const BEAM_THICKNESS = 4;
-                                        const getStemProps = (note: StaffNote) => {
-                                            const x = note.xPosition || 0; // Ensure xPosition is defined
-                                            const y = getNoteY(note.position, staffTop, note.clef || 'treble');
-                                            const stemX = x + (isGroupStemUp ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5));
-                                            return { stemX, y };
-                                        };
-
-                                        const firstNoteProps = getStemProps(firstNote);
-                                        const lastNoteProps = getStemProps(lastNote);
-                                        const firstNoteStemEndY = isGroupStemUp ? firstNoteProps.y - STEM_LENGTH : firstNoteProps.y + STEM_LENGTH;
-                                        const lastNoteStemEndY = isGroupStemUp ? lastNoteProps.y - STEM_LENGTH : lastNoteProps.y + STEM_LENGTH;
-                                        const getBeamCount = (d: NoteDuration) => (d === 'eighth' ? 1 : d === 'sixteenth' ? 2 : d === 'thirty-second' ? 3 : d === 'sixty-fourth' ? 4 : 0);
-                                        const maxBeams = Math.max(...group.map(n => getBeamCount(n.duration!)));
-                                        return (
-                                            <g key={`beam-group-${groupIndex}`} transform={`translate(0, ${yOffset})`}>
-                                                {group.map(note => {
-                                                    const { stemX, y } = getStemProps(note);
-                                                    const ratio = (group.length > 1 && lastNoteProps.stemX !== firstNoteProps.stemX) ? (stemX - firstNoteProps.stemX) / (lastNoteProps.stemX - firstNoteProps.stemX || 1) :  0;
-                                                    const stemEndY = firstNoteStemEndY + (lastNoteStemEndY - firstNoteStemEndY) * ratio;
-                                                    return <line key={`stem-${note.id}`} x1={stemX} y1={y} x2={stemX} y2={stemEndY} stroke="black" strokeWidth="1.5" />;
-                                                })}
-                                                {Array.from({ length: maxBeams }).map((_, beamLevel) => {
-                                                    const beamYDirection = isGroupStemUp ? 1 : -1;
-                                                    const beamLevelOffset = beamYDirection * beamLevel * (BEAM_THICKNESS + 2);
-                                                    let currentSegment: { startNote: StaffNote, endNote: StaffNote } | null = null;
-                                                    const segments: React.ReactNode[] = [];
-                                                    for (let i = 0; i < group.length; i++) {
-                                                        const note = group[i];
-                                                        if (getBeamCount(note.duration!) >= beamLevel + 1) {
-                                                            if (!currentSegment) currentSegment = { startNote: note, endNote: note };
-                                                            else currentSegment.endNote = note;
-                                                        } else {
-                                                            if (currentSegment) {
-                                                                const startProps = getStemProps(currentSegment.startNote);
-                                                                const endProps = getStemProps(currentSegment.endNote);
-                                                                const y1 = firstNoteStemEndY + (lastNoteStemEndY - firstNoteStemEndY) * ((startProps.stemX - firstNoteProps.stemX) / (lastNoteProps.stemX - firstNoteProps.stemX || 1)) + beamLevelOffset;
-                                                                const y2 = firstNoteStemEndY + (lastNoteStemEndY - firstNoteStemEndY) * ((endProps.stemX - firstNoteProps.stemX) / (lastNoteProps.stemX - firstNoteProps.stemX || 1)) + beamLevelOffset;
-                                                                segments.push(<path key={`${beamLevel}-${i}`} d={`M ${startProps.stemX} ${y1} L ${endProps.stemX} ${y2} L ${endProps.stemX} ${y2 - beamYDirection * BEAM_THICKNESS} L ${startProps.stemX} ${y1 - beamYDirection * BEAM_THICKNESS} Z`} fill="black" />);
-                                                            }
-                                                            currentSegment = null;
-                                                        }
-                                                    }
-                                                    if (currentSegment) {
-                                                        const startProps = getStemProps(currentSegment.startNote);
-                                                        const endProps = getStemProps(currentSegment.endNote);
-                                                        const y1 = firstNoteStemEndY + (lastNoteStemEndY - firstNoteStemEndY) * ((startProps.stemX - firstNoteProps.stemX) / (lastNoteProps.stemX - firstNoteProps.stemX || 1)) + beamLevelOffset;
-                                                        const y2 = firstNoteStemEndY + (lastNoteStemEndY - firstNoteStemEndY) * ((endProps.stemX - firstNoteProps.stemX) / (lastNoteProps.stemX - firstNoteProps.stemX || 1)) + beamLevelOffset;
-                                                        segments.push(<path key={`${beamLevel}-end`} d={`M ${startProps.stemX} ${y1} L ${endProps.stemX} ${y2} L ${endProps.stemX} ${y2 - beamYDirection * BEAM_THICKNESS} L ${startProps.stemX} ${y1 - beamYDirection * BEAM_THICKNESS} Z`} fill="black" />);
-                                                    }
-                                                    return segments;
-                                                })}
-                                            </g>
-                                        );
-                                    })}
-                                    {systemNotes.map(note => {
-                                        const isTreble = note.clef !== 'bass';
-                                        const staffTop = isTreble ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP;
-                                        const yOffset = isTreble ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT;
-                                        const y = getNoteY(note.position, staffTop, note.clef || 'treble');
-                                        
-                                        // FIX: Use calculated offsets for drawing noteheads
-                                        const nominalX = note.xPosition || 0;
-                                        const pos = notePositions.get(note.id);
-                                        const x = pos ? pos.x : nominalX;
-
-                                        const isHighlighted = notesToHighlight.includes(note.id);
-                                        const isPlayingNow = playingNoteIds.includes(note.id);
-                                        const isBeamed = currentBeamedNoteIds.has(note.id);
-                                        let noteColor = 'black';
-                                        if (isHighlighted) noteColor = 'rgb(56, 189, 248)';
-                                        if (isPlayingNow) noteColor = 'rgb(34, 197, 94)';
-                                        const duration = note.duration || 'quarter';
-                                        if (note.isRest) {
-                                            return (
-                                                <g key={note.id} onClick={(e) => handleNoteClick(note.id, e)} className="cursor-pointer">
-                                                    <Rest duration={duration} x={x} y={y + yOffset} color={noteColor} staffTop={staffTop + yOffset} />
-                                                    {note.isDotted && <circle cx={x + 15} cy={staffTop + yOffset + 2.5 * LINE_HEIGHT} r="2.5" fill={noteColor} />}
-                                                </g>
-                                            );
-                                        }
-                                        
-                                        const voice = note.voice;
-                                        let isStemUp: boolean;
-                                        if (note.manualStemDirection) {
-                                            isStemUp = note.manualStemDirection === 'up';
-                                        } else if (voice === 1 || voice === 3) {
-                                            isStemUp = true;
-                                        } else if (voice === 2 || voice === 4) {
-                                            isStemUp = false;
-                                        } else {
-                                            isStemUp = note.position < (note.clef === 'bass' ? -2 : 6);
-                                        }
-
-                                        // FIX: Stem aligns with nominal position, not shifted notehead
-                                        const stemX = nominalX + (isStemUp ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5));
-                                        const stemY1 = y, stemY2 = isStemUp ? y - 35 : y + 35;
-                                        let effectiveFill = noteColor, effectiveStroke = noteColor, effectiveStrokeWidth = isHighlighted ? 2.5 : 2;
-                                        if (duration === 'whole' || duration === 'half') effectiveFill = 'none';
-                                        return (
-                                            <g key={note.id} transform={`translate(0, ${yOffset})`} onClick={(e) => handleNoteClick(note.id, e)} className={`cursor-pointer ${isPlayingNow ? 'note-glow-strong' : ''}`}>
-                                                {note.explicitAccidental && <Accidental type={note.explicitAccidental} x={x + ACCIDENTAL_OFFSET_NORMAL} y={y} color={noteColor} />}
-                                                <LedgerLines 
-                                                    y={y} 
-                                                    noteHeadRx={NOTE_HEAD_RX_NORMAL} 
-                                                    color={effectiveStroke} 
-                                                    staffTop={staffTop} 
-                                                    xOffset={x} 
-                                                />
-                                                <ellipse cx={x} cy={y} rx={NOTE_HEAD_RX_NORMAL} ry={NOTE_HEAD_RY_NORMAL} fill={effectiveFill} stroke={effectiveStroke} strokeWidth={effectiveStrokeWidth} transform={`rotate(-20 ${x} ${y})`} />
-                                                {note.isDotted && <circle cx={x + NOTE_HEAD_RX_NORMAL + 5} cy={(note.position % 2 !== 0) ? y : y - LINE_HEIGHT / 2} r="2.5" fill={noteColor} />}
-                                                {duration !== 'whole' && !isBeamed && ( <line x1={stemX} y1={stemY1} x2={stemX} y2={stemY2} stroke={noteColor} strokeWidth="1.5" /> )}
-                                                {!isBeamed && (duration === 'eighth' || duration === 'sixteenth' || duration === 'thirty-second' || duration === 'sixty-fourth') && (() => {
-                                                    const flagCount = { 'eighth': 1, 'sixteenth': 2, 'thirty-second': 3, 'sixty-fourth': 4 }[duration];
-                                                    return <g stroke={noteColor} strokeWidth="2" fill="none">{Array.from({ length: flagCount }).map((_, i) => <path key={i} d={isStemUp ? `M${stemX} ${stemY2 + i * 5} q 8 5, 6 15` : `M${stemX} ${stemY2 - i * 5} q 8 -5, 6 -15`} />)}</g>;
-                                                })()}
-                                            </g>
-                                        );
-                                    })}
-                                    {ghostNote && ghostNote.systemIndex === systemIndex && (
-                                        <g opacity="0.5" style={{ pointerEvents: 'none' }} transform={`translate(0, ${ghostNote.clef !== 'bass' ? 0 : TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT})`}>
-                                            {ghostNote.explicitAccidental && <Accidental type={ghostNote.explicitAccidental} x={(ghostNote.xPosition || 0) + ACCIDENTAL_OFFSET_NORMAL} y={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} color={'black'} />}
-                                            <LedgerLines 
-                                                y={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} 
-                                                noteHeadRx={NOTE_HEAD_RX_NORMAL} 
-                                                color={'black'} 
-                                                staffTop={ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP} 
-                                                xOffset={ghostNote.xPosition || 0} 
-                                            />
-                                            <ellipse 
-                                                cx={ghostNote.xPosition || 0} 
-                                                cy={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} 
-                                                rx={NOTE_HEAD_RX_NORMAL} 
-                                                ry={NOTE_HEAD_RY_NORMAL} 
-                                                fill={ghostNote.duration === 'whole' || ghostNote.duration === 'half' ? 'none' : 'black'} 
-                                                stroke={'black'} 
-                                                strokeWidth={2} 
-                                                transform={`rotate(-20 ${(ghostNote.xPosition || 0)} ${getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')})`} 
-                                            />
-                                            {ghostNote.duration !== 'whole' && (
-                                                <line 
-                                                    x1={(ghostNote.xPosition || 0) + (ghostNote.manualStemDirection === 'up' ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5))} 
-                                                    y1={getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble')} 
-                                                    x2={(ghostNote.xPosition || 0) + (ghostNote.manualStemDirection === 'up' ? NOTE_HEAD_RX_NORMAL - 1.5 : -(NOTE_HEAD_RX_NORMAL - 1.5))} 
-                                                    y2={ghostNote.manualStemDirection === 'up' ? getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') - 35 : getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') + 35} 
-                                                    stroke={'black'} 
-                                                    strokeWidth="1.5" 
-                                                />
-                                            )}
-                                            {['eighth', 'sixteenth', 'thirty-second', 'sixty-fourth'].includes(ghostNote.duration || '') && (() => {
-                                                const flagCount = { 'eighth': 1, 'sixteenth': 2, 'thirty-second': 3, 'sixty-fourth': 4 }[ghostNote.duration || 'eighth'];
-                                                return <g stroke={'black'} strokeWidth="2" fill="none">{Array.from({ length: flagCount }).map((_, i) => <path key={i} d={ghostNote.manualStemDirection === 'up' ? `M${(ghostNote.xPosition || 0) + NOTE_HEAD_RX_NORMAL - 1.5} ${getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') - 35 + i * 5} q 8 5, 6 15` : `M${(ghostNote.xPosition || 0) - NOTE_HEAD_RX_NORMAL + 1.5} ${getNoteY(ghostNote.position, ghostNote.clef !== 'bass' ? TOP_STAFF_TOP : BOTTOM_STAFF_TOP, ghostNote.clef || 'treble') + 35 - i * 5} q 8 -5, 6 -15`} />)}</g>;
-                                            })()}
-                                        </g>
-                                    )}
-                                    {romanAnalysisBySystem[systemIndex]?.map((analysisItem, index) => {
-                                        const yPos = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT + 40;
-                                        const { roman, figures } = analysisItem.analysis;
-                                        const xPos = analysisItem.x;
-                                        
-                                        if (analysisMode === 'roman') {
-                                            return (
-                                                <text key={`analysis-${systemIndex}-${index}`} x={xPos} y={yPos} textAnchor="middle" fontFamily="serif" fontSize="18" fontWeight="bold" fill={primaryColor}>
-                                                    {roman}
-                                                    {figures.map((figure, figIndex) => (
-                                                        <tspan
-                                                            key={figIndex}
-                                                            fontSize="0.8em"
-                                                            fontWeight="normal"
-                                                            x={xPos + 25}
-                                                            dy={figIndex === 0 ? -8 : 12}
-                                                        >
-                                                            {figure}
-                                                        </tspan>
-                                                    ))}
-                                                </text>
-                                            );
-                                        } else { // 'symbol' mode
-                                            return (
-                                                <text key={`analysis-${systemIndex}-${index}`} x={xPos} y={yPos} textAnchor="middle" fontFamily="sans-serif" fontSize="16" fontWeight="bold" fill={primaryColor}>
-                                                    {roman}
-                                                </text>
-                                            );
-                                        }
-                                    })}
-                                </svg>
+                                <VexflowGrandStaff
+                                    notes={systemNotes}
+                                    timeSignature={timeSignature}
+                                    keySignature={keySignature}
+                                    width={actualSystemWidth}
+                                    height={TOTAL_SYSTEM_HEIGHT}
+                                    selectedNoteIds={Array.from(selectedNoteIds)}
+                                    onNoteClick={(noteId) => handleNoteClick(noteId, { stopPropagation: () => {} } as any)}
+                                    onStaffClick={(x, y) => handleBackgroundClick(x, y, systemIndex)}
+                                    onMouseMoveStaff={(x, y) => handleMouseMove(x, y, systemIndex)}
+                                    ghostNote={ghost}
+                                />
                             </div>
-                        )
+                        );
                     })}
                 </div>
                 {activeTab === 'analysis' && (
