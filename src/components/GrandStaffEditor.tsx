@@ -9,9 +9,9 @@ import {
 } from './icons/NoteValueIcons';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental } from '../utils/musicTheory';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
-import { NOTE_NAMES, DURATION_VALUES } from '../constants';
+import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
 import { UngroupIcon } from './icons/UngroupIcon';
 import { FlipStemIcon } from './icons/FlipStemIcon';
@@ -472,6 +472,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [clipboard, setClipboard] = useState<StaffNote[] | null>(null);
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
+    const [keyChangeMode, setKeyChangeMode] = useState<'none' | 'transpose' | 'modal'>('none');
+    const [modalTonicOverride, setModalTonicOverride] = useState<string>('');
     const [isMinorMode, setIsMinorMode] = useState(false);
     const [viewMode, setViewMode] = useState<ViewMode>('page');
     const [measuresPerLine, setMeasuresPerLine] = useState<number>(4);
@@ -804,6 +806,177 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const justDraggedRef = useRef(false);
 
     const keySignature = useMemo(() => getKeySignature(keySignatureRoot, 'Major'), [keySignatureRoot]);
+
+    const mod12Local = useCallback((n: number) => ((n % 12) + 12) % 12, []);
+
+    const makeNoteNameFromPitchAndMidi = useCallback((pitch: string, midi: number): string => {
+        const baseByPitch: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+        const base = baseByPitch[pitch] ?? 0;
+        const pc = mod12Local(midi);
+        const diff = mod12Local(pc - base); // 0..11
+        const suffix =
+            diff === 0 ? '' :
+            diff === 1 ? '#' :
+            diff === 2 ? '##' :
+            diff === 11 ? 'b' :
+            diff === 10 ? 'bb' : '';
+        return `${pitch}${suffix}`;
+    }, [mod12Local]);
+
+    const keyAccidentals = useMemo(() => {
+        const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
+        const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
+        return keySignature.type === 'sharp' ? sharpNotes.map(n => n + '#') : flatNotes.map(n => n + 'b');
+    }, [keySignature.count, keySignature.type]);
+
+    const noteNameToChromaticIndex = useCallback((name: string): number => {
+        const idxSharp = NOTE_NAMES.indexOf(name);
+        if (idxSharp >= 0) return idxSharp;
+        const normalized = name.replace('♯', '#').replace('♭', 'b');
+        for (let i = 0; i < ALL_NOTE_SPELLINGS.length; i++) {
+            if (ALL_NOTE_SPELLINGS[i].includes(normalized)) return i;
+        }
+        return -1;
+    }, []);
+
+    const preferFlats = useMemo(() => keySignature.type === 'flat' && keySignature.count > 0, [keySignature.count, keySignature.type]);
+    const modalTonicOptions = useMemo(() => {
+        return ALL_NOTE_SPELLINGS.map((names, idx) => {
+            const natural = names.find(n => !n.includes('#') && !n.includes('b'));
+            const sharp = names.find(n => n.includes('#'));
+            const flat = names.find(n => n.includes('b'));
+
+            const label = preferFlats
+                ? (flat ?? natural ?? sharp ?? names[0])
+                : (sharp ?? natural ?? flat ?? names[0]);
+            return { value: label, label, idx };
+        });
+    }, [preferFlats]);
+
+    const signedKeyDelta = useCallback((fromRoot: string, toRoot: string): number => {
+        const fromIdx = noteNameToChromaticIndex(fromRoot);
+        const toIdx = noteNameToChromaticIndex(toRoot);
+        if (fromIdx < 0 || toIdx < 0) return 0;
+        const up = ((toIdx - fromIdx) % 12 + 12) % 12;
+        const down = up - 12;
+        return Math.abs(down) < Math.abs(up) ? down : up;
+    }, [noteNameToChromaticIndex]);
+
+    const modeInfo = useMemo(() => {
+        if (keyChangeMode !== 'modal') return null;
+
+        const firstNote = rawNotes.find(n => !n.isRest);
+        const autoTonic = firstNote ? makeNoteNameFromPitchAndMidi(firstNote.pitch, firstNote.midi) : '';
+        const tonicName = (modalTonicOverride || autoTonic || '').replace('♯', '#').replace('♭', 'b');
+        if (!tonicName) return { tonicName: '', label: '' };
+
+        const keyRootIdx = noteNameToChromaticIndex(keySignatureRoot);
+        const tonicIdx = noteNameToChromaticIndex(tonicName);
+        if (keyRootIdx < 0 || tonicIdx < 0) {
+            return { tonicName, label: `Modo: ${tonicName} (non determinabile)` };
+        }
+
+        const majorIntervals = [0, 2, 4, 5, 7, 9, 11];
+        const scale = majorIntervals.map(i => mod12Local(keyRootIdx + i));
+        const degree = scale.indexOf(tonicIdx);
+        const modeNamesIt = ['Ionio', 'Dorico', 'Frigio', 'Lidio', 'Misolidio', 'Eolio', 'Locrio'];
+
+        if (degree < 0) {
+            return { tonicName, label: `Modo: ${tonicName} (fuori scala)` };
+        }
+
+        const mode = modeNamesIt[degree] ?? '—';
+        return { tonicName, label: `Modo: ${tonicName} ${mode}` };
+    }, [keyChangeMode, keySignatureRoot, makeNoteNameFromPitchAndMidi, modalTonicOverride, mod12Local, noteNameToChromaticIndex, rawNotes]);
+
+    const transposeAllNotesToKey = useCallback((fromRoot: string, toRoot: string) => {
+        const delta = signedKeyDelta(fromRoot, toRoot);
+        if (!delta) return;
+
+        const targetKeySignature = getKeySignature(toRoot, 'Major');
+
+        setRawNotes(prev => prev.map((n) => {
+            if (n.isRest) return n;
+
+            const currentClef = (n.clef || 'treble') as ClefType;
+            const a = (n.explicitAccidental ?? n.accidental ?? null) as AccidentalType | null;
+            const preferredAccidental: AccidentalType | null =
+                a === 'sharp' || a === 'double-sharp'
+                    ? 'sharp'
+                    : a === 'flat' || a === 'double-flat'
+                        ? 'flat'
+                        : null;
+
+            const nextMidi = n.midi + delta;
+            const recalculated = getNotePropertiesFromMidi(nextMidi, targetKeySignature, currentClef, preferredAccidental);
+
+            return {
+                ...n,
+                ...recalculated,
+                id: n.id,
+                midi: nextMidi,
+            };
+        }));
+    }, [setRawNotes, signedKeyDelta]);
+
+    const reinterpretAllNotesModallyInKey = useCallback((toRoot: string) => {
+        const targetKeySignature = getKeySignature(toRoot, 'Major');
+
+        const keyAlterationAmountForPitch = (pitch: string) => {
+            const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, targetKeySignature.type === 'sharp' ? targetKeySignature.count : 0);
+            const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, targetKeySignature.type === 'flat' ? targetKeySignature.count : 0);
+            return (targetKeySignature.type === 'sharp' && sharpNotes.includes(pitch)) ? 1 :
+                (targetKeySignature.type === 'flat' && flatNotes.includes(pitch)) ? -1 : 0;
+        };
+
+        const accidentalOffset = (a: AccidentalType) =>
+            a === 'sharp' ? 1 :
+            a === 'flat' ? -1 :
+            a === 'double-sharp' ? 2 :
+            a === 'double-flat' ? -2 : 0;
+
+        setRawNotes(prev => prev.map((n) => {
+            if (n.isRest) return n;
+
+            const currentClef = (n.clef || 'treble') as ClefType;
+            const base = getNotePropertiesFromDiatonicPosition(n.position, currentClef, targetKeySignature);
+
+            const userAcc = ((n as any).userAccidental ?? null) as AccidentalType | null;
+            if (!userAcc) {
+                return {
+                    ...n,
+                    ...base,
+                    id: n.id,
+                    explicitAccidental: null,
+                    accidental: undefined,
+                };
+            }
+
+            const keyAlt = keyAlterationAmountForPitch(base.pitch);
+            const naturalMidi = base.midi - keyAlt;
+            const finalMidi = naturalMidi + accidentalOffset(userAcc);
+
+            return {
+                ...n,
+                ...base,
+                id: n.id,
+                midi: finalMidi,
+                noteIndex: mod12Local(finalMidi),
+                explicitAccidental: userAcc,
+                accidental: userAcc,
+            };
+        }));
+    }, [mod12Local, setRawNotes]);
+
+    const handleKeySignatureRootChange = useCallback((nextRoot: string) => {
+        if (nextRoot === keySignatureRoot) return;
+        if (keyChangeMode === 'transpose') {
+            transposeAllNotesToKey(keySignatureRoot, nextRoot);
+        } else if (keyChangeMode === 'modal') {
+            reinterpretAllNotesModallyInKey(nextRoot);
+        }
+        setKeySignatureRoot(nextRoot);
+    }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, transposeAllNotesToKey]);
 
     const { currentTonic, currentQuality } = useMemo(() => {
         if (isMinorMode) {
@@ -2990,17 +3163,55 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             </div>
         ),
         key: (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-sm text-slate-400">Tonalità:</span>
                 <select
                     id="key-signature-select"
                     value={keySignatureRoot}
-                    onChange={e => setKeySignatureRoot(e.target.value)}
+                    onChange={e => handleKeySignatureRootChange(e.target.value)}
                     className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs"
                 >
                     <optgroup label="Diesis (♯)">{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                     <optgroup label="Bemolli (♭)">{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                 </select>
+
+                <label className="flex items-center gap-2 text-xs text-gray-300 select-none">
+                    <input
+                        type="checkbox"
+                        checked={keyChangeMode === 'transpose'}
+                        onChange={(e) => setKeyChangeMode(e.target.checked ? 'transpose' : 'none')}
+                        className="accent-cyan-500"
+                    />
+                    Trasponi
+                </label>
+
+                <label className="flex items-center gap-2 text-xs text-gray-300 select-none">
+                    <input
+                        type="checkbox"
+                        checked={keyChangeMode === 'modal'}
+                        onChange={(e) => setKeyChangeMode(e.target.checked ? 'modal' : 'none')}
+                        className="accent-cyan-500"
+                    />
+                    Modale
+                </label>
+
+                {keyChangeMode === 'modal' && (
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">Tonica:</span>
+                        <select
+                            value={modalTonicOverride}
+                            onChange={(e) => setModalTonicOverride(e.target.value)}
+                            className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs"
+                            title="Tonica del modo (vuoto = prima nota inserita)"
+                        >
+                            <option value="">Auto (prima nota)</option>
+                            {modalTonicOptions.map(opt => (
+                                <option key={opt.idx} value={opt.value}>{opt.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 <div className="relative flex p-0.5 bg-gray-900/50 rounded-md">
                     <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${isMinorMode ? '100%' : '0%'}) ` }}></div>
                     <button onClick={() => setIsMinorMode(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>Mag</button>
@@ -3337,6 +3548,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         const measureSet = new Set(system.measureIndices);
                         const systemNotes = layoutData.positionedNotes.filter(note => measureSet.has(note.measureIndex ?? -1));
 
+                        // When the key signature changes, previously-entered notes must re-evaluate which
+                        // accidentals are explicitly shown (naturals to cancel key signature, etc.).
+                        // We keep the stored MIDI pitch intact and only adjust rendering-related fields.
+                        const systemNotesForRender = systemNotes.map((n) => {
+                            if (n.isRest) return n;
+
+                            // If the user explicitly chose an accidental for this note, keep it.
+                            if ((n as any).userAccidental) return n;
+
+                            // Otherwise, recompute the accidental needed for the *existing pitch* under the
+                            // current key signature, without changing the staff position/spelling.
+                            const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
+                            const nextExplicit = calculateAccidental(noteName, keyAccidentals);
+                            return { ...n, explicitAccidental: nextExplicit };
+                        });
+
                         const actualSystemWidth = system.width;
                         const ghost = ghostNote && ghostNote.systemIndex === systemIndex ? ghostNote : null;
                         const systemBarlines = layoutData.systemsBarlines?.[systemIndex] || [];
@@ -3353,10 +3580,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             style={{ width: actualSystemWidth, height: TOTAL_SYSTEM_HEIGHT }}
                                                         data-system-index={systemIndex}
                           >
+                                                        {systemIndex === 0 && keyChangeMode === 'modal' && modeInfo?.label && (
+                                                                <div
+                                                                        className="absolute text-xs font-semibold text-slate-700"
+                                                                        style={{ left: 50, top: 0 }}
+                                                                >
+                                                                        {modeInfo.label}
+                                                                </div>
+                                                        )}
                             <RenderErrorBoundary label={`VexflowGrandStaff(system ${systemIndex})`} onReset={resetVexflow}>
                               <VexflowGrandStaff
                                 key={`vf-${systemIndex}-${vexflowNonce}`}
-                                notes={systemNotes}
+                                                                notes={systemNotesForRender}
                                 timeSignature={timeSignature}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
