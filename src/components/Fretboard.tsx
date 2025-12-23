@@ -108,11 +108,11 @@ const Fretboard: React.FC<FretboardProps> = ({
 }, [placedBoxes, allShapes, allNotes]);
 
   return (
-    <div className="bg-gray-800 shadow-[0_-10px_20px_rgba(0,0,0,0.3)] pt-2 font-mono">
-      <div className="w-full overflow-x-auto">
+    <div className="bg-gray-800 shadow-[0_-10px_20px_rgba(0,0,0,0.3)] pt-2 pb-3 font-mono">
+      <div className="w-full overflow-x-auto overflow-y-visible">
         <div className="relative px-2" style={{ width: '166.66%' }}>
           {/* Fret Numbers */}
-          <div className="flex">
+          <div className="flex pt-1 pb-1">
             <div style={{ width: 'calc(4rem + 8px)' }}></div> {/* Spacer for tuning names and nut */}
             <div className="flex-1 flex">
               {Array.from({ length: FRET_COUNT }).map((_, i) => {
@@ -120,7 +120,7 @@ const Fretboard: React.FC<FretboardProps> = ({
                 return (
                   <div
                     key={`fret-num-${fret}`}
-                    className="text-center text-xs text-gray-400"
+                    className="text-center text-xs leading-none text-gray-400"
                     style={{ flex: `1 1 ${100 / FRET_COUNT}%` }}
                   >
                     {fret}
@@ -131,8 +131,8 @@ const Fretboard: React.FC<FretboardProps> = ({
           </div>
           
           {/* Fretboard Structure */}
-          <div className="relative mt-2 flex" style={{ background: 'linear-gradient(90deg, #44302b, #301d1c)' }}>
-            <div className="w-16 flex h-40 lg:h-44">
+          <div className="relative mt-3 flex" style={{ background: 'linear-gradient(90deg, #44302b, #301d1c)' }}>
+            <div className="w-16 flex h-36 lg:h-40">
                 <div className="w-8 flex flex-col justify-around items-center h-full">
                     {GUITAR_TUNING_NAMES.map((noteName, i) => (
                         <div key={`open-string-${i}`} className="text-center text-lg text-stone-300 font-semibold">
@@ -170,6 +170,7 @@ const Fretboard: React.FC<FretboardProps> = ({
                             const isMajorRoot = info.type === RootType.Major;
                             const isRoot = isMinorRoot || isMajorRoot;
                             const shapeClasses = isRoot ? 'transform rotate-45 rounded-sm' : 'rounded-full';
+                            const sizeClasses = isRoot ? 'w-[18px] h-[18px] lg:w-[22px] lg:h-[22px]' : 'w-6 h-6 lg:w-7 lg:h-7';
 
                              const handleOpenStringClick = () => {
                                 onNoteInteraction({ s: stringIndex, f: 0, source: 'fretboard' });
@@ -187,8 +188,8 @@ const Fretboard: React.FC<FretboardProps> = ({
                             return (
                                 <div
                                     key={`indicator-${stringIndex}`}
-                                    className={`w-6 h-6 lg:w-7 lg:h-7 border-2 flex items-center justify-center transition-all cursor-pointer ${shapeClasses} ${glowClass ? 'scale-125 ring-4 ring-white/80' : ''} ${glowClass}`}
-                                    style={{ borderColor: dotColor, backgroundColor: dotColor }}
+                                className={`${sizeClasses} border-2 ${isRoot ? 'border-white/80 ring-2 ring-white/70 ring-offset-1 ring-offset-gray-900' : 'border-white/40'} flex items-center justify-center transition-all cursor-pointer ${shapeClasses} ${glowClass ? 'scale-125 ring-4 ring-white/80' : ''} ${glowClass}`}
+                                style={{ backgroundColor: dotColor }}
                                     onClick={handleOpenStringClick}
                                 >
                                 </div>
@@ -209,7 +210,7 @@ const Fretboard: React.FC<FretboardProps> = ({
             
             <div style={{ width: '8px', background: '#f0e6d2' }}></div>
 
-            <div className="relative flex-1 h-40 lg:h-44">
+            <div className="relative flex-1 h-36 lg:h-40">
                 {/* Frets */}
                 <div className="absolute top-0 left-0 w-full h-full flex">
                     {Array.from({ length: FRET_COUNT }).map((_, i) => {
@@ -318,10 +319,15 @@ const Fretboard: React.FC<FretboardProps> = ({
                                 }
                                 const isRoot = isPentatonicMinorRoot || isPentatonicMajorRoot;
                                 const shapeClasses = isRoot ? 'transform rotate-45 rounded-sm' : 'rounded-full';
+                                const sizeClasses = isRoot ? 'w-[18px] h-[18px] lg:w-[22px] lg:h-[22px]' : 'w-6 h-6 lg:w-7 lg:h-7';
+                                const rootEmphasisClass = isRoot && !glowClass
+                                  ? 'border-white/80 ring-2 ring-white/70 ring-offset-1 ring-offset-gray-900'
+                                  : '';
+                                const defaultBorderClass = !glowClass ? (isRoot ? 'border-white/80' : 'border-white/40') : '';
 
                                 return (
                                     <div 
-                                      className={`w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center transition-all duration-150 border-2 ${shapeClasses} ${glowClass ? 'scale-125 ring-4 ring-white/80' : 'border-white/40'} ${isRootForPlayback ? 'cursor-pointer' : 'cursor-default'} ${noteInfo.pentatonicInfo.isAlternate ? 'opacity-60' : ''} ${glowClass}`}
+                                      className={`${sizeClasses} flex items-center justify-center transition-all duration-150 border-2 ${shapeClasses} ${defaultBorderClass} ${rootEmphasisClass} ${glowClass ? 'scale-125 ring-4 ring-white/80' : ''} ${isRootForPlayback ? 'cursor-pointer' : 'cursor-default'} ${noteInfo.pentatonicInfo.isAlternate ? 'opacity-60' : ''} ${glowClass}`}
                                       style={{ backgroundColor: dotColor }}
                                       title={noteInfo.noteName + (isPentatonicMinorRoot ? ' (Minor Root)' : isPentatonicMajorRoot ? ' (Major Root)' : '')}
                                     >

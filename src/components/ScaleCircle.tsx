@@ -22,28 +22,72 @@ export const ScaleCircle: React.FC<ScaleCircleProps> = ({
   onNoteClick,
   scaleType
 }) => {
-  
+
+  // IMPORTANT: Tailwind does not generate dynamic classes like `fill-${color}-...`.
+  // Keep these classes static so colors work reliably in production builds.
   const scaleColorSet = useMemo(() => {
     const HARMONIC_MINOR_FAMILY: ScaleType[] = ['Harmonic Minor', 'Locrian #6', 'Ionian #5', 'Dorian #4', 'Phrygian Dominant', 'Lydian #2', 'Altered Dominant bb7'];
     const MELODIC_MINOR_FAMILY: ScaleType[] = ['Melodic Minor', 'Dorian b2', 'Lydian Augmented', 'Lydian Dominant', 'Mixolydian b6', 'Locrian #2', 'Altered Scale'];
     const MAJOR_MODES: ScaleType[] = ['Ionian', 'Lydian', 'Mixolydian'];
-    
-    let color = 'sky'; // Default for minor modes of major scale
-    if (scaleType === 'Pentatonic') color = 'orange';
-    else if (MAJOR_MODES.includes(scaleType)) color = 'yellow';
-    else if (HARMONIC_MINOR_FAMILY.includes(scaleType)) color = 'purple';
-    else if (MELODIC_MINOR_FAMILY.includes(scaleType)) color = 'green';
 
-    const textColor = ['yellow', 'orange', 'green'].includes(color) ? 'text-gray-900' : 'text-white';
-    
-    return {
-        fill: `fill-${color}-400/20`,
-        stroke: `stroke-${color}-400`,
-        dotBg: `bg-${color}-400`,
-        dotBorder: `border-${color}-600`,
-        rootDotBorder: `border-stone-200`,
-        textColor: textColor
+    type ColorKey = 'sky' | 'orange' | 'yellow' | 'purple' | 'green';
+    const COLOR_CLASSES: Record<ColorKey, {
+      fill: string;
+      stroke: string;
+      dotBg: string;
+      dotBorder: string;
+      textColor: string;
+      rootDotBorder: string;
+    }> = {
+      sky: {
+        fill: 'fill-sky-400/20',
+        stroke: 'stroke-sky-400',
+        dotBg: 'bg-sky-400',
+        dotBorder: 'border-sky-600',
+        textColor: 'text-white',
+        rootDotBorder: 'border-stone-200',
+      },
+      orange: {
+        fill: 'fill-orange-400/20',
+        stroke: 'stroke-orange-400',
+        dotBg: 'bg-orange-400',
+        dotBorder: 'border-orange-600',
+        textColor: 'text-gray-900',
+        rootDotBorder: 'border-stone-200',
+      },
+      yellow: {
+        fill: 'fill-yellow-400/20',
+        stroke: 'stroke-yellow-400',
+        dotBg: 'bg-yellow-400',
+        dotBorder: 'border-yellow-600',
+        textColor: 'text-gray-900',
+        rootDotBorder: 'border-stone-200',
+      },
+      purple: {
+        fill: 'fill-purple-400/20',
+        stroke: 'stroke-purple-400',
+        dotBg: 'bg-purple-400',
+        dotBorder: 'border-purple-600',
+        textColor: 'text-white',
+        rootDotBorder: 'border-stone-200',
+      },
+      green: {
+        fill: 'fill-green-400/20',
+        stroke: 'stroke-green-400',
+        dotBg: 'bg-green-400',
+        dotBorder: 'border-green-600',
+        textColor: 'text-gray-900',
+        rootDotBorder: 'border-stone-200',
+      },
     };
+
+    let key: ColorKey = 'sky';
+    if (scaleType === 'Pentatonic') key = 'orange';
+    else if (MAJOR_MODES.includes(scaleType)) key = 'yellow';
+    else if (HARMONIC_MINOR_FAMILY.includes(scaleType)) key = 'purple';
+    else if (MELODIC_MINOR_FAMILY.includes(scaleType)) key = 'green';
+
+    return COLOR_CLASSES[key];
   }, [scaleType]);
 
   const scaleNoteIndicesSet = useMemo(() => new Set(scaleNoteIndices), [scaleNoteIndices]);

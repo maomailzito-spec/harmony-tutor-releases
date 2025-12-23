@@ -23,7 +23,7 @@ const App: React.FC = () => {
     }, []);
     
     return (
-        <div className="min-h-screen flex flex-col bg-gray-900 font-sans">
+        <div className="min-h-screen flex flex-col bg-gray-900 font-sans text-gray-100">
             <div className="w-full max-w-screen-2xl mx-auto px-4 pt-1 lg:px-8 flex flex-col flex-grow">
                  <div className="flex justify-center mb-1 border-b border-gray-700">
                     <button

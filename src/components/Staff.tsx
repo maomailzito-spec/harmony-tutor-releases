@@ -268,7 +268,7 @@ const Staff = forwardRef<SVGSVGElement, StaffProps>(({
                 ))}
 
                 <g>
-                    { clef === 'treble' && <text x="30" y={staffTop + 1.6 * LINE_HEIGHT} fontSize="60" fontFamily="serif" fill={primaryColor} textAnchor="middle" dominantBaseline="central">𝄞</text> }
+                    { clef === 'treble' && <text x="30" y={staffTop + 2.6 * LINE_HEIGHT - 7} fontSize="92" fontFamily="serif" fill={primaryColor} textAnchor="middle" dominantBaseline="central">𝄞</text> }
                     { clef === 'bass' && <text x="30" y={staffTop + 1.9 * LINE_HEIGHT} fontSize="48" fontFamily="serif" fill={primaryColor} textAnchor="middle" dominantBaseline="central">𝄢</text> }
                     {keySignature && <KeySignatureDisplay signature={keySignature} color={primaryColor} clef={clef} staffTop={staffTop} />}
                     {timeSignature && <TimeSignatureDisplay signature={timeSignature} x={START_X + (keySignature.count * 14) + 15} color={primaryColor} staffTop={staffTop} />}

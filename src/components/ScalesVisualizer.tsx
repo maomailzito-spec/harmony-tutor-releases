@@ -821,7 +821,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
     const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
 
     return (
-        <div onClick={stopPropagation} className="flex-grow flex flex-col interactive-selection">
+        <div onClick={stopPropagation} className="flex-grow flex flex-col interactive-selection pb-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
                  <div className="lg:flex lg:justify-end w-full">
                     <Controls
@@ -882,7 +882,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                     </div>
                 )}
 
-                 <div className="mb-8">
+                 <div>
                     <Fretboard 
                         placedBoxes={placedBoxes}
                         allShapes={ALL_SHAPES}

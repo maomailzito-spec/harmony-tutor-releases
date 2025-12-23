@@ -421,7 +421,7 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
     const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
 
     return (
-        <div className="w-full flex flex-col gap-4 interactive-selection" onClick={stopPropagation}>
+        <div className="w-full flex flex-col gap-4 interactive-selection pb-4" onClick={stopPropagation}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
                 <div className="lg:flex lg:justify-end w-full">
                     <ChordControls
@@ -507,13 +507,13 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
                     keySignature={keySignature}
                     glowingNoteMidi={glowingNote?.writtenMidi ?? null}
                     onNoteInteraction={(noteData) => handleInteraction({ ...noteData, source: 'staff', noteIndex: noteData.noteIndex })}
-                    containerClassName="bg-gray-800/50 rounded-b-lg px-4 w-full overflow-hidden min-h-[200px]"
+                    containerClassName="bg-gray-800/50 rounded-b-lg px-4 w-full overflow-hidden min-h-[160px]"
                     // FIX: Pass the measured width to the Staff component.
                     width={staffWidth}
                 />
             </div>
             
-             <div className="text-center my-3">
+             <div className="text-center my-1">
                 <h2 className={`text-xl font-semibold tracking-wide ${CHORD_TEXT_COLORS[activeChordType] || 'text-yellow-400'}`}>
                     {rootNote.name} {activeChordType}
                 </h2>

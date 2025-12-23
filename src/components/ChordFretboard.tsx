@@ -57,14 +57,14 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
           {/* Fretboard Structure */}
           <div className="relative mt-2 flex" style={{ background: 'linear-gradient(90deg, #44302b, #301d1c)' }}>
              <div className="w-16 flex">
-                <div className="w-8 flex flex-col justify-around items-center h-40 lg:h-44">
+                <div className="w-8 flex flex-col justify-around items-center h-40 lg:h-44 py-2">
                     {GUITAR_TUNING_NAMES.map((noteName, i) => (
                         <div key={`open-string-${i}`} className="text-center text-lg text-stone-300 font-semibold">
                           {noteName}
                         </div>
                     ))}
                 </div>
-                <div className="w-8 flex flex-col justify-around items-center h-40 lg:h-44">
+                <div className="w-8 flex flex-col justify-around items-center h-40 lg:h-44 py-2">
                     {reversedVoicing.map((fret, i) => {
                         if (fret === -1) {
                             return <div key={`indicator-${i}`} className="text-center text-lg text-stone-300">x</div>;
@@ -74,6 +74,10 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
                             const soundingMidi = STRING_BASE_MIDI[i];
                             const isGlowing = soundingMidi === glowingNoteMidi;
                             const isHovered = hoveredNote?.stringIndex === i && hoveredNote?.fret === 0;
+                            const noteName = getNoteName(i, 0);
+                            const isRoot = noteName === rootNoteName;
+                            const shapeClasses = isRoot ? 'transform rotate-45 rounded-sm' : 'rounded-full';
+                            const sizeClasses = isRoot ? 'w-[18px] h-[18px] lg:w-[22px] lg:h-[22px]' : 'w-6 h-6 lg:w-7 lg:h-7';
 
                             return (
                                 <div key={`indicator-${i}`} 
@@ -82,11 +86,11 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
                                     onMouseLeave={() => setHoveredNote(null)}
                                     onClick={() => onNoteInteraction({ noteIndex: openStringNoteIndex, midi: soundingMidi })}
                                 >
-                                    <div className={`w-6 h-6 lg:w-7 lg:h-7 rounded-full border-2 flex items-center justify-center transition-all ${isGlowing ? 'note-glow-strong scale-125 ring-4 ring-white/80' : ''}`}
+                                    <div className={`${sizeClasses} border-2 flex items-center justify-center transition-all ${shapeClasses} ${isRoot && !isGlowing ? 'border-white/80 ring-2 ring-white/70 ring-offset-1 ring-offset-gray-900' : ''} ${isGlowing ? 'note-glow-strong scale-125 ring-4 ring-white/80' : ''}`}
                                         style={{ borderColor: CHORD_RGB_COLORS[activeChordType] || 'white' }}
                                     >
                                         {(isHovered || isGlowing) && (
-                                            <span className="text-white font-bold text-xs">{getNoteName(i, 0)}</span>
+                                            <span className={`text-white font-bold text-xs ${isRoot ? 'transform -rotate-45' : ''}`}>{noteName}</span>
                                         )}
                                     </div>
                                 </div>
@@ -147,6 +151,8 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
 
                         const noteName = getNoteName(stringIndex, fret);
                         const isRoot = noteName === rootNoteName;
+                        const shapeClasses = isRoot ? 'transform rotate-45 rounded-sm' : 'rounded-full';
+                        const sizeClasses = isRoot ? 'w-[18px] h-[18px] lg:w-[22px] lg:h-[22px]' : 'w-6 h-6 lg:w-7 lg:h-7';
                         
                         const openStringNoteIndex = GUITAR_TUNING[stringIndex];
                         const noteIndex = (openStringNoteIndex + fret) % 12;
@@ -158,7 +164,7 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
                             ? ROOT_NOTE_DOT_CLASSES[activeChordType]
                             : CHORD_DOT_CLASSES[activeChordType];
                         
-                        const y = `calc(${(stringIndex * (100/STRING_COUNT)) + (100/(STRING_COUNT*2))}%)`;
+                        const y = `clamp(20px, calc(${(stringIndex * (100/STRING_COUNT)) + (100/(STRING_COUNT*2))}%), calc(100% - 20px))`;
                         const x = `calc(${((fret - 0.5) / FRET_COUNT) * 100}%)`;
                         
                         return (
@@ -171,14 +177,15 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
                                 onClick={() => onNoteInteraction({ noteIndex, midi: soundingMidi })}
                             >
                                 <div
-                                    className={`w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center font-sans font-semibold border-2 rounded-full shadow-sm 
+                                    className={`${sizeClasses} flex items-center justify-center font-sans font-semibold border-2 shadow-sm ${shapeClasses}
                                     ${noteColorClasses}
                                     ${isRoot ? 'border-4' : ''}
+                                    ${isRoot && !isGlowing ? 'ring-2 ring-white/70 ring-offset-1 ring-offset-gray-900' : ''}
                                     ${isGlowing ? 'note-glow-strong scale-125 ring-4 ring-white/80' : ''}
                                     `}
                                 >
                                     {(isHovered || isGlowing) && (
-                                        <span className="text-white font-bold text-xs">{noteName}</span>
+                                        <span className={`text-white font-bold text-xs ${isRoot ? 'transform -rotate-45' : ''}`}>{noteName}</span>
                                     )}
                                 </div>
                             </div>
