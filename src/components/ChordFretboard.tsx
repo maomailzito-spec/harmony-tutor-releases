@@ -15,12 +15,13 @@ interface ChordFretboardProps {
   voicing: number[];
   rootNoteName: string;
   activeChordType: ChordType;
+    activeChordColor?: string;
   glowingNoteMidi: number | null;
   onNoteInteraction: (data: { noteIndex: number, midi: number }) => void;
   allNotes: DisplayNote[];
 }
 
-export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNoteName, activeChordType, glowingNoteMidi, onNoteInteraction, allNotes }) => {
+export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNoteName, activeChordType, activeChordColor, glowingNoteMidi, onNoteInteraction, allNotes }) => {
   const [hoveredNote, setHoveredNote] = useState<{ stringIndex: number; fret: number } | null>(null);
   const reversedVoicing = [...voicing].reverse();
   const fretsToDisplay = Array.from({ length: FRET_COUNT });
@@ -87,7 +88,7 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
                                     onClick={() => onNoteInteraction({ noteIndex: openStringNoteIndex, midi: soundingMidi })}
                                 >
                                     <div className={`${sizeClasses} border-2 flex items-center justify-center transition-all ${shapeClasses} ${isRoot && !isGlowing ? 'border-white/80 ring-2 ring-white/70 ring-offset-1 ring-offset-gray-900' : ''} ${isGlowing ? 'note-glow-strong scale-125 ring-4 ring-white/80' : ''}`}
-                                        style={{ borderColor: CHORD_RGB_COLORS[activeChordType] || 'white' }}
+                                        style={{ borderColor: activeChordColor || CHORD_RGB_COLORS[activeChordType] || 'white' }}
                                     >
                                         {(isHovered || isGlowing) && (
                                             <span className={`text-white font-bold text-xs ${isRoot ? 'transform -rotate-45' : ''}`}>{noteName}</span>
@@ -163,6 +164,8 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
                         const noteColorClasses = isRoot
                             ? ROOT_NOTE_DOT_CLASSES[activeChordType]
                             : CHORD_DOT_CLASSES[activeChordType];
+
+                        const fallbackColor = activeChordColor || CHORD_RGB_COLORS[activeChordType] || 'rgb(250, 204, 21)';
                         
                         const y = `clamp(20px, calc(${(stringIndex * (100/STRING_COUNT)) + (100/(STRING_COUNT*2))}%), calc(100% - 20px))`;
                         const x = `calc(${((fret - 0.5) / FRET_COUNT) * 100}%)`;
@@ -183,6 +186,7 @@ export const ChordFretboard: React.FC<ChordFretboardProps> = ({ voicing, rootNot
                                     ${isRoot && !isGlowing ? 'ring-2 ring-white/70 ring-offset-1 ring-offset-gray-900' : ''}
                                     ${isGlowing ? 'note-glow-strong scale-125 ring-4 ring-white/80' : ''}
                                     `}
+                                    style={!noteColorClasses ? { backgroundColor: fallbackColor, borderColor: 'white' } : undefined}
                                 >
                                     {(isHovered || isGlowing) && (
                                         <span className={`text-white font-bold text-xs ${isRoot ? 'transform -rotate-45' : ''}`}>{noteName}</span>

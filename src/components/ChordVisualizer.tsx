@@ -4,7 +4,7 @@ import { ChordControls } from './ChordControls';
 import { CagedSystem } from './CagedSystem';
 import { ChordFretboard } from './ChordFretboard';
 import { AudioService } from '../services/AudioService';
-import { ChordType, EnharmonicPreference, DisplayNote, CagedVoicing, Key, StaffNote, KeySignature, ScaleType, BuiltInChords } from '../types';
+import { ChordType, EnharmonicPreference, DisplayNote, CagedVoicing, Key, StaffNote, KeySignature, ScaleType, BuiltInChords, Voicing } from '../types';
 // FIX: Added missing constant imports
 import { CHROMATIC_SCALE, CHORD_FORMULAS as BUILT_IN_CHORD_FORMULAS, NOTE_NAMES, CHORD_RGB_COLORS, CHORD_TEXT_COLORS, SCALE_INTERVALS, ALL_NOTE_SPELLINGS } from '../constants';
 import { getGuitarVoicings } from '../data/guitarVoicings';
@@ -26,6 +26,33 @@ const MINOR_LIKE_CHORDS: ChordType[] = [
     BuiltInChords.Diminished7,
 ];
 
+const transposeVoicing = (voicing: Voicing, amount: number): Voicing => {
+    return voicing.map(fret => (fret === -1 ? -1 : fret + amount)) as Voicing;
+};
+
+const pickBestTransposition = (voicing: Voicing, deltaBase: number): Voicing => {
+    const deltas = [deltaBase, deltaBase + 12, deltaBase - 12];
+    const candidates = deltas
+        .map(d => transposeVoicing(voicing, d))
+        .filter(v => v.every(f => f === -1 || f >= 0));
+
+    if (candidates.length === 0) {
+        const safe = transposeVoicing(voicing, deltaBase + 12);
+        return safe.map(f => (f === -1 ? -1 : Math.max(0, f))) as Voicing;
+    }
+
+    const score = (v: Voicing) => {
+        const frets = v.filter(f => f !== -1) as number[];
+        const maxFret = frets.length ? Math.max(...frets) : 0;
+        const minFret = frets.length ? Math.min(...frets) : 0;
+        return { maxFret, minFret };
+    };
+
+    return candidates
+        .map(v => ({ v, s: score(v) }))
+        .sort((a, b) => a.s.maxFret - b.s.maxFret || a.s.minFret - b.s.minFret)[0].v;
+};
+
 interface ChordVisualizerProps {
     audioService: AudioService;
     isAudioReady: boolean;
@@ -33,7 +60,7 @@ interface ChordVisualizerProps {
 }
 
 const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudioReady, isActive }) => {
-    const { customChords } = useCustomData();
+    const { customVoicings, customChords } = useCustomData();
     const [rootNoteIndex, setRootNoteIndex] = useState(0); // C
     const [activeChordType, setActiveChordType] = useState<ChordType>(BuiltInChords.Major);
     const [enharmonicPreference, setEnharmonicPreference] = useState<EnharmonicPreference>('sharp');
@@ -139,11 +166,26 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
         });
     }, [rootNoteIndex, activeChordType, allNotes, allChordFormulas]);
 
+        const activeChordColor = useMemo(() => {
+            return customChords.find(c => c.name === activeChordType)?.color || CHORD_RGB_COLORS[activeChordType] || 'rgb(250, 204, 21)';
+        }, [customChords, activeChordType]);
+
      const chordNoteIndices = useMemo(() => new Set(chordNotes.map(n => n.originalIndex)), [chordNotes]);
 
     const allVoicings = useMemo(() => {
-        return getGuitarVoicings(rootNote.originalIndex, activeChordType);
-    }, [rootNote, activeChordType]);
+        const builtIn = getGuitarVoicings(rootNote.originalIndex, activeChordType) || [];
+        const saved = customVoicings
+            .filter(v => v.chordType === activeChordType)
+            .map(v => {
+                const deltaBase = rootNote.originalIndex - v.rootNoteIndex;
+                return {
+                    name: v.name,
+                    voicing: pickBestTransposition(v.voicing, deltaBase),
+                };
+            });
+        const merged = [...builtIn, ...saved];
+        return merged.length > 0 ? merged : null;
+    }, [rootNote, activeChordType, customVoicings]);
 
     const hasStringSets = useMemo(() => {
         if (!allVoicings) return false;
@@ -170,7 +212,7 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
             ? getKeySignature(contextKey.note, contextKey.scale)
             : { type: 'sharp', count: 0 };
     
-        const chordColor = CHORD_RGB_COLORS[activeChordType] || 'rgb(250, 204, 21)';
+            const chordColor = activeChordColor;
         const harmonyNoteColor = 'white';
         const scaleOnlyNoteColor = 'rgb(107, 114, 128)';
     
@@ -439,6 +481,7 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
                         allNotes={allNotes}
                         onNoteClick={handleRootNoteSelect}
                         activeChordType={activeChordType}
+                        activeChordColor={activeChordColor}
                         enharmonicPreference={enharmonicPreference}
                         glowingNoteIndex={glowingNote?.noteIndex ?? null}
                     />
@@ -525,6 +568,7 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
                         voicing={currentVoicing.voicing}
                         rootNoteName={rootNote.name}
                         activeChordType={activeChordType}
+                        activeChordColor={activeChordColor}
                         glowingNoteMidi={glowingNote?.writtenMidi ? glowingNote.writtenMidi - 12 : null}
                         onNoteInteraction={(data) => handleInteraction({ ...data, source: 'fretboard' })}
                         allNotes={allNotes}

@@ -10,6 +10,7 @@ interface ChordCircleProps {
   allNotes: DisplayNote[];
   onNoteClick: (noteIndex: number) => void;
   activeChordType: ChordType;
+  activeChordColor?: string;
   enharmonicPreference: EnharmonicPreference;
   glowingNoteIndex: number | null;
 }
@@ -34,6 +35,7 @@ export const ChordCircle: React.FC<ChordCircleProps> = ({
   allNotes, 
   onNoteClick, 
   activeChordType,
+  activeChordColor,
   enharmonicPreference,
   glowingNoteIndex
 }) => {
@@ -48,6 +50,11 @@ export const ChordCircle: React.FC<ChordCircleProps> = ({
       return `${x},${y}`;
     }).join(' ');
   }, [chordNotes]);
+
+  const chordFillClasses = CHORD_COLORS[activeChordType];
+  const chordDotClasses = CHORD_DOT_CLASSES[activeChordType];
+  const rootDotClasses = ROOT_NOTE_DOT_CLASSES[activeChordType];
+  const chordShadowClass = shadowColors[activeChordType];
 
   return (
     <div className="w-full max-w-sm aspect-square relative">
@@ -64,8 +71,17 @@ export const ChordCircle: React.FC<ChordCircleProps> = ({
         >
           <polygon
             points={shapePoints}
-            className={`${CHORD_COLORS[activeChordType]} stroke transition-all duration-500 ease-in-out`}
+            className={`${chordFillClasses ?? ''} stroke transition-all duration-500 ease-in-out`}
             strokeWidth="0.5"
+            style={
+              chordFillClasses
+                ? undefined
+                : {
+                    fill: activeChordColor ?? 'rgb(250, 204, 21)',
+                    fillOpacity: 0.2,
+                    stroke: activeChordColor ?? 'rgb(250, 204, 21)',
+                  }
+            }
           />
         </svg>
         
@@ -79,10 +95,16 @@ export const ChordCircle: React.FC<ChordCircleProps> = ({
 
           const getNoteStyleClasses = () => {
               if (isRoot) {
-                  return `${ROOT_NOTE_DOT_CLASSES[activeChordType]} shadow-lg ${shadowColors[activeChordType]} z-10 border-4`;
+                if (rootDotClasses) {
+                  return `${rootDotClasses} shadow-lg ${chordShadowClass ?? ''} z-10 border-4`;
+                }
+                return `text-gray-900 border-stone-200 shadow-lg z-10 border-4`;
               }
               if (isChordNote) {
-                  return CHORD_DOT_CLASSES[activeChordType];
+                if (chordDotClasses) {
+                  return chordDotClasses;
+                }
+                return 'text-white border-white/60';
               }
               return 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600 hover:border-gray-500';
           };
@@ -106,6 +128,18 @@ export const ChordCircle: React.FC<ChordCircleProps> = ({
                 top: `${y}%`,
                 width: '13%',
                 height: '13%',
+                ...(isRoot && !rootDotClasses
+                  ? {
+                      backgroundColor: activeChordColor ?? 'rgb(250, 204, 21)',
+                      borderColor: 'rgb(231, 229, 228)',
+                    }
+                  : {}),
+                ...(isChordNote && !chordDotClasses
+                  ? {
+                      backgroundColor: activeChordColor ?? 'rgb(250, 204, 21)',
+                      borderColor: 'rgba(255, 255, 255, 0.6)',
+                    }
+                  : {}),
               }}
               onClick={() => onNoteClick(note.originalIndex)}
             >

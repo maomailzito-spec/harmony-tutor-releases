@@ -119,7 +119,7 @@ interface ScalesVisualizerProps {
 }
 
 const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAudioReady, isActive }) => {
-    const { customScales } = useCustomData();
+    const { customScales, customScaleShapes } = useCustomData();
     const [scaleType, setScaleType] = useState<ScaleType>('Pentatonic');
     const [appState, setAppState, undoAppState] = useUndoableState<AppState>({
         placedBoxes: [],
@@ -144,13 +144,21 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
         return { ...BUILT_IN_SCALE_INTERVALS, ...customIntervals };
     }, [customScales]);
 
+    const allShapes = useMemo((): Record<ScaleType, ScaleShape[]> => {
+        const merged: Record<ScaleType, ScaleShape[]> = { ...ALL_SHAPES };
+        Object.entries(customScaleShapes).forEach(([scale, shapes]) => {
+            merged[scale] = [...(merged[scale] ?? []), ...(shapes ?? [])];
+        });
+        return merged;
+    }, [customScaleShapes]);
+
     // --- STAFF STATE ---
     const [staffNotes, setStaffNotes] = useState<StaffNote[]>([]);
     const [keySignature, setKeySignature] = useState<KeySignature>({ type: 'sharp', count: 0 });
     
     const availableShapes = useMemo((): ScaleShape[] => {
-        return ALL_SHAPES[scaleType] || [];
-    }, [scaleType]);
+        return allShapes[scaleType] || [];
+    }, [scaleType, allShapes]);
 
     // FIX: Add useEffect to measure staff container width.
     useEffect(() => {
@@ -311,7 +319,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
         const activeBox = placedBoxes.find(b => b.id === activeBoxId);
         
         if (activeBox) {
-            const shape = ALL_SHAPES[activeBox.scaleType]?.[activeBox.shapeIndex];
+            const shape = allShapes[activeBox.scaleType]?.[activeBox.shapeIndex];
             if (shape) {
                 const shapeStaffNotes = getFretboardNotesAsStaffNotes(shape, activeBox.fretPosition, newKeySignature, allNotes);
                 
@@ -357,7 +365,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                 }
             }
         
-            const shapesForScale = ALL_SHAPES[scaleType] || [];
+            const shapesForScale = allShapes[scaleType] || [];
             if (shapesForScale.length > 0) {
                  const allPositions = calculateLowestFretPositions(adjustedKey, shapesForScale, scaleType);
                 const firstShapePosition = allPositions.find(p => p.shapeIndex === 0);
@@ -394,7 +402,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                 if (activeBoxId) {
                     const updatedBoxes = current.placedBoxes.map(box => {
                         if (box.id === activeBoxId) {
-                            if (ALL_SHAPES[newScaleType]?.[box.shapeIndex]) {
+                            if (allShapes[newScaleType]?.[box.shapeIndex]) {
                                return { ...box, scaleType: newScaleType };
                             }
                         }
@@ -414,7 +422,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                 ? { ...current.selectedKey, scale: newQuality }
                 : current.selectedKey;
 
-            const shapesForScale = ALL_SHAPES[newScaleType] || [];
+            const shapesForScale = allShapes[newScaleType] || [];
             if (shapesForScale.length > 0) {
                 const allPositions = calculateLowestFretPositions(updatedKey, shapesForScale, newScaleType);
                 const firstShapePosition = allPositions.find(p => p.shapeIndex === 0);
@@ -478,7 +486,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
             const oldBox = currentAppState.placedBoxes.find(b => b.id === boxId);
             if (!oldBox) return currentAppState;
 
-            const shapesForScale = ALL_SHAPES[oldBox.scaleType];
+            const shapesForScale = allShapes[oldBox.scaleType];
             if (!shapesForScale || newShapeIndex < 0 || newShapeIndex >= shapesForScale.length) {
                 return currentAppState;
             }
@@ -552,7 +560,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
         const box = placedBoxes.find(b => b.id === boxId);
         if (!box) return null;
 
-        const shape = ALL_SHAPES[box.scaleType]?.[box.shapeIndex];
+        const shape = allShapes[box.scaleType]?.[box.shapeIndex];
         if (!shape) return null;
         
         const allNotes = shape.notes
@@ -847,7 +855,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                     <ShapeControls
                         placedBoxes={placedBoxes}
                         availableShapes={availableShapes}
-                        allShapes={ALL_SHAPES}
+                        allShapes={allShapes}
                         selectedKey={selectedKey}
                         onRemoveBox={removeBox}
                         onUpdateShapePosition={updateShapePosition}
@@ -885,7 +893,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                  <div>
                     <Fretboard 
                         placedBoxes={placedBoxes}
-                        allShapes={ALL_SHAPES}
+                        allShapes={allShapes}
                         selectedFret={selectedFret} 
                         onSelectFret={setSelectedFret}
                         onPlayScaleFromNote={handlePlayScaleFromNote}

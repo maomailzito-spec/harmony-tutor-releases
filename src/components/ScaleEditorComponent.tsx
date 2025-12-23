@@ -48,7 +48,7 @@ const scaleTypeToConstantName: Record<ScaleType, string> = {
 };
 
 const ScaleEditorComponent: React.FC = () => {
-    const { customScales, addCustomScale, deleteCustomScale } = useCustomData();
+    const { customScales, addCustomScale, deleteCustomScale, customScaleShapes, addCustomScaleShape, deleteCustomScaleShape } = useCustomData();
     const [notes, setNotes] = useState<ScaleNoteDefinition[]>([]);
     const [shapeName, setShapeName] = useState('Shape 1');
     const [shapeColor, setShapeColor] = useState('rgb(59, 130, 246)');
@@ -60,6 +60,7 @@ const ScaleEditorComponent: React.FC = () => {
     // Form state for new scale types
     const [newScaleName, setNewScaleName] = useState('');
     const [scaleTypeError, setScaleTypeError] = useState('');
+    const [shapeSaveMessage, setShapeSaveMessage] = useState<string>('');
 
     const shapeOptions = useMemo(() => {
         const shapes = ALL_SHAPES[scaleCategory] || [];
@@ -137,6 +138,35 @@ const ScaleEditorComponent: React.FC = () => {
 
     const handleClear = () => {
         setNotes([]);
+    };
+
+    const handleSaveShapeToApp = () => {
+        setShapeSaveMessage('');
+        if (!BUILT_IN_SCALE_TYPES.includes(scaleCategory)) {
+            setShapeSaveMessage('Salvataggio shape disponibile solo per scale predefinite.');
+            return;
+        }
+        if (!shapeName.trim()) {
+            setShapeSaveMessage('Dai un nome alla shape.');
+            return;
+        }
+        if (notes.length === 0) {
+            setShapeSaveMessage('Aggiungi almeno una nota prima di salvare.');
+            return;
+        }
+
+        const minFret = Math.min(...notes.map(n => n.f));
+        const normalizedNotes = notes
+            .map(n => ({ ...n, f: n.f - minFret }))
+            .sort((a, b) => (a.s - b.s) || (a.f - b.f));
+
+        addCustomScaleShape(scaleCategory, {
+            name: shapeName,
+            color: shapeColor,
+            notes: normalizedNotes,
+        });
+        setShapeSaveMessage('Shape salvata.');
+        setTimeout(() => setShapeSaveMessage(''), 1500);
     };
 
     const generatedCode = useMemo(() => {
@@ -354,6 +384,35 @@ ${notesString}
                             <li key={scale.name} className="flex justify-between items-center bg-gray-700 p-1.5 rounded-md text-sm">
                                 <span>{scale.name}</span>
                                 <button onClick={() => deleteCustomScale(scale.name)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-600">
+                                    <TrashIcon />
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                <div className="bg-gray-800/50 rounded-lg p-4 flex flex-col gap-2">
+                    <h3 className="font-bold text-lg text-white border-b border-gray-600 pb-2">Shape Salvate</h3>
+                    <div className="flex gap-2 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleSaveShapeToApp}
+                            className="flex-1 p-2 rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!BUILT_IN_SCALE_TYPES.includes(scaleCategory)}
+                        >
+                            Salva Shape
+                        </button>
+                    </div>
+                    {shapeSaveMessage && <p className="text-sm text-gray-300">{shapeSaveMessage}</p>}
+                    <ul className="space-y-1 pt-2 max-h-28 overflow-y-auto">
+                        {(customScaleShapes[scaleCategory] ?? []).map(shape => (
+                            <li key={shape.name} className="flex justify-between items-center bg-gray-700 p-1.5 rounded-md text-sm">
+                                <span>{shape.name}</span>
+                                <button
+                                    onClick={() => deleteCustomScaleShape(scaleCategory, shape.name)}
+                                    className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-600"
+                                    title="Elimina shape"
+                                >
                                     <TrashIcon />
                                 </button>
                             </li>

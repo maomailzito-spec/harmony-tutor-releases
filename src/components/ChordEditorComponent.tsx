@@ -8,6 +8,16 @@ import { TrashIcon } from './icons/TrashIcon';
 
 const STRING_BASE_MIDI = [64, 59, 55, 50, 45, 40]; // High E to Low E
 
+const COLORS = [
+    'rgb(239, 68, 68)',   // red-500
+    'rgb(249, 115, 22)',  // orange-500
+    'rgb(250, 204, 21)',  // yellow-400
+    'rgb(34, 197, 94)',   // green-500
+    'rgb(59, 130, 246)',  // blue-500
+    'rgb(139, 92, 246)', // violet-500
+    'rgb(219, 39, 119)', // fuchsia-500
+];
+
 const InfoIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -21,7 +31,7 @@ const CopyIcon: React.FC = () => (
 );
 
 const ChordEditorComponent: React.FC = () => {
-    const { customChords, addCustomChord, deleteCustomChord } = useCustomData();
+    const { customChords, addCustomChord, deleteCustomChord, customVoicings, addCustomVoicing, deleteCustomVoicing } = useCustomData();
     const [currentVoicing, setCurrentVoicing] = useState<Voicing>([-1, -1, -1, -1, -1, -1]);
     const [voicingName, setVoicingName] = useState('New Voicing');
     const [rootNoteIndex, setRootNoteIndex] = useState(0); // C
@@ -29,14 +39,20 @@ const ChordEditorComponent: React.FC = () => {
     const [selectedVoicingKey, setSelectedVoicingKey] = useState<string>('new');
     const [copySuccess, setCopySuccess] = useState(false);
     const [rootPosition, setRootPosition] = useState<{s: number, f: number} | null>(null);
+    const [voicingSaveMessage, setVoicingSaveMessage] = useState<string>('');
 
     // Form state for new chord types
     const [newChordName, setNewChordName] = useState('');
     const [chordTypeError, setChordTypeError] = useState('');
+    const [newChordColor, setNewChordColor] = useState<string>(COLORS[2]);
 
     const availableVoicings = useMemo(() => {
-        return getGuitarVoicings(rootNoteIndex, chordType) || [];
-    }, [rootNoteIndex, chordType]);
+        const builtIn = getGuitarVoicings(rootNoteIndex, chordType) || [];
+        const saved = customVoicings
+            .filter(v => v.chordType === chordType && v.rootNoteIndex === rootNoteIndex)
+            .map(v => ({ name: v.name, voicing: v.voicing }));
+        return [...builtIn, ...saved];
+    }, [rootNoteIndex, chordType, customVoicings]);
 
     useEffect(() => {
         setRootPosition(null);
@@ -46,6 +62,13 @@ const ChordEditorComponent: React.FC = () => {
             setVoicingName(`${rootNoteName} ${chordType} - Custom`);
         } else if (selectedVoicingKey === 'custom') {
             // Do nothing, keep manual edits
+        } else if (selectedVoicingKey.startsWith('saved|')) {
+            const id = selectedVoicingKey.slice('saved|'.length);
+            const saved = customVoicings.find(v => v.id === id);
+            if (saved) {
+                setCurrentVoicing(saved.voicing);
+                setVoicingName(saved.name);
+            }
         }
         else {
             const [indexStr, name] = selectedVoicingKey.split('|');
@@ -56,7 +79,7 @@ const ChordEditorComponent: React.FC = () => {
                 setVoicingName(selected.name);
             }
         }
-    }, [selectedVoicingKey, availableVoicings, rootNoteIndex, chordType]);
+    }, [selectedVoicingKey, availableVoicings, rootNoteIndex, chordType, customVoicings]);
     
     const notesForFretboard = useMemo((): ScaleNoteDefinition[] => {
         return currentVoicing
@@ -116,6 +139,22 @@ const ChordEditorComponent: React.FC = () => {
         setRootPosition(null);
         setSelectedVoicingKey('new');
     };
+
+    const handleSaveVoicingToApp = () => {
+        setVoicingSaveMessage('');
+        if (!voicingName.trim()) {
+            setVoicingSaveMessage('Dai un nome al voicing.');
+            return;
+        }
+        const hasAnyNote = currentVoicing.some(f => f > -1);
+        if (!hasAnyNote) {
+            setVoicingSaveMessage('Aggiungi almeno una nota prima di salvare.');
+            return;
+        }
+        addCustomVoicing(chordType, rootNoteIndex, voicingName, currentVoicing);
+        setVoicingSaveMessage('Voicing salvato.');
+        setTimeout(() => setVoicingSaveMessage(''), 1500);
+    };
     
     const generatedCode = useMemo(() => {
         const instruction = `// Aggiungi questo oggetto all'array per l'accordo '${chordType}' in data/guitarVoicings.ts\n`;
@@ -156,7 +195,7 @@ const ChordEditorComponent: React.FC = () => {
         });
         const formula = Array.from(formulaSet).sort((a,b) => a-b);
         
-        addCustomChord(newChordName, formula);
+        addCustomChord(newChordName, formula, newChordColor);
         setNewChordName('');
     };
 
@@ -237,9 +276,21 @@ const ChordEditorComponent: React.FC = () => {
                         >
                             <option value="new">+ Crea Nuovo Voicing</option>
                             {selectedVoicingKey === 'custom' && <option value="custom">-- Custom --</option>}
-                            {availableVoicings.map((voicing, index) => (
-                                <option key={`${index}|${voicing.name}`} value={`${index}|${voicing.name}`}>{voicing.name}</option>
-                            ))}
+                            <optgroup label="Voicings Disponibili">
+                                {(getGuitarVoicings(rootNoteIndex, chordType) || []).map((voicing, index) => (
+                                    <option key={`built|${index}|${voicing.name}`} value={`${index}|${voicing.name}`}>{voicing.name}</option>
+                                ))}
+                            </optgroup>
+                            {customVoicings.filter(v => v.chordType === chordType && v.rootNoteIndex === rootNoteIndex).length > 0 && (
+                                <optgroup label="Voicings Salvati">
+                                    {customVoicings
+                                        .filter(v => v.chordType === chordType && v.rootNoteIndex === rootNoteIndex)
+                                        .map(v => (
+                                            <option key={v.id} value={`saved|${v.id}`}>{v.name}</option>
+                                        ))
+                                    }
+                                </optgroup>
+                            )}
                         </select>
                     </div>
                     <div>
@@ -265,6 +316,22 @@ const ChordEditorComponent: React.FC = () => {
                                 placeholder="Nome Nuovo Tipo di Accordo"
                                 className="w-full bg-gray-700 border border-gray-600 rounded-md p-2"
                             />
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Colore Accordo</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {COLORS.map(color => (
+                                        <button
+                                            key={color}
+                                            type="button"
+                                            onClick={() => setNewChordColor(color)}
+                                            className={`w-8 h-8 rounded-full transition-transform transform hover:scale-110 ${newChordColor === color ? 'ring-2 ring-offset-2 ring-offset-gray-800 ring-white' : ''}`}
+                                            style={{ backgroundColor: color }}
+                                            aria-label={`Select color ${color}`}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
                             {chordTypeError && <p className="text-red-400 text-sm">{chordTypeError}</p>}
                              <div className="flex gap-2">
                                 <button type="submit" className="flex-1 p-2 rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">
@@ -280,6 +347,36 @@ const ChordEditorComponent: React.FC = () => {
                             </div>
                         </form>
                     </div>
+                </div>
+
+                <div className="bg-gray-800/50 rounded-lg p-4 flex flex-col gap-2">
+                    <h3 className="font-bold text-lg text-white border-b border-gray-600 pb-2">Voicings Salvati</h3>
+                    <div className="flex gap-2 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleSaveVoicingToApp}
+                            className="flex-1 p-2 rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors"
+                        >
+                            Salva Voicing
+                        </button>
+                    </div>
+                    {voicingSaveMessage && <p className="text-sm text-gray-300">{voicingSaveMessage}</p>}
+                    <ul className="space-y-1 pt-2 max-h-28 overflow-y-auto">
+                        {customVoicings
+                            .filter(v => v.chordType === chordType && v.rootNoteIndex === rootNoteIndex)
+                            .map(v => (
+                                <li key={v.id} className="flex justify-between items-center bg-gray-700 p-1.5 rounded-md text-sm">
+                                    <span>{v.name}</span>
+                                    <button
+                                        onClick={() => deleteCustomVoicing(v.id)}
+                                        className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-600"
+                                        title="Elimina voicing"
+                                    >
+                                        <TrashIcon />
+                                    </button>
+                                </li>
+                            ))}
+                    </ul>
                 </div>
 
                 <div className="bg-gray-800/50 rounded-lg p-4 flex flex-col gap-2">
