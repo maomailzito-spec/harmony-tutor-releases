@@ -153,6 +153,7 @@ export type StaffNote = {
   duration?: NoteDuration;
   isRest?: boolean;
   isTriplet?: boolean;
+  isDuplet?: boolean;
   groupId?: string;
   chordId?: string; // New property to group notes vertically in the same chord
   measureIndex?: number;
@@ -168,6 +169,7 @@ export type StaffNote = {
 export type Barline = {
   id: string;
   xPosition: number;
+  style?: 'single' | 'double' | 'final';
 };
 
 export type KeySignature = {
@@ -196,7 +198,8 @@ export type RuleViolation = {
 };
 
 export type AnalysisContext = {
-    measureIndex: number;
+  absBeat?: number;
+  measureIndex?: number;
     newTonic: string;
     newIsMinor: boolean;
 };

@@ -153,6 +153,7 @@ export type StaffNote = {
   duration?: NoteDuration;
   isRest?: boolean;
   isTriplet?: boolean;
+  isDuplet?: boolean;
   isDotted?: boolean;
   isTiedToNext?: boolean;
   groupId?: string;
@@ -172,6 +173,7 @@ export type StaffNote = {
 export type Barline = {
   id: string;
   xPosition: number;
+  style?: 'single' | 'double' | 'final';
 };
 
 export type KeySignature = {
@@ -189,6 +191,10 @@ export type ErrorConnection = {
   type: 'vertical' | 'horizontal';
   noteId1: string;
   noteId2: string;
+  // Optional metadata to keep connection coloring tied to the originating rule.
+  // If absent, the editor may derive severity from violations/endpoints.
+  severity?: 'error' | 'warning' | 'exception';
+  ruleId?: string;
 };
 
 export type RuleViolation = {
@@ -200,7 +206,11 @@ export type RuleViolation = {
 };
 
 export type AnalysisContext = {
-    measureIndex: number;
+  // New: position in the score timeline (quarter-note beats from start, can be fractional).
+  // This enables mid-measure key contexts (tonicizations/modulations) aligned to the playhead.
+  absBeat?: number;
+  // Legacy support (older state): measure boundary context.
+  measureIndex?: number;
     newTonic: string;
     newIsMinor: boolean;
 };

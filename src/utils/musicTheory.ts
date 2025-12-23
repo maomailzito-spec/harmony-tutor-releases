@@ -842,16 +842,17 @@ export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignat
     voices.forEach(voiceNotes => {
         let measureIndex = 0;
         let durationInMeasure = 0;
-        let tripletContext: { notesInTriplet: number; beatsForTriplet: number; notesProcessed: number } | null = null;
+        let tupletContext: { notesInGroup: number; beatsForGroup: number; notesProcessed: number } | null = null;
 
         for (const note of voiceNotes) {
             let durationInBeats = DURATION_VALUES[note.duration || 'quarter'] * (note.isDotted ? 1.5 : 1);
 
-            if (note.isTriplet && !tripletContext) {
-                tripletContext = { notesInTriplet: 3, beatsForTriplet: durationInBeats * 2, notesProcessed: 0 };
+            if (!tupletContext) {
+                if (note.isTriplet) tupletContext = { notesInGroup: 3, beatsForGroup: durationInBeats * 2, notesProcessed: 0 };
+                else if (note.isDuplet) tupletContext = { notesInGroup: 2, beatsForGroup: durationInBeats * 3, notesProcessed: 0 };
             }
 
-            if (tripletContext) durationInBeats = tripletContext.beatsForTriplet / tripletContext.notesInTriplet;
+            if (tupletContext) durationInBeats = tupletContext.beatsForGroup / tupletContext.notesInGroup;
 
             if (durationInMeasure + durationInBeats > beatsPerMeasure + 0.001) {
                 measureIndex++;
@@ -866,9 +867,9 @@ export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignat
 
             durationInMeasure += durationInBeats;
 
-            if (tripletContext) {
-                tripletContext.notesProcessed++;
-                if (tripletContext.notesProcessed >= tripletContext.notesInTriplet) tripletContext = null;
+            if (tupletContext) {
+                tupletContext.notesProcessed++;
+                if (tupletContext.notesProcessed >= tupletContext.notesInGroup) tupletContext = null;
             }
         }
     });
@@ -912,6 +913,11 @@ function getIntervalQuality(
     return null;
 }
 
+// NOTE: per supportare rosso/arancio/verde + linee di connessione,
+// assicurati che applyHarmonyRules produca `connections` con campi tipo:
+// - fromNoteId/toNoteId (oppure noteIds)
+// - severity: 'error' | 'warning' | 'exception' (o equivalente coerente)
+
 // NOTE: this is the full rules engine entrypoint expected by the editor.
 // It relies on helpers already defined above in this file (getDirection, getInterval, identifyChord, etc.).
 export function applyHarmonyRules(
@@ -919,20 +925,735 @@ export function applyHarmonyRules(
     keySignature: KeySignature,
     keyTonic: string,
     isMinor: boolean,
-    analysisContexts: AnalysisContext[]
+    analysisContexts: AnalysisContext[],
+    timeSignature?: TimeSignature
 ): HarmonyAnalysisResult {
-    // If you previously had a longer full implementation, keep it; this is a minimal safe fallback
-    // that preserves the output shape so the app loads. Replace/merge with your full rule set as needed.
+    const analyzedNotes = [...notes];
+    const violations: RuleViolation[] = [];
+    const connections: ErrorConnection[] = [];
 
-    // Build chord map by measureIndex/beat (same bucketing as the old engine)
-    const chordsMap = new Map<string, StaffNote[]>();
-    notes.forEach(note => {
-        if (note.isRest) return;
-        const key = `${note.measureIndex ?? 0}-${note.beat ?? 1}`;
-        if (!chordsMap.has(key)) chordsMap.set(key, []);
-        chordsMap.get(key)!.push(note);
+    const safeBeatsPerMeasure = (ts?: TimeSignature) => {
+        if (!ts) return 4;
+        return ts.numerator * (4 / ts.denominator);
+    };
+
+    const beatsPerMeasure = safeBeatsPerMeasure(timeSignature);
+
+    const ctxAbsBeat = (c: AnalysisContext) => {
+        const m = c.measureIndex ?? 0;
+        const legacyAbs = m * beatsPerMeasure;
+        const a = c.absBeat;
+        return Number.isFinite(a as any) ? (a as number) : legacyAbs;
+    };
+
+    // Resolve applicable context at a given absolute beat.
+    const getContextAtAbsBeat = (absBeat: number) => {
+        const applicable = (analysisContexts || [])
+            .filter(c => ctxAbsBeat(c) <= absBeat + 1e-6)
+            .sort((a, b) => ctxAbsBeat(b) - ctxAbsBeat(a))[0];
+        return {
+            tonic: applicable ? applicable.newTonic : keyTonic,
+            isMinor: applicable ? applicable.newIsMinor : isMinor,
+        };
+    };
+
+    const tonicPc = (() => {
+        const idx = noteNameToIndex[keyTonic];
+        return Number.isFinite(idx) ? idx : 0;
+    })();
+
+    const leadingPc = mod12(tonicPc - 1);
+
+    const isPerfectOctaveOrUnison = (semitonesMod12: number) => semitonesMod12 === 0;
+    const isPerfectFifth = (semitonesMod12: number) => semitonesMod12 === 7;
+
+    const stepDown = (fromMidi: number, toMidi: number) => (toMidi === fromMidi - 1) || (toMidi === fromMidi - 2);
+    const stepUpToTonic = (fromMidi: number, toMidi: number, tonicPitchClass: number) =>
+        (toMidi % 12) === tonicPitchClass && (toMidi > fromMidi) && (toMidi - fromMidi <= 2);
+
+    const dir = (a: number, b: number) => {
+        const d = b - a;
+        return d === 0 ? 0 : d > 0 ? 1 : -1;
+    };
+
+    const addViolation = (v: RuleViolation) => {
+        if (!v.noteIds || v.noteIds.length === 0) return;
+        // de-dupe by (ruleId + same set of noteIds at least)
+        const key = `${v.ruleId}::${[...new Set(v.noteIds)].sort().join(',')}`;
+        if ((addViolation as any)._seen?.has(key)) return;
+        (addViolation as any)._seen = (addViolation as any)._seen || new Set<string>();
+        (addViolation as any)._seen.add(key);
+        violations.push({ ...v, noteIds: [...new Set(v.noteIds)] });
+    };
+
+    // ---- Build chord timeline (by measureIndex/beat) ----
+    const chordMap = new Map<string, StaffNote[]>();
+    analyzedNotes.forEach(n => {
+        if (n.isRest) return;
+        const m = n.measureIndex ?? 0;
+        const b = n.beat ?? 1;
+        const key = `${m}-${b}`;
+        if (!chordMap.has(key)) chordMap.set(key, []);
+        chordMap.get(key)!.push(n);
     });
 
-    // Minimal: no violations/connections (so UI doesn't crash). Your full engine can be merged back here.
-    return { analyzedNotes: [...notes], violations: [], connections: [] };
+    const chordEvents = Array.from(chordMap.entries())
+        .map(([key, chordNotes]) => {
+            const [mStr, bStr] = key.split('-');
+            const m = Number(mStr);
+            const b = Number(bStr);
+            const absBeat = (m * beatsPerMeasure) + (b - 1);
+            const byVoice = new Map<Voice, StaffNote>();
+            chordNotes.forEach(n => {
+                const v = (n.voice ?? 1) as Voice;
+                // if duplicates in same voice at same time (rare), keep highest note (more informative)
+                const prev = byVoice.get(v);
+                if (!prev || (n.midi ?? -Infinity) > (prev.midi ?? -Infinity)) byVoice.set(v, n);
+            });
+            return { key, measureIndex: m, beat: b, absBeat, notes: chordNotes, byVoice };
+        })
+        .sort((a, b) => a.absBeat - b.absBeat);
+
+    // ---- Sounding harmony per beat (duration-aware) ----
+    // Needed for rules that depend on harmonic rhythm (e.g., harmonic syncopation).
+    const durationToBeats = (d?: StaffNote['duration']) => {
+        switch (d || 'quarter') {
+            case 'whole': return 4;
+            case 'half': return 2;
+            case 'quarter': return 1;
+            case 'eighth': return 0.5;
+            case 'sixteenth': return 0.25;
+            case 'thirty-second': return 0.125;
+            case 'sixty-fourth': return 0.0625;
+            default: return 1;
+        }
+    };
+
+    const noteSpan = analyzedNotes
+        .filter(n => !n.isRest)
+        .map(n => {
+            const m = n.measureIndex ?? 0;
+            const b = n.beat ?? 1;
+            const start = (m * beatsPerMeasure) + (b - 1);
+            const baseLen = durationToBeats(n.duration);
+            const dotted = n.isDotted ? 1.5 : 1;
+            const tuplet = n.isTriplet ? (2 / 3) : (n.isDuplet ? (3 / 2) : 1);
+            const len = baseLen * dotted * tuplet;
+            return { note: n, startAbsBeat: start, endAbsBeat: start + Math.max(len, 0.0001) };
+        });
+
+    const maxAbsBeat = noteSpan.reduce((mx, s) => Math.max(mx, Math.ceil(s.endAbsBeat)), 0);
+
+    const soundingNotesAt = (absBeat: number): StaffNote[] =>
+        noteSpan
+            .filter(s => absBeat >= s.startAbsBeat && absBeat < s.endAbsBeat)
+            .map(s => s.note);
+
+    const chordSignature = (sounding: StaffNote[]): string => {
+        const pcs = [...new Set(sounding.filter(n => !n.isRest).map(n => mod12(n.midi)))].sort((a, b) => a - b);
+        return pcs.join('-');
+    };
+
+    const pickOuterVoice = (sounding: StaffNote[], voice: Voice): StaffNote | undefined => {
+        const byV = sounding.filter(n => (n.voice ?? 1) === voice);
+        if (byV.length) return byV[0];
+        // Fallback if voice info missing: use extremes (soprano highest, bass lowest).
+        const sorted = sounding.slice().sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0));
+        if (!sorted.length) return undefined;
+        return voice === 1 ? sorted[sorted.length - 1] : voice === 4 ? sorted[0] : undefined;
+    };
+
+    // ---- Per-voice melodic lines (sorted by time) ----
+    const notesByVoice: Record<Voice, StaffNote[]> = { 1: [], 2: [], 3: [], 4: [] };
+    analyzedNotes
+        .filter(n => !n.isRest)
+        .forEach(n => {
+            const v = (n.voice ?? 1) as Voice;
+            notesByVoice[v].push(n);
+        });
+    (Object.keys(notesByVoice) as unknown as Voice[]).forEach(v => {
+        notesByVoice[v].sort((a, b) => {
+            const ma = a.measureIndex ?? 0;
+            const mb = b.measureIndex ?? 0;
+            if (ma !== mb) return ma - mb;
+            return (a.beat ?? 1) - (b.beat ?? 1);
+        });
+    });
+
+    // =========================================================
+    // Vertical checks (within a chord)
+    // =========================================================
+    chordEvents.forEach(ev => {
+        const v1 = ev.byVoice.get(1);
+        const v2 = ev.byVoice.get(2);
+        const v3 = ev.byVoice.get(3);
+        const v4 = ev.byVoice.get(4);
+        const present = [v1, v2, v3, v4].filter(Boolean) as StaffNote[];
+
+        // R-10: Doubling leading tone
+        const leadingNotes = present.filter(n => (n.midi % 12) === leadingPc);
+        if (leadingNotes.length >= 2) {
+            addViolation({
+                ruleId: 'R-10',
+                severity: 'error',
+                description: 'Raddoppio della sensibile',
+                suggestion: 'Evita di raddoppiare il 7° grado: preferisci raddoppiare la tonica o la quinta.',
+                noteIds: leadingNotes.map(n => n.id),
+            });
+        }
+
+        // R-04 / EXC-S02: voice crossing
+        if (v4 && v3 && v4.midi > v3.midi) {
+            addViolation({
+                ruleId: 'R-04',
+                severity: 'error',
+                description: 'Incrocio di voci grave (Basso sopra Tenore)',
+                suggestion: 'Riordina le altezze: Basso deve restare sotto il Tenore.',
+                noteIds: [v4.id, v3.id],
+            });
+        }
+        if (v3 && v2 && v3.midi > v2.midi) {
+            // tolerated case: Alto/Tenore
+            addViolation({
+                ruleId: 'EXC-S02',
+                severity: 'warning',
+                description: 'Incrocio Alto/Tenore (tollerato)',
+                suggestion: 'Di norma evita l’incrocio; può essere accettabile per esigenze melodiche.',
+                noteIds: [v3.id, v2.id],
+            });
+        }
+        if (v2 && v1 && v2.midi > v1.midi) {
+            addViolation({
+                ruleId: 'R-04',
+                severity: 'error',
+                description: 'Incrocio di voci grave (Alto sopra Soprano)',
+                suggestion: 'Riordina le altezze: Alto deve restare sotto il Soprano.',
+                noteIds: [v2.id, v1.id],
+            });
+        }
+
+        // R-08: excessive spacing (S-A, A-T > octave)
+        if (v1 && v2 && (v1.midi - v2.midi) > 12) {
+            addViolation({
+                ruleId: 'R-08',
+                severity: 'warning',
+                description: 'Spaziatura eccessiva tra Soprano e Alto (> 8va)',
+                suggestion: 'Avvicina Alto e Soprano entro l’ottava.',
+                noteIds: [v1.id, v2.id],
+            });
+        }
+        if (v2 && v3 && (v2.midi - v3.midi) > 12) {
+            addViolation({
+                ruleId: 'R-08',
+                severity: 'warning',
+                description: 'Spaziatura eccessiva tra Alto e Tenore (> 8va)',
+                suggestion: 'Avvicina Tenore e Alto entro l’ottava.',
+                noteIds: [v2.id, v3.id],
+            });
+        }
+    });
+
+    // =========================================================
+    // Horizontal checks (between consecutive chords)
+    // =========================================================
+    for (let i = 0; i < chordEvents.length - 1; i++) {
+        const a = chordEvents[i];
+        const b = chordEvents[i + 1];
+
+        const aV: Partial<Record<Voice, StaffNote>> = {
+            1: a.byVoice.get(1),
+            2: a.byVoice.get(2),
+            3: a.byVoice.get(3),
+            4: a.byVoice.get(4),
+        };
+        const bV: Partial<Record<Voice, StaffNote>> = {
+            1: b.byVoice.get(1),
+            2: b.byVoice.get(2),
+            3: b.byVoice.get(3),
+            4: b.byVoice.get(4),
+        };
+
+        const voices: Voice[] = [1, 2, 3, 4];
+
+        // R-13: all voices move in same direction
+        const dirs: number[] = [];
+        let anyMoves = false;
+        voices.forEach(v => {
+            const n1 = aV[v];
+            const n2 = bV[v];
+            if (!n1 || !n2) return;
+            const d = dir(n1.midi, n2.midi);
+            if (d !== 0) anyMoves = true;
+            dirs.push(d);
+        });
+        const nonZeroDirs = dirs.filter(d => d !== 0);
+        if (anyMoves && nonZeroDirs.length >= 3 && nonZeroDirs.every(d => d === nonZeroDirs[0])) {
+            addViolation({
+                ruleId: 'R-13',
+                severity: 'warning',
+                description: 'Moto parallelo di tutte le voci',
+                suggestion: 'Preferisci introdurre moto contrario o obliquo per dare indipendenza alle linee.',
+                noteIds: voices.flatMap(v => [aV[v]?.id, bV[v]?.id].filter(Boolean) as string[]),
+            });
+        }
+
+        // R-14: similar motion outer voices
+        const sopA = aV[1];
+        const sopB = bV[1];
+        const basA = aV[4];
+        const basB = bV[4];
+        if (sopA && sopB && basA && basB) {
+            const dS = dir(sopA.midi, sopB.midi);
+            const dB = dir(basA.midi, basB.midi);
+            if (dS !== 0 && dS === dB) {
+                addViolation({
+                    ruleId: 'R-14',
+                    severity: 'warning',
+                    description: 'Moto simile tra le voci estreme (Soprano/Basso)',
+                    suggestion: 'Il moto contrario tra voci estreme è spesso più stabile.',
+                    noteIds: [sopA.id, sopB.id, basA.id, basB.id],
+                });
+            }
+        }
+
+        // R-09: false relation chromatic
+        // Compare pitch letters with different accidentals across voices between consecutive chords.
+        const notesA = a.notes.filter(n => !n.isRest);
+        const notesB = b.notes.filter(n => !n.isRest);
+        for (const n1 of notesA) {
+            const p1 = (n1.pitch || '').toUpperCase();
+            const acc1 = (n1.explicitAccidental ?? n1.accidental ?? null) as AccidentalType | null;
+            if (!p1) continue;
+            for (const n2 of notesB) {
+                if ((n1.voice ?? 1) === (n2.voice ?? 1)) continue;
+                const p2 = (n2.pitch || '').toUpperCase();
+                if (p1 !== p2) continue;
+                const acc2 = (n2.explicitAccidental ?? n2.accidental ?? null) as AccidentalType | null;
+                const norm = (a: any) => a ?? 'natural';
+                if (norm(acc1) !== norm(acc2)) {
+                    addViolation({
+                        ruleId: 'R-09',
+                        severity: 'error',
+                        description: 'Falsa relazione cromatica',
+                        suggestion: 'Evita che una voce presenti una nota e un’altra la sua alterazione cromatica nel passaggio successivo.',
+                        noteIds: [n1.id, n2.id],
+                    });
+                }
+            }
+        }
+
+        // R-07: leading tone resolution
+        const ctx = getContextAtAbsBeat(a.absBeat);
+        const ctxTonicPc = (() => {
+            const idx = noteNameToIndex[ctx.tonic];
+            return Number.isFinite(idx) ? idx : tonicPc;
+        })();
+        const ctxLeadingPc = mod12(ctxTonicPc - 1);
+        voices.forEach(v => {
+            const n1 = aV[v];
+            const n2 = bV[v];
+            if (!n1 || !n2) return;
+            if ((n1.midi % 12) !== ctxLeadingPc) return;
+            const ok = stepUpToTonic(n1.midi, n2.midi, ctxTonicPc);
+            if (ok) return;
+            addViolation({
+                ruleId: 'R-07',
+                severity: (v === 1 || v === 4) ? 'error' : 'warning',
+                description: 'Risoluzione errata della sensibile',
+                suggestion: 'La sensibile tende a salire alla tonica (specie nelle voci esterne).',
+                noteIds: [n1.id, n2.id],
+            });
+        });
+
+        // R-01 / R-02: parallel octaves and fifths
+        for (let vi = 0; vi < voices.length; vi++) {
+            for (let vj = vi + 1; vj < voices.length; vj++) {
+                const vA = voices[vi];
+                const vB = voices[vj];
+                const a1 = aV[vA];
+                const a2 = aV[vB];
+                const b1 = bV[vA];
+                const b2 = bV[vB];
+                if (!a1 || !a2 || !b1 || !b2) continue;
+
+                const intA = mod12(Math.abs(a1.midi - a2.midi));
+                const intB = mod12(Math.abs(b1.midi - b2.midi));
+                const d1 = dir(a1.midi, b1.midi);
+                const d2 = dir(a2.midi, b2.midi);
+                const similar = d1 !== 0 && d1 === d2;
+                if (!similar) continue;
+
+                // Perfect octaves/unisons
+                if (isPerfectOctaveOrUnison(intA) && isPerfectOctaveOrUnison(intB)) {
+                    addViolation({
+                        ruleId: 'R-01',
+                        severity: 'error',
+                        description: 'Ottave parallele',
+                        suggestion: 'Introduci moto contrario o cambia disposizione delle voci.',
+                        noteIds: [a1.id, a2.id, b1.id, b2.id],
+                    });
+                    connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-01' });
+                    connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-01' });
+                    continue;
+                }
+
+                // Perfect fifths
+                if (isPerfectFifth(intA) && isPerfectFifth(intB)) {
+                    // Exceptions that downgrade
+                    let exception: RuleViolation | null = null;
+
+                    // EXC-M04: vi -> V in minor
+                    const aRoman = (() => {
+                        const c = getContextAtAbsBeat(a.absBeat);
+                        return getRomanAnalysis(a.notes, c.tonic, c.isMinor)?.roman ?? '';
+                    })();
+                    const bRoman = (() => {
+                        const c = getContextAtAbsBeat(b.absBeat);
+                        return getRomanAnalysis(b.notes, c.tonic, c.isMinor)?.roman ?? '';
+                    })();
+                    const normRoman = (r: string) => r.replace(/\s+/g, '').toLowerCase();
+                    const aR = normRoman(aRoman);
+                    const bR = normRoman(bRoman);
+                    const isMinorCtx = getContextAtAbsBeat(a.absBeat).isMinor;
+
+                    const matchesViToVByRoman = isMinorCtx && aR.startsWith('vi') && bR.startsWith('v');
+
+                    // Fallback when roman analysis is empty/ambiguous: detect by chord roots vs tonic.
+                    // In minor, VI has root at tonic+8 semitones; V has root at tonic+7 semitones.
+                    const matchesViToVByRoot = (() => {
+                        if (!isMinorCtx) return false;
+                        const ctx = getContextAtAbsBeat(a.absBeat);
+                        const tonicIdx = noteNameToIndex[ctx.tonic];
+                        if (!Number.isFinite(tonicIdx)) return false;
+                        const infoA = identifyChord(a.notes);
+                        const infoB = identifyChord(b.notes);
+                        if (!infoA?.root || !infoB?.root) return false;
+                        const aPc = mod12(infoA.root.midi);
+                        const bPc = mod12(infoB.root.midi);
+                        const tonicPc = mod12(tonicIdx);
+                        const intA = mod12(aPc - tonicPc);
+                        const intB = mod12(bPc - tonicPc);
+                        return intA === 8 && intB === 7;
+                    })();
+
+                    if (matchesViToVByRoman || matchesViToVByRoot) {
+                        exception = {
+                            ruleId: 'EXC-M04',
+                            severity: 'exception',
+                            description: 'Quinte parallele tollerate in minore (vi → V)',
+                            suggestion: 'Eccezione riconosciuta; verifica comunque la resa sonora.',
+                            noteIds: [a1.id, a2.id, b1.id, b2.id],
+                        };
+                    }
+
+                    // EXC-M03: "finta" quinta parallela con settima (dominant 7 chord)
+                    if (!exception) {
+                        const chordInfoB = identifyChord(b.notes);
+                        const isDom7 = !!chordInfoB && chordInfoB.type.toLowerCase().includes('dominant');
+                        if (isDom7 && chordInfoB?.root) {
+                            const rootMidi = chordInfoB.root.midi;
+                            const isSeventh = (n: StaffNote) => {
+                                const rel = mod12(n.midi - rootMidi);
+                                return rel === 10 || rel === 11;
+                            };
+                            if (isSeventh(b1) || isSeventh(b2)) {
+                                exception = {
+                                    ruleId: 'EXC-M03',
+                                    severity: 'exception',
+                                    description: '"Finta" quinta parallela con una settima',
+                                    suggestion: 'Eccezione: la seconda intervallazione è una settima dissonante (es. V7).',
+                                    noteIds: [a1.id, a2.id, b1.id, b2.id],
+                                };
+                            }
+                        }
+                    }
+
+                    if (exception) {
+                        addViolation(exception);
+                    } else {
+                        addViolation({
+                            ruleId: 'R-02',
+                            severity: 'error',
+                            description: 'Quinte parallele',
+                            suggestion: 'Evita il moto parallelo verso quinte perfette; usa moto contrario/obliquo.',
+                            noteIds: [a1.id, a2.id, b1.id, b2.id],
+                        });
+                    }
+
+                    const sev = exception ? exception.severity : 'error';
+                    const rid = exception ? exception.ruleId : 'R-02';
+                    connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: sev, ruleId: rid });
+                    connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: sev, ruleId: rid });
+                }
+            }
+        }
+
+        // R-05: hidden/direct fifths & octaves (outer voices)
+        if (sopA && sopB && basA && basB) {
+            const intB = mod12(Math.abs(sopB.midi - basB.midi));
+            const dS = dir(sopA.midi, sopB.midi);
+            const dB = dir(basA.midi, basB.midi);
+            const similar = dS !== 0 && dS === dB;
+            const sopranoLeap = Math.abs(sopB.midi - sopA.midi) > 2;
+            if (similar && sopranoLeap && (isPerfectFifth(intB) || isPerfectOctaveOrUnison(intB))) {
+                const isOct = isPerfectOctaveOrUnison(intB);
+                addViolation({
+                    ruleId: 'R-05',
+                    severity: 'warning',
+                    description: isOct
+                        ? 'Ottave nascoste (dirette) tra voci estreme'
+                        : 'Quinte nascoste (dirette) tra voci estreme',
+                    suggestion: 'Preferisci moto contrario, oppure evita il salto nella voce superiore.',
+                    noteIds: [sopA.id, sopB.id, basA.id, basB.id],
+                });
+
+                // Add explicit connections so the editor can render the orange dashed lines.
+                connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'warning', ruleId: 'R-05' });
+                connections.push({ type: 'horizontal', noteId1: basA.id, noteId2: basB.id, severity: 'warning', ruleId: 'R-05' });
+            }
+        }
+
+        // R-12: chord seventh resolution (with EXC-7m01)
+        const chordInfoA = identifyChord(a.notes);
+        if (chordInfoA?.root) {
+            const rootMidi = chordInfoA.root.midi;
+            const seventhNotes = a.notes
+                .filter(n => !n.isRest)
+                .filter(n => {
+                    const rel = mod12(n.midi - rootMidi);
+                    return rel === 10 || rel === 11;
+                });
+
+            if (seventhNotes.length) {
+                seventhNotes.forEach(n7 => {
+                    const v = (n7.voice ?? 1) as Voice;
+                    const nNext = bV[v];
+                    const sameVoiceResolves = !!nNext && stepDown(n7.midi, nNext.midi);
+                    if (sameVoiceResolves) return;
+
+                    // EXC-7m01 transferred resolution: resolution note appears in another voice.
+                    // (Or the original voice is silent/absent, but another voice contains the resolution.)
+                    const resolutionMidiCandidates = [n7.midi - 1, n7.midi - 2];
+                    const transferredResolution = (() => {
+                        // Prefer -1 semitone, then -2.
+                        // Accept the resolution even if it appears in another octave (pitch-class match).
+                        const candidates = (b.notes || []).filter(n => !n.isRest) as StaffNote[];
+
+                        // 1) Exact MIDI match first.
+                        for (const targetMidi of resolutionMidiCandidates) {
+                            const hit = candidates
+                                .slice()
+                                .sort((a, b) => (a.voice ?? 1) - (b.voice ?? 1))
+                                .find(n => n.midi === targetMidi);
+                            if (hit) return hit;
+                        }
+
+                        // 2) Pitch-class match (different octave).
+                        const targets = resolutionMidiCandidates.map(m => ({ midi: m, pc: mod12(m) }));
+                        let best: { note: StaffNote; score: number } | null = null;
+                        for (const cand of candidates) {
+                            const pc = mod12(cand.midi);
+                            for (const t of targets) {
+                                if (pc !== t.pc) continue;
+                                // Score: prefer closer register to the expected resolution MIDI.
+                                const score = Math.abs(cand.midi - t.midi);
+                                if (!best || score < best.score) best = { note: cand, score };
+                            }
+                        }
+                        return best?.note ?? null;
+                    })();
+
+                    if (transferredResolution) {
+                        addViolation({
+                            ruleId: 'EXC-7m01',
+                            severity: 'exception',
+                            description: 'Risoluzione della settima trasferita',
+                            suggestion: 'Eccezione: la nota di risoluzione compare in un’altra voce.',
+                            // Keep it to 2 noteIds so the editor can render the green connection line.
+                            noteIds: [n7.id, transferredResolution.id],
+                        });
+                        return;
+                    }
+
+                    // No transferred resolution note exists; if the voice continues, flag the error.
+                    if (!nNext) return;
+
+                    addViolation({
+                        ruleId: 'R-12',
+                        severity: 'error',
+                        description: 'Risoluzione errata della settima dell’accordo',
+                        suggestion: 'La 7a tende a risolvere scendendo di grado (per moto congiunto).',
+                        noteIds: [n7.id, nNext.id],
+                    });
+                });
+            }
+        }
+    }
+
+    // =========================================================
+    // Harmonic rhythm checks
+    // =========================================================
+    // R-16: Sincope armonica (a cavallo della battuta)
+    // Piston "regola della stanghetta": un accordo sul tempo debole (es. 4°) che si ripresenta
+    // sul battere (1°) della misura successiva produce un accento armonico "spostato".
+    // Non è un errore se lo stesso accordo era già presente su un tempo forte nella misura precedente.
+    // (Gli accordi vanno considerati equivalenti anche in caso di rivolto / cambio voci.)
+    const chordIdentity = (chordNotes: StaffNote[]): string => {
+        // For the "barline rule" we only care whether the *set of pitch classes* is the same,
+        // regardless of inversion/doublings/voice exchange.
+        return `pcs:${chordSignature(chordNotes)}`;
+    };
+
+    const chordAt = (measureIndex: number, beat: number): StaffNote[] | null => {
+        const k = `${measureIndex}-${beat}`;
+        return chordMap.get(k) || null;
+    };
+
+    const lastMeasureIndex = analyzedNotes.reduce((mx, n) => Math.max(mx, n.measureIndex ?? 0), 0);
+    for (let m = 0; m < lastMeasureIndex; m++) {
+        // 4/4 assumed by this editor's harmony engine currently.
+        const prevWeak = chordAt(m, 4);
+        const nextDownbeat = chordAt(m + 1, 1);
+        if (!prevWeak || !nextDownbeat) continue;
+
+        const idWeak = chordIdentity(prevWeak);
+        const idNext = chordIdentity(nextDownbeat);
+        if (!idWeak || !idNext || idWeak !== idNext) continue;
+
+        // If the same chord already appeared on a strong beat in the previous bar (1 or 3), do not flag.
+        const prevStrong1 = chordAt(m, 1);
+        const prevStrong3 = chordAt(m, 3);
+        const sameOnStrong = [prevStrong1, prevStrong3]
+            .filter(Boolean)
+            .some(ch => chordIdentity(ch as StaffNote[]) === idWeak);
+        if (sameOnStrong) continue;
+
+        const sopWeak = pickOuterVoice(prevWeak, 1);
+        const basWeak = pickOuterVoice(prevWeak, 4);
+        const sopNext = pickOuterVoice(nextDownbeat, 1);
+        const basNext = pickOuterVoice(nextDownbeat, 4);
+
+        const noteIds = [sopWeak?.id, sopNext?.id, basWeak?.id, basNext?.id].filter(Boolean) as string[];
+        if (noteIds.length < 2) continue;
+
+        addViolation({
+            ruleId: 'R-16',
+            severity: 'warning',
+            description: 'Sincope armonica (accordo sul debole che “entra” sul battere successivo)',
+            suggestion: 'Secondo la “regola della stanghetta” (Piston), in stile corale/classico è preferibile che il cambio armonico cada sul 1°. Nota: in musica moderna/jazz può essere una scelta ritmica intenzionale e tollerata.',
+            noteIds,
+        });
+
+        // Explicit connections so the editor shows orange dashed lines across the barline.
+        if (sopWeak && sopNext) connections.push({ type: 'horizontal', noteId1: sopWeak.id, noteId2: sopNext.id, severity: 'warning', ruleId: 'R-16' });
+        if (basWeak && basNext) connections.push({ type: 'horizontal', noteId1: basWeak.id, noteId2: basNext.id, severity: 'warning', ruleId: 'R-16' });
+    }
+
+    // =========================================================
+    // Connection synthesis (editor overlay)
+    // =========================================================
+    // Many rules are expressed as 2-note violations (e.g., voice crossing, spacing, leading-tone resolution).
+    // To keep the dashed "correction lines" consistently visible, synthesize connections for those
+    // violations when the rule did not explicitly push a connection.
+    const noteById = new Map<string, StaffNote>();
+    analyzedNotes.forEach(n => {
+        noteById.set(n.id, n);
+    });
+
+    const hasConnection = (a: string, b: string) => {
+        for (const c of connections) {
+            if ((c.noteId1 === a && c.noteId2 === b) || (c.noteId1 === b && c.noteId2 === a)) return true;
+        }
+        return false;
+    };
+
+    for (const v of violations) {
+        const ids = [...new Set((v.noteIds || []).filter((id) => typeof id === 'string'))];
+        if (ids.length !== 2) continue;
+
+        const [id1, id2] = ids;
+        const n1 = noteById.get(id1);
+        const n2 = noteById.get(id2);
+        if (!n1 || !n2) continue;
+        if (hasConnection(id1, id2)) continue;
+
+        const sameMoment = (n1.measureIndex ?? 0) === (n2.measureIndex ?? 0) && (n1.beat ?? 1) === (n2.beat ?? 1);
+        connections.push({
+            type: sameMoment ? 'vertical' : 'horizontal',
+            noteId1: id1,
+            noteId2: id2,
+            severity: v.severity,
+            ruleId: v.ruleId,
+        });
+    }
+
+    // =========================================================
+    // Melodic checks (per voice)
+    // =========================================================
+    (Object.keys(notesByVoice) as unknown as Voice[]).forEach(v => {
+        const line = notesByVoice[v];
+        for (let i = 0; i < line.length - 1; i++) {
+            const n1 = line[i];
+            const n2 = line[i + 1];
+            const midiDiff = (n2.midi ?? 0) - (n1.midi ?? 0);
+            const absSemi = Math.abs(midiDiff);
+
+            // R-15: large leaps in inner voices (Alto/Tenore > 6th)
+            if ((v === 2 || v === 3) && absSemi > 9) {
+                addViolation({
+                    ruleId: 'R-15',
+                    severity: 'warning',
+                    description: 'Salto melodico ampio nelle voci interne (> 6a)',
+                    suggestion: 'Preferisci moto congiunto o spezza il salto con note di passaggio.',
+                    noteIds: [n1.id, n2.id],
+                });
+            }
+
+            // R-06: incorrect resolution of augmented/diminished melodic leaps
+            // Use diatonic position difference + semitones to infer quality.
+            const diatonicSize = Math.min(Math.abs((n2.position ?? 0) - (n1.position ?? 0)), 7);
+            const quality = getIntervalQuality(diatonicSize, absSemi);
+            if (quality === 'Augmented' || quality === 'Diminished') {
+                const n3 = line[i + 2];
+                if (n3) {
+                    const nextDiff = (n3.midi ?? 0) - (n2.midi ?? 0);
+                    const nextAbs = Math.abs(nextDiff);
+                    const resolvesByStep = nextAbs > 0 && nextAbs <= 2;
+                    if (quality === 'Augmented') {
+                        const shouldGoUp = nextDiff > 0;
+                        if (!(resolvesByStep && shouldGoUp)) {
+                            addViolation({
+                                ruleId: 'R-06',
+                                severity: 'error',
+                                description: 'Risoluzione errata di salto melodico aumentato',
+                                suggestion: 'Dopo un intervallo aumentato, risolvi salendo di grado (moto congiunto).',
+                                noteIds: [n1.id, n2.id, n3.id],
+                            });
+                        }
+                    } else {
+                        const shouldGoDown = nextDiff < 0;
+                        if (!(resolvesByStep && shouldGoDown)) {
+                            addViolation({
+                                ruleId: 'R-06',
+                                severity: 'error',
+                                description: 'Risoluzione errata di salto melodico diminuito',
+                                suggestion: 'Dopo un intervallo diminuito, risolvi scendendo di grado (moto congiunto).',
+                                noteIds: [n1.id, n2.id, n3.id],
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Sort violations by severity (error -> warning -> exception) then by rule id for readability.
+    const sevRank: Record<RuleViolation['severity'], number> = { error: 0, warning: 1, exception: 2 };
+    violations.sort((a, b) => {
+        const sd = sevRank[a.severity] - sevRank[b.severity];
+        if (sd !== 0) return sd;
+        return a.ruleId.localeCompare(b.ruleId);
+    });
+
+    return { analyzedNotes, violations, connections };
 }
