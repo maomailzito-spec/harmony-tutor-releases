@@ -492,6 +492,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [selectedVoice, setSelectedVoice] = useState<Voice>(1);
     const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
     const [hoveredViolationNotes, setHoveredViolationNotes] = useState<string[] | null>(null);
+    const [selectedViolationIndex, setSelectedViolationIndex] = useState<number | null>(null);
     const staffContainerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(1000);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -1934,12 +1935,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         setSelectedNoteIds(next);
 
+        // Aggiorna la violation selezionata se la nota è coinvolta in una violation
+        if (!shiftKey) {
+            if (next.size === 1 && next.has(noteId) && Array.isArray(violations)) {
+                const idx = violations.findIndex(v => v.noteIds.includes(noteId));
+                setSelectedViolationIndex(idx !== -1 ? idx : null);
+            } else {
+                setSelectedViolationIndex(null);
+            }
+        }
+
         // When a note becomes selected via pointer click, audition it.
         const didSelect = next.has(noteId);
         if (didSelect && n && !n.isRest) {
             void playNote(n, 0.6);
         }
-    }, [getPlayheadPosForAbsBeat, playNote, rawNotes, selectedNoteIds, timeSignature]);
+    }, [getPlayheadPosForAbsBeat, playNote, rawNotes, selectedNoteIds, timeSignature, violations]);
 
     const pasteClipboardAt = useCallback((targetMeasureIndex: number, targetBeat: number) => {
         if (!clipboard || clipboard.length === 0) return;
@@ -2199,7 +2210,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             voice: selectedVoice,
         };
 
-        setRawNotes(prev => [...prev, newNote]);
+        setRawNotes(prev => {
+            // Rimuovi eventuale nota/pausa sovrapposta
+            const filtered = prev.filter(
+                n =>
+                    n.measureIndex !== newNote.measureIndex ||
+                    n.voice !== newNote.voice ||
+                    Math.abs((n.beat ?? 1) - (newNote.beat ?? 1)) > 1e-6
+            );
+            // Inserisci la nuova nota e ordina per measureIndex, beat, voice
+            const next = [...filtered, newNote].sort((a, b) => {
+                if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
+                if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
+                return (a.voice ?? 1) - (b.voice ?? 1);
+            });
+            return next;
+        });
         void playNote(newNote);
         if (activeAccidental) setActiveAccidental(null);
     }, [
@@ -2341,12 +2367,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
         const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
 
-        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
-        const step = Math.max(1e-6, gridStep);
-        const beat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
 
-        const snappedRelX = ((beat - 1) / beatsPerMeasure) * contentWidth;
-        const xPos = hit.measureStartX + MEASURE_PADDING_X + snappedRelX;
 
         if (selectedInsertion.type === 'rest') {
             setGhostNote({
@@ -2361,7 +2382,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 isTriplet,
                 isDuplet,
                 isDotted,
-                xPosition: xPos,
+                xPosition: x, // Coincide esattamente con il mouse
                 clef: targetClef,
                 voice: selectedVoice,
                 systemIndex,
@@ -2395,7 +2416,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             isTriplet,
             isDuplet,
             isDotted,
-            xPosition: xPos,
+            xPosition: x, // Coincide esattamente con il mouse
             clef: targetClef,
             voice: selectedVoice,
             systemIndex,
@@ -2441,7 +2462,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     const yAbs = clef === 'bass' ? TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + yInStaff : yInStaff;
                     const xAbs = n.xPosition ?? 0;
 
-                    if (xAbs >= xMin && xAbs <= xMax && yAbs >= yMin && yAbs <= yMax) {
+                    const TOLERANCE = 2;
+                    if (
+                        xAbs >= xMin - TOLERANCE && xAbs <= xMax + TOLERANCE &&
+                        yAbs >= yMin - TOLERANCE && yAbs <= yMax + TOLERANCE
+                    ) {
                         idsInRect.push(n.id);
                     }
                 });
@@ -2974,8 +2999,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 e.preventDefault();
                 e.stopPropagation();
 
-                const toDelete = new Set(selectedNoteIds);
-                setRawNotes(prev => prev.filter(n => !toDelete.has(n.id)));
+                setRawNotes(prev => prev.filter(n => {
+                    if (!selectedNoteIds.has(n.id)) return true;
+                    // Se è una pausa, la cancello (non la tengo)
+                    if (n.isRest) return false;
+                    return true;
+                }).map(n => {
+                    // Se è selezionata ed è una nota normale, la trasformo in pausa
+                    if (!selectedNoteIds.has(n.id)) return n;
+                    if (n.isRest) return n;
+                    return {
+                        ...n,
+                        isRest: true
+                    };
+                }));
                 setSelectedNoteIds(new Set());
                 return;
             }
@@ -3929,7 +3966,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 {activeTab === 'analysis' && (
                     <div className="w-full max-w-sm flex-shrink-0">
                         {isAnalysisEnabled ? (
-                            <HarmonyAnalysisPanel violations={violations} onHoverViolation={setHoveredViolationNotes} />
+                            <HarmonyAnalysisPanel
+                                violations={violations}
+                                onHoverViolation={setHoveredViolationNotes}
+                                selectedViolationIndex={selectedViolationIndex}
+                                onSelectViolation={index => {
+                                    setSelectedViolationIndex(index);
+                                    if (index != null && violations[index]) {
+                                        setSelectedNoteIds(new Set(violations[index].noteIds));
+                                    }
+                                }}
+                            />
                         ) : (
                             <div className="bg-gray-800/50 rounded-lg p-3 h-full max-h-96 overflow-y-auto flex items-center justify-center text-center text-gray-400">
                                 <div>

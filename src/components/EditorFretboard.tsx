@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScaleNoteDefinition, RootType } from '../types';
 
-const FRET_COUNT = 24;
+const FRET_COUNT = 18;
 const GUITAR_TUNING_NAMES = ['E', 'B', 'G', 'D', 'A', 'E'];
 
 interface EditorFretboardProps {
@@ -57,7 +57,7 @@ const EditorFretboard: React.FC<EditorFretboardProps> = ({
   return (
     <div className="bg-gray-800 shadow-[0_-10px_20px_rgba(0,0,0,0.3)] pt-2 pb-4 font-mono">
       <div className="w-full overflow-x-auto">
-        <div className="relative px-2" style={{ width: '166.66%' }}>
+        <div className="relative px-2" style={{ width: '130.66%' }}>
           {/* Fret Numbers */}
           <div className="flex">
             <div style={{ width: 'calc(4rem + 8px)' }}></div>
@@ -74,7 +74,7 @@ const EditorFretboard: React.FC<EditorFretboardProps> = ({
             </div>
           </div>
           
-          <div className="relative mt-2 flex h-64 lg:h-80" style={{ background: 'linear-gradient(90deg, #44302b, #301d1c)' }}>
+          <div className="relative mt-2 flex h-60 lg:h-40" style={{ background: 'linear-gradient(90deg, #44302b, #301d1c)' }}>
             <div className="w-16 flex">
                 <div className="w-8 flex flex-col justify-around items-center h-full">
                     {GUITAR_TUNING_NAMES.map((noteName, i) => (
@@ -105,13 +105,13 @@ const EditorFretboard: React.FC<EditorFretboardProps> = ({
                                     <div 
                                         draggable
                                         onDragStart={() => onDragStart(note)}
-                                        className={`w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center text-white font-bold text-xs rounded-full border-2 transition-opacity ${isDragged ? 'opacity-30' : 'opacity-100'}`}
+                                        className={`w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center text-white font-bold text-xs rounded-full border-2 transition-opacity ${isDragged ? 'opacity-30' : 'opacity-100'}`}
                                         style={{
                                             backgroundColor: note.t ? (note.t === RootType.Major ? 'rgb(239, 68, 68)' : 'rgb(250, 204, 21)') : 'rgb(59, 130, 246)',
                                             borderColor: 'white'
                                         }}
                                     >
-                                        {note.t === RootType.Major ? 'M' : note.t === RootType.Minor ? 'm' : ''}
+                                        {note.t === RootType.Major ? 'R' : note.t === RootType.Minor ? 'r' : ''}
                                     </div>
                                 )}
                             </div>
@@ -148,7 +148,7 @@ const EditorFretboard: React.FC<EditorFretboardProps> = ({
                             className="absolute left-0 right-0"
                             style={{ 
                                 top: `calc(${(i * (100/6)) + (100/12)}% - ${((i / 2.5) + 1.5)/2}px)`,
-                                height: `${(i / 2.5) + 1.5}px`,
+                                height: `${(i / 2.7) + 0.7}px`,
                                 background: 'linear-gradient(to bottom, #f0f0f0, #a0a0a0)'
                             }}
                         ></div>
@@ -184,13 +184,13 @@ const EditorFretboard: React.FC<EditorFretboardProps> = ({
                             <div 
                                 draggable
                                 onDragStart={() => onDragStart(note)}
-                                className={`w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center text-white font-bold text-xs rounded-full border-2 transition-opacity ${isDragged ? 'opacity-30' : 'opacity-100'}`}
+                                className={`w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center text-white font-bold text-xs rounded-full border-2 transition-opacity ${isDragged ? 'opacity-30' : 'opacity-100'}`}
                                 style={{
                                     backgroundColor: note.t ? (note.t === RootType.Major ? 'rgb(239, 68, 68)' : 'rgb(250, 204, 21)') : 'rgb(59, 130, 246)',
                                     borderColor: 'white'
                                 }}
                             >
-                               {note.t === RootType.Major ? 'M' : note.t === RootType.Minor ? 'm' : ''}
+                               {note.t === RootType.Major ? 'R' : note.t === RootType.Minor ? 'r' : ''}
                             </div>
                           )}
                         </div>

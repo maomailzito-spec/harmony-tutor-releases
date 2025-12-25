@@ -253,35 +253,62 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           x: number;
         }> = [];
 
+        // --- PATCH: Affiancamento teste tra voci adiacenti a distanza di seconda ---
+        // Raggruppa per xPosition (battuta/beat) e ordina per posizione verticale
+        const byX = new Map<number, StaffNote[]>();
+        for (const n of staffNotes) {
+          const absX = n.xPosition ?? (stave.getNoteStartX() + 10);
+          if (!byX.has(absX)) byX.set(absX, []);
+          byX.get(absX)!.push(n);
+        }
+        // Applica offset alle teste di note di voci adiacenti a distanza di seconda
+        const NOTE_HEAD_RX = 6.3; // come NOTE_HEAD_RX_NORMAL
+        const offset = NOTE_HEAD_RX * 1.0 - 1; // offset ancora più stretto (~5.3px)
+        const offsetMap = new Map<string, number>();
+        for (const group of byX.values()) {
+          // Ordina per posizione verticale (dal basso verso l'alto)
+          const sorted = group.slice().sort((a, b) => a.position - b.position);
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const n1 = sorted[i];
+            const n2 = sorted[i + 1];
+            // Solo se voci adiacenti e distanza di seconda
+            if (Math.abs((n1.voice ?? 0) - (n2.voice ?? 0)) === 1 && Math.abs(n1.position - n2.position) === 1) {
+              // S/A (1/2): Soprano (1, up) a sinistra, Alto (2, down) a destra
+              // T/B (3/4): Tenore (3, up) a sinistra, Basso (4, down) a destra
+              if ((n1.voice === 1 && n2.voice === 2) || (n1.voice === 3 && n2.voice === 4)) {
+                // n1 (up) a sinistra, n2 (down) a destra
+                offsetMap.set(n1.id, -offset);
+                offsetMap.set(n2.id, offset);
+              } else if ((n1.voice === 2 && n2.voice === 1) || (n1.voice === 4 && n2.voice === 3)) {
+                // n2 (up) a sinistra, n1 (down) a destra
+                offsetMap.set(n2.id, -offset);
+                offsetMap.set(n1.id, offset);
+              }
+            }
+          }
+        }
+        // --- FINE PATCH ---
         for (const n of staffNotes) {
           let vfNote: StaveNote | null = null;
           try {
             vfNote = makeVfNote(n, clef);
-
             if (n.id === '__ghost__') {
               vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
-              // Tiny alignment tweak: mouse X is measured at cursor point, but VexFlow notehead center
-              // can land slightly to the right when drawing without Formatter/Voice.
-              // Apply only to ghost so real notes (which are beat-aligned) remain unchanged.
               vfNote.setXShift(-18);
             } else if (selectedNoteIds.includes(n.id)) {
               vfNote.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });
             }
-
             const dotFill = n.id === '__ghost__'
               ? 'rgba(56,189,248,0.4)'
               : (selectedNoteIds.includes(n.id) ? '#38bdf8' : 'black');
-
-            // `xPosition` arriva in coordinate SVG assolute (come il mouse).
-            // Quando disegniamo senza Formatter/Voice, VexFlow interpreta la TickContext X
-            // come offset relativo a `stave.getNoteStartX()`.
             const absoluteX = (n.xPosition ?? (stave.getNoteStartX() + 10));
             const x = absoluteX - stave.getNoteStartX();
-
-            // IMPORTANT: attach to stave/context BEFORE preFormat.
+            // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
+            const xShift = offsetMap.get(n.id) ?? 0;
+            const prevXShift = (vfNote as any).x_shift ?? 0;
+            vfNote.setXShift(prevXShift + xShift);
             vfNote.setStave(stave);
             vfNote.setContext(context);
-
             const tc = new TickContext();
             tc.addTickable(vfNote);
             tc.preFormat();
@@ -289,7 +316,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             vfNote.setTickContext(tc);
             (vfNote as any).preFormat?.();
             (vfNote as any).postFormat?.();
-
             prepared.push({ staffNote: n, vfNote, dotFill, x });
           } catch {
             // If pre-formatting fails, try a minimal ghost fallback; otherwise skip.

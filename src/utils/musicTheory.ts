@@ -1188,12 +1188,23 @@ export function applyHarmonyRules(
         });
         const nonZeroDirs = dirs.filter(d => d !== 0);
         if (anyMoves && nonZeroDirs.length >= 3 && nonZeroDirs.every(d => d === nonZeroDirs[0])) {
+            const notePairs = voices.map(v => ({ a: aV[v], b: bV[v] })).filter(pair => pair.a && pair.b);
             addViolation({
                 ruleId: 'R-13',
                 severity: 'warning',
                 description: 'Moto parallelo di tutte le voci',
                 suggestion: 'Preferisci introdurre moto contrario o obliquo per dare indipendenza alle linee.',
-                noteIds: voices.flatMap(v => [aV[v]?.id, bV[v]?.id].filter(Boolean) as string[]),
+                noteIds: notePairs.flatMap(pair => [pair.a!.id, pair.b!.id]),
+            });
+            // Add errorConnections for overlay rendering
+            notePairs.forEach(pair => {
+                connections.push({
+                    type: 'horizontal',
+                    noteId1: pair.a!.id,
+                    noteId2: pair.b!.id,
+                    severity: 'warning',
+                    ruleId: 'R-13',
+                });
             });
         }
 
@@ -1212,6 +1223,21 @@ export function applyHarmonyRules(
                     description: 'Moto simile tra le voci estreme (Soprano/Basso)',
                     suggestion: 'Il moto contrario tra voci estreme è spesso più stabile.',
                     noteIds: [sopA.id, sopB.id, basA.id, basB.id],
+                });
+                // Add errorConnections for overlay rendering
+                connections.push({
+                    type: 'horizontal',
+                    noteId1: sopA.id,
+                    noteId2: sopB.id,
+                    severity: 'warning',
+                    ruleId: 'R-14',
+                });
+                connections.push({
+                    type: 'horizontal',
+                    noteId1: basA.id,
+                    noteId2: basB.id,
+                    severity: 'warning',
+                    ruleId: 'R-14',
                 });
             }
         }
@@ -1249,13 +1275,38 @@ export function applyHarmonyRules(
             return Number.isFinite(idx) ? idx : tonicPc;
         })();
         const ctxLeadingPc = mod12(ctxTonicPc - 1);
+        
         voices.forEach(v => {
             const n1 = aV[v];
             const n2 = bV[v];
             if (!n1 || !n2) return;
             if ((n1.midi % 12) !== ctxLeadingPc) return;
+
+            // 1. PRIMA controlliamo se risolve regolarmente (salendo alla tonica)
+            // Se lo fa, è perfetto: usciamo subito senza segnare nulla.
             const ok = stepUpToTonic(n1.midi, n2.midi, ctxTonicPc);
             if (ok) return;
+
+            // 2. SE NON RISOLVE, controlliamo se è un'eccezione ammessa (Dubois §19)
+            // Voce interna (Alto/Tenore) e Soprano canta la tonica
+            const isInternalVoice = v === 2 || v === 3;
+            const sopranoNext = bV[1];
+            if (
+                isInternalVoice &&
+                sopranoNext &&
+                (sopranoNext.midi % 12) === ctxTonicPc
+            ) {
+                addViolation({
+                    ruleId: 'EXC-LT-Transfer',
+                    severity: 'exception', // VERDE
+                    description: 'Risoluzione trasferita della sensibile ',
+                    suggestion: 'Ammesso perché la tonica è presa dal Soprano.',
+                    noteIds: [n1.id, sopranoNext.id],
+                });
+                return; // Salva il paziente ed esci
+            }
+
+            // 3. Se non è risolto e non è un'eccezione -> ERRORE/WARNING
             addViolation({
                 ruleId: 'R-07',
                 severity: (v === 1 || v === 4) ? 'error' : 'warning',

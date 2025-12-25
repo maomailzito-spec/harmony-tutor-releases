@@ -4,6 +4,8 @@ import { RuleViolation } from '../types';
 interface HarmonyAnalysisPanelProps {
     violations: RuleViolation[];
     onHoverViolation: (noteIds: string[] | null) => void;
+    selectedViolationIndex?: number | null;
+    onSelectViolation?: (index: number) => void;
 }
 
 const ErrorIcon: React.FC = () => (
@@ -32,7 +34,7 @@ const ExceptionIcon: React.FC = () => (
 );
 
 
-const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, onHoverViolation }) => {
+const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     return (
         <div className="bg-gray-800/50 rounded-lg p-3 h-full max-h-96 overflow-y-auto">
             {violations.length === 0 ? (
@@ -48,13 +50,14 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         const isException = violation.severity === 'exception';
                         const Icon = isError ? ErrorIcon : isException ? ExceptionIcon : WarningIcon;
                         const textColor = isError ? 'text-red-400' : isException ? 'text-green-400' : 'text-orange-400';
-
+                        const isSelected = selectedViolationIndex === index;
                         return (
-                            <li 
+                            <li
                                 key={`${violation.ruleId}-${index}`}
-                                className="bg-gray-700/50 p-3 rounded-lg border border-gray-600 hover:bg-gray-600/50 transition-colors cursor-pointer"
+                                className={`bg-gray-700/50 p-3 rounded-lg border border-gray-600 hover:bg-gray-600/50 transition-colors cursor-pointer ${isSelected ? 'ring-2 ring-cyan-400 border-cyan-400' : ''}`}
                                 onMouseEnter={() => onHoverViolation(violation.noteIds)}
                                 onMouseLeave={() => onHoverViolation(null)}
+                                onClick={() => onSelectViolation && onSelectViolation(index)}
                             >
                                 <div className="flex items-start gap-3">
                                     <Icon />
