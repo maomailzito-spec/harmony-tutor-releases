@@ -226,9 +226,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           drawSingle(x - 6, 1);
           drawSingle(x - 2, 3);
         } else if (bar.style === 'double') {
-          // Simple double barline (section): thin + thin.
-          drawSingle(x - 2, 1);
-          drawSingle(x + 2, 1);
+          // Simple double barline (section): thin + thin. Spostata di +3px a destra.
+          drawSingle(x + 1, 1);
+          drawSingle(x + 5, 1);
         } else {
           drawSingle(x, 1);
         }

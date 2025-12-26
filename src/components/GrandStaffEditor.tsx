@@ -24,6 +24,9 @@ interface GrandStaffEditorProps {
 }
 
 type InsertionElement = { type: 'note' | 'rest', duration: NoteDuration };
+
+// Must match value in VexflowGrandStaff.tsx
+const STAFF_MARGIN = 50;
 type Tool = 'insert';
 type ViewMode = 'page' | 'linear';
 type ActiveTab = 'editor' | 'analysis';
@@ -1189,11 +1192,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     const relativeX = (startTime / beatsPerMeasure) * contentWidth;
                     finalNotes.push({ ...n, xPosition: startX + MEASURE_PADDING_X + relativeX });
                 });
-                systemBarlines.push({
-                    id: `bar-${m}`,
-                    xPosition: startX + measureWidth,
-                    style: m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single'),
-                });
+                // Se è l'ultima misura del sistema, la barline va allineata a width - STAFF_MARGIN
+                const isLastInSystem = idx === sys.measureIndices.length - 1;
+                const svgStaffEnd = containerWidth - STAFF_MARGIN;
+                                const barStyle = m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single');
+                                let barX = startX + measureWidth;
+                                if (isLastInSystem) {
+                                    // Sposta solo la barline finale dell'ultimo sistema
+                                    barX = (m === finalMeasureIndex && barStyle === 'final') ? (svgStaffEnd + 3) : svgStaffEnd;
+                                }
+                                systemBarlines.push({
+                                        id: `bar-${m}`,
+                                        xPosition: barX,
+                                        style: barStyle,
+                                });
             });
             allSystemsBarlines.push(systemBarlines);
         });
