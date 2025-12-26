@@ -25,7 +25,7 @@ const App: React.FC = () => {
     return (
         <div className="min-h-screen flex flex-col bg-gray-900 font-sans text-gray-100">
             <div className="w-full max-w-screen-2xl mx-auto px-4 pt-1 lg:px-8 flex flex-col flex-grow">
-                 <div className="flex justify-center mb-1 border-b border-gray-700">
+                 <div className="sticky top-0 z-[60] bg-slate-900 flex justify-center mb-1 border-b border-gray-700">
                     <button
                         onClick={() => setMode('scales')}
                         className={`px-6 py-3 text-lg font-semibold transition-colors duration-200 focus:outline-none ${mode === 'scales' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}

@@ -3486,7 +3486,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
     return (
         <div className="flex-grow flex flex-col gap-4">
-            <div className="p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
+            <div className="sticky top-12 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
                 <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
                     {visibleGroupIds.map((id, idx) => (
                         <React.Fragment key={id}>
