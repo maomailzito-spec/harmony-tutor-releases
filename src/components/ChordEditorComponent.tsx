@@ -1,6 +1,30 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Voicing, ChordType, ScaleNoteDefinition, CagedVoicing, BuiltInChords, RootType } from '../types';
+import { Voicing, ChordType, ScaleNoteDefinition, CagedVoicing, BuiltInChords, RootType, StaffNote, KeySignature, TimeSignature } from '../types';
 import EditorFretboard from './EditorFretboard';
+import { getActiveNotesTimeline, getChordSymbol } from '../utils/musicTheory';
+// Dummy key signature e time signature per esempio (C major, 4/4)
+const DEFAULT_KEY_SIGNATURE: KeySignature = { type: 'sharp', count: 0 };
+const DEFAULT_TIME_SIGNATURE: TimeSignature = { numerator: 4, denominator: 4 };
+// Helper: converte le note della tastiera in StaffNote per analisi armonica
+function fretboardToStaffNotes(notes: ScaleNoteDefinition[], rootMidi: number): StaffNote[] {
+    return notes.map((n, i) => {
+        const midi = STRING_BASE_MIDI[n.s] + n.f;
+        return {
+            id: `n${i}`,
+            pitch: '',
+            octave: 4,
+            accidental: undefined,
+            explicitAccidental: null,
+            position: 0,
+            midi,
+            noteIndex: midi % 12,
+            duration: 'whole',
+            isRest: false,
+            measureIndex: 0,
+            beat: 1,
+        };
+    });
+}
 import { getGuitarVoicings } from '../data/guitarVoicings';
 import { CHROMATIC_SCALE } from '../constants';
 import { useCustomData } from './useCustomTypes';
@@ -92,6 +116,18 @@ const ChordEditorComponent: React.FC = () => {
             })
             .filter(note => note.f > -1);
     }, [currentVoicing, rootPosition]);
+
+    // Analisi armonica delle note attive (inclusi prolungamenti)
+    const chordSymbol = useMemo(() => {
+      if (notesForFretboard.length === 0) return null;
+      // Simula una nota lunga per ogni tasto premuto (nessun prolungamento reale, ma struttura pronta)
+      const staffNotes = fretboardToStaffNotes(notesForFretboard, 0);
+      // Ottieni la timeline (qui sarà un solo evento, ma la struttura è pronta per estensioni future)
+      const timeline = getActiveNotesTimeline(staffNotes, DEFAULT_TIME_SIGNATURE);
+      // Prendi le note attive del primo evento (tutte le note premute)
+      const notes = timeline[0]?.notes || [];
+      return getChordSymbol(notes, DEFAULT_KEY_SIGNATURE);
+    }, [notesForFretboard]);
 
     const handleNoteClick = useCallback((s: number, f: number, e: React.MouseEvent) => {
         e.preventDefault();
@@ -202,6 +238,10 @@ const ChordEditorComponent: React.FC = () => {
     return (
         <div className="flex-grow flex flex-col lg:flex-row gap-4 p-4">
             <div className="flex-grow">
+                {/* Mostra il simbolo dell'accordo analizzato */}
+                {chordSymbol && (
+                  <div className="mb-2 text-xl font-bold text-cyan-400">Accordo rilevato: {chordSymbol}</div>
+                )}
                 <EditorFretboard 
                     notes={notesForFretboard}
                     draggedNote={null}

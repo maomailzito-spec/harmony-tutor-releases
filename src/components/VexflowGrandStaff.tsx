@@ -293,7 +293,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           try {
             vfNote = makeVfNote(n, clef);
             if (n.id === '__ghost__') {
-              vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
+              vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.85)', strokeStyle: 'rgba(14,165,233,1)', shadowColor: '#0ea5e9', shadowBlur: 8 });
               vfNote.setXShift(-18);
             } else if (selectedNoteIds.includes(n.id)) {
               vfNote.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });

@@ -1,3 +1,49 @@
+/**
+ * Restituisce una timeline di eventi armonici: per ogni punto significativo (inizio/fine nota),
+ * fornisce tutte le note attive in quell'istante (considerando le note prolungate).
+ * Utile per analisi armonica completa (es. Cmaj7 con C minima + E,G,B sul beat successivo).
+ */
+export function getActiveNotesTimeline(
+    notes: StaffNote[],
+    timeSignature: TimeSignature
+): Array<{ absBeat: number; measureIndex: number; beat: number; notes: StaffNote[] }> {
+    const beatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
+    // Helper per durata
+    const getDuration = (n: StaffNote): number => {
+        const base = (DURATION_VALUES as any)[n.duration] || 1;
+        let val = base;
+        if (n.isDotted) val *= 1.5;
+        if (n.isTriplet) val *= 2 / 3;
+        if (n.isDuplet) val *= 3 / 2;
+        return val;
+    };
+    // Trova tutti i punti temporali in cui succede qualcosa (INIZIO o FINE nota)
+    const scanPointsSet = new Set<number>();
+    notes.forEach(n => {
+        if (n.isRest) return;
+        const m = n.measureIndex ?? 0;
+        const b = n.beat ?? 1;
+        const start = (m * beatsPerMeas) + (b - 1);
+        const end = start + getDuration(n);
+        scanPointsSet.add(start);
+        scanPointsSet.add(end);
+    });
+    const scanPoints = Array.from(scanPointsSet).sort((a, b) => a - b);
+    // Per ogni punto, trova le note attive
+    return scanPoints.map(absBeat => {
+        const activeNotes = notes.filter(n => {
+            if (n.isRest) return false;
+            const m = n.measureIndex ?? 0;
+            const b = n.beat ?? 1;
+            const start = (m * beatsPerMeas) + (b - 1);
+            const dur = getDuration(n);
+            return start <= absBeat && absBeat < (start + dur - 1e-6);
+        });
+        const measureIndex = Math.floor(absBeat / beatsPerMeas);
+        const beat = (absBeat % beatsPerMeas) + 1;
+        return { absBeat, measureIndex, beat, notes: activeNotes };
+    });
+}
 import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext } from '../types';
 import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES } from '../constants';
 
@@ -986,33 +1032,76 @@ export function applyHarmonyRules(
         violations.push({ ...v, noteIds: [...new Set(v.noteIds)] });
     };
 
-    // ---- Build chord timeline (by measureIndex/beat) ----
-    const chordMap = new Map<string, StaffNote[]>();
+    // ---- Build chord timeline (SCAN-LINE: Include ALL note changes, including sustained and short values) ----
+
+    // 1. Helper per calcolare la durata in beat (se non esiste già)
+    const getDuration = (n: StaffNote): number => {
+        const base = (DURATION_VALUES as any)[n.duration] || 1;
+        let val = base;
+        if (n.isDotted) val *= 1.5;
+        if (n.isTriplet) val *= 2 / 3;
+        if (n.isDuplet) val *= 3 / 2;
+        return val;
+    };
+
+    const beatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
+
+    // 2. Trova tutti i punti temporali in cui succede qualcosa (INIZIO o FINE nota)
+    const scanPointsSet = new Set<number>();
     analyzedNotes.forEach(n => {
         if (n.isRest) return;
         const m = n.measureIndex ?? 0;
         const b = n.beat ?? 1;
-        const key = `${m}-${b}`;
-        if (!chordMap.has(key)) chordMap.set(key, []);
-        chordMap.get(key)!.push(n);
+        const start = (m * beatsPerMeas) + (b - 1);
+        const end = start + getDuration(n);
+        scanPointsSet.add(start);
+        scanPointsSet.add(end);
     });
+    const scanPoints = Array.from(scanPointsSet).sort((a, b) => a - b);
 
-    const chordEvents = Array.from(chordMap.entries())
-        .map(([key, chordNotes]) => {
-            const [mStr, bStr] = key.split('-');
-            const m = Number(mStr);
-            const b = Number(bStr);
-            const absBeat = (m * beatsPerMeasure) + (b - 1);
-            const byVoice = new Map<Voice, StaffNote>();
-            chordNotes.forEach(n => {
-                const v = (n.voice ?? 1) as Voice;
-                // if duplicates in same voice at same time (rare), keep highest note (more informative)
-                const prev = byVoice.get(v);
-                if (!prev || (n.midi ?? -Infinity) > (prev.midi ?? -Infinity)) byVoice.set(v, n);
-            });
-            return { key, measureIndex: m, beat: b, absBeat, notes: chordNotes, byVoice };
-        })
-        .sort((a, b) => a.absBeat - b.absBeat);
+    // 3. Costruisci gli eventi: per ogni punto, chi sta suonando?
+    const chordEvents = scanPoints.map(absBeat => {
+        // Filtra note attive: Iniziate prima o ora, e che finiscono nel futuro
+        const activeNotes = analyzedNotes.filter(n => {
+            if (n.isRest) return false;
+            const m = n.measureIndex ?? 0;
+            const b = n.beat ?? 1;
+            const start = (m * beatsPerMeas) + (b - 1);
+            const dur = getDuration(n);
+            // È attiva se start <= absBeat < end
+            return start <= absBeat && absBeat < (start + dur - 1e-6);
+        });
+
+        // Raggruppa per voce (vince la nota più recente per ogni voce)
+        const byVoice = new Map<number, StaffNote>();
+        activeNotes.forEach(n => {
+            const v = n.voice ?? 1;
+            const m = n.measureIndex ?? 0;
+            const b = n.beat ?? 1;
+            const start = (m * beatsPerMeas) + (b - 1);
+            const prev = byVoice.get(v);
+            if (!prev) {
+                byVoice.set(v, n);
+            } else {
+                const prevM = prev.measureIndex ?? 0;
+                const prevB = prev.beat ?? 1;
+                const prevStart = (prevM * beatsPerMeas) + (prevB - 1);
+                if (start > prevStart) byVoice.set(v, n);
+            }
+        });
+
+        // Calcola info descrittive per l'evento
+        const measureIndex = Math.floor(absBeat / beatsPerMeas);
+        const beat = (absBeat % beatsPerMeas) + 1;
+
+        return {
+            absBeat,
+            measureIndex,
+            beat,
+            notes: Array.from(byVoice.values()),
+            byVoice
+        };
+    });
 
     // ---- Sounding harmony per beat (duration-aware) ----
     // Needed for rules that depend on harmonic rhythm (e.g., harmonic syncopation).
@@ -1177,17 +1266,15 @@ export function applyHarmonyRules(
 
         // R-13: all voices move in same direction
         const dirs: number[] = [];
-        let anyMoves = false;
         voices.forEach(v => {
             const n1 = aV[v];
             const n2 = bV[v];
             if (!n1 || !n2) return;
             const d = dir(n1.midi, n2.midi);
-            if (d !== 0) anyMoves = true;
             dirs.push(d);
         });
-        const nonZeroDirs = dirs.filter(d => d !== 0);
-        if (anyMoves && nonZeroDirs.length >= 3 && nonZeroDirs.every(d => d === nonZeroDirs[0])) {
+        // La regola scatta solo se tutte le voci si muovono (nessun d === 0) e tutte nella stessa direzione
+        if (dirs.length === 4 && dirs.every(d => d !== 0) && dirs.every(d => d === dirs[0])) {
             const notePairs = voices.map(v => ({ a: aV[v], b: bV[v] })).filter(pair => pair.a && pair.b);
             addViolation({
                 ruleId: 'R-13',
@@ -1216,28 +1303,39 @@ export function applyHarmonyRules(
         if (sopA && sopB && basA && basB) {
             const dS = dir(sopA.midi, sopB.midi);
             const dB = dir(basA.midi, basB.midi);
+            const sopranoMelodicInterval = Math.abs(sopB.midi - sopA.midi);
             if (dS !== 0 && dS === dB) {
-                addViolation({
-                    ruleId: 'R-14',
-                    severity: 'warning',
-                    description: 'Moto simile tra le voci estreme (Soprano/Basso)',
-                    suggestion: 'Il moto contrario tra voci estreme è spesso più stabile.',
-                    noteIds: [sopA.id, sopB.id, basA.id, basB.id],
-                });
+                if (sopranoMelodicInterval <= 2) {
+                    addViolation({
+                        ruleId: 'EXC-Hidden-Stepwise',
+                        severity: 'exception',
+                        description: 'Moto retto/nascosto ammesso (Soprano per grado congiunto)',
+                        suggestion: 'Eccezione classica: il Soprano si muove per grado congiunto.',
+                        noteIds: [sopA.id, sopB.id, basA.id, basB.id],
+                    });
+                } else {
+                    addViolation({
+                        ruleId: 'R-14',
+                        severity: 'warning',
+                        description: 'Moto simile tra le voci estreme (Soprano/Basso)',
+                        suggestion: 'Il moto contrario tra voci estreme è spesso più stabile.',
+                        noteIds: [sopA.id, sopB.id, basA.id, basB.id],
+                    });
+                }
                 // Add errorConnections for overlay rendering
                 connections.push({
                     type: 'horizontal',
                     noteId1: sopA.id,
                     noteId2: sopB.id,
-                    severity: 'warning',
-                    ruleId: 'R-14',
+                    severity: sopranoMelodicInterval <= 2 ? 'exception' : 'warning',
+                    ruleId: sopranoMelodicInterval <= 2 ? 'EXC-Hidden-Stepwise' : 'R-14',
                 });
                 connections.push({
                     type: 'horizontal',
                     noteId1: basA.id,
                     noteId2: basB.id,
-                    severity: 'warning',
-                    ruleId: 'R-14',
+                    severity: sopranoMelodicInterval <= 2 ? 'exception' : 'warning',
+                    ruleId: sopranoMelodicInterval <= 2 ? 'EXC-Hidden-Stepwise' : 'R-14',
                 });
             }
         }
@@ -1268,19 +1366,36 @@ export function applyHarmonyRules(
             }
         }
 
-        // R-07: leading tone resolution
+        // R-07: leading tone resolution (obbligo solo su V e vii°)
         const ctx = getContextAtAbsBeat(a.absBeat);
         const ctxTonicPc = (() => {
             const idx = noteNameToIndex[ctx.tonic];
             return Number.isFinite(idx) ? idx : tonicPc;
         })();
         const ctxLeadingPc = mod12(ctxTonicPc - 1);
-        
+
+        // Identifica il grado dell'accordo corrente
+        const chordInfoA_R07 = identifyChord(a.notes);
+        let isVorViidim = false;
+        if (chordInfoA_R07 && chordInfoA_R07.root) {
+            const rootPc = mod12(chordInfoA_R07.root.midi);
+            const intervalFromTonic = mod12(rootPc - ctxTonicPc);
+            // V grado: intervallo 7, vii°: intervallo 11 e tipo diminuito
+            if (intervalFromTonic === 7) {
+                isVorViidim = true;
+            } else if (intervalFromTonic === 11 && chordInfoA_R07.type && chordInfoA_R07.type.toLowerCase().includes('diminished')) {
+                isVorViidim = true;
+            }
+        }
+
         voices.forEach(v => {
             const n1 = aV[v];
             const n2 = bV[v];
             if (!n1 || !n2) return;
             if ((n1.midi % 12) !== ctxLeadingPc) return;
+
+            // Applica la regola SOLO se l'accordo è V o vii°
+            if (!isVorViidim) return;
 
             // 1. PRIMA controlliamo se risolve regolarmente (salendo alla tonica)
             // Se lo fa, è perfetto: usciamo subito senza segnare nulla.
@@ -1446,37 +1561,61 @@ export function applyHarmonyRules(
             const dB = dir(basA.midi, basB.midi);
             const similar = dS !== 0 && dS === dB;
             const sopranoLeap = Math.abs(sopB.midi - sopA.midi) > 2;
-            if (similar && sopranoLeap && (isPerfectFifth(intB) || isPerfectOctaveOrUnison(intB))) {
+            if (similar && (isPerfectFifth(intB) || isPerfectOctaveOrUnison(intB))) {
                 const isOct = isPerfectOctaveOrUnison(intB);
-                addViolation({
-                    ruleId: 'R-05',
-                    severity: 'warning',
-                    description: isOct
-                        ? 'Ottave nascoste (dirette) tra voci estreme'
-                        : 'Quinte nascoste (dirette) tra voci estreme',
-                    suggestion: 'Preferisci moto contrario, oppure evita il salto nella voce superiore.',
-                    noteIds: [sopA.id, sopB.id, basA.id, basB.id],
-                });
-
-                // Add explicit connections so the editor can render the orange dashed lines.
-                connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'warning', ruleId: 'R-05' });
-                connections.push({ type: 'horizontal', noteId1: basA.id, noteId2: basB.id, severity: 'warning', ruleId: 'R-05' });
+                if (!sopranoLeap) {
+                    addViolation({
+                        ruleId: 'EXC-Hidden-Stepwise',
+                        severity: 'exception',
+                        description: 'Moto retto/nascosto ammesso (Soprano per grado congiunto)',
+                        suggestion: 'Eccezione classica: il Soprano si muove per grado congiunto.',
+                        noteIds: [sopA.id, sopB.id, basA.id, basB.id],
+                    });
+                    connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
+                    connections.push({ type: 'horizontal', noteId1: basA.id, noteId2: basB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
+                } else {
+                    addViolation({
+                        ruleId: 'R-05',
+                        severity: 'warning',
+                        description: isOct
+                            ? 'Ottave nascoste (dirette) tra voci estreme'
+                            : 'Quinte nascoste (dirette) tra voci estreme',
+                        suggestion: 'Preferisci moto contrario, oppure evita il salto nella voce superiore.',
+                        noteIds: [sopA.id, sopB.id, basA.id, basB.id],
+                    });
+                    connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'warning', ruleId: 'R-05' });
+                    connections.push({ type: 'horizontal', noteId1: basA.id, noteId2: basB.id, severity: 'warning', ruleId: 'R-05' });
+                }
             }
         }
 
-        // R-12: chord seventh resolution (with EXC-7m01)
+        // R-12: chord seventh resolution (with EXC-7m01, updated for minor/major 7th logic)
         const chordInfoA = identifyChord(a.notes);
         if (chordInfoA?.root) {
             const rootMidi = chordInfoA.root.midi;
             const seventhNotes = a.notes
                 .filter(n => !n.isRest)
-                .filter(n => {
+                .map(n => {
                     const rel = mod12(n.midi - rootMidi);
-                    return rel === 10 || rel === 11;
-                });
+                    return { n, rel };
+                })
+                .filter(({ rel }) => rel === 10 || rel === 11);
 
             if (seventhNotes.length) {
-                seventhNotes.forEach(n7 => {
+                seventhNotes.forEach(({ n: n7, rel }) => {
+                    // Minor seventh (10): must resolve down
+                    // Major seventh (11): must resolve down ONLY if below the root
+                    let mustResolveDown = false;
+                    if (rel === 10) {
+                        mustResolveDown = true;
+                    } else if (rel === 11) {
+                        if (n7.midi < rootMidi) {
+                            mustResolveDown = true;
+                        }
+                    }
+
+                    if (!mustResolveDown) return; // No error if not required to resolve down
+
                     const v = (n7.voice ?? 1) as Voice;
                     const nNext = bV[v];
                     const sameVoiceResolves = !!nNext && stepDown(n7.midi, nNext.midi);
@@ -1556,8 +1695,10 @@ export function applyHarmonyRules(
     };
 
     const chordAt = (measureIndex: number, beat: number): StaffNote[] | null => {
-        const k = `${measureIndex}-${beat}`;
-        return chordMap.get(k) || null;
+        // Cerca tra gli eventi della timeline
+        const absBeat = (measureIndex * beatsPerMeas) + (beat - 1);
+        const ev = chordEvents.find(e => Math.abs(e.absBeat - absBeat) < 1e-6);
+        return ev ? ev.notes : null;
     };
 
     const lastMeasureIndex = analyzedNotes.reduce((mx, n) => Math.max(mx, n.measureIndex ?? 0), 0);

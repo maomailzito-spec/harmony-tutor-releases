@@ -9,7 +9,7 @@ import {
 } from './icons/NoteValueIcons';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline } from '../utils/musicTheory';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
@@ -1204,88 +1204,90 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     // ADAPTER LAYER (domain -> overlay data)
     // =========================================================
 
-    // Stable harmony labels per system (roman+figures and symbol)
+    // Timeline-based harmony labels per system (roman+figures and symbol)
     const harmonyLabelsBySystem = useMemo(() => {
         if (!isAnalysisEnabled || !layoutData) return [];
 
+        // Use the timeline of all active notes at each event (start/end of any note)
+        const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature);
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const ctxAtAbsBeat = (absBeat: number) => (analysisContexts || [])
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
             .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
 
-        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string }[][] = [];
+        // For each system, collect all timeline events that fall within its measures
+        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string }[][] = layoutData.systemsParams.map(() => []);
 
-        layoutData.systemsParams.forEach((system, systemIndex) => {
-            const measureSet = new Set(system.measureIndices);
-            const systemNotes = layoutData.positionedNotes.filter(n => !n.isRest && measureSet.has(n.measureIndex ?? -1));
 
-            // Group by chordId (preferred) else measure-beat (stable); NOT by xPosition
-            const chords = new Map<string, StaffNote[]>();
-            systemNotes.forEach(n => {
-                const key = n.chordId || `${n.measureIndex ?? 0}-${n.beat ?? 1}`;
-                if (!chords.has(key)) chords.set(key, []);
-                chords.get(key)!.push(n);
-            });
+        // Helper: compute xPosition for a given absBeat in a system
+        function getXForAbsBeat(absBeat: number, system: any) {
+            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+            const measureIndex = Math.floor(absBeat / beatsPerMeasure);
+            const beatInMeasure = (absBeat - (measureIndex * beatsPerMeasure)) + 1;
+            const idx = system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return 0;
+            const startX = system.startMeasuresX[idx];
+            const endX = idx < system.measureIndices.length - 1 ? system.startMeasuresX[idx + 1] : (system.width - START_X);
+            const measureWidth = Math.max(1, endX - startX);
+            const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
+            const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / beatsPerMeasure));
+            return startX + MEASURE_PADDING_X + (rel * contentWidth);
+        }
 
-            const systemLabels: { id: string; x: number; roman: string; figures: string[]; symbol: string }[] = [];
-
-            chords.forEach((chordNotes, chordKey) => {
-                const measureIndex = chordNotes[0]?.measureIndex ?? 0;
-                const beat = chordNotes[0]?.beat ?? 1;
-                const chordAbsBeat = (measureIndex * beatsPerMeasure) + (beat - 1);
-
-                const applicableContext = ctxAtAbsBeat(chordAbsBeat);
-                const contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
-                const contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
-
-                let roman = '';
-                let figures: string[] = [];
-                let symbol = '';
-
-                try {
-                    // Always compute both so we can place them in different regions.
-                    const r = getRomanAnalysis(chordNotes, contextTonic, contextIsMinor);
-                    if (r) {
-                        roman = r.roman;
-                        figures = r.figures || [];
-                    }
-
-                    const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
-                    const s = getChordSymbol(chordNotes, contextKeySignature);
-                    if (s) symbol = s;
-                } catch (err) {
-                    // Prevent hard-crash from analysis edge cases while we wire everything.
-                    console.warn('Harmony label compute failed', err);
-                    return;
+        timeline.forEach(event => {
+            // Find which system this event belongs to
+            const measureIndex = event.measureIndex;
+            let systemIndex = -1;
+            for (let i = 0; i < layoutData.systemsParams.length; i++) {
+                if (layoutData.systemsParams[i].measureIndices.includes(measureIndex)) {
+                    systemIndex = i;
+                    break;
                 }
+            }
+            if (systemIndex === -1) return;
+            const system = layoutData.systemsParams[systemIndex];
 
-                if (!roman && !symbol) return;
+            // Only show labels for events with at least 2 notes
+            if (!event.notes || event.notes.length < 2) return;
 
-                // Anchor labels to the bass voice when available.
-                const bassAnchor = chordNotes
-                    .filter(n => !n.isRest)
-                    .find(n => (n.voice ?? 0) === 4)
-                    ?? chordNotes
-                        .filter(n => !n.isRest)
-                        .slice()
-                        .sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0))[0]
-                    ?? chordNotes[0];
+            const applicableContext = ctxAtAbsBeat(event.absBeat);
+            const contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
+            const contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
 
-                const x = (bassAnchor?.xPosition ?? chordNotes[0]?.xPosition ?? 0);
+            let roman = '';
+            let figures: string[] = [];
+            let symbol = '';
 
-                systemLabels.push({
-                    id: `hlabel-${systemIndex}-${chordKey}`,
-                    x,
-                    roman,
-                    figures,
-                    symbol,
-                });
+            try {
+                const r = getRomanAnalysis(event.notes, contextTonic, contextIsMinor);
+                if (r) {
+                    roman = r.roman;
+                    figures = r.figures || [];
+                }
+                const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
+                const s = getChordSymbol(event.notes, contextKeySignature);
+                if (s) symbol = s;
+            } catch (err) {
+                console.warn('Harmony label compute failed', err);
+                return;
+            }
+
+            if (!roman && !symbol) return;
+
+            // Anchor label to the current timeline event's beat (not just the note's attack)
+            const x = getXForAbsBeat(event.absBeat, system);
+
+            labelsBySystem[systemIndex].push({
+                id: `hlabel-${systemIndex}-${event.absBeat}`,
+                x,
+                roman,
+                figures,
+                symbol,
             });
-
-            systemLabels.sort((a, b) => a.x - b.x);
-            labelsBySystem[systemIndex] = systemLabels;
         });
 
+        // Sort labels in each system by x
+        labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
         return labelsBySystem;
     }, [analysisContextAbsBeat, analysisContexts, currentTonic, isAnalysisEnabled, isMinorMode, layoutData, timeSignature]);
 
