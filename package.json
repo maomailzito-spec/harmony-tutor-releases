@@ -2,13 +2,15 @@
   "name": "harmony-tutor-locale",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron": "wait-on http-get://localhost:5173 && electron .",
+    "electron:dev": "concurrently -k \"cross-env NODE_ENV=development npm run dev\" \"cross-env NODE_ENV=development npm run electron\""
   },
   "dependencies": {
     "@heroicons/react": "^2.1.3",
@@ -26,12 +28,17 @@
     "@typescript-eslint/parser": "^7.2.0",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.19",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.2.2",
-    "vite": "^5.2.0"
+    "vite": "^5.2.0",
+    "wait-on": "^9.0.3"
   }
 }

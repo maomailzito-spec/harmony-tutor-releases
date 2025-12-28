@@ -471,8 +471,11 @@ class RenderErrorBoundary extends React.Component<
 
 const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioService, isAudioReady }) => {
     const [rawNotes, setRawNotes, undoNotes] = useUndoableState<StaffNote[]>([]);
+    // Ref per avere sempre il valore aggiornato di rawNotes
+    const latestRawNotes = useRef(rawNotes);
     const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
     const [clipboard, setClipboard] = useState<StaffNote[] | null>(null);
+    const [copyPasteError, setCopyPasteError] = useState<string | null>(null);
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
     const [keyChangeMode, setKeyChangeMode] = useState<'none' | 'transpose' | 'modal'>('none');
@@ -991,6 +994,74 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     }, [keySignatureRoot, isMinorMode]);
 
     const notes = useMemo(() => calculateNoteBeats(rawNotes, timeSignature), [rawNotes, timeSignature]);
+
+
+    // Mantieni latestRawNotes aggiornato
+    useEffect(() => {
+        latestRawNotes.current = rawNotes;
+    }, [rawNotes]);
+
+
+    // Integrazione UNICA e robusta con Electron API (listener registrato una sola volta)
+    useEffect(() => {
+        const api = (window as any).electronAPI;
+        if (!api) {
+            console.warn("Electron API non disponibile.");
+            return;
+        }
+        console.log("Electron API attiva nel Renderer: Listener Unico Registrato.");
+
+        const handler = async (action: string, payload: any) => {
+            if (action === 'save' || action === 'save-as') {
+                console.log("Comando di salvataggio ricevuto:", action);
+                if (latestRawNotes.current.length === 0 && !window.confirm("Il progetto è vuoto. Salvare comunque?")) return;
+                console.log("Contenuto di rawNotes al momento del salvataggio:", latestRawNotes.current);
+                const projectData = JSON.stringify({ notes: latestRawNotes.current }, null, 2);
+                console.log("Dati da salvare preparati. Chiamata a api.saveFile...");
+                try {
+                    const result = await api.saveFile(projectData);
+                    console.log("Risultato salvataggio:", result);
+                } catch (err) {
+                    console.error("Errore durante il salvataggio:", err);
+                }
+            } else if (action === 'open') {
+                console.log("Comando di apertura ricevuto.");
+                setRawNotes([]);
+                try {
+                    console.log("Tentativo di parsare i dati:", payload?.data);
+                    const data = payload?.data;
+                    if (!data) throw new Error("Nessun dato fornito per l'apertura.");
+                    const loadedProject = JSON.parse(data);
+                    if (loadedProject && Array.isArray(loadedProject.notes)) {
+                        setRawNotes(loadedProject.notes);
+                        console.log("Dati note parsati e caricati:", loadedProject.notes);
+                    } else {
+                        throw new Error("Formato dati non valido.");
+                    }
+                } catch (err) {
+                    console.error("Errore durante l'apertura del file:", err);
+                }
+            } else if (action === 'new') {
+                console.log("Comando nuovo progetto ricevuto.");
+                const confirmed = window.confirm("Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.");
+                if (confirmed) {
+                    setRawNotes([]);
+                }
+            }
+        };
+
+        api.onMenuAction?.(handler);
+
+        // Cleanup: rimuovi listener
+        const removeListener = () => {
+            if (api.removeMenuAction) {
+                api.removeMenuAction(handler);
+            }
+        };
+        return removeListener;
+    }, []);
+
+    // ...existing code...
 
     // Tie-orientation is controlled by selecting the two tied notes.
     // When exactly 2 notes are selected AND they form a valid tie pair, the flip button
@@ -2850,21 +2921,49 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     return rest as StaffNote;
                 });
                 setClipboard(copied);
+                // Prova anche a copiare come testo JSON negli appunti di sistema
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
+                }
                 return;
             }
 
             // Cmd/Ctrl+V: arm paste mode (next click selects paste location)
             if (isMod && key === 'v') {
-                if (!clipboard || clipboard.length === 0) return;
                 e.preventDefault();
                 e.stopPropagation();
 
+                // Se clipboard locale è vuota, prova a leggere dagli appunti di sistema
+                if ((!clipboard || clipboard.length === 0) && navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.readText().then(text => {
+                        try {
+                            const parsed = JSON.parse(text);
+                            if (Array.isArray(parsed) && parsed[0] && parsed[0].id) {
+                                setClipboard(parsed);
+                                setCopyPasteError(null);
+                            } else {
+                                setCopyPasteError('Nessun dato valido negli appunti.');
+                            }
+                        } catch {
+                            setCopyPasteError('Dati negli appunti non validi.');
+                        }
+                    }).catch(() => setCopyPasteError('Impossibile leggere dagli appunti di sistema.'));
+                    return;
+                }
+
                 // Standard UX: paste at the current paste caret.
-                if (pasteCaret) {
+                if (pasteCaret && clipboard && clipboard.length > 0) {
                     pasteClipboardAt(pasteCaret.measureIndex, pasteCaret.beat);
                 }
                 return;
             }
+    {/* Feedback errori copia/incolla */}
+    {copyPasteError && (
+        <div style={{position:'fixed',bottom:16,right:16,background:'#c00',color:'#fff',padding:'8px 16px',borderRadius:8,zIndex:9999}}>
+            {copyPasteError}
+            <button style={{marginLeft:8}} onClick={()=>setCopyPasteError(null)}>Chiudi</button>
+        </div>
+    )}
 
             // V: cycle voices in order 4 -> 3 -> 2 -> 1 (B, T, A, S)
             if (!isMod && key === 'v') {
