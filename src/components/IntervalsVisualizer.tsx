@@ -255,7 +255,7 @@ const IntervalsVisualizer: React.FC<IntervalsVisualizerProps> = ({ audioService,
         );
 
         if (!targetPosition) {
-            console.error("Could not place the target note on the fretboard.");
+            // errore silenziato
             return;
         }
 

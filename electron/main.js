@@ -63,10 +63,55 @@ function createMenu() {
         { role: 'undo' },
         { role: 'redo' },
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' }
+        {
+          label: 'Taglia',
+          accelerator: 'CmdOrCtrl+X',
+          click: () => {
+            console.log('[MAIN] Menu: Taglia cliccato');
+            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'cut' });
+          }
+        },
+        {
+          label: 'Copia',
+          accelerator: 'CmdOrCtrl+C',
+          click: () => {
+            console.log('[MAIN] Menu: Copia cliccato');
+            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'copy' });
+          }
+        },
+        {
+          label: 'Incolla',
+          accelerator: 'CmdOrCtrl+V',
+          click: () => {
+            console.log('[MAIN] Menu: Incolla cliccato');
+            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'paste' });
+          }
+        },
+        {
+          label: 'Seleziona tutto',
+          accelerator: 'CmdOrCtrl+A',
+          click: () => {
+            console.log('[MAIN] Menu: Seleziona tutto cliccato');
+            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'selectAll' });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Chiudi progetto',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => {
+            console.log('[MAIN] Menu: Chiudi progetto cliccato');
+            mainWindow && mainWindow.webContents.send('menu-action', 'close-project');
+          }
+        },
+        {
+          label: 'Nuovo progetto',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            console.log('[MAIN] Menu: Nuovo progetto cliccato');
+            mainWindow && mainWindow.webContents.send('menu-action', 'new-project');
+          }
+        }
       ]
     },
     {

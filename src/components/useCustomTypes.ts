@@ -32,7 +32,6 @@ const loadFromStorage = <T>(key: string, defaultValue: T): T => {
     const item = window.localStorage.getItem(key);
     return item ? JSON.parse(item) : defaultValue;
   } catch (error) {
-    console.error(`Error loading ${key} from storage`, error);
     return defaultValue;
   }
 };
@@ -41,7 +40,7 @@ const saveToStorage = (key: string, value: unknown) => {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
-    console.error(`Error saving ${key} to storage`, error);
+    // errore silenziato
   }
 };
 

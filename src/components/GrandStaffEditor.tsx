@@ -1,3 +1,14 @@
+// ...existing code...
+// TypeScript: dichiarazione per window.electronAPI
+declare global {
+    interface Window {
+        electronAPI?: {
+            onMenuAction: (handler: (action: string, payload: any) => void) => (() => void) | void;
+            saveFile: (content: string) => Promise<any>;
+            addRecentFile: (filePath: string) => Promise<any>;
+        };
+    }
+}
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext } from '../types';
@@ -473,8 +484,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [rawNotes, setRawNotes, undoNotes] = useUndoableState<StaffNote[]>([]);
     // Ref per avere sempre il valore aggiornato di rawNotes
     const latestRawNotes = useRef(rawNotes);
+
+    // Mantieni latestRawNotes aggiornato
+    useEffect(() => {
+        latestRawNotes.current = rawNotes;
+    }, [rawNotes]);
+    // ...existing code...
+    // Wrapper per il comando di copia
     const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
     const [clipboard, setClipboard] = useState<StaffNote[] | null>(null);
+    // Ref per clipboard aggiornata
+    const latestClipboardRef = useRef<StaffNote[] | null>(clipboard);
+    useEffect(() => {
+        latestClipboardRef.current = clipboard;
+    }, [clipboard]);
+    // Ref per avere sempre il valore aggiornato di selectedNoteIds
+    const latestSelectedNoteIds = useRef(selectedNoteIds);
+    useEffect(() => {
+        latestSelectedNoteIds.current = selectedNoteIds;
+    }, [selectedNoteIds]);
+    // Wrapper per il comando di copia
+    const handleCopy = useCallback(() => {
+        const currentSelected = latestSelectedNoteIds.current;
+        if (!currentSelected || currentSelected.size === 0) return;
+        const selected = rawNotes.filter(n => currentSelected.has(n.id));
+        // Copia profonda delle note selezionate
+        const copied = selected.map(n => ({ ...n }));
+        setClipboard(copied);
+    }, [rawNotes, setClipboard]);
+    
+    
     const [copyPasteError, setCopyPasteError] = useState<string | null>(null);
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
@@ -532,6 +571,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [midiOutputs, setMidiOutputs] = useState<any[]>([]);
     const [selectedMidiOutput, setSelectedMidiOutput] = useState<any | null>(null);
     const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
+    const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
 
     const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const measureTextWidth = useCallback((text: string, font: string) => {
@@ -1000,66 +1040,334 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     useEffect(() => {
         latestRawNotes.current = rawNotes;
     }, [rawNotes]);
+    // (No external paste bridge globals here)
 
 
-    // Integrazione UNICA e robusta con Electron API (listener registrato una sola volta)
+    // Funzione robusta per gestire tutte le azioni del menu di Electron
+    const handleMenuAction = useCallback(async (action, payload) => {
+        const api = (window).electronAPI;
+        if (!api) return;
+        // console.log('[HANDLE_MENU_ACTION] action:', action, 'payload:', payload); // decommentare solo per debug
+        if (action === 'edit-command' && payload && payload.command) {
+            const command = payload.command;
+            // console.log(`[HANDLE_MENU_ACTION] Comando ricevuto: ${command}`); // decommentare solo per debug
+            if (command === 'copy') {
+                const currentSelected = latestSelectedNoteIds.current;
+                const selected = (latestRawNotes.current || []).filter(n => currentSelected && currentSelected.has(n.id));
+                if (!currentSelected || currentSelected.size === 0) {
+                    setCopyPasteError('Nessuna nota selezionata da copiare.');
+                    return;
+                }
+                const copied = selected.map(n => {
+                    const { xPosition, ...rest } = n as any;
+                    return rest as StaffNote;
+                });
+                setClipboard(copied);
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
+                }
+                // Imposta un pasteMarker basato sul contenuto appena copiato (primo evento nel blocco)
+                try {
+                    if (copied && copied.length > 0) {
+                        const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                        const absBeats = copied.map(n => ((n.measureIndex ?? 0) * beatsPerMeasureLocal) + ((n.beat ?? 1) - 1));
+                        const baseAbs = Math.min(...absBeats);
+                        const measureIdx = Math.max(0, Math.floor(baseAbs / beatsPerMeasureLocal));
+                        const beatInMeasure = Math.round(((baseAbs - (measureIdx * beatsPerMeasureLocal)) + 1) * 1e6) / 1e6;
+                        let systemIndex = 0;
+                        if (layoutData && layoutData.systemsParams) {
+                            for (let si = 0; si < layoutData.systemsParams.length; si++) {
+                                if (layoutData.systemsParams[si].measureIndices.includes(measureIdx)) { systemIndex = si; break; }
+                            }
+                        }
+                        const marker = { systemIndex, measureIndex: measureIdx, beat: beatInMeasure, ts: Date.now() };
+                        console.log('[PASTE MARKER] set from copied notes:', marker);
+                        setPasteMarker(marker);
+                    }
+                } catch (e) {
+                    console.warn('[PASTE MARKER] failed to set from copied notes', e);
+                }
+                // Imposta un marker logico per la successiva incolla via menù
+                try {
+                    let marker = null as any;
+                    if (pasteCaret) {
+                        marker = { systemIndex: pasteCaret.systemIndex, measureIndex: pasteCaret.measureIndex, beat: pasteCaret.beat, ts: Date.now() };
+                    } else if (playheadPosition && layoutData && layoutData.systemsParams) {
+                        const sysParams = layoutData.systemsParams[playheadPosition.systemIndex];
+                        if (sysParams && sysParams.measureIndices && sysParams.startMeasuresX) {
+                            let minDist = Infinity;
+                            let bestIdx = 0;
+                            for (let i = 0; i < sysParams.measureIndices.length; i++) {
+                                const x = sysParams.startMeasuresX[i] ?? 0;
+                                const dist = Math.abs(x - playheadPosition.x);
+                                if (dist < minDist) {
+                                    minDist = dist;
+                                    bestIdx = i;
+                                }
+                            }
+                            marker = { systemIndex: playheadPosition.systemIndex, measureIndex: sysParams.measureIndices[bestIdx] ?? 0, beat: 1, ts: Date.now() };
+                        }
+                    }
+                    if (marker) {
+                        console.log('[PASTE MARKER] set:', marker);
+                        setPasteMarker(marker);
+                    }
+                } catch (e) {
+                    // non critico
+                }
+                return;
+            }
+            if (command === 'cut') {
+                // console.log('[HANDLE_MENU_ACTION] selectedNoteIds:', selectedNoteIds); // decommentare solo per debug
+                if (selectedNoteIds.size === 0) {
+                    // console.log('[HANDLE_MENU_ACTION] Nessuna nota selezionata per taglia');
+                    return;
+                }
+                const selected = rawNotes.filter(n => selectedNoteIds.has(n.id));
+                // console.log('[HANDLE_MENU_ACTION] Note selezionate per taglia:', selected);
+                const copied = selected.map(n => {
+                    const { xPosition, ...rest } = n as any;
+                    return rest as StaffNote;
+                });
+                setClipboard(copied);
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
+                }
+                // Cancella le note selezionate
+                setRawNotes(prev => prev.filter(n => !selectedNoteIds.has(n.id)));
+                setSelectedNoteIds(new Set());
+                return;
+            }
+            if (command === 'paste') {
+                // Ref per clipboard aggiornata
+                console.log('[DEBUG][MENU PASTE] Chiamato. clipboardRef:', latestClipboardRef.current, 'pasteCaret:', pasteCaret);
+                // Se è presente un pasteMarker recente, usalo e consumalo (30s timeout)
+                try {
+                    if (pasteMarker && (Date.now() - pasteMarker.ts) < 30000) {
+                        const pm = pasteMarker;
+                        console.log('[PASTE MARKER] consumed for paste:', pm);
+                        setPasteMarker(null);
+                        const caretFromMarker = { x: 0, systemIndex: pm.systemIndex, measureIndex: pm.measureIndex, beat: pm.beat };
+                        // Keep internal pasteCaret in sync so other logic sees it
+                        setPasteCaret(caretFromMarker);
+                        if (latestClipboardRef.current && latestClipboardRef.current.length > 0) {
+                            pasteClipboardAt(caretFromMarker.measureIndex, caretFromMarker.beat);
+                        } else {
+                            console.log('[PASTE MARKER] No clipboard data available to paste');
+                        }
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('[PASTE MARKER] error consuming marker', err);
+                }
+                // Se clipboard locale è vuota, prova a leggere dagli appunti di sistema
+                if ((!latestClipboardRef.current || latestClipboardRef.current.length === 0) && navigator.clipboard && window.isSecureContext) {
+                    console.log('[DEBUG][MENU PASTE] Clipboard locale vuota, provo a leggere dagli appunti di sistema...');
+                    navigator.clipboard.readText().then(text => {
+                        try {
+                            const parsed = JSON.parse(text);
+                            if (Array.isArray(parsed) && parsed[0] && parsed[0].id) {
+                                console.log('[DEBUG][MENU PASTE] Dati validi trovati negli appunti di sistema:', parsed);
+                                setClipboard(parsed);
+                                setCopyPasteError(null);
+                            } else {
+                                console.log('[DEBUG][MENU PASTE] Nessun dato valido negli appunti di sistema:', text);
+                                setCopyPasteError('Nessun dato valido negli appunti.');
+                            }
+                        } catch {
+                            console.log('[DEBUG][MENU PASTE] Dati negli appunti non validi:', text);
+                            setCopyPasteError('Dati negli appunti non validi');
+                        }
+                    }).catch(() => {
+                        console.log('[DEBUG][MENU PASTE] Errore nella lettura dagli appunti di sistema');
+                        setCopyPasteError('Impossibile leggere dagli appunti di sistema.');
+                    });
+                    return;
+                }
+                // Se esiste una posizione playhead, incolla lì; altrimenti caret, altrimenti in testa
+                let caret = null;
+                if (playheadPosition && layoutData && layoutData.systemsParams) {
+                    const sysParams = layoutData.systemsParams[playheadPosition.systemIndex];
+                    if (sysParams && sysParams.measureIndices && sysParams.startMeasuresX) {
+                        let minDist = Infinity;
+                        let bestIdx = 0;
+                        for (let i = 0; i < sysParams.measureIndices.length; i++) {
+                            const x = sysParams.startMeasuresX[i] ?? 0;
+                            const dist = Math.abs(x - playheadPosition.x);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                bestIdx = i;
+                            }
+                        }
+                        caret = {
+                            x: playheadPosition.x,
+                            systemIndex: playheadPosition.systemIndex,
+                            measureIndex: sysParams.measureIndices[bestIdx] ?? 0,
+                            beat: 1
+                        };
+                    }
+                }
+                if (!caret && pasteCaret) {
+                    caret = pasteCaret;
+                }
+                if (!caret) {
+                    caret = { x: 0, systemIndex: 0, measureIndex: 0, beat: 1 };
+                    setPasteCaret(caret);
+                }
+                console.log('[DEBUG][MENU PASTE] caret finale:', caret, 'clipboardRef:', latestClipboardRef.current);
+                if (caret && latestClipboardRef.current && latestClipboardRef.current.length > 0) {
+                    console.log('[DEBUG][MENU PASTE] Chiamo pasteClipboardAt con', caret.measureIndex, caret.beat);
+                    pasteClipboardAt(caret.measureIndex, caret.beat);
+                }
+                return;
+            }
+            if (command === 'selectAll') {
+                // Usa latestRawNotes.current per garantire che siano le note aggiornate
+                const allNotes = latestRawNotes.current || [];
+                const allNoteIds = allNotes.filter(n => n && n.id !== undefined).map(n => n.id);
+                console.log('[HANDLE_MENU_ACTION] Seleziona tutte le note:', allNoteIds);
+                setSelectedNoteIds(new Set(allNoteIds));
+                return;
+            }
+        }
+        if (action === 'close-project') {
+            console.log("Comando chiudi progetto ricevuto.");
+            const confirmed = window.confirm("Vuoi chiudere il progetto corrente? Le modifiche non salvate andranno perse.");
+            if (confirmed) {
+                // Reset rawNotes to initial state
+                setRawNotes([]);
+                setKeySignatureRoot('C');
+                setTimeSignature({ numerator: 4, denominator: 4 });
+                setClipboard(null);
+                setSelectedNoteIds(new Set());
+                setActiveTab('editor');
+                setDoubleBarlineMeasures([]);
+                setMinMeasureCount(4);
+                setMeasuresPerLine(4);
+                setIsMinorMode(false);
+                setKeyChangeMode('none');
+                setModalTonicOverride('');
+                setIsDotted(false);
+                setIsTriplet(false);
+                setIsDuplet(false);
+                setIsSwing(false);
+                setTupletNoteCount(0);
+                setTripletBaseDuration(null);
+                setActiveAccidental(null);
+                setSelectedVoice(1);
+                setHoveredViolationNotes(null);
+                setSelectedViolationIndex(null);
+                setViewMode('page');
+                setPasteCaret(null);
+                setAnalysisContexts([]);
+                setContextMenu(null);
+                setShowRomanAnalysis(true);
+                setShowSymbolAnalysis(false);
+                setShowMeasureNumbers(true);
+                setToolbarGroupOrder(DEFAULT_TOOLBAR_ORDER);
+                setToolbarGroupVisibility(DEFAULT_TOOLBAR_VISIBILITY);
+                setIsToolbarCustomizeOpen(false);
+                setSelectedToolbarGroupId(null);
+                setMidiOutputs([]);
+                setSelectedMidiOutput(null);
+            }
+        } else if (action === 'save' || action === 'save-as') {
+            console.log("Comando di salvataggio ricevuto:", action);
+            if (latestRawNotes.current.length === 0 && !window.confirm("Il progetto è vuoto. Salvare comunque?")) return;
+            const projectData = JSON.stringify({ notes: latestRawNotes.current }, null, 2);
+            try {
+                const result = await api.saveFile(projectData);
+                if (result && result.success && result.filePath) {
+                    api.addRecentFile(result.filePath);
+                }
+            } catch (err) {
+                console.error("Errore durante il salvataggio:", err);
+            }
+        } else if (action === 'open') {
+            console.log("Comando di apertura ricevuto.");
+            setRawNotes([]);
+            try {
+                const data = payload?.data;
+                if (!data) throw new Error("Nessun dato fornito per l'apertura.");
+                const loadedProject = JSON.parse(data);
+                if (loadedProject && Array.isArray(loadedProject.notes)) {
+                    setRawNotes(loadedProject.notes);
+                    if (payload && payload.filePath) {
+                        api.addRecentFile(payload.filePath);
+                    }
+                } else {
+                    throw new Error("Formato dati non valido.");
+                }
+            } catch (err) {
+                console.error("Errore durante l'apertura del file:", err);
+            }
+        } else if (action === 'new') {
+            console.log("Comando nuovo progetto ricevuto.");
+            const confirmed = window.confirm("Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.");
+            if (confirmed) {
+                setRawNotes([]);
+            }
+        }
+    }, [setRawNotes, setKeySignatureRoot, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsDotted, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setToolbarGroupVisibility, setIsToolbarCustomizeOpen, setSelectedToolbarGroupId, setMidiOutputs, setSelectedMidiOutput]);
+
+    // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
-        const api = (window as any).electronAPI;
+        const api = (window).electronAPI;
+        // console.log('[RENDERER] window.electronAPI:', api); // decommentare solo per debug
         if (!api) {
             console.warn("Electron API non disponibile.");
             return;
         }
-        console.log("Electron API attiva nel Renderer: Listener Unico Registrato.");
+        // console.log("[RENDERER] Listener Unico Registrato."); // decommentare solo per debug
+        const removeListener = api.onMenuAction((action, payload) => {
+            handleMenuAction(action, payload);
+        });
+        return () => {
+            if (removeListener) removeListener();
+        };
+    }, [handleMenuAction]);
 
-        const handler = async (action: string, payload: any) => {
-            if (action === 'save' || action === 'save-as') {
-                console.log("Comando di salvataggio ricevuto:", action);
-                if (latestRawNotes.current.length === 0 && !window.confirm("Il progetto è vuoto. Salvare comunque?")) return;
-                console.log("Contenuto di rawNotes al momento del salvataggio:", latestRawNotes.current);
-                const projectData = JSON.stringify({ notes: latestRawNotes.current }, null, 2);
-                console.log("Dati da salvare preparati. Chiamata a api.saveFile...");
-                try {
-                    const result = await api.saveFile(projectData);
-                    console.log("Risultato salvataggio:", result);
-                } catch (err) {
-                    console.error("Errore durante il salvataggio:", err);
-                }
-            } else if (action === 'open') {
-                console.log("Comando di apertura ricevuto.");
-                setRawNotes([]);
-                try {
-                    console.log("Tentativo di parsare i dati:", payload?.data);
-                    const data = payload?.data;
-                    if (!data) throw new Error("Nessun dato fornito per l'apertura.");
-                    const loadedProject = JSON.parse(data);
-                    if (loadedProject && Array.isArray(loadedProject.notes)) {
-                        setRawNotes(loadedProject.notes);
-                        console.log("Dati note parsati e caricati:", loadedProject.notes);
-                    } else {
-                        throw new Error("Formato dati non valido.");
+    // Listen for native copy events (keyboard) to set the paste marker as well
+    useEffect(() => {
+        const onNativeCopy = (ev: ClipboardEvent) => {
+            try {
+                handleCopy();
+                let marker = null as any;
+                if (pasteCaret) {
+                    marker = { systemIndex: pasteCaret.systemIndex, measureIndex: pasteCaret.measureIndex, beat: pasteCaret.beat, ts: Date.now() };
+                } else if (playheadPosition && layoutData && layoutData.systemsParams) {
+                    const sysParams = layoutData.systemsParams[playheadPosition.systemIndex];
+                    if (sysParams && sysParams.measureIndices && sysParams.startMeasuresX) {
+                        let minDist = Infinity;
+                        let bestIdx = 0;
+                        for (let i = 0; i < sysParams.measureIndices.length; i++) {
+                            const x = sysParams.startMeasuresX[i] ?? 0;
+                            const dist = Math.abs(x - playheadPosition.x);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                bestIdx = i;
+                            }
+                        }
+                        marker = { systemIndex: playheadPosition.systemIndex, measureIndex: sysParams.measureIndices[bestIdx] ?? 0, beat: 1, ts: Date.now() };
                     }
-                } catch (err) {
-                    console.error("Errore durante l'apertura del file:", err);
                 }
-            } else if (action === 'new') {
-                console.log("Comando nuovo progetto ricevuto.");
-                const confirmed = window.confirm("Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.");
-                if (confirmed) {
-                    setRawNotes([]);
-                }
+                if (marker) setPasteMarker(marker);
+            } catch (e) {
+                // ignore
             }
         };
+        window.addEventListener('copy', onNativeCopy);
+        return () => window.removeEventListener('copy', onNativeCopy);
+    }, [handleCopy]);
 
-        api.onMenuAction?.(handler);
+    // Auto-expire pasteMarker after 30s
+    useEffect(() => {
+        if (!pasteMarker) return;
+        const t = window.setTimeout(() => setPasteMarker(null), 30000);
+        return () => window.clearTimeout(t);
+    }, [pasteMarker]);
 
-        // Cleanup: rimuovi listener
-        const removeListener = () => {
-            if (api.removeMenuAction) {
-                api.removeMenuAction(handler);
-            }
-        };
-        return removeListener;
-    }, []);
+    
 
     // ...existing code...
 
@@ -1547,6 +1855,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         return null;
     }, [layoutData, timeSignature]);
 
+    const pasteMarkerPos = useMemo(() => {
+        if (!pasteMarker || !layoutData) return null;
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const absBeat = pasteMarker.measureIndex * beatsPerMeasure + (pasteMarker.beat - 1);
+        const pos = getPlayheadPosForAbsBeat(absBeat);
+        if (!pos) return null;
+        const top = (pos.systemIndex * TOTAL_SYSTEM_HEIGHT) + PLAYHEAD_Y_TOP;
+        return { x: pos.x, y: top };
+    }, [pasteMarker, layoutData, timeSignature, getPlayheadPosForAbsBeat]);
+
     useEffect(() => {
         if (!isPlaying) return;
         if (!audioService.audioContext) return;
@@ -1985,20 +2303,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         // Also set a paste caret at the clicked note's time (standard UX: click target, then Cmd+V).
         const n = rawNotes.find(nn => nn.id === noteId);
-        if (n && Number.isFinite(n.measureIndex) && Number.isFinite(n.beat)) {
-            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-            const absBeat = ((n.measureIndex ?? 0) * beatsPerMeasure) + ((n.beat ?? 1) - 1);
-            playbackCursorAbsBeatRef.current = absBeat;
-
+        if (n && Number.isFinite(n.measureIndex) && Number.isFinite(n.beat) && layoutData) {
+            // Trova il systemIndex corretto per la misura
+            let systemIndex = 0;
+            for (let i = 0; i < layoutData.systemsParams.length; i++) {
+                if (layoutData.systemsParams[i].measureIndices.includes(n.measureIndex)) {
+                    systemIndex = i;
+                    break;
+                }
+            }
+            // Quantizza il beat alla griglia attuale
+            const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
+            const step = Math.max(1e-6, gridStep);
+            const quantizedBeat = Math.round((1 + Math.round((n.beat - 1) / step) * step) * 1e6) / 1e6;
             setPasteCaret({
                 x: 0,
-                systemIndex: 0,
-                measureIndex: n.measureIndex ?? 0,
-                beat: n.beat ?? 1,
+                systemIndex,
+                measureIndex: n.measureIndex,
+                beat: quantizedBeat,
             });
-
-            const pos = getPlayheadPosForAbsBeat(absBeat);
-            if (pos) setPlayheadPosition(pos);
         }
 
         // Compute next selection synchronously so we can decide whether to play the note.
@@ -2038,12 +2361,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     }, [getPlayheadPosForAbsBeat, playNote, rawNotes, selectedNoteIds, timeSignature, violations]);
 
     const pasteClipboardAt = useCallback((targetMeasureIndex: number, targetBeat: number) => {
-        if (!clipboard || clipboard.length === 0) return;
+        const dataToPaste = latestClipboardRef.current;
+        if (!dataToPaste || dataToPaste.length === 0) return;
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const targetAbsBeat = (targetMeasureIndex * beatsPerMeasure) + (targetBeat - 1);
 
-        const srcAbsBeats = clipboard
+        const srcAbsBeats = dataToPaste
             .map(n => {
                 const m = n.measureIndex ?? 0;
                 const b = n.beat ?? 1;
@@ -2062,7 +2386,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             return map.get(id)!;
         };
 
-        const pasted: StaffNote[] = clipboard
+        const pasted: StaffNote[] = dataToPaste
             .map(n => {
                 const m = n.measureIndex ?? 0;
                 const b = n.beat ?? 1;
@@ -2091,7 +2415,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             setRawNotes(prev => [...prev, ...pasted]);
             setSelectedNoteIds(new Set(pasted.map(n => n.id)));
         }
-    }, [clipboard, setRawNotes, setSelectedNoteIds, timeSignature]);
+    }, [setRawNotes, setSelectedNoteIds, timeSignature]);
 
     const getSystemMeasureAtX = useCallback((systemIndex: number, x: number) => {
         const sys = layoutData?.systemsParams?.[systemIndex];
@@ -2149,6 +2473,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         return Number.isFinite(cur as any) ? (cur as number) : 0;
     }, [audioService.audioContext, bpm, timeSignature]);
 
+    // (No external-paste handler)
+
     const toggleDoubleBarlineAtPlayhead = useCallback(() => {
         // Requires a playhead/cursor position so the user has explicit intent.
         if (!playheadPosition) return;
@@ -2195,6 +2521,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const beat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
 
         setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, beat);
+        // Aggiorna sempre pasteCaret con beat quantizzato
+        setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat });
     }, [getCurrentAbsBeatForPlayhead, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion.duration, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
@@ -2219,17 +2547,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
         const step = Math.max(1e-6, gridStep);
-        const beat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
+        const quantizedBeat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
 
         // Set playback cursor + visible playhead at the clicked point.
-        setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, beat);
+        setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, quantizedBeat);
 
-        // Cmd/Ctrl-click on empty staff: set paste caret (without inserting a note).
-        // This enables the common flow: click target location, then Cmd+V.
-        if ((e?.metaKey || e?.ctrlKey) && clipboard && clipboard.length > 0) {
-            setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat });
-            return;
-        }
+        // Aggiorna sempre pasteCaret con beat quantizzato
+        setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat: quantizedBeat });
+
+        // Per compatibilità con i costruttori StaffNote che usano la shorthand "beat"
+        const beat = quantizedBeat;
 
         const targetClef: ClefType = (selectedVoice === 3 || selectedVoice === 4) ? 'bass' : 'treble';
         // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
@@ -4120,6 +4447,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     })()}
                     initialIsMinor={existingContextForMenu ? existingContextForMenu.newIsMinor : isMinorMode}
                 />
+            )}
+            {pasteMarkerPos && (
+                <div style={{ position: 'absolute', left: pasteMarkerPos.x - 8, top: pasteMarkerPos.y - 14, pointerEvents: 'none', zIndex: 9999 }}>
+                    <svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 0 L16 12 L0 12 Z" fill="#06b6d4" opacity="0.95" />
+                    </svg>
+                </div>
             )}
         </div>
     );

@@ -408,7 +408,7 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
                 .filter((file): file is string => file !== null);
             await audioService.playGuitarVoicing(noteAudioFiles);
         } catch (error) {
-            console.error("Error playing guitar voicing:", error);
+            // errore silenziato
         } finally {
             setIsVoicingPlaying(false);
         }

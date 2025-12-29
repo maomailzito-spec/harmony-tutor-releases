@@ -17,8 +17,8 @@ const App: React.FC = () => {
         const audioService = audioServiceRef.current;
         audioService.init().then(() => {
             setIsAudioReady(true);
-        }).catch(err => {
-            console.error("Failed to initialize audio", err);
+        }).catch(() => {
+            // errore silenziato
         });
     }, []);
     

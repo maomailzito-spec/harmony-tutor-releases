@@ -17,7 +17,6 @@ export class AudioService {
             await this.loadInitialSounds();
             resolve();
         } catch (error) {
-            console.error("Error initializing AudioContext:", error);
             reject(error);
         }
     });
@@ -31,7 +30,7 @@ export class AudioService {
           try {
               await this.audioContext.resume();
           } catch (e) {
-              console.error("Could not resume audio context:", e);
+              // errore silenziato
           }
       }
   }
@@ -46,7 +45,7 @@ export class AudioService {
       const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
       this.audioBuffers.set(audioFile, audioBuffer);
     } catch (error) {
-      console.error(`Failed to load sound for ${audioFile}:`, error);
+      // errore silenziato
     }
   }
 
