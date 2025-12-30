@@ -481,7 +481,7 @@ class RenderErrorBoundary extends React.Component<
 }
 
 const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioService, isAudioReady }) => {
-    const [rawNotes, setRawNotes, undoNotes] = useUndoableState<StaffNote[]>([]);
+    const [rawNotes, setRawNotes, undoNotes, redoNotes] = useUndoableState<StaffNote[]>([]);
     // Ref per avere sempre il valore aggiornato di rawNotes
     const latestRawNotes = useRef(rawNotes);
 
@@ -1044,12 +1044,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
 
     // Funzione robusta per gestire tutte le azioni del menu di Electron
+    // Print handler (moved above menu handler to avoid temporal dead zone): opens a print window for the staff container
+    const handlePrint = useCallback(() => {
+        const container = staffContainerRef.current;
+        if (!container) {
+            console.warn('[PRINT] no staff container available');
+            return;
+        }
+        const printWindow = window.open('', '_blank', 'width=1200,height=800');
+        if (!printWindow) {
+            console.warn('[PRINT] unable to open print window (popup blocked?)');
+            return;
+        }
+        const head = document.head.innerHTML;
+        const content = container.innerHTML;
+        printWindow.document.open();
+        printWindow.document.write(`<!doctype html><html><head>${head}<style>body{background:white;margin:0;padding:20px}svg{max-width:100%;height:auto}</style></head><body>${content}</body></html>`);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            try { printWindow.print(); } catch (e) { console.warn('[PRINT] print failed', e); }
+            setTimeout(() => { try { printWindow.close(); } catch (_) {} }, 1000);
+        }, 500);
+    }, [staffContainerRef]);
+
     const handleMenuAction = useCallback(async (action, payload) => {
         const api = (window).electronAPI;
         if (!api) return;
+        console.log('[HANDLE_MENU_ACTION] received action:', action, 'payload:', payload, 'undoExists:', !!undoNotes, 'redoExists:', !!redoNotes);
         // console.log('[HANDLE_MENU_ACTION] action:', action, 'payload:', payload); // decommentare solo per debug
-        if (action === 'edit-command' && payload && payload.command) {
-            const command = payload.command;
+            if ((action === 'edit-command' && payload && payload.command) || action === 'undo' || action === 'redo') {
+
+                // Support both 'edit-command' payloads and role-based 'undo'/'redo' actions
+                const command = (action === 'undo' || action === 'redo') ? action : payload.command;
             // console.log(`[HANDLE_MENU_ACTION] Comando ricevuto: ${command}`); // decommentare solo per debug
             if (command === 'copy') {
                 const currentSelected = latestSelectedNoteIds.current;
@@ -1221,6 +1248,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 }
                 return;
             }
+            if (command === 'undo') {
+                console.log('[HANDLE_MENU_ACTION] invoking undo');
+                try { undoNotes(); } catch (e) { console.warn('[HANDLE_MENU_ACTION] undo failed', e); }
+                return;
+            }
+            if (command === 'redo') {
+                console.log('[HANDLE_MENU_ACTION] invoking redo');
+                try { redoNotes && redoNotes(); } catch (e) { console.warn('[HANDLE_MENU_ACTION] redo failed', e); }
+                return;
+            }
             if (command === 'selectAll') {
                 // Usa latestRawNotes.current per garantire che siano le note aggiornate
                 const allNotes = latestRawNotes.current || [];
@@ -1229,6 +1266,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 setSelectedNoteIds(new Set(allNoteIds));
                 return;
             }
+        }
+        if (action === 'print') {
+            try { handlePrint(); } catch (e) { console.warn('[HANDLE_MENU_ACTION] print failed', e); }
+            return;
         }
         if (action === 'close-project') {
             console.log("Comando chiudi progetto ricevuto.");
@@ -1308,7 +1349,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 setRawNotes([]);
             }
         }
-    }, [setRawNotes, setKeySignatureRoot, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsDotted, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setToolbarGroupVisibility, setIsToolbarCustomizeOpen, setSelectedToolbarGroupId, setMidiOutputs, setSelectedMidiOutput]);
+    }, [setRawNotes, setKeySignatureRoot, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsDotted, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setToolbarGroupVisibility, setIsToolbarCustomizeOpen, setSelectedToolbarGroupId, setMidiOutputs, setSelectedMidiOutput, undoNotes, redoNotes, handlePrint]);
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
@@ -1366,6 +1407,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const t = window.setTimeout(() => setPasteMarker(null), 30000);
         return () => window.clearTimeout(t);
     }, [pasteMarker]);
+
+    // (print handler moved earlier)
 
     
 
@@ -3424,13 +3467,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 return;
             }
 
-            // Cmd/Ctrl+Z: undo
+            // Cmd/Ctrl+Z: undo (Shift+Cmd/Ctrl+Z = redo)
             if (isMod && key === 'z') {
                 e.preventDefault();
                 e.stopPropagation();
-                undoNotes();
-                // Selection may now reference deleted notes; clear defensively.
-                setSelectedNoteIds(new Set());
+                if (e.shiftKey) {
+                    try { redoNotes && redoNotes(); } catch (err) { console.warn('[KEYBOARD] redo failed', err); }
+                } else {
+                    undoNotes();
+                    // Selection may now reference deleted notes; clear defensively.
+                    setSelectedNoteIds(new Set());
+                }
                 return;
             }
 
@@ -3456,6 +3503,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 setSelectedNoteIds(new Set());
                 return;
             }
+
+            
         };
 
         window.addEventListener('keydown', onKeyDown, { capture: true });
@@ -3467,6 +3516,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         setRawNotes,
         rawNotes,
         undoNotes,
+        redoNotes,
         setActiveAccidental,
         keySignature,
         getNotePropertiesFromMidi,

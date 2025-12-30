@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
+let recentFiles = [];
 
 function createMenu() {
   const isMac = process.platform === 'darwin';
@@ -18,6 +19,21 @@ function createMenu() {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'Recent',
+          submenu: (recentFiles.length === 0) ? [ { label: 'Nessun file recente', enabled: false } ] : recentFiles.map(fp => ({
+            label: fp,
+            click: () => {
+              if (!mainWindow) return;
+              try {
+                const data = fs.readFileSync(fp, 'utf-8');
+                mainWindow.webContents.send('menu-action', 'open', { data, filePath: fp });
+              } catch (err) {
+                console.error('Errore apertura file recente:', err);
+              }
+            }
+          }))
+        },
         {
           label: 'Nuovo Progetto',
           accelerator: 'CmdOrCtrl+N',
@@ -46,6 +62,12 @@ function createMenu() {
         },
         { type: 'separator' },
         {
+          label: 'Stampa',
+          accelerator: 'CmdOrCtrl+P',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'print'); }
+        },
+        { type: 'separator' },
+        {
           label: 'Salva',
           accelerator: 'CmdOrCtrl+S',
           click: () => mainWindow && mainWindow.webContents.send('menu-action', 'save')
@@ -54,14 +76,31 @@ function createMenu() {
           label: 'Salva con nome...',
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => mainWindow && mainWindow.webContents.send('menu-action', 'save-as')
+        },
+        { type: 'separator' },
+        {
+          label: 'Chiudi progetto',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => {
+            console.log('[MAIN] Menu: Chiudi progetto cliccato (File menu)');
+            if (mainWindow) mainWindow.webContents.send('menu-action', 'close-project');
+          }
         }
       ]
     },
     {
       label: 'Modifica',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        {
+          label: 'Annulla',
+          accelerator: 'CmdOrCtrl+Z',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'undo'); }
+        },
+        {
+          label: 'Ripeti',
+          accelerator: 'Shift+CmdOrCtrl+Z',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'redo'); }
+        },
         { type: 'separator' },
         {
           label: 'Taglia',
@@ -96,22 +135,7 @@ function createMenu() {
           }
         },
         { type: 'separator' },
-        {
-          label: 'Chiudi progetto',
-          accelerator: 'CmdOrCtrl+W',
-          click: () => {
-            console.log('[MAIN] Menu: Chiudi progetto cliccato');
-            mainWindow && mainWindow.webContents.send('menu-action', 'close-project');
-          }
-        },
-        {
-          label: 'Nuovo progetto',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => {
-            console.log('[MAIN] Menu: Nuovo progetto cliccato');
-            mainWindow && mainWindow.webContents.send('menu-action', 'new-project');
-          }
-        }
+        // (Removed duplicate 'Chiudi progetto' and 'Nuovo progetto' from Edit menu)
       ]
     },
     {
@@ -132,6 +156,18 @@ function createMenu() {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 }
+
+// ipc listener: renderer notifies main of recent files (path)
+ipcMain.on('add-recent', (event, filePath) => {
+  if (!filePath || typeof filePath !== 'string') return;
+  // Move to top, dedupe, limit 10
+  recentFiles = [filePath, ...recentFiles.filter(p => p !== filePath)].slice(0, 10);
+  try {
+    createMenu();
+  } catch (err) {
+    console.error('Errore aggiornamento menu recenti:', err);
+  }
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({

@@ -6,6 +6,7 @@ export function useUndoableState<T>(initialState: T): [
     // FIX: Use imported SetStateAction type.
     (newState: SetStateAction<T>) => void,
     () => void,
+    () => void,
 ] {
     const [history, setHistory] = useState<T[]>([initialState]);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -29,6 +30,12 @@ export function useUndoableState<T>(initialState: T): [
             setCurrentIndex(prevIndex => prevIndex - 1);
         }
     }, [currentIndex]);
-    
-    return [state, setState, undo];
+
+    const redo = useCallback(() => {
+        if (currentIndex < history.length - 1) {
+            setCurrentIndex(prevIndex => prevIndex + 1);
+        }
+    }, [currentIndex, history.length]);
+
+    return [state, setState, undo, redo];
 }
