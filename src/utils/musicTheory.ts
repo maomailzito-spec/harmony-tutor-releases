@@ -975,6 +975,10 @@ export function applyHarmonyRules(
     timeSignature?: TimeSignature
 ): HarmonyAnalysisResult {
     const analyzedNotes = [...notes];
+    // Quick entry log to ensure analysis runs in renderer console
+    try {
+        console.log('[ANALYSIS] applyHarmonyRules called - notes:', analyzedNotes.length, 'key:', keyTonic, 'isMinor:', isMinor);
+    } catch (_) { /* ignore in non-browser contexts */ }
     const violations: RuleViolation[] = [];
     const connections: ErrorConnection[] = [];
 
@@ -1030,6 +1034,21 @@ export function applyHarmonyRules(
         (addViolation as any)._seen = (addViolation as any)._seen || new Set<string>();
         (addViolation as any)._seen.add(key);
         violations.push({ ...v, noteIds: [...new Set(v.noteIds)] });
+    };
+
+    // --- Helpers for passing-note detection ---
+    const getIntervalSemitones = (m1: number, m2: number) => Math.abs((m1 ?? 0) - (m2 ?? 0));
+
+    type ChordEvent = { absBeat: number; measureIndex: number; beat: number; notes: StaffNote[]; byVoice: Map<number, StaffNote> };
+
+    const isNoteInChord = (note: StaffNote | undefined | null, ev: ChordEvent | undefined | null) => {
+        if (!note || !ev || !ev.notes) return false;
+        try {
+            const pcs = ev.notes.filter(n => n && !n.isRest).map(n => mod12(n.midi));
+            return pcs.includes(mod12(note.midi));
+        } catch {
+            return false;
+        }
     };
 
     // ---- Build chord timeline (SCAN-LINE: Include ALL note changes, including sustained and short values) ----
@@ -1168,6 +1187,137 @@ export function applyHarmonyRules(
             return (a.beat ?? 1) - (b.beat ?? 1);
         });
     });
+
+    // -----------------------
+    // Passing-note detector
+    // -----------------------
+    function detectPassingNotes(notesByVoice: Record<Voice, StaffNote[]>, chordEvents: ChordEvent[], beatsPerMeasure: number): void {
+        const voices: Voice[] = [1, 2, 3, 4];
+
+        try {
+            console.log('[ANALYSIS] detectPassingNotes start - voices counts:', Object.fromEntries((Object.keys(notesByVoice) as unknown as Voice[]).map(v=>[v, notesByVoice[v].length])));
+        } catch (_) {}
+
+        const findEventForNote = (note: StaffNote, voice: Voice) => {
+            for (const ev of chordEvents) {
+                try {
+                    const vNote = ev.byVoice.get(voice);
+                    if (vNote && vNote.id === note.id) return ev;
+                    if (ev.notes && ev.notes.find(n => n.id === note.id)) return ev;
+                    // Fallback: match by measureIndex + beat in case short passing notes
+                    const evMeasure = ev.measureIndex ?? 0;
+                    const evBeat = ev.beat ?? 1;
+                    const noteMeasure = note.measureIndex ?? 0;
+                    const noteBeat = note.beat ?? 1;
+                    if (evMeasure === noteMeasure && Math.abs(evBeat - noteBeat) < 1e-6) return ev;
+                } catch (_) { /* ignore */ }
+            }
+            return undefined as ChordEvent | undefined;
+        };
+
+        voices.forEach(v => {
+            const line = notesByVoice[v] || [];
+            for (let j = 1; j < line.length - 1; j++) {
+                const prev = line[j - 1];
+                const cur = line[j];
+                const next = line[j + 1];
+                if (!prev || !cur || !next) continue;
+
+                const s1 = getIntervalSemitones(prev.midi, cur.midi);
+                const s2 = getIntervalSemitones(cur.midi, next.midi);
+                // stepwise motion (<= 2 semitones) and same direction
+                const dir1 = Math.sign(cur.midi - prev.midi);
+                const dir2 = Math.sign(next.midi - cur.midi);
+                if (!(s1 <= 2 && s2 <= 2 && dir1 !== 0 && dir1 === dir2)) continue;
+
+                const prevEv = findEventForNote(prev, v);
+                const curEv = findEventForNote(cur, v);
+                const nextEv = findEventForNote(next, v);
+                if (!prevEv || !curEv || !nextEv) continue;
+
+                // weak beat: not beat 1 (allow small float tolerance)
+                // Use the note's beat if available (more reliable for very short values)
+                const noteBeat = cur.beat ?? (curEv ? curEv.beat : 1);
+                const isStrongBeat = Math.abs((noteBeat ?? 1) - 1) < 1e-6;
+                if (isStrongBeat) continue;
+
+                // harmonic membership: prev and next consonant, cur dissonant
+                const prevConsonant = isNoteInChord(prev, prevEv);
+                const nextConsonant = isNoteInChord(next, nextEv);
+                const curConsonant = isNoteInChord(cur, curEv);
+                // Additionally consider whether the current note is part of the surrounding harmony
+                const curInPrevOrNext = isNoteInChord(cur, prevEv) || isNoteInChord(cur, nextEv);
+
+                // Treat very short notes (e.g., eighths) as passing even if they incidentally form
+                // a seventh with sustained voices (i.e., are present in the vertical pitch set).
+                const durPrev = getDuration(prev);
+                const durCur = getDuration(cur);
+                const durNext = getDuration(next);
+                const isShortNonHarmonic = durCur < Math.min(durPrev, durNext) && durCur <= 0.5;
+
+                // Diagnostic logging for problematic passing-note cases (match the specific B id).
+                const debugTargetIds = new Set([
+                    'aa7659d2-b357-4369-a706-d11ea39b0b31', // B on levare
+                ]);
+                if (debugTargetIds.has(cur.id)) {
+                    try {
+                        const prevDur = durPrev;
+                        const curDur = durCur;
+                        const nextDur = durNext;
+                        const prevEvInfo = prevEv ? { absBeat: prevEv.absBeat, beat: prevEv.beat, measureIndex: prevEv.measureIndex, notes: prevEv.notes.map(n=>n.pitch+'('+n.midi+')') } : null;
+                        const curEvInfo = curEv ? { absBeat: curEv.absBeat, beat: curEv.beat, measureIndex: curEv.measureIndex, notes: curEv.notes.map(n=>n.pitch+'('+n.midi+')') } : null;
+                        const nextEvInfo = nextEv ? { absBeat: nextEv.absBeat, beat: nextEv.beat, measureIndex: nextEv.measureIndex, notes: nextEv.notes.map(n=>n.pitch+'('+n.midi+')') } : null;
+                        console.log('[DEBUG PASSING] prev:', { id: prev.id, pitch: prev.pitch, midi: prev.midi, beat: prev.beat, measure: prev.measureIndex, dur: prevDur, inChord: prevConsonant },
+                            'cur:', { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, measure: cur.measureIndex, dur: curDur, inChord: curConsonant },
+                            'next:', { id: next.id, pitch: next.pitch, midi: next.midi, beat: next.beat, measure: next.measureIndex, dur: nextDur, inChord: nextConsonant },
+                            'events:', { prevEv: prevEvInfo, curEv: curEvInfo, nextEv: nextEvInfo },
+                            'isShortNonHarmonic', isShortNonHarmonic, 'beatsPerMeasure', beatsPerMeasure, 'scanPointsCount', chordEvents.length
+                        );
+                    } catch (err) {
+                        console.warn('[DEBUG PASSING] logging failed', err);
+                    }
+                }
+
+                // Log evaluation for this triplet (concise)
+                try {
+                    const info = {
+                        voice: v,
+                        prev: { id: prev.id, pitch: prev.pitch, midi: prev.midi, beat: prev.beat, dur: getDuration(prev) },
+                        cur: { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, dur: getDuration(cur) },
+                        next: { id: next.id, pitch: next.pitch, midi: next.midi, beat: next.beat, dur: getDuration(next) },
+                        prevConsonant, curConsonant, nextConsonant, isShortNonHarmonic,
+                        prevEv: prevEv ? { absBeat: prevEv.absBeat, beat: prevEv.beat, measureIndex: prevEv.measureIndex, pcs: prevEv.notes.map(n=>mod12(n.midi)) } : null,
+                        curEv: curEv ? { absBeat: curEv.absBeat, beat: curEv.beat, measureIndex: curEv.measureIndex, pcs: curEv.notes.map(n=>mod12(n.midi)) } : null,
+                        nextEv: nextEv ? { absBeat: nextEv.absBeat, beat: nextEv.beat, measureIndex: nextEv.measureIndex, pcs: nextEv.notes.map(n=>mod12(n.midi)) } : null,
+                        chordEventsLength: chordEvents.length
+                    };
+                    console.log('[ANALYSIS] passing-eval-json', JSON.stringify(info));
+                } catch (err) { console.warn('[ANALYSIS] passing-eval logging failed', err); }
+
+                // Mark as passing if prev and next are consonant and the current note is not part
+                // of the prev/next harmonic collections, or if it is significantly shorter.
+                if (prevConsonant && nextConsonant && ((!curConsonant && !curInPrevOrNext) || isShortNonHarmonic || !curInPrevOrNext)) {
+                    cur.isPassing = true;
+                    try {
+                        console.log('[ANALYSIS] mark-passing', { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, measure: cur.measureIndex, curConsonant, curInPrevOrNext, isShortNonHarmonic });
+                    } catch (_) {}
+                }
+            }
+        });
+    }
+
+    // Before running vertical checks, detect passing notes (non-accented passing tones)
+    try {
+        detectPassingNotes(notesByVoice, chordEvents as ChordEvent[], beatsPerMeas);
+    } catch (err) {
+        // Non critico: detection failure should not break analysis
+        console.warn('[ANALYSIS] detectPassingNotes failed', err);
+    }
+
+    try {
+        const cnt = analyzedNotes.filter(n => (n as any).isPassing).length;
+        console.log('[ANALYSIS] detectPassingNotes result - passing count:', cnt, 'ids:', analyzedNotes.filter(n=> (n as any).isPassing).map(n=>n.id));
+    } catch (_) { }
 
     // =========================================================
     // Vertical checks (within a chord)

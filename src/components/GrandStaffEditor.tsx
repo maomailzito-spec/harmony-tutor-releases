@@ -1650,7 +1650,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
 
         // For each system, collect all timeline events that fall within its measures
-        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string }[][] = layoutData.systemsParams.map(() => []);
+        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string; absBeat?: number }[][] = layoutData.systemsParams.map(() => []);
 
 
         // Helper: compute xPosition for a given absBeat in a system
@@ -1717,6 +1717,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 roman,
                 figures,
                 symbol,
+                absBeat: event.absBeat,
             });
         });
 
@@ -4098,6 +4099,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         const systemTriplets = tripletGroupsBySystem[systemIndex] || [];
 
                         const systemHarmonyLabels = (harmonyLabelsBySystem?.[systemIndex] || []);
+                        // Compute which harmony labels should be hidden because a passing note
+                        // originates from that chord (i.e., the passing note's previous chord)
+                        const hideLabelAbsBeats = new Set<number>();
+                        try {
+                            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                            const notesByVoice = new Map<number, StaffNote[]>();
+                            for (const n of layoutData.positionedNotes) {
+                                if (n.isRest) continue;
+                                const v = n.voice || 1;
+                                if (!notesByVoice.has(v)) notesByVoice.set(v, []);
+                                notesByVoice.get(v)!.push(n);
+                            }
+                            for (const [v, arr] of Array.from(notesByVoice.entries())) {
+                                arr.sort((a, b) => {
+                                    const ma = a.measureIndex ?? 0;
+                                    const mb = b.measureIndex ?? 0;
+                                    if (ma !== mb) return ma - mb;
+                                    return (a.beat ?? 1) - (b.beat ?? 1);
+                                });
+                                for (let i = 0; i < arr.length; i++) {
+                                    const cur = arr[i] as any;
+                                    if (!cur.isPassing) continue;
+                                    // hide the label corresponding to the weak-beat event where the passing note sits
+                                    const curAbs = (cur.measureIndex ?? 0) * beatsPerMeasure + ((cur.beat ?? 1) - 1);
+                                    hideLabelAbsBeats.add(curAbs);
+                                }
+                            }
+                        } catch (_) {}
                         const showHarmony = isAnalysisEnabled && systemHarmonyLabels.length > 0;
 
                         return (
@@ -4290,8 +4319,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                                                         const SYMBOL_SHIFT_Y = 6;
                                                                                                                                         const symbolsY = TOP_STAFF_TOP - 18 + SYMBOL_SHIFT_Y;
 
-                                                                    const showRoman = showRomanAnalysis && !!lbl.roman;
-                                                                    const showSymbol = showSymbolAnalysis && !!(lbl as any).symbol;
+                                                                    const showRoman = showRomanAnalysis && !!lbl.roman && !(hideLabelAbsBeats.has((lbl as any).absBeat));
+                                                                    const showSymbol = showSymbolAnalysis && !!(lbl as any).symbol && !(hideLabelAbsBeats.has((lbl as any).absBeat));
 
                                                                     // Keep a consistent left edge reference for both roman and symbols.
                                                                     const romanFont = '700 14px serif';
@@ -4445,6 +4474,160 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         );
                                                                     });
                                                                 })()}
+
+                                                                    {/* Passing-note overlays: horizontal line from previous chord to passing note + 'p' label */}
+                                                                    {(() => {
+                                                                        if (!analyzedNotes || analyzedNotes.length === 0) return null;
+                                                                        const systemNoteIdSet = new Set(systemNotes.map(n => n.id));
+                                                                        const byVoice = new Map<number, typeof analyzedNotes>();
+                                                                        for (const n of analyzedNotes) {
+                                                                            const v = n.voice || 1;
+                                                                            if (!byVoice.has(v)) byVoice.set(v, [] as any);
+                                                                            byVoice.get(v)!.push(n);
+                                                                        }
+
+                                                                        // Sort each voice by measureIndex then beat (fallback to 0)
+                                                                        for (const [v, arr] of Array.from(byVoice.entries())) {
+                                                                            arr.sort((a: any, b: any) => {
+                                                                                const ma = (a.measureIndex ?? 0) * 1000 + (a.beat ?? 0);
+                                                                                const mb = (b.measureIndex ?? 0) * 1000 + (b.beat ?? 0);
+                                                                                return ma - mb;
+                                                                            });
+                                                                        }
+
+                                                                        const results: JSX.Element[] = [];
+
+                                                                        const applyOverlayShift = (p: { x: number; y: number }, clef: ClefType, voice: Voice) => {
+                                                                            if (clef === 'bass') {
+                                                                                return {
+                                                                                    x: p.x + OVERLAY_BASS_X_SHIFT_PX,
+                                                                                    y: p.y + OVERLAY_BASS_Y_SHIFT_PX,
+                                                                                };
+                                                                            }
+                                                                            return {
+                                                                                x: p.x + OVERLAY_TREBLE_X_SHIFT_PX,
+                                                                                y: p.y + OVERLAY_TREBLE_Y_SHIFT_PX + (voice === 2 ? OVERLAY_TREBLE_VOICE2_Y_ADJUST_PX : 0),
+                                                                            };
+                                                                        };
+
+                                                                        for (const [v, arr] of Array.from(byVoice.entries())) {
+                                                                            for (let i = 0; i < arr.length; i++) {
+                                                                                const cur = arr[i] as any;
+                                                                                // Render passing overlay only if the passing note is part of this system
+                                                                                if (!systemNoteIdSet.has(cur.id)) continue;
+                                                                                if (!cur.isPassing) continue;
+                                                                                const prev = arr[i - 1] as any | undefined;
+                                                                                if (!prev) continue;
+
+                                                                                const pPos = notePositions.get(cur.id);
+                                                                                if (!pPos) continue;
+
+                                                                                // Compute previous chord center X. Prefer chordId grouping if present.
+                                                                                let prevCenterX: number | null = null;
+                                                                                if (prev.chordId) {
+                                                                                    const chordNotes = analyzedNotes.filter(n => n.chordId === prev.chordId);
+                                                                                    const xs: number[] = chordNotes.map(n => notePositions.get(n.id)).filter(Boolean).map(pp => (pp as any).x);
+                                                                                    if (xs.length) prevCenterX = xs.reduce((a, b) => a + b, 0) / xs.length;
+                                                                                }
+                                                                                if (prevCenterX === null) {
+                                                                                    // Fallback: same measureIndex/beat
+                                                                                    const sameBeat = analyzedNotes.filter(n => (n.measureIndex === prev.measureIndex) && (n.beat === prev.beat));
+                                                                                    const xs = sameBeat.map(n => notePositions.get(n.id)).filter(Boolean).map(pp => (pp as any).x);
+                                                                                    if (xs.length) prevCenterX = xs.reduce((a, b) => a + b, 0) / xs.length;
+                                                                                }
+                                                                                if (prevCenterX === null) {
+                                                                                    const pp = notePositions.get(prev.id);
+                                                                                    if (pp) prevCenterX = pp.x;
+                                                                                }
+
+                                                                                // More robust: compute previous chord center by matching positionedNotes' start time
+                                                                                try {
+                                                                                    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                                                                                    const prevStart = (prev.measureIndex ?? 0) * beatsPerMeasure + ((prev.beat ?? 1) - 1);
+                                                                                    const sameStartNotes = (layoutData.positionedNotes || []).filter(n => {
+                                                                                        if (n.isRest) return false;
+                                                                                        const nStart = (n.measureIndex ?? 0) * beatsPerMeasure + ((n.beat ?? 1) - 1);
+                                                                                        return Math.abs(nStart - prevStart) < 1e-6;
+                                                                                    });
+                                                                                    if (sameStartNotes.length) {
+                                                                                        const xs = sameStartNotes.map(n => n.xPosition ?? 0).filter(x => Number.isFinite(x));
+                                                                                        if (xs.length) {
+                                                                                            const avg = xs.reduce((a, b) => a + b, 0) / xs.length;
+                                                                                            prevCenterX = avg;
+                                                                                        }
+                                                                                    }
+                                                                                } catch (_) {}
+                                                                                if (prevCenterX === null) continue;
+
+                                                                                const clef = noteClefById.get(cur.id) || 'treble';
+                                                                                const voiceNum = noteVoiceById.get(cur.id) || 1;
+                                                                                const q = applyOverlayShift(pPos, clef, voiceNum as Voice);
+                                                                                    // Ensure the passing-line does not overlap the roman/figures area
+                                                                                    // Prefer anchoring the start of the passing line to the right edge
+                                                                                    // of the roman/figures area (if present). Fall back to prev chord center.
+                                                                                    let startX: number | null = null;
+                                                                                    try {
+                                                                                        const labels = systemHarmonyLabels || [];
+                                                                                        if (labels.length) {
+                                                                                            // find the label closest to prevCenterX
+                                                                                            let best: any = null;
+                                                                                            let bestDist = Infinity;
+                                                                                            for (const lbl of labels) {
+                                                                                                const dx = Math.abs((lbl as any).x - (prevCenterX as number));
+                                                                                                if (dx < bestDist) {
+                                                                                                    bestDist = dx;
+                                                                                                    best = lbl;
+                                                                                                }
+                                                                                            }
+                                                                                            if (best && bestDist <= 60) {
+                                                                                                const RB_SHIFT_X = 25;
+                                                                                                const romanFont = '700 14px serif';
+                                                                                                const refW = measureTextWidth('V', romanFont);
+                                                                                                const paddingAfterRoman = 8;
+                                                                                                const romanText = (best as any).roman || '';
+                                                                                                const romanW = measureTextWidth(romanText, romanFont);
+                                                                                                const baseX = (best as any).x + RB_SHIFT_X - refW;
+                                                                                                startX = baseX + romanW + 6 + paddingAfterRoman;
+                                                                                            }
+                                                                                        }
+                                                                                    } catch (_) { startX = null; }
+
+                                                                                    if (startX === null) startX = prevCenterX;
+
+                                                                                    // Position passing line below the lower staff (under the bass)
+                                                                                    const bassBottomLineY = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + (BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT);
+                                                                                    const PASS_LINE_OFFSET_PX = 52; // distance below the bottom staff (moved down ~40px)
+                                                                                    const lineY = bassBottomLineY + PASS_LINE_OFFSET_PX;
+
+                                                                                    results.push(
+                                                                                        <g key={`passing-${cur.id}`}>
+                                                                                            <line
+                                                                                                x1={startX}
+                                                                                                y1={lineY}
+                                                                                                x2={q.x - 7}
+                                                                                                y2={lineY}
+                                                                                                stroke="#111827"
+                                                                                                strokeWidth={2}
+                                                                                                strokeLinecap="butt"
+                                                                                            />
+                                                                                            <text
+                                                                                                x={q.x} // end of line (x2)
+                                                                                                y={lineY}
+                                                                                                textAnchor="middle"
+                                                                                                dominantBaseline="middle"
+                                                                                                fontSize={12}
+                                                                                                fontWeight={700}
+                                                                                                fill="black"
+                                                                                            >
+                                                                                                p
+                                                                                            </text>
+                                                                                        </g>
+                                                                                    );
+                                                                            }
+                                                                        }
+
+                                                                        return results;
+                                                                    })()}
                               </svg>
                             )}
                           </div>

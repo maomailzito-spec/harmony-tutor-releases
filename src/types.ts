@@ -148,6 +148,7 @@ export type StaffNote = {
   color?: string;
   noteIndex: number;
   isPentatonicNote?: boolean;
+  isPassing?: boolean;
   timestep?: number;
   xPosition?: number;
   duration?: NoteDuration;
