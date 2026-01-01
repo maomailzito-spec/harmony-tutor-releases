@@ -4,6 +4,54 @@ const fs = require('fs');
 
 let mainWindow;
 let recentFiles = [];
+let selectOnlyCurrentVoiceEnabled = false;
+
+function getRecentsStorePath() {
+  // userData is available after app is ready; guard just in case.
+  try {
+    const userData = app.getPath('userData');
+    return path.join(userData, 'recent-files.json');
+  } catch {
+    return null;
+  }
+}
+
+function loadRecentFiles() {
+  const storePath = getRecentsStorePath();
+  if (!storePath) return;
+  try {
+    if (!fs.existsSync(storePath)) return;
+    const raw = fs.readFileSync(storePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      recentFiles = parsed.filter((p) => typeof p === 'string' && p.trim().length > 0).slice(0, 10);
+    }
+  } catch (err) {
+    console.warn('[MAIN] Failed to load recent files:', err);
+  }
+}
+
+function saveRecentFiles() {
+  const storePath = getRecentsStorePath();
+  if (!storePath) return;
+  try {
+    fs.mkdirSync(path.dirname(storePath), { recursive: true });
+    fs.writeFileSync(storePath, JSON.stringify(recentFiles, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[MAIN] Failed to save recent files:', err);
+  }
+}
+
+function touchRecentFile(filePath) {
+  if (!filePath || typeof filePath !== 'string') return;
+  recentFiles = [filePath, ...recentFiles.filter((p) => p !== filePath)].slice(0, 10);
+  saveRecentFiles();
+  try {
+    createMenu();
+  } catch (err) {
+    console.error('Errore aggiornamento menu recenti:', err);
+  }
+}
 
 function createMenu() {
   const isMac = process.platform === 'darwin';
@@ -27,6 +75,8 @@ function createMenu() {
               if (!mainWindow) return;
               try {
                 const data = fs.readFileSync(fp, 'utf-8');
+                // Move to top (MRU) and persist.
+                touchRecentFile(fp);
                 mainWindow.webContents.send('menu-action', 'open', { data, filePath: fp });
               } catch (err) {
                 console.error('Errore apertura file recente:', err);
@@ -135,6 +185,19 @@ function createMenu() {
           }
         },
         { type: 'separator' },
+        {
+          label: 'Seleziona solo voce corrente (rettangolo)',
+          type: 'checkbox',
+          accelerator: 'Alt+S',
+          checked: !!selectOnlyCurrentVoiceEnabled,
+          click: (menuItem) => {
+            selectOnlyCurrentVoiceEnabled = !!menuItem.checked;
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-action', 'set-select-only-voice', { enabled: selectOnlyCurrentVoiceEnabled });
+            }
+          }
+        },
+        { type: 'separator' },
         // (Removed duplicate 'Chiudi progetto' and 'Nuovo progetto' from Edit menu)
       ]
     },
@@ -159,14 +222,7 @@ function createMenu() {
 
 // ipc listener: renderer notifies main of recent files (path)
 ipcMain.on('add-recent', (event, filePath) => {
-  if (!filePath || typeof filePath !== 'string') return;
-  // Move to top, dedupe, limit 10
-  recentFiles = [filePath, ...recentFiles.filter(p => p !== filePath)].slice(0, 10);
-  try {
-    createMenu();
-  } catch (err) {
-    console.error('Errore aggiornamento menu recenti:', err);
-  }
+  touchRecentFile(filePath);
 });
 
 function createWindow() {
@@ -216,6 +272,7 @@ ipcMain.handle('save-file-dialog', async (event, content) => {
 });
 
 app.whenReady().then(() => {
+  loadRecentFiles();
   createWindow();
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

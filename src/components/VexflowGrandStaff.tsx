@@ -17,6 +17,7 @@ interface VexflowGrandStaffProps {
   onStaffMouseDown?: (e: MouseEvent, svg: SVGSVGElement) => void;
   onBarlineRightClick?: (barlineId: string, e: MouseEvent) => void;
   ghostNote?: StaffNote | null;
+  onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
 }
 
 const DEFAULT_WIDTH = 900;
@@ -141,8 +142,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onStaffMouseDown,
   onBarlineRightClick,
   ghostNote,
+  onNoteHitPoints,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const noteHitPointsRef = useRef<Array<{ id: string; x: number; y: number; isGhost: boolean }>>([]);
+  const lastAltPickRef = useRef<{
+    x: number;
+    y: number;
+    ids: string[];
+    index: number;
+    ts: number;
+  } | null>(null);
 
   // Keep latest callbacks in refs so DOM listeners don't get torn down
   // on every React re-render (important for mousedown->mouseup gestures).
@@ -241,6 +251,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const trebleNotes = allNotes.filter(n => (n.clef || 'treble') === 'treble');
       const bassNotes = allNotes.filter(n => n.clef === 'bass');
 
+      const hitPoints: Array<{ id: string; x: number; y: number; isGhost: boolean }> = [];
+
       const drawNotesAtX = (
         staffNotes: StaffNote[],
         stave: Stave,
@@ -274,12 +286,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             // Solo se voci adiacenti e distanza di seconda
             if (Math.abs((n1.voice ?? 0) - (n2.voice ?? 0)) === 1 && Math.abs(n1.position - n2.position) === 1) {
               // S/A (1/2): Soprano (1, up) a sinistra, Alto (2, down) a destra
+              // A/T (2/3): Tenore (3, up) a sinistra, Alto (2, down) a destra (quando condividono lo stesso rigo)
               // T/B (3/4): Tenore (3, up) a sinistra, Basso (4, down) a destra
-              if ((n1.voice === 1 && n2.voice === 2) || (n1.voice === 3 && n2.voice === 4)) {
+              if ((n1.voice === 1 && n2.voice === 2) || (n1.voice === 2 && n2.voice === 3) || (n1.voice === 3 && n2.voice === 4)) {
                 // n1 (up) a sinistra, n2 (down) a destra
                 offsetMap.set(n1.id, -offset);
                 offsetMap.set(n2.id, offset);
-              } else if ((n1.voice === 2 && n2.voice === 1) || (n1.voice === 4 && n2.voice === 3)) {
+              } else if ((n1.voice === 2 && n2.voice === 1) || (n1.voice === 3 && n2.voice === 2) || (n1.voice === 4 && n2.voice === 3)) {
                 // n2 (up) a sinistra, n1 (down) a destra
                 offsetMap.set(n2.id, -offset);
                 offsetMap.set(n1.id, offset);
@@ -501,6 +514,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             }
           }
 
+          // Store hit point for proximity selection.
+          // Use vfNote Y coordinates when available; otherwise fall back to mid-line.
+          try {
+            const ys: number[] | undefined = (vfNote as any).getYs?.();
+            const yHit = (ys && ys.length > 0)
+              ? (ys.reduce((a, b) => a + b, 0) / ys.length)
+              : stave.getYForLine(2);
+            const absX = (n.xPosition ?? (stave.getNoteStartX() + 10)) + (((vfNote as any).x_shift ?? 0) as number);
+            hitPoints.push({ id: n.id, x: absX, y: yHit, isGhost: n.id === '__ghost__' });
+          } catch {
+            // ignore
+          }
+
           if (didDraw && n.isDotted && group) {
             try {
               const svgNS = 'http://www.w3.org/2000/svg';
@@ -624,10 +650,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
       };
 
+      // Draw (and collect hit points) for both staves.
       drawNotesAtX(trebleNotes, treble, 'treble');
       drawNotesAtX(bassNotes, bass, 'bass');
 
+      noteHitPointsRef.current = hitPoints;
+      onNoteHitPoints?.(hitPoints);
+
       // No per-note DOM wiring here: we handle clicks via the global SVG handler below
+    } else {
+      noteHitPointsRef.current = [];
+      onNoteHitPoints?.([]);
     }
   }, [notes, timeSignature, keySignature, barlines, width, height, selectedNoteIds, ghostNote]);
 
@@ -730,11 +763,65 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const { x, y } = clientToSvgCoords(svg, e);
       const { noteId: upNoteId, isGhost: upIsGhost } = getTargetNoteInfo(e.target);
 
-      if (down.downNoteId && down.downNoteId === upNoteId && !down.downIsGhost && !upIsGhost) {
-        onNoteClickRef.current?.(down.downNoteId, e);
-      } else {
-        onStaffClickRef.current?.(x, y, e);
+      // Prefer the note we started the click on (mousedown), even if mouseup lands
+      // on an untagged element (e.g., a Beam path). Fall back to the mouseup target.
+      const chosenNoteId = (down.downNoteId && !down.downIsGhost)
+        ? down.downNoteId
+        : ((upNoteId && !upIsGhost) ? upNoteId : null);
+
+      if (chosenNoteId) {
+        onNoteClickRef.current?.(chosenNoteId, e);
+        return;
       }
+
+      // If the DOM target wasn't a note (beams/ledger lines/background), try a proximity pick.
+      // This makes selection easier when notes overlap or are hard to click precisely.
+      const HIT_RADIUS_PX = 22;
+      const candidates: Array<{ id: string; d2: number; dx: number; dy: number }> = [];
+      for (const p of noteHitPointsRef.current) {
+        if (p.isGhost) continue;
+        const dx = p.x - x;
+        const dy = p.y - y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 <= HIT_RADIUS_PX * HIT_RADIUS_PX) {
+          candidates.push({ id: p.id, d2, dx, dy });
+        }
+      }
+
+      // Strongly prefer candidates close to the click Y to avoid accidentally grabbing
+      // a different voice above/below when X positions are close.
+      const Y_BAND_PX = 10;
+      const preferred = candidates.filter(c => Math.abs(c.dy) <= Y_BAND_PX);
+      const pool = preferred.length > 0 ? preferred : candidates;
+
+      pool.sort((a, b) => a.d2 - b.d2);
+
+      if (pool.length > 0) {
+        // Option/Alt+Click cycles through overlapping candidates.
+        if (e.altKey && pool.length > 1) {
+          const now = Date.now();
+          const prev = lastAltPickRef.current;
+          const sameSpot = !!prev && Math.hypot(prev.x - x, prev.y - y) <= 8 && (now - prev.ts) <= 2000;
+
+          const ids = pool.map(c => c.id);
+          let index = 0;
+          if (sameSpot && prev && prev.ids.join('|') === ids.join('|')) {
+            index = (prev.index + 1) % ids.length;
+          }
+
+          lastAltPickRef.current = { x, y, ids, index, ts: now };
+          onNoteClickRef.current?.(ids[index], e);
+          return;
+        }
+
+        // Default: pick the closest candidate.
+        onNoteClickRef.current?.(pool[0].id, e);
+        return;
+      }
+
+      // Option/Alt+Click: selection-only gesture (do not trigger insertion).
+      if (e.altKey) return;
+      onStaffClickRef.current?.(x, y, e);
     };
 
     const onMouseDown = (e: MouseEvent) => {
@@ -787,8 +874,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       if (!moveCb) return;
 
       const { tagged, isGhost } = getTargetNoteInfo(e.target);
-      // Allow moving when hovering ghost; block when hovering real note.
-      if (tagged && !isGhost) return;
+      // Allow moving when hovering ghost.
+      // When *not* dragging, block when hovering a real note (prevents ghost placement jitter).
+      // When dragging (marquee selection), keep updating the rectangle even over notes.
+      if (tagged && !isGhost && !(down && down.moved)) return;
 
       const { x, y } = clientToSvgCoords(svg, e);
       moveCb(x, y);

@@ -633,6 +633,54 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
     return bestMatch;
 }
 
+// Return detailed candidate list for debugging/inspection.
+export function identifyChordCandidates(notes: StaffNote[]) {
+    if (!notes || notes.length < 2) return [];
+    const validNotes = notes.filter(n => !n.isRest);
+    if (validNotes.length < 2) return [];
+
+    const uniqueNotes = [...new Map(validNotes.map(n => [n.noteIndex, n])).values()];
+    const uniquePitches = uniqueNotes.map(n => n.noteIndex);
+    const bassNote = [...validNotes].sort((a, b) => a.midi - b.midi)[0];
+
+    const allCandidates: { 
+        root: StaffNote; 
+        type: string; 
+        intervals: Set<number>; 
+        priority: number;
+        matchType: MatchType;
+        score: number; 
+    }[] = [];
+
+    const standardCandidates = findStandardCandidates(uniqueNotes, uniquePitches);
+    standardCandidates.forEach(c => allCandidates.push({ ...c, score: 0 }));
+
+    for (const candidate of allCandidates) {
+        let score = 0;
+        if (candidate.matchType === 'exact') score += 20;
+        else if (candidate.matchType === 'no_fifth') score += 10;
+        score += (CHORD_CHECK_ORDER.length - candidate.priority);
+        if (candidate.root.noteIndex === bassNote.noteIndex) score += 5;
+        candidate.score = score;
+    }
+
+    allCandidates.sort((a, b) => b.score - a.score);
+    return allCandidates;
+}
+
+export function calculateRomanFromChordInfo(
+    chordInfo: { root: StaffNote; type: string },
+    keySignatureRoot: string,
+    isMinorMode: boolean
+): string | null {
+    try {
+        const keyTonicIndex = noteNameToIndex[keySignatureRoot];
+        if (keyTonicIndex === undefined) return null;
+        const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode };
+        return calculateRomanNumeral(chordInfo, keyInfo);
+    } catch (_) { return null; }
+}
+
 
 
 const CHORD_TYPE_TO_SYMBOL: Partial<Record<ChordType, string>> = {
@@ -759,6 +807,32 @@ function getFiguredBass(
     return [];
 }
 
+function getVerticalFiguresFromNotes(notes: StaffNote[]): string[] {
+    try {
+        const sounding = (notes || []).filter(n => n && !n.isRest && typeof n.pitch === 'string' && typeof n.octave === 'number');
+        if (sounding.length < 2) return [];
+
+        const bass = [...sounding].sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0))[0];
+        if (!bass || typeof bass.pitch !== 'string' || typeof bass.octave !== 'number') return [];
+        const bassPos = getNotePosition(bass.pitch, bass.octave);
+
+        const figures = new Set<number>();
+        for (const n of sounding) {
+            if (n.id === bass.id) continue;
+            const pos = getNotePosition(n.pitch, n.octave);
+            let num = (pos - bassPos) + 1;
+            while (num <= 0) num += 7;
+            while (num > 13) num -= 7;
+            if (num === 1 || num === 8) continue;
+            figures.add(num);
+        }
+
+        return [...figures].sort((a, b) => a - b).map(String);
+    } catch {
+        return [];
+    }
+}
+
 function calculateRomanNumeral(
     chordInfo: { root: StaffNote; type: string },
     keyInfo: { tonicIndex: number; isMinor: boolean }
@@ -842,8 +916,14 @@ export function getRomanAnalysis(
     const baseRomanSymbol = calculateRomanNumeral(chordInfo, keyInfo);
 
     let figures: string[] = [];
-    if (chordInfo.type === BuiltInChords.Sus4) figures = ['5', '4'];
-    else if (chordInfo.type === BuiltInChords.Sus2) figures = ['5', '2'];
+    if (chordInfo.type === BuiltInChords.Sus4 || chordInfo.type === BuiltInChords.Sus2) {
+        // For sus chords, prefer the actual vertical interval content (e.g. V7sus4 should
+        // show 4/5/7 rather than losing 7ths by hardcoding 5-4 / 5-2).
+        figures = getVerticalFiguresFromNotes(chord);
+        if (!figures || figures.length === 0) {
+            figures = chordInfo.type === BuiltInChords.Sus4 ? ['5', '4'] : ['5', '2'];
+        }
+    }
     else if (chordInfo.type === BuiltInChords.Add9) {
         const triadFigures = getFiguredBass(chord, { ...chordInfo, type: BuiltInChords.Major });
         figures = [...triadFigures, '9'];
@@ -977,11 +1057,13 @@ export function applyHarmonyRules(
     analysisContexts: AnalysisContext[],
     timeSignature?: TimeSignature
 ): HarmonyAnalysisResult {
+    const DEBUG_ANALYSIS = false;
+    const debugLog = (...args: any[]) => {
+        if (!DEBUG_ANALYSIS) return;
+        try { console.log(...args); } catch (_) {}
+    };
     const analyzedNotes = [...notes];
-    // Quick entry log to ensure analysis runs in renderer console
-    try {
-        console.log('[ANALYSIS] applyHarmonyRules called - notes:', analyzedNotes.length, 'key:', keyTonic, 'isMinor:', isMinor);
-    } catch (_) { /* ignore in non-browser contexts */ }
+    debugLog('[ANALYSIS] applyHarmonyRules called - notes:', analyzedNotes.length, 'key:', keyTonic, 'isMinor:', isMinor);
     const violations: RuleViolation[] = [];
     const connections: ErrorConnection[] = [];
 
@@ -1197,9 +1279,7 @@ export function applyHarmonyRules(
     function detectPassingNotes(notesByVoice: Record<Voice, StaffNote[]>, chordEvents: ChordEvent[], beatsPerMeasure: number): void {
         const voices: Voice[] = [1, 2, 3, 4];
 
-        try {
-            console.log('[ANALYSIS] detectPassingNotes start - voices counts:', Object.fromEntries((Object.keys(notesByVoice) as unknown as Voice[]).map(v=>[v, notesByVoice[v].length])));
-        } catch (_) {}
+        debugLog('[ANALYSIS] detectPassingNotes start - voices counts:', Object.fromEntries((Object.keys(notesByVoice) as unknown as Voice[]).map(v=>[v, notesByVoice[v].length])));
 
         const findEventForNote = (note: StaffNote, voice: Voice) => {
             for (const ev of chordEvents) {
@@ -1272,40 +1352,44 @@ export function applyHarmonyRules(
                         const prevEvInfo = prevEv ? { absBeat: prevEv.absBeat, beat: prevEv.beat, measureIndex: prevEv.measureIndex, notes: prevEv.notes.map(n=>n.pitch+'('+n.midi+')') } : null;
                         const curEvInfo = curEv ? { absBeat: curEv.absBeat, beat: curEv.beat, measureIndex: curEv.measureIndex, notes: curEv.notes.map(n=>n.pitch+'('+n.midi+')') } : null;
                         const nextEvInfo = nextEv ? { absBeat: nextEv.absBeat, beat: nextEv.beat, measureIndex: nextEv.measureIndex, notes: nextEv.notes.map(n=>n.pitch+'('+n.midi+')') } : null;
-                        console.log('[DEBUG PASSING] prev:', { id: prev.id, pitch: prev.pitch, midi: prev.midi, beat: prev.beat, measure: prev.measureIndex, dur: prevDur, inChord: prevConsonant },
-                            'cur:', { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, measure: cur.measureIndex, dur: curDur, inChord: curConsonant },
-                            'next:', { id: next.id, pitch: next.pitch, midi: next.midi, beat: next.beat, measure: next.measureIndex, dur: nextDur, inChord: nextConsonant },
-                            'events:', { prevEv: prevEvInfo, curEv: curEvInfo, nextEv: nextEvInfo },
-                            'isShortNonHarmonic', isShortNonHarmonic, 'beatsPerMeasure', beatsPerMeasure, 'scanPointsCount', chordEvents.length
-                        );
+                        if (DEBUG_ANALYSIS) {
+                            debugLog('[DEBUG PASSING] prev:', { id: prev.id, pitch: prev.pitch, midi: prev.midi, beat: prev.beat, measure: prev.measureIndex, dur: prevDur, inChord: prevConsonant },
+                                'cur:', { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, measure: cur.measureIndex, dur: curDur, inChord: curConsonant },
+                                'next:', { id: next.id, pitch: next.pitch, midi: next.midi, beat: next.beat, measure: next.measureIndex, dur: nextDur, inChord: nextConsonant },
+                                'events:', { prevEv: prevEvInfo, curEv: curEvInfo, nextEv: nextEvInfo },
+                                'isShortNonHarmonic', isShortNonHarmonic, 'beatsPerMeasure', beatsPerMeasure, 'scanPointsCount', chordEvents.length
+                            );
+                        }
                     } catch (err) {
                         console.warn('[DEBUG PASSING] logging failed', err);
                     }
                 }
 
-                // Log evaluation for this triplet (concise)
-                try {
-                    const info = {
-                        voice: v,
-                        prev: { id: prev.id, pitch: prev.pitch, midi: prev.midi, beat: prev.beat, dur: getDuration(prev) },
-                        cur: { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, dur: getDuration(cur) },
-                        next: { id: next.id, pitch: next.pitch, midi: next.midi, beat: next.beat, dur: getDuration(next) },
-                        prevConsonant, curConsonant, nextConsonant, isShortNonHarmonic,
-                        prevEv: prevEv ? { absBeat: prevEv.absBeat, beat: prevEv.beat, measureIndex: prevEv.measureIndex, pcs: prevEv.notes.map(n=>mod12(n.midi)) } : null,
-                        curEv: curEv ? { absBeat: curEv.absBeat, beat: curEv.beat, measureIndex: curEv.measureIndex, pcs: curEv.notes.map(n=>mod12(n.midi)) } : null,
-                        nextEv: nextEv ? { absBeat: nextEv.absBeat, beat: nextEv.beat, measureIndex: nextEv.measureIndex, pcs: nextEv.notes.map(n=>mod12(n.midi)) } : null,
-                        chordEventsLength: chordEvents.length
-                    };
-                    console.log('[ANALYSIS] passing-eval-json', JSON.stringify(info));
-                } catch (err) { console.warn('[ANALYSIS] passing-eval logging failed', err); }
+                // Optional: verbose per-triplet logging (disabled by default)
+                if (DEBUG_ANALYSIS) {
+                    try {
+                        const info = {
+                            voice: v,
+                            prev: { id: prev.id, pitch: prev.pitch, midi: prev.midi, beat: prev.beat, dur: getDuration(prev) },
+                            cur: { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, dur: getDuration(cur) },
+                            next: { id: next.id, pitch: next.pitch, midi: next.midi, beat: next.beat, dur: getDuration(next) },
+                            prevConsonant, curConsonant, nextConsonant, isShortNonHarmonic,
+                            prevEv: prevEv ? { absBeat: prevEv.absBeat, beat: prevEv.beat, measureIndex: prevEv.measureIndex, pcs: prevEv.notes.map(n=>mod12(n.midi)) } : null,
+                            curEv: curEv ? { absBeat: curEv.absBeat, beat: curEv.beat, measureIndex: curEv.measureIndex, pcs: curEv.notes.map(n=>mod12(n.midi)) } : null,
+                            nextEv: nextEv ? { absBeat: nextEv.absBeat, beat: nextEv.beat, measureIndex: nextEv.measureIndex, pcs: nextEv.notes.map(n=>mod12(n.midi)) } : null,
+                            chordEventsLength: chordEvents.length
+                        };
+                        debugLog('[ANALYSIS] passing-eval-json', JSON.stringify(info));
+                    } catch (err) {
+                        console.warn('[ANALYSIS] passing-eval logging failed', err);
+                    }
+                }
 
                 // Mark as passing if prev and next are consonant and the current note is not part
                 // of the prev/next harmonic collections, or if it is significantly shorter.
                 if (prevConsonant && nextConsonant && ((!curConsonant && !curInPrevOrNext) || isShortNonHarmonic || !curInPrevOrNext)) {
                     cur.isPassing = true;
-                    try {
-                        console.log('[ANALYSIS] mark-passing', { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, measure: cur.measureIndex, curConsonant, curInPrevOrNext, isShortNonHarmonic });
-                    } catch (_) {}
+                    debugLog('[ANALYSIS] mark-passing', { id: cur.id, pitch: cur.pitch, midi: cur.midi, beat: cur.beat, measure: cur.measureIndex, curConsonant, curInPrevOrNext, isShortNonHarmonic });
                 }
             }
         });
@@ -1315,7 +1399,7 @@ export function applyHarmonyRules(
     // Suspension (ritardo) detector
     // -----------------------
     function detectSuspensions(notesByVoice: Record<Voice, StaffNote[]>, chordEvents: ChordEvent[], beatsPerMeasure: number) {
-        try { console.log('[ANALYSIS] detectSuspensions start'); } catch(_) {}
+        debugLog('[ANALYSIS] detectSuspensions start');
 
         // Build note start/end map (absolute beats)
         const noteSpanMap = new Map<string, { start: number; end: number }>();
@@ -1358,11 +1442,11 @@ export function applyHarmonyRules(
 
                 // Rule 1: Preparation - there must be a note in previous chord equal in pitch to S
                 if ((prep.midi ?? 0) !== (S.midi ?? 0)) {
-                    try { console.log('[ANALYSIS] detectSuspensions skip-prep-mismatch', { voice: v, prepId: prep.id, prepMidi: prep.midi, sId: S.id, sMidi: S.midi, aAbs: a.absBeat, bAbs: b.absBeat }); } catch(_) {}
+                    debugLog('[ANALYSIS] detectSuspensions skip-prep-mismatch', { voice: v, prepId: prep.id, prepMidi: prep.midi, sId: S.id, sMidi: S.midi, aAbs: a.absBeat, bAbs: b.absBeat });
                     continue;
                 }
                 if (!isNoteInChord(prep, a)) {
-                    try { console.log('[ANALYSIS] detectSuspensions skip-prep-not-consonant', { prepId: prep.id, aAbs: a.absBeat }); } catch(_) {}
+                    debugLog('[ANALYSIS] detectSuspensions skip-prep-not-consonant', { prepId: prep.id, aAbs: a.absBeat });
                     continue; // prep must be consonant in previous chord
                 }
 
@@ -1372,23 +1456,41 @@ export function applyHarmonyRules(
                 const tiedOrStartedBefore = (S.id === prep.id) || (sStart < b.absBeat - 1e-6) || (prepEnd > b.absBeat - 1e-6);
                 if (!tiedOrStartedBefore) continue;
 
-                // S must be dissonant with the new chord (notes that start at the downbeat)
+                // S must be dissonant with the new chord at the downbeat.
+                // Use an interval-to-bass test rather than chord-identification membership,
+                // because chord ID can be unstable with missing tones / tied notes and may
+                // cause false suspensions one chord too early.
                 const newNotesAtB = analyzedNotes.filter(n => Math.abs(getNoteStart(n) - b.absBeat) < 1e-6);
-                // Exclude the same continuing/tied note instance from the chord when
-                // testing consonance, so a tied S present in `b.notes` does not
-                // make it appear consonant simply because it's the same sounding id.
-                const chordNotesForConsonance = (b.notes || []).filter((n: StaffNote) => n.id !== S.id);
-                const chordForConsonance = { ...b, notes: chordNotesForConsonance } as ChordEvent;
-                const sConsonantAtB = chordNotesForConsonance.length ? isNoteInChord(S, chordForConsonance) : false;
-                if (sConsonantAtB) {
-                    try { console.log('[ANALYSIS] detectSuspensions skip-s-consonant-at-B', { sId: S.id, bAbs: b.absBeat }); } catch(_) {}
-                    continue; // if S is consonant with new chord it's not a suspension
+                // Important: a true suspension happens when the harmony changes
+                // *under* a held note. If nothing changes in other voices at this
+                // beat, we are likely at the preparation onset (voice-enter) and
+                // should not mark a suspension here.
+                const newNotesOtherVoicesAtB = newNotesAtB.filter(n => (n.voice ?? 1) !== v);
+                if (newNotesOtherVoicesAtB.length === 0) {
+                    debugLog('[ANALYSIS] detectSuspensions skip-no-harmony-change-under-held-note', { voice: v, bAbs: b.absBeat, sId: S.id });
+                    continue;
                 }
+                // Determine bass-at-B excluding S (if possible)
+                const notesAtB = (b.notes || []) as StaffNote[];
+                const otherAtB = notesAtB.filter(n => n.id !== S.id);
+                const bassAtB = (otherAtB.length ? otherAtB : notesAtB)
+                    .slice()
+                    .sort((x, y) => (x.midi ?? 0) - (y.midi ?? 0))[0];
+                if (!bassAtB || typeof bassAtB.midi !== 'number' || typeof S.midi !== 'number') {
+                    continue;
+                }
+
+                const intervalMod12 = mod12((S.midi ?? 0) - (bassAtB.midi ?? 0));
+                // Treat 2nd, 4th, 7th as dissonant against the bass in this context.
+                // NOTE: 6-5 suspensions are common but the 6th is consonant vs the bass,
+                // so we allow 6ths *only* if later checks confirm a true 6-5 resolution.
+                const isConsonantToBass = intervalMod12 === 0 || intervalMod12 === 3 || intervalMod12 === 4 || intervalMod12 === 7 || intervalMod12 === 8 || intervalMod12 === 9;
+                const isPotentialSixthSusp = intervalMod12 === 8 || intervalMod12 === 9;
 
                 // Duration: S should last at least MIN_SUSP_DURATION after the downbeat
                 const sEnd = getNoteEnd(S);
                 if ((sEnd - b.absBeat) < MIN_SUSP_DURATION - 1e-6) {
-                    try { console.log('[ANALYSIS] detectSuspensions skip-short-duration', { sId: S.id, durAfterB: (sEnd - b.absBeat) }); } catch(_) {}
+                    debugLog('[ANALYSIS] detectSuspensions skip-short-duration', { sId: S.id, durAfterB: (sEnd - b.absBeat) });
                     continue;
                 }
 
@@ -1396,7 +1498,7 @@ export function applyHarmonyRules(
                 const line = notesByVoice[v] || [];
                 const idxAfter = line.findIndex(n => getNoteStart(n) > b.absBeat + 1e-6);
                 if (idxAfter === -1) {
-                    try { console.log('[ANALYSIS] detectSuspensions skip-no-candidates-after', { voice: v, bAbs: b.absBeat }); } catch(_) {}
+                    debugLog('[ANALYSIS] detectSuspensions skip-no-candidates-after', { voice: v, bAbs: b.absBeat });
                     continue;
                 }
 
@@ -1418,7 +1520,7 @@ export function applyHarmonyRules(
                     if (candDur <= ORNAMENT_DUR) continue;
                 }
                 if (!resolved) {
-                    try { console.log('[ANALYSIS] detectSuspensions skip-no-resolution', { prepId: prep.id, sId: S.id, searchFrom: b.absBeat, window: MAX_RESOLUTION_WINDOW }); } catch(_) {}
+                    debugLog('[ANALYSIS] detectSuspensions skip-no-resolution', { prepId: prep.id, sId: S.id, searchFrom: b.absBeat, window: MAX_RESOLUTION_WINDOW });
                     continue;
                 }
 
@@ -1431,7 +1533,7 @@ export function applyHarmonyRules(
                 const allowedAsc = isLeading && delta > 0 && isStep;
                 const allowedDesc = delta < 0 && isStep;
                 if (!(allowedAsc || allowedDesc)) {
-                    try { console.log('[ANALYSIS] detectSuspensions skip-direction-or-step', { sId: S.id, resolvedId: resolved.id, delta, isStep, allowedAsc, allowedDesc }); } catch(_) {}
+                    debugLog('[ANALYSIS] detectSuspensions skip-direction-or-step', { sId: S.id, resolvedId: resolved.id, delta, isStep, allowedAsc, allowedDesc });
                     continue;
                 }
 
@@ -1452,15 +1554,43 @@ export function applyHarmonyRules(
                     const fn = ((fromNum - 1) % 7) + 1;
                     const tn = ((toNum - 1) % 7) + 1;
                     if (fn === 4 && tn === 3) displayType = '4-3';
+                    else if (fn === 6 && tn === 5) displayType = '6-5';
                     else if (fn === 7 && tn === 6) displayType = '7-6';
                     else if (fn === 2 && tn === 1 && fromNum > 7) displayType = '9-8';
                     if (!displayType) {
                         const rawInterval = Math.abs(((suspendedNote.midi ?? 0) - (bass.midi ?? 0)));
                         const mod12Int = rawInterval % 12;
                         if (mod12Int === 5) displayType = '4-3';
+                        else if (mod12Int === 8 || mod12Int === 9) displayType = '6-5';
                         else if (mod12Int === 10 || mod12Int === 11) displayType = '7-6';
                         else if (mod12Int === 2 && rawInterval > 12) displayType = '9-8';
                     }
+                }
+
+                // If the note is consonant vs bass at B, only accept it as a suspension
+                // when it matches a true 6-5 pattern and the bass is stable.
+                if (isConsonantToBass) {
+                    if (!(isPotentialSixthSusp && displayType === '6-5')) {
+                        debugLog('[ANALYSIS] detectSuspensions skip-s-consonant-at-B', { sId: S.id, bAbs: b.absBeat, bassId: bassAtB.id, intervalMod12 });
+                        continue;
+                    }
+
+                    // Extra guard for 6-5: require that the bass at the resolution event
+                    // is the same pitch class as the bass at B (avoid misclassifying
+                    // ordinary 6ths in first-inversion chords).
+                    try {
+                        const resStart = getNoteStart(resolved);
+                        const evRes = chordEvents.find(e => Math.abs(e.absBeat - resStart) < 1e-6);
+                        if (evRes && evRes.notes && evRes.notes.length) {
+                            const bassAtRes = evRes.notes.slice().sort((x, y) => (x.midi ?? 0) - (y.midi ?? 0))[0];
+                            if (bassAtRes && typeof bassAtRes.midi === 'number') {
+                                if (mod12(bassAtRes.midi) !== mod12(bassAtB.midi)) {
+                                    debugLog('[ANALYSIS] detectSuspensions skip-6-5-bass-changed', { sId: S.id, bAbs: b.absBeat, resAbs: evRes.absBeat, bassB: mod12(bassAtB.midi), bassRes: mod12(bassAtRes.midi) });
+                                    continue;
+                                }
+                            }
+                        }
+                    } catch (_) {}
                 }
 
                 // All checks passed: mark suspension on the preparatory note (prep)
@@ -1480,23 +1610,25 @@ export function applyHarmonyRules(
                         //    contains the prep (e.g., beat 3) even if the note
                         //    started earlier and was sustained.
                         const eventsBeforeB = (chordEvents || []).filter(e => typeof e.absBeat === 'number' && e.absBeat < b.absBeat - 1e-6);
-                        try {
-                            console.log('[ANALYSIS] detectSuspensions debug eventsBeforeB', { bAbs: b.absBeat, aAbs: a.absBeat, noteStart, events: eventsBeforeB.map(e => ({ absBeat: e.absBeat })) });
-                            eventsBeforeB.forEach(ev => {
-                                try {
-                                    const ids: any = {};
-                                    [1,2,3,4].forEach(vn => { const n = ev.byVoice.get(vn as Voice); if (n) ids[vn] = n.id; });
-                                    console.log('[ANALYSIS] detectSuspensions debug eventByVoice', { evAbs: ev.absBeat, ids });
-                                } catch(_) {}
-                            });
-                        } catch(_) {}
+                        if (DEBUG_ANALYSIS) {
+                            try {
+                                debugLog('[ANALYSIS] detectSuspensions debug eventsBeforeB', { bAbs: b.absBeat, aAbs: a.absBeat, noteStart, events: eventsBeforeB.map(e => ({ absBeat: e.absBeat })) });
+                                eventsBeforeB.forEach(ev => {
+                                    try {
+                                        const ids: any = {};
+                                        [1,2,3,4].forEach(vn => { const n = ev.byVoice.get(vn as Voice); if (n) ids[vn] = n.id; });
+                                        debugLog('[ANALYSIS] detectSuspensions debug eventByVoice', { evAbs: ev.absBeat, ids });
+                                    } catch(_) {}
+                                });
+                            } catch(_) {}
+                        }
                         const matches = eventsBeforeB.filter(ev => {
                             try {
                                 const v = ev.byVoice.get(prep.voice || 1);
                                 return v && v.id === prep.id;
                             } catch (_) { return false; }
                         });
-                        try { console.log('[ANALYSIS] detectSuspensions debug matches', { prepId: prep.id, prepVoice: prep.voice, matchAbs: matches.map(m=>m.absBeat) }); } catch(_) {}
+                        debugLog('[ANALYSIS] detectSuspensions debug matches', { prepId: prep.id, prepVoice: prep.voice, matchAbs: matches.map(m=>m.absBeat) });
                         if (matches.length) {
                             const chosen = matches.reduce((A, B) => (A.absBeat! > B.absBeat! ? A : B));
                             originStart = chosen.absBeat!;
@@ -1533,16 +1665,17 @@ export function applyHarmonyRules(
                         }
                     }
                 } catch (_) {}
-                // Display anchor: use the downbeat event (b.absBeat) so the
-                // suspension label is shown at the preparatory chord event
-                // (user expectation: third beat), not at the earlier note start.
+                // Display anchor: place the suspension at the onset of the dissonance
+                // (event `b`), not at the earlier preparation chord. This keeps the
+                // Roman-numeral interpretation aligned with where the suspension
+                // actually happens.
                 (prep as any).isSuspension = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum };
                 // Clear any passing flags on involved notes
                 if ((prep as any).isPassing) (prep as any).isPassing = false;
                 if ((S as any).isPassing) (S as any).isPassing = false;
                 if ((resolved as any).isPassing) (resolved as any).isPassing = false;
 
-                try { console.log('[ANALYSIS] mark-suspension (strict)', { prepId: prep.id, sId: S.id, resolvedId: resolved.id, originStart, bAbs: b.absBeat }); } catch(_) {}
+                debugLog('[ANALYSIS] mark-suspension (strict)', { prepId: prep.id, sId: S.id, resolvedId: resolved.id, originStart, bAbs: b.absBeat });
 
                 connections.push({ type: 'horizontal', noteId1: prep.id, noteId2: resolved.id, severity: 'exception', ruleId: `S-strict` });
             }
@@ -1564,7 +1697,7 @@ export function applyHarmonyRules(
 
     try {
         const cnt = analyzedNotes.filter(n => (n as any).isPassing).length;
-        console.log('[ANALYSIS] detectPassingNotes result - passing count:', cnt, 'ids:', analyzedNotes.filter(n=> (n as any).isPassing).map(n=>n.id));
+        debugLog('[ANALYSIS] detectPassingNotes result - passing count:', cnt, 'ids:', analyzedNotes.filter(n=> (n as any).isPassing).map(n=>n.id));
     } catch (_) { }
 
     // =========================================================
