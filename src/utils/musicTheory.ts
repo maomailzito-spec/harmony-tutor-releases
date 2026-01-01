@@ -19,7 +19,7 @@ export function getActiveNotesTimeline(
     };
     // Trova tutti i punti temporali in cui succede qualcosa (INIZIO o FINE nota)
     const scanPointsSet = new Set<number>();
-    notes.forEach(n => {
+        notes.forEach(n => { 
         if (n.isRest) return;
         const m = n.measureIndex ?? 0;
         const b = n.beat ?? 1;
@@ -621,7 +621,10 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
 
         score += (CHORD_CHECK_ORDER.length - candidate.priority);
         
-        if (candidate.root.noteIndex === bassNote.noteIndex) score += 0.5;
+        // Strongly prefer candidates where the detected root matches the actual bass note
+        // (this helps correctly identify suspended chords in root position/inversions,
+        // e.g. prefer Gsus over Csus2/G when the bass is G).
+        if (candidate.root.noteIndex === bassNote.noteIndex) score += 5;
         candidate.score = score;
     }
 
@@ -1222,6 +1225,8 @@ export function applyHarmonyRules(
                 const cur = line[j];
                 const next = line[j + 1];
                 if (!prev || !cur || !next) continue;
+                // If any of the triplet notes participate in a suspension, skip passing detection here
+                if ((prev as any).isSuspension || (cur as any).isSuspension || (next as any).isSuspension) continue;
 
                 const s1 = getIntervalSemitones(prev.midi, cur.midi);
                 const s2 = getIntervalSemitones(cur.midi, next.midi);
@@ -1306,11 +1311,254 @@ export function applyHarmonyRules(
         });
     }
 
-    // Before running vertical checks, detect passing notes (non-accented passing tones)
+    // -----------------------
+    // Suspension (ritardo) detector
+    // -----------------------
+    function detectSuspensions(notesByVoice: Record<Voice, StaffNote[]>, chordEvents: ChordEvent[], beatsPerMeasure: number) {
+        try { console.log('[ANALYSIS] detectSuspensions start'); } catch(_) {}
+
+        // Build note start/end map (absolute beats)
+        const noteSpanMap = new Map<string, { start: number; end: number }>();
+        analyzedNotes.forEach(n => {
+            const m = n.measureIndex ?? 0;
+            const b = n.beat ?? 1;
+            const start = (m * beatsPerMeasure) + (b - 1);
+            const dur = getDuration(n);
+            noteSpanMap.set(n.id, { start, end: start + Math.max(dur, 1e-6) });
+        });
+
+        const getNoteStart = (note: StaffNote) => noteSpanMap.get(note.id)?.start ?? (((note.measureIndex ?? 0) * beatsPerMeasure) + ((note.beat ?? 1) - 1));
+        const getNoteEnd = (note: StaffNote) => noteSpanMap.get(note.id)?.end ?? (((note.measureIndex ?? 0) * beatsPerMeasure) + ((note.beat ?? 1) - 1) + getDuration(note));
+
+        const MIN_SUSP_DURATION = 1.0; // beats: S should last at least one beat
+        const MAX_RESOLUTION_WINDOW = 4.0; // beats: search for resolution within this window
+        const ORNAMENT_DUR = 0.5; // notes shorter than this may be ornaments
+
+        for (let i = 0; i < chordEvents.length - 1; i++) {
+            const a = chordEvents[i];
+            const b = chordEvents[i + 1];
+
+            // context tonic/leading for this downbeat
+            const ctx = getContextAtAbsBeat(b.absBeat);
+            const ctxTonicPc = noteNameToIndex[ctx.tonic] ?? tonicPc;
+            const ctxLeadingPc = mod12(ctxTonicPc - 1);
+
+            for (const v of [1,2,3,4] as Voice[]) {
+                const prep = a.byVoice.get(v);
+                if (!prep) continue; // no preparatory note in previous chord
+
+                // find the sounding note at the downbeat in this voice (S)
+                const sounders = analyzedNotes.filter(n => (n.voice ?? 1) === v).filter(n => {
+                    const s = getNoteStart(n);
+                    const e = getNoteEnd(n);
+                    return s <= b.absBeat + 1e-6 && e > b.absBeat + 1e-6;
+                });
+                if (!sounders.length) continue;
+                const S = sounders[0];
+
+                // Rule 1: Preparation - there must be a note in previous chord equal in pitch to S
+                if ((prep.midi ?? 0) !== (S.midi ?? 0)) {
+                    try { console.log('[ANALYSIS] detectSuspensions skip-prep-mismatch', { voice: v, prepId: prep.id, prepMidi: prep.midi, sId: S.id, sMidi: S.midi, aAbs: a.absBeat, bAbs: b.absBeat }); } catch(_) {}
+                    continue;
+                }
+                if (!isNoteInChord(prep, a)) {
+                    try { console.log('[ANALYSIS] detectSuspensions skip-prep-not-consonant', { prepId: prep.id, aAbs: a.absBeat }); } catch(_) {}
+                    continue; // prep must be consonant in previous chord
+                }
+
+                // Rule 2: S must start before or at the downbeat (tied or began before change)
+                const sStart = getNoteStart(S);
+                const prepEnd = getNoteEnd(prep);
+                const tiedOrStartedBefore = (S.id === prep.id) || (sStart < b.absBeat - 1e-6) || (prepEnd > b.absBeat - 1e-6);
+                if (!tiedOrStartedBefore) continue;
+
+                // S must be dissonant with the new chord (notes that start at the downbeat)
+                const newNotesAtB = analyzedNotes.filter(n => Math.abs(getNoteStart(n) - b.absBeat) < 1e-6);
+                // Exclude the same continuing/tied note instance from the chord when
+                // testing consonance, so a tied S present in `b.notes` does not
+                // make it appear consonant simply because it's the same sounding id.
+                const chordNotesForConsonance = (b.notes || []).filter((n: StaffNote) => n.id !== S.id);
+                const chordForConsonance = { ...b, notes: chordNotesForConsonance } as ChordEvent;
+                const sConsonantAtB = chordNotesForConsonance.length ? isNoteInChord(S, chordForConsonance) : false;
+                if (sConsonantAtB) {
+                    try { console.log('[ANALYSIS] detectSuspensions skip-s-consonant-at-B', { sId: S.id, bAbs: b.absBeat }); } catch(_) {}
+                    continue; // if S is consonant with new chord it's not a suspension
+                }
+
+                // Duration: S should last at least MIN_SUSP_DURATION after the downbeat
+                const sEnd = getNoteEnd(S);
+                if ((sEnd - b.absBeat) < MIN_SUSP_DURATION - 1e-6) {
+                    try { console.log('[ANALYSIS] detectSuspensions skip-short-duration', { sId: S.id, durAfterB: (sEnd - b.absBeat) }); } catch(_) {}
+                    continue;
+                }
+
+                // Find resolution R: first subsequent note in same voice that is consonant
+                const line = notesByVoice[v] || [];
+                const idxAfter = line.findIndex(n => getNoteStart(n) > b.absBeat + 1e-6);
+                if (idxAfter === -1) {
+                    try { console.log('[ANALYSIS] detectSuspensions skip-no-candidates-after', { voice: v, bAbs: b.absBeat }); } catch(_) {}
+                    continue;
+                }
+
+                let resolved: StaffNote | null = null;
+                let resolvedIdx = -1;
+                for (let k = idxAfter; k < line.length; k++) {
+                    const cand = line[k];
+                    const candStart = getNoteStart(cand);
+                    if (candStart - b.absBeat > MAX_RESOLUTION_WINDOW) break;
+                    // allow ornamentals (short notes) between S and a true resolution
+                    const candDur = getNoteEnd(cand) - candStart;
+                    const candConsonant = isNoteInChord(cand, chordEvents.find(e=>Math.abs(e.absBeat - candStart) < 1e-6) || null);
+                    if (candConsonant) {
+                        resolved = cand;
+                        resolvedIdx = k;
+                        break;
+                    }
+                    // otherwise skip ornaments (short) and continue
+                    if (candDur <= ORNAMENT_DUR) continue;
+                }
+                if (!resolved) {
+                    try { console.log('[ANALYSIS] detectSuspensions skip-no-resolution', { prepId: prep.id, sId: S.id, searchFrom: b.absBeat, window: MAX_RESOLUTION_WINDOW }); } catch(_) {}
+                    continue;
+                }
+
+                // Direction & stepwise checks: resolution should be stepwise (<=2 semitones)
+                const sMidiAtDown = S.midi ?? 0;
+                const rMidi = resolved.midi ?? 0;
+                const delta = rMidi - sMidiAtDown;
+                const isStep = Math.abs(delta) <= 2;
+                const isLeading = (sMidiAtDown % 12) === ctxLeadingPc;
+                const allowedAsc = isLeading && delta > 0 && isStep;
+                const allowedDesc = delta < 0 && isStep;
+                if (!(allowedAsc || allowedDesc)) {
+                    try { console.log('[ANALYSIS] detectSuspensions skip-direction-or-step', { sId: S.id, resolvedId: resolved.id, delta, isStep, allowedAsc, allowedDesc }); } catch(_) {}
+                    continue;
+                }
+
+                // Compute a display type (4-3,7-6,9-8) when possible
+                const getDiatonicPosition = (n: StaffNote) => {
+                    try { return getNotePosition(n.pitch, n.octave); } catch(_) { return 0; }
+                };
+                const suspendedNote = prep;
+                const suspendedPos = getDiatonicPosition(suspendedNote);
+                const bass = (b.notes || []).slice().sort((x,y) => (x.midi ?? 0) - (y.midi ?? 0))[0];
+                let displayType: string | null = null;
+                let fromNum = 0; let toNum = 0;
+                if (bass) {
+                    const bassPos = getDiatonicPosition(bass);
+                    fromNum = (suspendedPos - bassPos) + 1;
+                    const resolvedPos = getDiatonicPosition(resolved);
+                    toNum = (resolvedPos - bassPos) + 1;
+                    const fn = ((fromNum - 1) % 7) + 1;
+                    const tn = ((toNum - 1) % 7) + 1;
+                    if (fn === 4 && tn === 3) displayType = '4-3';
+                    else if (fn === 7 && tn === 6) displayType = '7-6';
+                    else if (fn === 2 && tn === 1 && fromNum > 7) displayType = '9-8';
+                    if (!displayType) {
+                        const rawInterval = Math.abs(((suspendedNote.midi ?? 0) - (bass.midi ?? 0)));
+                        const mod12Int = rawInterval % 12;
+                        if (mod12Int === 5) displayType = '4-3';
+                        else if (mod12Int === 10 || mod12Int === 11) displayType = '7-6';
+                        else if (mod12Int === 2 && rawInterval > 12) displayType = '9-8';
+                    }
+                }
+
+                // All checks passed: mark suspension on the preparatory note (prep)
+                // Find the timeline event that actually contains the preparatory
+                // note and use its absBeat as the canonical "from" for the
+                // suspension display. This ensures the label is placed next to
+                // the preparatory chord event (e.g., beat 3) rather than an
+                // earlier unrelated event. Fall back to `a.absBeat` or the
+                // note start if necessary.
+                let originStart = a.absBeat;
+                try {
+                    const noteStart = getNoteStart(prep);
+                    if (Number.isFinite(noteStart)) {
+                        // 1) Prefer the most recent chordEvent before the downbeat
+                        //    where this voice explicitly references the preparatory
+                        //    note id. This ensures we anchor to the chord that
+                        //    contains the prep (e.g., beat 3) even if the note
+                        //    started earlier and was sustained.
+                        const eventsBeforeB = (chordEvents || []).filter(e => typeof e.absBeat === 'number' && e.absBeat < b.absBeat - 1e-6);
+                        try {
+                            console.log('[ANALYSIS] detectSuspensions debug eventsBeforeB', { bAbs: b.absBeat, aAbs: a.absBeat, noteStart, events: eventsBeforeB.map(e => ({ absBeat: e.absBeat })) });
+                            eventsBeforeB.forEach(ev => {
+                                try {
+                                    const ids: any = {};
+                                    [1,2,3,4].forEach(vn => { const n = ev.byVoice.get(vn as Voice); if (n) ids[vn] = n.id; });
+                                    console.log('[ANALYSIS] detectSuspensions debug eventByVoice', { evAbs: ev.absBeat, ids });
+                                } catch(_) {}
+                            });
+                        } catch(_) {}
+                        const matches = eventsBeforeB.filter(ev => {
+                            try {
+                                const v = ev.byVoice.get(prep.voice || 1);
+                                return v && v.id === prep.id;
+                            } catch (_) { return false; }
+                        });
+                        try { console.log('[ANALYSIS] detectSuspensions debug matches', { prepId: prep.id, prepVoice: prep.voice, matchAbs: matches.map(m=>m.absBeat) }); } catch(_) {}
+                        if (matches.length) {
+                            const chosen = matches.reduce((A, B) => (A.absBeat! > B.absBeat! ? A : B));
+                            originStart = chosen.absBeat!;
+                        } else {
+                            // Prefer the nearest prior chordEvent to the downbeat B
+                            // (i.e., the latest event with absBeat < b.absBeat). This
+                            // tends to place the suspension label on the most recent
+                            // preparatory chord (e.g., beat 3) even when the prep
+                            // note began earlier.
+                            const priorEvents = (chordEvents || []).filter(e => typeof e.absBeat === 'number' && e.absBeat < b.absBeat - 1e-6);
+                            if (priorEvents.length) {
+                                const nearest = priorEvents.reduce((A, B) => (A.absBeat! > B.absBeat! ? A : B));
+                                originStart = nearest.absBeat!;
+                            } else {
+                                // Fallback to signature-based heuristic
+                                const targetSig = chordSignature(b.notes || []);
+                                const idxB = chordEvents.findIndex(e => Math.abs(e.absBeat - b.absBeat) < 1e-6);
+                                if (idxB >= 0) {
+                                    for (let k = idxB - 1; k >= 0; k--) {
+                                        const ev = chordEvents[k];
+                                        const sig = chordSignature(ev.notes || []);
+                                        if (sig !== targetSig) { originStart = ev.absBeat; break; }
+                                    }
+                                }
+                                // final fallback: last event <= noteStart
+                                if (originStart === a.absBeat) {
+                                    const candidates = (chordEvents || []).filter(e => typeof e.absBeat === 'number' && e.absBeat <= noteStart + 1e-6);
+                                    if (candidates.length) {
+                                        const chosen = candidates.reduce((A, B) => (A.absBeat! > B.absBeat! ? A : B));
+                                        originStart = chosen.absBeat!;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (_) {}
+                // Display anchor: use the downbeat event (b.absBeat) so the
+                // suspension label is shown at the preparatory chord event
+                // (user expectation: third beat), not at the earlier note start.
+                (prep as any).isSuspension = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum };
+                // Clear any passing flags on involved notes
+                if ((prep as any).isPassing) (prep as any).isPassing = false;
+                if ((S as any).isPassing) (S as any).isPassing = false;
+                if ((resolved as any).isPassing) (resolved as any).isPassing = false;
+
+                try { console.log('[ANALYSIS] mark-suspension (strict)', { prepId: prep.id, sId: S.id, resolvedId: resolved.id, originStart, bAbs: b.absBeat }); } catch(_) {}
+
+                connections.push({ type: 'horizontal', noteId1: prep.id, noteId2: resolved.id, severity: 'exception', ruleId: `S-strict` });
+            }
+        }
+    }
+
+    // Run suspension detection first, then passing-note detection (passing should not override suspensions)
+    try {
+        detectSuspensions(notesByVoice, chordEvents as ChordEvent[], beatsPerMeas);
+    } catch (err) {
+        console.warn('[ANALYSIS] detectSuspensions failed', err);
+    }
+
     try {
         detectPassingNotes(notesByVoice, chordEvents as ChordEvent[], beatsPerMeas);
     } catch (err) {
-        // Non critico: detection failure should not break analysis
         console.warn('[ANALYSIS] detectPassingNotes failed', err);
     }
 

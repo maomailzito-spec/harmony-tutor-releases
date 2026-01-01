@@ -1706,6 +1706,56 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 return;
             }
 
+            // If a suspension originates at this event, prefer showing the resolution's Roman
+            // on the preparatory event and include the suspension type as figured label.
+            try {
+                const suspAtEvent = (analyzedNotes || []).find(n => (n as any).isSuspension && Math.abs(((n as any).isSuspension.fromAbsBeat ?? -1) - event.absBeat) < 1e-6);
+                if (suspAtEvent) {
+                    const s = (suspAtEvent as any).isSuspension;
+                    if (s && s.resolvedById) {
+                        // find timeline event containing the resolution note
+                        const resEv = timeline.find(ev => ev.notes && ev.notes.find((nn: any) => nn.id === s.resolvedById));
+                        if (resEv) {
+                            try {
+                                // Use the context at the resolution event (tonic/minor) to compute the roman
+                                const resContext = ctxAtAbsBeat(resEv.absBeat);
+                                const resTonic = resContext ? resContext.newTonic : currentTonic;
+                                const resIsMinor = resContext ? resContext.newIsMinor : isMinorMode;
+                                const r = getRomanAnalysis(resEv.notes, resTonic, resIsMinor);
+                                if (r) {
+                                    // Use the roman from the resolution, but do NOT
+                                    // replace the preparatory event's figured bass here.
+                                    roman = r.roman || roman;
+                                    // leave `figures` as originally computed for this event
+                                    // (the preparatory chord's figures), unless it's empty
+                                    // in which case fall back to the suspension's diatonic
+                                    // numbers if available.
+                                    if ((!figures || figures.length === 0) && s && typeof s.fromNum === 'number' && typeof s.toNum === 'number') {
+                                        figures = [String(s.fromNum), String(s.toNum)];
+                                    }
+                                }
+                            } catch (_) {}
+                        }
+                    }
+                    // Do not prepend the interval-form '4-3' to the figures here —
+                    // keep vertical figures like '4/5' that belonged to the preparatory chord.
+                }
+            } catch (_) {}
+
+            // If this event is the resolution target of any detected suspension,
+            // suppress the Roman numeral/figures here (we prefer to show the
+            // harmony label at the preparatory event instead).
+            try {
+                const isResolutionEvent = (analyzedNotes || []).some(n => {
+                    try {
+                        const s = (n as any).isSuspension;
+                        if (!s || !s.resolvedById) return false;
+                        return !!(event.notes && event.notes.find((nn: any) => nn.id === s.resolvedById));
+                    } catch (_) { return false; }
+                });
+                if (isResolutionEvent) { roman = ''; figures = []; symbol = ''; }
+            } catch (_) {}
+
             if (!roman && !symbol) return;
 
             // Anchor label to the current timeline event's beat (not just the note's attack)
@@ -4381,6 +4431,82 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                         ))}
                                                                                                     </g>
                                                                                                 ) : null}
+                                                                                                {/* Suspension hold-line + resolution number */}
+                                                                                                {(() => {
+                                                                                                    try {
+                                                                                                        if (!analyzedNotes || !lbl.absBeat) return null;
+                                                                                                        const suspNote = (analyzedNotes as any[]).find(n => n && n.isSuspension && Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - ((lbl as any).absBeat ?? -999)) < 1e-6);
+                                                                                                        if (!suspNote) return null;
+                                                                                                        const s = (suspNote as any).isSuspension;
+                                                                                                        if (!s || !s.resolvedById) return null;
+
+                                                                                                        // compute total figures width
+                                                                                                        const figTexts = (lbl.figures || []);
+                                                                                                        const hasSuspFigure = figTexts.some(ft => /^\d+-\d+/.test((ft||'').toString()));
+                                                                                                        let figsW = 0;
+                                                                                                        for (let i = 0; i < figTexts.length; i++) {
+                                                                                                            figsW += measureTextWidth(figTexts[i], '12px serif') + 6;
+                                                                                                        }
+                                                                                                        const figuresEnd = figuresX + Math.max(0, figsW);
+
+                                                                                                        // minimum line end beyond figures
+                                                                                                        const minLineEnd = figuresEnd + 12;
+
+                                                                                                        // find resolved note and map to X/Y (prefer precise notePositions mapping)
+                                                                                                        const resolvedNote = (analyzedNotes as any[]).find(n => n && n.id === s.resolvedById);
+                                                                                                        let resX = minLineEnd;
+                                                                                                        let resolvedY: number | null = null;
+                                                                                                        if (resolvedNote) {
+                                                                                                            const pos = notePositions.get(resolvedNote.id);
+                                                                                                            if (pos && typeof pos.x === 'number') {
+                                                                                                                resX = Math.max(minLineEnd, pos.x);
+                                                                                                            }
+                                                                                                            if (pos && typeof pos.y === 'number') {
+                                                                                                                resolvedY = pos.y;
+                                                                                                            }
+                                                                                                        }
+
+                                                                                                        // extend line by 10px to left and right
+                                                                                                        const lineStart = Math.max(figuresX, figuresEnd + 4 - 10);
+                                                                                                        const lineEnd = resX + 10;
+                                                                                                        // original: figuresY0 - 6; lower by 16px as requested
+                                                                                                        const lineY = figuresY0 + 10;
+                                                                                                        // Place number below the figures (original behaviour)
+                                                                                                        const numberY = figuresY0 + 14;
+
+                                                                                                        try { console.log('[RENDER] susp line', { lblId: lbl.id, lineStart, lineEnd, resX, resolvedId: s.resolvedById }); } catch(_) {}
+                                                                                                        return (
+                                                                                                            <>
+                                                                                                                <line
+                                                                                                                    x1={lineStart}
+                                                                                                                    x2={lineEnd}
+
+                                                                                                                    y1={lineY}
+                                                                                                                    y2={lineY}
+                                                                                                                    stroke="black"
+                                                                                                                    strokeWidth={2}
+                                                                                                                    strokeLinecap="butt"
+                                                                                                                />
+                                                                                                                {(!hasSuspFigure && s && typeof s.toNum === 'number' && s.toNum > 0) ? (
+                                                                                                                    <text
+                                                                                                                        x={resX + 20}
+                                                                                                                        y={numberY}
+                                                                                                                        textAnchor="middle"
+                                                                                                                        fontSize={12}
+                                                                                                                        fill="black"
+                                                                                                                        fontWeight={700}
+                                                                                                                    >
+                                                                                                                        {(() => {
+                                                                                                                            try { return (((s.toNum - 1) % 7) + 1); } catch (_) { return null; }
+                                                                                                                        })()}
+                                                                                                                    </text>
+                                                                                                                ) : null}
+                                                                                                            </>
+                                                                                                        );
+                                                                                                    } catch (e) {
+                                                                                                        return null;
+                                                                                                    }
+                                                                                                })()}
                                                                                             </>
                                                                                         );
                                                                                     })()}
@@ -4393,9 +4519,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                 {/* Violation connections (aligned to note positions) */}
                                                                 {(() => {
                                                                     const systemNoteIdSet = new Set(systemNotes.map(n => n.id));
-                                                                    const systemConnections = (errorConnections || []).filter(c =>
-                                                                        systemNoteIdSet.has(c.noteId1) && systemNoteIdSet.has(c.noteId2)
-                                                                    );
+                                                                    // Only render connections that belong to this system AND that correspond
+                                                                    // to an actual violation entry. This prevents drawing ad-hoc connections
+                                                                    // (e.g., suspension-only connections without panel entries) as dashed lines.
+                                                                    const systemConnections = (errorConnections || []).filter(c => {
+                                                                        if (!systemNoteIdSet.has(c.noteId1) || !systemNoteIdSet.has(c.noteId2)) return false;
+                                                                        // Do not render suspension-only connections (S-). We draw the
+                                                                        // hold-line next to the Roman/figures instead — rendering the
+                                                                        // S- connection here produced unwanted green dashed lines.
+                                                                        if (c.ruleId && typeof c.ruleId === 'string' && c.ruleId.startsWith('S-')) return false;
+                                                                        const match = (violations || []).find(v => {
+                                                                            if (!v || !v.ruleId || v.ruleId !== c.ruleId) return false;
+                                                                            const ids = Array.isArray(v.noteIds) ? v.noteIds : [];
+                                                                            return ids.includes(c.noteId1) && ids.includes(c.noteId2);
+                                                                        });
+                                                                        if (!match) {
+                                                                            try { console.log('[RENDER] skipping-connection-no-violation', { noteId1: c.noteId1, noteId2: c.noteId2, ruleId: c.ruleId }); } catch(_) {}
+                                                                            return false;
+                                                                        }
+                                                                        return true;
+                                                                    });
 
                                                                     const rank: Record<'error' | 'warning' | 'exception', number> = { error: 3, exception: 2, warning: 1 };
                                                                     const bestOf = (a?: 'error' | 'warning' | 'exception', b?: 'error' | 'warning' | 'exception') => {
