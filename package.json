@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "electron": "wait-on http-get://localhost:5173 && electron .",
     "electron:dev": "concurrently -k \"cross-env NODE_ENV=development npm run dev\" \"cross-env NODE_ENV=development npm run electron\"",
-    "regress": "tsx scripts/regression-check.ts"
+    "regress": "tsx scripts/regression-check.ts",
+    "baseline:reset": "git reset --hard baseline-2026-01-04"
   },
   "dependencies": {
     "@heroicons/react": "^2.1.3",
