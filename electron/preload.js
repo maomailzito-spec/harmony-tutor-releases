@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('menu-action', subscription);
     return () => ipcRenderer.removeListener('menu-action', subscription);
   },
-  saveFile: (content) => ipcRenderer.invoke('save-file-dialog', content)
+  saveFile: (content, filePath) => ipcRenderer.invoke('save-file-dialog', content, filePath)
   ,
   addRecentFile: (filePath) => ipcRenderer.send('add-recent', filePath)
 });

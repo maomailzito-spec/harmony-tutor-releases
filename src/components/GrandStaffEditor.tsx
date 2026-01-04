@@ -4,7 +4,7 @@ declare global {
     interface Window {
         electronAPI?: {
             onMenuAction: (handler: (action: string, payload: any) => void) => (() => void) | void;
-            saveFile: (content: string) => Promise<any>;
+            saveFile: (content: string, filePath?: string) => Promise<any>;
             addRecentFile: (filePath: string) => Promise<any>;
         };
     }
@@ -22,7 +22,7 @@ import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo } from '../utils/musicTheory';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
-import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS } from '../constants';
+import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
 import { UngroupIcon } from './icons/UngroupIcon';
 import { FlipStemIcon } from './icons/FlipStemIcon';
@@ -42,6 +42,7 @@ type Tool = 'insert';
 type ViewMode = 'page' | 'linear';
 type ActiveTab = 'editor' | 'analysis';
 type StaffLayoutMode = 'parti_late' | 'parti_strette';
+type StaffSystemMode = 'grandstaff' | 'treble_only';
 
 const LINE_HEIGHT = 12;
 const STAFF_LINES_HEIGHT = 4 * LINE_HEIGHT;
@@ -143,6 +144,7 @@ type ToolbarGroupId =
     | 'midi';
 
 const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
+const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
 const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'playback',
     'bpm',
@@ -259,16 +261,6 @@ const Rest: React.FC<{ duration: NoteDuration, y: number, color: string, x: numb
                     />
                 </g>
             );
-        
-        case 'eighth': {
-            const head = "M-7,-3 C-11,-3 -12,0 -10,3 C-8,6 -4,7 -2,5 C0,3 0,0 -3,-2 Z";
-            const stem = "M-2,-4 L10,22 L8,22 L-4,-4 Z";
-             return (
-                <g transform={baseTransform}>
-                    <path d={`${stem} ${head}`} fill={color} />
-                </g>
-            );
-        }
         
         case 'sixteenth': {
             const head1 = "M-7,-8 C-11,-8 -12,-5 -10,-2 C-8,1 -4,2 -2,0 C0,-2 0,-5 -3,-7 Z";
@@ -518,6 +510,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [copyPasteError, setCopyPasteError] = useState<string | null>(null);
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
+    const [projectTitle, setProjectTitle] = useState<string>('');
     const [keyChangeMode, setKeyChangeMode] = useState<'none' | 'transpose' | 'modal'>('none');
     const [modalTonicOverride, setModalTonicOverride] = useState<string>('');
     const [isMinorMode, setIsMinorMode] = useState(false);
@@ -564,16 +557,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     // Used to make marquee selection deterministic and independent from clef/position approximations.
     const systemNoteHitPointsRef = useRef<Record<number, Array<{ id: string; x: number; y: number; isGhost: boolean }>>>({});
 
+    // Staff system mode:
+    // - grandstaff: standard treble+bass system (chorale / piano style)
+    // - treble_only: single treble staff (guitar-style; written pitches sound an octave lower)
+    const [staffSystemMode, setStaffSystemMode] = useState<StaffSystemMode>(() => {
+        try {
+            const raw = window.localStorage.getItem(STAFF_SYSTEM_MODE_KEY);
+            if (raw === 'grandstaff' || raw === 'treble_only') return raw;
+        } catch (_) {}
+        return 'grandstaff';
+    });
+    useEffect(() => {
+        try { window.localStorage.setItem(STAFF_SYSTEM_MODE_KEY, staffSystemMode); } catch (_) {}
+    }, [staffSystemMode]);
+
     // Staff layout (render-only mapping by voice):
     // - parti_late: S/A on treble, T/B on bass (current behavior)
     // - parti_strette: S/A/T on treble, B on bass
     const [staffLayoutMode, setStaffLayoutMode] = useState<StaffLayoutMode>('parti_late');
 
     const clefForVoice = useCallback((voice: number | undefined | null): ClefType => {
+        if (staffSystemMode === 'treble_only') return 'treble';
         const v = voice ?? 1;
         if (staffLayoutMode === 'parti_strette') return v === 4 ? 'bass' : 'treble';
         return (v === 3 || v === 4) ? 'bass' : 'treble';
-    }, [staffLayoutMode]);
+    }, [staffLayoutMode, staffSystemMode]);
+
+    const playbackTransposeSemitones = staffSystemMode === 'treble_only' ? -12 : 0;
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
@@ -581,11 +591,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [showSymbolAnalysis, setShowSymbolAnalysis] = useState(false);
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
     const [toolbarGroupOrder, setToolbarGroupOrder] = useState<ToolbarGroupId[]>(DEFAULT_TOOLBAR_ORDER);
-    const [toolbarGroupVisibility, setToolbarGroupVisibility] = useState<Record<ToolbarGroupId, boolean>>(DEFAULT_TOOLBAR_VISIBILITY);
     const [isToolbarCustomizeOpen, setIsToolbarCustomizeOpen] = useState(false);
-    const [selectedToolbarGroupId, setSelectedToolbarGroupId] = useState<ToolbarGroupId | null>(null);
+
+    const [currentProjectFilePath, setCurrentProjectFilePath] = useState<string | null>(null);
+    const currentProjectFileName = useMemo(() => {
+        if (!currentProjectFilePath) return null;
+        const parts = currentProjectFilePath.split(/[/\\]/);
+        return parts[parts.length - 1] || currentProjectFilePath;
+    }, [currentProjectFilePath]);
+
     const [midiOutputs, setMidiOutputs] = useState<any[]>([]);
     const [selectedMidiOutput, setSelectedMidiOutput] = useState<any | null>(null);
+    const [isMidiMenuOpen, setIsMidiMenuOpen] = useState(false);
+    const midiMenuRef = useRef<HTMLDivElement | null>(null);
     const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
     const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
 
@@ -608,6 +626,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const resetVexflow = useCallback(() => {
         setVexflowNonce(n => n + 1);
     }, []);
+
+    useEffect(() => {
+        if (!isMidiMenuOpen) return;
+
+        const onPointerDown = (ev: PointerEvent) => {
+            const el = midiMenuRef.current;
+            if (!el) return;
+            if (el.contains(ev.target as Node)) return;
+            setIsMidiMenuOpen(false);
+        };
+
+        const onKeyDown = (ev: KeyboardEvent) => {
+            if (ev.key === 'Escape') setIsMidiMenuOpen(false);
+        };
+
+        window.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('pointerdown', onPointerDown);
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [isMidiMenuOpen]);
     
     const isLoopingRef = useRef(isLooping);
     const loopRangeRef = useRef(loopRange);
@@ -658,20 +698,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             if (!raw) return;
             const parsed = JSON.parse(raw);
             const order: ToolbarGroupId[] = Array.isArray(parsed?.order) ? parsed.order : [];
-            const visible: Partial<Record<ToolbarGroupId, boolean>> = (parsed?.visible && typeof parsed.visible === 'object') ? parsed.visible : {};
 
             const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
             const cleanedOrder = order.filter((id: any): id is ToolbarGroupId => all.has(id));
             const fullOrder: ToolbarGroupId[] = Array.from(new Set([...cleanedOrder, ...DEFAULT_TOOLBAR_ORDER]));
 
-            const nextVisible: Record<ToolbarGroupId, boolean> = { ...DEFAULT_TOOLBAR_VISIBILITY };
-            (Object.keys(DEFAULT_TOOLBAR_VISIBILITY) as ToolbarGroupId[]).forEach((k) => {
-                const v = (visible as any)[k];
-                if (typeof v === 'boolean') nextVisible[k] = v;
-            });
-
             setToolbarGroupOrder(fullOrder);
-            setToolbarGroupVisibility(nextVisible);
         } catch {
             // ignore malformed prefs
         }
@@ -679,34 +711,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
     useEffect(() => {
         try {
-            localStorage.setItem(TOOLBAR_PREFS_KEY, JSON.stringify({ order: toolbarGroupOrder, visible: toolbarGroupVisibility }));
+            localStorage.setItem(TOOLBAR_PREFS_KEY, JSON.stringify({ order: toolbarGroupOrder }));
         } catch {
             // ignore quota/errors
         }
-    }, [toolbarGroupOrder, toolbarGroupVisibility]);
+    }, [toolbarGroupOrder]);
 
-    const moveToolbarGroup = useCallback((id: ToolbarGroupId, dir: -1 | 1) => {
+    const reorderToolbarGroups = useCallback((dragId: ToolbarGroupId, overId: ToolbarGroupId) => {
         setToolbarGroupOrder(prev => {
-            const idx = prev.indexOf(id);
-            if (idx < 0) return prev;
-            const nextIdx = idx + dir;
-            if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+            if (dragId === overId) return prev;
+            const from = prev.indexOf(dragId);
+            const to = prev.indexOf(overId);
+            if (from < 0 || to < 0) return prev;
             const next = [...prev];
-            const tmp = next[nextIdx];
-            next[nextIdx] = next[idx];
-            next[idx] = tmp;
+            next.splice(from, 1);
+            next.splice(to, 0, dragId);
             return next;
         });
-    }, []);
-
-    const toggleToolbarGroupVisibility = useCallback((id: ToolbarGroupId) => {
-        setToolbarGroupVisibility(prev => ({ ...prev, [id]: !prev[id] }));
-    }, []);
-
-    const resetToolbarPrefs = useCallback(() => {
-        setToolbarGroupOrder(DEFAULT_TOOLBAR_ORDER);
-        setToolbarGroupVisibility(DEFAULT_TOOLBAR_VISIBILITY);
-        setSelectedToolbarGroupId('playback');
     }, []);
 
     const applyMinMeasureCountDraft = useCallback(() => {
@@ -714,6 +735,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         if (!Number.isFinite(v)) return;
         setMinMeasureCount(Math.max(1, v));
     }, [minMeasureCountDraft]);
+
+    const bumpMinMeasureCount = useCallback((delta: number) => {
+        const parsed = Math.trunc(Number(minMeasureCountDraft));
+        const base = Number.isFinite(parsed) ? parsed : minMeasureCount;
+        const next = Math.max(1, base + delta);
+        setMinMeasureCount(next);
+        setMinMeasureCountDraft(String(next));
+    }, [minMeasureCount, minMeasureCountDraft]);
 
     const stopMetronomeInternal = useCallback(() => {
         if (metronomeIntervalRef.current) {
@@ -983,6 +1012,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         }));
     }, [setRawNotes, signedKeyDelta]);
 
+    // Track the last key change so toggling "Trasponi" can retroactively apply/revert.
+    const lastKeyChangeRef = useRef<null | { fromRoot: string; toRoot: string; transposedApplied: boolean }>(null);
+
+    const setTransposeKeyChangeEnabled = useCallback((enabled: boolean) => {
+        // If modal mode is active, keep it modal; transpose is mutually exclusive.
+        if (enabled) {
+            if (keyChangeMode === 'transpose') return;
+            // If the last key change happened with transpose disabled, apply it now.
+            const last = lastKeyChangeRef.current;
+            if (last && !last.transposedApplied && last.fromRoot !== last.toRoot) {
+                transposeAllNotesToKey(last.fromRoot, last.toRoot);
+                lastKeyChangeRef.current = { ...last, transposedApplied: true };
+            }
+            setKeyChangeMode('transpose');
+            return;
+        }
+
+        // Disabling: if transpose was applied for the last change, revert it.
+        if (keyChangeMode !== 'transpose') {
+            setKeyChangeMode('none');
+            return;
+        }
+        const last = lastKeyChangeRef.current;
+        if (last && last.transposedApplied && last.fromRoot !== last.toRoot) {
+            transposeAllNotesToKey(last.toRoot, last.fromRoot);
+            lastKeyChangeRef.current = { ...last, transposedApplied: false };
+        }
+        setKeyChangeMode('none');
+    }, [keyChangeMode, setKeyChangeMode, transposeAllNotesToKey]);
+
     const reinterpretAllNotesModallyInKey = useCallback((toRoot: string) => {
         const targetKeySignature = getKeySignature(toRoot, 'Major');
 
@@ -1034,11 +1093,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
     const handleKeySignatureRootChange = useCallback((nextRoot: string) => {
         if (nextRoot === keySignatureRoot) return;
-        if (keyChangeMode === 'transpose') {
-            transposeAllNotesToKey(keySignatureRoot, nextRoot);
+
+        const fromRoot = keySignatureRoot;
+        const isTranspose = keyChangeMode === 'transpose';
+
+        if (isTranspose) {
+            transposeAllNotesToKey(fromRoot, nextRoot);
         } else if (keyChangeMode === 'modal') {
+            // Modal reinterpretation is a different operation; don't reuse last-key-change transpose state.
             reinterpretAllNotesModallyInKey(nextRoot);
+            lastKeyChangeRef.current = null;
+            setKeySignatureRoot(nextRoot);
+            return;
         }
+
+        // Record last key change so the transpose checkbox can apply/revert even if toggled after.
+        lastKeyChangeRef.current = { fromRoot, toRoot: nextRoot, transposedApplied: isTranspose };
         setKeySignatureRoot(nextRoot);
     }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, transposeAllNotesToKey]);
 
@@ -1302,6 +1372,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 // Reset rawNotes to initial state
                 setRawNotes([]);
                 setKeySignatureRoot('C');
+                setProjectTitle('');
                 setTimeSignature({ numerator: 4, denominator: 4 });
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
@@ -1330,20 +1401,40 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 setShowSymbolAnalysis(false);
                 setShowMeasureNumbers(true);
                 setToolbarGroupOrder(DEFAULT_TOOLBAR_ORDER);
-                setToolbarGroupVisibility(DEFAULT_TOOLBAR_VISIBILITY);
                 setIsToolbarCustomizeOpen(false);
-                setSelectedToolbarGroupId(null);
                 setMidiOutputs([]);
                 setSelectedMidiOutput(null);
+                setCurrentProjectFilePath(null);
             }
         } else if (action === 'save' || action === 'save-as') {
             console.log("Comando di salvataggio ricevuto:", action);
             if (latestRawNotes.current.length === 0 && !window.confirm("Il progetto è vuoto. Salvare comunque?")) return;
-            const projectData = JSON.stringify({ notes: latestRawNotes.current }, null, 2);
+            const projectData = JSON.stringify({
+                notes: latestRawNotes.current,
+                staffSystemMode,
+                // Project-level settings
+                keySignatureRoot,
+                projectTitle,
+                timeSignature,
+                isMinorMode,
+                keyChangeMode,
+                modalTonicOverride,
+                minMeasureCount,
+                measuresPerLine,
+                doubleBarlineMeasures,
+                analysisContexts,
+                bpm,
+                isBpmActive,
+                isMetronomeOn,
+            }, null, 2);
             try {
-                const result = await api.saveFile(projectData);
+                // If we already have a path for the current project, ask main to overwrite it
+                // without prompting; otherwise fall back to the save dialog (Save As behavior).
+                const targetPath = currentProjectFilePath && action === 'save' ? currentProjectFilePath : undefined;
+                const result = await api.saveFile(projectData, targetPath);
                 if (result && result.success && result.filePath) {
                     api.addRecentFile(result.filePath);
+                    setCurrentProjectFilePath(result.filePath);
                 }
             } catch (err) {
                 console.error("Errore durante il salvataggio:", err);
@@ -1351,14 +1442,113 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         } else if (action === 'open') {
             console.log("Comando di apertura ricevuto.");
             setRawNotes([]);
+            // Reset to defaults first so older projects (missing fields) don't
+            // inherit settings from the previously opened project.
+            setKeySignatureRoot('C');
+            setProjectTitle('');
+            setTimeSignature({ numerator: 4, denominator: 4 });
+            setIsMinorMode(false);
+            setKeyChangeMode('none');
+            setModalTonicOverride('');
+            setMinMeasureCount(4);
+            setMeasuresPerLine(4);
+            setDoubleBarlineMeasures([]);
+            setAnalysisContexts([]);
+            setBpm(120);
+            setIsBpmActive(false);
+            setIsMetronomeOn(false);
             try {
                 const data = payload?.data;
                 if (!data) throw new Error("Nessun dato fornito per l'apertura.");
                 const loadedProject = JSON.parse(data);
                 if (loadedProject && Array.isArray(loadedProject.notes)) {
-                    setRawNotes(loadedProject.notes);
+                    // Self-heal older/saved projects: keep spelling fields as-is, but
+                    // ensure pitch-class fields are consistent for analysis.
+                    const normalizedNotes = (loadedProject.notes as any[]).map((n: any) => {
+                        try {
+                            if (!n || typeof n !== 'object') return n;
+                            if (n.isRest) {
+                                return {
+                                    ...n,
+                                    midi: Number.isFinite(n.midi) ? n.midi : 0,
+                                    noteIndex: 0,
+                                };
+                            }
+
+                            const midi = Number(n.midi);
+                            if (Number.isFinite(midi)) {
+                                return {
+                                    ...n,
+                                    midi,
+                                    noteIndex: mod12Local(midi),
+                                };
+                            }
+
+                            const ni = typeof n.noteIndex === 'number' ? n.noteIndex : 0;
+                            return { ...n, noteIndex: mod12Local(ni) };
+                        } catch {
+                            return n;
+                        }
+                    });
+
+                    setRawNotes(normalizedNotes as any);
+                    if (loadedProject.staffSystemMode === 'grandstaff' || loadedProject.staffSystemMode === 'treble_only') {
+                        setStaffSystemMode(loadedProject.staffSystemMode);
+                    }
+
+                    // Restore project-level settings when present.
+                    if (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot) {
+                        setKeySignatureRoot(loadedProject.keySignatureRoot);
+                    }
+                    if (typeof loadedProject.projectTitle === 'string') {
+                        setProjectTitle(loadedProject.projectTitle);
+                    }
+                    if (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') {
+                        const n = Number((loadedProject.timeSignature as any).numerator);
+                        const d = Number((loadedProject.timeSignature as any).denominator);
+                        if (Number.isFinite(n) && Number.isFinite(d) && n > 0 && d > 0) {
+                            setTimeSignature({ numerator: n, denominator: d });
+                        }
+                    }
+                    if (typeof loadedProject.isMinorMode === 'boolean') {
+                        setIsMinorMode(loadedProject.isMinorMode);
+                    }
+                    if (loadedProject.keyChangeMode === 'none' || loadedProject.keyChangeMode === 'transpose' || loadedProject.keyChangeMode === 'modal') {
+                        setKeyChangeMode(loadedProject.keyChangeMode);
+                    }
+                    if (typeof loadedProject.modalTonicOverride === 'string') {
+                        setModalTonicOverride(loadedProject.modalTonicOverride);
+                    }
+                    if (typeof loadedProject.minMeasureCount === 'number' && Number.isFinite(loadedProject.minMeasureCount) && loadedProject.minMeasureCount > 0) {
+                        setMinMeasureCount(Math.max(1, Math.trunc(loadedProject.minMeasureCount)));
+                    }
+                    if (typeof loadedProject.measuresPerLine === 'number' && Number.isFinite(loadedProject.measuresPerLine) && loadedProject.measuresPerLine > 0) {
+                        setMeasuresPerLine(Math.max(1, Math.trunc(loadedProject.measuresPerLine)));
+                    }
+                    if (Array.isArray(loadedProject.doubleBarlineMeasures)) {
+                        const nums = (loadedProject.doubleBarlineMeasures as any[])
+                            .map(x => Math.trunc(Number(x)))
+                            .filter(n => Number.isFinite(n) && n >= 0);
+                        setDoubleBarlineMeasures(nums);
+                    }
+                    if (Array.isArray(loadedProject.analysisContexts)) {
+                        setAnalysisContexts(loadedProject.analysisContexts);
+                    }
+                    if (typeof loadedProject.bpm === 'number' && Number.isFinite(loadedProject.bpm) && loadedProject.bpm > 0) {
+                        setBpm(loadedProject.bpm);
+                    }
+                    if (typeof loadedProject.isBpmActive === 'boolean') {
+                        setIsBpmActive(loadedProject.isBpmActive);
+                    }
+                    if (typeof loadedProject.isMetronomeOn === 'boolean') {
+                        setIsMetronomeOn(loadedProject.isMetronomeOn);
+                    }
+
                     if (payload && payload.filePath) {
                         api.addRecentFile(payload.filePath);
+                        setCurrentProjectFilePath(payload.filePath);
+                    } else {
+                        setCurrentProjectFilePath(null);
                     }
                 } else {
                     throw new Error("Formato dati non valido.");
@@ -1371,9 +1561,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const confirmed = window.confirm("Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.");
             if (confirmed) {
                 setRawNotes([]);
+                setProjectTitle('');
+                setCurrentProjectFilePath(null);
             }
+        } else if (action === 'set-show-measure-numbers') {
+            setShowMeasureNumbers(!!payload?.enabled);
+        } else if (action === 'toggle-toolbar-customize') {
+            setIsToolbarCustomizeOpen(prev => !prev);
         }
-    }, [setRawNotes, setKeySignatureRoot, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsDotted, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setToolbarGroupVisibility, setIsToolbarCustomizeOpen, setSelectedToolbarGroupId, setMidiOutputs, setSelectedMidiOutput, undoNotes, redoNotes, handlePrint]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsDotted, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, keySignatureRoot, projectTitle, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode]);
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
@@ -1592,34 +1788,73 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         // Avoid adding extra trailing measures automatically (prevents the "cesura" from drifting).
         let targetTotalMeasures = Math.max(minMeasureCount, maxMeasureIndex + 1);
         const measureMinInfo: { minWidth: number, notes: StaffNote[] }[] = [];
-        for (let m = 0; m < targetTotalMeasures; m++) {
-            const measureNotes = notesByMeasure.get(m) || [];
-            let minDurationValue = measureNotes.length > 0 ? measureNotes.reduce((min, n) => Math.min(min, DURATION_VALUES[n.duration || 'quarter']), 1) : 1;
-            let pxPerBeat = 60;
-            if (minDurationValue <= 0.0625) pxPerBeat = 280; else if (minDurationValue <= 0.125) pxPerBeat = 180; else if (minDurationValue <= 0.25) pxPerBeat = 120; else if (minDurationValue <= 0.5) pxPerBeat = 100;
-            measureMinInfo[m] = { minWidth: (beatsPerMeasure * pxPerBeat) + (MEASURE_PADDING_X * 2), notes: measureNotes };
-        }
-        const systems: { measureIndices: number[], width: number, startMeasuresX: number[] }[] = [];
-        let currentSystemMeasures: number[] = [], currentSystemMinContentWidth = 0;
+
         // IMPORTANT: distribute measures within the actual staff drawable width.
         // If we use the full container width here, the last measure can overshoot the staff end,
         // making the end-of-line barline ("cesura") disappear or drift.
         const usablePageWidth = systemRightX - startOffset - STAFF_PADDING_X;
+
+        // Measure width heuristic ("misure che si allargano"):
+        // widen measures proportionally to rhythmic density (smallest duration present).
+        // This keeps insertion intuitive and avoids the cumulative beat drift that happens
+        // when measures are visually compressed.
+        const BASE_PX_PER_BEAT = 70;
+        const getNoteBeats = (n: any): number => {
+            const base = (DURATION_VALUES as any)?.[n?.duration] ?? 1;
+            const dotted = n?.isDotted ? 1.5 : 1;
+            const tuplet = n?.isTriplet ? (2 / 3) : (n?.isDuplet ? (3 / 2) : 1);
+            const beats = Number(base) * dotted * tuplet;
+            return Number.isFinite(beats) && beats > 0 ? beats : 1;
+        };
+        for (let m = 0; m < targetTotalMeasures; m++) {
+            const measureNotes = notesByMeasure.get(m) || [];
+
+            let minBeat = 1;
+            for (const n of measureNotes) {
+                const b = getNoteBeats(n);
+                if (b < minBeat) minBeat = b;
+            }
+
+            // Density factor: quarter=1.0, eighth≈1.2, 16th≈1.6, 32nd≈2.1, 64th≈2.6
+            const inv = 1 / Math.max(1e-6, minBeat);
+            const densityFactor = Math.min(2.6, Math.max(1, 1 + (inv - 1) * 0.35));
+
+            const minWidth = (beatsPerMeasure * BASE_PX_PER_BEAT * densityFactor) + (MEASURE_PADDING_X * 2);
+            measureMinInfo[m] = { minWidth, notes: measureNotes };
+        }
+        const systems: { measureIndices: number[], width: number, startMeasuresX: number[] }[] = [];
+        let currentSystemMeasures: number[] = [], currentSystemMinContentWidth = 0;
         const finalizeSystem = (indices: number[], contentWidthSum: number) => {
             if (indices.length === 0) return;
-            const extraSpace = Math.max(0, usablePageWidth - contentWidthSum);
+            // If measures are narrower than the available staff width, expand evenly.
+            // If measures are wider (e.g. dense rhythms + high "misure per riga"),
+            // shrink proportionally so the selected count still fits on the line.
+            const scale = contentWidthSum > 0 ? Math.min(1, usablePageWidth / contentWidthSum) : 1;
+            const scaledSum = contentWidthSum * scale;
+            const extraSpace = Math.max(0, usablePageWidth - scaledSum);
             const extraPerMeasure = extraSpace / indices.length;
             const systemStartMeasuresX: number[] = [];
             let currentX = startOffset;
-            indices.forEach(m => { systemStartMeasuresX.push(currentX); currentX += measureMinInfo[m].minWidth + extraPerMeasure; });
+            indices.forEach(m => {
+                systemStartMeasuresX.push(currentX);
+                const w = (measureMinInfo[m].minWidth * scale) + extraPerMeasure;
+                currentX += w;
+            });
             systems.push({ measureIndices: indices, width: containerWidth, startMeasuresX: systemStartMeasuresX });
         };
         for (let m = 0; m < targetTotalMeasures; m++) {
             const measureW = measureMinInfo[m].minWidth;
-            if ((currentSystemMeasures.length >= measuresPerLine || currentSystemMinContentWidth + measureW > usablePageWidth) && currentSystemMeasures.length > 0) {
+            currentSystemMeasures.push(m);
+            currentSystemMinContentWidth += measureW;
+
+            // Primary controller: the user-selected measures-per-line.
+            // We intentionally do not wrap early based on width; instead we scale widths
+            // inside finalizeSystem so the selected count still fits.
+            if (currentSystemMeasures.length >= measuresPerLine) {
                 finalizeSystem(currentSystemMeasures, currentSystemMinContentWidth);
-                currentSystemMeasures = [m]; currentSystemMinContentWidth = measureW;
-            } else { currentSystemMeasures.push(m); currentSystemMinContentWidth += measureW; }
+                currentSystemMeasures = [];
+                currentSystemMinContentWidth = 0;
+            }
         }
         if (currentSystemMeasures.length > 0) finalizeSystem(currentSystemMeasures, currentSystemMinContentWidth);
         const finalNotes: StaffNote[] = []; const allSystemsBarlines: Barline[][] = []; const measureFinalWidths = new Map<number, number>();
@@ -1668,13 +1903,57 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         // Use the timeline of all active notes at each event (start/end of any note)
         const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature);
+
+        // Labels should follow *structural onsets* rather than every scanpoint.
+        // Note-off-only scanpoints can temporarily reduce the verticality (e.g. 2 notes)
+        // and cause spurious chord identification (like #IV° ...) even when the harmony
+        // is conceptually being held.
+        const timelineForLabels = (timeline || []).filter((ev: any, idx: number) => {
+            if (!ev) return false;
+            if (idx === 0) return true;
+
+            const prev = timeline[idx - 1] as any;
+            const prevIds = new Set<string>((prev?.notes || []).map((n: any) => String(n?.id ?? '')));
+            const curNotes = (ev?.notes || []) as any[];
+
+            // 1) Keep onset events (at least one new active note).
+            const hasOnset = curNotes.some(n => {
+                const id = String(n?.id ?? '');
+                return id && !prevIds.has(id);
+            });
+            if (hasOnset) return true;
+
+            // 2) Also keep note-off-only events on strong beats / barlines.
+            // Otherwise, a harmony change caused by a release at the barline
+            // gets shifted to the next onset (user reported beat-1 label moving to beat-2).
+            try {
+                const curIds = new Set<string>(curNotes.map(n => String(n?.id ?? '')).filter(Boolean));
+                const removed = Array.from(prevIds).some(id => id && !curIds.has(id));
+                if (!removed) return false;
+
+                const absBeat = Number(ev?.absBeat);
+                if (!Number.isFinite(absBeat)) return false;
+                const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+
+                const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
+                if (!nearInt(inMeasure)) return false;
+                const beat0 = Math.round(inMeasure);
+
+                // Strong beats: 1 (beat0=0) and, when applicable, 3 (beat0=2) in common meters.
+                const isStrong = beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
+                return isStrong;
+            } catch {
+                return false;
+            }
+        });
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const ctxAtAbsBeat = (absBeat: number) => (analysisContexts || [])
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
             .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
 
         // For each system, collect all timeline events that fall within its measures
-        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string; absBeat?: number }[][] = layoutData.systemsParams.map(() => []);
+        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string; absBeat?: number; hiddenMarker?: boolean }[][] = layoutData.systemsParams.map(() => []);
 
 
         // Helper: compute xPosition for a given absBeat in a system
@@ -1692,7 +1971,337 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             return startX + MEASURE_PADDING_X + (rel * contentWidth);
         }
 
-        timeline.forEach(event => {
+        const lastSigBySystem = new Map<number, string>();
+        const lastCtxBySystem = new Map<number, string>();
+        const lastStructuralByVoiceBySystem = new Map<number, Map<number, any>>();
+        const lastBassPcBySystem = new Map<number, number | null>();
+        const lastRomanBySystem = new Map<number, string>();
+        const lastFiguresBySystem = new Map<number, string[]>();
+        const lastChordRootPcBySystem = new Map<number, number | null>();
+        const lastChordTypeBySystem = new Map<number, string | null>();
+
+        const indexByAbsBeat = new Map<number, number>();
+        for (let i = 0; i < (timeline || []).length; i++) {
+            const ev = (timeline as any[])[i];
+            if (ev && typeof ev.absBeat === 'number') indexByAbsBeat.set(ev.absBeat, i);
+        }
+
+        const isDissonantIntervalAgainstBass = (note: any, notes: any[]): boolean => {
+            try {
+                if (!note || note.isRest || !Number.isFinite(note.midi)) return false;
+                const pool = (notes || []).filter(n => n && !n.isRest && Number.isFinite(n.midi));
+                if (pool.length < 2) return false;
+                const bass = pool.slice().sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0))[0];
+                if (!bass || bass.id === note.id) return false;
+                const interval = (((note.midi - bass.midi) % 12) + 12) % 12;
+                return interval === 1 || interval === 2 || interval === 5 || interval === 6 || interval === 10 || interval === 11;
+            } catch {
+                return false;
+            }
+        };
+
+        const findNextOnsetForVoice = (fromFullIndex: number, voice: number, maxDeltaBeats = 1.01): { note: any; ev: any } | null => {
+            try {
+                if (fromFullIndex < 0 || fromFullIndex >= (timeline || []).length) return null;
+                const fromEv: any = (timeline as any[])[fromFullIndex];
+                const fromAbs = fromEv?.absBeat ?? 0;
+                const prevIds = new Set<string>(((fromEv?.notes || []) as any[])
+                    .filter(n => (n?.voice ?? 1) === voice)
+                    .map(n => String(n?.id ?? '')));
+                for (let j = fromFullIndex + 1; j < (timeline || []).length; j++) {
+                    const ev: any = (timeline as any[])[j];
+                    if (!ev || typeof ev.absBeat !== 'number') continue;
+                    if ((ev.absBeat - fromAbs) > maxDeltaBeats) break;
+                    const candidates = ((ev.notes || []) as any[]).filter(n => (n?.voice ?? 1) === voice);
+                    for (const n of candidates) {
+                        const id = String(n?.id ?? '');
+                        if (!id) continue;
+                        if (!prevIds.has(id)) return { note: n, ev };
+                    }
+                }
+            } catch { /* ignore */ }
+            return null;
+        };
+
+        const isResolvingDissonanceForLabels = (n: any, evAbsBeat: number): boolean => {
+            try {
+                if (!n || n.isRest) return false;
+                const v = (n?.voice ?? 1) as number;
+                if (v === 4) return false; // never treat bass as non-chord tone for labels
+                const fullIndex = indexByAbsBeat.get(evAbsBeat);
+                if (fullIndex == null) return false;
+                const curEv: any = (timeline as any[])[fullIndex];
+
+                // Only treat *onsets* as potential resolving dissonances/appoggiature.
+                // If this note was already sounding in the previous event, it's a held tone.
+                try {
+                    const prevEv: any = fullIndex > 0 ? (timeline as any[])[fullIndex - 1] : null;
+                    if (prevEv?.notes) {
+                        const alreadySounding = ((prevEv.notes || []) as any[]).some(p => (p?.voice ?? 1) === v && String(p?.id ?? '') && String(p?.id ?? '') === String(n?.id ?? ''));
+                        if (alreadySounding) return false;
+                    }
+                } catch { /* ignore */ }
+
+                // Critical guard: in inversions, chord tones can be dissonant vs the *bass* (e.g. the 3rd of V7 in 4/2).
+                // Do not classify a note as a "resolving dissonance" if it is a chord tone of a confident, non-sus chord
+                // interpretation of the current verticality. This prevents secondary dominants (e.g. D7/C = V7/V 4/2)
+                // from collapsing into I4/7 after adding the next-beat resolution.
+                try {
+                    const notesHere = (curEv?.notes || []) as any[];
+                    if (notesHere.length >= 3) {
+                        const cands = identifyChordCandidates(notesHere as any);
+                        const best = (cands && cands.length) ? cands[0] : null;
+                        const matchType = (best as any)?.matchType;
+                        const chordType = String(best?.type || '');
+                        const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                        const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+                        if (confident && !isSusLike && best?.root && best?.type) {
+                            const rootPc = Number.isFinite((best.root as any).noteIndex)
+                                ? (((best.root as any).noteIndex % 12) + 12) % 12
+                                : (Number.isFinite((best.root as any).midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
+                            const notePc = Number.isFinite(n?.midi)
+                                ? (((n.midi % 12) + 12) % 12)
+                                : (typeof n.noteIndex === 'number' ? (((n.noteIndex % 12) + 12) % 12) : null);
+                            if (rootPc != null && notePc != null) {
+                                const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                                if (Array.isArray(formula) && formula.length) {
+                                    const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
+                                    if (formula.includes(intervalFromRoot)) {
+                                        // Exception: allow a resolving 7th (common 7-6 retardation/appoggiatura)
+                                        // to be treated as a non-chord tone *even if* the best chord candidate
+                                        // is a 7th chord, when dropping this note yields a triadic interpretation.
+                                        // This is intentionally conservative: do NOT do this for dominant 7ths,
+                                        // to avoid breaking V7/V and cadential dominant behavior.
+                                        try {
+                                            const isSeventh = intervalFromRoot === 10 || intervalFromRoot === 11;
+                                            const isMajor7Like = /Major\s*7/i.test(chordType) || /Minor\s*7/i.test(chordType);
+                                            const isDominant7 = /Dominant\s*7/i.test(chordType) || /7/.test(chordType) && /Dominant/i.test(chordType);
+                                            if (isSeventh && isMajor7Like && !isDominant7) {
+                                                const remaining = notesHere.filter(nn => String(nn?.id ?? '') !== String(n?.id ?? ''));
+                                                if (remaining.length >= 2) {
+                                                    const c2 = identifyChordCandidates(remaining as any);
+                                                    const b2 = (c2 && c2.length) ? c2[0] : null;
+                                                    const mt2 = (b2 as any)?.matchType;
+                                                    const confident2 = mt2 === 'exact' || mt2 === 'no_fifth' || mt2 === 'no_third';
+                                                    const t2 = String(b2?.type || '');
+                                                    const isTriad2 = !/7|9|11|13/i.test(t2) && !/Major\s*7|Minor\s*7|Dominant\s*7/i.test(t2);
+                                                    if (confident2 && isTriad2) {
+                                                        // Do NOT short-circuit; allow the resolution tests below.
+                                                    } else {
+                                                        return false;
+                                                    }
+                                                } else {
+                                                    return false;
+                                                }
+                                            } else {
+                                                return false;
+                                            }
+                                        } catch {
+                                            return false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
+
+                if (!isDissonantIntervalAgainstBass(n, curEv?.notes || [])) return false;
+
+                // Appoggiature can last longer than a single beat; allow a slightly wider window.
+                const next = findNextOnsetForVoice(fullIndex, v, 2.01);
+                if (!next?.note || !Number.isFinite(n.midi) || !Number.isFinite(next.note.midi)) return false;
+                const step = Math.abs((next.note.midi ?? 0) - (n.midi ?? 0));
+                if (!(step > 0 && step <= 2)) return false;
+                // Resolution should remove the vertical dissonance vs the (new) bass.
+                if (isDissonantIntervalAgainstBass(next.note, next.ev?.notes || [])) return false;
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        const isNonChordToneAtLabelEvent = (n: any, absBeat: number) => {
+            try {
+                if (!n) return true;
+                if (n.isRest) return true;
+                const v = (n?.voice ?? 1) as number;
+                if (v === 4) return false; // keep the bass in the structural snapshot
+                if (n.isPassing || n.isEscape) return true;
+
+                // If a note is tagged as appoggiatura but it's actually consonant against the
+                // current bass, treat it as a chord tone (mis-tag guard).
+                if (n.isAppoggiatura) {
+                    const fullIndex = indexByAbsBeat.get(absBeat);
+                    const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
+                    if (curEv?.notes && isDissonantIntervalAgainstBass(n, curEv.notes || [])) return true;
+                    return false;
+                }
+
+                // Anticipations are tricky: they can be either true NCTs (dissonant against the
+                // current bass) or simply early chord tones that belong to the underlying harmony.
+                // If an "anticipation" is consonant against the bass at this scanpoint, keep it
+                // in the structural snapshot to avoid collapsing triads to dyads (e.g. Bb/D -> iii5).
+                if (n.isAnticipation) {
+                    const fullIndex = indexByAbsBeat.get(absBeat);
+                    const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
+                    if (curEv?.notes && isDissonantIntervalAgainstBass(n, curEv.notes || [])) return true;
+                    return false;
+                }
+
+                // Same idea for neighbors: if the engine tagged a chord tone as a neighbor, but it's
+                // consonant against the current bass on a strong beat, keep it so inversions like I6
+                // don't collapse into dyad-inferred labels.
+                if (n.isNeighbor) {
+                    const fullIndex = indexByAbsBeat.get(absBeat);
+                    const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
+                    if (curEv?.notes && !isDissonantIntervalAgainstBass(n, curEv.notes || [])) {
+                        try {
+                            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                            const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+                            const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
+                            if (nearInt(inMeasure)) {
+                                const beat0 = Math.round(inMeasure);
+                                const isStrong = beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
+                                if (isStrong) return false;
+                            }
+                        } catch { /* ignore */ }
+                    }
+                    return true;
+                }
+                const s = n.isSuspension;
+                if (s && typeof s.fromAbsBeat === 'number' && Math.abs(s.fromAbsBeat - absBeat) < 1e-6) return true;
+                if (isResolvingDissonanceForLabels(n, absBeat)) return true;
+            } catch (_) { /* ignore */ }
+            return false;
+        };
+
+        const inferDiatonicRomanFromBass = (bassPc: number | null, tonic: string, isMinor: boolean): { roman: string; triad: { root: number; third: number; fifth: number } } | null => {
+            try {
+                if (bassPc == null) return null;
+                const tIdx = noteNameToChromaticIndex(String(tonic ?? ''));
+                if (tIdx == null || tIdx < 0 || !Number.isFinite(tIdx)) return null;
+
+                const scaleIntervals = isMinor
+                    ? [0, 2, 3, 5, 7, 8, 10] // natural minor for diatonic triads
+                    : [0, 2, 4, 5, 7, 9, 11];
+                const romanMaj = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+                const romanMin = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+                const romans = isMinor ? romanMin : romanMaj;
+
+                let degree = -1;
+                for (let i = 0; i < scaleIntervals.length; i++) {
+                    const pc = (((tIdx + scaleIntervals[i]) % 12) + 12) % 12;
+                    if (pc === bassPc) { degree = i; break; }
+                }
+                if (degree < 0) return null;
+                const roman = romans[degree];
+
+                const rootPc = (((tIdx + scaleIntervals[degree]) % 12) + 12) % 12;
+                const isDim = roman.includes('°');
+                const isMinTriad = !isDim && roman === roman.toLowerCase();
+                const isAug = roman.includes('+');
+                const thirdInt = isMinTriad || isDim ? 3 : 4;
+                const fifthInt = isAug ? 8 : (isDim ? 6 : 7);
+                return {
+                    roman,
+                    triad: {
+                        root: rootPc,
+                        third: (rootPc + thirdInt) % 12,
+                        fifth: (rootPc + fifthInt) % 12,
+                    }
+                };
+            } catch {
+                return null;
+            }
+        };
+
+        const inferDiatonicTriadFromRoman = (roman: string, tonic: string, isMinor: boolean): { root: number; third: number; fifth: number } | null => {
+            try {
+                const r = String(roman || '').trim();
+                if (!r) return null;
+                const tIdx = noteNameToChromaticIndex(String(tonic ?? ''));
+                if (tIdx == null || tIdx < 0 || !Number.isFinite(tIdx)) return null;
+                const scaleIntervals = isMinor
+                    ? [0, 2, 3, 5, 7, 8, 10]
+                    : [0, 2, 4, 5, 7, 9, 11];
+                const romanMaj = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+                const romanMin = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+                const romans = isMinor ? romanMin : romanMaj;
+                const degree = romans.indexOf(r);
+                if (degree < 0) return null;
+                const rootPc = (((tIdx + scaleIntervals[degree]) % 12) + 12) % 12;
+                const isDim = r.includes('°');
+                const isMinTriad = !isDim && r === r.toLowerCase();
+                const isAug = r.includes('+');
+                const thirdInt = isMinTriad || isDim ? 3 : 4;
+                const fifthInt = isAug ? 8 : (isDim ? 6 : 7);
+                return {
+                    root: rootPc,
+                    third: (rootPc + thirdInt) % 12,
+                    fifth: (rootPc + fifthInt) % 12,
+                };
+            } catch {
+                return null;
+            }
+        };
+
+        const signatureFromNotes = (notes: any[]) => {
+            try {
+                // Use pitch-class signature only. This avoids re-labeling just because
+                // a voice re-articulates the same harmony in another octave/register.
+                const pcs = [...new Set((notes || []).filter(Boolean)
+                    .map((n: any) => {
+                        if (Number.isFinite(n?.midi)) return (((n.midi % 12) + 12) % 12);
+                        if (typeof n?.noteIndex === 'number') return (((n.noteIndex % 12) + 12) % 12);
+                        return null;
+                    })
+                    .filter((v: any) => v != null && Number.isFinite(v)))].sort((a, b) => a - b);
+                return pcs.join('-');
+            } catch {
+                return '';
+            }
+        };
+
+        const pcSetFromNotes = (notes: any[]): Set<number> => {
+            const s = new Set<number>();
+            for (const n of notes || []) {
+                if (!n || n.isRest) continue;
+                const pc = Number.isFinite(n?.midi)
+                    ? (((n.midi % 12) + 12) % 12)
+                    : (typeof n.noteIndex === 'number' ? (((n.noteIndex % 12) + 12) % 12) : null);
+                if (pc == null || !Number.isFinite(pc)) continue;
+                s.add(pc);
+            }
+            return s;
+        };
+
+        const triadPcsFromRootAndType = (rootPc: number, chordType: string): { root: number; third: number; fifth: number } | null => {
+            try {
+                if (rootPc == null || !Number.isFinite(rootPc)) return null;
+                const t = String(chordType || '');
+                const isDim = t.includes('dim') || t.includes('°') || t.includes('b5');
+                const isAug = t.includes('aug') || t.includes('+') || t.includes('#5');
+                const isMinor = !isDim && !isAug && (t.startsWith('m') || t.includes('Minor'));
+                const thirdInt = isMinor || isDim ? 3 : 4;
+                const fifthInt = isAug ? 8 : (isDim ? 6 : 7);
+                const root = (((rootPc % 12) + 12) % 12);
+                return {
+                    root,
+                    third: (root + thirdInt) % 12,
+                    fifth: (root + fifthInt) % 12,
+                };
+            } catch {
+                return null;
+            }
+        };
+
+        const isSubset = (a: Set<number>, b: Set<number>): boolean => {
+            for (const x of a) if (!b.has(x)) return false;
+            return true;
+        };
+
+        timelineForLabels.forEach((event, eventIndex) => {
             // Find which system this event belongs to
             const measureIndex = event.measureIndex;
             let systemIndex = -1;
@@ -1705,71 +2314,259 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             if (systemIndex === -1) return;
             const system = layoutData.systemsParams[systemIndex];
 
-            // For Roman analysis we generally want all *sounding* notes, but when a
-            // suspension happens at this event we must ignore the suspended note at
-            // its onset (non-harmonic) to avoid wrong roots (e.g., IV instead of V2).
-            const suspIdsAtThisBeat = new Set<string>();
-            try {
-                for (const n of (analyzedNotes as any[] || [])) {
-                    const s = n?.isSuspension;
-                    if (!s) continue;
-                    if (typeof s.fromAbsBeat !== 'number') continue;
-                    if (Math.abs(s.fromAbsBeat - event.absBeat) < 1e-6) {
-                        if (typeof n.id === 'string') suspIdsAtThisBeat.add(n.id);
-                    }
-                }
-            } catch (_) {}
+            // Structural harmony: ignore ornaments/anticipations so they don't create
+            // micro-harmony labels on every scan-point.
+            const fullNotes = (event.notes || []);
 
-            const labelNotesRaw = (event.notes || []);
-            const labelNotesForRoman = labelNotesRaw.filter((n: any) => !suspIdsAtThisBeat.has(n.id));
-            const labelNotes = (labelNotesForRoman.length >= 2 ? labelNotesForRoman : labelNotesRaw);
-            if (!labelNotes || labelNotes.length < 2) return;
+            // Build a stable structural snapshot by voice: if a voice is currently on an ornament
+            // (anticipation/neighbor/etc.), keep the last non-ornamental active note for that voice.
+            // This prevents spurious label changes when a chord tone is temporarily replaced by an ornament.
+            const voiceSet = new Set<number>();
+            for (const n of fullNotes) {
+                const v = (n?.voice ?? 1) as number;
+                if (!n || n.isRest) continue;
+                voiceSet.add(v);
+            }
+
+            if (!lastStructuralByVoiceBySystem.has(systemIndex)) {
+                lastStructuralByVoiceBySystem.set(systemIndex, new Map<number, any>());
+            }
+            const lastStructural = lastStructuralByVoiceBySystem.get(systemIndex)!;
+
+            // Clear voices that are no longer active at this event.
+            for (const v of Array.from(lastStructural.keys())) {
+                if (!voiceSet.has(v)) lastStructural.delete(v);
+            }
+
+            // Update with any currently-active non-ornamental notes.
+            for (const n of fullNotes) {
+                if (!n || n.isRest) continue;
+                const v = (n?.voice ?? 1) as number;
+                if (isNonChordToneAtLabelEvent(n, event.absBeat)) {
+                    continue;
+                }
+                lastStructural.set(v, n);
+            }
+
+            const harmonicNotes = Array.from(lastStructural.values()).filter(Boolean);
+
+            // If a suspension originates at this event, the held tone is a non-chord tone
+            // against the new harmony. Exclude it from the chord-analysis snapshot so we
+            // don't accidentally label the verticality as a sus/add sonority (e.g. V7/6).
+            const harmonicNotesNoSuspAtThisBeat = harmonicNotes.filter((n: any) => {
+                const s = n?.isSuspension;
+                if (!s || typeof s.fromAbsBeat !== 'number') return true;
+                return Math.abs(s.fromAbsBeat - event.absBeat) >= 1e-6;
+            });
+            const analysisNotes = (harmonicNotesNoSuspAtThisBeat.length >= 2)
+                ? harmonicNotesNoSuspAtThisBeat
+                : harmonicNotes;
+
+            // For naming (roman + chord symbol), treat consonant "neighbor/anticipation" notes on
+            // strong beats as chord tones. This avoids cases where a true chord tone gets tagged as
+            // NCT and then removed inside getRomanAnalysis/getChordSymbol, collapsing a triad to a dyad
+            // (e.g. Bb/D -> iii5 and missing chord symbol).
+            const analysisNotesForNaming = (() => {
+                try {
+                    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                    const absBeat = Number(event.absBeat);
+                    const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+                    const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
+                    const isStrong = (() => {
+                        if (!nearInt(inMeasure)) return false;
+                        const beat0 = Math.round(inMeasure);
+                        return beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
+                    })();
+
+                    if (!isStrong) return analysisNotes;
+
+                    return (analysisNotes || []).map((n: any) => {
+                        if (!n || n.isRest) return n;
+                        const s = n.isSuspension;
+                        const isSusp = !!s && typeof s.fromAbsBeat === 'number';
+                        const isNctFlag = !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
+
+                        if (!isNctFlag && !isSusp) return n;
+
+                        // Use fullNotes so consonance is evaluated against the real bass.
+                        const dissonantVsBass = isDissonantIntervalAgainstBass(n, fullNotes || []);
+
+                        // Only drop/keep suspension behavior at its actual onset. During preparation,
+                        // a note can be marked as isSuspension but should still count as chord tone.
+                        const isSuspStartHere = isSusp && Math.abs((s.fromAbsBeat as number) - absBeat) < 1e-6;
+                        if (isSusp && isSuspStartHere) return n;
+
+                        if (dissonantVsBass) return n;
+
+                        return {
+                            ...n,
+                            isNeighbor: false,
+                            isAnticipation: false,
+                            isAppoggiatura: false,
+                            isSuspension: isSusp ? undefined : n.isSuspension,
+                        };
+                    });
+                } catch {
+                    return analysisNotes;
+                }
+            })();
+
+            // Bass-driven stability: avoid re-labeling on every upper-voice onset.
+            // If the bass pitch-class is unchanged, keep the previous label (unless this is the first label).
+            const bassNote = (analysisNotes || [])
+                .filter((n: any) => n && !n.isRest && Number.isFinite(n.midi))
+                .slice()
+                .sort((a: any, b: any) => (a.midi ?? 0) - (b.midi ?? 0))[0];
+            const bassPc = bassNote && Number.isFinite(bassNote.midi) ? (((bassNote.midi % 12) + 12) % 12) : null;
+
+            // If the harmonic content doesn't change (only ornaments changed), skip.
+            const harmonicSig = signatureFromNotes(harmonicNotes);
+            if (!harmonicSig || harmonicNotes.length < 2) {
+                return;
+            }
 
             const applicableContext = ctxAtAbsBeat(event.absBeat);
             const contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
             const contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
 
+            const ctxKey = `${contextTonic}::${contextIsMinor ? 'm' : 'M'}`;
+            const prevSig = lastSigBySystem.get(systemIndex);
+            const prevCtx = lastCtxBySystem.get(systemIndex);
+            const prevBassPc = lastBassPcBySystem.get(systemIndex);
+
+            const hasOrnamentOnsetAtThisBeat = (() => {
+                try {
+                    // Only true "ornaments" should create hidden markers for the generic harmony hold-line.
+                    // Passing notes already have their own connection/line, so don't double-draw.
+                    return (fullNotes || []).some((n: any) => {
+                        if (!n || n.isRest) return false;
+                        return !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura || n.isEscape);
+                    });
+                } catch {
+                    return false;
+                }
+            })();
+
+            const shouldSuppressAsCompletion = (() => {
+                try {
+                    if (!prevSig || prevCtx !== ctxKey) return false;
+                    if (prevBassPc == null || bassPc == null) return false;
+                    if (prevBassPc !== bassPc) return false;
+
+                    const prevPcs = new Set(prevSig.split('-').filter(Boolean).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n)));
+                    const curPcs = new Set(harmonicSig.split('-').filter(Boolean).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n)));
+                    if (prevPcs.size !== 2) return false;
+                    if (curPcs.size !== 3) return false;
+                    for (const p of prevPcs) if (!curPcs.has(p)) return false;
+
+                    // Case A: completion to the diatonic triad implied by the bass.
+                    {
+                        const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
+                        if (inferred) {
+                            const triadSet = new Set<number>([inferred.triad.root, inferred.triad.third, inferred.triad.fifth]);
+                            const ok = Array.from(curPcs).every(p => triadSet.has(p));
+                            if (ok) return true;
+                        }
+                    }
+
+                    // Case B: completion to the previous *diatonic* triad (shell -> full triad)
+                    // e.g. vi6 shell (C–E over C) -> vi6 (A–C–E over C).
+                    {
+                        const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+                        if (prevRoman && !String(prevRoman).includes('/')) {
+                            const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
+                            if (prevTriad) {
+                                const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
+                                const okPrev = Array.from(prevPcs).every(p => triadSet.has(p));
+                                const okCur = Array.from(curPcs).every(p => triadSet.has(p));
+                                if (okPrev && okCur) return true;
+                            }
+                        }
+                    }
+
+                    return false;
+                } catch {
+                    return false;
+                }
+            })();
+
+            if ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion) {
+                // Keep the label stable, but record that *something happened* here (ornament/appoggiatura)
+                // so the renderer can draw a short hold-line across hidden beats.
+                if (hasOrnamentOnsetAtThisBeat || shouldSuppressAsCompletion) {
+                    const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+                    if (prevRoman) {
+                        const x = getXForAbsBeat(event.absBeat, system);
+                        labelsBySystem[systemIndex].push({
+                            id: `hlabel-hidden-${systemIndex}-${event.absBeat}`,
+                            x,
+                            roman: prevRoman,
+                            figures: lastFiguresBySystem.get(systemIndex) || [],
+                            symbol: '',
+                            absBeat: event.absBeat,
+                            hiddenMarker: true,
+                        });
+                    }
+                }
+                return;
+            }
+            lastSigBySystem.set(systemIndex, harmonicSig);
+            lastCtxBySystem.set(systemIndex, ctxKey);
+            lastBassPcBySystem.set(systemIndex, bassPc);
+
             let roman = '';
             let figures: string[] = [];
             let symbol = '';
+            let isAug6Roman = false;
+
+            const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+            const prevRootPc = lastChordRootPcBySystem.get(systemIndex);
+            const prevType = lastChordTypeBySystem.get(systemIndex);
 
             try {
-                const r = getRomanAnalysis(labelNotes, contextTonic, contextIsMinor);
+                const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor);
                 if (r) {
                     roman = r.roman;
                     figures = r.figures || [];
+                    isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
                 }
                 const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
-                const s = getChordSymbol(event.notes, contextKeySignature);
+                const s = getChordSymbol(analysisNotesForNaming as any, contextKeySignature, contextTonic);
                 if (s) symbol = s;
 
-                // If the chord symbol explicitly indicates a slash or a 7th (e.g. G7/F),
-                // prefer the identifyChord result for roman (log candidates for debugging).
+                // If the chord symbol explicitly indicates a slash (e.g. D7/F#),
+                // prefer roman derived from the *symbol root*.
+                // Under suspensions/ties, identifyChordCandidates can mis-root and collapse
+                // into misleading labels like I4/7.
                 try {
-                    if (symbol && (symbol.indexOf('/') >= 0 || /7/.test(symbol))) {
-                        try {
-                            const candidates = identifyChordCandidates(event.notes || []);
-                            if (false) {
-                                console.debug('[ANALYSIS] identifyChordCandidates', { absBeat: event.absBeat, symbol, candidates: candidates.map(c => ({ root: c.root?.noteIndex, type: c.type, score: c.score })) });
-                            }
-                            if (candidates && candidates.length) {
-                                const chosen = candidates[0];
-                                const forced = calculateRomanFromChordInfo({ root: chosen.root, type: chosen.type }, contextTonic, contextIsMinor);
-                                if (forced) {
-                                    roman = forced;
-                                } else {
-                                    const fullR = getRomanAnalysis(event.notes, contextTonic, contextIsMinor);
-                                    if (fullR) roman = fullR.roman || roman;
+                    if (!isAug6Roman && symbol && (symbol.indexOf('/') >= 0)) {
+                        const symRaw = String(symbol || '').replace('♯', '#').replace('♭', 'b');
+                        const rootMatch = symRaw.match(/^([A-G])([#b]?)/);
+                        const rootName = rootMatch ? `${rootMatch[1]}${rootMatch[2] || ''}` : '';
+                        const rootPc = rootName ? noteNameToChromaticIndex(rootName) : -1;
+
+                        const inferredType = (() => {
+                            const s = symRaw;
+                            if (/maj7/i.test(s)) return 'Major 7';
+                            if (/m7/i.test(s)) return 'Minor 7';
+                            if (s.includes('°') || /dim7/i.test(s)) return 'Diminished 7';
+                            if (s.includes('7')) return 'Dominant 7';
+                            if (/\bm\b/i.test(s) || /m(?!aj)/i.test(s)) return 'Minor';
+                            return 'Major';
+                        })();
+
+                        if (rootPc != null && rootPc >= 0) {
+                            const virtualRootMidi = 60 + (((rootPc % 12) + 12) % 12);
+                            const virtualRoot = ({ id: 'virtual-root', pitch: 'C', octave: 4, position: 0, midi: virtualRootMidi, noteIndex: rootPc } as any);
+                            const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: inferredType }, contextTonic, contextIsMinor);
+                            if (forced) {
+                                roman = forced;
+                                // For dominant sevenths, keep a stable 7 figure.
+                                if (String(inferredType).startsWith('Dominant')) {
+                                    figures = ['7'];
+                                    if (/b9/i.test(symRaw) || /7b9/i.test(symRaw)) figures.push('♭9');
+                                    if (/#9/i.test(symRaw) || /7#9/i.test(symRaw)) figures.push('♯9');
                                 }
-                                // prefer figured bass from full analysis if available
-                                const fullRfig = getRomanAnalysis(event.notes, contextTonic, contextIsMinor);
-                                if (fullRfig && fullRfig.figures && fullRfig.figures.length) figures = fullRfig.figures;
-                            }
-                        } catch (e) {
-                            const fullR = getRomanAnalysis(event.notes, contextTonic, contextIsMinor);
-                            if (fullR) {
-                                roman = fullR.roman || roman;
-                                if (fullR.figures && fullR.figures.length) figures = fullR.figures;
                             }
                         }
                     }
@@ -1777,6 +2574,154 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             } catch (err) {
                 console.warn('Harmony label compute failed', err);
                 return;
+            }
+
+            // If the current verticality is *exactly* a diatonic triad with the bass as its root,
+            // prefer the diatonic degree inferred from the bass. This is a robust guard against
+            // occasional mis-rooting under ties/suspensions and ensures stable labels like I5
+            // for plain tonic triads (e.g. Bb–D–F over Bb in Bb major).
+            try {
+                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
+                if (!isAug6Roman && !isSecondaryOrSlashRoman && bassPc != null) {
+                    const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
+                    if (inferred) {
+                        const pcs = pcSetFromNotes(analysisNotes as any);
+                        if (pcs.size === 3 && bassPc === inferred.triad.root) {
+                            const triadSet = new Set<number>([inferred.triad.root, inferred.triad.third, inferred.triad.fifth]);
+                            const ok = Array.from(pcs).every(p => triadSet.has(p));
+                            if (ok) {
+                                roman = inferred.roman;
+                                figures = ['5'];
+                            }
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // If we only have a dyad (2 pitch classes), roman labeling is inherently ambiguous.
+            // Prefer a diatonic bass-inferred label to avoid V/III misreads on power-chord shells
+            // (e.g. C–G should read as I in C, A–E as vi).
+            try {
+                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
+                const pcs = pcSetFromNotes(analysisNotes as any);
+                if (!isSecondaryOrSlashRoman && bassPc != null && pcs.size <= 2) {
+                    const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
+                    if (inferred) {
+                        roman = inferred.roman;
+                        if (bassPc === inferred.triad.root) figures = ['5'];
+                        else if (bassPc === inferred.triad.third) figures = ['6'];
+                        else if (bassPc === inferred.triad.fifth) figures = ['6', '4'];
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // --- Shell continuation (appoggiature / sparse textures) ---
+            // If the previous label is a diatonic triad (e.g. vi) and the current vertical
+            // is just a sparse subset of that triad (often 2 PCs, because one chord tone is
+            // momentarily missing), keep the previous Roman numeral and reflect the inversion
+            // from the bass.
+            // This prevents weak-beat shells like C–E over C from collapsing to I when the
+            // intended harmony is still vi6 (A–C–E with A omitted).
+            try {
+                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
+                const pcs = pcSetFromNotes(analysisNotes as any);
+                if (!isSecondaryOrSlashRoman && prevRoman && bassPc != null && pcs.size > 0 && pcs.size <= 2) {
+                    const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
+                    if (prevTriad) {
+                        const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
+                        if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
+                            roman = prevRoman;
+                            if (bassPc === prevTriad.root) figures = ['5'];
+                            else if (bassPc === prevTriad.third) figures = ['6'];
+                            else if (bassPc === prevTriad.fifth) figures = ['6', '4'];
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // --- Diatonic shell/rootless inference (your "due accordi" policy) ---
+            // This is a *fallback* only: use the bass to infer a diatonic triad when we
+            // cannot confidently label the harmony. Do NOT override an existing roman label,
+            // otherwise inversions start looking like "root=bass".
+            try {
+                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
+                if (!isSecondaryOrSlashRoman && bassPc != null && !roman) {
+                    const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
+                    if (inferred) {
+                        const pcs = pcSetFromNotes(analysisNotes as any);
+                        const triadSet = new Set<number>([inferred.triad.root, inferred.triad.third, inferred.triad.fifth]);
+                        const pcsSubset = isSubset(pcs, triadSet);
+                        // Allow very sparse sets (2 pcs) to still count as the triad.
+                        if (pcsSubset && pcs.size > 0 && pcs.size <= 3) {
+                            roman = inferred.roman;
+                            if (bassPc === inferred.triad.root) figures = ['5'];
+                            else if (bassPc === inferred.triad.third) figures = ['6'];
+                            else if (bassPc === inferred.triad.fifth) figures = ['6', '4'];
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // Display policy: for triads in root position, show '5' (I5, vi5, ...)
+            // to match your hold-line notation.
+            try {
+                if (roman && (!figures || figures.length === 0) && !/7/.test(String(roman))) {
+                    figures = ['5'];
+                }
+            } catch { /* ignore */ }
+
+            // --- Post-processing: infer inversions from the previous harmony when the bass moves
+            // to a chord tone.
+            try {
+                const pcs = pcSetFromNotes(analysisNotes as any);
+                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
+                if (prevRoman && prevRootPc != null && prevType && bassPc != null && roman && roman !== prevRoman && !String(roman).includes('/')) {
+                    const triad = triadPcsFromRootAndType(prevRootPc, prevType);
+                    if (triad) {
+                        const triadSet = new Set<number>([triad.root, triad.third, triad.fifth]);
+                        // Current vertical may be rootless; allow subset of the triad.
+                        if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
+                            roman = prevRoman;
+                            if (bassPc === triad.root) figures = ['5'];
+                            else if (bassPc === triad.third) figures = ['6'];
+                            else if (bassPc === triad.fifth) figures = ['6', '4'];
+                        }
+                    }
+                }
+
+                // If the previous chord is a *diatonic triad label* (I/ii/iii/IV/V/vi/vii° etc.)
+                // keep that roman when the current vertical is a subset of its triad, even if the
+                // bass alone would imply a different diatonic root (e.g. Am/C shell -> vi6, not I).
+                if (prevRoman && bassPc != null && roman && roman !== prevRoman && !String(roman).includes('/')) {
+                    const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
+                    if (prevTriad) {
+                        const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
+                        if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
+                            roman = prevRoman;
+                            if (bassPc === prevTriad.root) figures = ['5'];
+                            else if (bassPc === prevTriad.third) figures = ['6'];
+                            else if (bassPc === prevTriad.fifth) figures = ['6', '4'];
+                        }
+                    }
+                }
+            } catch (_) {
+                // ignore
+            }
+
+            // Capture the most likely chord root/type for inversion inference on the next label.
+            try {
+                const candidates = identifyChordCandidates(analysisNotesForNaming || []);
+                if (candidates && candidates.length) {
+                    const chosen = candidates[0];
+                    const rootPc = (chosen?.root?.noteIndex ?? null);
+                    if (rootPc != null && Number.isFinite(rootPc)) lastChordRootPcBySystem.set(systemIndex, (((rootPc % 12) + 12) % 12));
+                    if (chosen?.type) lastChordTypeBySystem.set(systemIndex, String(chosen.type));
+                }
+            } catch (_) {}
+
+            if (roman) {
+                lastRomanBySystem.set(systemIndex, roman);
+                lastFiguresBySystem.set(systemIndex, (figures || []).slice());
             }
 
             // If a suspension originates at this event, prefer showing the resolution's Roman
@@ -1792,6 +2737,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                 if (suspNote) {
                     const s = (suspNote as any).isSuspension;
+                    const normalizeSuspNum = (num: number): number | null => {
+                        try {
+                            if (!Number.isFinite(num)) return null;
+                            const n = Math.round(num);
+                            if (n <= 0) return null;
+                            return (((n - 1) % 7 + 7) % 7) + 1;
+                        } catch {
+                            return null;
+                        }
+                    };
+                    const normalizeFigureString = (fig: string): string => {
+                        const s = String(fig ?? '').trim();
+                        if (!s) return s;
+                        // Preserve special cases we intentionally show as compound figures.
+                        // (9-8 suspensions are shown with a 9 at the onset, not 2.)
+                        const m = s.match(/(\d+)/);
+                        if (!m) return s;
+                        const n = parseInt(m[1], 10);
+                        if (!Number.isFinite(n) || n <= 0) return s;
+                        if (n === 8 || n === 9) return s;
+                        if (n > 9) {
+                            const simple = (((n - 1) % 7 + 7) % 7) + 1;
+                            return s.replace(m[1], String(simple));
+                        }
+                        return s;
+                    };
+                    const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '9-8']);
                     // Prefer showing the Roman numeral of the *resolution harmony*.
                     // This matches traditional analysis where the dissonance is a
                     // non-chord tone against the new chord, and aligns with how we
@@ -1815,61 +2787,87 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     } catch (_) {}
 
                     if (resolvedRoman) {
-                        roman = resolvedRoman;
+                        // Don't overwrite secondary dominants (V/x) at suspension onset.
+                        // In your cadence case, adding the resolution chord should not make V7/V disappear.
+                        if (!String(roman || '').includes('/')) {
+                            roman = resolvedRoman;
+                        }
                     } else {
                         // Fallback: underlying harmony at suspension onset (already
                         // excluding the suspended note at this beat via `labelNotes`).
-                        const rHere = getRomanAnalysis(labelNotes, contextTonic, contextIsMinor);
+                        const rHere = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor);
                         if (rHere) roman = rHere.roman || roman;
                     }
 
-                    // For 4-3 suspensions (e.g. V7sus4), show the degrees present above the
-                    // chord root (4/5/7) rather than bass-based shorthand (4/3) which can hide
-                    // the presence of the 7th when extra tones are present.
+                    // In very sparse textures (e.g. G–E with the suspension filtered out),
+                    // the chord-ID can flip to iii even though the intended harmony is V.
+                    // Stabilize by preferring a resolution-event chord candidate that matches
+                    // the bass pitch-class, and as a last resort force V over dominant bass.
                     try {
-                        if (s && String(s.type) === '4-3') {
-                            const pitchToDiatonic = (p: string) => {
-                                switch (p) {
-                                    case 'C': return 0;
-                                    case 'D': return 1;
-                                    case 'E': return 2;
-                                    case 'F': return 3;
-                                    case 'G': return 4;
-                                    case 'A': return 5;
-                                    case 'B': return 6;
-                                    default: return null;
-                                }
-                            };
+                        // Don't clobber secondary dominants (V/x) with sparse-texture heuristics.
+                        if (String(roman).includes('/')) {
+                            // keep as-is
+                        } else {
+                        const evForRoman = (resEvForSusp || event) as any;
+                        const evNotes = (evForRoman?.notes || []) as any[];
+                        const bassNote = evNotes.slice().sort((x, y) => (x?.midi ?? 0) - (y?.midi ?? 0))[0];
+                        const bassPc = (bassNote && Number.isFinite(bassNote.midi)) ? ((bassNote.midi % 12) + 12) % 12 : null;
+                        const ctxHere = ctxAtAbsBeat(evForRoman?.absBeat ?? event.absBeat);
+                        const tonicHere = ctxHere ? ctxHere.newTonic : contextTonic;
+                        const isMinorHere = ctxHere ? ctxHere.newIsMinor : contextIsMinor;
 
-                            let rootPitch: string | null = null;
-                            try {
-                                const sourceNotes = (resEvForSusp?.notes && resEvForSusp.notes.length >= 2)
-                                    ? resEvForSusp.notes
-                                    : (event.notes || []);
-                                const cands = identifyChordCandidates(sourceNotes);
-                                rootPitch = cands?.[0]?.root?.pitch ?? null;
-                            } catch (_) {}
-
-                            const rootIdx = rootPitch ? pitchToDiatonic(rootPitch) : null;
-                            if (rootIdx !== null) {
-                                const degs = new Set<number>();
-                                for (const nn of (event.notes || [])) {
-                                    const p = (nn as any)?.pitch;
-                                    const idx = typeof p === 'string' ? pitchToDiatonic(p) : null;
-                                    if (idx === null) continue;
-                                    const deg = ((idx - rootIdx + 7) % 7) + 1;
-                                    if (deg === 1) continue;
-                                    degs.add(deg);
-                                }
-                                const list = [...degs].sort((a, b) => b - a).map(String);
-                                if (list.length) figures = list;
-                            }
+                        const candidates = identifyChordCandidates(evNotes);
+                        if (candidates && candidates.length) {
+                            const preferred = (bassPc == null)
+                                ? candidates[0]
+                                : (candidates.find(c => (c?.root?.noteIndex ?? null) === bassPc) || candidates[0]);
+                            const forced = preferred
+                                ? calculateRomanFromChordInfo({ root: preferred.root, type: preferred.type }, tonicHere, isMinorHere)
+                                : null;
+                            if (forced) roman = forced;
+                        }
                         }
                     } catch (_) {}
 
-                    // If no figures computed, fall back to the detected suspension numbers.
-                    if ((!figures || figures.length === 0) && s && typeof s.fromNum === 'number' && typeof s.toNum === 'number') {
-                        figures = [String(s.fromNum), String(s.toNum)];
+                    // Figures policy:
+                    // - Classic suspensions (4-3/6-5/7-6/9-8): show the suspension figure(s) next to the Roman
+                    //   (e.g. V4/5, V6), and show only the resolution number at the end of the hold-line.
+                    // - Non-classic ritardi (e.g. bass retardation): prefer vertical figures computed on the
+                    //   full sounding set at the onset.
+                    if (s && CLASSIC_TYPES.has(String(s.type))) {
+                        try {
+                            // Compute onset figures from the *structural* notes at this event (including the held tone),
+                            // otherwise we risk getting a sanitized chord that hides the suspension.
+                            const onsetR = getRomanAnalysis((harmonicNotes || []) as any, contextTonic, contextIsMinor);
+                            const onsetFigures = (onsetR?.figures || figures || []).map(normalizeFigureString);
+
+                            // Ensure the suspension-from figure is present (11 -> 4 etc.)
+                            const suspType = String((s as any).type ?? '');
+                            const fromWanted = (() => {
+                                if (suspType === '4-3') return 4;
+                                if (suspType === '6-5') return 6;
+                                if (suspType === '7-6') return 7;
+                                if (suspType === '9-8') return 9;
+                                return normalizeSuspNum(Number((s as any).fromNum));
+                            })();
+
+                            const out: string[] = [];
+                            const push = (x: string) => { if (x && !out.includes(x)) out.push(x); };
+                            // Keep any onset figures (e.g., the 5 in a 4-3 over V)
+                            onsetFigures.forEach(push);
+                            if (fromWanted != null) push(String(fromWanted));
+                            figures = out;
+                        } catch (_) {
+                            figures = (figures || []).map(normalizeFigureString);
+                        }
+                    } else {
+                        try {
+                            const fullR = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor);
+                            if (fullR?.figures?.length) figures = fullR.figures;
+                            figures = (figures || []).map(normalizeFigureString);
+                        } catch (_) {
+                            figures = (figures || []).map(normalizeFigureString);
+                        }
                     }
                 }
             } catch (_) {}
@@ -1897,6 +2895,49 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     }
                 }
             } catch (_) {}
+
+            // --- Rescue: secondary dominants from explicit chord symbol ---
+            // In some cases (especially when ties/suspensions make the vertical set "dirty"),
+            // the chord-ID can collapse into something like I with odd figures (e.g. 4 + 7),
+            // even though the chord symbol is clearly a dominant seventh (e.g. D7 => V7/V in C).
+            // Prefer the dominant-based roman when the symbol is unambiguous.
+            try {
+                const symRaw = String(symbol || '');
+                const sym = symRaw.replace('♯', '#').replace('♭', 'b');
+
+                const isDominantSymbol = (() => {
+                    if (!sym) return false;
+                    if (sym.includes('/')) return false; // slash handled elsewhere
+                    if (/maj7/i.test(sym)) return false;
+                    if (/m7/i.test(sym)) return false;
+                    if (sym.includes('°') || /dim7/i.test(sym)) return false;
+                    // Dominant-type spellings in this app: "7", "7b9", "7#9", "11", "13", etc.
+                    return /7|9|11|13/.test(sym);
+                })();
+
+                const looksLikeI47 = (() => {
+                    const figs = (figures || []).map(f => String(f));
+                    return String(roman || '') === 'I' && figs.includes('4') && figs.includes('7');
+                })();
+
+                if (isDominantSymbol && !String(roman || '').includes('/') && (looksLikeI47 || String(roman || '') === 'I')) {
+                    const m = sym.match(/^([A-G])([#b]?)/);
+                    if (m) {
+                        const rootName = `${m[1]}${m[2] || ''}`;
+                        const rootPc = noteNameToChromaticIndex(rootName);
+                        if (rootPc != null && rootPc >= 0) {
+                            const virtualRootMidi = 60 + (((rootPc % 12) + 12) % 12);
+                            const virtualRoot = ({ id: 'virtual-root', pitch: 'C', octave: 4, position: 0, midi: virtualRootMidi, noteIndex: rootPc } as any);
+                            const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: 'Dominant 7' }, contextTonic, contextIsMinor);
+                            if (forced && String(forced).includes('/')) {
+                                roman = forced;
+                                // Keep figures minimal and stable for secondary dominants.
+                                figures = ['7'];
+                            }
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
 
             if (!roman && !symbol) return;
 
@@ -2021,20 +3062,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
     const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number) => {
         if (!output || note.isRest) return;
-        const midi = note.midi;
+        const midi = (note.midi ?? 0) + playbackTransposeSemitones;
         if (!Number.isFinite(midi) || midi <= 0) return;
         const vel = 100;
         output.send([0x90, midi, vel]);
         output.send([0x80, midi, 0], window.performance.now() + durationSec * 1000);
-    }, []);
+    }, [playbackTransposeSemitones]);
 
     const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8) => {
         if (!isAudioReady || !audioService.audioContext || note.isRest) return;
         await audioService.ensureAudioIsReady();
-        const midi = note.midi;
+        const midi = (note.midi ?? 0) + playbackTransposeSemitones;
         if (!Number.isFinite(midi) || midi < 21 || midi > 108) return;
         await audioService.playNote(midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSec });
-    }, [audioService, isAudioReady, midiToName]);
+    }, [audioService, isAudioReady, midiToName, playbackTransposeSemitones]);
 
     const playNote = useCallback(async (note: StaffNote, durationSec = 0.8) => {
         if (selectedMidiOutput) {
@@ -2316,8 +3357,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         if (n.isRest) return;
                         const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
                         const midi = n.midi;
-                        if (!Number.isFinite(midi) || midi < 21 || midi > 108) return;
-                        void audioService.playNote(midiToName(midi), { when, duration: durSec });
+                        const midiT = (midi ?? 0) + playbackTransposeSemitones;
+                        if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
+                        void audioService.playNote(midiToName(midiT), { when, duration: durSec });
                     });
                 }
             }, Math.max(0, (startMs - performance.now()) + delayMs));
@@ -2327,7 +3369,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         const endMs = (maxEndAbsBeat - startAbsBeat) * beatDurationSec * 1000;
         playbackTimeoutsRef.current.push(window.setTimeout(() => stopPlayback(), Math.max(0, (startMs - performance.now()) + endMs + 200)));
-    }, [audioService, bpm, getPlayheadPosForAbsBeat, isAudioReady, isSwing, midiToName, rawNotes, selectedMidiOutput, sendMidiNote, startMetronomeScheduler, stopPlayback, timeSignature]);
+    }, [audioService, bpm, getPlayheadPosForAbsBeat, isAudioReady, isSwing, midiToName, rawNotes, selectedMidiOutput, sendMidiNote, startMetronomeScheduler, stopPlayback, timeSignature, playbackTransposeSemitones]);
 
     const togglePlayback = useCallback(() => {
         if (isPlaying) stopPlayback();
@@ -2665,13 +3707,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const count = sys.measureIndices.length;
         if (count === 0) return null;
 
+        // Small hysteresis near measure boundaries (barlines): users often click a few px
+        // "into" the barline stroke, which would otherwise map to the previous measure and
+        // overwrite its last slot.
+        const MEASURE_BOUNDARY_SLOP_PX = 10;
+
+        // Prefer the *rendered* barline positions for measure ends.
+        // This keeps click targeting correct when measures have very different visual widths.
+        const barlines = layoutData.systemsBarlines?.[systemIndex] || [];
+        const barEndByMeasure = new Map<number, number>();
+        for (const b of barlines) {
+            const id = String((b as any)?.id ?? '');
+            const m = id.startsWith('bar-') ? Number(id.slice(4)) : NaN;
+            if (Number.isFinite(m) && typeof (b as any)?.xPosition === 'number') {
+                barEndByMeasure.set(m, (b as any).xPosition as number);
+            }
+        }
+
         // Use the same segment logic as the layout builder (startX -> nextX),
         // and fall back to nearest measure when x is slightly outside.
         for (let i = 0; i < count; i++) {
             const mIdx = sys.measureIndices[i];
             const startX = sys.startMeasuresX[i];
-            const endX = i < count - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
+            const fallbackEndX = i < count - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
+            const endX = barEndByMeasure.get(mIdx) ?? fallbackEndX;
             const w = Math.max(0, endX - startX);
+
+            // If we're just left of this measure's start, treat it as this measure.
+            if (i > 0 && x >= (startX - MEASURE_BOUNDARY_SLOP_PX) && x < startX) {
+                return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
+            }
             if (x >= startX && x < endX) return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
         }
 
@@ -2686,10 +3751,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         }
         const mIdx = sys.measureIndices[idx];
         const startX = sys.startMeasuresX[idx];
-        const endX = idx < count - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+        const fallbackEndX = idx < count - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+        const endX = barEndByMeasure.get(mIdx) ?? fallbackEndX;
         const w = Math.max(0, endX - startX);
         return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
     }, [layoutData]);
+
+    const getSnapBiasForDuration = useCallback((dur: any) => {
+        return (
+            dur === 'sixteenth' ? 0.55 :
+            dur === 'thirty-second' ? 0.6 :
+            dur === 'sixty-fourth' ? 0.65 :
+            0.35
+        );
+    }, []);
+
+    const quantizeBeatRawToGrid = useCallback((beatRaw: number, beatsPerMeasure: number) => {
+        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
+        const step = Math.max(1e-6, gridStep);
+        const snapBias = getSnapBiasForDuration(selectedInsertion.duration);
+
+        const slot = Math.floor(((beatRaw - 1) / step) + snapBias);
+        const maxStartBeat = 1 + Math.max(0, beatsPerMeasure - step);
+        const beat = Math.min(
+            Math.max(1, Math.round((1 + (slot * step)) * 1e6) / 1e6),
+            Math.round(maxStartBeat * 1e6) / 1e6,
+        );
+        return { beat, step };
+    }, [getSnapBiasForDuration, selectedInsertion.duration, tupletFactor]);
+
+    const [snapGuide, setSnapGuide] = useState<{ systemIndex: number; x: number } | null>(null);
 
     const setPlaybackCursorFromMeasureBeat = useCallback((systemIndex: number, x: number, measureIndex: number, beat: number) => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -2755,16 +3846,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
         const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
-
-        // Quantize to the current grid (same as left-click insertion).
-        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
-        const step = Math.max(1e-6, gridStep);
-        const beat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
+        const { beat } = quantizeBeatRawToGrid(beatRaw, beatsPerMeasure);
 
         setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, beat);
         // Aggiorna sempre pasteCaret con beat quantizzato
         setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat });
-    }, [getCurrentAbsBeatForPlayhead, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion.duration, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
+    }, [getCurrentAbsBeatForPlayhead, getSystemMeasureAtX, layoutData, playheadPosition, quantizeBeatRawToGrid, setPlaybackCursorFromMeasureBeat, timeSignature]);
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
         if (!layoutData) return;
@@ -2785,10 +3872,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
         const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
-
-        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
-        const step = Math.max(1e-6, gridStep);
-        const quantizedBeat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
+        const { beat: quantizedBeat } = quantizeBeatRawToGrid(beatRaw, beatsPerMeasure);
 
         // Set playback cursor + visible playhead at the clicked point.
         setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, quantizedBeat);
@@ -2798,12 +3882,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         // Per compatibilità con i costruttori StaffNote che usano la shorthand "beat"
         const beat = quantizedBeat;
+        const beatNorm = Math.round(beat * 1e6) / 1e6;
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
         // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
         // otherwise the treble/bass gating will cut off low notes for S/A.
         const yForArea = targetClef === 'treble' ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX) : y;
-        const isBassArea = yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
+        const isBassArea = (staffSystemMode === 'treble_only')
+            ? false
+            : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
         if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) return;
 
         // Option/Alt+Click: selection-only gesture (no insertion).
@@ -2827,7 +3914,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 clef: targetClef,
                 voice: selectedVoice,
             };
-            setRawNotes(prev => [...prev, rest]);
+            setRawNotes(prev => {
+                const filtered = prev.filter(n => {
+                    if (n.measureIndex !== rest.measureIndex) return true;
+                    if (n.voice !== rest.voice) return true;
+                    const nBeat = Math.round(((n.beat ?? 1) as number) * 1e6) / 1e6;
+                    return nBeat !== beatNorm;
+                });
+                return [...filtered, rest].sort((a, b) => {
+                    if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
+                    if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
+                    return (a.voice ?? 1) - (b.voice ?? 1);
+                });
+            });
             return;
         }
 
@@ -2868,12 +3967,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         setRawNotes(prev => {
             // Rimuovi eventuale nota/pausa sovrapposta
-            const filtered = prev.filter(
-                n =>
-                    n.measureIndex !== newNote.measureIndex ||
-                    n.voice !== newNote.voice ||
-                    Math.abs((n.beat ?? 1) - (newNote.beat ?? 1)) > 1e-6
-            );
+            const filtered = prev.filter(n => {
+                if (n.measureIndex !== newNote.measureIndex) return true;
+                if (n.voice !== newNote.voice) return true;
+                const nBeat = Math.round(((n.beat ?? 1) as number) * 1e6) / 1e6;
+                return nBeat !== beatNorm;
+            });
             // Inserisci la nuova nota e ordina per measureIndex, beat, voice
             const next = [...filtered, newNote].sort((a, b) => {
                 if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
@@ -2896,8 +3995,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         selectedVoice,
         setRawNotes,
         setPasteCaret,
+        staffSystemMode,
         timeSignature,
-        tupletFactor,
+        quantizeBeatRawToGrid,
         applyActiveAccidental,
         playNote,
         activeAccidental,
@@ -3003,19 +4103,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
         // otherwise the treble/bass gating will cut off low notes for S/A.
         const yForArea = targetClef === 'treble' ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX) : y;
-        const isBassArea = yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2);
+        const isBassArea = (staffSystemMode === 'treble_only')
+            ? false
+            : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
         if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) {
             setGhostNote(null);
+            setSnapGuide(null);
             return;
         }
 
         const hit = getSystemMeasureAtX(systemIndex, x);
-        if (!hit) { setGhostNote(null); return; }
+        if (!hit) {
+            setGhostNote(null);
+            setSnapGuide(null);
+            return;
+        }
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
         const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
+
+        // Show a guide at the snapped insertion slot while keeping the ghost under the cursor.
+        try {
+            if (tool === 'insert' && !(dragStartPosRef.current && dragStartPosRef.current.systemIndex === systemIndex)) {
+                const { beat: qb } = quantizeBeatRawToGrid(beatRaw, beatsPerMeasure);
+                const snappedX = hit.measureStartX + MEASURE_PADDING_X + (((qb - 1) / beatsPerMeasure) * contentWidth);
+                setSnapGuide({ systemIndex, x: snappedX });
+            } else {
+                setSnapGuide(null);
+            }
+        } catch {
+            setSnapGuide(null);
+        }
 
 
 
@@ -3057,6 +4177,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         pos = Math.round(pos);
 
         let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
+        props = applyActiveAccidental(props);
 
         setGhostNote({
             id: 'ghost',
@@ -3071,7 +4192,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             voice: selectedVoice,
             systemIndex,
         });
-    }, [clefForVoice, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, timeSignature, tupletFactor]);
+    }, [
+        applyActiveAccidental,
+        clefForVoice,
+        getNotePropertiesFromDiatonicPosition,
+        getSystemMeasureAtX,
+        isDotted,
+        isDuplet,
+        isTriplet,
+        keySignature,
+        layoutData,
+        quantizeBeatRawToGrid,
+        selectedInsertion,
+        selectedVoice,
+        staffSystemMode,
+        timeSignature,
+        tool,
+    ]);
 
     // Finalize marquee selection on mouse up
     useEffect(() => {
@@ -3912,7 +5049,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     id="key-signature-select"
                     value={keySignatureRoot}
                     onChange={e => handleKeySignatureRootChange(e.target.value)}
-                    className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs"
+                    className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-[111px]"
                 >
                     <optgroup label="Diesis (♯)">{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                     <optgroup label="Bemolli (♭)">{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
@@ -3922,7 +5059,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     <input
                         type="checkbox"
                         checked={keyChangeMode === 'transpose'}
-                        onChange={(e) => setKeyChangeMode(e.target.checked ? 'transpose' : 'none')}
+                        onChange={(e) => setTransposeKeyChangeEnabled(e.target.checked)}
                         className="accent-cyan-500"
                     />
                     Trasponi
@@ -3944,7 +5081,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         <select
                             value={modalTonicOverride}
                             onChange={(e) => setModalTonicOverride(e.target.value)}
-                            className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs"
+                            className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-24"
                             title="Tonica del modo (vuoto = prima nota inserita)"
                         >
                             <option value="">Auto (prima nota)</option>
@@ -3971,33 +5108,74 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         measures: (
             <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-400">Misure:</span>
-                <input
-                    value={minMeasureCountDraft}
-                    onChange={(e) => setMinMeasureCountDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            applyMinMeasureCountDraft();
-                        }
-                    }}
-                    inputMode="numeric"
-                    className="w-16 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-white"
-                    aria-label="Numero misure brano"
-                />
-                <button
-                    onClick={applyMinMeasureCountDraft}
-                    className="px-2 py-1 rounded-md bg-slate-700 text-gray-200 text-xs font-semibold hover:bg-slate-600 transition-colors"
-                    title="Crea/Imposta numero di misure del brano (fissa la cesura finale)"
-                >
-                    Crea
-                </button>
+                <div className="flex items-center">
+                    <input
+                        value={minMeasureCountDraft}
+                        onChange={(e) => setMinMeasureCountDraft(e.target.value)}
+                        onBlur={applyMinMeasureCountDraft}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                applyMinMeasureCountDraft();
+                            }
+                        }}
+                        inputMode="numeric"
+                        className="w-14 bg-slate-700 border border-slate-600 rounded-l-md px-2 py-1 text-sm text-white"
+                        aria-label="Numero misure brano"
+                    />
+                    <div className="flex flex-col">
+                        <button
+                            onClick={() => bumpMinMeasureCount(+1)}
+                            className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-slate-600 rounded-tr-md text-[10px] text-gray-200 hover:bg-slate-600"
+                            title="Aumenta misure"
+                            aria-label="Aumenta misure"
+                        >
+                            ▲
+                        </button>
+                        <button
+                            onClick={() => bumpMinMeasureCount(-1)}
+                            className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-t-0 border-slate-600 rounded-br-md text-[10px] text-gray-200 hover:bg-slate-600"
+                            title="Diminuisci misure"
+                            aria-label="Diminuisci misure"
+                        >
+                            ▼
+                        </button>
+                    </div>
+                </div>
+
+                <div className="w-px h-5 bg-gray-600 mx-1"></div>
+
+                <div className="flex items-center gap-1">
+                    <span className="text-xs text-slate-400">Per riga:</span>
+                    <select
+                        value={measuresPerLine}
+                        onChange={(e) => {
+                            const v = Math.trunc(Number(e.target.value));
+                            setMeasuresPerLine(Number.isFinite(v) ? Math.max(1, v) : 4);
+                        }}
+                        className="bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-white"
+                        aria-label="Misure per riga"
+                        title="Misure per riga"
+                    >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(v => (
+                            <option key={v} value={v}>{v}</option>
+                        ))}
+                    </select>
+                </div>
             </div>
         ),
         voices: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
                 {[1, 2, 3, 4].map(v => (
-                    <button key={v} onClick={() => setSelectedVoice(v as Voice)} className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${selectedVoice === v ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}>V{v}</button>
+                    <button
+                        key={v}
+                        onClick={() => setSelectedVoice(v as Voice)}
+                        className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${selectedVoice === v ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                        title={v === 1 ? 'Soprano' : v === 2 ? 'Alto' : v === 3 ? 'Tenore' : 'Basso'}
+                    >
+                        {v === 1 ? 'S' : v === 2 ? 'A' : v === 3 ? 'T' : 'B'}
+                    </button>
                 ))}
             </div>
         ),
@@ -4109,8 +5287,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         ),
         analysis: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
-                <button onClick={() => setActiveTab('editor')} className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${activeTab === 'editor' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}>Editor</button>
-                <button onClick={() => setActiveTab('analysis')} className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${activeTab === 'analysis' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}>Analisi</button>
+                <button
+                    onClick={() => setActiveTab(prev => prev === 'analysis' ? 'editor' : 'analysis')}
+                    className="px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all bg-cyan-600 text-white hover:bg-cyan-500"
+                    title={activeTab === 'analysis' ? 'Torna a Editor' : 'Apri Analisi'}
+                >
+                    {activeTab === 'analysis' ? 'Editor' : 'Analisi'}
+                </button>
                 <button
                     onClick={() => setIsAnalysisEnabled(prev => !prev)}
                     className={`ml-1 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${isAnalysisEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
@@ -4122,27 +5305,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     <div className="flex items-center gap-1 p-0.5 bg-gray-900/50 rounded-md text-xs ml-2">
                         <button
                             onClick={() => setShowRomanAnalysis(prev => !prev)}
-                            className={`w-24 rounded-sm py-0.5 font-bold transition-all ${showRomanAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
+                            className={`w-10 rounded-sm py-0.5 font-bold transition-all ${showRomanAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
                             title={showRomanAnalysis ? 'Nascondi Numeri Romani' : 'Mostra Numeri Romani'}
                         >
-                            Numeri Romani
+                            V7
                         </button>
                         <button
                             onClick={() => setShowSymbolAnalysis(prev => !prev)}
-                            className={`w-24 rounded-sm py-0.5 font-bold transition-all ${showSymbolAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
+                            className={`w-10 rounded-sm py-0.5 font-bold transition-all ${showSymbolAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
                             title={showSymbolAnalysis ? 'Nascondi Sigle' : 'Mostra Sigle'}
                         >
-                            Sigle
+                            G7
                         </button>
                     </div>
                 )}
-                <button
-                    onClick={() => setShowMeasureNumbers(prev => !prev)}
-                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${showMeasureNumbers ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
-                    title={showMeasureNumbers ? 'Nascondi Numeri Misure' : 'Mostra Numeri Misure'}
-                >
-                    <span>Numeri misure</span>
-                </button>
                 <button
                     onClick={() => setStaffLayoutMode(prev => prev === 'parti_late' ? 'parti_strette' : 'parti_late')}
                     className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${staffLayoutMode === 'parti_strette' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
@@ -4150,50 +5326,76 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 >
                     <span>Parti strette</span>
                 </button>
+                <button
+                    onClick={() => setStaffSystemMode(prev => prev === 'grandstaff' ? 'treble_only' : 'grandstaff')}
+                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${staffSystemMode === 'treble_only' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
+                    title={staffSystemMode === 'treble_only' ? 'Pentagramma: Solo violino (stile chitarra; suona 8va sotto)' : 'Pentagramma: Grand staff (violino + basso)'}
+                >
+                    <span>Solo violino</span>
+                </button>
             </div>
         ),
         midi: (
-            <div className="flex items-center gap-2">
-                <button onClick={handleActivateMidi} className="p-2 rounded-md bg-sky-600 text-white text-xs font-semibold hover:bg-sky-500 transition-colors">
-                    Attiva MIDI
-                </button>
-                <label htmlFor="midi-output" className="text-sm text-slate-400">MIDI Out:</label>
-                <select
-                    id="midi-output"
-                    value={selectedMidiOutput?.id || ''}
-                    onChange={e => {
-                        const outputId = e.target.value;
-                        const output = midiOutputs.find(o => o.id === outputId) || null;
-                        setSelectedMidiOutput(output);
+            <div ref={midiMenuRef} className="relative flex items-center">
+                <button
+                    onClick={async () => {
+                        // Load outputs on demand.
+                        if (midiOutputs.length === 0) {
+                            try { await handleActivateMidi(); } catch (_) {}
+                        }
+                        setIsMidiMenuOpen(o => !o);
                     }}
-                    className="bg-slate-700 text-white rounded p-1 text-sm"
-                    disabled={midiOutputs.length === 0}
+                    className="px-2 py-1 rounded-md bg-sky-600 text-white text-xs font-semibold hover:bg-sky-500 transition-colors"
+                    title="MIDI Out"
                 >
-                    <option value="">Audio Interno</option>
-                    {midiOutputs.map(output => (
-                        <option key={output.id} value={output.id}>
-                            {output.name}
-                        </option>
-                    ))}
-                </select>
+                    MIDI
+                </button>
+
+                {isMidiMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 min-w-56 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">
+                        <div className="px-2 py-1 text-[11px] text-slate-300">Seleziona uscita</div>
+
+                        <button
+                            onClick={() => {
+                                setSelectedMidiOutput(null);
+                                setIsMidiMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${selectedMidiOutput ? 'text-gray-200 hover:bg-slate-700' : 'bg-cyan-600 text-white'}`}
+                        >
+                            <span>Audio Interno</span>
+                            {!selectedMidiOutput && <span className="text-[11px]">✓</span>}
+                        </button>
+
+                        {midiOutputs.length === 0 ? (
+                            <div className="px-2 py-1 text-[11px] text-gray-400">Nessun dispositivo MIDI</div>
+                        ) : (
+                            midiOutputs.map(output => {
+                                const isSelected = selectedMidiOutput?.id === output.id;
+                                return (
+                                    <button
+                                        key={output.id}
+                                        onClick={() => {
+                                            setSelectedMidiOutput(output);
+                                            setIsMidiMenuOpen(false);
+                                        }}
+                                        className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${isSelected ? 'bg-cyan-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
+                                        title={output.name}
+                                    >
+                                        <span className="truncate">{output.name}</span>
+                                        {isSelected && <span className="text-[11px]">✓</span>}
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                )}
             </div>
         ),
     };
 
-    const visibleGroupIds = toolbarGroupOrder.filter(id => toolbarGroupVisibility[id]);
+    const visibleGroupIds = toolbarGroupOrder;
 
-    const selectedGroupIndex = selectedToolbarGroupId ? toolbarGroupOrder.indexOf(selectedToolbarGroupId) : -1;
-    const canMoveSelectedLeft = selectedGroupIndex > 0;
-    const canMoveSelectedRight = selectedGroupIndex >= 0 && selectedGroupIndex < toolbarGroupOrder.length - 1;
-
-    useEffect(() => {
-        if (!isToolbarCustomizeOpen) return;
-        // When opening: ensure we have a stable selection.
-        setSelectedToolbarGroupId(prev => {
-            if (prev && toolbarGroupOrder.includes(prev)) return prev;
-            return toolbarGroupOrder[0] ?? 'playback';
-        });
-    }, [isToolbarCustomizeOpen, toolbarGroupOrder]);
+    const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
 
     return (
         <div className="flex-grow flex flex-col gap-4">
@@ -4201,89 +5403,53 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
                     {visibleGroupIds.map((id, idx) => (
                         <React.Fragment key={id}>
-                            {toolbarGroups[id]}
+                            <div
+                                className="relative"
+                                onDragOver={(e) => {
+                                    if (!isToolbarCustomizeOpen) return;
+                                    if (!draggingToolbarGroupId) return;
+                                    e.preventDefault();
+                                    if (draggingToolbarGroupId === id) return;
+                                    reorderToolbarGroups(draggingToolbarGroupId, id);
+                                }}
+                                onDrop={(e) => {
+                                    if (!isToolbarCustomizeOpen) return;
+                                    e.preventDefault();
+                                    setDraggingToolbarGroupId(null);
+                                }}
+                            >
+                                {isToolbarCustomizeOpen && (
+                                    <span
+                                        draggable
+                                        onDragStart={(e) => {
+                                            setDraggingToolbarGroupId(id);
+                                            try {
+                                                e.dataTransfer.effectAllowed = 'move';
+                                                e.dataTransfer.setData('text/plain', id);
+                                            } catch (_) {}
+                                        }}
+                                        onDragEnd={() => setDraggingToolbarGroupId(null)}
+                                        className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none cursor-grab px-1 text-gray-300"
+                                        title="Trascina per riordinare"
+                                    >
+                                        ⋮⋮
+                                    </span>
+                                )}
+                                {toolbarGroups[id]}
+                            </div>
                             {idx < visibleGroupIds.length - 1 && <div className="h-6 w-px bg-slate-600"></div>}
                         </React.Fragment>
                     ))}
 
                     <div className="ml-auto flex items-center gap-2">
-                        <button
-                            onClick={() => setIsToolbarCustomizeOpen(o => !o)}
-                            className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${isToolbarCustomizeOpen ? 'bg-slate-200 text-gray-900' : 'bg-slate-700 text-gray-200 hover:bg-slate-600'}`}
-                            title={isToolbarCustomizeOpen ? 'Chiudi personalizzazione toolbar' : 'Personalizza toolbar'}
+                        <div
+                            className="max-w-xs truncate text-xs text-slate-300"
+                            title={currentProjectFilePath ?? 'Senza nome'}
                         >
-                            Personalizza
-                        </button>
+                            <span className="text-slate-400">File:</span> {currentProjectFileName ?? 'Senza nome'}
+                        </div>
                     </div>
                 </div>
-
-                {isToolbarCustomizeOpen && (
-                    <div className="mt-2 rounded-md bg-slate-700 p-2 text-xs text-gray-200">
-                        <div className="flex items-center justify-between">
-                            <div className="font-semibold text-slate-100">Toolbar</div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        if (!selectedToolbarGroupId) return;
-                                        moveToolbarGroup(selectedToolbarGroupId, -1);
-                                    }}
-                                    disabled={!selectedToolbarGroupId || !canMoveSelectedLeft}
-                                    className="px-2 py-1 rounded-md bg-slate-600 hover:bg-slate-500 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Sposta a sinistra"
-                                >
-                                    ←
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (!selectedToolbarGroupId) return;
-                                        moveToolbarGroup(selectedToolbarGroupId, 1);
-                                    }}
-                                    disabled={!selectedToolbarGroupId || !canMoveSelectedRight}
-                                    className="px-2 py-1 rounded-md bg-slate-600 hover:bg-slate-500 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Sposta a destra"
-                                >
-                                    →
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (!selectedToolbarGroupId) return;
-                                        toggleToolbarGroupVisibility(selectedToolbarGroupId);
-                                    }}
-                                    disabled={!selectedToolbarGroupId}
-                                    className="px-2 py-1 rounded-md bg-slate-600 hover:bg-slate-500 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Mostra/Nascondi gruppo selezionato"
-                                >
-                                    {selectedToolbarGroupId && toolbarGroupVisibility[selectedToolbarGroupId] ? 'Nascondi' : 'Mostra'}
-                                </button>
-                                <button
-                                    onClick={resetToolbarPrefs}
-                                    className="px-2 py-1 rounded-md bg-slate-600 hover:bg-slate-500 transition-colors text-xs font-semibold"
-                                    title="Ripristina toolbar predefinita"
-                                >
-                                    Ripristina
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="mt-2 grid gap-1">
-                            {toolbarGroupOrder.map((id) => {
-                                const isSelected = id === selectedToolbarGroupId;
-                                const isVisible = !!toolbarGroupVisibility[id];
-                                return (
-                                    <button
-                                        key={`tbopt-${id}`}
-                                        onClick={() => setSelectedToolbarGroupId(id)}
-                                        className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left transition-colors ${isSelected ? 'bg-cyan-600 text-white' : 'bg-slate-800/60 text-gray-200 hover:bg-slate-700/70'}`}
-                                        title="Seleziona gruppo"
-                                    >
-                                        <span className="font-semibold">{TOOLBAR_GROUP_LABEL[id]}</span>
-                                        <span className={`text-[11px] ${isSelected ? 'text-white/90' : (isVisible ? 'text-gray-300' : 'text-gray-400')}`}>{isVisible ? 'Mostrato' : 'Nascosto'}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
             </div>
             
             <div className="flex flex-row gap-4 flex-grow min-h-0">
@@ -4292,6 +5458,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg p-4 shadow-inner ${viewMode === 'linear' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
                     onClick={handleDeselectOnClickOutside}
                 >
+                    <div className="w-full flex justify-center mb-3">
+                        <input
+                            value={projectTitle}
+                            onChange={(e) => setProjectTitle(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            placeholder="Titolo"
+                            className="w-full max-w-2xl bg-transparent text-center text-lg font-semibold text-slate-800 placeholder:text-slate-400 outline-none"
+                        />
+                    </div>
                     {/* ADD guard (avoid crash on first render if layoutData is not ready) */}
                     {!layoutData ? null : layoutData.systemsParams.map((system, systemIndex) => {
                         // PERF: avoid new Set(...) inside filter per note
@@ -4324,6 +5500,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         const systemTriplets = tripletGroupsBySystem[systemIndex] || [];
 
                         const systemHarmonyLabels = (harmonyLabelsBySystem?.[systemIndex] || []);
+
+                        // Clamp the *final* harmony hold-line to the end of the last measure
+                        // that actually contains notes in this system (so it won't extend into
+                        // a following empty measure).
+                        const lastNonEmptyMeasureEndX = (() => {
+                            try {
+                                const nonRests = systemNotes.filter(n => n && !n.isRest && Number.isFinite((n as any).midi));
+                                const lastMeasureIdx = nonRests.length
+                                    ? Math.max(...nonRests.map(n => (n.measureIndex ?? -1)).filter(v => v >= 0))
+                                    : Math.max(...(system.measureIndices || [0]));
+
+                                const i = system.measureIndices.indexOf(lastMeasureIdx);
+                                const staffEndX = (actualSystemWidth ?? 0) - STAFF_MARGIN;
+                                if (i < 0) return staffEndX;
+                                const endX = (i < system.measureIndices.length - 1)
+                                    ? (system.startMeasuresX?.[i + 1] ?? staffEndX)
+                                    : staffEndX;
+                                // Stop a bit before the barline so the line doesn't look like it spills past.
+                                return Math.max(0, Math.min(staffEndX, endX - 6));
+                            } catch {
+                                return (actualSystemWidth ?? 0) - STAFF_MARGIN;
+                            }
+                        })();
+
                         // Compute which harmony labels should be hidden because a passing note
                         // originates from that chord (i.e., the passing note's previous chord)
                         const hideLabelAbsBeats = new Set<number>();
@@ -4378,6 +5578,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                 barlines={systemBarlines}
                                 width={actualSystemWidth}
                                 height={TOTAL_SYSTEM_HEIGHT}
+                                                                staffMode={staffSystemMode}
+                                                                enableProximityPick={tool !== 'insert'}
                                 selectedNoteIds={Array.from(selectedNoteIds)}
                                 onNoteClick={(noteId, e) => handleNoteClick(noteId, e as any)}
                                                                 onStaffClick={(x, y, e) => handleBackgroundClick(x, y, systemIndex, e)}
@@ -4390,6 +5592,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                 ghostNote={ghost}
                               />
                             </RenderErrorBoundary> {/* FIX: this closing tag was missing */}
+
+                                                        {/* Overlay: insertion snap guide (ghost stays under cursor) */}
+                                                        {tool === 'insert' && snapGuide && snapGuide.systemIndex === systemIndex && (
+                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                                                <line
+                                                                    x1={snapGuide.x}
+                                                                    y1={PLAYHEAD_Y_TOP}
+                                                                    x2={snapGuide.x}
+                                                                    y2={PLAYHEAD_Y_BOTTOM}
+                                                                    className="stroke-cyan-500"
+                                                                    strokeWidth={2.5}
+                                                                    opacity={0.6}
+                                                                    strokeDasharray="6 6"
+                                                                />
+                                                            </svg>
+                                                        )}
 
                                                         {/* Overlay: playhead */}
                                                         {playheadPosition && playheadPosition.systemIndex === systemIndex && (
@@ -4536,7 +5754,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                 ))}
 
                                 {/* Harmony labels (roman/symbol) + figured bass */}
-                                {showHarmony && systemHarmonyLabels.map(lbl => {
+                                {showHarmony && systemHarmonyLabels.map((lbl, lblIndex) => {
                                                                     const bassBottomLineY = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + (BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT);
                                                                     // Trial positioning: move roman+figures to the right of bass stems and lower.
                                                                       const RB_SHIFT_X = 25;
@@ -4548,8 +5766,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                                                         const SYMBOL_SHIFT_Y = 6;
                                                                                                                                         const symbolsY = TOP_STAFF_TOP - 18 + SYMBOL_SHIFT_Y;
 
-                                                                    const showRoman = showRomanAnalysis && !!lbl.roman && !(hideLabelAbsBeats.has((lbl as any).absBeat));
-                                                                    const showSymbol = showSymbolAnalysis && !!(lbl as any).symbol && !(hideLabelAbsBeats.has((lbl as any).absBeat));
+                                                                    const isHiddenMarker = !!(lbl as any).hiddenMarker;
+                                                                    const showRoman = showRomanAnalysis && !!lbl.roman && !isHiddenMarker && !(hideLabelAbsBeats.has((lbl as any).absBeat));
+                                                                    const showSymbol = showSymbolAnalysis && !!(lbl as any).symbol && !isHiddenMarker && !(hideLabelAbsBeats.has((lbl as any).absBeat));
 
                                                                     // Keep a consistent left edge reference for both roman and symbols.
                                                                     const romanFont = '700 14px serif';
@@ -4581,6 +5800,96 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanW + 6;
 
+                                                                                        // Harmony hold-line: extend from end of this label to the next label.
+                                                                                        const nextVisible = (() => {
+                                                                                            for (let j = lblIndex + 1; j < systemHarmonyLabels.length; j++) {
+                                                                                                const candidate: any = systemHarmonyLabels[j];
+                                                                                                const abs = (candidate as any)?.absBeat;
+                                                                                                const candidateShow = showRomanAnalysis && !!candidate?.roman && !(candidate as any)?.hiddenMarker && !(hideLabelAbsBeats.has(abs));
+                                                                                                if (candidateShow) return candidate;
+                                                                                            }
+                                                                                            return null;
+                                                                                        })();
+
+                                                                                        const holdLine = (() => {
+                                                                                            try {
+                                                                                                const absBeat = (lbl as any).absBeat as number | undefined;
+
+                                                                                                // Don't draw the generic harmony hold-line when this label is a suspension onset,
+                                                                                                // because the suspension renderer already draws its own line + resolution number.
+                                                                                                try {
+                                                                                                    if (analyzedNotes && typeof absBeat === 'number') {
+                                                                                                        const suspHere = (analyzedNotes as any[]).some(n => n && n.isSuspension && Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - absBeat) < 1e-6);
+                                                                                                        if (suspHere) return null;
+                                                                                                    }
+                                                                                                } catch { /* ignore */ }
+
+                                                                                                // Only draw hold-lines when we are actually suppressing at least one intermediate
+                                                                                                // harmony label (e.g. because a passing note sits on a weak beat).
+                                                                                                const hasHiddenBetween = (() => {
+                                                                                                    try {
+                                                                                                        if (typeof absBeat !== 'number') return false;
+                                                                                                        const spanEndAbs = (nextVisible && typeof (nextVisible as any).absBeat === 'number')
+                                                                                                            ? ((nextVisible as any).absBeat as number)
+                                                                                                            : Infinity;
+                                                                                                        for (let j = lblIndex + 1; j < systemHarmonyLabels.length; j++) {
+                                                                                                            const cand: any = systemHarmonyLabels[j];
+                                                                                                            const a = cand?.absBeat;
+                                                                                                            if (typeof a !== 'number') continue;
+                                                                                                            if (a <= absBeat) continue;
+                                                                                                            if (a >= spanEndAbs) break;
+                                                                                                            if ((cand as any)?.hiddenMarker) return true;
+                                                                                                            if (hideLabelAbsBeats.has(a)) return true;
+                                                                                                        }
+                                                                                                        return false;
+                                                                                                    } catch {
+                                                                                                        return false;
+                                                                                                    }
+                                                                                                })();
+                                                                                                if (!hasHiddenBetween) return null;
+
+                                                                                                const figTexts = (lbl.figures || []) as string[];
+                                                                                                const maxFigW = figTexts.length
+                                                                                                    ? Math.max(...figTexts.map(t => measureTextWidth(String(t), '12px serif')))
+                                                                                                    : 0;
+                                                                                                const x1 = (figTexts.length ? (figuresX + maxFigW + 10) : (romanX + romanW + 10));
+
+                                                                                                // End at the staff end / last non-empty measure end.
+                                                                                                const staffEndX = (actualSystemWidth ?? 0) - STAFF_MARGIN;
+                                                                                                let x2 = nextVisible ? staffEndX : (lastNonEmptyMeasureEndX ?? staffEndX);
+                                                                                                if (nextVisible) {
+                                                                                                    const nextRomanText = (nextVisible as any).roman || '';
+                                                                                                    const nextRomanW = measureTextWidth(String(nextRomanText), romanFont);
+                                                                                                    const nextBaseX = (nextVisible as any).x + RB_SHIFT_X - refW;
+                                                                                                    // stop a bit before the next roman starts
+                                                                                                    x2 = Math.max(x1 + 8, nextBaseX - 12);
+                                                                                                }
+                                                                                                // Never extend beyond the staff end.
+                                                                                                x2 = Math.min(x2, staffEndX);
+
+                                                                                                // Keep hold-lines short: they are only a visual cue that the harmony is held,
+                                                                                                // not a literal duration ruler.
+                                                                                                const MAX_HOLD_LINE_PX = 110;
+                                                                                                x2 = Math.min(x2, x1 + MAX_HOLD_LINE_PX);
+                                                                                                // Avoid tiny/negative lines
+                                                                                                if (!(x2 > x1 + 6)) return null;
+                                                                                                const y = figuresY0 + 10;
+                                                                                                return (
+                                                                                                    <line
+                                                                                                        x1={x1}
+                                                                                                        y1={y}
+                                                                                                        x2={x2}
+                                                                                                        y2={y}
+                                                                                                        stroke="black"
+                                                                                                        strokeWidth={2}
+                                                                                                        strokeLinecap="butt"
+                                                                                                    />
+                                                                                                );
+                                                                                            } catch {
+                                                                                                return null;
+                                                                                            }
+                                                                                        })();
+
                                                                                         return (
                                                                                             <>
                                                                                                 <text
@@ -4610,10 +5919,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                         ))}
                                                                                                     </g>
                                                                                                 ) : null}
+
+                                                                                                {/* Harmony hold-line (between labels) */}
+                                                                                                {holdLine}
+
                                                                                                 {/* Suspension hold-line + resolution number */}
                                                                                                 {(() => {
                                                                                                     try {
-                                                                                                        if (!analyzedNotes || !lbl.absBeat) return null;
+                                                                                                        const absBeat = (lbl as any).absBeat;
+                                                                                                        if (!analyzedNotes || typeof absBeat !== 'number') return null;
                                                                                                         const suspNote = (analyzedNotes as any[]).find(n => n && n.isSuspension && Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - ((lbl as any).absBeat ?? -999)) < 1e-6);
                                                                                                         if (!suspNote) return null;
                                                                                                         const s = (suspNote as any).isSuspension;
@@ -4653,7 +5967,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                         // Place number below the figures (original behaviour)
                                                                                                         const numberY = figuresY0 + 14;
 
-                                                                                                        try { console.log('[RENDER] susp line', { lblId: lbl.id, lineStart, lineEnd, resX, resolvedId: s.resolvedById }); } catch(_) {}
+                                                                                                        // (intentionally no debug log here; this render path is hot)
                                                                                                         return (
                                                                                                             <>
                                                                                                                 <line
@@ -4666,7 +5980,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                                     strokeWidth={2}
                                                                                                                     strokeLinecap="butt"
                                                                                                                 />
-                                                                                                                {(!hasSuspFigure && s && typeof s.toNum === 'number' && s.toNum > 0) ? (
+                                                                                                                {(() => {
+                                                                                                                    if (hasSuspFigure || !s) return null;
+
+                                                                                                                    const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '9-8']);
+                                                                                                                    const suspType = (typeof (s as any).type === 'string') ? String((s as any).type) : '';
+                                                                                                                    const text = (() => {
+                                                                                                                        // Classic suspensions: show ONLY the resolution number at the end.
+                                                                                                                        // (Start figure is already printed near the Roman numeral.)
+                                                                                                                        if (suspType && CLASSIC_TYPES.has(suspType)) {
+                                                                                                                            if (suspType === '4-3') return '3';
+                                                                                                                            if (suspType === '6-5') return '5';
+                                                                                                                            if (suspType === '7-6') return '6';
+                                                                                                                            if (suspType === '9-8') return '8';
+                                                                                                                        }
+                                                                                                                        try {
+                                                                                                                            const n = Math.round(Number((s as any).toNum));
+                                                                                                                            if (!Number.isFinite(n) || n <= 0) return null;
+                                                                                                                            // Keep 8/9 as-is; reduce larger compound figures to 1..7.
+                                                                                                                            if (n === 8 || n === 9) return String(n);
+                                                                                                                            if (n > 9) return String((((n - 1) % 7 + 7) % 7) + 1);
+                                                                                                                            return String(n);
+                                                                                                                        } catch (_) {
+                                                                                                                            return null;
+                                                                                                                        }
+                                                                                                                    })();
+
+                                                                                                                    if (text == null || text === '') return null;
+
+                                                                                                                    return (
                                                                                                                     <text
                                                                                                                         x={resX + 20}
                                                                                                                         y={numberY}
@@ -4675,11 +6017,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                                         fill="black"
                                                                                                                         fontWeight={700}
                                                                                                                     >
-                                                                                                                        {(() => {
-                                                                                                                            try { return (((s.toNum - 1) % 7) + 1); } catch (_) { return null; }
-                                                                                                                        })()}
+                                                                                                                        {text}
                                                                                                                     </text>
-                                                                                                                ) : null}
+                                                                                                                    );
+                                                                                                                })()}
                                                                                                             </>
                                                                                                         );
                                                                                                     } catch (e) {
@@ -4798,6 +6139,65 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                 })()}
 
                                                                     {/* Passing-note overlays: horizontal line from previous chord to passing note + 'p' label */}
+                                                                    {/* Ornament overlays: compact marker for nota di volta (neighbor) */}
+                                                                    {(() => {
+                                                                        if (!isAnalysisEnabled) return null;
+                                                                        if (!analyzedNotes || analyzedNotes.length === 0) return null;
+                                                                        const systemNoteIdSet = new Set(systemNotes.map(n => n.id));
+
+                                                                        const applyOverlayShift = (p: { x: number; y: number }, clef: ClefType, voice: Voice) => {
+                                                                            if (clef === 'bass') {
+                                                                                return {
+                                                                                    x: p.x + OVERLAY_BASS_X_SHIFT_PX,
+                                                                                    y: p.y + OVERLAY_BASS_Y_SHIFT_PX,
+                                                                                };
+                                                                            }
+                                                                            return {
+                                                                                x: p.x + OVERLAY_TREBLE_X_SHIFT_PX,
+                                                                                y: p.y + OVERLAY_TREBLE_Y_SHIFT_PX + (voice === 2 ? OVERLAY_TREBLE_VOICE2_Y_ADJUST_PX : 0),
+                                                                            };
+                                                                        };
+
+                                                                        const results: JSX.Element[] = [];
+                                                                        for (const n of analyzedNotes as any[]) {
+                                                                            if (!n || !n.id) continue;
+                                                                            if (!systemNoteIdSet.has(n.id)) continue;
+                                                                            const mark = (n as any).ornamentMark;
+                                                                            const isNeighbor = !!(n as any).isNeighbor;
+                                                                            if (!mark && !isNeighbor) continue;
+                                                                            // Currently only neighbor-tone uses the 'v' mark.
+                                                                            const text = (mark as string) || 'v';
+
+                                                                            const pPos = notePositions.get(n.id);
+                                                                            if (!pPos) continue;
+                                                                            const clef = (noteClefById.get(n.id) || 'treble') as ClefType;
+                                                                            const voiceNum = (noteVoiceById.get(n.id) || 1) as Voice;
+                                                                            const q = applyOverlayShift(pPos, clef, voiceNum);
+
+                                                                            // Place slightly above-left to avoid the stem.
+                                                                            // Fine-tune: nudge 3px to the right for better alignment.
+                                                                            const x = q.x - 5;
+                                                                            const y = q.y - 12;
+
+                                                                            results.push(
+                                                                                <text
+                                                                                    key={`orn-${n.id}`}
+                                                                                    x={x}
+                                                                                    y={y}
+                                                                                    textAnchor="middle"
+                                                                                    dominantBaseline="middle"
+                                                                                    fontSize={12}
+                                                                                    fontWeight={700}
+                                                                                    fill="black"
+                                                                                    opacity={0.9}
+                                                                                >
+                                                                                    {text}
+                                                                                </text>
+                                                                            );
+                                                                        }
+
+                                                                        return results;
+                                                                    })()}
                                                                     {(() => {
                                                                         if (!analyzedNotes || analyzedNotes.length === 0) return null;
                                                                         const systemNoteIdSet = new Set(systemNotes.map(n => n.id));

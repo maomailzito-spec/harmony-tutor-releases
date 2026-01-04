@@ -5,6 +5,7 @@ const fs = require('fs');
 let mainWindow;
 let recentFiles = [];
 let selectOnlyCurrentVoiceEnabled = false;
+let showMeasureNumbersEnabled = true;
 
 function getRecentsStorePath() {
   // userData is available after app is ready; guard just in case.
@@ -204,6 +205,23 @@ function createMenu() {
     {
       label: 'Vista',
       submenu: [
+        {
+          label: 'Riordina toolbar (drag)…',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.send('menu-action', 'toggle-toolbar-customize');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Numeri misure',
+          type: 'checkbox',
+          checked: !!showMeasureNumbersEnabled,
+          click: (menuItem) => {
+            showMeasureNumbersEnabled = !!menuItem.checked;
+            if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-measure-numbers', { enabled: showMeasureNumbersEnabled });
+          }
+        },
+        { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
@@ -253,17 +271,31 @@ function createWindow() {
   });
 }
 
-ipcMain.handle('save-file-dialog', async (event, content) => {
+ipcMain.handle('save-file-dialog', async (event, content, targetPath) => {
   if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
-  
+
+  // If a targetPath is provided, save directly without prompting.
+  if (targetPath && typeof targetPath === 'string' && targetPath.trim().length > 0) {
+    try {
+      fs.writeFileSync(targetPath, content);
+      // Touch recent files (ensure MRU updated)
+      touchRecentFile(targetPath);
+      return { success: true, filePath: targetPath };
+    } catch (err) {
+      console.error("Errore scrittura file:", err);
+      return { success: false, error: err.message };
+    }
+  }
+
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
     filters: [{ name: 'Harmony Project', extensions: ['json'] }]
   });
-  
+
   if (canceled || !filePath) return { success: false, error: 'Salvataggio annullato' };
 
   try {
     fs.writeFileSync(filePath, content);
+    touchRecentFile(filePath);
     return { success: true, filePath };
   } catch (err) {
     console.error("Errore scrittura file:", err);
