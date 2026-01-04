@@ -4,7 +4,7 @@ declare global {
     interface Window {
         electronAPI?: {
             onMenuAction: (handler: (action: string, payload: any) => void) => (() => void) | void;
-            saveFile: (content: string, filePath?: string) => Promise<any>;
+            saveFile: (content: string, targetPath?: string) => Promise<any>;
             addRecentFile: (filePath: string) => Promise<any>;
         };
     }
@@ -511,6 +511,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
     const [projectTitle, setProjectTitle] = useState<string>('');
+    const [titleFontSize, setTitleFontSize] = useState<number>(18);
+    const [titleFontFamily, setTitleFontFamily] = useState<string>('serif');
     const [keyChangeMode, setKeyChangeMode] = useState<'none' | 'transpose' | 'modal'>('none');
     const [modalTonicOverride, setModalTonicOverride] = useState<string>('');
     const [isMinorMode, setIsMinorMode] = useState(false);
@@ -1167,6 +1169,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             setMarqueeSelectOnlyCurrentVoice(!!(payload && payload.enabled));
             return;
         }
+        if (action === 'set-title-font-family') {
+            if (payload && typeof payload.family === 'string') setTitleFontFamily(payload.family);
+            return;
+        }
+        if (action === 'increase-title-font') {
+            setTitleFontSize(s => Math.min(72, s + 1));
+            return;
+        }
+        if (action === 'decrease-title-font') {
+            setTitleFontSize(s => Math.max(8, s - 1));
+            return;
+        }
             if ((action === 'edit-command' && payload && payload.command) || action === 'undo' || action === 'redo') {
 
                 // Support both 'edit-command' payloads and role-based 'undo'/'redo' actions
@@ -1415,22 +1429,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 // Project-level settings
                 keySignatureRoot,
                 projectTitle,
+                titleFontSize,
+                titleFontFamily,
                 timeSignature,
                 isMinorMode,
                 keyChangeMode,
                 modalTonicOverride,
-                minMeasureCount,
-                measuresPerLine,
-                doubleBarlineMeasures,
                 analysisContexts,
                 bpm,
                 isBpmActive,
                 isMetronomeOn,
             }, null, 2);
             try {
-                // If we already have a path for the current project, ask main to overwrite it
-                // without prompting; otherwise fall back to the save dialog (Save As behavior).
-                const targetPath = currentProjectFilePath && action === 'save' ? currentProjectFilePath : undefined;
+                const targetPath = (action === 'save' && currentProjectFilePath) ? currentProjectFilePath : undefined;
                 const result = await api.saveFile(projectData, targetPath);
                 if (result && result.success && result.filePath) {
                     api.addRecentFile(result.filePath);
@@ -1450,9 +1461,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             setIsMinorMode(false);
             setKeyChangeMode('none');
             setModalTonicOverride('');
-            setMinMeasureCount(4);
-            setMeasuresPerLine(4);
-            setDoubleBarlineMeasures([]);
             setAnalysisContexts([]);
             setBpm(120);
             setIsBpmActive(false);
@@ -1503,6 +1511,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     if (typeof loadedProject.projectTitle === 'string') {
                         setProjectTitle(loadedProject.projectTitle);
                     }
+                    if (typeof loadedProject.titleFontSize === 'number' && Number.isFinite(loadedProject.titleFontSize)) {
+                        setTitleFontSize(Math.max(12, Math.min(72, loadedProject.titleFontSize)));
+                    }
+                    if (typeof loadedProject.titleFontFamily === 'string' && loadedProject.titleFontFamily) {
+                        setTitleFontFamily(loadedProject.titleFontFamily);
+                    }
                     if (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') {
                         const n = Number((loadedProject.timeSignature as any).numerator);
                         const d = Number((loadedProject.timeSignature as any).denominator);
@@ -1518,18 +1532,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     }
                     if (typeof loadedProject.modalTonicOverride === 'string') {
                         setModalTonicOverride(loadedProject.modalTonicOverride);
-                    }
-                    if (typeof loadedProject.minMeasureCount === 'number' && Number.isFinite(loadedProject.minMeasureCount) && loadedProject.minMeasureCount > 0) {
-                        setMinMeasureCount(Math.max(1, Math.trunc(loadedProject.minMeasureCount)));
-                    }
-                    if (typeof loadedProject.measuresPerLine === 'number' && Number.isFinite(loadedProject.measuresPerLine) && loadedProject.measuresPerLine > 0) {
-                        setMeasuresPerLine(Math.max(1, Math.trunc(loadedProject.measuresPerLine)));
-                    }
-                    if (Array.isArray(loadedProject.doubleBarlineMeasures)) {
-                        const nums = (loadedProject.doubleBarlineMeasures as any[])
-                            .map(x => Math.trunc(Number(x)))
-                            .filter(n => Number.isFinite(n) && n >= 0);
-                        setDoubleBarlineMeasures(nums);
                     }
                     if (Array.isArray(loadedProject.analysisContexts)) {
                         setAnalysisContexts(loadedProject.analysisContexts);
@@ -1569,7 +1571,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         } else if (action === 'toggle-toolbar-customize') {
             setIsToolbarCustomizeOpen(prev => !prev);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsDotted, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, keySignatureRoot, projectTitle, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsDotted, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode]);
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
@@ -1788,73 +1790,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         // Avoid adding extra trailing measures automatically (prevents the "cesura" from drifting).
         let targetTotalMeasures = Math.max(minMeasureCount, maxMeasureIndex + 1);
         const measureMinInfo: { minWidth: number, notes: StaffNote[] }[] = [];
-
+        for (let m = 0; m < targetTotalMeasures; m++) {
+            const measureNotes = notesByMeasure.get(m) || [];
+            let minDurationValue = measureNotes.length > 0 ? measureNotes.reduce((min, n) => Math.min(min, DURATION_VALUES[n.duration || 'quarter']), 1) : 1;
+            let pxPerBeat = 60;
+            if (minDurationValue <= 0.0625) pxPerBeat = 280; else if (minDurationValue <= 0.125) pxPerBeat = 180; else if (minDurationValue <= 0.25) pxPerBeat = 120; else if (minDurationValue <= 0.5) pxPerBeat = 100;
+            measureMinInfo[m] = { minWidth: (beatsPerMeasure * pxPerBeat) + (MEASURE_PADDING_X * 2), notes: measureNotes };
+        }
+        const systems: { measureIndices: number[], width: number, startMeasuresX: number[] }[] = [];
+        let currentSystemMeasures: number[] = [], currentSystemMinContentWidth = 0;
         // IMPORTANT: distribute measures within the actual staff drawable width.
         // If we use the full container width here, the last measure can overshoot the staff end,
         // making the end-of-line barline ("cesura") disappear or drift.
         const usablePageWidth = systemRightX - startOffset - STAFF_PADDING_X;
-
-        // Measure width heuristic ("misure che si allargano"):
-        // widen measures proportionally to rhythmic density (smallest duration present).
-        // This keeps insertion intuitive and avoids the cumulative beat drift that happens
-        // when measures are visually compressed.
-        const BASE_PX_PER_BEAT = 70;
-        const getNoteBeats = (n: any): number => {
-            const base = (DURATION_VALUES as any)?.[n?.duration] ?? 1;
-            const dotted = n?.isDotted ? 1.5 : 1;
-            const tuplet = n?.isTriplet ? (2 / 3) : (n?.isDuplet ? (3 / 2) : 1);
-            const beats = Number(base) * dotted * tuplet;
-            return Number.isFinite(beats) && beats > 0 ? beats : 1;
-        };
-        for (let m = 0; m < targetTotalMeasures; m++) {
-            const measureNotes = notesByMeasure.get(m) || [];
-
-            let minBeat = 1;
-            for (const n of measureNotes) {
-                const b = getNoteBeats(n);
-                if (b < minBeat) minBeat = b;
-            }
-
-            // Density factor: quarter=1.0, eighth≈1.2, 16th≈1.6, 32nd≈2.1, 64th≈2.6
-            const inv = 1 / Math.max(1e-6, minBeat);
-            const densityFactor = Math.min(2.6, Math.max(1, 1 + (inv - 1) * 0.35));
-
-            const minWidth = (beatsPerMeasure * BASE_PX_PER_BEAT * densityFactor) + (MEASURE_PADDING_X * 2);
-            measureMinInfo[m] = { minWidth, notes: measureNotes };
-        }
-        const systems: { measureIndices: number[], width: number, startMeasuresX: number[] }[] = [];
-        let currentSystemMeasures: number[] = [], currentSystemMinContentWidth = 0;
         const finalizeSystem = (indices: number[], contentWidthSum: number) => {
             if (indices.length === 0) return;
-            // If measures are narrower than the available staff width, expand evenly.
-            // If measures are wider (e.g. dense rhythms + high "misure per riga"),
-            // shrink proportionally so the selected count still fits on the line.
-            const scale = contentWidthSum > 0 ? Math.min(1, usablePageWidth / contentWidthSum) : 1;
-            const scaledSum = contentWidthSum * scale;
-            const extraSpace = Math.max(0, usablePageWidth - scaledSum);
+            const extraSpace = Math.max(0, usablePageWidth - contentWidthSum);
             const extraPerMeasure = extraSpace / indices.length;
             const systemStartMeasuresX: number[] = [];
             let currentX = startOffset;
-            indices.forEach(m => {
-                systemStartMeasuresX.push(currentX);
-                const w = (measureMinInfo[m].minWidth * scale) + extraPerMeasure;
-                currentX += w;
-            });
+            indices.forEach(m => { systemStartMeasuresX.push(currentX); currentX += measureMinInfo[m].minWidth + extraPerMeasure; });
             systems.push({ measureIndices: indices, width: containerWidth, startMeasuresX: systemStartMeasuresX });
         };
         for (let m = 0; m < targetTotalMeasures; m++) {
             const measureW = measureMinInfo[m].minWidth;
-            currentSystemMeasures.push(m);
-            currentSystemMinContentWidth += measureW;
-
-            // Primary controller: the user-selected measures-per-line.
-            // We intentionally do not wrap early based on width; instead we scale widths
-            // inside finalizeSystem so the selected count still fits.
-            if (currentSystemMeasures.length >= measuresPerLine) {
+            if ((currentSystemMeasures.length >= measuresPerLine || currentSystemMinContentWidth + measureW > usablePageWidth) && currentSystemMeasures.length > 0) {
                 finalizeSystem(currentSystemMeasures, currentSystemMinContentWidth);
-                currentSystemMeasures = [];
-                currentSystemMinContentWidth = 0;
-            }
+                currentSystemMeasures = [m]; currentSystemMinContentWidth = measureW;
+            } else { currentSystemMeasures.push(m); currentSystemMinContentWidth += measureW; }
         }
         if (currentSystemMeasures.length > 0) finalizeSystem(currentSystemMeasures, currentSystemMinContentWidth);
         const finalNotes: StaffNote[] = []; const allSystemsBarlines: Barline[][] = []; const measureFinalWidths = new Map<number, number>();
@@ -3707,36 +3670,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const count = sys.measureIndices.length;
         if (count === 0) return null;
 
-        // Small hysteresis near measure boundaries (barlines): users often click a few px
-        // "into" the barline stroke, which would otherwise map to the previous measure and
-        // overwrite its last slot.
-        const MEASURE_BOUNDARY_SLOP_PX = 10;
-
-        // Prefer the *rendered* barline positions for measure ends.
-        // This keeps click targeting correct when measures have very different visual widths.
-        const barlines = layoutData.systemsBarlines?.[systemIndex] || [];
-        const barEndByMeasure = new Map<number, number>();
-        for (const b of barlines) {
-            const id = String((b as any)?.id ?? '');
-            const m = id.startsWith('bar-') ? Number(id.slice(4)) : NaN;
-            if (Number.isFinite(m) && typeof (b as any)?.xPosition === 'number') {
-                barEndByMeasure.set(m, (b as any).xPosition as number);
-            }
-        }
-
         // Use the same segment logic as the layout builder (startX -> nextX),
         // and fall back to nearest measure when x is slightly outside.
         for (let i = 0; i < count; i++) {
             const mIdx = sys.measureIndices[i];
             const startX = sys.startMeasuresX[i];
-            const fallbackEndX = i < count - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
-            const endX = barEndByMeasure.get(mIdx) ?? fallbackEndX;
+            const endX = i < count - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
             const w = Math.max(0, endX - startX);
-
-            // If we're just left of this measure's start, treat it as this measure.
-            if (i > 0 && x >= (startX - MEASURE_BOUNDARY_SLOP_PX) && x < startX) {
-                return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
-            }
             if (x >= startX && x < endX) return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
         }
 
@@ -3751,36 +3691,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         }
         const mIdx = sys.measureIndices[idx];
         const startX = sys.startMeasuresX[idx];
-        const fallbackEndX = idx < count - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
-        const endX = barEndByMeasure.get(mIdx) ?? fallbackEndX;
+        const endX = idx < count - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
         const w = Math.max(0, endX - startX);
         return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
     }, [layoutData]);
-
-    const getSnapBiasForDuration = useCallback((dur: any) => {
-        return (
-            dur === 'sixteenth' ? 0.55 :
-            dur === 'thirty-second' ? 0.6 :
-            dur === 'sixty-fourth' ? 0.65 :
-            0.35
-        );
-    }, []);
-
-    const quantizeBeatRawToGrid = useCallback((beatRaw: number, beatsPerMeasure: number) => {
-        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
-        const step = Math.max(1e-6, gridStep);
-        const snapBias = getSnapBiasForDuration(selectedInsertion.duration);
-
-        const slot = Math.floor(((beatRaw - 1) / step) + snapBias);
-        const maxStartBeat = 1 + Math.max(0, beatsPerMeasure - step);
-        const beat = Math.min(
-            Math.max(1, Math.round((1 + (slot * step)) * 1e6) / 1e6),
-            Math.round(maxStartBeat * 1e6) / 1e6,
-        );
-        return { beat, step };
-    }, [getSnapBiasForDuration, selectedInsertion.duration, tupletFactor]);
-
-    const [snapGuide, setSnapGuide] = useState<{ systemIndex: number; x: number } | null>(null);
 
     const setPlaybackCursorFromMeasureBeat = useCallback((systemIndex: number, x: number, measureIndex: number, beat: number) => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -3846,12 +3760,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
         const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
-        const { beat } = quantizeBeatRawToGrid(beatRaw, beatsPerMeasure);
+
+        // Quantize to the current grid (same as left-click insertion).
+        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
+        const step = Math.max(1e-6, gridStep);
+        const beat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
 
         setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, beat);
         // Aggiorna sempre pasteCaret con beat quantizzato
         setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat });
-    }, [getCurrentAbsBeatForPlayhead, getSystemMeasureAtX, layoutData, playheadPosition, quantizeBeatRawToGrid, setPlaybackCursorFromMeasureBeat, timeSignature]);
+    }, [getCurrentAbsBeatForPlayhead, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion.duration, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
         if (!layoutData) return;
@@ -3872,7 +3790,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
         const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
-        const { beat: quantizedBeat } = quantizeBeatRawToGrid(beatRaw, beatsPerMeasure);
+
+        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
+        const step = Math.max(1e-6, gridStep);
+        const quantizedBeat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
 
         // Set playback cursor + visible playhead at the clicked point.
         setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, quantizedBeat);
@@ -3882,7 +3803,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         // Per compatibilità con i costruttori StaffNote che usano la shorthand "beat"
         const beat = quantizedBeat;
-        const beatNorm = Math.round(beat * 1e6) / 1e6;
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
         // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
@@ -3914,19 +3834,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 clef: targetClef,
                 voice: selectedVoice,
             };
-            setRawNotes(prev => {
-                const filtered = prev.filter(n => {
-                    if (n.measureIndex !== rest.measureIndex) return true;
-                    if (n.voice !== rest.voice) return true;
-                    const nBeat = Math.round(((n.beat ?? 1) as number) * 1e6) / 1e6;
-                    return nBeat !== beatNorm;
-                });
-                return [...filtered, rest].sort((a, b) => {
-                    if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
-                    if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
-                    return (a.voice ?? 1) - (b.voice ?? 1);
-                });
-            });
+            setRawNotes(prev => [...prev, rest]);
             return;
         }
 
@@ -3967,12 +3875,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         setRawNotes(prev => {
             // Rimuovi eventuale nota/pausa sovrapposta
-            const filtered = prev.filter(n => {
-                if (n.measureIndex !== newNote.measureIndex) return true;
-                if (n.voice !== newNote.voice) return true;
-                const nBeat = Math.round(((n.beat ?? 1) as number) * 1e6) / 1e6;
-                return nBeat !== beatNorm;
-            });
+            const filtered = prev.filter(
+                n =>
+                    n.measureIndex !== newNote.measureIndex ||
+                    n.voice !== newNote.voice ||
+                    Math.abs((n.beat ?? 1) - (newNote.beat ?? 1)) > 1e-6
+            );
             // Inserisci la nuova nota e ordina per measureIndex, beat, voice
             const next = [...filtered, newNote].sort((a, b) => {
                 if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
@@ -3997,7 +3905,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         setPasteCaret,
         staffSystemMode,
         timeSignature,
-        quantizeBeatRawToGrid,
+        tupletFactor,
         applyActiveAccidental,
         playNote,
         activeAccidental,
@@ -4108,34 +4016,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
         if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) {
             setGhostNote(null);
-            setSnapGuide(null);
             return;
         }
 
         const hit = getSystemMeasureAtX(systemIndex, x);
-        if (!hit) {
-            setGhostNote(null);
-            setSnapGuide(null);
-            return;
-        }
+        if (!hit) { setGhostNote(null); return; }
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
         const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
-
-        // Show a guide at the snapped insertion slot while keeping the ghost under the cursor.
-        try {
-            if (tool === 'insert' && !(dragStartPosRef.current && dragStartPosRef.current.systemIndex === systemIndex)) {
-                const { beat: qb } = quantizeBeatRawToGrid(beatRaw, beatsPerMeasure);
-                const snappedX = hit.measureStartX + MEASURE_PADDING_X + (((qb - 1) / beatsPerMeasure) * contentWidth);
-                setSnapGuide({ systemIndex, x: snappedX });
-            } else {
-                setSnapGuide(null);
-            }
-        } catch {
-            setSnapGuide(null);
-        }
 
 
 
@@ -4192,23 +4082,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             voice: selectedVoice,
             systemIndex,
         });
-    }, [
-        applyActiveAccidental,
-        clefForVoice,
-        getNotePropertiesFromDiatonicPosition,
-        getSystemMeasureAtX,
-        isDotted,
-        isDuplet,
-        isTriplet,
-        keySignature,
-        layoutData,
-        quantizeBeatRawToGrid,
-        selectedInsertion,
-        selectedVoice,
-        staffSystemMode,
-        timeSignature,
-        tool,
-    ]);
+    }, [applyActiveAccidental, clefForVoice, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor]);
 
     // Finalize marquee selection on mouse up
     useEffect(() => {
@@ -5143,26 +5017,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         </button>
                     </div>
                 </div>
-
-                <div className="w-px h-5 bg-gray-600 mx-1"></div>
-
-                <div className="flex items-center gap-1">
-                    <span className="text-xs text-slate-400">Per riga:</span>
-                    <select
-                        value={measuresPerLine}
-                        onChange={(e) => {
-                            const v = Math.trunc(Number(e.target.value));
-                            setMeasuresPerLine(Number.isFinite(v) ? Math.max(1, v) : 4);
-                        }}
-                        className="bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-white"
-                        aria-label="Misure per riga"
-                        title="Misure per riga"
-                    >
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(v => (
-                            <option key={v} value={v}>{v}</option>
-                        ))}
-                    </select>
-                </div>
             </div>
         ),
         voices: (
@@ -5465,7 +5319,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => e.stopPropagation()}
                             placeholder="Titolo"
-                            className="w-full max-w-2xl bg-transparent text-center text-lg font-semibold text-slate-800 placeholder:text-slate-400 outline-none"
+                            className="w-full max-w-2xl bg-transparent text-center font-semibold text-slate-800 placeholder:text-slate-400 outline-none"
+                            style={{ fontSize: `${titleFontSize}px`, fontFamily: titleFontFamily }}
                         />
                     </div>
                     {/* ADD guard (avoid crash on first render if layoutData is not ready) */}
@@ -5592,22 +5447,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                 ghostNote={ghost}
                               />
                             </RenderErrorBoundary> {/* FIX: this closing tag was missing */}
-
-                                                        {/* Overlay: insertion snap guide (ghost stays under cursor) */}
-                                                        {tool === 'insert' && snapGuide && snapGuide.systemIndex === systemIndex && (
-                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
-                                                                <line
-                                                                    x1={snapGuide.x}
-                                                                    y1={PLAYHEAD_Y_TOP}
-                                                                    x2={snapGuide.x}
-                                                                    y2={PLAYHEAD_Y_BOTTOM}
-                                                                    className="stroke-cyan-500"
-                                                                    strokeWidth={2.5}
-                                                                    opacity={0.6}
-                                                                    strokeDasharray="6 6"
-                                                                />
-                                                            </svg>
-                                                        )}
 
                                                         {/* Overlay: playhead */}
                                                         {playheadPosition && playheadPosition.systemIndex === systemIndex && (

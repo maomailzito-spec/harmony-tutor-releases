@@ -8,7 +8,6 @@ let selectOnlyCurrentVoiceEnabled = false;
 let showMeasureNumbersEnabled = true;
 
 function getRecentsStorePath() {
-  // userData is available after app is ready; guard just in case.
   try {
     const userData = app.getPath('userData');
     return path.join(userData, 'recent-files.json');
@@ -54,6 +53,16 @@ function touchRecentFile(filePath) {
   }
 }
 
+function setWindowTitleForPath(filePath) {
+  try {
+    if (!mainWindow) return;
+    const base = filePath && typeof filePath === 'string' ? path.basename(filePath) : app.name;
+    mainWindow.setTitle(`${base} — ${app.name}`);
+  } catch (err) {
+    console.warn('Impossibile impostare il titolo della finestra:', err);
+  }
+}
+
 function createMenu() {
   const isMac = process.platform === 'darwin';
   const template = [
@@ -76,9 +85,9 @@ function createMenu() {
               if (!mainWindow) return;
               try {
                 const data = fs.readFileSync(fp, 'utf-8');
-                // Move to top (MRU) and persist.
                 touchRecentFile(fp);
                 mainWindow.webContents.send('menu-action', 'open', { data, filePath: fp });
+                setWindowTitleForPath(fp);
               } catch (err) {
                 console.error('Errore apertura file recente:', err);
               }
@@ -88,7 +97,12 @@ function createMenu() {
         {
           label: 'Nuovo Progetto',
           accelerator: 'CmdOrCtrl+N',
-          click: () => mainWindow && mainWindow.webContents.send('menu-action', 'new')
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-action', 'new');
+              setWindowTitleForPath(null);
+            }
+          }
         },
         { type: 'separator' },
         {
@@ -105,6 +119,7 @@ function createMenu() {
             try {
               const data = fs.readFileSync(filePath, 'utf-8');
               mainWindow.webContents.send('menu-action', 'open', { data, filePath });
+              setWindowTitleForPath(filePath);
             } catch (err) {
               console.error("Errore lettura file:", err);
               mainWindow.webContents.send('menu-error', 'open-failed', err.message);
@@ -133,8 +148,11 @@ function createMenu() {
           label: 'Chiudi progetto',
           accelerator: 'CmdOrCtrl+W',
           click: () => {
-            console.log('[MAIN] Menu: Chiudi progetto cliccato (File menu)');
-            if (mainWindow) mainWindow.webContents.send('menu-action', 'close-project');
+            if (mainWindow) {
+              console.log('[MAIN] Menu: Chiudi progetto cliccato (File menu)');
+              mainWindow.webContents.send('menu-action', 'close-project');
+              setWindowTitleForPath(null);
+            }
           }
         }
       ]
@@ -156,34 +174,22 @@ function createMenu() {
         {
           label: 'Taglia',
           accelerator: 'CmdOrCtrl+X',
-          click: () => {
-            console.log('[MAIN] Menu: Taglia cliccato');
-            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'cut' });
-          }
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'cut' }); }
         },
         {
           label: 'Copia',
           accelerator: 'CmdOrCtrl+C',
-          click: () => {
-            console.log('[MAIN] Menu: Copia cliccato');
-            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'copy' });
-          }
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'copy' }); }
         },
         {
           label: 'Incolla',
           accelerator: 'CmdOrCtrl+V',
-          click: () => {
-            console.log('[MAIN] Menu: Incolla cliccato');
-            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'paste' });
-          }
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'paste' }); }
         },
         {
           label: 'Seleziona tutto',
           accelerator: 'CmdOrCtrl+A',
-          click: () => {
-            console.log('[MAIN] Menu: Seleziona tutto cliccato');
-            mainWindow && mainWindow.webContents.send('menu-action', 'edit-command', { command: 'selectAll' });
-          }
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'selectAll' }); }
         },
         { type: 'separator' },
         {
@@ -199,7 +205,34 @@ function createMenu() {
           }
         },
         { type: 'separator' },
-        // (Removed duplicate 'Chiudi progetto' and 'Nuovo progetto' from Edit menu)
+        {
+          label: 'Titolo',
+          submenu: [
+            {
+              label: 'Serif',
+              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-title-font-family', { family: 'serif' }); }
+            },
+            {
+              label: 'Sans-serif',
+              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-title-font-family', { family: 'sans-serif' }); }
+            },
+            {
+              label: 'Monospace',
+              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-title-font-family', { family: 'monospace' }); }
+            },
+            { type: 'separator' },
+            {
+              label: 'Aumenta dimensione titolo',
+              accelerator: 'CmdOrCtrl+]',
+              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'increase-title-font'); }
+            },
+            {
+              label: 'Diminuisci dimensione titolo',
+              accelerator: 'CmdOrCtrl+[',
+              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'decrease-title-font'); }
+            }
+          ]
+        }
       ]
     },
     {
@@ -207,9 +240,7 @@ function createMenu() {
       submenu: [
         {
           label: 'Riordina toolbar (drag)…',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('menu-action', 'toggle-toolbar-customize');
-          }
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'toggle-toolbar-customize'); }
         },
         { type: 'separator' },
         {
@@ -234,11 +265,11 @@ function createMenu() {
       ]
     }
   ];
+
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 }
 
-// ipc listener: renderer notifies main of recent files (path)
 ipcMain.on('add-recent', (event, filePath) => {
   touchRecentFile(filePath);
 });
@@ -250,7 +281,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false, // Disabilita la sandbox per caricare il preload locale
+      sandbox: false,
       preload: path.join(__dirname, 'preload.js')
     }
   });
@@ -259,7 +290,7 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools(); // Apre la console per debug
+    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -271,21 +302,8 @@ function createWindow() {
   });
 }
 
-ipcMain.handle('save-file-dialog', async (event, content, targetPath) => {
+ipcMain.handle('save-file-dialog', async (event, content) => {
   if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
-
-  // If a targetPath is provided, save directly without prompting.
-  if (targetPath && typeof targetPath === 'string' && targetPath.trim().length > 0) {
-    try {
-      fs.writeFileSync(targetPath, content);
-      // Touch recent files (ensure MRU updated)
-      touchRecentFile(targetPath);
-      return { success: true, filePath: targetPath };
-    } catch (err) {
-      console.error("Errore scrittura file:", err);
-      return { success: false, error: err.message };
-    }
-  }
 
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
     filters: [{ name: 'Harmony Project', extensions: ['json'] }]
@@ -295,10 +313,34 @@ ipcMain.handle('save-file-dialog', async (event, content, targetPath) => {
 
   try {
     fs.writeFileSync(filePath, content);
-    touchRecentFile(filePath);
+    setWindowTitleForPath(filePath);
     return { success: true, filePath };
   } catch (err) {
     console.error("Errore scrittura file:", err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('save-file', async (event, content, targetPath) => {
+  if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
+
+  try {
+    if (targetPath && typeof targetPath === 'string') {
+      fs.writeFileSync(targetPath, content);
+      setWindowTitleForPath(targetPath);
+      return { success: true, filePath: targetPath };
+    }
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      filters: [{ name: 'Harmony Project', extensions: ['json'] }]
+    });
+    if (canceled || !filePath) return { success: false, error: 'Salvataggio annullato' };
+
+    fs.writeFileSync(filePath, content);
+    setWindowTitleForPath(filePath);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('Errore salvataggio file:', err);
     return { success: false, error: err.message };
   }
 });

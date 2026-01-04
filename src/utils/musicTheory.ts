@@ -1925,28 +1925,6 @@ export function applyHarmonyRules(
             }
         };
 
-        const isChordToneInEvent = (note: StaffNote, ev: ChordEvent, excludeNoteId?: string): boolean => {
-            try {
-                const pool = (ev.notes || []).filter(n => n && !n.isRest && (!excludeNoteId || n.id !== excludeNoteId));
-
-                // With fewer than 3 distinct pitch classes, chord identity is often underdetermined.
-                // Be conservative: don't assert chord-tone membership from ambiguous dyads,
-                // otherwise consonant neighbors like 5-6-5 can be mistakenly blocked.
-                const pcs = new Set<number>(pool.map(n => mod12(n.noteIndex)));
-                if (pcs.size < 3) return false;
-
-                const info = identifyChord(pool);
-                if (!info?.root || !info?.intervals) return false;
-                const rootPc = mod12(info.root.noteIndex);
-                const notePc = mod12(note.noteIndex);
-                if (notePc === rootPc) return true;
-                const rel = mod12(notePc - rootPc);
-                return info.intervals.has(rel);
-            } catch {
-                return false;
-            }
-        };
-
         const isConsonantToHarmony = (note: StaffNote, ev: ChordEvent, _voice: Voice) => {
             try {
                 const notePc = pitchClassOf(note);
@@ -2072,17 +2050,14 @@ export function applyHarmonyRules(
                 const curCon = isConsonantToHarmony(cur, curEv, v);
                 const nextCon = isConsonantToHarmony(next, nextEv, v);
 
-                // Neighbor tone (nota di volta): stepwise motion away and back (x-y-x).
-                // In practice this can be consonant (e.g. 5-6-5) and may occur across harmony changes;
-                // we therefore treat it primarily as a melodic figure.
-                if (prev && prevEv) {
+                // Neighbor tone: consonant -> dissonant step -> consonant, returning to same pitch.
+                if (prev && prevEv && !curCon && prevCon && nextCon) {
                     const returnsSame = (prev.midi ?? 0) === (next.midi ?? 0);
                     const stepIn = semis(prev, cur) <= 2 && semis(cur, next) <= 2;
                     const oppositeDir = sgn(prev, cur) !== 0 && sgn(prev, cur) === -sgn(cur, next);
                     // Require the ornament itself to be short; otherwise long chord tones (often unique
                     // in sparse textures) can be misread as neighbors.
                     const shortNeighbor = getDuration(cur) <= 0.5;
-
                     if (returnsSame && stepIn && oppositeDir && shortNeighbor) {
                         (cur as any).isNeighbor = true;
                         // Compact visual marker handled by renderer overlay (no dashed connections).
@@ -2118,6 +2093,21 @@ export function applyHarmonyRules(
                 if (prev && prevEv && !curCon) {
                     const repeats = (next.midi ?? 0) === (cur.midi ?? 0);
                     const short = getDuration(cur) <= 0.5;
+
+                    const isChordToneInEvent = (note: StaffNote, ev: ChordEvent, excludeNoteId?: string): boolean => {
+                        try {
+                            const pool = (ev.notes || []).filter(n => n && !n.isRest && (!excludeNoteId || n.id !== excludeNoteId));
+                            const info = identifyChord(pool);
+                            if (!info?.root || !info?.intervals) return false;
+                            const rootPc = mod12(info.root.noteIndex);
+                            const notePc = mod12(note.noteIndex);
+                            if (notePc === rootPc) return true;
+                            const rel = mod12(notePc - rootPc);
+                            return info.intervals.has(rel);
+                        } catch {
+                            return false;
+                        }
+                    };
 
                     // Current harmony: exclude the candidate note to avoid tautological "it's in the chord"
                     // when the chord-ID is influenced by the note we're trying to classify.

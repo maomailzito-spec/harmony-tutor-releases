@@ -10,7 +10,6 @@ interface VexflowGrandStaffProps {
   width?: number;
   height?: number;
   staffMode?: 'grandstaff' | 'treble_only';
-  enableProximityPick?: boolean;
   onNoteClick?: (noteId: string, e: MouseEvent) => void;
   selectedNoteIds?: string[];
   onStaffClick?: (x: number, y: number, e: MouseEvent) => void;
@@ -18,8 +17,9 @@ interface VexflowGrandStaffProps {
   onMouseMoveStaff?: (x: number, y: number) => void;
   onStaffMouseDown?: (e: MouseEvent, svg: SVGSVGElement) => void;
   onBarlineRightClick?: (barlineId: string, e: MouseEvent) => void;
-  onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   ghostNote?: StaffNote | null;
+  onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
+  enableProximityPick?: boolean;
 }
 
 const DEFAULT_WIDTH = 900;
@@ -104,15 +104,17 @@ const makeVfNote = (n: StaffNote, clef: 'treble' | 'bass') => {
   //   - `null` means “do not show” (implied by key signature)
   //   - otherwise show that explicit accidental
   // - If `explicitAccidental` is undefined (legacy notes), fall back to `accidental`.
-  const accidentalToShow: AccidentalType | null =
-    n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
-  const vfAccidental = accidentalTypeToVexflow(accidentalToShow);
-  if (vfAccidental) {
-    try {
-      note.addModifier(new Accidental(vfAccidental), 0);
-    } catch {
-      // Never crash rendering due to a bad/unknown accidental value.
-      // If VexFlow rejects it, we just skip the modifier.
+  if (!n.isRest) {
+    const accidentalToShow: AccidentalType | null =
+      n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
+    const vfAccidental = accidentalTypeToVexflow(accidentalToShow);
+    if (vfAccidental) {
+      try {
+        note.addModifier(new Accidental(vfAccidental), 0);
+      } catch {
+        // Never crash rendering due to a bad/unknown accidental value.
+        // If VexFlow rejects it, we just skip the modifier.
+      }
     }
   }
   (note as any).__staffNoteId = n.id;
@@ -137,8 +139,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
   staffMode = 'grandstaff',
-  enableProximityPick,
-  onNoteHitPoints,
   onNoteClick,
   selectedNoteIds = [],
   onStaffClick,
@@ -147,8 +147,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onStaffMouseDown,
   onBarlineRightClick,
   ghostNote,
+  onNoteHitPoints,
+  enableProximityPick = true,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const noteHitPointsRef = useRef<Array<{ id: string; x: number; y: number; isGhost: boolean }>>([]);
+  const lastAltPickRef = useRef<{
+    x: number;
+    y: number;
+    ids: string[];
+    index: number;
+    ts: number;
+  } | null>(null);
 
   // Keep latest callbacks in refs so DOM listeners don't get torn down
   // on every React re-render (important for mousedown->mouseup gestures).
@@ -163,9 +173,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   useEffect(() => { onStaffRightClickRef.current = onStaffRightClick; }, [onStaffRightClick]);
   useEffect(() => { onMouseMoveStaffRef.current = onMouseMoveStaff; }, [onMouseMoveStaff]);
   useEffect(() => { onStaffMouseDownRef.current = onStaffMouseDown; }, [onStaffMouseDown]);
-
-  const onNoteHitPointsRef = useRef<typeof onNoteHitPoints>(onNoteHitPoints);
-  useEffect(() => { onNoteHitPointsRef.current = onNoteHitPoints; }, [onNoteHitPoints]);
 
   // Right-click on a measure barline (context menu)
   const onBarlineRightClickRef = useRef<typeof onBarlineRightClick>(onBarlineRightClick);
@@ -198,7 +205,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     treble.addKeySignature(keyString);
     treble.setContext(context).draw();
 
-    const bass = staffMode === 'grandstaff' ? new Stave(STAFF_MARGIN, BASS_Y, staffWidth) : null;
+    const bass = (staffMode === 'grandstaff') ? new Stave(STAFF_MARGIN, BASS_Y, staffWidth) : null;
     if (bass) {
       bass.addClef('bass').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       bass.addKeySignature(keyString);
@@ -217,7 +224,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // exactly on the top/bottom staff lines (avoids pixel drift vs. a separate overlay).
     if (barlines.length > 0) {
       const yTop = treble.getYForLine(0);
-      const yBottom = (bass ?? treble).getYForLine(4);
+      const yBottom = bass ? bass.getYForLine(4) : treble.getYForLine(4);
       const ctxAny = context as any;
       ctxAny.save?.();
 
@@ -237,9 +244,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           drawSingle(x - 6, 1);
           drawSingle(x - 2, 3);
         } else if (bar.style === 'double') {
-          // Simple double barline (section): thin + thin.
-          drawSingle(x - 2, 1);
-          drawSingle(x + 2, 1);
+          // Simple double barline (section): thin + thin. Spostata di +3px a destra.
+          drawSingle(x + 1, 1);
+          drawSingle(x + 5, 1);
         } else {
           drawSingle(x, 1);
         }
@@ -249,8 +256,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
     const allNotes = ghostNote ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes;
     if (allNotes && allNotes.length > 0) {
-      const trebleNotes = allNotes.filter(n => (n.clef || 'treble') === 'treble');
-      const bassNotes = staffMode === 'grandstaff' ? allNotes.filter(n => n.clef === 'bass') : [];
+      const trebleNotes = (staffMode === 'treble_only')
+        ? allNotes
+        : allNotes.filter(n => (n.clef || 'treble') === 'treble');
+      const bassNotes = (staffMode === 'treble_only')
+        ? []
+        : allNotes.filter(n => n.clef === 'bass');
+
+      const hitPoints: Array<{ id: string; x: number; y: number; isGhost: boolean }> = [];
 
       const drawNotesAtX = (
         staffNotes: StaffNote[],
@@ -285,12 +298,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             // Solo se voci adiacenti e distanza di seconda
             if (Math.abs((n1.voice ?? 0) - (n2.voice ?? 0)) === 1 && Math.abs(n1.position - n2.position) === 1) {
               // S/A (1/2): Soprano (1, up) a sinistra, Alto (2, down) a destra
+              // A/T (2/3): Tenore (3, up) a sinistra, Alto (2, down) a destra (quando condividono lo stesso rigo)
               // T/B (3/4): Tenore (3, up) a sinistra, Basso (4, down) a destra
-              if ((n1.voice === 1 && n2.voice === 2) || (n1.voice === 3 && n2.voice === 4)) {
+              if ((n1.voice === 1 && n2.voice === 2) || (n1.voice === 2 && n2.voice === 3) || (n1.voice === 3 && n2.voice === 4)) {
                 // n1 (up) a sinistra, n2 (down) a destra
                 offsetMap.set(n1.id, -offset);
                 offsetMap.set(n2.id, offset);
-              } else if ((n1.voice === 2 && n2.voice === 1) || (n1.voice === 4 && n2.voice === 3)) {
+              } else if ((n1.voice === 2 && n2.voice === 1) || (n1.voice === 3 && n2.voice === 2) || (n1.voice === 4 && n2.voice === 3)) {
                 // n2 (up) a sinistra, n1 (down) a destra
                 offsetMap.set(n2.id, -offset);
                 offsetMap.set(n1.id, offset);
@@ -304,8 +318,40 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           try {
             vfNote = makeVfNote(n, clef);
             if (n.id === '__ghost__') {
-              vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
-              vfNote.setXShift(-18);
+              vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.85)', strokeStyle: 'rgba(14,165,233,1)', shadowColor: '#0ea5e9', shadowBlur: 8 });
+              // If the ghost has an accidental, keep a smaller left shift so the
+              // accidental doesn't get pushed out / trigger VF layout fallback.
+              const accidentalToShow: AccidentalType | null =
+                n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
+              const hasAccidental = !!accidentalTypeToVexflow(accidentalToShow);
+              vfNote.setXShift(hasAccidental ? -6 : -18);
+
+              // Nudge the ghost accidental further left so it doesn't overlap the notehead.
+              // (Only affects the preview, not the final inserted note.)
+              if (hasAccidental) {
+                try {
+                  const mods: any[] =
+                    (vfNote as any).getModifiers?.() ??
+                    (vfNote as any).modifiers ??
+                    [];
+                  for (const m of mods) {
+                    const isAcc =
+                      (m && typeof m.getCategory === 'function' && m.getCategory() === 'accidentals') ||
+                      (m instanceof (Accidental as any));
+                    if (!isAcc) continue;
+                    try {
+                      const cur = typeof m.getXShift === 'function' ? (m.getXShift() ?? 0) : 0;
+                      // Note: VF's modifier x-shift direction can be counterintuitive across
+                      // renderers; empirically, adding shift here moves the accidental left.
+                      if (typeof m.setXShift === 'function') m.setXShift(cur + 10);
+                    } catch {
+                      // ignore
+                    }
+                  }
+                } catch {
+                  // ignore
+                }
+              }
             } else if (selectedNoteIds.includes(n.id)) {
               vfNote.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });
             }
@@ -313,7 +359,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               ? 'rgba(56,189,248,0.4)'
               : (selectedNoteIds.includes(n.id) ? '#38bdf8' : 'black');
             const absoluteX = (n.xPosition ?? (stave.getNoteStartX() + 10));
-            const x = absoluteX - stave.getNoteStartX();
+            const xRaw = absoluteX - stave.getNoteStartX();
+            const x = n.id === '__ghost__' ? Math.max(0, xRaw) : xRaw;
             // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
             const xShift = offsetMap.get(n.id) ?? 0;
             const prevXShift = (vfNote as any).x_shift ?? 0;
@@ -332,21 +379,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             // If pre-formatting fails, try a minimal ghost fallback; otherwise skip.
             if (n.id === '__ghost__') {
               try {
-                const fallbackNote = makeVfNote(
-                  {
-                    ...n,
-                    explicitAccidental: null,
-                    accidental: undefined,
-                    userAccidental: undefined,
-                  } as StaffNote,
-                  clef
-                );
+                // Keep accidentals in the ghost fallback too; the whole point of the
+                // ghost is to preview the exact insertion (pitch + accidental).
+                const fallbackNote = makeVfNote({ ...n } as StaffNote, clef);
                 fallbackNote.setStave(stave);
                 fallbackNote.setContext(context);
                 fallbackNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
 
                 const absoluteX = (n.xPosition ?? (stave.getNoteStartX() + 10));
-                const x = absoluteX - stave.getNoteStartX();
+                const x = Math.max(0, absoluteX - stave.getNoteStartX());
                 const tc2 = new TickContext();
                 tc2.addTickable(fallbackNote);
                 tc2.preFormat();
@@ -512,6 +553,26 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             }
           }
 
+          // Store hit point for proximity selection.
+          // Use vfNote Y coordinates when available; otherwise fall back to mid-line.
+          try {
+            const ys: number[] | undefined = (vfNote as any).getYs?.();
+            const yHit = (ys && ys.length > 0)
+              ? (ys.reduce((a, b) => a + b, 0) / ys.length)
+              : stave.getYForLine(2);
+
+            // Prefer VexFlow's rendered X when available; this stays correct even when
+            // noteheads are shifted due to multi-voice spacing / modifiers.
+            const vfAbsX = (vfNote as any).getAbsoluteX?.();
+            const xHit = (typeof vfAbsX === 'number' && Number.isFinite(vfAbsX))
+              ? vfAbsX
+              : ((n.xPosition ?? (stave.getNoteStartX() + 10)) + (((vfNote as any).x_shift ?? 0) as number));
+
+            hitPoints.push({ id: n.id, x: xHit, y: yHit, isGhost: n.id === '__ghost__' });
+          } catch {
+            // ignore
+          }
+
           if (didDraw && n.isDotted && group) {
             try {
               const svgNS = 'http://www.w3.org/2000/svg';
@@ -635,17 +696,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
       };
 
+      // Draw (and collect hit points) for both staves.
       drawNotesAtX(trebleNotes, treble, 'treble');
-      drawNotesAtX(bassNotes, bass, 'bass');
-      if (bass) {
-        drawNotesAtX(bassNotes, bass, 'bass');
-      }
+      if (bass) drawNotesAtX(bassNotes, bass, 'bass');
 
+      noteHitPointsRef.current = hitPoints;
+      onNoteHitPoints?.(hitPoints);
 
-    // This renderer version doesn't compute hit points; keep the editor from
-    // using stale data by explicitly reporting an empty set each render.
-    onNoteHitPointsRef.current?.([]);
       // No per-note DOM wiring here: we handle clicks via the global SVG handler below
+    } else {
+      noteHitPointsRef.current = [];
+      onNoteHitPoints?.([]);
     }
   }, [notes, timeSignature, keySignature, barlines, width, height, selectedNoteIds, ghostNote]);
 
@@ -748,11 +809,90 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const { x, y } = clientToSvgCoords(svg, e);
       const { noteId: upNoteId, isGhost: upIsGhost } = getTargetNoteInfo(e.target);
 
-      if (down.downNoteId && down.downNoteId === upNoteId && !down.downIsGhost && !upIsGhost) {
-        onNoteClickRef.current?.(down.downNoteId, e);
-      } else {
-        onStaffClickRef.current?.(x, y, e);
+      // Prefer the note we started the click on (mousedown), even if mouseup lands
+      // on an untagged element (e.g., a Beam path). Fall back to the mouseup target.
+      const chosenNoteId = (down.downNoteId && !down.downIsGhost)
+        ? down.downNoteId
+        : ((upNoteId && !upIsGhost) ? upNoteId : null);
+
+      if (chosenNoteId) {
+        onNoteClickRef.current?.(chosenNoteId, e);
+        return;
       }
+
+      const proximityPick = (radiusPx: number, yBandPx: number) => {
+        const candidates: Array<{ id: string; d2: number; dx: number; dy: number }> = [];
+        for (const p of noteHitPointsRef.current) {
+          if (p.isGhost) continue;
+          const dx = p.x - x;
+          const dy = p.y - y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 <= radiusPx * radiusPx) {
+            candidates.push({ id: p.id, d2, dx, dy });
+          }
+        }
+
+        const preferred = candidates.filter(c => Math.abs(c.dy) <= yBandPx);
+        const pool = preferred.length > 0 ? preferred : candidates;
+        pool.sort((a, b) => a.d2 - b.d2);
+        return pool;
+      };
+
+      // If the DOM target wasn't a note (beams/ledger lines/background), try a proximity pick.
+      // This makes selection easier when notes overlap or are hard to click precisely.
+      // IMPORTANT: In insertion mode we disable proximity-pick so clicks near adjacent voices
+      // still place new notes instead of accidentally selecting the nearby voice.
+      // Option/Alt still enables proximity-pick for selection-only gestures.
+      if (!enableProximityPick && !e.altKey) {
+        // In insertion mode, we still want a plain click on an existing note to select it.
+        // Use a proximity pick only when the click is clearly near an existing note;
+        // otherwise allow background clicks to fall through to insertion.
+        const nearPool = proximityPick(20, 999);
+        if (nearPool.length > 0) {
+          const best = nearPool[0];
+
+          // Only treat it as a note click if we're essentially on the notehead.
+          // This avoids stealing clicks meant to insert a nearby 2nd/3rd.
+          const ON_NOTE_DY_PX = 6;
+          const ON_NOTE_DX_PX = 14;
+          if (Math.abs(best.dy) <= ON_NOTE_DY_PX && Math.abs(best.dx) <= ON_NOTE_DX_PX) {
+            onNoteClickRef.current?.(best.id, e);
+            return;
+          }
+        }
+
+        onStaffClickRef.current?.(x, y, e);
+        return;
+      }
+
+      const pool = proximityPick(22, 10);
+
+      if (pool.length > 0) {
+        // Option/Alt+Click cycles through overlapping candidates.
+        if (e.altKey && pool.length > 1) {
+          const now = Date.now();
+          const prev = lastAltPickRef.current;
+          const sameSpot = !!prev && Math.hypot(prev.x - x, prev.y - y) <= 8 && (now - prev.ts) <= 2000;
+
+          const ids = pool.map(c => c.id);
+          let index = 0;
+          if (sameSpot && prev && prev.ids.join('|') === ids.join('|')) {
+            index = (prev.index + 1) % ids.length;
+          }
+
+          lastAltPickRef.current = { x, y, ids, index, ts: now };
+          onNoteClickRef.current?.(ids[index], e);
+          return;
+        }
+
+        // Default: pick the closest candidate.
+        onNoteClickRef.current?.(pool[0].id, e);
+        return;
+      }
+
+      // Option/Alt+Click: selection-only gesture (do not trigger insertion).
+      if (e.altKey) return;
+      onStaffClickRef.current?.(x, y, e);
     };
 
     const onMouseDown = (e: MouseEvent) => {
@@ -805,8 +945,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       if (!moveCb) return;
 
       const { tagged, isGhost } = getTargetNoteInfo(e.target);
-      // Allow moving when hovering ghost; block when hovering real note.
-      if (tagged && !isGhost) return;
+      // Allow moving when hovering ghost.
+      // When *not* dragging, block when hovering a real note (prevents ghost placement jitter).
+      // When dragging (marquee selection), keep updating the rectangle even over notes.
+      if (tagged && !isGhost && !(down && down.moved)) return;
 
       const { x, y } = clientToSvgCoords(svg, e);
       moveCb(x, y);

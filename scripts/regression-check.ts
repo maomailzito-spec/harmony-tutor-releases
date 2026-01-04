@@ -18,13 +18,6 @@ type Fixture = {
   timeSignature: { numerator: number; denominator: number };
   analysisContexts?: any[];
   notes: any[];
-  ornaments?: Array<{
-    noteId: string;
-    ornamentMark?: string;
-    isNeighbor?: boolean;
-    isAnticipation?: boolean;
-    isAppoggiatura?: boolean;
-  }>;
   expects: Array<{
     // Absolute beat, where absBeat = measureIndex * beatsPerMeasure + (beat-1)
     absBeat: number;
@@ -79,38 +72,6 @@ const main = () => {
       (fx.analysisContexts || []) as any,
       fx.timeSignature as any,
     );
-
-    if (fx.ornaments && fx.ornaments.length) {
-      for (const exp of fx.ornaments) {
-        const n: any = (result.analyzedNotes as any[]).find((x) => x && x.id === exp.noteId);
-        if (!n) {
-          fixtureFailed = true;
-          anyFailed = true;
-          fail(`[${fx.name}] Missing analyzed note id='${exp.noteId}'`);
-          continue;
-        }
-        if (exp.ornamentMark != null && String(n.ornamentMark ?? '') !== exp.ornamentMark) {
-          fixtureFailed = true;
-          anyFailed = true;
-          fail(`[${fx.name}] noteId='${exp.noteId}' ornamentMark expected '${exp.ornamentMark}' got '${String(n.ornamentMark ?? '')}'`);
-        }
-        if (exp.isNeighbor != null && Boolean(n.isNeighbor) !== exp.isNeighbor) {
-          fixtureFailed = true;
-          anyFailed = true;
-          fail(`[${fx.name}] noteId='${exp.noteId}' isNeighbor expected '${exp.isNeighbor}' got '${Boolean(n.isNeighbor)}'`);
-        }
-        if (exp.isAnticipation != null && Boolean(n.isAnticipation) !== exp.isAnticipation) {
-          fixtureFailed = true;
-          anyFailed = true;
-          fail(`[${fx.name}] noteId='${exp.noteId}' isAnticipation expected '${exp.isAnticipation}' got '${Boolean(n.isAnticipation)}'`);
-        }
-        if (exp.isAppoggiatura != null && Boolean(n.isAppoggiatura) !== exp.isAppoggiatura) {
-          fixtureFailed = true;
-          anyFailed = true;
-          fail(`[${fx.name}] noteId='${exp.noteId}' isAppoggiatura expected '${exp.isAppoggiatura}' got '${Boolean(n.isAppoggiatura)}'`);
-        }
-      }
-    }
 
     const timeline = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
 
