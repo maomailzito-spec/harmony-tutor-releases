@@ -4548,6 +4548,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         if (e?.altKey) return;
 
         if (selectedInsertion.type === 'rest') {
+            // Strict manual rest insertion: use same snap/duration logic as notes, replace overlapping events, rebuild timeline for slot
             const rest: StaffNote = {
                 id: crypto.randomUUID(),
                 pitch: 'B',
@@ -4559,13 +4560,85 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 isRest: true,
                 isTriplet,
                 isDuplet,
-                isDotted,
+                isDotted: selectedInsertion.isDotted ?? false,
                 measureIndex: hit.measureIndex,
                 beat,
+                startTick: snappedTick,
+                durationTicks: durTicks,
                 clef: targetClef,
                 voice: selectedVoice,
             };
-            setRawNotes(prev => [...prev, rest]);
+            setRawNotes(prev => {
+                // Remove any overlapping note/rest in the same measure/voice at this slot
+                const filtered = prev.filter(
+                    n =>
+                        n.measureIndex !== rest.measureIndex ||
+                        n.voice !== rest.voice ||
+                        Math.abs((n.beat ?? 1) - (rest.beat ?? 1)) > 1e-6
+                );
+                // Insert the new rest and sort
+                const next = [...filtered, rest].sort((a, b) => {
+                    if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
+                    if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
+                    return (a.voice ?? 1) - (b.voice ?? 1);
+                });
+                try {
+                    const collectSnapshot = (minMeasure: number, maxMeasure: number) => {
+                        const notes = (layoutDataRef.current?.positionedNotes ?? [])
+                            .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= minMeasure && n.measureIndex <= maxMeasure);
+                        return notes.map(n => {
+                            let measureStartX = undefined as number | undefined;
+                            let measureWidth = undefined as number | undefined;
+                            if (layoutDataRef.current?.systemsParams) {
+                                for (const sys of layoutDataRef.current.systemsParams) {
+                                    const idx = sys.measureIndices.indexOf(n.measureIndex);
+                                    if (idx !== -1) {
+                                        measureStartX = sys.startMeasuresX[idx];
+                                        const nextX = idx < sys.startMeasuresX.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+                                        measureWidth = Math.max(0, nextX - measureStartX);
+                                        break;
+                                    }
+                                }
+                            }
+                            const pxPerQuarter = measureWidth ? (measureWidth / (timeSignature.numerator * (4 / timeSignature.denominator))) : null;
+                            let fallbackX = undefined;
+                            if (typeof n.beat === 'number' && typeof measureStartX === 'number' && typeof pxPerQuarter === 'number') {
+                                fallbackX = measureStartX + ((n.beat - 1) * pxPerQuarter);
+                            }
+                            return {
+                                id: n.id,
+                                measureIndex: n.measureIndex,
+                                beat: n.beat,
+                                startTick: (n as any).startTick,
+                                durationTicks: (n as any).durationTicks,
+                                xPosition: n.xPosition,
+                                fallbackX,
+                                measureStartX,
+                                measureWidth,
+                                pxPerQuarter,
+                            };
+                        });
+                    };
+                    const afterSnap = collectSnapshot(Math.max(0, rest.measureIndex - 1), rest.measureIndex + 1);
+                    const deltas = {} as Record<string, { before?: any; after?: any; dx?: number }>;
+                    const before = (layoutDataRef.current?.positionedNotes ?? [])
+                        .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= Math.max(0, rest.measureIndex - 1) && n.measureIndex <= rest.measureIndex + 1)
+                        .map(n => ({ id: n.id, x: n.xPosition }));
+                    before.forEach(b => { deltas[b.id] = { before: b }; });
+                    afterSnap.forEach(a => {
+                        if (!deltas[a.id]) deltas[a.id] = {} as any;
+                        deltas[a.id].after = { id: a.id, x: a.xPosition, fallbackX: a.fallbackX };
+                        const bx = deltas[a.id].before?.x ?? deltas[a.id].before?.x;
+                        const ax = a.xPosition ?? a.fallbackX;
+                        if (typeof bx === 'number' && typeof ax === 'number') deltas[a.id].dx = ax - bx;
+                    });
+                    const deltasList = Object.entries(deltas).map(([id, v]) => ({ id, dx: v.dx ?? 0, before: v.before, after: v.after }));
+                    const maxAbsDx = deltasList.reduce((acc, v) => Math.max(acc, Math.abs(v.dx ?? 0)), 0);
+                    const nonZero = deltasList.filter(d => Math.abs(d.dx ?? 0) > 1e-9).length;
+                    console.log('[restInsert] after rest targetMeasure=' + rest.measureIndex + ' maxAbsDx=' + maxAbsDx + ' nonZero=' + nonZero + ' deltasJSON=' + JSON.stringify(deltasList));
+                } catch (e) { /* ignore */ }
+                return next;
+            });
             return;
         }
 
