@@ -94,7 +94,54 @@ export function rebuildMeasureTimelineForVoice(
             currentTick += durationTicks;
         }
 
-        return result;
+        // --- POST-PROCESSING TIMELINE: rimuovi pause in conflitto e clamp ---
+        const notesOnly = result.filter(n => !n.isRest);
+        const restsOnly = result.filter(n => n.isRest);
+
+        const cleanedRests = restsOnly.filter(rest => {
+            const rStart = rest.startTick ?? 0;
+            const rEnd = rStart + (rest.durationTicks ?? 0);
+
+            const overlapsNote = notesOnly.some(note => {
+                if (note.voice !== rest.voice) return false;
+                const nStart = note.startTick ?? 0;
+                const nEnd = nStart + (note.durationTicks ?? 0);
+                return nStart < rEnd && nEnd > rStart;
+            });
+
+            return !overlapsNote;
+        });
+
+        const clampedRests = cleanedRests
+            .map(rest => {
+                const rStart = rest.startTick ?? measureStartTick;
+                let rEnd = rStart + (rest.durationTicks ?? 0);
+                if (rEnd > measureEndTick) {
+                    rEnd = measureEndTick;
+                }
+                const newDurTicks = Math.max(0, rEnd - rStart);
+                if (newDurTicks <= 0) {
+                    return null;
+                }
+                return {
+                    ...rest,
+                    startTick: rStart,
+                    durationTicks: newDurTicks,
+                } as StaffNote;
+            })
+            .filter((r): r is StaffNote => r !== null);
+
+        const finalTimeline = [...notesOnly, ...clampedRests].sort((a, b) => {
+            const aTick = a.startTick ?? 0;
+            const bTick = b.startTick ?? 0;
+            if (aTick !== bTick) return aTick - bTick;
+            if ((a.isRest ? 1 : 0) !== (b.isRest ? 1 : 0)) {
+                return (a.isRest ? 1 : 0) - (b.isRest ? 1 : 0);
+            }
+            return 0;
+        });
+
+        return finalTimeline;
     }
 
     // Usa sia note che rest MANUALI come eventi sorgente
@@ -167,12 +214,14 @@ export function rebuildMeasureTimelineForVoice(
                 voice,
             });
         } else {
+            // Mantieni duration/isDotted originali
             result.push({
                 ...event.original,
                 startTick: event.startTick,
                 durationTicks: durTicks,
                 beat: beatInMeasure,
-                duration: getDurationFromBeats(durBeats),
+                duration: event.original.duration,
+                isDotted: event.original.isDotted,
                 isRest: false,
                 measureIndex,
                 voice,
@@ -272,7 +321,7 @@ interface GrandStaffEditorProps {
     isAudioReady: boolean;
 }
 
-type InsertionElement = { type: 'note' | 'rest', duration: NoteDuration };
+type InsertionElement = { type: 'note' | 'rest', duration: NoteDuration, isDotted?: boolean };
 
 // Must match value in VexflowGrandStaff.tsx
 const STAFF_MARGIN = 50;
@@ -761,7 +810,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
     const [tool, setTool] = useState<Tool>('insert');
-    const [selectedInsertion, setSelectedInsertion] = useState<InsertionElement>({ type: 'note', duration: 'quarter' });
+    const [selectedInsertion, setSelectedInsertion] = useState<InsertionElement>({ type: 'note', duration: 'quarter', isDotted: false });
     const [isDotted, setIsDotted] = useState(false);
     const [isTriplet, setIsTriplet] = useState(false);
     const [isDuplet, setIsDuplet] = useState(false);
@@ -3446,11 +3495,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     }, [playbackTransposeSemitones]);
 
     const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8) => {
-        if (!isAudioReady || !audioService.audioContext || note.isRest) return;
-        await audioService.ensureAudioIsReady();
-        const midi = (note.midi ?? 0) + playbackTransposeSemitones;
-        if (!Number.isFinite(midi) || midi < 21 || midi > 108) return;
-        await audioService.playNote(midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSec });
+                if (!isAudioReady || !audioService.audioContext || note.isRest) return;
+                await audioService.ensureAudioIsReady();
+                const midi = (note.midi ?? 0) + playbackTransposeSemitones;
+                if (!Number.isFinite(midi) || midi < 21 || midi > 108) return;
+                // Calcola la durata in secondi usando durationTicks se presente
+                let durationSecFinal = durationSec;
+                if (typeof note.durationTicks === 'number' && note.durationTicks > 0) {
+                    const beats = note.durationTicks / TICKS_PER_QUARTER;
+                    const safeBpm = Math.max(20, Math.min(300, bpm || 120));
+                    durationSecFinal = beats * (60 / safeBpm);
+                } else {
+                    let durBeatsBase = DURATION_VALUES[note.duration ?? 'quarter'] ?? 1;
+                    if (note.isDotted) durBeatsBase *= 1.5;
+                    if (note.isTriplet) durBeatsBase = durBeatsBase * 2 / 3;
+                    if (note.isDuplet) durBeatsBase = durBeatsBase * 3 / 2;
+                    const safeBpm = Math.max(20, Math.min(300, bpm || 120));
+                    durationSecFinal = durBeatsBase * (60 / safeBpm);
+                }
+                await audioService.playNote(midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal });
     }, [audioService, isAudioReady, midiToName, playbackTransposeSemitones]);
 
     const playNote = useCallback(async (note: StaffNote, durationSec = 0.8) => {
@@ -4419,12 +4482,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const absBeatRaw = measureStartBeat + localBeat;
         const tickRaw = beatsToTicks(absBeatRaw);
 
-        // durata base in beat (es. 1 = quarto, 0.5 = ottavo, 0.25 = sedicesimo)
-        let durBeats = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
-        if (!isFinite(durBeats) || durBeats <= 0) {
-          durBeats = 1; // fallback: un quarto
-        }
-        const durTicks = durBeats * TICKS_PER_QUARTER;
+                // Calcolo durationTicks esplicito e coerente
+                let durBeatsBase = DURATION_VALUES[selectedInsertion.duration] ?? 1;
+                if (selectedInsertion.isDotted) {
+                    durBeatsBase *= 1.5;
+                }
+                if (isTriplet) {
+                    durBeatsBase = durBeatsBase * 2 / 3;
+                }
+                if (isDuplet) {
+                    durBeatsBase = durBeatsBase * 3 / 2;
+                }
+                durBeatsBase *= tupletFactor;
+                if (!isFinite(durBeatsBase) || durBeatsBase <= 0) {
+                    durBeatsBase = 1;
+                }
+                const durTicks = durBeatsBase * TICKS_PER_QUARTER;
 
         // tick assoluti inizio/fine misura
         const measureStartTick = beatsToTicks(measureStartBeat);
@@ -4527,10 +4600,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     isRest: false,
                     isTriplet,
                     isDuplet,
-                    isDotted,
+                    isDotted: selectedInsertion.isDotted ?? false,
                     measureIndex: hit.measureIndex,
                     beat,
-                    startTick,   // <-- aggiunto
+                    startTick,
+                    durationTicks: durTicks, // <-- AGGIUNTO QUI
                     clef: targetClef,
                     voice: selectedVoice,
                 };
@@ -5903,7 +5977,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     </button>
                 ))}
                 <div className="w-px h-5 bg-gray-600 mx-1"></div>
-                <button onClick={() => setIsDotted(d => !d)} className={`p-1 rounded-md transition-colors ${isDotted ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`} title="Punto di valore"><DotIcon className={TOOLBAR_ICON_CLASS} /></button>
+                                <button
+                                    onClick={() =>
+                                        setSelectedInsertion(prev => ({
+                                            ...prev,
+                                            isDotted: !prev.isDotted
+                                        }))
+                                    }
+                                    className={`p-1 rounded-md transition-colors ${
+                                        selectedInsertion.isDotted
+                                            ? 'bg-cyan-600 text-white'
+                                            : 'text-gray-300 hover:bg-gray-600'
+                                    }`}
+                                    title="Punto di valore"
+                                >
+                                    <DotIcon className={TOOLBAR_ICON_CLASS} />
+                                </button>
                 <button onClick={() => {
                     setIsTriplet(t => {
                         const newTripletState = !t;
