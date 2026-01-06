@@ -1,0 +1,31 @@
+{
+  "type": "layoutAudit",
+  "action": "insert",
+  "measure": 0,
+  "measures": [
+    {
+      "measureIndex": 0,
+      "systemStartX": 105,
+      "measureWidth": 1192.0000000000066,
+      "pxPerQuarter": 298.00000000000165
+    },
+    {
+      "measureIndex": 1,
+      "systemStartX": 1297.0000000000066,
+      "measureWidth": 1192.0000000000066,
+      "pxPerQuarter": 298.00000000000165
+    },
+    {
+      "measureIndex": 2,
+      "systemStartX": 2489.000000000013,
+      "measureWidth": 1142.0000000000068,
+      "pxPerQuarter": 285.5000000000017
+    },
+    {
+      "measureIndex": 3,
+      "systemStartX": 105,
+      "measureWidth": 1261,
+      "pxPerQuarter": 315.25
+    }
+  ]
+}

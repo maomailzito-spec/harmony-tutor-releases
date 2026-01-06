@@ -1,0 +1,67 @@
+{
+  "type": "layoutAudit",
+  "action": "insert",
+  "measure": 0,
+  "measures": [
+    {
+      "measureIndex": 0,
+      "systemStartX": 105,
+      "measureWidth": 615.9999999999984,
+      "pxPerQuarter": 153.9999999999996
+    },
+    {
+      "measureIndex": 1,
+      "systemStartX": 720.9999999999984,
+      "measureWidth": 615.9999999999984,
+      "pxPerQuarter": 153.9999999999996
+    },
+    {
+      "measureIndex": 2,
+      "systemStartX": 1336.9999999999968,
+      "measureWidth": 565.9999999999984,
+      "pxPerQuarter": 141.4999999999996
+    },
+    {
+      "measureIndex": 3,
+      "systemStartX": 105,
+      "measureWidth": 625.5000000000002,
+      "pxPerQuarter": 156.37500000000006
+    },
+    {
+      "measureIndex": 4,
+      "systemStartX": 730.5000000000002,
+      "measureWidth": 635.4999999999998,
+      "pxPerQuarter": 158.87499999999994
+    },
+    {
+      "measureIndex": 5,
+      "systemStartX": 105,
+      "measureWidth": 417,
+      "pxPerQuarter": 104.25
+    },
+    {
+      "measureIndex": 6,
+      "systemStartX": 522,
+      "measureWidth": 417,
+      "pxPerQuarter": 104.25
+    },
+    {
+      "measureIndex": 7,
+      "systemStartX": 939,
+      "measureWidth": 427,
+      "pxPerQuarter": 106.75
+    },
+    {
+      "measureIndex": 8,
+      "systemStartX": 105,
+      "measureWidth": 625.5,
+      "pxPerQuarter": 156.375
+    },
+    {
+      "measureIndex": 9,
+      "systemStartX": 730.5,
+      "measureWidth": 635.5,
+      "pxPerQuarter": 158.875
+    }
+  ]
+}

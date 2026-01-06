@@ -94,6 +94,36 @@ export function rebuildMeasureTimelineForVoice(
             currentTick += durationTicks;
         }
 
+        // --- AGGIUNTA: copertura finale se rimane un piccolo buco ---
+        const remainingTicks = endTick - currentTick;
+        if (remainingTicks > epsilonTicks) {
+            const remainingBeats = remainingTicks / TICKS_PER_QUARTER;
+            const approxDuration = getDurationFromBeats(remainingBeats);
+            const durBeats = DURATION_VALUES[approxDuration] ?? remainingBeats;
+            const durationTicks = durBeats * TICKS_PER_QUARTER;
+            const absBeat = ticksToBeats(currentTick);
+            const beatInMeasure = (absBeat % beatsPerMeasure) + 1;
+
+            result.push({
+                id: crypto.randomUUID(),
+                measureIndex,
+                voice,
+                isRest: true,
+                isTriplet: false,
+                isDuplet: false,
+                isDotted: false,
+                startTick: currentTick,
+                durationTicks,
+                duration: approxDuration,
+                beat: beatInMeasure,
+                pitch: 'B',
+                octave: 4,
+                position: 0,
+                midi: 0,
+                noteIndex: 0,
+            } as StaffNote);
+        }
+
         // --- POST-PROCESSING TIMELINE: rimuovi pause in conflitto e clamp ---
         const notesOnly = result.filter(n => !n.isRest);
         const restsOnly = result.filter(n => n.isRest);
