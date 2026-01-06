@@ -1,6 +1,7 @@
 // FIX: Replaced the entire file content with a correct implementation of the Staff component to fix the corrupted file and missing default export.
 import React, { forwardRef, useMemo } from 'react';
 import { StaffNote, KeySignature, AccidentalType, TimeSignature, Barline, NoteDuration, ClefType } from '../types';
+import { TICKS_PER_QUARTER } from '../constants';
 
 interface StaffProps {
     notes: StaffNote[];
@@ -34,6 +35,7 @@ interface StaffProps {
 const LINE_HEIGHT = 12;
 const DEFAULT_STAFF_TOP = 50;
 const START_X = 50;
+const MEASURE_PADDING_X = 20;
 const NOTE_HEAD_RX_NORMAL = 6.3;
 const NOTE_HEAD_RY_NORMAL = 4.725;
 const ACCIDENTAL_OFFSET_NORMAL = -20;
@@ -281,7 +283,22 @@ const Staff = forwardRef<SVGSVGElement, StaffProps>(({
                 {allNotes.map(note => {
                     const duration = note.duration || 'quarter';
                     const y = getNoteYForRender(note.position);
-                    const x = note.xPosition || 0;
+                    let x = (typeof note.xPosition === 'number') ? note.xPosition : 0;
+                    // Fallback: compute from startTick if available and timeSignature present
+                    if ((x === 0 || x === undefined) && typeof note.startTick === 'number' && timeSignature) {
+                        try {
+                            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                            const absBeat = (note.startTick as number) / TICKS_PER_QUARTER;
+                            const beatInMeasure = (absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure) + 1;
+                            const staveStartX = START_X;
+                            const staveWidth = (width || 800) - START_X - 10;
+                            const contentWidth = Math.max(1, staveWidth - (MEASURE_PADDING_X * 2));
+                            const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / beatsPerMeasure));
+                            x = staveStartX + MEASURE_PADDING_X + (rel * contentWidth);
+                        } catch {
+                            // ignore and keep x
+                        }
+                    }
                     const noteColor = note.color || primaryColor;
 
                     if (note.isRest) {

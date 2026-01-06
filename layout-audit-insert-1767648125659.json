@@ -1,0 +1,55 @@
+{
+  "type": "layoutAudit",
+  "action": "insert",
+  "measure": 6,
+  "measures": [
+    {
+      "measureIndex": 0,
+      "systemStartX": 105,
+      "measureWidth": 250.20000000000005,
+      "pxPerQuarter": 62.55000000000001
+    },
+    {
+      "measureIndex": 1,
+      "systemStartX": 355.20000000000005,
+      "measureWidth": 250.20000000000005,
+      "pxPerQuarter": 62.55000000000001
+    },
+    {
+      "measureIndex": 2,
+      "systemStartX": 605.4000000000001,
+      "measureWidth": 250.20000000000005,
+      "pxPerQuarter": 62.55000000000001
+    },
+    {
+      "measureIndex": 3,
+      "systemStartX": 855.6000000000001,
+      "measureWidth": 250.20000000000005,
+      "pxPerQuarter": 62.55000000000001
+    },
+    {
+      "measureIndex": 4,
+      "systemStartX": 1105.8000000000002,
+      "measureWidth": 260.1999999999998,
+      "pxPerQuarter": 65.04999999999995
+    },
+    {
+      "measureIndex": 5,
+      "systemStartX": 105,
+      "measureWidth": 417,
+      "pxPerQuarter": 104.25
+    },
+    {
+      "measureIndex": 6,
+      "systemStartX": 522,
+      "measureWidth": 416.9999999999998,
+      "pxPerQuarter": 104.24999999999994
+    },
+    {
+      "measureIndex": 7,
+      "systemStartX": 938.9999999999998,
+      "measureWidth": 427.0000000000002,
+      "pxPerQuarter": 106.75000000000006
+    }
+  ]
+}

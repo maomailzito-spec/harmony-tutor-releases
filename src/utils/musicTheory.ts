@@ -45,7 +45,7 @@ export function getActiveNotesTimeline(
     });
 }
 import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext } from '../types';
-import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES } from '../constants';
+import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 
 const STRING_BASE_MIDI = [64, 59, 55, 50, 45, 40];
 const GUITAR_TUNING_INDICES = GUITAR_TUNING;
@@ -67,6 +67,51 @@ const mod = (n: number, m: number) => ((n % m) + m) % m;
 const mod12 = (n: number) => mod(n, 12);
 
 // Figured-bass helpers: ensure vertical stacking order (top number first).
+/** Converts ticks to beats (assuming TICKS_PER_QUARTER = 1 beat) */
+export function ticksToBeats(ticks: number): number {
+    return ticks / TICKS_PER_QUARTER;
+}
+
+/** Converts beats to ticks (assuming TICKS_PER_QUARTER = 1 beat) */
+export function beatsToTicks(beats: number): number {
+    return Math.round(beats * TICKS_PER_QUARTER);
+}
+
+/** Rebuilds the timeline for a given measure and voice, clamping rests and removing overlaps */
+export function rebuildMeasureTimelineForVoice(
+    notes: StaffNote[],
+    measureIndex: number,
+    voice: Voice,
+    timeSignature: TimeSignature
+): StaffNote[] {
+    // Filter notes for the target measure and voice
+    const filtered = notes.filter(n => n.measureIndex === measureIndex && n.voice === voice);
+    // Sort by beat
+    filtered.sort((a, b) => (a.beat ?? 1) - (b.beat ?? 1));
+    // Clamp rests and remove overlaps
+    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+    let timeline: StaffNote[] = [];
+    let lastEnd = 1;
+    for (const n of filtered) {
+        let start = n.beat ?? 1;
+        let base = (DURATION_VALUES as any)[n.duration || 'quarter'] || 1;
+        let dur = base;
+        if (n.isDotted) dur *= 1.5;
+        if (n.isTriplet) dur *= 2 / 3;
+        if (n.isDuplet) dur *= 3 / 2;
+        let end = Math.min(start + dur, beatsPerMeasure + 1);
+        // Clamp start to lastEnd if overlapping
+        if (start < lastEnd) start = lastEnd;
+        // Clamp end to measure boundary
+        if (end > beatsPerMeasure + 1) end = beatsPerMeasure + 1;
+        // Only add if duration is positive
+        if (end > start) {
+            timeline.push({ ...n, beat: start, duration: n.duration, isRest: n.isRest });
+            lastEnd = end;
+        }
+    }
+    return timeline;
+}
 const SUPERSCRIPT_TO_DIGIT: Record<string, string> = {
     '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
     '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',

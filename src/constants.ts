@@ -36,6 +36,13 @@ export const DURATION_VALUES: Record<NoteDuration, number> = {
     'sixty-fourth': 0.0625,
 };
 
+// High-resolution tick base: ticks per quarter note. Used for precise internal timing.
+export const TICKS_PER_QUARTER = 960;
+
+// Default layout scale: pixels per internal tick. Use a small value so
+// that px-per-quarter = DEFAULT_PX_PER_TICK * TICKS_PER_QUARTER is a
+// reasonable on-screen size (e.g. 0.05 * 960 = 48 px per quarter).
+export const DEFAULT_PX_PER_TICK = 0.05;
 // These are the root notes of keys that use flats. Note names match the 'NOTE_NAMES' array.
 export const FLAT_MAJOR_ROOTS = new Set(['F', 'A#', 'D#', 'G#', 'C#']); // F, Bb, Eb, Ab, Db
 export const FLAT_MINOR_ROOTS = new Set(['D', 'G', 'C', 'F', 'A#', 'D#']); // Dm, Gm, Cm, Fm, Bbm, Ebm

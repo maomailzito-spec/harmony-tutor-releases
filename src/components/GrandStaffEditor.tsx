@@ -1,3 +1,241 @@
+// Restituisce la durata standard più vicina (NoteDuration) per un valore in beat
+function getDurationFromBeats(beats: number): NoteDuration {
+    const entries: [NoteDuration, number][] = Object.entries(DURATION_VALUES) as any;
+    let best: NoteDuration = 'quarter';
+    let minDiff = Infinity;
+    for (const [dur, val] of entries) {
+        const diff = Math.abs(val - beats);
+        if (diff < minDiff) {
+            minDiff = diff;
+            best = dur as NoteDuration;
+        }
+    }
+    return best;
+}
+export function rebuildMeasureTimelineForVoice(
+    allNotes: StaffNote[],
+    measureIndex: number,
+    voice: Voice,
+    timeSignature: { numerator: number; denominator: number; }
+): StaffNote[] {
+    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+
+    // Per ora supporto solo 4/4 in modo “intelligente”
+    if (!(timeSignature.numerator === 4 && timeSignature.denominator === 4)) {
+        return allNotes
+            .filter(n => n.measureIndex === measureIndex && n.voice === voice)
+            .sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0));
+    }
+
+    const measureStartBeat = measureIndex * beatsPerMeasure;
+    const measureEndBeat = (measureIndex + 1) * beatsPerMeasure;
+    const measureStartTick = beatsToTicks(measureStartBeat);
+    const measureEndTick = beatsToTicks(measureEndBeat);
+
+    // Costruisce una sequenza di pause spezzate in durate standard
+    function buildRestsBetween(startTick: number, endTick: number): StaffNote[] {
+        const allowedDurations: NoteDuration[] = [
+            'whole',
+            'half',
+            'quarter',
+            'eighth',
+            'sixteenth',
+            'thirty-second',
+        ];
+
+        const result: StaffNote[] = [];
+        let currentTick = startTick;
+        const epsilonTicks = TICKS_PER_QUARTER * 0.001;
+
+        while (endTick - currentTick > epsilonTicks) {
+            const remainingBeats = (endTick - currentTick) / TICKS_PER_QUARTER;
+
+            let chosen: NoteDuration | null = null;
+            let durBeats = 0;
+
+            // scegli la durata più grande che ci sta
+            for (const dur of allowedDurations) {
+                const val = DURATION_VALUES[dur];
+                if (val <= remainingBeats + 1e-6 && val > durBeats) {
+                    chosen = dur;
+                    durBeats = val;
+                }
+            }
+
+            if (!chosen || durBeats <= 0) {
+                const approxDuration = getDurationFromBeats(remainingBeats);
+                durBeats = DURATION_VALUES[approxDuration] ?? remainingBeats;
+                chosen = approxDuration;
+            }
+
+            const durationTicks = durBeats * TICKS_PER_QUARTER;
+            const absBeat = ticksToBeats(currentTick);
+            const beatInMeasure = (absBeat % beatsPerMeasure) + 1;
+
+            result.push({
+                id: crypto.randomUUID(),
+                measureIndex,
+                voice,
+                isRest: true,
+                isTriplet: false,
+                isDuplet: false,
+                isDotted: false,
+                startTick: currentTick,
+                durationTicks,
+                duration: chosen,
+                beat: beatInMeasure,
+                pitch: 'B',
+                octave: 4,
+                position: 0,
+                midi: 0,
+                noteIndex: 0,
+            } as StaffNote);
+
+            currentTick += durationTicks;
+        }
+
+        return result;
+    }
+
+    // Usa sia note che rest MANUALI come eventi sorgente
+    const items = allNotes.filter(
+        n =>
+            n.measureIndex === measureIndex &&
+            n.voice === voice
+    );
+
+    const events = items
+        .map(n => {
+            // startTick
+            let startTick: number;
+            if (typeof n.startTick === 'number' && isFinite(n.startTick)) {
+                startTick = n.startTick;
+            } else {
+                const absBeat = (n.measureIndex ?? 0) * beatsPerMeasure + ((n.beat ?? 1) - 1);
+                startTick = beatsToTicks(absBeat);
+            }
+
+            // durationTicks
+            let durationTicks: number;
+            if (typeof n.durationTicks === 'number' && n.durationTicks > 0) {
+                durationTicks = n.durationTicks;
+            } else {
+                let durBeats = DURATION_VALUES[n.duration ?? 'quarter'] ?? 1;
+                if (n.isDotted) durBeats *= 1.5;
+                if (n.isTriplet) durBeats = durBeats * 2 / 3;
+                if (n.isDuplet) durBeats = durBeats * 3 / 2;
+                durationTicks = durBeats * TICKS_PER_QUARTER;
+            }
+
+            let clampedStart = Math.max(measureStartTick, startTick);
+            let clampedEnd = Math.min(measureEndTick, clampedStart + durationTicks);
+            if (clampedEnd < clampedStart) clampedEnd = clampedStart;
+
+            return {
+                original: n,
+                startTick: clampedStart,
+                endTick: clampedEnd,
+                isRest: !!n.isRest,
+            };
+        })
+        .filter(e => e.endTick > e.startTick)
+        .sort((a, b) => a.startTick - b.startTick);
+
+    const result: StaffNote[] = [];
+    let cursor = measureStartTick;
+
+    for (const event of events) {
+        if (event.startTick > cursor) {
+            const rests = buildRestsBetween(cursor, event.startTick);
+            result.push(...rests);
+        }
+
+        const durTicks = event.endTick - event.startTick;
+        const durBeats = durTicks / TICKS_PER_QUARTER;
+        const absBeat = ticksToBeats(event.startTick);
+        const beatInMeasure = (absBeat % beatsPerMeasure) + 1;
+
+        if (event.isRest) {
+            result.push({
+                ...event.original,
+                startTick: event.startTick,
+                durationTicks: durTicks,
+                beat: beatInMeasure,
+                duration: getDurationFromBeats(durBeats),
+                isRest: true,
+                measureIndex,
+                voice,
+            });
+        } else {
+            result.push({
+                ...event.original,
+                startTick: event.startTick,
+                durationTicks: durTicks,
+                beat: beatInMeasure,
+                duration: getDurationFromBeats(durBeats),
+                isRest: false,
+                measureIndex,
+                voice,
+            });
+        }
+
+        cursor = event.endTick;
+    }
+
+    if (cursor < measureEndTick) {
+        const rests = buildRestsBetween(cursor, measureEndTick);
+        result.push(...rests);
+    }
+
+    // --- POST-PROCESSING: rimuovi rest in conflitto e clamp dentro la misura ---
+    const notesOnly = result.filter(n => !n.isRest);
+    const restsOnly = result.filter(n => n.isRest);
+
+    const cleanedRests = restsOnly.filter(rest => {
+        const rStart = rest.startTick ?? 0;
+        const rEnd = rStart + (rest.durationTicks ?? 0);
+
+        const overlapsNote = notesOnly.some(note => {
+            if (note.voice !== rest.voice) return false;
+            const nStart = note.startTick ?? 0;
+            const nEnd = nStart + (note.durationTicks ?? 0);
+            return nStart < rEnd && nEnd > rStart;
+        });
+
+        return !overlapsNote;
+    });
+
+    const clampedRests = cleanedRests
+        .map(rest => {
+            const rStart = rest.startTick ?? measureStartTick;
+            let rEnd = rStart + (rest.durationTicks ?? 0);
+            if (rEnd > measureEndTick) {
+                rEnd = measureEndTick;
+            }
+            const newDurTicks = Math.max(0, rEnd - rStart);
+            if (newDurTicks <= 0) {
+                return null;
+            }
+            return {
+                ...rest,
+                startTick: rStart,
+                durationTicks: newDurTicks,
+            } as StaffNote;
+        })
+        .filter((r): r is StaffNote => r !== null);
+
+    const finalTimeline = [...notesOnly, ...clampedRests].sort((a, b) => {
+        const aTick = a.startTick ?? 0;
+        const bTick = b.startTick ?? 0;
+        if (aTick !== bTick) return aTick - bTick;
+        if ((a.isRest ? 1 : 0) !== (b.isRest ? 1 : 0)) {
+            return (a.isRest ? 1 : 0) - (b.isRest ? 1 : 0);
+        }
+        return 0;
+    });
+
+    return finalTimeline;
+}
 // ...existing code...
 // TypeScript: dichiarazione per window.electronAPI
 declare global {
@@ -20,9 +258,9 @@ import {
 } from './icons/NoteValueIcons';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, ticksToBeats, beatsToTicks } from '../utils/musicTheory';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
-import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS } from '../constants';
+import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
 import { UngroupIcon } from './icons/UngroupIcon';
 import { FlipStemIcon } from './icons/FlipStemIcon';
@@ -474,6 +712,7 @@ class RenderErrorBoundary extends React.Component<
 }
 
 const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioService, isAudioReady }) => {
+        const measureGridStepRef = useRef<Map<number, number>>(new Map());
     const [rawNotes, setRawNotes, undoNotes, redoNotes] = useUndoableState<StaffNote[]>([]);
     // Ref per avere sempre il valore aggiornato di rawNotes
     const latestRawNotes = useRef(rawNotes);
@@ -628,6 +867,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const resetVexflow = useCallback(() => {
         setVexflowNonce(n => n + 1);
     }, []);
+
+    // Stable layout parameters: keep `pxPerQuarter` stable across layout passes
+    // to avoid global rescaling (which caused the drift). Reset when container
+    // width changes so layout can adapt to a new viewport.
+    const stablePxPerQuarterRef = useRef<number | null>(null);
+    useEffect(() => {
+        // reset stability when the container resizes
+        stablePxPerQuarterRef.current = null;
+    }, [containerWidth]);
 
     useEffect(() => {
         if (!isMidiMenuOpen) return;
@@ -1499,7 +1747,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         }
                     });
 
-                    setRawNotes(normalizedNotes as any);
+                    // Convert legacy beat/measure floats to high-resolution ticks for stability.
+                    try {
+                        const ts = (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') ? loadedProject.timeSignature : { numerator: 4, denominator: 4 };
+                        const beatsPerMeasure = ts.numerator * (4 / ts.denominator);
+                        const ticksPerBeat = TICKS_PER_QUARTER; // quarter = 1 beat
+                        const withTicks = (normalizedNotes as any[]).map(n => {
+                            try {
+                                const m = Number.isFinite(n.measureIndex) ? n.measureIndex : 0;
+                                const b = Number.isFinite(n.beat) ? n.beat : 1;
+                                const absBeat = (m * beatsPerMeasure) + (b - 1);
+                                const startTick = Math.round(absBeat * ticksPerBeat);
+
+                                // duration -> beats
+                                const base = (DURATION_VALUES as any)[n.duration || 'quarter'] || 1;
+                                let durBeats = base;
+                                if (n.isDotted) durBeats *= 1.5;
+                                if (n.isTriplet) durBeats *= 2 / 3;
+                                if (n.isDuplet) durBeats *= 3 / 2;
+                                const durationTicks = Math.round(durBeats * ticksPerBeat);
+
+                                return { ...n, startTick, durationTicks };
+                            } catch (e) { return n; }
+                        });
+                        setRawNotes(withTicks as any);
+                        try {
+                            const maxIdx = (withTicks as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), -1);
+                            const measuresCount = Math.max(1, maxIdx + 1);
+                            setMinMeasureCount(measuresCount);
+                            setMinMeasureCountDraft(String(measuresCount));
+                        } catch (_) {}
+                    } catch (e) {
+                        setRawNotes(normalizedNotes as any);
+                    }
                     if (loadedProject.staffSystemMode === 'grandstaff' || loadedProject.staffSystemMode === 'treble_only') {
                         setStaffSystemMode(loadedProject.staffSystemMode);
                     }
@@ -1763,14 +2043,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     }, [isActive, viewMode]);
 
     const layoutData = useMemo(() => {
+        // New deterministic tick-based layout:
         const notesToLayout = analyzedNotes;
         const keySigWidth = keySignature.count * 14;
         const timeSigWidthWithPadding = timeSignature ? 55 : 0;
         const startOffset = START_X + keySigWidth + timeSigWidthWithPadding;
-        // Keep the same right margin as the VexFlow renderer (see VexflowGrandStaff: STAFF_MARGIN = 50).
-        // Using a smaller margin here makes the last barline drift away from the staff.
         const systemRightX = containerWidth - START_X;
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+
+        // Build notes grouped by measure
         const notesByMeasure = new Map<number, StaffNote[]>();
         let maxMeasureIndex = -1;
         notesToLayout.forEach(note => {
@@ -1780,81 +2061,213 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             notesByMeasure.get(m)!.push(note);
         });
 
-        // Where the "piece" ends (for the final double barline):
-        // - at least the minimum measure count
-        // - but never before the last measure that contains notes
         const finalMeasureIndex = Math.max(0, Math.max((minMeasureCount - 1), maxMeasureIndex));
-        // Total measures rendered:
-        // - enough to include the user-defined piece length
-        // - never fewer than the last measure containing notes
-        // Avoid adding extra trailing measures automatically (prevents the "cesura" from drifting).
-        let targetTotalMeasures = Math.max(minMeasureCount, maxMeasureIndex + 1);
-        const measureMinInfo: { minWidth: number, notes: StaffNote[] }[] = [];
-        for (let m = 0; m < targetTotalMeasures; m++) {
-            const measureNotes = notesByMeasure.get(m) || [];
-            let minDurationValue = measureNotes.length > 0 ? measureNotes.reduce((min, n) => Math.min(min, DURATION_VALUES[n.duration || 'quarter']), 1) : 1;
-            let pxPerBeat = 60;
-            if (minDurationValue <= 0.0625) pxPerBeat = 280; else if (minDurationValue <= 0.125) pxPerBeat = 180; else if (minDurationValue <= 0.25) pxPerBeat = 120; else if (minDurationValue <= 0.5) pxPerBeat = 100;
-            measureMinInfo[m] = { minWidth: (beatsPerMeasure * pxPerBeat) + (MEASURE_PADDING_X * 2), notes: measureNotes };
-        }
-        const systems: { measureIndices: number[], width: number, startMeasuresX: number[] }[] = [];
-        let currentSystemMeasures: number[] = [], currentSystemMinContentWidth = 0;
-        // IMPORTANT: distribute measures within the actual staff drawable width.
-        // If we use the full container width here, the last measure can overshoot the staff end,
-        // making the end-of-line barline ("cesura") disappear or drift.
+        const targetTotalMeasures = Math.max(minMeasureCount, maxMeasureIndex + 1);
+
+        // Compute layout using ticks per system to ensure stable px-per-beat inside each system.
         const usablePageWidth = systemRightX - startOffset - STAFF_PADDING_X;
-        const finalizeSystem = (indices: number[], contentWidthSum: number) => {
-            if (indices.length === 0) return;
-            const extraSpace = Math.max(0, usablePageWidth - contentWidthSum);
-            const extraPerMeasure = extraSpace / indices.length;
-            const systemStartMeasuresX: number[] = [];
-            let currentX = startOffset;
-            indices.forEach(m => { systemStartMeasuresX.push(currentX); currentX += measureMinInfo[m].minWidth + extraPerMeasure; });
-            systems.push({ measureIndices: indices, width: containerWidth, startMeasuresX: systemStartMeasuresX });
+        const MIN_PX_PER_QUARTER = 48;
+        const ticksPerMeasure = beatsPerMeasure * TICKS_PER_QUARTER;
+
+        // Build systems greedily by measure *natural width* (preferred px-per-tick),
+        // not by fixed measure count. This avoids creating an extremely small
+        // residual measure that would force px/quarter compression.
+        const tentativeSystems: { measureIndices: number[] }[] = [];
+        let curSys: number[] = [];
+        // Natural width for a measure using the deterministic default px-per-tick
+        const naturalMeasureWidth = (mIdx: number) => {
+            const measureTicks = ticksPerMeasure;
+            const content = Math.round(measureTicks * DEFAULT_PX_PER_TICK);
+            return content + (MEASURE_PADDING_X * 2);
         };
+        let accWidth = 0;
         for (let m = 0; m < targetTotalMeasures; m++) {
-            const measureW = measureMinInfo[m].minWidth;
-            if ((currentSystemMeasures.length >= measuresPerLine || currentSystemMinContentWidth + measureW > usablePageWidth) && currentSystemMeasures.length > 0) {
-                finalizeSystem(currentSystemMeasures, currentSystemMinContentWidth);
-                currentSystemMeasures = [m]; currentSystemMinContentWidth = measureW;
-            } else { currentSystemMeasures.push(m); currentSystemMinContentWidth += measureW; }
+            const mWidth = naturalMeasureWidth(m);
+            if (curSys.length === 0) {
+                curSys.push(m);
+                accWidth = mWidth;
+            } else if (accWidth + mWidth > usablePageWidth && curSys.length > 0) {
+                tentativeSystems.push({ measureIndices: curSys });
+                curSys = [m];
+                accWidth = mWidth;
+            } else {
+                curSys.push(m);
+                accWidth += mWidth;
+            }
         }
-        if (currentSystemMeasures.length > 0) finalizeSystem(currentSystemMeasures, currentSystemMinContentWidth);
-        const finalNotes: StaffNote[] = []; const allSystemsBarlines: Barline[][] = []; const measureFinalWidths = new Map<number, number>();
+        if (curSys.length > 0) tentativeSystems.push({ measureIndices: curSys });
+
+                // Limita il numero di misure per system in base alla griglia di inserimento
+                const minGridBeat = Math.max(
+                    1e-6,
+                    DURATION_VALUES[selectedInsertion?.duration ?? 'quarter'] * (tupletFactor ?? 1)
+                );
+
+                let maxMeasuresPerSystem = 5;
+                if (minGridBeat <= 0.25) {
+                    maxMeasuresPerSystem = 2;
+                } else if (minGridBeat <= 0.5) {
+                    maxMeasuresPerSystem = 3;
+                }
+
+                const limitedSystems = [];
+                for (const sys of tentativeSystems) {
+                    const indices = sys.measureIndices;
+                    for (let i = 0; i < indices.length; i += maxMeasuresPerSystem) {
+                        limitedSystems.push({
+                            ...sys,
+                            measureIndices: indices.slice(i, i + maxMeasuresPerSystem),
+                        });
+                    }
+                }
+
+        // If a global default px-per-tick is configured, check whether every tentative
+        // system can fit using that scale. If so, prefer the global deterministic value
+        // (this prevents unexpected global reflow when inserting measures).
+        const canUseDefaultPxPerTick = typeof DEFAULT_PX_PER_TICK === 'number' && isFinite(DEFAULT_PX_PER_TICK) && DEFAULT_PX_PER_TICK > 0 && tentativeSystems.every(sys => {
+            const measureCount = sys.measureIndices.length;
+            const totalTicks = measureCount * ticksPerMeasure;
+            const totalPadding = measureCount * (MEASURE_PADDING_X * 2);
+            const availableContentWidth = Math.max(40, usablePageWidth - totalPadding);
+            const neededContentWidth = Math.round(totalTicks * DEFAULT_PX_PER_TICK);
+            return neededContentWidth <= availableContentWidth;
+        });
+
+        const finalNotes: StaffNote[] = [];
+        const allSystemsBarlines: Barline[][] = [];
+        const measureFinalWidths = new Map<number, number>();
         const doubleSet = new Set(doubleBarlineMeasures);
-        systems.forEach(sys => {
-            const systemBarlines: Barline[] = [];
-            sys.measureIndices.forEach((m, idx) => {
-                const startX = sys.startMeasuresX[idx];
-                const nextX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : systemRightX;
-                const measureWidth = nextX - startX;
-                measureFinalWidths.set(m, measureWidth);
+
+        // For each tentative system compute pxPerTick from available width minus paddings
+        let curXStart = startOffset;
+        const systemsParams: { measureIndices: number[]; width: number; startMeasuresX: number[]; pxPerTick: number }[] = [];
+        limitedSystems.forEach((sys, sysIndex) => {
+            const measureCount = sys.measureIndices.length;
+            const totalPadding = measureCount * (MEASURE_PADDING_X * 2);
+            const availableContentWidth = Math.max(40, usablePageWidth - totalPadding);
+            const totalTicks = sys.measureIndices.reduce((s, mi) => s + ticksPerMeasure, 0);
+
+            // Allow increasing pxPerTick beyond the default when notes are very dense
+            // so small subdivisions (biscrome etc.) remain legible.
+            const minPxPerTick = (MIN_PX_PER_QUARTER / TICKS_PER_QUARTER);
+            const MIN_PIXEL_SPACING = 8; // px between adjacent onsets
+
+            // Compute the smallest tick delta between adjacent onsets inside the system
+            let minDeltaTicks = Infinity;
+            sys.measureIndices.forEach(m => {
                 const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
-                const contentWidth = measureWidth - (MEASURE_PADDING_X * 2);
-                measureNotes.forEach(n => {
-                    const startTime = (n.beat || 1) - 1;
-                    const relativeX = (startTime / beatsPerMeasure) * contentWidth;
-                    finalNotes.push({ ...n, xPosition: startX + MEASURE_PADDING_X + relativeX });
-                });
-                // Se è l'ultima misura del sistema, la barline va allineata a width - STAFF_MARGIN
+                const ticks = measureNotes.map(n => (typeof (n as any).startTick === 'number')
+                    ? (n as any).startTick
+                    : Math.round((((n.measureIndex ?? 0) * beatsPerMeasure) + ((n.beat ?? 1) - 1)) * TICKS_PER_QUARTER));
+                ticks.sort((a, b) => a - b);
+                for (let i = 1; i < ticks.length; i++) {
+                    const d = ticks[i] - ticks[i-1];
+                    if (d > 0 && d < minDeltaTicks) minDeltaTicks = d;
+                }
+            });
+            if (!isFinite(minDeltaTicks) || minDeltaTicks <= 0) minDeltaTicks = ticksPerMeasure;
+
+            const neededPxPerTickFromNotes = MIN_PIXEL_SPACING / Math.max(1, minDeltaTicks);
+            const defaultPx = (typeof DEFAULT_PX_PER_TICK === 'number' && DEFAULT_PX_PER_TICK > 0) ? DEFAULT_PX_PER_TICK : 0;
+            const pxPerTick = Math.max(minPxPerTick, defaultPx, neededPxPerTickFromNotes, (availableContentWidth / Math.max(1, totalTicks)));
+
+            const systemBarlines: Barline[] = [];
+            let curX = curXStart;
+            const startMeasuresX: number[] = [];
+            sys.measureIndices.forEach((m, idx) => {
+                const measureTicks = ticksPerMeasure;
+                const contentWidthForMeasure = measureTicks * pxPerTick;
+                // If this is the first measure in the system, reserve space for key/time glyphs
+                // so notes don't overlap the clef/time.
+                const isFirstMeasureInSystem = idx === 0;
+                const extraLeft = isFirstMeasureInSystem ? (keySigWidth + timeSigWidthWithPadding) : 0;
+                const measureWidth = contentWidthForMeasure + (MEASURE_PADDING_X * 2) + extraLeft;
+                measureFinalWidths.set(m, measureWidth);
+                // store start X relative to the start of this system (local coordinates)
+                startMeasuresX.push((curX - curXStart + START_X) + extraLeft);
+
+                // position notes using ticks when available (fallback to beat field)
+                const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
+                                const measureStartTick = beatsToTicks(m * beatsPerMeasure);
+                                measureNotes.forEach(n => {
+                                    // Ogni nota DEVE avere startTick
+                                    if (typeof (n as any).startTick !== 'number') {
+                                        return; // nota non valida, la saltiamo
+                                    }
+                                    const nStartTick = (n as any).startTick as number;
+                                    const relativeTicks = Math.max(0, nStartTick - measureStartTick);
+                                    const relativeX = relativeTicks * pxPerTick; // nessun round qui
+                                    const localX =
+                                        (curX - curXStart + START_X) +
+                                        extraLeft +
+                                        MEASURE_PADDING_X +
+                                        relativeX;
+                                    finalNotes.push({ ...n, xPosition: localX });
+                                });
+
                 const isLastInSystem = idx === sys.measureIndices.length - 1;
                 const svgStaffEnd = containerWidth - STAFF_MARGIN;
-                                const barStyle = m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single');
-                                let barX = startX + measureWidth;
-                                if (isLastInSystem) {
-                                    // Sposta solo la barline finale dell'ultimo sistema
-                                    barX = (m === finalMeasureIndex && barStyle === 'final') ? (svgStaffEnd + 3) : svgStaffEnd;
-                                }
-                                systemBarlines.push({
-                                        id: `bar-${m}`,
-                                        xPosition: barX,
-                                        style: barStyle,
-                                });
+                const barStyle = m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single');
+                let barXLocal = (curX - curXStart + START_X) + measureWidth;
+                if (isLastInSystem) {
+                    const systemWidth = Math.max(containerWidth, (curX - curXStart + START_X));
+                    // Place final bar slightly inside the staff end to avoid clipping
+                    // or being rendered outside the canvas by fractional/rounding issues.
+                    barXLocal = (m === finalMeasureIndex && barStyle === 'final') ? (systemWidth - STAFF_MARGIN - 1) : (systemWidth - STAFF_MARGIN);
+                }
+                systemBarlines.push({ id: `bar-${m}`, xPosition: barXLocal, style: barStyle });
+
+                curX += measureWidth;
             });
+
             allSystemsBarlines.push(systemBarlines);
+            // Record the actual used width for the system. If the system does not
+            // fill the container, give the leftover space to the last measure so
+            // the barline aligns with the edge (prevents a visually short last
+            // measure that breaks insertion UX). This does not change pxPerTick.
+            let usedWidth = curX - curXStart + START_X;
+            if (usedWidth < containerWidth) {
+                const extra = containerWidth - usedWidth;
+                const lastMeasureIdx = sys.measureIndices[sys.measureIndices.length - 1];
+                const prev = measureFinalWidths.get(lastMeasureIdx) || 0;
+                measureFinalWidths.set(lastMeasureIdx, prev + extra);
+                // shift the barline for the last measure
+                if (systemBarlines.length > 0) {
+                    const lastBar = systemBarlines[systemBarlines.length - 1];
+                    lastBar.xPosition = (lastBar.xPosition || 0) + extra;
+                }
+                usedWidth += extra;
+            }
+            const finalWidth = usedWidth;
+            systemsParams.push({ measureIndices: sys.measureIndices, width: finalWidth, startMeasuresX, pxPerTick });
+            // next system starts after current curX plus small gap
+            curXStart = curX + 20;
         });
-        return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systems, measureFinalWidths };
+
+
+        try {
+            const sample = finalNotes.slice(0, 12).map(n => ({ id: n.id, measureIndex: n.measureIndex, beat: n.beat, startTick: (n as any).startTick, x: n.xPosition }));
+            const firstMeasureIndex = 0;
+            const sampleMeasureWidth = measureFinalWidths.get(firstMeasureIndex) || 0;
+            const samplePxPerQuarter = sampleMeasureWidth > 0 ? ((sampleMeasureWidth - (MEASURE_PADDING_X * 2)) / Math.max(1, beatsPerMeasure)) : 0;
+            // Per-system diagnostics: report pxPerTick estimate and first positioned note
+            systemsParams.forEach((sp, si) => {
+                const sysNotes = finalNotes.filter(n => sp.measureIndices.includes(n.measureIndex ?? -1));
+                const firstNote = sysNotes.length > 0 ? sysNotes[0] : null;
+                // eslint-disable-next-line no-console
+                console.log('[layoutData-system]', 'idx=', si, 'measures=', sp.measureIndices.length, 'systemWidth=', sp.width, 'firstNoteX=', firstNote ? firstNote.xPosition : null);
+            });
+            // eslint-disable-next-line no-console
+            console.log('[layoutData] samplePxPerQuarter=', samplePxPerQuarter, 'sampleMeasureWidth=', sampleMeasureWidth, 'notesSample=', sample, 'systems=', systemsParams.length);
+        } catch (e) {
+            // ignore logging errors
+        }
+        return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths };
     }, [analyzedNotes, containerWidth, timeSignature, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures]);
+
+    // Keep a ref to the latest layoutData so async callbacks can read current layout
+    const layoutDataRef = useRef(layoutData);
+    useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
 
     // =========================================================
     // ADAPTER LAYER (domain -> overlay data)
@@ -3610,6 +4023,65 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const dataToPaste = latestClipboardRef.current;
         if (!dataToPaste || dataToPaste.length === 0) return;
 
+        try {
+            const collectSnapshot = (minMeasure: number, maxMeasure: number) => {
+                const notes = (layoutDataRef.current?.positionedNotes ?? [])
+                    .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= minMeasure && n.measureIndex <= maxMeasure);
+
+                const snapshot = notes.map(n => {
+                    // find measure geometry
+                    let measureStartX = undefined as number | undefined;
+                    let measureWidth = undefined as number | undefined;
+                    if (layoutDataRef.current?.systemsParams) {
+                        for (const sys of layoutDataRef.current.systemsParams) {
+                            const idx = sys.measureIndices.indexOf(n.measureIndex as number);
+                            if (idx !== -1) {
+                                measureStartX = sys.startMeasuresX[idx];
+                                const nextX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+                                measureWidth = Math.max(0, (nextX - measureStartX));
+                                break;
+                            }
+                        }
+                    }
+
+                    const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                    const pxPerQuarter = measureWidth ? (measureWidth / beatsPerMeasureLocal) : undefined;
+
+                    let fallbackX = undefined as number | undefined;
+                    try {
+                        if (typeof n.xPosition === 'number') fallbackX = n.xPosition;
+                        else if (typeof n.startTick === 'number' && typeof measureStartX === 'number' && typeof measureWidth === 'number') {
+                            const absBeat = (n.startTick ?? 0) / TICKS_PER_QUARTER;
+                            const beatInMeasure = absBeat - Math.floor(absBeat / beatsPerMeasureLocal) * beatsPerMeasureLocal;
+                            fallbackX = measureStartX + (beatInMeasure / beatsPerMeasureLocal) * measureWidth;
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+
+                    return {
+                        id: n.id,
+                        measureIndex: n.measureIndex,
+                        beat: n.beat,
+                        startTick: (n as any).startTick,
+                        durationTicks: (n as any).durationTicks,
+                        xPosition: n.xPosition,
+                        fallbackX,
+                        measureStartX,
+                        measureWidth,
+                        pxPerQuarter,
+                    };
+                });
+                return snapshot;
+            };
+
+            const beforeSnap = collectSnapshot(Math.max(0, targetMeasureIndex - 1), targetMeasureIndex + 1);
+            // eslint-disable-next-line no-console
+            console.log('[pasteClipboardAt] before paste targetMeasure=', targetMeasureIndex, 'detailedSnapshot=', beforeSnap);
+        } catch (e) {
+            // ignore
+        }
+
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const targetAbsBeat = (targetMeasureIndex * beatsPerMeasure) + (targetBeat - 1);
 
@@ -3645,21 +4117,155 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                 const { xPosition, ...rest } = n as any;
 
-                return {
-                    ...(rest as StaffNote),
-                    id: crypto.randomUUID(),
-                    measureIndex: newMeasureIndex,
-                    beat: newBeat,
-                    chordId: remapId(chordIdMap, (n as any).chordId),
-                    groupId: remapId(groupIdMap, (n as any).groupId),
-                    manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
-                };
+                try {
+                    const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                    const absBeat = (newMeasureIndex * beatsPerMeasureLocal) + (newBeat - 1);
+                    const startTick = Math.round(absBeat * TICKS_PER_QUARTER);
+                    const base = (DURATION_VALUES as any)[(n as any).duration || 'quarter'] || 1;
+                    let durBeats = base;
+                    if ((n as any).isDotted) durBeats *= 1.5;
+                    if ((n as any).isTriplet) durBeats *= 2 / 3;
+                    if ((n as any).isDuplet) durBeats *= 3 / 2;
+                    const durationTicks = Math.round(durBeats * TICKS_PER_QUARTER);
+
+                    return {
+                        ...(rest as StaffNote),
+                        id: crypto.randomUUID(),
+                        measureIndex: newMeasureIndex,
+                        beat: newBeat,
+                        startTick,
+                        durationTicks,
+                        chordId: remapId(chordIdMap, (n as any).chordId),
+                        groupId: remapId(groupIdMap, (n as any).groupId),
+                        manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
+                    };
+                } catch (e) {
+                    return {
+                        ...(rest as StaffNote),
+                        id: crypto.randomUUID(),
+                        measureIndex: newMeasureIndex,
+                        beat: newBeat,
+                        chordId: remapId(chordIdMap, (n as any).chordId),
+                        groupId: remapId(groupIdMap, (n as any).groupId),
+                        manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
+                    };
+                }
             })
             .filter(Boolean) as StaffNote[];
 
         if (pasted.length > 0) {
             setRawNotes(prev => [...prev, ...pasted]);
             setSelectedNoteIds(new Set(pasted.map(n => n.id)));
+
+            // After a tick, log positions to compare pre/post paste
+            setTimeout(() => {
+                try {
+                    const collectSnapshot = (minMeasure: number, maxMeasure: number) => {
+                        const notes = (layoutDataRef.current?.positionedNotes ?? [])
+                            .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= minMeasure && n.measureIndex <= maxMeasure);
+
+                        return notes.map(n => {
+                            let measureStartX = undefined as number | undefined;
+                            let measureWidth = undefined as number | undefined;
+                            if (layoutDataRef.current?.systemsParams) {
+                                for (const sys of layoutDataRef.current.systemsParams) {
+                                    const idx = sys.measureIndices.indexOf(n.measureIndex as number);
+                                    if (idx !== -1) {
+                                        measureStartX = sys.startMeasuresX[idx];
+                                        const nextX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+                                        measureWidth = Math.max(0, (nextX - measureStartX));
+                                        break;
+                                    }
+                                }
+                            }
+
+                            const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                            const pxPerQuarter = measureWidth ? (measureWidth / beatsPerMeasureLocal) : undefined;
+
+                            let fallbackX = undefined as number | undefined;
+                            try {
+                                if (typeof n.xPosition === 'number') fallbackX = n.xPosition;
+                                else if (typeof n.startTick === 'number' && typeof measureStartX === 'number' && typeof measureWidth === 'number') {
+                                    const absBeat = (n.startTick ?? 0) / TICKS_PER_QUARTER;
+                                    const beatInMeasure = absBeat - Math.floor(absBeat / beatsPerMeasureLocal) * beatsPerMeasureLocal;
+                                    fallbackX = measureStartX + (beatInMeasure / beatsPerMeasureLocal) * measureWidth;
+                                }
+                            } catch (e) {
+                                // ignore
+                            }
+
+                            return {
+                                id: n.id,
+                                measureIndex: n.measureIndex,
+                                beat: n.beat,
+                                startTick: (n as any).startTick,
+                                durationTicks: (n as any).durationTicks,
+                                xPosition: n.xPosition,
+                                fallbackX,
+                                measureStartX,
+                                measureWidth,
+                                pxPerQuarter,
+                            };
+                        });
+                    };
+
+                    const afterSnap = collectSnapshot(Math.max(0, targetMeasureIndex - 1), targetMeasureIndex + 1);
+                    // compute deltas by id
+                    const deltas = {} as Record<string, { before?: any; after?: any; dx?: number }>;
+                    const before = (layoutDataRef.current?.positionedNotes ?? [])
+                        .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= Math.max(0, targetMeasureIndex - 1) && n.measureIndex <= targetMeasureIndex + 1)
+                        .map(n => ({ id: n.id, x: n.xPosition }));
+                    before.forEach(b => { deltas[b.id] = { before: b }; });
+                    afterSnap.forEach(a => {
+                        if (!deltas[a.id]) deltas[a.id] = {} as any;
+                        deltas[a.id].after = { id: a.id, x: a.xPosition, fallbackX: a.fallbackX };
+                        const bx = deltas[a.id].before?.x ?? deltas[a.id].before?.x;
+                        const ax = a.xPosition ?? a.fallbackX;
+                        if (typeof bx === 'number' && typeof ax === 'number') deltas[a.id].dx = ax - bx;
+                    });
+
+                    // compute simple metrics for easy inspection/copy
+                    const deltasList = Object.entries(deltas).map(([id, v]) => ({ id, dx: v.dx ?? 0, before: v.before, after: v.after }));
+                    const maxAbsDx = deltasList.reduce((acc, v) => Math.max(acc, Math.abs(v.dx ?? 0)), 0);
+                    const nonZero = deltasList.filter(d => Math.abs(d.dx ?? 0) > 1e-9).length;
+                    // eslint-disable-next-line no-console
+                    console.log('[pasteClipboardAt] after paste targetMeasure=' + targetMeasureIndex + ' maxAbsDx=' + maxAbsDx + ' nonZero=' + nonZero + ' deltasJSON=' + JSON.stringify(deltasList));
+
+                    try {
+                        const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                        const systems = (layoutDataRef.current?.systemsParams || []).map((s: any) => ({
+                            measureIndices: s.measureIndices,
+                            startMeasuresX: s.startMeasuresX,
+                            width: s.width,
+                        }));
+                        const measuresInfo: any[] = [];
+                        for (const sys of systems) {
+                            for (let i = 0; i < (sys.measureIndices || []).length; i++) {
+                                const m = sys.measureIndices[i];
+                                const startX = sys.startMeasuresX[i];
+                                const nextX = i < (sys.startMeasuresX || []).length - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
+                                const w = Math.max(0, nextX - startX);
+                                measuresInfo.push({ measureIndex: m, systemStartX: startX, measureWidth: w, pxPerQuarter: w ? (w / beatsPerMeasureLocal) : null });
+                            }
+                        }
+                        // eslint-disable-next-line no-console
+                        console.log('[layoutAudit] paste targetMeasure=' + targetMeasureIndex + ' systemsSummary=' + JSON.stringify(measuresInfo));
+                        try {
+                            const api = (window as any).electronAPI;
+                            if (api && typeof api.saveFile === 'function') {
+                                const fname = `layout-audit-paste-${Date.now()}.json`;
+                                api.saveFile(JSON.stringify({ type: 'layoutAudit', action: 'paste', targetMeasure: targetMeasureIndex, measures: measuresInfo }, null, 2), fname).then(() => {
+                                    console.log('[layoutAudit] saved to', fname);
+                                }).catch(() => {});
+                            }
+                        } catch (_) {}
+                    } catch (e) {
+                        // ignore
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }, 60);
         }
     }, [setRawNotes, setSelectedNoteIds, timeSignature]);
 
@@ -3672,12 +4278,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         // Use the same segment logic as the layout builder (startX -> nextX),
         // and fall back to nearest measure when x is slightly outside.
-        for (let i = 0; i < count; i++) {
+            for (let i = 0; i < count; i++) {
             const mIdx = sys.measureIndices[i];
             const startX = sys.startMeasuresX[i];
             const endX = i < count - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
             const w = Math.max(0, endX - startX);
-            if (x >= startX && x < endX) return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
+            if (x >= startX && x < endX) return { measureIndex: mIdx, measureStartX: startX, measureWidth: w, pxPerTick: sys.pxPerTick };
         }
 
         // Fallback: clamp x and pick closest bucket.
@@ -3693,7 +4299,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const startX = sys.startMeasuresX[idx];
         const endX = idx < count - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
         const w = Math.max(0, endX - startX);
-        return { measureIndex: mIdx, measureStartX: startX, measureWidth: w };
+        return { measureIndex: mIdx, measureStartX: startX, measureWidth: w, pxPerTick: sys.pxPerTick };
     }, [layoutData]);
 
     const setPlaybackCursorFromMeasureBeat = useCallback((systemIndex: number, x: number, measureIndex: number, beat: number) => {
@@ -3757,9 +4363,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         if (!hit) return;
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const ticksPerMeasure = beatsPerMeasure * TICKS_PER_QUARTER;
+
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
-        const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
+
+        // Limita il click all'interno della misura visibile
+        const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
+
+        // Mappa x → ticks dentro la misura
+        const relativeTicks = (clampedRelX / contentWidth) * ticksPerMeasure;
+
+        // Tick assoluto della misura + offset interno
+        const measureStartTick = hit.measureIndex * ticksPerMeasure;
+        const absTicks = measureStartTick + relativeTicks;
+
+        // Usa l'utilità comune per convertire ticks → beat
+        const beatRaw = ticksToBeats(absTicks);
 
         // Quantize to the current grid (same as left-click insertion).
         const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
@@ -3783,26 +4403,64 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             setSelectedNoteIds(new Set());
         }
 
+
         const hit = getSystemMeasureAtX(systemIndex, x);
         if (!hit) return;
 
+        // --- Nuovo snap rigoroso sulla griglia dei tick ---
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const ticksPerMeasure = beatsPerMeasure * TICKS_PER_QUARTER;
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
         const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
-        const beatRaw = (Math.max(0, Math.min(1, relX / contentWidth)) * beatsPerMeasure) + 1;
+        const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
+        const frac = clampedRelX / contentWidth; // 0..1
+        const localBeat = frac * beatsPerMeasure;
+        const measureStartBeat = hit.measureIndex * beatsPerMeasure;
+        const absBeatRaw = measureStartBeat + localBeat;
+        const tickRaw = beatsToTicks(absBeatRaw);
 
-        const gridStep = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
-        const step = Math.max(1e-6, gridStep);
-        const quantizedBeat = Math.round((1 + Math.round((beatRaw - 1) / step) * step) * 1e6) / 1e6;
+        // durata base in beat (es. 1 = quarto, 0.5 = ottavo, 0.25 = sedicesimo)
+        let durBeats = DURATION_VALUES[selectedInsertion.duration] * tupletFactor;
+        if (!isFinite(durBeats) || durBeats <= 0) {
+          durBeats = 1; // fallback: un quarto
+        }
+        const durTicks = durBeats * TICKS_PER_QUARTER;
 
-        // Set playback cursor + visible playhead at the clicked point.
-        setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, quantizedBeat);
+        // tick assoluti inizio/fine misura
+        const measureStartTick = beatsToTicks(measureStartBeat);
+        const measureEndTick = measureStartTick + ticksPerMeasure;
+
+        // offset locale del click rispetto all'inizio misura
+        let localTicks = tickRaw - measureStartTick;
+        if (!isFinite(localTicks)) localTicks = 0;
+        if (localTicks < 0) localTicks = 0;
+        if (localTicks > ticksPerMeasure) localTicks = ticksPerMeasure;
+
+        // quantizzazione alla griglia di durTicks
+        let snappedLocalTicks = Math.round(localTicks / durTicks) * durTicks;
+
+        // ultimo onset valido: non possiamo iniziare dopo la fine della misura
+        const maxLocalStart = Math.max(0, ticksPerMeasure - durTicks);
+        if (snappedLocalTicks < 0) snappedLocalTicks = 0;
+        if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
+
+        // tick assoluto quantizzato
+        const snappedTick = measureStartTick + snappedLocalTicks;
+
+        // beat assoluto del punto quantizzato
+        const absBeatSnapped = ticksToBeats(snappedTick);
+
+        // beat locale nella misura (1..beatsPerMeasure)
+        const beatInMeasure = (absBeatSnapped % beatsPerMeasure) + 1;
+
+        // Set playback cursor + visible playhead al punto quantizzato
+        setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, beatInMeasure);
 
         // Aggiorna sempre pasteCaret con beat quantizzato
-        setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat: quantizedBeat });
+        setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat: beatInMeasure });
 
         // Per compatibilità con i costruttori StaffNote che usano la shorthand "beat"
-        const beat = quantizedBeat;
+        const beat = beatInMeasure;
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
         // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
@@ -3859,19 +4517,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
         props = applyActiveAccidental(props);
 
+        // usa sempre l’utility comune
+        const startTick = snappedTick;
+
         const newNote: StaffNote = {
-            id: crypto.randomUUID(),
-            ...props,
-            duration: selectedInsertion.duration,
-            isRest: false,
-            isTriplet,
-            isDuplet,
-            isDotted,
-            measureIndex: hit.measureIndex,
-            beat,
-            clef: targetClef,
-            voice: selectedVoice,
-        };
+                    id: crypto.randomUUID(),
+                    ...props,
+                    duration: selectedInsertion.duration,
+                    isRest: false,
+                    isTriplet,
+                    isDuplet,
+                    isDotted,
+                    measureIndex: hit.measureIndex,
+                    beat,
+                    startTick,   // <-- aggiunto
+                    clef: targetClef,
+                    voice: selectedVoice,
+                };
 
         setRawNotes(prev => {
             // Rimuovi eventuale nota/pausa sovrapposta
@@ -3881,16 +4543,212 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     n.voice !== newNote.voice ||
                     Math.abs((n.beat ?? 1) - (newNote.beat ?? 1)) > 1e-6
             );
-            // Inserisci la nuova nota e ordina per measureIndex, beat, voice
+
+            // Inserisci la nuova nota (con startTick!) e ordina per measureIndex, beat, voice
             const next = [...filtered, newNote].sort((a, b) => {
                 if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
                 if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
                 return (a.voice ?? 1) - (b.voice ?? 1);
             });
-            return next;
+            try {
+                const collectSnapshot = (minMeasure: number, maxMeasure: number) => {
+                    const notes = (layoutDataRef.current?.positionedNotes ?? [])
+                        .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= minMeasure && n.measureIndex <= maxMeasure);
+
+                    return notes.map(n => {
+                        let measureStartX = undefined as number | undefined;
+                        let measureWidth = undefined as number | undefined;
+                        if (layoutDataRef.current?.systemsParams) {
+                            for (const sys of layoutDataRef.current.systemsParams) {
+                                const idx = sys.measureIndices.indexOf(n.measureIndex as number);
+                                if (idx !== -1) {
+                                    measureStartX = sys.startMeasuresX[idx];
+                                    const nextX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+                                    measureWidth = Math.max(0, (nextX - measureStartX));
+                                    break;
+                                }
+                            }
+                        }
+
+                        const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                        const pxPerQuarter = measureWidth ? (measureWidth / beatsPerMeasureLocal) : undefined;
+
+                        let fallbackX = undefined as number | undefined;
+                        try {
+                            if (typeof n.xPosition === 'number') fallbackX = n.xPosition;
+                            else if (typeof n.startTick === 'number' && typeof measureStartX === 'number' && typeof measureWidth === 'number') {
+                                const absBeat = (n.startTick ?? 0) / TICKS_PER_QUARTER;
+                                const beatInMeasure = absBeat - Math.floor(absBeat / beatsPerMeasureLocal) * beatsPerMeasureLocal;
+                                fallbackX = measureStartX + (beatInMeasure / beatsPerMeasureLocal) * measureWidth;
+                            }
+                        } catch (e) {
+                            // ignore
+                        }
+
+                        return {
+                            id: n.id,
+                            measureIndex: n.measureIndex,
+                            beat: n.beat,
+                            startTick: (n as any).startTick,
+                            durationTicks: (n as any).durationTicks,
+                            xPosition: n.xPosition,
+                            fallbackX,
+                            measureStartX,
+                            measureWidth,
+                            pxPerQuarter,
+                        };
+                    });
+                };
+
+                const beforeSnap = collectSnapshot(Math.max(0, newNote.measureIndex - 1), newNote.measureIndex + 1);
+                // eslint-disable-next-line no-console
+                console.log('[insertNote] before insert measure=', newNote.measureIndex, 'detailedSnapshot=', beforeSnap);
+            } catch {
+                // ignore
+            }
+
+            // Ricostruisci la timeline completa per la misura+voce della nuova nota
+            const targetMeasure = newNote.measureIndex!;
+            const targetVoice = newNote.voice!;
+
+            const rebuilt = rebuildMeasureTimelineForVoice(
+                next,
+                targetMeasure,
+                targetVoice,
+                timeSignature
+            );
+
+            // Tieni tutte le altre note (altre misure o altre voci)
+            const others = next.filter(
+                n =>
+                    n.measureIndex !== targetMeasure ||
+                    n.voice !== targetVoice
+            );
+
+            // Nuovo array completo
+            const combined = [...others, ...rebuilt];
+
+            // Riordina globalmente per sicurezza
+            const finalNotes = combined.sort((a, b) => {
+                if ((a.measureIndex ?? 0) !== (b.measureIndex ?? 0)) {
+                    return (a.measureIndex ?? 0) - (b.measureIndex ?? 0);
+                }
+                if ((a.beat ?? 1) !== (b.beat ?? 1)) {
+                    return (a.beat ?? 1) - (b.beat ?? 1);
+                }
+                return (a.voice ?? 1) - (b.voice ?? 1);
+            });
+
+            return finalNotes;
         });
         void playNote(newNote);
         if (activeAccidental) setActiveAccidental(null);
+        // Log after a tick to capture updated positions
+        setTimeout(() => {
+            try {
+                const collectSnapshot = (minMeasure: number, maxMeasure: number) => {
+                    const notes = (layoutDataRef.current?.positionedNotes ?? [])
+                        .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= minMeasure && n.measureIndex <= maxMeasure);
+
+                    return notes.map(n => {
+                        let measureStartX = undefined as number | undefined;
+                        let measureWidth = undefined as number | undefined;
+                        if (layoutDataRef.current?.systemsParams) {
+                            for (const sys of layoutDataRef.current.systemsParams) {
+                                const idx = sys.measureIndices.indexOf(n.measureIndex as number);
+                                if (idx !== -1) {
+                                    measureStartX = sys.startMeasuresX[idx];
+                                    const nextX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+                                    measureWidth = Math.max(0, (nextX - measureStartX));
+                                    break;
+                                }
+                            }
+                        }
+
+                        const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                        const pxPerQuarter = measureWidth ? (measureWidth / beatsPerMeasureLocal) : undefined;
+
+                        let fallbackX = undefined as number | undefined;
+                        try {
+                            if (typeof n.xPosition === 'number') fallbackX = n.xPosition;
+                            else if (typeof n.startTick === 'number' && typeof measureStartX === 'number' && typeof measureWidth === 'number') {
+                                const absBeat = (n.startTick ?? 0) / TICKS_PER_QUARTER;
+                                const beatInMeasure = absBeat - Math.floor(absBeat / beatsPerMeasureLocal) * beatsPerMeasureLocal;
+                                fallbackX = measureStartX + (beatInMeasure / beatsPerMeasureLocal) * measureWidth;
+                            }
+                        } catch (e) {
+                            // ignore
+                        }
+
+                        return {
+                            id: n.id,
+                            measureIndex: n.measureIndex,
+                            beat: n.beat,
+                            startTick: (n as any).startTick,
+                            durationTicks: (n as any).durationTicks,
+                            xPosition: n.xPosition,
+                            fallbackX,
+                            measureStartX,
+                            measureWidth,
+                            pxPerQuarter,
+                        };
+                    });
+                };
+
+                const afterSnap = collectSnapshot(Math.max(0, newNote.measureIndex - 1), newNote.measureIndex + 1);
+                const deltas = {} as Record<string, { before?: any; after?: any; dx?: number }>;
+                const before = (layoutDataRef.current?.positionedNotes ?? [])
+                    .filter(n => typeof n.measureIndex === 'number' && n.measureIndex >= Math.max(0, newNote.measureIndex - 1) && n.measureIndex <= newNote.measureIndex + 1)
+                    .map(n => ({ id: n.id, x: n.xPosition }));
+                before.forEach(b => { deltas[b.id] = { before: b }; });
+                afterSnap.forEach(a => {
+                    if (!deltas[a.id]) deltas[a.id] = {} as any;
+                    deltas[a.id].after = { id: a.id, x: a.xPosition, fallbackX: a.fallbackX };
+                    const bx = deltas[a.id].before?.x ?? deltas[a.id].before?.x;
+                    const ax = a.xPosition ?? a.fallbackX;
+                    if (typeof bx === 'number' && typeof ax === 'number') deltas[a.id].dx = ax - bx;
+                });
+                const deltasList = Object.entries(deltas).map(([id, v]) => ({ id, dx: v.dx ?? 0, before: v.before, after: v.after }));
+                const maxAbsDx = deltasList.reduce((acc, v) => Math.max(acc, Math.abs(v.dx ?? 0)), 0);
+                const nonZero = deltasList.filter(d => Math.abs(d.dx ?? 0) > 1e-9).length;
+                // eslint-disable-next-line no-console
+                console.log('[insertNote] after insert measure=' + newNote.measureIndex + ' maxAbsDx=' + maxAbsDx + ' nonZero=' + nonZero + ' deltasJSON=' + JSON.stringify(deltasList));
+
+                try {
+                    const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                    const systems = (layoutDataRef.current?.systemsParams || []).map((s: any) => ({
+                        measureIndices: s.measureIndices,
+                        startMeasuresX: s.startMeasuresX,
+                        width: s.width,
+                    }));
+                    const measuresInfo: any[] = [];
+                    for (const sys of systems) {
+                        for (let i = 0; i < (sys.measureIndices || []).length; i++) {
+                            const m = sys.measureIndices[i];
+                            const startX = sys.startMeasuresX[i];
+                            const nextX = i < (sys.startMeasuresX || []).length - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
+                            const w = Math.max(0, nextX - startX);
+                            measuresInfo.push({ measureIndex: m, systemStartX: startX, measureWidth: w, pxPerQuarter: w ? (w / beatsPerMeasureLocal) : null });
+                        }
+                    }
+                    // eslint-disable-next-line no-console
+                    console.log('[layoutAudit] insert measure=' + newNote.measureIndex + ' systemsSummary=' + JSON.stringify(measuresInfo));
+                    try {
+                        const api = (window as any).electronAPI;
+                        if (api && typeof api.saveFile === 'function') {
+                            const fname = `layout-audit-insert-${Date.now()}.json`;
+                            api.saveFile(JSON.stringify({ type: 'layoutAudit', action: 'insert', measure: newNote.measureIndex, measures: measuresInfo }, null, 2), fname).then(() => {
+                                console.log('[layoutAudit] saved to', fname);
+                            }).catch(() => {});
+                        }
+                    } catch (_) {}
+                } catch (e) {
+                    // ignore
+                }
+            } catch {
+                // ignore
+            }
+        }, 60);
     }, [
         clefForVoice,
         getSystemMeasureAtX,
@@ -5424,8 +6282,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         {modeInfo.label}
                                                                 </div>
                                                         )}
-                            <RenderErrorBoundary label={`VexflowGrandStaff(system ${systemIndex})`} onReset={resetVexflow}>
-                              <VexflowGrandStaff
+                                                        <RenderErrorBoundary label={`VexflowGrandStaff(system ${systemIndex})`} onReset={resetVexflow}>
+                                                            {(() => {
+                                                                // eslint-disable-next-line no-console
+                                                                console.log(`[layoutData-systemBarlines-JSON] ${systemIndex} ${JSON.stringify((systemBarlines || []).map(b => ({ id: b.id, x: Math.round(b.xPosition || 0), style: b.style })))}`);
+                                                                return null;
+                                                            })()}
+                                                            <VexflowGrandStaff
                                 key={`vf-${systemIndex}-${vexflowNonce}`}
                                                                 notes={systemNotesForRender}
                                 timeSignature={timeSignature}
@@ -5451,15 +6314,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                         {/* Overlay: playhead */}
                                                         {playheadPosition && playheadPosition.systemIndex === systemIndex && (
                                                             <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
-                                                                <line
-                                                                    x1={playheadPosition.x}
-                                                                    y1={PLAYHEAD_Y_TOP}
-                                                                    x2={playheadPosition.x}
-                                                                    y2={PLAYHEAD_Y_BOTTOM}
-                                                                    className="stroke-cyan-500"
-                                                                    strokeWidth={2}
-                                                                    opacity={0.7}
-                                                                />
+                                                                {
+                                                                    (() => {
+                                                                        const staffEndX = (actualSystemWidth ?? 0) - STAFF_MARGIN;
+                                                                        const xClamped = Math.min(playheadPosition.x, staffEndX);
+                                                                        return (
+                                                                            <line
+                                                                                x1={xClamped}
+                                                                                y1={PLAYHEAD_Y_TOP}
+                                                                                x2={xClamped}
+                                                                                y2={PLAYHEAD_Y_BOTTOM}
+                                                                                className="stroke-cyan-500"
+                                                                                strokeWidth={2}
+                                                                                opacity={0.7}
+                                                                            />
+                                                                        );
+                                                                    })()
+                                                                }
                                                             </svg>
                                                         )}
 

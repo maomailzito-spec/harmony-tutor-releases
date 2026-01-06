@@ -161,6 +161,9 @@ export type StaffNote = {
   chordId?: string; // New property to group notes vertically in the same chord
   measureIndex?: number;
   beat?: number;
+  // Tick-based timeline (high resolution). Optional for legacy compatibility.
+  startTick?: number;
+  durationTicks?: number;
   clef?: ClefType;
   errorType?: 'error' | 'warning' | 'exception' | null;
   voice?: Voice;

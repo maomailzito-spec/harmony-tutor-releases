@@ -1,0 +1,97 @@
+{
+  "type": "layoutAudit",
+  "action": "insert",
+  "measure": 1,
+  "measures": [
+    {
+      "measureIndex": 0,
+      "systemStartX": 105,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 1,
+      "systemStartX": 337,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 2,
+      "systemStartX": 569,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 3,
+      "systemStartX": 801,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 4,
+      "systemStartX": 1033,
+      "measureWidth": 182,
+      "pxPerQuarter": 45.5
+    },
+    {
+      "measureIndex": 5,
+      "systemStartX": 105,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 6,
+      "systemStartX": 337,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 7,
+      "systemStartX": 569,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 8,
+      "systemStartX": 801,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 9,
+      "systemStartX": 1033,
+      "measureWidth": 182,
+      "pxPerQuarter": 45.5
+    },
+    {
+      "measureIndex": 10,
+      "systemStartX": 105,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 11,
+      "systemStartX": 337,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 12,
+      "systemStartX": 569,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 13,
+      "systemStartX": 801,
+      "measureWidth": 232,
+      "pxPerQuarter": 58
+    },
+    {
+      "measureIndex": 14,
+      "systemStartX": 1033,
+      "measureWidth": 182,
+      "pxPerQuarter": 45.5
+    }
+  ]
+}

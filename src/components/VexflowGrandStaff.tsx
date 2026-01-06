@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie } from 'vexflow';
 import type { AccidentalType, Barline, KeySignature, StaffNote, TimeSignature } from '../types';
+import { TICKS_PER_QUARTER } from '../constants';
 
 interface VexflowGrandStaffProps {
   notes: StaffNote[];
@@ -28,6 +29,7 @@ const DEFAULT_HEIGHT = 250;
 const STAFF_MARGIN = 50;
 const TREBLE_Y = 40;
 const BASS_Y = 140;
+const MEASURE_PADDING_X = 20;
 
 const durationToVexflow = (duration: StaffNote['duration']): string => {
   switch (duration) {
@@ -358,7 +360,45 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const dotFill = n.id === '__ghost__'
               ? 'rgba(56,189,248,0.4)'
               : (selectedNoteIds.includes(n.id) ? '#38bdf8' : 'black');
-            const absoluteX = (n.xPosition ?? (stave.getNoteStartX() + 10));
+            // Prefer explicit layout xPosition; if missing, try to compute from ticks (fallback)
+            let absoluteX: number;
+            if (typeof n.xPosition === 'number') {
+              absoluteX = n.xPosition;
+            } else if (typeof (n as any).startTick === 'number' && timeSignature) {
+              try {
+                const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                const absBeat = (n as any).startTick / TICKS_PER_QUARTER;
+                const beatInMeasure = (absBeat - Math.floor(absBeat / beatsPerMeasureLocal) * beatsPerMeasureLocal) + 1;
+                const startNoteX = stave.getNoteStartX();
+                    const contentWidth = Math.max(1, staffWidth - (MEASURE_PADDING_X * 2));
+                const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / beatsPerMeasureLocal));
+                absoluteX = startNoteX + MEASURE_PADDING_X + (rel * contentWidth);
+              } catch {
+                absoluteX = stave.getNoteStartX() + 10;
+              }
+            } else {
+              absoluteX = stave.getNoteStartX() + 10;
+            }
+
+            try {
+              // Clamp absoluteX to stave content area so ghost notes or computed X
+              // can't escape the visible stave (fixes ghost/playhead overflow).
+              const staveStart = stave.getNoteStartX();
+              const contentWidth = Math.max(1, staffWidth - (MEASURE_PADDING_X * 2));
+              const maxAbs = staveStart + MEASURE_PADDING_X + contentWidth - 4;
+              if (typeof absoluteX === 'number' && absoluteX > maxAbs) absoluteX = maxAbs;
+            } catch {
+              // ignore clamp failures
+            }
+
+            try {
+              if (typeof n.xPosition !== 'number') {
+                // eslint-disable-next-line no-console
+                console.log('[Vexflow] fallbackX', { id: n.id, startTick: (n as any).startTick, absBeat: (typeof (n as any).startTick === 'number' ? ((n as any).startTick / TICKS_PER_QUARTER) : undefined), absoluteX });
+              }
+            } catch (e) {
+              // ignore
+            }
             const xRaw = absoluteX - stave.getNoteStartX();
             const x = n.id === '__ghost__' ? Math.max(0, xRaw) : xRaw;
             // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
@@ -413,6 +453,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         if (prepared.length === 0) return;
 
+        try {
+          const firstNonGhost = prepared.find(p => p.staffNote.id !== '__ghost__') || prepared[0];
+          const firstVfAbs = firstNonGhost && (firstNonGhost.vfNote as any).getAbsoluteX?.();
+          // eslint-disable-next-line no-console
+          console.log('[layoutData-renderer-system]', {
+            staveStartX: stave.getNoteStartX(),
+            firstPreparedX_rel: prepared[0] ? prepared[0].x : null,
+            firstVfNoteAbsoluteX: typeof firstVfAbs === 'number' ? firstVfAbs : null,
+            sampleMeasureIndex: prepared[0]?.staffNote?.measureIndex ?? null,
+          });
+        } catch {
+          // ignore logging failures
+        }
         const isBeamable = (n: StaffNote) => {
           if (n.isRest) return false;
           const dur = durationToVexflow(n.duration);
