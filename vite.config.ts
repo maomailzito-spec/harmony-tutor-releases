@@ -7,6 +7,10 @@ import autoprefixer from 'autoprefixer' // Importa autoprefixer
 export default defineConfig({
   plugins: [react()],
   base: './',
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
   css: {
     postcss: {
       plugins: [
