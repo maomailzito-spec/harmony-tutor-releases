@@ -541,6 +541,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [hoveredViolationNotes, setHoveredViolationNotes] = useState<string[] | null>(null);
     const [selectedViolationIndex, setSelectedViolationIndex] = useState<number | null>(null);
     const staffContainerRef = useRef<HTMLDivElement>(null);
+    const scoreScrollRef = useRef<HTMLDivElement>(null);
+    const systemElementByIndexRef = useRef<Map<number, HTMLDivElement>>(new Map());
+    const measureToSystemIndexRef = useRef<Map<number, number>>(new Map());
+    const noteToSystemIndexRef = useRef<Map<string, number>>(new Map());
     const [containerWidth, setContainerWidth] = useState(1000);
     const [isPlaying, setIsPlaying] = useState(false);
     const [bpm, setBpm] = useState(120);
@@ -2099,6 +2103,77 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     // Keep a ref to the latest layoutData so async callbacks can read current layout
     const layoutDataRef = useRef(layoutData);
     useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
+
+    const measureToSystemIndex = useMemo(() => {
+        const map = new Map<number, number>();
+        if (!layoutData?.systemsParams) return map;
+        for (let systemIndex = 0; systemIndex < layoutData.systemsParams.length; systemIndex++) {
+            const sys: any = layoutData.systemsParams[systemIndex];
+            const measures: number[] = Array.isArray(sys?.measureIndices) ? sys.measureIndices : [];
+            for (const measureIndex of measures) {
+                if (typeof measureIndex === 'number') map.set(measureIndex, systemIndex);
+            }
+        }
+        return map;
+    }, [layoutData]);
+
+    const noteToSystemIndex = useMemo(() => {
+        const map = new Map<string, number>();
+        const positioned = (layoutData as any)?.positionedNotes;
+        if (!Array.isArray(positioned)) return map;
+        for (const n of positioned) {
+            const id = n?.id;
+            const measureIndex = n?.measureIndex;
+            if (typeof id !== 'string' || !id) continue;
+            if (typeof measureIndex !== 'number') continue;
+            const systemIndex = measureToSystemIndex.get(measureIndex);
+            if (typeof systemIndex === 'number') map.set(id, systemIndex);
+        }
+        return map;
+    }, [layoutData, measureToSystemIndex]);
+
+    useEffect(() => {
+        measureToSystemIndexRef.current = measureToSystemIndex;
+        noteToSystemIndexRef.current = noteToSystemIndex;
+    }, [measureToSystemIndex, noteToSystemIndex]);
+
+    const scrollScoreToViolationIndex = useCallback((index: number) => {
+        const v = violations?.[index];
+        if (!v || !Array.isArray(v.noteIds) || v.noteIds.length === 0) return;
+
+        let systemIndex: number | null = null;
+
+        for (const noteId of v.noteIds) {
+            const si = noteToSystemIndexRef.current.get(noteId);
+            if (typeof si === 'number') {
+                systemIndex = si;
+                break;
+            }
+        }
+
+        if (systemIndex == null) {
+            // Fallback: look up measureIndex from raw notes and map that to a system.
+            const firstId = v.noteIds[0];
+            const n = rawNotes.find(r => r.id === firstId);
+            const mi = n?.measureIndex;
+            const si = typeof mi === 'number' ? measureToSystemIndexRef.current.get(mi) : undefined;
+            if (typeof si === 'number') systemIndex = si;
+        }
+
+        if (systemIndex == null) return;
+
+        const el = systemElementByIndexRef.current.get(systemIndex);
+        if (!el) return;
+
+        // Wait one frame so selection styles apply, then scroll.
+        requestAnimationFrame(() => {
+            try {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch {
+                // Ignore scroll failures (e.g. element not mounted).
+            }
+        });
+    }, [measureToSystemIndexRef, noteToSystemIndexRef, rawNotes, violations]);
 
     // =========================================================
     // ADAPTER LAYER (domain -> overlay data)
@@ -6171,7 +6246,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
 
     return (
-        <div className="flex-grow flex flex-col gap-4">
+        <div className="flex-grow flex flex-col gap-4 min-h-0">
             <div className="sticky top-12 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
                 <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
                     {visibleGroupIds.map((id, idx) => (
@@ -6250,6 +6325,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             
             <div className="flex flex-row gap-4 flex-grow min-h-0">
                 <div
+                    ref={scoreScrollRef}
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${viewMode === 'linear' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
                     onClick={handleDeselectOnClickOutside}
                 >
@@ -6354,9 +6430,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         } catch (_) {}
                         const showHarmony = isAnalysisEnabled && systemHarmonyLabels.length > 0;
 
-                        return (
+                                                return (
                           <div
                             key={`system-${systemIndex}`}
+                                                        ref={(el) => {
+                                                                const map = systemElementByIndexRef.current;
+                                                                if (el) map.set(systemIndex, el);
+                                                                else map.delete(systemIndex);
+                                                        }}
                             className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'}`}
                             style={{ width: actualSystemWidth, height: TOTAL_SYSTEM_HEIGHT }}
                                                         data-system-index={systemIndex}
@@ -7152,7 +7233,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                 {/* Restore analysis panel */}
                 {activeTab === 'analysis' && (
-                    <div className="w-full max-w-sm flex-shrink-0">
+                    <div className="w-full max-w-sm flex-shrink-0 h-full min-h-0">
                         {isAnalysisEnabled ? (
                             <HarmonyAnalysisPanel
                                 violations={violations}
@@ -7163,10 +7244,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                     if (index != null && violations[index]) {
                                         setSelectedNoteIds(new Set(violations[index].noteIds));
                                     }
+                                    if (typeof index === 'number') scrollScoreToViolationIndex(index);
                                 }}
                             />
                         ) : (
-                            <div className="bg-gray-800/50 rounded-lg p-3 h-full max-h-96 overflow-y-auto flex items-center justify-center text-center text-gray-400">
+                            <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto flex items-center justify-center text-center text-gray-400">
                                 <div>
                                     <p className="font-semibold">L'analisi armonica è disattivata.</p>
                                     <p className="text-sm mt-1">Attivala per vedere gli errori.</p>

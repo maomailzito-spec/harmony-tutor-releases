@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
     "preview": "vite preview",
-    "electron": "wait-on http-get://localhost:5173 && electron .",
+    "electron": "wait-on http-get://127.0.0.1:5173 && electron .",
     "electron:dev": "concurrently -k \"cross-env NODE_ENV=development npm run dev\" \"cross-env NODE_ENV=development npm run electron\"",
     "regress": "tsx scripts/regression-check.ts"
   },

@@ -23,8 +23,8 @@ const App: React.FC = () => {
     }, []);
     
     return (
-        <div className="min-h-screen flex flex-col bg-gray-900 font-sans text-gray-100">
-            <div className="w-full px-2 pt-1 lg:px-4 flex flex-col flex-grow">
+        <div className="h-screen overflow-hidden flex flex-col bg-gray-900 font-sans text-gray-100">
+            <div className="w-full px-2 pt-1 lg:px-4 flex flex-col flex-grow min-h-0 overflow-hidden">
                  <div className="sticky top-0 z-[60] bg-slate-900 flex justify-center mb-1 border-b border-gray-700">
                     <button
                         onClick={() => setMode('scales')}
@@ -58,33 +58,33 @@ const App: React.FC = () => {
                     </button>
                 </div>
 
-                <div className={mode === 'scales' ? 'flex flex-col flex-grow' : 'hidden'}>
+                <div className={mode === 'scales' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
                     <ScalesVisualizer 
                         audioService={audioServiceRef.current}
                         isAudioReady={isAudioReady}
                         isActive={mode === 'scales'}
                     />
                 </div>
-                <div className={mode === 'chords' ? 'flex flex-col flex-grow' : 'hidden'}>
+                <div className={mode === 'chords' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
                     <ChordVisualizer 
                         audioService={audioServiceRef.current}
                         isAudioReady={isAudioReady}
                         isActive={mode === 'chords'}
                     />
                 </div>
-                <div className={mode === 'intervals' ? 'flex flex-col flex-grow' : 'hidden'}>
+                <div className={mode === 'intervals' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
                     <IntervalsVisualizer
                         audioService={audioServiceRef.current}
                         isAudioReady={isAudioReady}
                         isActive={mode === 'intervals'}
                     />
                 </div>
-                <div className={mode === 'editor' ? 'flex flex-col flex-grow' : 'hidden'}>
+                <div className={mode === 'editor' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
                     <MainEditor
                         isActive={mode === 'editor'}
                     />
                 </div>
-                <div className={mode === 'grandStaff' ? 'flex flex-col flex-grow' : 'hidden'}>
+                <div className={mode === 'grandStaff' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
                     <GrandStaffEditor
                         isActive={mode === 'grandStaff'}
                         audioService={audioServiceRef.current}

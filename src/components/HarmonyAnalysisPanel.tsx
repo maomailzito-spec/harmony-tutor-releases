@@ -36,7 +36,7 @@ const ExceptionIcon: React.FC = () => (
 
 const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     return (
-        <div className="bg-gray-800/50 rounded-lg p-3 h-full max-h-96 overflow-y-auto">
+        <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto">
             {violations.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
                     <CheckCircleIcon />

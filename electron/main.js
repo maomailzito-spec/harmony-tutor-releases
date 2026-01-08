@@ -286,10 +286,11 @@ function createWindow() {
     }
   });
 
-  const isDev = true; // Forza la modalità di sviluppo per ora
+  const isDev = process.env.NODE_ENV === 'development';
+  const devServerUrl = process.env.ELECTRON_START_URL || 'http://127.0.0.1:5173';
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL(devServerUrl);
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
