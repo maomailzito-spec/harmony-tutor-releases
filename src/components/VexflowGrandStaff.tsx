@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie } from 'vexflow';
-import type { AccidentalType, Barline, KeySignature, StaffNote, TimeSignature } from '../types';
+import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 
 interface VexflowGrandStaffProps {
@@ -10,7 +10,7 @@ interface VexflowGrandStaffProps {
   barlines?: Barline[];
   width?: number;
   height?: number;
-  staffMode?: 'grandstaff' | 'treble_only';
+  staffMode?: 'grandstaff' | 'treble_only' | 'satb_ancient';
   onNoteClick?: (noteId: string, e: MouseEvent) => void;
   selectedNoteIds?: string[];
   onStaffClick?: (x: number, y: number, e: MouseEvent) => void;
@@ -25,10 +25,17 @@ interface VexflowGrandStaffProps {
 
 const DEFAULT_WIDTH = 900;
 const DEFAULT_HEIGHT = 250;
+const DEFAULT_HEIGHT_SATB = 440;
 // Keep X alignment consistent with GrandStaffEditor layout (START_X = 50)
 const STAFF_MARGIN = 50;
 const TREBLE_Y = 40;
 const BASS_Y = 140;
+// SATB (chiavi antiche): soprano (C1), alto (C3), tenor (C4), bass (F4)
+// Keep these in sync with GrandStaffEditor.tsx for cursor->pitch mapping and playhead overlays.
+const SOPRANO_Y = 40;
+const ALTO_Y = 140;
+const TENOR_Y = 240;
+const SATB_BASS_Y = 340;
 const MEASURE_PADDING_X = 20;
 
 const durationToVexflow = (duration: StaffNote['duration']): string => {
@@ -74,7 +81,7 @@ const accidentalTypeToVexflow = (accidental: AccidentalType | string | null | un
   }
 };
 
-const makeVfNote = (n: StaffNote, clef: 'treble' | 'bass') => {
+const makeVfNote = (n: StaffNote, clef: ClefType) => {
   const key = `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`;
   const baseDur = durationToVexflow(n.duration);
   // Keep the duration string free of dots.
@@ -82,7 +89,7 @@ const makeVfNote = (n: StaffNote, clef: 'treble' | 'bass') => {
   // notes one-by-one without Voice/Formatter).
   const duration = `${baseDur}${n.isRest ? 'r' : ''}`;
   const note = new StaveNote({
-    clef,
+    clef: clef as any,
     keys: [key],
     duration,
   });
@@ -196,19 +203,27 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     if (!containerRef.current) return;
     containerRef.current.innerHTML = '';
     const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
-    renderer.resize(width, height);
+    const effectiveHeight = staffMode === 'satb_ancient' ? Math.max(height, DEFAULT_HEIGHT_SATB) : height;
+    renderer.resize(width, effectiveHeight);
     const context = renderer.getContext();
     const staffWidth = width - 2 * STAFF_MARGIN;
 
     const keyString = keySignatureToVexflowString(keySignature);
 
-    const treble = new Stave(STAFF_MARGIN, TREBLE_Y, staffWidth);
-    treble.addClef('treble').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
-    treble.addKeySignature(keyString);
-    treble.setContext(context).draw();
-
+    const treble = staffMode !== 'satb_ancient' ? new Stave(STAFF_MARGIN, TREBLE_Y, staffWidth) : null;
     const bass = (staffMode === 'grandstaff') ? new Stave(STAFF_MARGIN, BASS_Y, staffWidth) : null;
-    if (bass) {
+    const satbSoprano = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, SOPRANO_Y, staffWidth) : null;
+    const satbAlto = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, ALTO_Y, staffWidth) : null;
+    const satbTenor = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, TENOR_Y, staffWidth) : null;
+    const satbBass = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, SATB_BASS_Y, staffWidth) : null;
+
+    if (treble) {
+      treble.addClef('treble').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
+      treble.addKeySignature(keyString);
+      treble.setContext(context).draw();
+    }
+
+    if (bass && treble) {
       bass.addClef('bass').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       bass.addKeySignature(keyString);
       bass.setContext(context).draw();
@@ -222,11 +237,44 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       lineLeft.setContext(context).draw();
     }
 
+    if (satbSoprano && satbAlto && satbTenor && satbBass) {
+      satbSoprano.addClef('soprano' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
+      satbSoprano.addKeySignature(keyString);
+      satbSoprano.setContext(context).draw();
+
+      satbAlto.addClef('alto' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
+      satbAlto.addKeySignature(keyString);
+      satbAlto.setContext(context).draw();
+
+      satbTenor.addClef('tenor' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
+      satbTenor.addKeySignature(keyString);
+      satbTenor.setContext(context).draw();
+
+      satbBass.addClef('bass' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
+      satbBass.addKeySignature(keyString);
+      satbBass.setContext(context).draw();
+
+      const brace = new StaveConnector(satbSoprano, satbBass);
+      brace.setType(StaveConnector.type.BRACE);
+      brace.setContext(context).draw();
+
+      const lineLeft = new StaveConnector(satbSoprano, satbBass);
+      lineLeft.setType(StaveConnector.type.SINGLE_LEFT);
+      lineLeft.setContext(context).draw();
+    }
+
     // Draw barlines using the actual stave metrics so the line starts/ends
     // exactly on the top/bottom staff lines (avoids pixel drift vs. a separate overlay).
     if (barlines.length > 0) {
-      const yTop = treble.getYForLine(0);
-      const yBottom = bass ? bass.getYForLine(4) : treble.getYForLine(4);
+      const topStave = (staffMode === 'satb_ancient' && satbSoprano)
+        ? satbSoprano
+        : (treble as Stave);
+      const bottomStave = (staffMode === 'satb_ancient' && satbBass)
+        ? satbBass
+        : (bass ? bass : (treble as Stave));
+
+      const yTop = topStave.getYForLine(0);
+      const yBottom = bottomStave.getYForLine(4);
       const ctxAny = context as any;
       ctxAny.save?.();
 
@@ -265,12 +313,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         ? []
         : allNotes.filter(n => n.clef === 'bass');
 
+      const sopranoNotes = staffMode === 'satb_ancient' ? allNotes.filter(n => n.clef === 'soprano') : [];
+      const altoNotes = staffMode === 'satb_ancient' ? allNotes.filter(n => n.clef === 'alto') : [];
+      const tenorNotes = staffMode === 'satb_ancient' ? allNotes.filter(n => n.clef === 'tenor') : [];
+      const satbBassNotes = staffMode === 'satb_ancient' ? allNotes.filter(n => n.clef === 'bass') : [];
+
       const hitPoints: Array<{ id: string; x: number; y: number; isGhost: boolean }> = [];
 
       const drawNotesAtX = (
         staffNotes: StaffNote[],
         stave: Stave,
-        clef: 'treble' | 'bass'
+        clef: ClefType
       ) => {
         const prepared: Array<{
           staffNote: StaffNote;
@@ -749,9 +802,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
       };
 
-      // Draw (and collect hit points) for both staves.
-      drawNotesAtX(trebleNotes, treble, 'treble');
-      if (bass) drawNotesAtX(bassNotes, bass, 'bass');
+      // Draw (and collect hit points) for the active system.
+      if (staffMode === 'satb_ancient' && satbSoprano && satbAlto && satbTenor && satbBass) {
+        drawNotesAtX(sopranoNotes, satbSoprano, 'soprano');
+        drawNotesAtX(altoNotes, satbAlto, 'alto');
+        drawNotesAtX(tenorNotes, satbTenor, 'tenor');
+        drawNotesAtX(satbBassNotes, satbBass, 'bass');
+      } else {
+        if (treble) drawNotesAtX(trebleNotes, treble, 'treble');
+        if (bass) drawNotesAtX(bassNotes, bass, 'bass');
+      }
 
       noteHitPointsRef.current = hitPoints;
       onNoteHitPoints?.(hitPoints);
@@ -761,7 +821,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       noteHitPointsRef.current = [];
       onNoteHitPoints?.([]);
     }
-  }, [notes, timeSignature, keySignature, barlines, width, height, selectedNoteIds, ghostNote]);
+  }, [notes, timeSignature, keySignature, barlines, width, height, staffMode, selectedNoteIds, ghostNote]);
 
   // Attach pointer handlers ONCE to the persistent container. The SVG is frequently
   // re-created (ghost note updates), so attaching listeners to the SVG would

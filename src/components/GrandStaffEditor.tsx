@@ -44,7 +44,7 @@ type ViewMode = 'page' | 'linear';
 type CanvasFormat = 'page' | 'landscape';
 type ActiveTab = 'editor' | 'analysis';
 type StaffLayoutMode = 'parti_late' | 'parti_strette';
-type StaffSystemMode = 'grandstaff' | 'treble_only';
+type StaffSystemMode = 'grandstaff' | 'treble_only' | 'satb_ancient';
 
 const LINE_HEIGHT = 12;
 const STAFF_LINES_HEIGHT = 4 * LINE_HEIGHT;
@@ -61,6 +61,14 @@ const TOTAL_SYSTEM_HEIGHT = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_H
 const VF_TREBLE_Y = 40;
 const VF_BASS_Y = 140;
 const VF_LINE_SPACING = 10;
+
+// SATB (chiavi antiche): soprano (C1), alto (C3), tenore (C4), basso (F4)
+// Must match values in VexflowGrandStaff.tsx
+const VF_SATB_SOPRANO_Y = 40;
+const VF_SATB_ALTO_Y = 140;
+const VF_SATB_TENOR_Y = 240;
+const VF_SATB_BASS_Y = 340;
+const VF_SATB_SYSTEM_HEIGHT = 440;
 
 // Match VexFlow's grand staff span (see VexflowGrandStaff).
 // Requested: move the bottom endpoint DOWN to the first/lowest line of the lower staff.
@@ -581,7 +589,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [staffSystemMode, setStaffSystemMode] = useState<StaffSystemMode>(() => {
         try {
             const raw = window.localStorage.getItem(STAFF_SYSTEM_MODE_KEY);
-            if (raw === 'grandstaff' || raw === 'treble_only') return raw;
+            if (raw === 'grandstaff' || raw === 'treble_only' || raw === 'satb_ancient') return raw;
         } catch (_) {}
         return 'grandstaff';
     });
@@ -597,11 +605,81 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const clefForVoice = useCallback((voice: number | undefined | null): ClefType => {
         if (staffSystemMode === 'treble_only') return 'treble';
         const v = voice ?? 1;
+        if (staffSystemMode === 'satb_ancient') {
+            if (v === 1) return 'soprano';
+            if (v === 2) return 'alto';
+            if (v === 3) return 'tenor';
+            return 'bass';
+        }
         if (staffLayoutMode === 'parti_strette') return v === 4 ? 'bass' : 'treble';
         return (v === 3 || v === 4) ? 'bass' : 'treble';
     }, [staffLayoutMode, staffSystemMode]);
 
     const playbackTransposeSemitones = staffSystemMode === 'treble_only' ? -12 : 0;
+
+    const systemHeightPx = staffSystemMode === 'satb_ancient' ? VF_SATB_SYSTEM_HEIGHT : TOTAL_SYSTEM_HEIGHT;
+    const playheadYTopPx = staffSystemMode === 'satb_ancient'
+        ? (VF_SATB_SOPRANO_Y + PLAYHEAD_Y_OFFSET_PX - 3)
+        : PLAYHEAD_Y_TOP;
+    const playheadYBottomPx = staffSystemMode === 'satb_ancient'
+        ? ((VF_SATB_BASS_Y + (4 * VF_LINE_SPACING)) + PLAYHEAD_Y_OFFSET_PX)
+        : PLAYHEAD_Y_BOTTOM;
+
+    const vfStaveTopYForClef = useCallback((clef: ClefType): number => {
+        if (staffSystemMode === 'satb_ancient') {
+            if (clef === 'soprano') return VF_SATB_SOPRANO_Y;
+            if (clef === 'alto') return VF_SATB_ALTO_Y;
+            if (clef === 'tenor') return VF_SATB_TENOR_Y;
+            return VF_SATB_BASS_Y;
+        }
+        return clef === 'bass' ? VF_BASS_Y : VF_TREBLE_Y;
+    }, [staffSystemMode]);
+
+    const vfC4YForClef = useCallback((clef: ClefType, staveTopY: number): number => {
+        // C4 (position 0) reference within the staff for each clef.
+        // All values are expressed in VexFlow coordinates.
+        switch (clef) {
+            case 'soprano':
+                // Middle C on bottom line
+                return staveTopY + 4 * VF_LINE_SPACING;
+            case 'alto':
+                // Middle C on middle line
+                return staveTopY + 2 * VF_LINE_SPACING;
+            case 'tenor':
+                // Middle C on 4th line (from bottom) = 2nd line from top
+                return staveTopY + 1 * VF_LINE_SPACING;
+            case 'bass':
+                // Middle C one ledger line above
+                return staveTopY - 1 * VF_LINE_SPACING;
+            case 'treble':
+            default:
+                // Middle C one ledger line below
+                return staveTopY + 5 * VF_LINE_SPACING;
+        }
+    }, []);
+
+    const isSvgYWithinClefStaff = useCallback((ySvg: number, clef: ClefType): boolean => {
+        if (staffSystemMode !== 'satb_ancient') {
+            // Existing gating logic handles treble/bass split.
+            return true;
+        }
+        const yAdj = ySvg + VF_TREBLE_MOUSE_Y_ADJUST_PX;
+        const top = vfStaveTopYForClef(clef);
+        const bottom = top + 4 * VF_LINE_SPACING;
+        const pad = 18;
+        return yAdj >= (top - pad) && yAdj <= (bottom + pad);
+    }, [staffSystemMode, vfStaveTopYForClef]);
+
+    const diatonicPositionFromSvgY = useCallback((ySvg: number, clef: ClefType): number | null => {
+        if (staffSystemMode !== 'satb_ancient') return null;
+        if (!isSvgYWithinClefStaff(ySvg, clef)) return null;
+
+        const yAdj = ySvg + VF_TREBLE_MOUSE_Y_ADJUST_PX;
+        const top = vfStaveTopYForClef(clef);
+        const c4Y = vfC4YForClef(clef, top);
+        const halfStep = VF_LINE_SPACING / 2;
+        return Math.round((c4Y - yAdj) / halfStep);
+    }, [isSvgYWithinClefStaff, staffSystemMode, vfC4YForClef, vfStaveTopYForClef]);
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
@@ -1621,7 +1699,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     } catch (e) {
                         setRawNotes(normalizedNotes as any);
                     }
-                    if (loadedProject.staffSystemMode === 'grandstaff' || loadedProject.staffSystemMode === 'treble_only') {
+                    if (loadedProject.staffSystemMode === 'grandstaff' || loadedProject.staffSystemMode === 'treble_only' || loadedProject.staffSystemMode === 'satb_ancient') {
                         setStaffSystemMode(loadedProject.staffSystemMode);
                     }
 
@@ -1808,6 +1886,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const { analyzedNotes, connections: errorConnections, violations } = analysisResult;
 
     const getNoteY = (position: number, staffTop: number, clef: ClefType): number => {
+        // Legacy (non-VexFlow) approximation used only as a fallback when we don't have
+        // VexFlow hit points yet. Treat C-clefs as “upper staff” for the fallback path.
         if (clef === 'bass') {
             return staffTop - (position + 2) * (LINE_HEIGHT / 2);
         }
@@ -4477,13 +4557,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const beat = beatInMeasure;
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
-        // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
-        // otherwise the treble/bass gating will cut off low notes for S/A.
-        const yForArea = targetClef === 'treble' ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX) : y;
-        const isBassArea = (staffSystemMode === 'treble_only')
-            ? false
-            : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
-        if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) return;
+
+        if (staffSystemMode === 'satb_ancient') {
+            if (!isSvgYWithinClefStaff(y, targetClef)) return;
+        } else {
+            // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
+            // otherwise the treble/bass gating will cut off low notes for S/A.
+            const yForArea = targetClef === 'treble' ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX) : y;
+            const isBassArea = (staffSystemMode === 'treble_only')
+                ? false
+                : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
+            if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) return;
+        }
 
         // Option/Alt+Click: selection-only gesture (no insertion).
         if (e?.altKey) return;
@@ -4585,23 +4670,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             return;
         }
 
-        const relativeY = targetClef === 'treble'
-            ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX)
-            : (y - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT);
-
         let pos = 0;
-        if (targetClef === 'treble') {
-            const staffTop = VF_TREBLE_Y;
-            pos = ((staffTop + 5 * VF_LINE_SPACING) - relativeY) / (VF_LINE_SPACING / 2);
+        if (staffSystemMode === 'satb_ancient') {
+            const computed = diatonicPositionFromSvgY(y, targetClef);
+            if (computed == null) return;
+            pos = computed;
         } else {
-            const staffTop = BOTTOM_STAFF_TOP;
-            pos = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+            const relativeY = targetClef === 'treble'
+                ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX)
+                : (y - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT);
+
+            if (targetClef === 'treble') {
+                const staffTop = VF_TREBLE_Y;
+                pos = ((staffTop + 5 * VF_LINE_SPACING) - relativeY) / (VF_LINE_SPACING / 2);
+            } else {
+                const staffTop = BOTTOM_STAFF_TOP;
+                pos = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+            }
+
+            // keep your existing empirical bass alignment
+            if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
+
+            pos = Math.round(pos);
         }
-
-        // keep your existing empirical bass alignment
-        if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
-
-        pos = Math.round(pos);
 
         let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
         props = applyAutoLeadingToneInMinor(props);
@@ -4930,15 +5021,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         if (!layoutData) return;
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
-        // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
-        // otherwise the treble/bass gating will cut off low notes for S/A.
-        const yForArea = targetClef === 'treble' ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX) : y;
-        const isBassArea = (staffSystemMode === 'treble_only')
-            ? false
-            : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
-        if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) {
-            setGhostNote(null);
-            return;
+
+        if (staffSystemMode === 'satb_ancient') {
+            if (!isSvgYWithinClefStaff(y, targetClef)) {
+                setGhostNote(null);
+                return;
+            }
+        } else {
+            // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
+            // otherwise the treble/bass gating will cut off low notes for S/A.
+            const yForArea = targetClef === 'treble' ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX) : y;
+            const isBassArea = (staffSystemMode === 'treble_only')
+                ? false
+                : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
+            if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) {
+                setGhostNote(null);
+                return;
+            }
         }
 
         const hit = getSystemMeasureAtX(systemIndex, x);
@@ -4972,21 +5071,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             return;
         }
 
-        const relativeY = targetClef === 'treble'
-            ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX)
-            : (y - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT);
-
         let pos = 0;
-        if (targetClef === 'treble') {
-            const staffTop = VF_TREBLE_Y;
-            pos = ((staffTop + 5 * VF_LINE_SPACING) - relativeY) / (VF_LINE_SPACING / 2);
+        if (staffSystemMode === 'satb_ancient') {
+            const computed = diatonicPositionFromSvgY(y, targetClef);
+            if (computed == null) {
+                setGhostNote(null);
+                return;
+            }
+            pos = computed;
         } else {
-            const staffTop = BOTTOM_STAFF_TOP;
-            pos = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
-        }
+            const relativeY = targetClef === 'treble'
+                ? (y + VF_TREBLE_MOUSE_Y_ADJUST_PX)
+                : (y - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT);
 
-        if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
-        pos = Math.round(pos);
+            if (targetClef === 'treble') {
+                const staffTop = VF_TREBLE_Y;
+                pos = ((staffTop + 5 * VF_LINE_SPACING) - relativeY) / (VF_LINE_SPACING / 2);
+            } else {
+                const staffTop = BOTTOM_STAFF_TOP;
+                pos = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
+            }
+
+            if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
+            pos = Math.round(pos);
+        }
 
         let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
         props = applyAutoLeadingToneInMinor(props);
@@ -5005,7 +5113,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             voice: selectedVoice,
             systemIndex,
         });
-    }, [applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor]);
+    }, [applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor]);
 
     // Finalize marquee selection on mouse up
     useEffect(() => {
@@ -5306,6 +5414,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const map = new Map<string, { x: number; y: number }>();
         if (!layoutData) return map;
 
+        if (staffSystemMode === 'satb_ancient') {
+            // SATB: use VexFlow-aligned coordinates per clef so overlays follow notes.
+            const halfStep = VF_LINE_SPACING / 2;
+            layoutData.positionedNotes.forEach(n => {
+                const clef = (n.clef || 'soprano') as ClefType;
+                const staveTopY = vfStaveTopYForClef(clef);
+                const c4Y = vfC4YForClef(clef, staveTopY);
+                const y = c4Y - (n.position * halfStep);
+                map.set(n.id, { x: n.xPosition ?? 0, y });
+            });
+            return map;
+        }
+
+        // Legacy (grand staff / treble-only): keep the original approximation + empirical overlay shifts.
         layoutData.positionedNotes.forEach(n => {
             const clef = (n.clef || 'treble') as ClefType;
             const staffTop = clef === 'bass' ? BOTTOM_STAFF_TOP : TOP_STAFF_TOP;
@@ -5317,7 +5439,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         });
 
         return map;
-    }, [layoutData, getNoteY]);
+    }, [getNoteY, layoutData, staffSystemMode, vfC4YForClef, vfStaveTopYForClef]);
 
     const noteClefById = useMemo(() => {
         const map = new Map<string, ClefType>();
@@ -6169,17 +6291,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 )}
                 <button
                     onClick={() => setStaffLayoutMode(prev => prev === 'parti_late' ? 'parti_strette' : 'parti_late')}
-                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${staffLayoutMode === 'parti_strette' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
-                    title={staffLayoutMode === 'parti_strette' ? 'Layout: Parti strette (SAT sopra, B sotto)' : 'Layout: Parti late (SA sopra, TB sotto)'}
+                    disabled={staffSystemMode === 'satb_ancient'}
+                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed ${staffLayoutMode === 'parti_strette' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
+                    title={staffSystemMode === 'satb_ancient' ? 'Layout non applicabile in SATB (4 righi)' : (staffLayoutMode === 'parti_strette' ? 'Layout: Parti strette (SAT sopra, B sotto)' : 'Layout: Parti late (SA sopra, TB sotto)')}
                 >
                     <span>Parti strette</span>
                 </button>
                 <button
-                    onClick={() => setStaffSystemMode(prev => prev === 'grandstaff' ? 'treble_only' : 'grandstaff')}
-                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${staffSystemMode === 'treble_only' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
-                    title={staffSystemMode === 'treble_only' ? 'Pentagramma: Solo violino (stile chitarra; suona 8va sotto)' : 'Pentagramma: Grand staff (violino + basso)'}
+                    onClick={() => setStaffSystemMode(prev => {
+                        if (prev === 'grandstaff') return 'satb_ancient';
+                        if (prev === 'satb_ancient') return 'treble_only';
+                        return 'grandstaff';
+                    })}
+                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${staffSystemMode !== 'grandstaff' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
+                    title={
+                        staffSystemMode === 'treble_only'
+                            ? 'Pentagramma: Solo violino (stile chitarra; suona 8va sotto)'
+                            : staffSystemMode === 'satb_ancient'
+                                ? 'Pentagramma: SATB (chiavi antiche: C1/C3/C4/F4)'
+                                : 'Pentagramma: Grand staff (violino + basso)'
+                    }
                 >
-                    <span>Solo violino</span>
+                    <span>
+                        {staffSystemMode === 'treble_only'
+                            ? 'Solo violino'
+                            : staffSystemMode === 'satb_ancient'
+                                ? 'SATB antiche'
+                                : 'Grand staff'}
+                    </span>
                 </button>
             </div>
         ),
@@ -6431,7 +6570,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         const showHarmony = isAnalysisEnabled && systemHarmonyLabels.length > 0;
 
                                                 return (
-                          <div
+                                                    <div
                             key={`system-${systemIndex}`}
                                                         ref={(el) => {
                                                                 const map = systemElementByIndexRef.current;
@@ -6439,7 +6578,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                 else map.delete(systemIndex);
                                                         }}
                             className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'}`}
-                            style={{ width: actualSystemWidth, height: TOTAL_SYSTEM_HEIGHT }}
+                            style={{ width: actualSystemWidth, height: systemHeightPx }}
                                                         data-system-index={systemIndex}
                           >
                                                         {systemIndex === 0 && keyChangeMode === 'modal' && modeInfo?.label && (
@@ -6458,7 +6597,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
                                 width={actualSystemWidth}
-                                height={TOTAL_SYSTEM_HEIGHT}
+                                height={systemHeightPx}
                                                                 staffMode={staffSystemMode}
                                                                 enableProximityPick={tool !== 'insert'}
                                 selectedNoteIds={Array.from(selectedNoteIds)}
@@ -6476,7 +6615,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                                                         {/* Overlay: playhead */}
                                                         {playheadPosition && playheadPosition.systemIndex === systemIndex && (
-                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {
                                                                     (() => {
                                                                         const staffEndX = (actualSystemWidth ?? 0) - STAFF_MARGIN;
@@ -6484,9 +6623,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         return (
                                                                             <line
                                                                                 x1={xClamped}
-                                                                                y1={PLAYHEAD_Y_TOP}
+                                                                                y1={playheadYTopPx}
                                                                                 x2={xClamped}
-                                                                                y2={PLAYHEAD_Y_BOTTOM}
+                                                                                y2={playheadYBottomPx}
                                                                                 className="stroke-cyan-500"
                                                                                 strokeWidth={2}
                                                                                 opacity={0.7}
@@ -6499,7 +6638,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                                                         {/* Overlay: selection rect */}
                                                         {ENABLE_MARQUEE_SELECTION && rectForRender && selectionRect.systemIndex === systemIndex && (
-                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                 <rect
                                   x={rectForRender.x}
                                   y={rectForRender.y}
@@ -6514,7 +6653,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                             {/* Overlay: duplets */}
                             {systemDuplets.length > 0 && (
-                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                 {systemDuplets.map((t) => {
                                     const hook = 8;
                                     const y = t.bracketY;
@@ -6547,7 +6686,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                             {/* Overlay: triplets */}
                             {systemTriplets.length > 0 && (
-                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                 {systemTriplets.map((t) => {
                                     const hook = 8;
                                     const y = t.bracketY;
@@ -6580,7 +6719,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                             {/* Overlay: measure numbers */}
                             {showMeasureNumbers && (
-                                <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                                <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                     {(layoutData.systemsParams?.[systemIndex]?.measureIndices || []).map((mIdx, i) => {
                                         // Start numbering from measure 2 (skip the very first one).
                                         if (mIdx === 0) return null;
@@ -6592,7 +6731,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                             <text
                                                 key={`mnum-${systemIndex}-${mIdx}`}
                                                 x={startX}
-                                                y={TOP_STAFF_TOP + 44}
+                                                y={staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 14) : (TOP_STAFF_TOP + 44)}
                                                 textAnchor="middle"
                                                 dominantBaseline="middle"
                                                 fontSize={11}
@@ -6609,13 +6748,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                             {/* Overlay: analysis labels + violation highlights (adapter output) */}
                                                         {(isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0) && (
-                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={TOTAL_SYSTEM_HEIGHT}>
+                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers */}
                                                                 {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
                                                                     <text
                                                                         key={`ctx-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        y={TOP_STAFF_TOP - 12}
+                                                                        y={staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y - 12) : (TOP_STAFF_TOP - 12)}
                                                                         textAnchor="start"
                                                                         fontSize={11}
                                                                         fontWeight={600}
@@ -6628,16 +6767,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                                 {/* Harmony labels (roman/symbol) + figured bass */}
                                 {showHarmony && systemHarmonyLabels.map((lbl, lblIndex) => {
-                                                                    const bassBottomLineY = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + (BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT);
+                                                                    const bottomStaffBottomLineY = (staffSystemMode === 'satb_ancient')
+                                                                        ? (VF_SATB_BASS_Y + 4 * VF_LINE_SPACING)
+                                                                        : (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + (BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT));
                                                                     // Trial positioning: move roman+figures to the right of bass stems and lower.
                                                                       const RB_SHIFT_X = 25;
                                                                       const RB_SHIFT_Y = 30;
-                                                                    const romanBelowY = bassBottomLineY + 28 + RB_SHIFT_Y;
-                                                                    const figuresY0 = bassBottomLineY + 20 + RB_SHIFT_Y;
+                                                                                                                                        const romanBelowY = bottomStaffBottomLineY + 28 + RB_SHIFT_Y;
+                                                                                                                                        const figuresY0 = bottomStaffBottomLineY + 20 + RB_SHIFT_Y;
 
                                                                                                                                         // Chord symbols (sigle) stay above the top staff; shift down only a few pixels.
                                                                                                                                         const SYMBOL_SHIFT_Y = 6;
-                                                                                                                                        const symbolsY = TOP_STAFF_TOP - 18 + SYMBOL_SHIFT_Y;
+                                                                                                                                        const symbolsY = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 18 + SYMBOL_SHIFT_Y;
 
                                                                     const isHiddenMarker = !!(lbl as any).hiddenMarker;
                                                                     const showRoman = showRomanAnalysis && !!lbl.roman && !isHiddenMarker && !(hideLabelAbsBeats.has((lbl as any).absBeat));
@@ -6912,6 +7053,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                 {/* Violation connections (aligned to note positions) */}
                                                                 {(() => {
                                                                     const systemNoteIdSet = new Set(systemNotes.map(n => n.id));
+                                                                    const hitPoints = systemNoteHitPointsRef.current[systemIndex] || [];
+                                                                    const hitPointById = new Map(hitPoints.filter(p => !p.isGhost).map(p => [p.id, { x: p.x, y: p.y }]));
                                                                     // Only render connections that belong to this system AND that correspond
                                                                     // to an actual violation entry. This prevents drawing ad-hoc connections
                                                                     // (e.g., suspension-only connections without panel entries) as dashed lines.
@@ -6962,14 +7105,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         level === 'warning' ? '#f59e0b' : level === 'exception' ? '#22c55e' : '#ef4444';
 
                                                                     return systemConnections.map((c, idx) => {
-                                                                        const p1 = notePositions.get(c.noteId1);
-                                                                        const p2 = notePositions.get(c.noteId2);
-                                                                        if (!p1 || !p2) return null;
+                                                                        const hp1 = hitPointById.get(c.noteId1);
+                                                                        const hp2 = hitPointById.get(c.noteId2);
 
                                                                         const clef1 = noteClefById.get(c.noteId1) || 'treble';
                                                                         const clef2 = noteClefById.get(c.noteId2) || 'treble';
 
                                                                         const applyOverlayShift = (p: { x: number; y: number }, clef: ClefType, voice: Voice) => {
+                                                                            if (staffSystemMode === 'satb_ancient') return p;
                                                                             if (clef === 'bass') {
                                                                                 return {
                                                                                     x: p.x + OVERLAY_BASS_X_SHIFT_PX,
@@ -6985,8 +7128,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         const v1 = noteVoiceById.get(c.noteId1) || 1;
                                                                         const v2 = noteVoiceById.get(c.noteId2) || 1;
 
-                                                                        const q1 = applyOverlayShift(p1, clef1, v1);
-                                                                        const q2 = applyOverlayShift(p2, clef2, v2);
+                                                                        // Prefer actual VexFlow hit points (already aligned).
+                                                                        // Fallback to the legacy approximation + overlay shift.
+                                                                        const q1 = hp1 ? hp1 : (() => {
+                                                                            const p = notePositions.get(c.noteId1);
+                                                                            return p ? applyOverlayShift(p, clef1, v1) : null;
+                                                                        })();
+                                                                        const q2 = hp2 ? hp2 : (() => {
+                                                                            const p = notePositions.get(c.noteId2);
+                                                                            return p ? applyOverlayShift(p, clef2, v2) : null;
+                                                                        })();
+                                                                        if (!q1 || !q2) return null;
 
                                                                         const isHovered = !!hoveredViolationNotes && (hoveredViolationNotes.includes(c.noteId1) || hoveredViolationNotes.includes(c.noteId2));
                                                                         const lvl = connectionLevel(c);
@@ -7018,7 +7170,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         if (!analyzedNotes || analyzedNotes.length === 0) return null;
                                                                         const systemNoteIdSet = new Set(systemNotes.map(n => n.id));
 
+                                                                        const hitPoints = systemNoteHitPointsRef.current[systemIndex] || [];
+                                                                        const hitPointById = new Map(hitPoints.filter(p => !p.isGhost).map(p => [p.id, { x: p.x, y: p.y }]));
+
                                                                         const applyOverlayShift = (p: { x: number; y: number }, clef: ClefType, voice: Voice) => {
+                                                                            if (staffSystemMode === 'satb_ancient') return p;
                                                                             if (clef === 'bass') {
                                                                                 return {
                                                                                     x: p.x + OVERLAY_BASS_X_SHIFT_PX,
@@ -7041,11 +7197,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                             // Currently only neighbor-tone uses the 'v' mark.
                                                                             const text = (mark as string) || 'v';
 
+                                                                            const hp = hitPointById.get(n.id);
                                                                             const pPos = notePositions.get(n.id);
-                                                                            if (!pPos) continue;
+                                                                            if (!hp && !pPos) continue;
                                                                             const clef = (noteClefById.get(n.id) || 'treble') as ClefType;
                                                                             const voiceNum = (noteVoiceById.get(n.id) || 1) as Voice;
-                                                                            const q = applyOverlayShift(pPos, clef, voiceNum);
+                                                                            const q = hp ? hp : applyOverlayShift(pPos as any, clef, voiceNum);
 
                                                                             // Place slightly above-left to avoid the stem.
                                                                             // Fine-tune: nudge 3px to the right for better alignment.
@@ -7074,6 +7231,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                     {(() => {
                                                                         if (!analyzedNotes || analyzedNotes.length === 0) return null;
                                                                         const systemNoteIdSet = new Set(systemNotes.map(n => n.id));
+
+                                                                        const hitPoints = systemNoteHitPointsRef.current[systemIndex] || [];
+                                                                        const hitPointById = new Map(hitPoints.filter(p => !p.isGhost).map(p => [p.id, { x: p.x, y: p.y }]));
+                                                                        const getOverlayX = (noteId: string): number | null => {
+                                                                            const hp = hitPointById.get(noteId);
+                                                                            if (hp) return hp.x;
+                                                                            const p = notePositions.get(noteId);
+                                                                            return p ? p.x : null;
+                                                                        };
                                                                         const byVoice = new Map<number, typeof analyzedNotes>();
                                                                         for (const n of analyzedNotes) {
                                                                             const v = n.voice || 1;
@@ -7093,6 +7259,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         const results: JSX.Element[] = [];
 
                                                                         const applyOverlayShift = (p: { x: number; y: number }, clef: ClefType, voice: Voice) => {
+                                                                            if (staffSystemMode === 'satb_ancient') return p;
                                                                             if (clef === 'bass') {
                                                                                 return {
                                                                                     x: p.x + OVERLAY_BASS_X_SHIFT_PX,
@@ -7114,25 +7281,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                 const prev = arr[i - 1] as any | undefined;
                                                                                 if (!prev) continue;
 
+                                                                                const hpCur = hitPointById.get(cur.id);
                                                                                 const pPos = notePositions.get(cur.id);
-                                                                                if (!pPos) continue;
+                                                                                if (!hpCur && !pPos) continue;
 
                                                                                 // Compute previous chord center X. Prefer chordId grouping if present.
                                                                                 let prevCenterX: number | null = null;
                                                                                 if (prev.chordId) {
                                                                                     const chordNotes = analyzedNotes.filter(n => n.chordId === prev.chordId);
-                                                                                    const xs: number[] = chordNotes.map(n => notePositions.get(n.id)).filter(Boolean).map(pp => (pp as any).x);
+                                                                                    const xs: number[] = chordNotes.map(n => getOverlayX(n.id)).filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
                                                                                     if (xs.length) prevCenterX = xs.reduce((a, b) => a + b, 0) / xs.length;
                                                                                 }
                                                                                 if (prevCenterX === null) {
                                                                                     // Fallback: same measureIndex/beat
                                                                                     const sameBeat = analyzedNotes.filter(n => (n.measureIndex === prev.measureIndex) && (n.beat === prev.beat));
-                                                                                    const xs = sameBeat.map(n => notePositions.get(n.id)).filter(Boolean).map(pp => (pp as any).x);
+                                                                                    const xs = sameBeat.map(n => getOverlayX(n.id)).filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
                                                                                     if (xs.length) prevCenterX = xs.reduce((a, b) => a + b, 0) / xs.length;
                                                                                 }
                                                                                 if (prevCenterX === null) {
-                                                                                    const pp = notePositions.get(prev.id);
-                                                                                    if (pp) prevCenterX = pp.x;
+                                                                                    const xPrev = getOverlayX(prev.id);
+                                                                                    if (xPrev != null) prevCenterX = xPrev;
                                                                                 }
 
                                                                                 // More robust: compute previous chord center by matching positionedNotes' start time
@@ -7156,7 +7324,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                                                                                 const clef = noteClefById.get(cur.id) || 'treble';
                                                                                 const voiceNum = noteVoiceById.get(cur.id) || 1;
-                                                                                const q = applyOverlayShift(pPos, clef, voiceNum as Voice);
+                                                                                const q = hpCur ? hpCur : applyOverlayShift(pPos as any, clef, voiceNum as Voice);
                                                                                     // Ensure the passing-line does not overlap the roman/figures area
                                                                                     // Prefer anchoring the start of the passing line to the right edge
                                                                                     // of the roman/figures area (if present). Fall back to prev chord center.
@@ -7190,7 +7358,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                     if (startX === null) startX = prevCenterX;
 
                                                                                     // Position passing line below the lower staff (under the bass)
-                                                                                    const bassBottomLineY = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + (BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT);
+                                                                                    const bassBottomLineY = (staffSystemMode === 'satb_ancient')
+                                                                                        ? (VF_SATB_BASS_Y + 4 * VF_LINE_SPACING)
+                                                                                        : (VF_BASS_Y + 4 * VF_LINE_SPACING);
                                                                                     const PASS_LINE_OFFSET_PX = 52; // distance below the bottom staff (moved down ~40px)
                                                                                     const lineY = bassBottomLineY + PASS_LINE_OFFSET_PX;
 

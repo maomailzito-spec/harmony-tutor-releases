@@ -134,7 +134,7 @@ export interface PlacedInterval {
 
 export type AccidentalType = 'sharp' | 'flat' | 'natural' | 'double-sharp' | 'double-flat';
 export type NoteDuration = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth' | 'thirty-second' | 'sixty-fourth';
-export type ClefType = 'treble' | 'bass';
+export type ClefType = 'treble' | 'bass' | 'soprano' | 'alto' | 'tenor';
 export type Voice = 1 | 2 | 3 | 4;
 
 export type StaffNote = {
