@@ -68,7 +68,10 @@ const VF_SATB_SOPRANO_Y = 40;
 const VF_SATB_ALTO_Y = 140;
 const VF_SATB_TENOR_Y = 240;
 const VF_SATB_BASS_Y = 340;
-const VF_SATB_SYSTEM_HEIGHT = 440;
+// Extra bottom space in SATB mode so very low bass notes (e.g. C below the staff)
+// remain fully visible and insertable. This must not affect pitch mapping.
+const VF_SATB_BASS_EXTRA_BOTTOM_PX = 100;
+const VF_SATB_SYSTEM_HEIGHT = VF_SATB_BASS_Y + (4 * VF_LINE_SPACING) + VF_SATB_BASS_EXTRA_BOTTOM_PX;
 
 // Match VexFlow's grand staff span (see VexflowGrandStaff).
 // Requested: move the bottom endpoint DOWN to the first/lowest line of the lower staff.
@@ -666,7 +669,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const yAdj = ySvg + VF_TREBLE_MOUSE_Y_ADJUST_PX;
         const top = vfStaveTopYForClef(clef);
         const bottom = top + 4 * VF_LINE_SPACING;
-        const pad = 18;
+        // Allow extra room ONLY for SATB bass so ledger lines below are reachable.
+        // This is input gating/padding, not a pitch mapping change.
+        const pad = clef === 'bass' ? 60 : 18;
         return yAdj >= (top - pad) && yAdj <= (bottom + pad);
     }, [staffSystemMode, vfStaveTopYForClef]);
 

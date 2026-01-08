@@ -25,7 +25,9 @@ interface VexflowGrandStaffProps {
 
 const DEFAULT_WIDTH = 900;
 const DEFAULT_HEIGHT = 250;
-const DEFAULT_HEIGHT_SATB = 440;
+// SATB needs extra bottom space so very low bass notes (e.g. C below the staff)
+// are not clipped by the SVG viewport.
+const DEFAULT_HEIGHT_SATB = 480;
 // Keep X alignment consistent with GrandStaffEditor layout (START_X = 50)
 const STAFF_MARGIN = 50;
 const TREBLE_Y = 40;
