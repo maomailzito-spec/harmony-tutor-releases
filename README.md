@@ -28,6 +28,20 @@
 - Switch **Analisi/Editor**: un solo pulsante toggle che cambia etichetta (Analisi ↔ Editor).
 - **MIDI** compattato: un solo pulsante con dropdown per scegliere il MIDI Out (incluso “Audio Interno”), chiudibile con click fuori / `Esc`.
 
+### Scorciatoie tastiera (Grand Staff editor)
+
+#### Layout / View
+- **Alt/Option + L**: cicla la vista del pentagramma tra **Grand Staff**, **SATB antiche (4 righi)** e gli altri sistemi disponibili.
+  - Azione **solo di vista**: non modifica note, voci, ritmo o stato dell’analisi.
+
+#### Pause
+- **R**: **toggle** tra inserimento **nota** ↔ **pausa**.
+  - La durata segue il valore ritmico corrente (inclusi **punto**, **terzina/duina** se attivi).
+
+#### Ottave
+- **Shift + Freccia Su**: sposta le note selezionate **+1 ottava**.
+- **Shift + Freccia Giù**: sposta le note selezionate **-1 ottava**.
+
 ### Rendering (VexFlow)
 - Le **pause** non ricevono più modificatori di alterazione (evita “alterazioni fantasma” dopo cancellazioni/modifiche).
 - La **ghost note** in inserimento mostra anche l’alterazione selezionata; l’alterazione della ghost viene inoltre spostata a sinistra per evitare sovrapposizioni con la testa della nota.

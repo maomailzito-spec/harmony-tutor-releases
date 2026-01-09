@@ -154,7 +154,7 @@ type ToolbarGroupId =
     | 'accidentals'
     | 'notations'
     | 'analysis'
-    | 'midi';
+    | 'more';
 
 const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
 const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
@@ -169,7 +169,7 @@ const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'accidentals',
     'notations',
     'analysis',
-    'midi',
+    'more',
 ];
 const DEFAULT_TOOLBAR_VISIBILITY: Record<ToolbarGroupId, boolean> = {
     playback: true,
@@ -182,7 +182,7 @@ const DEFAULT_TOOLBAR_VISIBILITY: Record<ToolbarGroupId, boolean> = {
     accidentals: true,
     notations: true,
     analysis: true,
-    midi: true,
+    more: true,
 };
 const TOOLBAR_GROUP_LABEL: Record<ToolbarGroupId, string> = {
     playback: 'Play',
@@ -195,7 +195,7 @@ const TOOLBAR_GROUP_LABEL: Record<ToolbarGroupId, string> = {
     accidentals: 'Accidenti',
     notations: 'Notazione',
     analysis: 'Analisi',
-    midi: 'MIDI',
+    more: 'Menu',
 };
 
 const getChordNoteheadOffsetsById = (chord: StaffNote[], noteHeadRx: number, isStemUp: boolean): Map<string, number> => {
@@ -719,7 +719,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [midiOutputs, setMidiOutputs] = useState<any[]>([]);
     const [selectedMidiOutput, setSelectedMidiOutput] = useState<any | null>(null);
     const [isMidiMenuOpen, setIsMidiMenuOpen] = useState(false);
-    const midiMenuRef = useRef<HTMLDivElement | null>(null);
+
+    const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+    const moreMenuRef = useRef<HTMLDivElement | null>(null);
+
+    // SATB toggle should behave as a true toggle without losing access to the previous mode.
+    const lastNonSatbModeRef = useRef<StaffSystemMode>('grandstaff');
+    useEffect(() => {
+        if (staffSystemMode !== 'satb_ancient') lastNonSatbModeRef.current = staffSystemMode;
+    }, [staffSystemMode]);
     const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
     const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
 
@@ -753,26 +761,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     }, [containerWidth]);
 
     useEffect(() => {
-        if (!isMidiMenuOpen) return;
+        if (!isMoreMenuOpen) return;
 
-        const onPointerDown = (ev: PointerEvent) => {
-            const el = midiMenuRef.current;
+        const onDocMouseDown = (ev: MouseEvent) => {
+            const el = moreMenuRef.current;
             if (!el) return;
-            if (el.contains(ev.target as Node)) return;
+            if (el.contains(ev.target as any)) return;
+            setIsMoreMenuOpen(false);
             setIsMidiMenuOpen(false);
         };
 
-        const onKeyDown = (ev: KeyboardEvent) => {
-            if (ev.key === 'Escape') setIsMidiMenuOpen(false);
+        const onDocKeyDown = (ev: KeyboardEvent) => {
+            if (ev.key === 'Escape') {
+                setIsMoreMenuOpen(false);
+                setIsMidiMenuOpen(false);
+            }
         };
 
-        window.addEventListener('pointerdown', onPointerDown);
-        window.addEventListener('keydown', onKeyDown);
+        document.addEventListener('mousedown', onDocMouseDown);
+        document.addEventListener('keydown', onDocKeyDown);
         return () => {
-            window.removeEventListener('pointerdown', onPointerDown);
-            window.removeEventListener('keydown', onKeyDown);
+            document.removeEventListener('mousedown', onDocMouseDown);
+            document.removeEventListener('keydown', onDocKeyDown);
         };
-    }, [isMidiMenuOpen]);
+    }, [isMoreMenuOpen]);
     
     const isLoopingRef = useRef(isLooping);
     const loopRangeRef = useRef(loopRange);
@@ -1278,26 +1290,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         printWindow.document.write(`<!doctype html><html><head>${head}<style>body{background:white;margin:0;padding:20px}svg{max-width:100%;height:auto}</style></head><body>${content}</body></html>`);
         printWindow.document.close();
         printWindow.focus();
-        setTimeout(() => {
-            try { printWindow.print(); } catch (e) { /* Removed debug log */ }
-            setTimeout(() => { try { printWindow.close(); } catch (_) {} }, 1000);
-        }, 500);
-    }, [staffContainerRef]);
+    }, []);
 
-    const handleMenuAction = useCallback(async (action, payload) => {
-        const api = (window).electronAPI;
-        if (!api) return;
-        // Removed debug log
-        //
+    const handleMenuAction = useCallback(async (action: string, payload: any) => {
+        const api = (window as any).electronAPI;
 
-        if (action === 'set-select-only-voice') {
-            setMarqueeSelectOnlyCurrentVoice(!!(payload && payload.enabled));
-            return;
-        }
-        if (action === 'set-title-font-family') {
-            if (payload && typeof payload.family === 'string') setTitleFontFamily(payload.family);
-            return;
-        }
         if (action === 'increase-title-font') {
             setTitleFontSize(s => Math.min(72, s + 1));
             return;
@@ -1611,10 +1608,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 toolbarGroupOrder,
             }, null, 2);
             try {
+                if (!api?.saveFile) return;
                 const targetPath = (action === 'save' && currentProjectFilePath) ? currentProjectFilePath : undefined;
                 const result = await api.saveFile(projectData, targetPath);
                 if (result && result.success && result.filePath) {
-                    api.addRecentFile(result.filePath);
+                    if (api?.addRecentFile) api.addRecentFile(result.filePath);
                     setCurrentProjectFilePath(result.filePath);
                 }
             } catch (err) {
@@ -1763,7 +1761,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     }
 
                     if (payload && payload.filePath) {
-                        api.addRecentFile(payload.filePath);
+                        if (api?.addRecentFile) api.addRecentFile(payload.filePath);
                         setCurrentProjectFilePath(payload.filePath);
                     } else {
                         setCurrentProjectFilePath(null);
@@ -2132,10 +2130,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 const barStyle = m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single');
                 let barXLocal = (curX - curXStart + START_X) + measureWidth;
                 if (isLastInSystem) {
-                    const systemWidth = Math.max(containerWidth, (curX - curXStart + START_X));
-                    // Place final bar slightly inside the staff end to avoid clipping
-                    // or being rendered outside the canvas by fractional/rounding issues.
-                    barXLocal = (m === finalMeasureIndex && barStyle === 'final') ? (systemWidth - STAFF_MARGIN - 1) : (systemWidth - STAFF_MARGIN);
+                    // IMPORTANT:
+                    // The last barline of the system must be placed at the actual end of the staff
+                    // for this system, not at `containerWidth`.
+                    // Using `containerWidth` can place it too far left when the computed system
+                    // width exceeds the container (then the rightmost barline appears “missing”,
+                    // especially after suppressing VexFlow's per-staff end barlines).
+                    const systemWidthIfEndedHere = (curX - curXStart + START_X) + measureWidth;
+                    // Place final bar slightly inside the staff end to avoid clipping.
+                    barXLocal = (m === finalMeasureIndex && barStyle === 'final')
+                        ? (systemWidthIfEndedHere - STAFF_MARGIN - 1)
+                        : (systemWidthIfEndedHere - STAFF_MARGIN);
                 }
                 systemBarlines.push({ id: `bar-${m}`, xPosition: barXLocal, style: barStyle });
 
@@ -5524,6 +5529,82 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const isMod = e.metaKey || e.ctrlKey;
             const key = (e.key || '').toLowerCase();
 
+            const transposeSelectedNotesBySemitones = (delta: number) => {
+                if (selectedNoteIds.size === 0) return;
+
+                const preferFromAccidental = (n: StaffNote): AccidentalType | null => {
+                    const a = (n.explicitAccidental ?? n.accidental ?? null) as AccidentalType | null;
+                    if (!a) return null;
+                    if (a.includes('flat')) return 'flat';
+                    if (a.includes('sharp')) return 'sharp';
+                    return null;
+                };
+
+                setRawNotes(prev => {
+                    const updated = prev.map(n => {
+                        if (!selectedNoteIds.has(n.id)) return n;
+                        if (n.isRest) return n;
+                        if (!Number.isFinite(n.midi)) return n;
+
+                        const nextMidi = n.midi + delta;
+                        const clef: ClefType = (n.clef || ((n.voice === 3 || n.voice === 4) ? 'bass' : 'treble')) as ClefType;
+                        const preferred = preferFromAccidental(n);
+                        const props = getNotePropertiesFromMidi(nextMidi, keySignature, clef, preferred);
+
+                        return {
+                            ...n,
+                            ...props,
+                        };
+                    });
+
+                    // If a tie no longer connects equal pitches, remove the tie flag.
+                    // (Rendering + playback treat ties only when the MIDI matches.)
+                    const byVoice: Record<number, StaffNote[]> = {};
+                    updated.forEach(n => {
+                        const v = (n.voice ?? 1) as number;
+                        if (!byVoice[v]) byVoice[v] = [];
+                        byVoice[v].push(n);
+                    });
+
+                    const idsToUntie = new Set<string>();
+                    Object.values(byVoice).forEach(list => {
+                        const voiceLine = [...list].sort((a, b) => {
+                            const ma = a.measureIndex ?? 0;
+                            const mb = b.measureIndex ?? 0;
+                            if (ma !== mb) return ma - mb;
+                            return (a.beat ?? 1) - (b.beat ?? 1);
+                        });
+                        for (let i = 0; i < voiceLine.length - 1; i++) {
+                            const from = voiceLine[i];
+                            if (!(from as any).isTiedToNext) continue;
+                            const to = voiceLine[i + 1];
+                            if (to.isRest || from.midi !== to.midi) {
+                                idsToUntie.add(from.id);
+                            }
+                        }
+                    });
+
+                    if (idsToUntie.size === 0) return updated;
+
+                    return updated.map(n => {
+                        if (!idsToUntie.has(n.id)) return n;
+                        return { ...n, isTiedToNext: false, manualTieDirection: undefined };
+                    });
+                });
+            };
+
+            // Alt/Option+L: cycle staff layout/view (view-only)
+            if (!isMod && e.altKey && e.code === 'KeyL') {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const modes: StaffSystemMode[] = ['grandstaff', 'satb_ancient', 'treble_only'];
+                const idx = Math.max(0, modes.indexOf(staffSystemMode));
+                const next = modes[(idx + 1) % modes.length];
+                setStaffSystemMode(next);
+                return;
+            }
+
             // Space: always toggle playback (avoid requiring focus on the Play button)
             if (!isMod && (key === ' ' || key === 'spacebar')) {
                 e.preventDefault();
@@ -5631,6 +5712,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 return;
             }
 
+            // R: toggle rest insertion mode (preserves duration / dotted / tuplets)
+            if (!isMod && key === 'r') {
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' }));
+                return;
+            }
+
             // . (punto): toggle dotted rhythm
             // Some keyboard layouts may emit '>' with Shift+period; accept both.
             if (!isMod && (key === '.' || key === '>')) {
@@ -5657,74 +5746,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 return;
             }
 
-            // ArrowUp / ArrowDown: transpose selected notes by semitone
-            if (!isMod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            // Shift+ArrowUp / Shift+ArrowDown: transpose selected notes by octave
+            if (!isMod && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                 if (selectedNoteIds.size === 0) return;
                 e.preventDefault();
                 e.stopPropagation();
+                transposeSelectedNotesBySemitones(e.key === 'ArrowUp' ? 12 : -12);
+                return;
+            }
 
-                const delta = e.key === 'ArrowUp' ? 1 : -1;
-
-                const preferFromAccidental = (n: StaffNote): AccidentalType | null => {
-                    const a = (n.explicitAccidental ?? n.accidental ?? null) as AccidentalType | null;
-                    if (!a) return null;
-                    if (a.includes('flat')) return 'flat';
-                    if (a.includes('sharp')) return 'sharp';
-                    return null;
-                };
-
-                setRawNotes(prev => {
-                    const updated = prev.map(n => {
-                        if (!selectedNoteIds.has(n.id)) return n;
-                        if (n.isRest) return n;
-                        if (!Number.isFinite(n.midi)) return n;
-
-                        const nextMidi = n.midi + delta;
-                        const clef: ClefType = (n.clef || ((n.voice === 3 || n.voice === 4) ? 'bass' : 'treble')) as ClefType;
-                        const preferred = preferFromAccidental(n);
-                        const props = getNotePropertiesFromMidi(nextMidi, keySignature, clef, preferred);
-
-                        return {
-                            ...n,
-                            ...props,
-                        };
-                    });
-
-                    // If a tie no longer connects equal pitches, remove the tie flag.
-                    // (Rendering + playback treat ties only when the MIDI matches.)
-                    const byVoice: Record<number, StaffNote[]> = {};
-                    updated.forEach(n => {
-                        const v = (n.voice ?? 1) as number;
-                        if (!byVoice[v]) byVoice[v] = [];
-                        byVoice[v].push(n);
-                    });
-
-                    const idsToUntie = new Set<string>();
-                    Object.values(byVoice).forEach(list => {
-                        const voiceLine = [...list].sort((a, b) => {
-                            const ma = a.measureIndex ?? 0;
-                            const mb = b.measureIndex ?? 0;
-                            if (ma !== mb) return ma - mb;
-                            return (a.beat ?? 1) - (b.beat ?? 1);
-                        });
-                        for (let i = 0; i < voiceLine.length - 1; i++) {
-                            const from = voiceLine[i];
-                            if (!(from as any).isTiedToNext) continue;
-                            const to = voiceLine[i + 1];
-                            if (to.isRest || from.midi !== to.midi) {
-                                idsToUntie.add(from.id);
-                            }
-                        }
-                    });
-
-                    if (idsToUntie.size === 0) return updated;
-
-                    return updated.map(n => {
-                        if (!idsToUntie.has(n.id)) return n;
-                        return { ...n, isTiedToNext: false, manualTieDirection: undefined };
-                    });
-                });
-
+            // ArrowUp / ArrowDown: transpose selected notes by semitone
+            if (!isMod && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                if (selectedNoteIds.size === 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                transposeSelectedNotesBySemitones(e.key === 'ArrowUp' ? 1 : -1);
                 return;
             }
 
@@ -5796,6 +5832,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         stopPlayback,
         getPlayheadPosForAbsBeat,
         toggleMetronome,
+        setSelectedInsertion,
+        staffSystemMode,
+        setStaffSystemMode,
     ]);
 
     const selectedNotesBeamState = useMemo(() => {
@@ -6141,8 +6180,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         ),
         insert: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
-                <button onClick={() => { setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' })); }} className="p-1 rounded-md text-gray-300 hover:bg-gray-600 transition-colors" title={selectedInsertion.type === 'note' ? "Nota" : "Pausa"}>
-                    {selectedInsertion.type === 'note' ? <QuarterNoteIcon className={TOOLBAR_ICON_CLASS} /> : <QuarterRestIcon className={TOOLBAR_ICON_CLASS} />}
+                <button
+                    onClick={() => { setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' })); }}
+                    className={`p-1 rounded-md transition-colors ${selectedInsertion.type === 'rest' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                    title={
+                        selectedInsertion.type === 'note'
+                            ? 'Passa a Pausa (R)'
+                            : 'Modalità Pausa attiva — passa a Nota (R)'
+                    }
+                >
+                    {selectedInsertion.type === 'note'
+                        ? <QuarterRestIcon className={TOOLBAR_ICON_CLASS} />
+                        : <QuarterNoteIcon className={TOOLBAR_ICON_CLASS} />}
                 </button>
                 <div className="w-px h-5 bg-gray-600 mx-1"></div>
                 {durations.map(({ duration, label }) => (
@@ -6294,91 +6343,133 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         </button>
                     </div>
                 )}
-                <button
-                    onClick={() => setStaffLayoutMode(prev => prev === 'parti_late' ? 'parti_strette' : 'parti_late')}
-                    disabled={staffSystemMode === 'satb_ancient'}
-                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed ${staffLayoutMode === 'parti_strette' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
-                    title={staffSystemMode === 'satb_ancient' ? 'Layout non applicabile in SATB (4 righi)' : (staffLayoutMode === 'parti_strette' ? 'Layout: Parti strette (SAT sopra, B sotto)' : 'Layout: Parti late (SA sopra, TB sotto)')}
-                >
-                    <span>Parti strette</span>
-                </button>
-                <button
-                    onClick={() => setStaffSystemMode(prev => {
-                        if (prev === 'grandstaff') return 'satb_ancient';
-                        if (prev === 'satb_ancient') return 'treble_only';
-                        return 'grandstaff';
-                    })}
-                    className={`ml-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${staffSystemMode !== 'grandstaff' ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
-                    title={
-                        staffSystemMode === 'treble_only'
-                            ? 'Pentagramma: Solo violino (stile chitarra; suona 8va sotto)'
-                            : staffSystemMode === 'satb_ancient'
-                                ? 'Pentagramma: SATB (chiavi antiche: C1/C3/C4/F4)'
-                                : 'Pentagramma: Grand staff (violino + basso)'
-                    }
-                >
-                    <span>
-                        {staffSystemMode === 'treble_only'
-                            ? 'Solo violino'
-                            : staffSystemMode === 'satb_ancient'
-                                ? 'SATB antiche'
-                                : 'Grand staff'}
-                    </span>
-                </button>
             </div>
         ),
-        midi: (
-            <div ref={midiMenuRef} className="relative flex items-center">
+        more: (
+            <div ref={moreMenuRef} className="relative flex items-center">
                 <button
-                    onClick={async () => {
-                        // Load outputs on demand.
-                        if (midiOutputs.length === 0) {
-                            try { await handleActivateMidi(); } catch (_) {}
-                        }
-                        setIsMidiMenuOpen(o => !o);
-                    }}
-                    className="px-2 py-1 rounded-md bg-sky-600 text-white text-xs font-semibold hover:bg-sky-500 transition-colors"
-                    title="MIDI Out"
+                    onClick={() => setIsMoreMenuOpen(o => !o)}
+                    className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${isMoreMenuOpen ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
+                    title="Menu"
                 >
-                    MIDI
+                    ⋯
                 </button>
 
-                {isMidiMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 min-w-56 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">
-                        <div className="px-2 py-1 text-[11px] text-slate-300">Seleziona uscita</div>
+                {isMoreMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">
+                        {/* Staff system mode */}
+                        {staffSystemMode !== 'grandstaff' && (
+                            <button
+                                onClick={() => setStaffSystemMode('grandstaff')}
+                                className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                title="Torna al Grand Staff (2 righi) — Alt/Option+L"
+                            >
+                                <span>Grand Staff (2 righi)</span>
+                            </button>
+                        )}
+
+                        {/* Toggles */}
+                        <button
+                            onClick={async () => {
+                                const enabled = isMidiMenuOpen || !!selectedMidiOutput;
+                                if (enabled) {
+                                    setSelectedMidiOutput(null);
+                                    setIsMidiMenuOpen(false);
+                                    return;
+                                }
+                                if (midiOutputs.length === 0) {
+                                    try { await handleActivateMidi(); } catch (_) {}
+                                }
+                                setIsMidiMenuOpen(true);
+                            }}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="MIDI"
+                        >
+                            <span>MIDI</span>
+                            {(isMidiMenuOpen || !!selectedMidiOutput) && <span className="text-[11px]">✓</span>}
+                        </button>
 
                         <button
                             onClick={() => {
-                                setSelectedMidiOutput(null);
-                                setIsMidiMenuOpen(false);
+                                const isSatb = staffSystemMode === 'satb_ancient';
+                                if (isSatb) setStaffSystemMode(lastNonSatbModeRef.current);
+                                else setStaffSystemMode('satb_ancient');
                             }}
-                            className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${selectedMidiOutput ? 'text-gray-200 hover:bg-slate-700' : 'bg-cyan-600 text-white'}`}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="SATB antiche (4 righi) — Alt/Option+L"
                         >
-                            <span>Audio Interno</span>
-                            {!selectedMidiOutput && <span className="text-[11px]">✓</span>}
+                            <span>SATB antiche (4 righi)</span>
+                            {staffSystemMode === 'satb_ancient' && <span className="text-[11px]">✓</span>}
                         </button>
 
-                        {midiOutputs.length === 0 ? (
-                            <div className="px-2 py-1 text-[11px] text-gray-400">Nessun dispositivo MIDI</div>
-                        ) : (
-                            midiOutputs.map(output => {
-                                const isSelected = selectedMidiOutput?.id === output.id;
-                                return (
-                                    <button
-                                        key={output.id}
-                                        onClick={() => {
-                                            setSelectedMidiOutput(output);
-                                            setIsMidiMenuOpen(false);
-                                        }}
-                                        className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${isSelected ? 'bg-cyan-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
-                                        title={output.name}
-                                    >
-                                        <span className="truncate">{output.name}</span>
-                                        {isSelected && <span className="text-[11px]">✓</span>}
-                                    </button>
-                                );
-                            })
+                        <button
+                            onClick={() => setStaffLayoutMode(prev => prev === 'parti_late' ? 'parti_strette' : 'parti_late')}
+                            disabled={staffSystemMode === 'satb_ancient'}
+                            className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${staffSystemMode === 'satb_ancient' ? 'text-gray-500 cursor-not-allowed' : 'text-gray-200 hover:bg-slate-700'}`}
+                            title={staffSystemMode === 'satb_ancient' ? 'Layout non applicabile in SATB (4 righi)' : 'Parti strette'}
+                        >
+                            <span>Parti strette</span>
+                            {staffLayoutMode === 'parti_strette' && staffSystemMode !== 'satb_ancient' && <span className="text-[11px]">✓</span>}
+                        </button>
+
+                        {/* MIDI outputs (keeps existing behavior, nested under the MIDI toggle) */}
+                        {isMidiMenuOpen && (
+                            <div className="mt-1 rounded-md bg-slate-900/40 border border-slate-700">
+                                <div className="px-2 py-1 text-[11px] text-slate-300">Seleziona uscita</div>
+                                <button
+                                    onClick={() => {
+                                        setSelectedMidiOutput(null);
+                                        setIsMidiMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${selectedMidiOutput ? 'text-gray-200 hover:bg-slate-700' : 'bg-cyan-600 text-white'}`}
+                                >
+                                    <span>Audio Interno</span>
+                                    {!selectedMidiOutput && <span className="text-[11px]">✓</span>}
+                                </button>
+                                {midiOutputs.length === 0 ? (
+                                    <div className="px-2 py-1 text-[11px] text-gray-400">Nessun dispositivo MIDI</div>
+                                ) : (
+                                    midiOutputs.map(output => {
+                                        const isSelected = selectedMidiOutput?.id === output.id;
+                                        return (
+                                            <button
+                                                key={output.id}
+                                                onClick={() => {
+                                                    setSelectedMidiOutput(output);
+                                                    setIsMidiMenuOpen(false);
+                                                }}
+                                                className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${isSelected ? 'bg-cyan-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
+                                                title={output.name}
+                                            >
+                                                <span className="truncate">{output.name}</span>
+                                                {isSelected && <span className="text-[11px]">✓</span>}
+                                            </button>
+                                        );
+                                    })
+                                )}
+                            </div>
                         )}
+
+                        <div className="my-2 h-px bg-slate-700" />
+
+                        {/* Formato (radio) */}
+                        <div className="px-2 pb-1 text-[11px] text-slate-300">Formato</div>
+                        <button
+                            onClick={() => setCanvasFormat('page')}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="Page"
+                        >
+                            <span>Page</span>
+                            <span className="text-[11px]">{canvasFormat === 'page' ? '●' : '○'}</span>
+                        </button>
+                        <button
+                            onClick={() => setCanvasFormat('landscape')}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="Landscape"
+                        >
+                            <span>Landscape</span>
+                            <span className="text-[11px]">{canvasFormat === 'landscape' ? '●' : '○'}</span>
+                        </button>
                     </div>
                 )}
             </div>
@@ -6391,7 +6482,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
     return (
         <div className="flex-grow flex flex-col gap-4 min-h-0">
-            <div className="sticky top-12 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
+            <div className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
                 <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
                     {visibleGroupIds.map((id, idx) => (
                         <React.Fragment key={id}>
@@ -6434,29 +6525,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     ))}
 
                     <div className="ml-auto flex items-center gap-2">
-                        <div className="flex items-center gap-1.5 text-xs">
-                            <span className="text-slate-400">Formato:</span>
-                            <div className="relative flex p-0.5 bg-gray-900/50 rounded-md flex-shrink-0">
-                                <div
-                                    className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform"
-                                    style={{ transform: `translateX(${canvasFormat === 'landscape' ? '100%' : '0%'})` }}
-                                ></div>
-                                <button
-                                    onClick={() => setCanvasFormat('page')}
-                                    className={`relative w-20 rounded-sm py-0.5 text-xs font-bold transition-colors ${canvasFormat === 'page' ? 'text-gray-900' : 'text-gray-300'}`}
-                                    title="Larghezza tipo pagina (centrata)"
-                                >
-                                    Page
-                                </button>
-                                <button
-                                    onClick={() => setCanvasFormat('landscape')}
-                                    className={`relative w-24 rounded-sm py-0.5 text-xs font-bold transition-colors ${canvasFormat === 'landscape' ? 'text-gray-900' : 'text-gray-300'}`}
-                                    title="Usa tutta la larghezza disponibile"
-                                >
-                                    Landscape
-                                </button>
-                            </div>
-                        </div>
                         <div
                             className="max-w-xs truncate text-xs text-slate-300"
                             title={currentProjectFilePath ?? 'Senza nome'}
@@ -6778,8 +6846,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                     // Trial positioning: move roman+figures to the right of bass stems and lower.
                                                                       const RB_SHIFT_X = 25;
                                                                       const RB_SHIFT_Y = 30;
-                                                                                                                                        const romanBelowY = bottomStaffBottomLineY + 28 + RB_SHIFT_Y;
-                                                                                                                                        const figuresY0 = bottomStaffBottomLineY + 20 + RB_SHIFT_Y;
+
+                                                                                                                                        // SATB antiche: lower the whole bass-analysis block (roman + figures)
+                                                                                                                                        // with a fixed offset to avoid collisions with bass noteheads/ties.
+                                                                                                                                        // No dynamic collision detection.
+                                                                                                                                        const SATB_BASS_FIGURES_EXTRA_Y_PX = 32;
+                                                                                                                                        const figuresExtraY = (staffSystemMode === 'satb_ancient') ? SATB_BASS_FIGURES_EXTRA_Y_PX : 0;
+
+                                                                                                                                        const romanBelowY = bottomStaffBottomLineY + 28 + RB_SHIFT_Y + figuresExtraY;
+                                                                                                                                        const figuresY0 = bottomStaffBottomLineY + 20 + RB_SHIFT_Y + figuresExtraY;
 
                                                                                                                                         // Chord symbols (sigle) stay above the top staff; shift down only a few pixels.
                                                                                                                                         const SYMBOL_SHIFT_Y = 6;

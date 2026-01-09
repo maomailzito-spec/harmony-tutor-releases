@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie } from 'vexflow';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline } from 'vexflow';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 
@@ -219,6 +219,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const satbTenor = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, TENOR_Y, staffWidth) : null;
     const satbBass = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, SATB_BASS_Y, staffWidth) : null;
 
+    // We draw the end-of-system barline ourselves as a single connecting line,
+    // so suppress per-staff right-end barlines to avoid double-thickness.
+    // (Internal measure barlines are handled separately below.)
+    const stavesForEndBarSuppression: Stave[] = [treble, bass, satbSoprano, satbAlto, satbTenor, satbBass].filter(Boolean) as Stave[];
+    for (const s of stavesForEndBarSuppression) {
+      try {
+        s.setEndBarType(VFBarline.type.NONE);
+      } catch {
+        // Ignore: future VexFlow changes shouldn't crash rendering.
+      }
+    }
+
     if (treble) {
       treble.addClef('treble').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       treble.addKeySignature(keyString);
@@ -266,7 +278,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     }
 
     // Draw barlines using the actual stave metrics so the line starts/ends
-    // exactly on the top/bottom staff lines (avoids pixel drift vs. a separate overlay).
+    // exactly on the top/bottom staff lines.
+    // IMPORTANT: barlines are drawn as a single connecting line for the whole system
+    // (including internal measure barlines), to match the existing engraving style.
     if (barlines.length > 0) {
       const topStave = (staffMode === 'satb_ancient' && satbSoprano)
         ? satbSoprano
@@ -292,11 +306,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const x = bar.xPosition;
         if (bar.style === 'final') {
           // Standard final barline: thin + thick.
-          // Keep both slightly inside the staff end so it doesn't clip.
           drawSingle(x - 6, 1);
           drawSingle(x - 2, 3);
         } else if (bar.style === 'double') {
-          // Simple double barline (section): thin + thin. Spostata di +3px a destra.
+          // Simple double barline (section): thin + thin.
           drawSingle(x + 1, 1);
           drawSingle(x + 5, 1);
         } else {
