@@ -20,7 +20,7 @@ import {
 } from './icons/NoteValueIcons';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice } from '../utils/musicTheory';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
@@ -1085,13 +1085,56 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         });
     }, [preferFlats]);
 
-    const signedKeyDelta = useCallback((fromRoot: string, toRoot: string): number => {
+    const signedKeyDelta = useCallback((fromRoot: string, toRoot: string, notesForHeuristic?: any[]): number => {
         const fromIdx = noteNameToChromaticIndex(fromRoot);
         const toIdx = noteNameToChromaticIndex(toRoot);
         if (fromIdx < 0 || toIdx < 0) return 0;
+
         const up = ((toIdx - fromIdx) % 12 + 12) % 12;
         const down = up - 12;
-        return Math.abs(down) < Math.abs(up) ? down : up;
+
+        // If we don't have notes to judge by, fall back to the smallest motion.
+        const notes = (notesForHeuristic || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi));
+        if (notes.length === 0) {
+            return Math.abs(down) < Math.abs(up) ? down : up;
+        }
+
+        // SATB-ish written MIDI ranges (C4=60). These are intentionally generous.
+        const rangesByVoice: Record<number, { min: number; max: number }> = {
+            1: { min: 60, max: 84 }, // S
+            2: { min: 55, max: 79 }, // A
+            3: { min: 48, max: 72 }, // T
+            4: { min: 40, max: 64 }, // B
+        };
+        const rangeFromClef = (clef: ClefType | string | undefined) => {
+            const c = (clef || 'treble') as any;
+            return c === 'bass' ? { min: 40, max: 64 } : { min: 55, max: 84 };
+        };
+
+        const scoreDelta = (d: number): number => {
+            let score = 0;
+            for (const n of notes) {
+                const v = Number((n as any).voice);
+                const r = Number.isFinite(v) && rangesByVoice[v] ? rangesByVoice[v] : rangeFromClef((n as any).clef);
+                const next = (n as any).midi + d;
+
+                // Penalize register violations heavily.
+                if (next < r.min) {
+                    const dist = r.min - next;
+                    score += 1000 * dist * dist;
+                } else if (next > r.max) {
+                    const dist = next - r.max;
+                    score += 1000 * dist * dist;
+                }
+            }
+            // Prefer smaller overall motion when both are in-range.
+            score += notes.length * (d * d);
+            return score;
+        };
+
+        const scoreUp = scoreDelta(up);
+        const scoreDown = scoreDelta(down);
+        return scoreDown < scoreUp ? down : up;
     }, [noteNameToChromaticIndex]);
 
     const modeInfo = useMemo(() => {
@@ -1122,7 +1165,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     }, [keyChangeMode, keySignatureRoot, makeNoteNameFromPitchAndMidi, modalTonicOverride, mod12Local, noteNameToChromaticIndex, rawNotes]);
 
     const transposeAllNotesToKey = useCallback((fromRoot: string, toRoot: string) => {
-        const delta = signedKeyDelta(fromRoot, toRoot);
+        const delta = signedKeyDelta(fromRoot, toRoot, latestRawNotes.current);
         if (!delta) return;
 
         const targetKeySignature = getKeySignature(toRoot, 'Major');
@@ -2404,6 +2447,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 if (fullIndex == null) return false;
                 const curEv: any = (timeline as any[])[fullIndex];
 
+                const isChordToneOfConfidentCandidate = (note: any, notesHere: any[]): boolean => {
+                    try {
+                        if (!note || note.isRest) return false;
+                        const notes = (notesHere || []) as any[];
+                        if (notes.length < 3) return false;
+                        const cands = identifyChordCandidates(notes as any);
+                        const best = (cands && cands.length) ? cands[0] : null;
+                        const matchType = (best as any)?.matchType;
+                        const chordType = String(best?.type || '');
+                        const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                        const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+                        if (!confident || isSusLike || !best?.root || !best?.type) return false;
+
+                        const rootPc = Number.isFinite((best.root as any).noteIndex)
+                            ? (((best.root as any).noteIndex % 12) + 12) % 12
+                            : (Number.isFinite((best.root as any).midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
+                        const notePc = Number.isFinite(note?.midi)
+                            ? (((note.midi % 12) + 12) % 12)
+                            : (typeof note.noteIndex === 'number' ? (((note.noteIndex % 12) + 12) % 12) : null);
+                        if (rootPc == null || notePc == null) return false;
+
+                        const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                        if (!Array.isArray(formula) || !formula.length) return false;
+                        const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
+                        return formula.includes(intervalFromRoot);
+                    } catch {
+                        return false;
+                    }
+                };
+
                 // Only treat *onsets* as potential resolving dissonances/appoggiature.
                 // If this note was already sounding in the previous event, it's a held tone.
                 try {
@@ -2420,60 +2493,56 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 // from collapsing into I4/7 after adding the next-beat resolution.
                 try {
                     const notesHere = (curEv?.notes || []) as any[];
-                    if (notesHere.length >= 3) {
+                    if (isChordToneOfConfidentCandidate(n, notesHere)) {
+                        // Still allow the special 7-6/7-8 style resolution logic below to run
+                        // for non-dominant major/minor seventh chords when dropping the 7th yields
+                        // a stable triad (handled in the next block).
+                        // Default: chord tones are NOT treated as resolving dissonances.
                         const cands = identifyChordCandidates(notesHere as any);
                         const best = (cands && cands.length) ? cands[0] : null;
-                        const matchType = (best as any)?.matchType;
                         const chordType = String(best?.type || '');
-                        const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
-                        const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
-                        if (confident && !isSusLike && best?.root && best?.type) {
-                            const rootPc = Number.isFinite((best.root as any).noteIndex)
-                                ? (((best.root as any).noteIndex % 12) + 12) % 12
-                                : (Number.isFinite((best.root as any).midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
-                            const notePc = Number.isFinite(n?.midi)
-                                ? (((n.midi % 12) + 12) % 12)
-                                : (typeof n.noteIndex === 'number' ? (((n.noteIndex % 12) + 12) % 12) : null);
-                            if (rootPc != null && notePc != null) {
-                                const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
-                                if (Array.isArray(formula) && formula.length) {
-                                    const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
-                                    if (formula.includes(intervalFromRoot)) {
-                                        // Exception: allow a resolving 7th (common 7-6 retardation/appoggiatura)
-                                        // to be treated as a non-chord tone *even if* the best chord candidate
-                                        // is a 7th chord, when dropping this note yields a triadic interpretation.
-                                        // This is intentionally conservative: do NOT do this for dominant 7ths,
-                                        // to avoid breaking V7/V and cadential dominant behavior.
-                                        try {
-                                            const isSeventh = intervalFromRoot === 10 || intervalFromRoot === 11;
-                                            const isMajor7Like = /Major\s*7/i.test(chordType) || /Minor\s*7/i.test(chordType);
-                                            const isDominant7 = /Dominant\s*7/i.test(chordType) || /7/.test(chordType) && /Dominant/i.test(chordType);
-                                            if (isSeventh && isMajor7Like && !isDominant7) {
-                                                const remaining = notesHere.filter(nn => String(nn?.id ?? '') !== String(n?.id ?? ''));
-                                                if (remaining.length >= 2) {
-                                                    const c2 = identifyChordCandidates(remaining as any);
-                                                    const b2 = (c2 && c2.length) ? c2[0] : null;
-                                                    const mt2 = (b2 as any)?.matchType;
-                                                    const confident2 = mt2 === 'exact' || mt2 === 'no_fifth' || mt2 === 'no_third';
-                                                    const t2 = String(b2?.type || '');
-                                                    const isTriad2 = !/7|9|11|13/i.test(t2) && !/Major\s*7|Minor\s*7|Dominant\s*7/i.test(t2);
-                                                    if (confident2 && isTriad2) {
-                                                        // Do NOT short-circuit; allow the resolution tests below.
-                                                    } else {
-                                                        return false;
-                                                    }
-                                                } else {
-                                                    return false;
-                                                }
-                                            } else {
-                                                return false;
-                                            }
-                                        } catch {
+                        const rootPc = Number.isFinite((best?.root as any)?.noteIndex)
+                            ? (((best.root as any).noteIndex % 12) + 12) % 12
+                            : (Number.isFinite((best?.root as any)?.midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
+                        const notePc = Number.isFinite(n?.midi)
+                            ? (((n.midi % 12) + 12) % 12)
+                            : (typeof n.noteIndex === 'number' ? (((n.noteIndex % 12) + 12) % 12) : null);
+                        if (rootPc != null && notePc != null) {
+                            const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
+                            // Exception: allow a resolving 7th (common 7-6 retardation/appoggiatura)
+                            // to be treated as a non-chord tone *even if* the best chord candidate
+                            // is a 7th chord, when dropping this note yields a triadic interpretation.
+                            // This is intentionally conservative: do NOT do this for dominant 7ths,
+                            // to avoid breaking V7/V and cadential dominant behavior.
+                            try {
+                                const isSeventh = intervalFromRoot === 10 || intervalFromRoot === 11;
+                                const isMajor7Like = /Major\s*7/i.test(chordType) || /Minor\s*7/i.test(chordType);
+                                const isDominant7 = /Dominant\s*7/i.test(chordType) || (/7/.test(chordType) && /Dominant/i.test(chordType));
+                                if (isSeventh && isMajor7Like && !isDominant7) {
+                                    const remaining = notesHere.filter(nn => String(nn?.id ?? '') !== String(n?.id ?? ''));
+                                    if (remaining.length >= 2) {
+                                        const c2 = identifyChordCandidates(remaining as any);
+                                        const b2 = (c2 && c2.length) ? c2[0] : null;
+                                        const mt2 = (b2 as any)?.matchType;
+                                        const confident2 = mt2 === 'exact' || mt2 === 'no_fifth' || mt2 === 'no_third';
+                                        const t2 = String(b2?.type || '');
+                                        const isTriad2 = !/7|9|11|13/i.test(t2) && !/Major\s*7|Minor\s*7|Dominant\s*7/i.test(t2);
+                                        if (confident2 && isTriad2) {
+                                            // Do NOT short-circuit; allow the resolution tests below.
+                                        } else {
                                             return false;
                                         }
+                                    } else {
+                                        return false;
                                     }
+                                } else {
+                                    return false;
                                 }
+                            } catch {
+                                return false;
                             }
+                        } else {
+                            return false;
                         }
                     }
                 } catch { /* ignore */ }
@@ -2498,7 +2567,81 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 if (!n) return true;
                 if (n.isRest) return true;
                 const v = (n?.voice ?? 1) as number;
-                if (v === 4) return false; // keep the bass in the structural snapshot
+                if (v === 4) {
+                    // By default keep the bass in the structural snapshot (it stabilizes labels).
+                    // Exception: when the engine explicitly flags a short weak-beat bass note as an
+                    // ornament (passing/escape/neighbor/etc.), ignore it so it doesn't create a
+                    // spurious harmony label (e.g. V4 from a bass "nota di volta").
+                    const isBassOrnFlag = !!(n.isPassing || n.isEscape || n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
+                    if (!isBassOrnFlag) return false;
+
+                    const dur = (() => {
+                        try {
+                            const base = (DURATION_VALUES as any)[n.duration || 'quarter'] || 1;
+                            let val = base;
+                            if (n.isDotted) val *= 1.5;
+                            if (n.isTriplet) val *= 2 / 3;
+                            if (n.isDuplet) val *= 3 / 2;
+                            return val;
+                        } catch {
+                            return 999;
+                        }
+                    })();
+
+                    const weak = (() => {
+                        try {
+                            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                            const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+                            const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
+                            if (!nearInt(inMeasure)) return false;
+                            const beat0 = Math.round(inMeasure);
+                            const isStrong = beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
+                            return !isStrong;
+                        } catch {
+                            return false;
+                        }
+                    })();
+
+                    if (weak && dur <= 1.01) return true;
+                    return false;
+                }
+
+                // Mis-tag guard (critical for inversions): chord tones can be dissonant vs the bass.
+                // If the engine tagged a chord tone as neighbor/anticipation/appoggiatura, keep it
+                // in the structural snapshot when it belongs to a confident chord candidate.
+                try {
+                    const hasNctFlag = !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
+                    if (hasNctFlag) {
+                        const fullIndex = indexByAbsBeat.get(absBeat);
+                        const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
+                        const notesHere = (curEv?.notes || []) as any[];
+                        if (notesHere.length >= 3) {
+                            const cands = identifyChordCandidates(notesHere as any);
+                            const best = (cands && cands.length) ? cands[0] : null;
+                            const matchType = (best as any)?.matchType;
+                            const chordType = String(best?.type || '');
+                            const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                            const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+                            if (confident && !isSusLike && best?.root && best?.type) {
+                                const rootPc = Number.isFinite((best.root as any).noteIndex)
+                                    ? (((best.root as any).noteIndex % 12) + 12) % 12
+                                    : (Number.isFinite((best.root as any).midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
+                                const notePc = Number.isFinite(n?.midi)
+                                    ? (((n.midi % 12) + 12) % 12)
+                                    : (typeof n.noteIndex === 'number' ? (((n.noteIndex % 12) + 12) % 12) : null);
+                                if (rootPc != null && notePc != null) {
+                                    const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                                    if (Array.isArray(formula) && formula.length) {
+                                        const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
+                                        if (formula.includes(intervalFromRoot)) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
                 if (n.isPassing || n.isEscape) return true;
 
                 // If a note is tagged as appoggiatura but it's actually consonant against the
@@ -2721,11 +2864,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             }
 
             const harmonicNotes = Array.from(lastStructural.values()).filter(Boolean);
+            const fallbackHarmonicNotes = (harmonicNotes.length >= 2)
+                ? harmonicNotes
+                : (fullNotes || []).filter((n: any) => n && !n.isRest);
 
             // If a suspension originates at this event, the held tone is a non-chord tone
             // against the new harmony. Exclude it from the chord-analysis snapshot so we
             // don't accidentally label the verticality as a sus/add sonority (e.g. V7/6).
-            const harmonicNotesNoSuspAtThisBeat = harmonicNotes.filter((n: any) => {
+            const harmonicNotesNoSuspAtThisBeat = fallbackHarmonicNotes.filter((n: any) => {
                 const s = n?.isSuspension;
                 if (!s || typeof s.fromAbsBeat !== 'number') return true;
                 return Math.abs(s.fromAbsBeat - event.absBeat) >= 1e-6;
@@ -2792,8 +2938,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const bassPc = bassNote && Number.isFinite(bassNote.midi) ? (((bassNote.midi % 12) + 12) % 12) : null;
 
             // If the harmonic content doesn't change (only ornaments changed), skip.
-            const harmonicSig = signatureFromNotes(harmonicNotes);
-            if (!harmonicSig || harmonicNotes.length < 2) {
+            const harmonicSig = signatureFromNotes(fallbackHarmonicNotes);
+            if (!harmonicSig || fallbackHarmonicNotes.length < 2) {
                 return;
             }
 
@@ -2886,8 +3032,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             lastCtxBySystem.set(systemIndex, ctxKey);
             lastBassPcBySystem.set(systemIndex, bassPc);
 
+            // L2: figures depend only on the actual vertical intervals above the real bass.
+            // Never derive/overwrite them from roman/symbol/quality.
+            let figures: string[] = computeFiguredBassFromNotes(analysisNotes as any, FIGURED_BASS_UI_OPTIONS).figures;
+
             let roman = '';
-            let figures: string[] = [];
             let symbol = '';
             let isAug6Roman = false;
 
@@ -2899,7 +3048,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor);
                 if (r) {
                     roman = r.roman;
-                    figures = r.figures || [];
                     isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
                 }
                 const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
@@ -2911,7 +3059,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 // Under suspensions/ties, identifyChordCandidates can mis-root and collapse
                 // into misleading labels like I4/7.
                 try {
-                    if (!isAug6Roman && symbol && (symbol.indexOf('/') >= 0)) {
+                    // IMPORTANT: do not clobber diminished leading-tone analyses (e.g. vii°7)
+                    // with a dominant-from-symbol-root label like V7.
+                    const romanIsDiminished = (() => {
+                        const r = String(roman || '');
+                        return r.includes('°') || r.includes('ø');
+                    })();
+
+                    if (!isAug6Roman && symbol && (symbol.indexOf('/') >= 0) && !romanIsDiminished) {
                         const symRaw = String(symbol || '').replace('♯', '#').replace('♭', 'b');
                         const rootMatch = symRaw.match(/^([A-G])([#b]?)/);
                         const rootName = rootMatch ? `${rootMatch[1]}${rootMatch[2] || ''}` : '';
@@ -2933,12 +3088,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: inferredType }, contextTonic, contextIsMinor);
                             if (forced) {
                                 roman = forced;
-                                // For dominant sevenths, keep a stable 7 figure.
-                                if (String(inferredType).startsWith('Dominant')) {
-                                    figures = ['7'];
-                                    if (/b9/i.test(symRaw) || /7b9/i.test(symRaw)) figures.push('♭9');
-                                    if (/#9/i.test(symRaw) || /7#9/i.test(symRaw)) figures.push('♯9');
-                                }
                             }
                         }
                     }
@@ -2963,7 +3112,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             const ok = Array.from(pcs).every(p => triadSet.has(p));
                             if (ok) {
                                 roman = inferred.roman;
-                                figures = ['5'];
                             }
                         }
                     }
@@ -2980,9 +3128,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
                     if (inferred) {
                         roman = inferred.roman;
-                        if (bassPc === inferred.triad.root) figures = ['5'];
-                        else if (bassPc === inferred.triad.third) figures = ['6'];
-                        else if (bassPc === inferred.triad.fifth) figures = ['6', '4'];
                     }
                 }
             } catch { /* ignore */ }
@@ -3003,9 +3148,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
                         if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
                             roman = prevRoman;
-                            if (bassPc === prevTriad.root) figures = ['5'];
-                            else if (bassPc === prevTriad.third) figures = ['6'];
-                            else if (bassPc === prevTriad.fifth) figures = ['6', '4'];
                         }
                     }
                 }
@@ -3026,19 +3168,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         // Allow very sparse sets (2 pcs) to still count as the triad.
                         if (pcsSubset && pcs.size > 0 && pcs.size <= 3) {
                             roman = inferred.roman;
-                            if (bassPc === inferred.triad.root) figures = ['5'];
-                            else if (bassPc === inferred.triad.third) figures = ['6'];
-                            else if (bassPc === inferred.triad.fifth) figures = ['6', '4'];
                         }
                     }
-                }
-            } catch { /* ignore */ }
-
-            // Display policy: for triads in root position, show '5' (I5, vi5, ...)
-            // to match your hold-line notation.
-            try {
-                if (roman && (!figures || figures.length === 0) && !/7/.test(String(roman))) {
-                    figures = ['5'];
                 }
             } catch { /* ignore */ }
 
@@ -3054,9 +3185,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         // Current vertical may be rootless; allow subset of the triad.
                         if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
                             roman = prevRoman;
-                            if (bassPc === triad.root) figures = ['5'];
-                            else if (bassPc === triad.third) figures = ['6'];
-                            else if (bassPc === triad.fifth) figures = ['6', '4'];
                         }
                     }
                 }
@@ -3070,9 +3198,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
                         if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
                             roman = prevRoman;
-                            if (bassPc === prevTriad.root) figures = ['5'];
-                            else if (bassPc === prevTriad.third) figures = ['6'];
-                            else if (bassPc === prevTriad.fifth) figures = ['6', '4'];
                         }
                     }
                 }
@@ -3101,14 +3226,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             try {
                 // Determine if this event is the suspension onset using the explicit
                 // `fromAbsBeat` field (connections are ambiguous with tied notes).
-                const suspNote = (analyzedNotes as any[] || []).find((n: any) => {
+                const suspNotes = (analyzedNotes as any[] || []).filter((n: any) => {
                     const s = n?.isSuspension;
                     if (!s || typeof s.fromAbsBeat !== 'number') return false;
                     return Math.abs(s.fromAbsBeat - event.absBeat) < 1e-6;
                 });
 
-                if (suspNote) {
-                    const s = (suspNote as any).isSuspension;
+                if (suspNotes.length) {
+                    const suspInfos = suspNotes
+                        .map((sn: any) => ({
+                            sn,
+                            s: (sn as any)?.isSuspension,
+                            type: String((sn as any)?.isSuspension?.type ?? ''),
+                        }))
+                        .filter((x: any) => !!x.s);
+                    if (!suspInfos.length) return;
+
+                    // Use one suspension as the Roman-resolution driver. For double suspensions,
+                    // the resolution harmony should be the same.
+                    const sForRoman = (suspInfos.find((x: any) => typeof x?.s?.resolvedById === 'string' && x.s.resolvedById) || suspInfos[0]).s;
+
                     const normalizeSuspNum = (num: number): number | null => {
                         try {
                             if (!Number.isFinite(num)) return null;
@@ -3135,7 +3272,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         }
                         return s;
                     };
-                    const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '9-8']);
+                    const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '7-8', '8-7', '9-8', '2-3']);
+                    const classicSuspInfos = suspInfos.filter((x: any) => CLASSIC_TYPES.has(String(x.type)));
+                    const allSuspensionsClassic = classicSuspInfos.length > 0 && classicSuspInfos.length === suspInfos.length;
+                    const hasNineEight = classicSuspInfos.some((x: any) => String(x.type) === '9-8');
+                    const hasTwoThree = classicSuspInfos.some((x: any) => String(x.type) === '2-3');
                     // Prefer showing the Roman numeral of the *resolution harmony*.
                     // This matches traditional analysis where the dissonance is a
                     // non-chord tone against the new chord, and aligns with how we
@@ -3143,10 +3284,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     let resolvedRoman: string | null = null;
                     let resEvForSusp: any | null = null;
                     try {
-                        if (s && typeof s.resolvedById === 'string' && s.resolvedById) {
+                        if (sForRoman && typeof sForRoman.resolvedById === 'string' && sForRoman.resolvedById) {
                             const resEv = (timeline || [])
                                 .filter((ev: any) => typeof ev?.absBeat === 'number' && ev.absBeat >= event.absBeat - 1e-6)
-                                .find((ev: any) => (ev?.notes || []).some((nn: any) => nn?.id === s.resolvedById));
+                                .find((ev: any) => (ev?.notes || []).some((nn: any) => nn?.id === sForRoman.resolvedById));
                             if (resEv) {
                                 resEvForSusp = resEv;
                                 const ctxRes = ctxAtAbsBeat(resEv.absBeat);
@@ -3206,36 +3347,86 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     //   (e.g. V4/5, V6), and show only the resolution number at the end of the hold-line.
                     // - Non-classic ritardi (e.g. bass retardation): prefer vertical figures computed on the
                     //   full sounding set at the onset.
-                    if (s && CLASSIC_TYPES.has(String(s.type))) {
+                    if (allSuspensionsClassic) {
                         try {
                             // Compute onset figures from the *structural* notes at this event (including the held tone),
                             // otherwise we risk getting a sanitized chord that hides the suspension.
-                            const onsetR = getRomanAnalysis((harmonicNotes || []) as any, contextTonic, contextIsMinor);
-                            const onsetFigures = (onsetR?.figures || figures || []).map(normalizeFigureString);
+                            const onsetFigures = (computeFiguredBassFromNotes((harmonicNotes || []) as any, FIGURED_BASS_UI_OPTIONS).figures || figures || [])
+                                .map(normalizeFigureString);
 
-                            // Ensure the suspension-from figure is present (11 -> 4 etc.)
-                            const suspType = String((s as any).type ?? '');
-                            const fromWanted = (() => {
-                                if (suspType === '4-3') return 4;
-                                if (suspType === '6-5') return 6;
-                                if (suspType === '7-6') return 7;
-                                if (suspType === '9-8') return 9;
-                                return normalizeSuspNum(Number((s as any).fromNum));
-                            })();
+                            // Ensure the suspension-from figure(s) are present (double suspensions => multiple)
+                            const fromWanteds = classicSuspInfos
+                                .map((x: any) => {
+                                    const suspType = String(x.type ?? '');
+                                    if (suspType === '4-3') return 4;
+                                    if (suspType === '6-5') return 6;
+                                    if (suspType === '7-6') return 7;
+                                    if (suspType === '7-8') return 7;
+                                    if (suspType === '8-7') return 8;
+                                    if (suspType === '9-8') return 9;
+                                    if (suspType === '2-3') return 2;
+                                    return normalizeSuspNum(Number((x.s as any)?.fromNum));
+                                })
+                                .filter((n: any) => n != null);
 
                             const out: string[] = [];
                             const push = (x: string) => { if (x && !out.includes(x)) out.push(x); };
                             // Keep any onset figures (e.g., the 5 in a 4-3 over V)
                             onsetFigures.forEach(push);
-                            if (fromWanted != null) push(String(fromWanted));
-                            figures = out;
+                            fromWanteds.forEach((n: any) => push(String(n)));
+
+                            // Special case: double suspension 9-8 + 4-3.
+                            // For didactic alignment, drop the plain '5' (otherwise the onset figures
+                            // can look visually "crossed" relative to the 8/3 resolution stack).
+                            const isDoubleNineFour =
+                                classicSuspInfos.length === 2 &&
+                                hasNineEight &&
+                                classicSuspInfos.some((x: any) => String(x.type) === '4-3');
+                            if (isDoubleNineFour) {
+                                for (let i = out.length - 1; i >= 0; i--) {
+                                    if (out[i] === '5') out.splice(i, 1);
+                                }
+                            }
+                            // Pedagogical convention: if a 9-8 suspension is present, prefer 9 over 2.
+                            // (2 is the simple form of 9, but here we explicitly want 9 because it resolves to 8.)
+                            if (hasNineEight && out.includes('9')) {
+                                for (let i = out.length - 1; i >= 0; i--) {
+                                    if (out[i] === '2') out.splice(i, 1);
+                                }
+                            }
+
+                            // Conversely, for a 2-3 ascending ritardo, prefer 2 over 9.
+                            // (We only prefer 9 in the specific 9-8 suspension convention.)
+                            if (hasTwoThree && out.includes('2')) {
+                                for (let i = out.length - 1; i >= 0; i--) {
+                                    if (out[i] === '9') out.splice(i, 1);
+                                }
+                            }
+                            // In double suspensions, order figures so the higher suspension-from figure
+                            // appears above the lower one (avoids visual crossing like 9__3 / 4__8).
+                            if (classicSuspInfos.length > 1) {
+                                const extractNum = (t: string) => {
+                                    const m = String(t || '').match(/(\d+)/);
+                                    const n = m ? Number(m[1]) : Number.NaN;
+                                    return Number.isFinite(n) ? n : Number.NaN;
+                                };
+                                figures = out.slice().sort((a, b) => {
+                                    const an = extractNum(a);
+                                    const bn = extractNum(b);
+                                    const aa = Number.isFinite(an) ? an : -Infinity;
+                                    const bb = Number.isFinite(bn) ? bn : -Infinity;
+                                    return bb - aa;
+                                });
+                            } else {
+                                figures = out;
+                            }
                         } catch (_) {
                             figures = (figures || []).map(normalizeFigureString);
                         }
                     } else {
                         try {
-                            const fullR = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor);
-                            if (fullR?.figures?.length) figures = fullR.figures;
+                            const fullFigures = computeFiguredBassFromNotes((fullNotes || []) as any, FIGURED_BASS_UI_OPTIONS).figures;
+                            if (fullFigures?.length) figures = fullFigures;
                             figures = (figures || []).map(normalizeFigureString);
                         } catch (_) {
                             figures = (figures || []).map(normalizeFigureString);
@@ -3251,7 +3442,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             // IMPORTANT: keep the Roman numeral at the resolution for non-classic cases
             // (e.g., the 2/4 ritardo we labeled with a resolving chord like ii).
             try {
-                const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '9-8']);
+                const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '7-8', '8-7', '9-8', '2-3']);
                 const resolvingSuspensions = (analyzedNotes || [])
                     .map(n => (n as any)?.isSuspension)
                     .filter((s: any) => s && typeof s.resolvedById === 'string' && s.resolvedById)
@@ -3283,8 +3474,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     if (/maj7/i.test(sym)) return false;
                     if (/m7/i.test(sym)) return false;
                     if (sym.includes('°') || /dim7/i.test(sym)) return false;
+                    // IMPORTANT: do not treat "add9"/"sus" sonorities as dominants.
+                    // Otherwise a plain tonic add9 like C–E–G–D becomes C7 => V/IV.
+                    if (/add/i.test(sym)) return false;
+                    if (/sus/i.test(sym)) return false;
+
                     // Dominant-type spellings in this app: "7", "7b9", "7#9", "11", "13", etc.
-                    return /7|9|11|13/.test(sym);
+                    // - If it explicitly contains '7' (and isn't maj7/m7/dim7), treat as dominant.
+                    // - If it contains 9/11/13 without 'maj' or 'm', treat as dominant shorthand (e.g. "C9").
+                    if (/7/.test(sym)) return true;
+                    if (/(9|11|13)/.test(sym) && !/maj/i.test(sym) && !/\bm\b/i.test(sym) && !/m(?!aj)/i.test(sym)) {
+                        return true;
+                    }
+                    return false;
                 })();
 
                 const looksLikeI47 = (() => {
@@ -3303,8 +3505,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: 'Dominant 7' }, contextTonic, contextIsMinor);
                             if (forced && String(forced).includes('/')) {
                                 roman = forced;
-                                // Keep figures minimal and stable for secondary dominants.
-                                figures = ['7'];
                             }
                         }
                     }
@@ -6889,7 +7089,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                             {showRoman ? (
                                                                                 <g>
                                                                                     {(() => {
-                                                                                        const romanText = lbl.roman || '';
+                                                                                        // Display-only suffix: show vii°7 for diminished seventh chords
+                                                                                        // without changing the underlying roman used for stability heuristics.
+                                                                                        const needsDim7Suffix = (() => {
+                                                                                            try {
+                                                                                                const base = String(lbl.roman || '');
+                                                                                                if (!(base.includes('°') || base.includes('ø'))) return false;
+                                                                                                const figTexts = (lbl.figures || []) as string[];
+                                                                                                const has7th = figTexts.some(t => String(t).includes('7'));
+                                                                                                if (has7th) return true;
+                                                                                                const sym = String((lbl as any).symbol || '');
+                                                                                                return /dim7/i.test(sym) || (sym.includes('°') && /7/.test(sym));
+                                                                                            } catch {
+                                                                                                return false;
+                                                                                            }
+                                                                                        })();
+
+                                                                                        const romanText = (lbl.roman || '') + (needsDim7Suffix ? '7' : '');
                                                                                         const romanW = measureTextWidth(romanText, romanFont);
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanW + 6;
@@ -7022,10 +7238,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                     try {
                                                                                                         const absBeat = (lbl as any).absBeat;
                                                                                                         if (!analyzedNotes || typeof absBeat !== 'number') return null;
-                                                                                                        const suspNote = (analyzedNotes as any[]).find(n => n && n.isSuspension && Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - ((lbl as any).absBeat ?? -999)) < 1e-6);
-                                                                                                        if (!suspNote) return null;
-                                                                                                        const s = (suspNote as any).isSuspension;
-                                                                                                        if (!s || !s.resolvedById) return null;
+                                                                                                        const suspNotes = (analyzedNotes as any[]).filter(
+                                                                                                            n =>
+                                                                                                                n &&
+                                                                                                                n.isSuspension &&
+                                                                                                                Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - ((lbl as any).absBeat ?? -999)) < 1e-6,
+                                                                                                        );
+                                                                                                        if (!suspNotes.length) return null;
+                                                                                                        const suspInfos = suspNotes
+                                                                                                            .map(sn => ({
+                                                                                                                s: (sn as any).isSuspension,
+                                                                                                                sn,
+                                                                                                            }))
+                                                                                                            .filter(({ s }) => s && s.resolvedById);
+                                                                                                        if (!suspInfos.length) return null;
 
                                                                                                         // compute total figures width
                                                                                                         const figTexts = (lbl.figures || []);
@@ -7039,17 +7265,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                         // minimum line end beyond figures
                                                                                                         const minLineEnd = figuresEnd + 12;
 
-                                                                                                        // find resolved note and map to X/Y (prefer precise notePositions mapping)
-                                                                                                        const resolvedNote = (analyzedNotes as any[]).find(n => n && n.id === s.resolvedById);
+                                                                                                        // find resolved notes and map to X/Y (prefer precise notePositions mapping)
                                                                                                         let resX = minLineEnd;
                                                                                                         let resolvedY: number | null = null;
-                                                                                                        if (resolvedNote) {
-                                                                                                            const pos = notePositions.get(resolvedNote.id);
-                                                                                                            if (pos && typeof pos.x === 'number') {
-                                                                                                                resX = Math.max(minLineEnd, pos.x);
-                                                                                                            }
-                                                                                                            if (pos && typeof pos.y === 'number') {
-                                                                                                                resolvedY = pos.y;
+                                                                                                        const resolvedNotesById = new Map<string, any>();
+                                                                                                        for (const { s } of suspInfos) {
+                                                                                                            const rid = String((s as any).resolvedById);
+                                                                                                            const resolvedNote = (analyzedNotes as any[]).find(n => n && n.id === rid);
+                                                                                                            if (resolvedNote) {
+                                                                                                                resolvedNotesById.set(rid, resolvedNote);
+                                                                                                                const pos = notePositions.get(resolvedNote.id);
+                                                                                                                if (pos && typeof pos.x === 'number') {
+                                                                                                                    resX = Math.max(resX, Math.max(minLineEnd, pos.x));
+                                                                                                                }
+                                                                                                                if (resolvedY == null && pos && typeof pos.y === 'number') {
+                                                                                                                    resolvedY = pos.y;
+                                                                                                                }
                                                                                                             }
                                                                                                         }
 
@@ -7075,45 +7306,127 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                                     strokeLinecap="butt"
                                                                                                                 />
                                                                                                                 {(() => {
-                                                                                                                    if (hasSuspFigure || !s) return null;
+                                                                                                                    if (hasSuspFigure) return null;
 
-                                                                                                                    const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '9-8']);
-                                                                                                                    const suspType = (typeof (s as any).type === 'string') ? String((s as any).type) : '';
-                                                                                                                    const text = (() => {
+                                                                                                                    const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '7-8', '8-7', '9-8', '2-3']);
+                                                                                                                    const resolutionTextFor = (susp: any, resolvedNote: any) => {
+                                                                                                                        const suspType = (typeof susp?.type === 'string') ? String(susp.type) : '';
                                                                                                                         // Classic suspensions: show ONLY the resolution number at the end.
-                                                                                                                        // (Start figure is already printed near the Roman numeral.)
                                                                                                                         if (suspType && CLASSIC_TYPES.has(suspType)) {
                                                                                                                             if (suspType === '4-3') return '3';
                                                                                                                             if (suspType === '6-5') return '5';
                                                                                                                             if (suspType === '7-6') return '6';
-                                                                                                                            if (suspType === '9-8') return '8';
+                                                                                                                            if (suspType === '7-8') return '8';
+                                                                                                                            if (suspType === '2-3') return '3';
+                                                                                                                            if (suspType === '8-7') {
+                                                                                                                                try {
+                                                                                                                                    const acc = (resolvedNote as any)?.userAccidental ?? (resolvedNote as any)?.explicitAccidental ?? (resolvedNote as any)?.accidental ?? null;
+                                                                                                                                    const prefix = acc === 'flat' ? '♭' : (acc === 'sharp' ? '♯' : (acc === 'natural' ? '♮' : ''));
+                                                                                                                                    return `${prefix}7`;
+                                                                                                                                } catch {
+                                                                                                                                    return '7';
+                                                                                                                                }
                                                                                                                         }
-                                                                                                                        try {
-                                                                                                                            const n = Math.round(Number((s as any).toNum));
+                                                                                                                        if (suspType === '9-8') return '8';
+                                                                                                                    }
+                                                                                                                    try {
+                                                                                                                            const n = Math.round(Number((susp as any).toNum));
                                                                                                                             if (!Number.isFinite(n) || n <= 0) return null;
                                                                                                                             // Keep 8/9 as-is; reduce larger compound figures to 1..7.
                                                                                                                             if (n === 8 || n === 9) return String(n);
                                                                                                                             if (n > 9) return String((((n - 1) % 7 + 7) % 7) + 1);
                                                                                                                             return String(n);
-                                                                                                                        } catch (_) {
+                                                                                                                    } catch {
                                                                                                                             return null;
+                                                                                                                    }
+                                                                                                                };
+
+                                                                                                                    const partsRaw = suspInfos
+                                                                                                                        .map(({ s }) => {
+                                                                                                                            const resolvedNote = resolvedNotesById.get(String((s as any).resolvedById));
+                                                                                                                            return resolutionTextFor(s, resolvedNote);
+                                                                                                                        })
+                                                                                                                        .filter((t): t is string => typeof t === 'string' && t.length > 0);
+                                                                                                                    if (!partsRaw.length) return null;
+
+                                                                                                                    // In double suspensions, order the stacked resolution numbers by the
+                                                                                                                    // corresponding suspension-from figure (9 above 4 => 8 above 3), so the
+                                                                                                                    // visual pairing is unambiguous.
+                                                                                                                    const getFromWanted = (susp: any): number | null => {
+                                                                                                                        try {
+                                                                                                                            const suspType = String(susp?.type ?? '');
+                                                                                                                            if (suspType === '4-3') return 4;
+                                                                                                                            if (suspType === '6-5') return 6;
+                                                                                                                            if (suspType === '7-6') return 7;
+                                                                                                                                if (suspType === '7-8') return 7;
+                                                                                                                            if (suspType === '8-7') return 8;
+                                                                                                                            if (suspType === '9-8') return 9;
+                                                                                                                            const n = Math.round(Number((susp as any)?.fromNum));
+                                                                                                                            if (!Number.isFinite(n) || n <= 0) return null;
+                                                                                                                            return (((n - 1) % 7 + 7) % 7) + 1;
+                                                                                                                    } catch {
+                                                                                                                            return null;
+                                                                                                                    }
+                                                                                                                };
+
+                                                                                                                    const pairs = suspInfos
+                                                                                                                        .map(({ s }) => {
+                                                                                                                            const resolvedNote = resolvedNotesById.get(String((s as any).resolvedById));
+                                                                                                                            return { from: getFromWanted(s), text: resolutionTextFor(s, resolvedNote) };
+                                                                                                                        })
+                                                                                                                        .filter((p: any) => typeof p.text === 'string' && p.text.length > 0);
+
+                                                                                                                    // Deduplicate by text, but keep the highest from if duplicated.
+                                                                                                                    const byText = new Map<string, { from: number; text: string }>();
+                                                                                                                    for (const p of pairs) {
+                                                                                                                            const f = (p.from == null || !Number.isFinite(p.from)) ? -Infinity : Number(p.from);
+                                                                                                                            const existing = byText.get(p.text);
+                                                                                                                            if (!existing || f > existing.from) byText.set(p.text, { from: f, text: p.text });
                                                                                                                         }
-                                                                                                                    })();
 
-                                                                                                                    if (text == null || text === '') return null;
+                                                                                                                    const parts = Array.from(byText.values())
+                                                                                                                        .sort((a, b) => b.from - a.from)
+                                                                                                                        .map((x) => x.text);
 
-                                                                                                                    return (
-                                                                                                                    <text
-                                                                                                                        x={resX + 20}
-                                                                                                                        y={numberY}
-                                                                                                                        textAnchor="middle"
-                                                                                                                        fontSize={12}
-                                                                                                                        fill="black"
-                                                                                                                        fontWeight={700}
-                                                                                                                    >
-                                                                                                                        {text}
-                                                                                                                    </text>
-                                                                                                                    );
+																					if (!parts.length) return null;
+
+                                                                                    // Double suspensions: stack the resolution numbers vertically (8 above 3).
+                                                                                    // Align to the same figure baseline as the onset stack (9 above 4) to avoid
+                                                                                    // the impression of "crossing".
+                                                                                    if (parts.length > 1) {
+                                                                                            const baseY = figuresY0;
+                                                                                            return (
+                                                                                                <>
+                                                                                                    {parts.map((t, i) => (
+                                                                                                        <text
+                                                                                                            key={`res-${i}-${t}`}
+                                                                                                            x={resX + 16}
+                                                                                                            y={baseY + (i * 12)}
+                                                                                                            textAnchor="start"
+                                                                                                            fontSize={12}
+                                                                                                            fill="black"
+                                                                                                            fontWeight={700}
+                                                                                                        >
+                                                                                                            {t}
+                                                                                                        </text>
+                                                                                                    ))}
+                                                                                                </>
+                                                                                            );
+                                                                                    }
+
+                                                                                    // Single suspension: keep existing placement (below the figures).
+                                                                                    return (
+                                                                                        <text
+                                                                                            x={resX + 16}
+                                                                                            y={numberY}
+                                                                                        textAnchor="start"
+                                                                                        fontSize={12}
+                                                                                        fill="black"
+                                                                                        fontWeight={700}
+                                                                                    >
+                                                                                        {parts[0]}
+                                                                                    </text>
+                                                                                    );
                                                                                                                 })()}
                                                                                                             </>
                                                                                                         );

@@ -12,6 +12,6 @@
     { "id": "s", "pitch": "B", "octave": 3, "position": -1, "midi": 58, "noteIndex": 10, "clef": "bass", "explicitAccidental": "flat", "accidental": "flat", "userAccidental": "flat", "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 1 }
   ],
   "expects": [
-    { "absBeat": 0, "roman": "V", "figuresInclude": ["♭9"] }
+    { "absBeat": 0, "roman": "vii°", "figuresInclude": ["♭♭7"] }
   ]
 }

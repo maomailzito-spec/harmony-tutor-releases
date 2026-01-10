@@ -257,8 +257,286 @@ export function getKeySignature(rootNote: string, quality: 'Major' | 'Minor'): K
 const NOTE_PITCH_TO_POSITION: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
 
 const getNotePosition = (pitch: string, octave: number): number => {
-    return NOTE_PITCH_TO_POSITION[pitch] + (octave - 4) * 7;
+    const letter = (pitch || '').charAt(0).toUpperCase();
+    return NOTE_PITCH_TO_POSITION[letter] + (octave - 4) * 7;
 };
+
+// =========================================================
+// Livello 1 — Struttura intervallare (oggettiva)
+// =========================================================
+
+export type BassInterval = {
+    /** Diatonic interval number above the bass (1.., compound allowed). */
+    number: number;
+    /** Chromatic semitone distance above the bass (>= 0). */
+    semitones: number;
+    /** Alteration relative to major/perfect form of this diatonic interval (e.g. -1 => ♭). */
+    alteration: number;
+};
+
+export type IntervalSet = {
+    bass: StaffNote;
+    intervals: BassInterval[];
+};
+
+const expectedSemitonesForMajorPerfect = (diatonicNumber: number): number => {
+    // Major/perfect simple intervals: 1,2,3,4,5,6,7
+    const simple = (((diatonicNumber - 1) % 7) + 7) % 7 + 1;
+    const octaves = Math.floor((diatonicNumber - 1) / 7);
+    const simpleSemis: Record<number, number> = { 1: 0, 2: 2, 3: 4, 4: 5, 5: 7, 6: 9, 7: 11 };
+    return (simpleSemis[simple] ?? 0) + (12 * octaves);
+};
+
+const alterationToGlyph = (alt: number): string => {
+    if (!Number.isFinite(alt) || alt === 0) return '';
+    if (alt > 0) return '♯'.repeat(Math.min(4, Math.round(alt)));
+    return '♭'.repeat(Math.min(4, Math.round(-alt)));
+};
+
+/**
+ * Livello 1: given simultaneous notes, return the real bass and the set of intervals above it.
+ * NOTE: this function does not use key/tonality/roman/symbol.
+ */
+export function collectIntervalsAboveBass(notes: StaffNote[]): IntervalSet | null {
+    try {
+        const sounding = (notes || []).filter(n => n && !n.isRest && Number.isFinite((n as any).midi));
+        if (sounding.length < 2) return null;
+
+        const bass = [...sounding].sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0))[0];
+        if (!bass || !Number.isFinite((bass as any).midi)) return null;
+        if (typeof bass.pitch !== 'string' || typeof bass.octave !== 'number') return null;
+
+        const bassMidi = bass.midi as number;
+        const bassPos = getNotePosition(bass.pitch, bass.octave);
+
+        const out: BassInterval[] = [];
+        const seen = new Set<string>();
+
+        for (const n of sounding) {
+            if (!n) continue;
+            if (n === bass) continue;
+            const nId = (n as any).id;
+            const bassId = (bass as any).id;
+            if (nId != null && bassId != null && nId === bassId) continue;
+            if (typeof n.pitch !== 'string' || typeof n.octave !== 'number') continue;
+            if (!Number.isFinite((n as any).midi)) continue;
+
+            const pos = getNotePosition(n.pitch, n.octave);
+            let diatonicNumber = (pos - bassPos) + 1;
+            while (diatonicNumber <= 0) diatonicNumber += 7;
+
+            const semis = Math.max(0, (n.midi as number) - bassMidi);
+            const expected = expectedSemitonesForMajorPerfect(diatonicNumber);
+
+            // For figured-bass accidentals, follow the written accidental policy:
+            // if a note has no explicit accidental, treat it as unaltered (implied by key signature).
+            // This keeps L2 independent from functional interpretation while matching notation conventions.
+            const anyN = n as any;
+            const hasExplicitAccidental = anyN.explicitAccidental != null;
+            const alteration = hasExplicitAccidental ? (semis - expected) : 0;
+
+            const key = `${diatonicNumber}:${alteration}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            out.push({ number: diatonicNumber, semitones: semis, alteration });
+        }
+
+        return { bass, intervals: out };
+    } catch {
+        return null;
+    }
+}
+
+// =========================================================
+// Livello 2 — Cifratura del basso (convenzione)
+// =========================================================
+
+export type FigureResult = {
+    figures: string[];
+};
+
+export type FiguredBassOptions = {
+    /** Standard convention: omit 5/3 when present. Default: true. */
+    omitFiveThree?: boolean;
+    /** App display convention: show root-position triads as '5'. Default: false. */
+    showRootPositionTriadAs5?: boolean;
+    /** If true, allow showing 9/11/13 as extensions when present. Default: false (prefer conventional 2/4/6). */
+    showExtensions?: boolean;
+
+    /** If true, show a root-position added 9th as '9' (and omit the implied 3/5). Default: false. */
+    showAdd9As9?: boolean;
+};
+
+// Single source of truth for how the app *displays* figured bass (L2) in the UI.
+// This does not affect the L2 purity (still derived only from L1 intervals), only which
+// conventional figures are shown/omitted.
+export const FIGURED_BASS_UI_OPTIONS: Readonly<FiguredBassOptions> = Object.freeze({
+    omitFiveThree: true,
+    showRootPositionTriadAs5: true,
+    // Keep academic convention by default (avoid 11/13 just because of spacing),
+    // but do show an actual added 9th as '9' for pedagogy.
+    showExtensions: false,
+    showAdd9As9: true,
+});
+
+const normalizeIntervalNumberForFigures = (n: number): number => {
+    if (!Number.isFinite(n)) return n;
+    let num = Math.round(n);
+    while (num > 13) num -= 7;
+    while (num <= 0) num += 7;
+
+    // Common simplifications: 10th -> 3rd, 12th -> 5th.
+    if (num === 10) return 3;
+    if (num === 12) return 5;
+    return num;
+};
+
+/**
+ * Livello 2: compute figured-bass from a set of bass-intervals.
+ * PURE: does not depend on key, roman numerals, or chord symbols.
+ */
+export function computeFiguredBassFromIntervals(intervals: BassInterval[], options: FiguredBassOptions = {}): FigureResult {
+    const omitFiveThree = options.omitFiveThree !== false;
+    const showRootPositionTriadAs5 = options.showRootPositionTriadAs5 === true;
+    const showExtensions = options.showExtensions === true;
+    const showAdd9As9 = options.showAdd9As9 === true;
+
+    try {
+        if (!intervals || intervals.length === 0) return { figures: [] };
+
+        const reduceToSimpleFigureNumber = (n: number): number => {
+            if (!Number.isFinite(n)) return n;
+            let num = Math.round(n);
+            while (num > 7) num -= 7;
+            while (num <= 0) num += 7;
+            return num;
+        };
+
+        // Two maps:
+        // - altBySimple: conventional figured bass (2/4/6 instead of 9/11/13)
+        // - altByRaw: keep 9/11/13 availability if the caller explicitly wants extensions
+        const altBySimple = new Map<number, number>();
+        const altByRaw = new Map<number, number>();
+
+        for (const it of intervals) {
+            const raw = normalizeIntervalNumberForFigures(it.number);
+            if (!Number.isFinite(raw)) continue;
+            if (raw === 1 || raw === 8) continue;
+            if (!altByRaw.has(raw)) altByRaw.set(raw, Math.round(it.alteration));
+
+            const simple = reduceToSimpleFigureNumber(raw);
+            if (simple === 1) continue;
+            if (!altBySimple.has(simple)) altBySimple.set(simple, Math.round(it.alteration));
+        }
+
+        const altByNum = altBySimple;
+
+        const has = (n: number) => altByNum.has(n);
+        const alt = (n: number) => altByNum.get(n) ?? 0;
+        const isAltered = (n: number) => (alt(n) ?? 0) !== 0;
+
+        // Determine the canonical “inversion shorthand” from the raw interval content.
+        // This depends only on which interval numbers are present.
+        let baseNums: number[] = [];
+
+        // Seventh-chord inversions are identified by their *figured-bass interval sets* above the bass,
+        // not by the presence of a 7th above the bass (e.g. Cmaj7/E is 6/5 with 3,5,6 above E).
+        if (has(2) && has(4) && has(6)) {
+            baseNums = [4, 2];
+        } else if (has(3) && has(4) && has(6)) {
+            baseNums = [4, 3];
+        } else if (has(3) && has(5) && has(6)) {
+            baseNums = [6, 5];
+        } else if (has(7)) {
+            baseNums = [7];
+        } else if (has(6) && has(4)) {
+            baseNums = [6, 4];
+        } else if (has(6)) {
+            baseNums = [6];
+        } else {
+            // Triads / dyads / other sonorities
+            if (omitFiveThree && has(3) && has(5) && !isAltered(3) && !isAltered(5)) {
+                // Only treat this as a plain 5/3 triad if the sonority contains *only* 3 and 5.
+                // If there are extra tones (e.g. added 9th -> simple '2'), do not force a lone '5'.
+                const keys = Array.from(altByNum.keys()).filter(n => n !== 1 && n !== 8);
+                const isPureTriad = keys.length === 2 && keys.includes(3) && keys.includes(5);
+                if (isPureTriad) {
+                    baseNums = showRootPositionTriadAs5 ? [5] : [];
+                } else {
+                    baseNums = keys.sort((a, b) => a - b);
+                }
+            } else {
+                // Keep the interval content as-is (useful for dyads/sus/altered triads/extensions).
+                baseNums = Array.from(altByNum.keys()).filter(n => n !== 1 && n !== 8).sort((a, b) => a - b);
+            }
+        }
+
+        // Special-case (still pure L2): if this verticality is a plain root-position triad
+        // with an added 9th, display it as '9' rather than reducing to '2' or forcing '5'.
+        // This is a display convention; it does not depend on key/roman/symbol.
+        try {
+            if (showAdd9As9) {
+                const hasRaw9 = altByRaw.has(9);
+                const looksLikeAdd9 = hasRaw9 && has(2) && has(3) && has(5) && !has(4) && !has(6) && !has(7);
+                if (looksLikeAdd9) {
+                    baseNums = [9];
+                }
+            }
+        } catch { /* ignore */ }
+
+        // Optional: show extensions (9/11/13) only when explicitly requested.
+        // Default is conventional figured bass (2/4/6) even if the voicing creates compound intervals.
+        if (showExtensions) {
+            const hasRaw = (n: number) => altByRaw.has(n);
+            const extensions = [13, 11, 9].filter(hasRaw);
+            for (const n of extensions) if (!baseNums.includes(n)) baseNums.push(n);
+
+            // Prefer the compound figure when explicitly showing extensions.
+            // Avoid showing both 2 and 9 (or 4 and 11, 6 and 13).
+            if (hasRaw(9)) baseNums = baseNums.filter(n => n !== 2);
+            if (hasRaw(11)) baseNums = baseNums.filter(n => n !== 4);
+            if (hasRaw(13)) baseNums = baseNums.filter(n => n !== 6);
+
+            // If this is fundamentally a root-position triad (3+5) with added extensions,
+            // do not also print the implied 3 and 5.
+            // Example: C–E–G–D should show '9', not '9 5 3'.
+            try {
+                const hasAnyExtension = hasRaw(9) || hasRaw(11) || hasRaw(13);
+                const hasTriadCore = baseNums.includes(3) && baseNums.includes(5) && !isAltered(3) && !isAltered(5);
+                const hasInversionShorthand = baseNums.some(n => n === 6 || n === 4 || n === 2 || n === 7);
+                if (hasAnyExtension && hasTriadCore && !hasInversionShorthand) {
+                    baseNums = baseNums.filter(n => n !== 3 && n !== 5);
+                }
+            } catch { /* ignore */ }
+
+            // Simplification policy (minimal): if 9 or 13 are present, omit 7.
+            if ((hasRaw(9) || hasRaw(13)) && baseNums.includes(7)) baseNums = baseNums.filter(n => n !== 7);
+        }
+
+        // Apply accidentals to shown figures; if 3/5 are altered, show them even if omitted.
+        const shown = new Set<number>(baseNums);
+        for (const n of [3, 5]) {
+            if (isAltered(n)) shown.add(n);
+        }
+
+        const figures = Array.from(shown)
+            .filter(n => n !== 1 && n !== 8)
+            .sort((a, b) => a - b)
+            .map(n => `${alterationToGlyph(alt(n))}${n}`);
+
+        return { figures: normalizeFiguresVertical(figures) };
+    } catch {
+        return { figures: [] };
+    }
+}
+
+/** Convenience: Livello 1 -> Livello 2 */
+export function computeFiguredBassFromNotes(notes: StaffNote[], options: FiguredBassOptions = {}): FigureResult {
+    const l1 = collectIntervalsAboveBass(notes);
+    if (!l1) return { figures: [] };
+    return computeFiguredBassFromIntervals(l1.intervals, options);
+}
 
 /** Restituisce le proprietà di una nota in base alla sua posizione diatonica */
 export function getNotePropertiesFromDiatonicPosition(
@@ -290,8 +568,12 @@ export function getNotePropertiesFromDiatonicPosition(
         noteIndex = (noteIndex + 1) % 12;
         finalMidi = cBaseMidi + noteIndex;
     } else if (keySignature.type === 'flat' && flatNotes.includes(pitch)) {
-        noteIndex = (noteIndex - 1 + 12) % 12;
-        finalMidi = cBaseMidi + noteIndex;
+        // Key signatures with 6♭/7♭ (Gb/Cb) include C♭. When deriving MIDI for a diatonic "C",
+        // subtracting one semitone wraps 0→11; we must also shift the octave down.
+        const nextIndex = (noteIndex - 1 + 12) % 12;
+        const needsOctaveCorrection = pitch === 'C' && noteIndex === 0 && nextIndex === 11 && keySignature.count >= 6;
+        noteIndex = nextIndex;
+        finalMidi = (needsOctaveCorrection ? (cBaseMidi - 12) : cBaseMidi) + noteIndex;
     } else {
         finalMidi = cBaseMidi + noteIndex;
     }
@@ -546,55 +828,65 @@ const getInterval = (note1: StaffNote, note2: StaffNote): number => {
 // Pitch-class extraction must be consistent across the engine.
 // In some saved/edited states `noteIndex` can be stale, while `midi` remains reliable.
 const pitchClassOf = (n: StaffNote): number => {
+    const anyN: any = n as any;
+
+    const midiSrc = (n && Number.isFinite(anyN?.midi)) ? (anyN.midi as number) : null;
+    const noteIndexSrc = Number.isFinite(anyN?.noteIndex) ? (anyN.noteIndex as number) : null;
+
+    const pitch = typeof anyN?.pitch === 'string' ? String(anyN.pitch).toUpperCase() : '';
+    const acc: any = (anyN?.userAccidental ?? anyN?.explicitAccidental ?? anyN?.accidental ?? null);
+
+    // Derive from spelling when possible.
+    let spelledPc: number | null = null;
     try {
-        const anyN: any = n as any;
-        const pitch = typeof anyN?.pitch === 'string' ? String(anyN.pitch).toUpperCase() : '';
-        if (/^[A-G]$/.test(pitch)) {
-            const acc: any = (anyN?.userAccidental ?? anyN?.explicitAccidental ?? anyN?.accidental ?? null);
-            if (acc) {
-                const suffix =
-                    acc === 'sharp' || acc === '#' ? '#' :
-                    acc === 'flat' || acc === 'b' ? 'b' :
-                    acc === 'double-sharp' || acc === '##' ? '##' :
-                    acc === 'double-flat' || acc === 'bb' ? 'bb' :
-                    acc === 'natural' || acc === 'n' ? '' :
-                    '';
-                const name = `${pitch}${suffix}`;
-                const idx = (noteNameToIndex as any)[name];
-                if (Number.isFinite(idx)) return mod12(idx);
-            }
+        // Accept both letter-only pitches ("C") and pitches that already include accidentals ("C#", "DB").
+        if (/^[A-G]([#B]{1,2})?$/.test(pitch)) {
+            const nameDirect = pitch.replace('B', 'b'); // normalize accidental casing
+            const idxDirect = (noteNameToIndex as any)[nameDirect];
+            if (Number.isFinite(idxDirect)) spelledPc = mod12(idxDirect);
+        } else if (/^[A-G]$/.test(pitch)) {
+            const suffix =
+                acc === 'sharp' || acc === '#' ? '#' :
+                acc === 'flat' || acc === 'b' ? 'b' :
+                acc === 'double-sharp' || acc === '##' ? '##' :
+                acc === 'double-flat' || acc === 'bb' ? 'bb' :
+                acc === 'natural' || acc === 'n' ? '' :
+                '';
+            const name = `${pitch}${suffix}`;
+            const idx = (noteNameToIndex as any)[name];
+            if (Number.isFinite(idx)) spelledPc = mod12(idx);
         }
     } catch { /* ignore */ }
 
-    const src = (n && Number.isFinite((n as any).midi)) ? (n as any).midi : (n as any).noteIndex;
-    return mod12(src);
+    // Prefer MIDI when available (it already encodes key-signature-implied spellings like Bb shown as 'B'),
+    // but detect obviously stale MIDI values after edits. If the spelled pitch-class differs by >= 3 semitones,
+    // trust the spelling.
+    if (midiSrc != null) {
+        const midiPc = mod12(midiSrc);
+        if (spelledPc != null) {
+            const d = Math.abs(midiPc - spelledPc);
+            const circ = Math.min(d, 12 - d);
+            if (circ >= 3) return spelledPc;
+        }
+        return midiPc;
+    }
+
+    if (spelledPc != null) return spelledPc;
+    if (noteIndexSrc != null) return mod12(noteIndexSrc);
+    return 0;
 };
 
 // Important: order matters. Fr+/Ger+ are supersets of It+; we must test them first
 // or they'll be swallowed by the more general It+ matcher.
+// If both Ger+ and Fr+ pitch-classes are present (common with added tones), prefer Ger+.
 const CHROMATIC_CHORD_DEFINITIONS: { [key: string]: { symbol: string, matcher: (chord: StaffNote[], keyInfo: { tonicIndex: number, isMinor: boolean }) => boolean } } = {
-    FRENCH_AUGMENTED_SIXTH: {
-        symbol: 'Fr+',
-        matcher: (chord, keyInfo) => {
-            // Fr+ contains ♭6–1–2–♯4.
-            const pcs = new Set(chord.map(pitchClassOf));
-            // Strict: extra pitch-classes mean it's not a canonical Fr+ sonority.
-            if (pcs.size !== 4) return false;
-
-            const b6 = (keyInfo.tonicIndex + 8) % 12;  // ♭6
-            const one = keyInfo.tonicIndex % 12;       // 1
-            const two = (keyInfo.tonicIndex + 2) % 12; // 2
-            const sharp4 = (keyInfo.tonicIndex + 6) % 12; // ♯4
-            return pcs.has(b6) && pcs.has(one) && pcs.has(two) && pcs.has(sharp4);
-        }
-    },
     GERMAN_AUGMENTED_SIXTH: {
         symbol: 'Ger+',
         matcher: (chord, keyInfo) => {
             // Ger+ contains ♭6–1–♭3–♯4 (e.g. in C: Ab–C–Eb–F#).
             const pcs = new Set(chord.map(pitchClassOf));
-            // Strict: extra pitch-classes mean it's not a canonical Ger+ sonority.
-            if (pcs.size !== 4) return false;
+            // Allow extra pitch-classes (passing tones/doublings) without losing the core sonority.
+            if (pcs.size < 4) return false;
 
             const b6 = (keyInfo.tonicIndex + 8) % 12;  // ♭6
             const one = keyInfo.tonicIndex % 12;       // 1
@@ -603,13 +895,33 @@ const CHROMATIC_CHORD_DEFINITIONS: { [key: string]: { symbol: string, matcher: (
             return pcs.has(b6) && pcs.has(one) && pcs.has(flat3) && pcs.has(sharp4);
         }
     },
+    FRENCH_AUGMENTED_SIXTH: {
+        symbol: 'Fr+',
+        matcher: (chord, keyInfo) => {
+            // Fr+ contains ♭6–1–2–♯4.
+            const pcs = new Set(chord.map(pitchClassOf));
+            // Allow extra pitch-classes (passing tones/doublings) without losing the core sonority.
+            if (pcs.size < 4) return false;
+
+            const b6 = (keyInfo.tonicIndex + 8) % 12;  // ♭6
+            const one = keyInfo.tonicIndex % 12;       // 1
+            const two = (keyInfo.tonicIndex + 2) % 12; // 2
+            const sharp4 = (keyInfo.tonicIndex + 6) % 12; // ♯4
+
+            // If ♭3 is present too, prefer labeling as Ger+.
+            const flat3 = (keyInfo.tonicIndex + 3) % 12;
+            if (pcs.has(flat3)) return false;
+
+            return pcs.has(b6) && pcs.has(one) && pcs.has(two) && pcs.has(sharp4);
+        }
+    },
     ITALIAN_AUGMENTED_SIXTH: {
         symbol: 'It+',
         matcher: (chord, keyInfo) => {
             // It+ contains ♭6–1–♯4.
             const pcs = new Set(chord.map(pitchClassOf));
-            // Strict: extra pitch-classes mean it's not a canonical It+ sonority.
-            if (pcs.size !== 3) return false;
+            // Allow extra pitch-classes (passing tones/doublings) without losing the core sonority.
+            if (pcs.size < 3) return false;
 
             const b6 = (keyInfo.tonicIndex + 8) % 12;  // ♭6
             const one = keyInfo.tonicIndex % 12;       // 1
@@ -772,6 +1084,16 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
         }
 
         score += (CHORD_CHECK_ORDER.length - candidate.priority);
+
+        // Guardrail: do not classify a sonority as a dominant-type chord unless it actually
+        // contains the dominant 7th (minor 7th above the root). This prevents false V/x
+        // labels caused by added 9ths/13ths without a tritone-bearing core.
+        try {
+            if (typeof candidate.type === 'string' && candidate.type.startsWith('Dominant')) {
+                const hasDom7th = candidate.intervals?.has(10);
+                if (!hasDom7th) score -= 1000;
+            }
+        } catch { /* ignore */ }
         
         // Prefer candidates where the detected root matches the actual bass note
         // (helps identify inversions/sus chords). However, avoid this bias for symmetric
@@ -916,7 +1238,7 @@ export function getChordSymbol(
     // Display symbols should represent the underlying harmony, not surface dissonances.
     // Filter common non-chord tones + suspension/ritardo notes that would otherwise
     // distort the detected chord into misleading sus/slash readings.
-    const filteredChord = (chord || []).filter(n => {
+    let filteredChord = (chord || []).filter(n => {
         if (!n || n.isRest) return false;
         const anyN = n as any;
         if (anyN.isSuspension) return false;
@@ -929,7 +1251,11 @@ export function getChordSymbol(
         );
     });
 
-    if (filteredChord.length < 2) return null;
+    if (filteredChord.length < 2) {
+        const fallback = (chord || []).filter(n => n && !n.isRest);
+        if (fallback.length < 2) return null;
+        filteredChord = fallback;
+    }
 
     const keyUsesFlats = keySignature.type === 'flat' && keySignature.count > 0;
     const tonicIndex = (contextTonic && noteNameToIndex[contextTonic] !== undefined)
@@ -989,8 +1315,46 @@ export function getChordSymbol(
         }
     } catch { /* ignore */ }
 
-    const chordInfo = identifyChord(filteredChord);
-    if (!chordInfo) return null;
+    const fullChord = (chord || []).filter(n => n && !n.isRest);
+    const chordInfo = identifyChord(filteredChord) || identifyChord(fullChord);
+
+    // If the sonority contains a dominant core (M3 + m7) but multiple altered tensions
+    // prevent a strict chord-type match, still show a dominant-7 symbol and append tensions.
+    if (!chordInfo) {
+        const allPcs = new Set<number>(fullChord.map(pitchClassOf).map(mod12));
+        const pcsArr = [...allPcs];
+
+        const findDominantRoot = (): number | null => {
+            for (const r of pcsArr) {
+                if (allPcs.has(mod12(r + 4)) && allPcs.has(mod12(r + 10))) return r;
+            }
+            return null;
+        };
+
+        const rootPc = findDominantRoot();
+        if (rootPc == null) return null;
+
+        const rootName = getNoteName(rootPc);
+        let analysisText = `${rootName}${CHORD_TYPE_TO_SYMBOL[BuiltInChords.Dominant7] ?? '7'}`;
+
+        // Append tensions from the full pitch-class set.
+        const ints = new Set<number>([...allPcs].map(pc => mod12(pc - rootPc)));
+        const addIfPresent = (interval: number, token: string) => {
+            if (ints.has(interval) && !analysisText.includes(token)) analysisText += token;
+        };
+        addIfPresent(1, '♭9');
+        addIfPresent(3, '♯9');
+        addIfPresent(5, '11');
+        addIfPresent(6, '♯11');
+        addIfPresent(8, '♭13');
+        addIfPresent(9, '13');
+
+        const bassNote = [...fullChord].filter(n => Number.isFinite((n as any).midi)).sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0))[0] || fullChord[0];
+        const bassPc = bassNote ? pitchClassOf(bassNote) : rootPc;
+        if (bassPc !== rootPc) analysisText += `/${getNoteName(bassPc)}`;
+
+        return analysisText;
+    }
 
     const { root: chordRoot, type: quality } = chordInfo;
     if (!chordRoot || !quality) return null;
@@ -1000,6 +1364,32 @@ export function getChordSymbol(
     const symbol = CHORD_TYPE_TO_SYMBOL[quality] ?? '';
 
     let analysisText = `${rootName}${symbol}`;
+
+    // If the detected chord is a 7th/dominant-like sonority, append altered tensions
+    // based on the actual pitch-class content (without changing the detected chord type).
+    try {
+        const q = String(quality || '');
+        const isSeventhLike = q.includes('7') || q.startsWith('Dominant');
+        if (isSeventhLike) {
+            const allPcs = new Set<number>((chord || []).filter(n => n && !n.isRest).map(pitchClassOf).map(mod12));
+            const ints = new Set<number>([...allPcs].map(pc => mod12(pc - chordRootPc)));
+            const already = analysisText;
+
+            const addIfPresent = (interval: number, token: string) => {
+                if (ints.has(interval) && !already.includes(token)) {
+                    analysisText += token;
+                }
+            };
+
+            // semitone-intervals above root -> conventional tension labels
+            addIfPresent(1, '♭9');
+            addIfPresent(3, '♯9');
+            addIfPresent(5, '11');
+            addIfPresent(6, '♯11');
+            addIfPresent(8, '♭13');
+            addIfPresent(9, '13');
+        }
+    } catch { /* ignore */ }
 
     const bassNote = [...filteredChord].filter(n => Number.isFinite(n.midi)).sort((a, b) => a.midi - b.midi)[0] || filteredChord[0];
     const bassPc = bassNote ? pitchClassOf(bassNote) : chordRootPc;
@@ -1170,7 +1560,8 @@ function calculateRomanNumeral(
     }
 
     let roman = romanNumerals[degreeIndex];
-    if (quality === BuiltInChords.Major && roman.toLowerCase() === roman) roman = roman.toUpperCase();
+    const effectiveQuality = (quality === BuiltInChords.Add9) ? BuiltInChords.Major : quality;
+    if (effectiveQuality === BuiltInChords.Major && roman.toLowerCase() === roman) roman = roman.toUpperCase();
     else if (quality === BuiltInChords.Minor && roman.toUpperCase() === roman) roman = roman.toLowerCase();
     else if (quality === BuiltInChords.Diminished && !roman.includes('°')) roman += '°';
     else if (quality === BuiltInChords.Augmented && !roman.includes('+')) roman += '+';
@@ -1202,14 +1593,51 @@ export function getRomanAnalysis(
 
     if (filteredChord.length < 2) return null;
 
+    // Livello 2 (cifratura) is computed *only* from the vertical intervals,
+    // independent of any roman/symbol/function interpretation.
+    const figuresL2 = computeFiguredBassFromNotes(filteredChord, FIGURED_BASS_UI_OPTIONS).figures;
+
     const keyTonicIndex = noteNameToIndex[keySignatureRoot];
     if (keyTonicIndex === undefined) return null;
     const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode };
 
+    // L3 policy (accademico): a 6/4 over the dominant bass is labeled as tonic 6/4 (I4/6 or i4/6),
+    // not as V4/6. Functional/cadential handling stays in the rule layer, not in the label.
+    try {
+        const hasFigureValue = (v: number) => (figuresL2 || []).some(f => extractFigureValue(f) === v);
+        const has64 = hasFigureValue(6) && hasFigureValue(4);
+        if (has64) {
+            const bass = filteredChord
+                .filter(n => n && !n.isRest && Number.isFinite((n as any).midi))
+                .slice()
+                .sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0))[0];
+            if (bass) {
+                const bassPc = mod12(pitchClassOf(bass));
+                const tonicPc = mod12(keyTonicIndex);
+                const dominantBassPc = mod12(keyTonicIndex + 7);
+
+                if (bassPc === dominantBassPc) {
+                    const pcs = new Set<number>([...new Set((filteredChord || []).map(pitchClassOf).map(mod12))]);
+
+                    // Decide case by the *actual* third present (Picardy third supported).
+                    const tonicMajThird = mod12(tonicPc + 4);
+                    const tonicMinThird = mod12(tonicPc + 3);
+                    const hasTonic = pcs.has(tonicPc);
+                    const hasThird = pcs.has(tonicMajThird) || pcs.has(tonicMinThird);
+
+                    if (hasTonic && hasThird) {
+                        const roman = pcs.has(tonicMajThird) ? 'I' : 'i';
+                        return { roman, figures: figuresL2 };
+                    }
+                }
+            }
+        }
+    } catch { /* ignore */ }
+
     // When we only have a dyad (2 pitch classes), chord-ID can prefer sus/pedal readings
     // that map to the wrong roman numeral (e.g. C–G -> V). If the dyad cleanly fits the
     // diatonic triad implied by the bass, prefer that roman for stability.
-    const inferDiatonicRomanFromBassDyad = (): { roman: string; figures: string[] } | null => {
+    const inferDiatonicRomanFromBassDyad = (): { roman: string } | null => {
         try {
             const pcs = [...new Set((filteredChord || []).map(pitchClassOf).map(mod12))];
             if (pcs.length > 2) return null;
@@ -1253,27 +1681,22 @@ export function getRomanAnalysis(
             ]);
             if (!pcs.every(p => triadSet.has(p))) return null;
 
-            // With a dyad, we can't infer a true inversion beyond the bass degree.
-            // Prefer a stable root-position figure when bass is the triad root.
-            let figures: string[] = [];
-            if (bassPc === rootPc) figures = ['5'];
-            else if (bassPc === mod12(rootPc + thirdInt)) figures = ['6'];
-            else if (bassPc === mod12(rootPc + fifthInt)) figures = ['6', '4'];
-
-            return { roman, figures };
+            return { roman };
         } catch {
             return null;
         }
     };
 
     for (const definition of Object.values(CHROMATIC_CHORD_DEFINITIONS)) {
-        if (definition.matcher(filteredChord, keyInfo)) return { roman: definition.symbol, figures: [] };
+        if (definition.matcher(filteredChord, keyInfo)) return { roman: definition.symbol, figures: figuresL2 };
     }
 
-    // Rootless V7(♭9) heuristic (common in tonal writing):
-    // In minor, the set {#7, 2, 4, ♭6} equals the leading-tone fully-diminished 7th,
-    // which is often used as a dominant 7♭9 without its root.
-    // Example in Dm: {C#, E, G, Bb} => A7♭9 (no A), often with E in bass.
+    // Leading-tone fully diminished 7th in minor:
+    // In minor, the set {#7, 2, 4, ♭6} equals the leading-tone fully-diminished 7th.
+    // It can be interpreted as a rootless V7(♭9), but for Roman numerals we prefer
+    // labeling it directly as vii° (user-facing figured-bass doesn't encode the
+    // missing dominant root).
+    // Example in Am: {G#, B, D, F} => vii°7 (also equals E7♭9 without E).
     try {
         if (isMinorMode) {
             const valid = filteredChord;
@@ -1289,35 +1712,8 @@ export function getRomanAnalysis(
                     mod12(leadingPc + 9),
                 ]);
                 const subset = pcs.every(pc => dim7Set.has(pc));
-                if (subset) {
-                    const bass = valid.slice().sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0))[0];
-                    const bassPc = bass ? pitchClassOf(bass) : dominantPc;
-                    const intervalFromRoot = mod12(bassPc - dominantPc);
-
-                    let figures: string[] = [];
-                    if (intervalFromRoot === 0) figures = ['7'];
-                    else if (intervalFromRoot === 3 || intervalFromRoot === 4) figures = ['6', '5'];
-                    else if (intervalFromRoot === 6 || intervalFromRoot === 7) figures = ['4', '3'];
-                    else if (intervalFromRoot >= 9 && intervalFromRoot <= 11) figures = ['4', '2'];
-
-                    figures.push('♭9');
-                    figures = normalizeFiguresVertical(figures);
-
-                    const baseMidi = Number.isFinite((bass as any)?.midi)
-                        ? ((bass as any).midi as number)
-                        : (Number.isFinite((valid[0] as any)?.midi) ? ((valid[0] as any).midi as number) : 60);
-                    const basePc = mod12(baseMidi);
-                    const midiForDominant = baseMidi + mod12(dominantPc - basePc);
-                    const virtualRoot = {
-                        ...(bass || valid[0]),
-                        midi: midiForDominant,
-                        noteIndex: dominantPc,
-                    } as StaffNote;
-                    const roman = calculateRomanNumeral(
-                        { root: virtualRoot, type: BuiltInChords.Dominant7b9 },
-                        keyInfo
-                    );
-                    return { roman, figures };
+                if (subset && pcs.includes(leadingPc)) {
+                    return { roman: 'vii°', figures: figuresL2 };
                 }
             }
         }
@@ -1347,54 +1743,11 @@ export function getRomanAnalysis(
     try {
         if (typeof baseRomanSymbol === 'string' && baseRomanSymbol && !baseRomanSymbol.includes('/')) {
             const inferred = inferDiatonicRomanFromBassDyad();
-            if (inferred) {
-                return { roman: inferred.roman, figures: normalizeFiguresVertical(inferred.figures) };
-            }
+            if (inferred) return { roman: inferred.roman, figures: figuresL2 };
         }
     } catch { /* ignore */ }
 
-    let figures: string[] = [];
-    if (chordInfo.type === BuiltInChords.Sus4 || chordInfo.type === BuiltInChords.Sus2) {
-        // For sus chords, prefer the actual vertical interval content (e.g. V7sus4 should
-        // show 4/5/7 rather than losing 7ths by hardcoding 5-4 / 5-2).
-        figures = getVerticalFiguresFromNotes(filteredChord);
-        if (!figures || figures.length === 0) {
-            figures = chordInfo.type === BuiltInChords.Sus4 ? ['5', '4'] : ['5', '2'];
-        }
-    }
-    else if (chordInfo.type === BuiltInChords.Add9) {
-        const triadFigures = getFiguredBass(filteredChord, { ...chordInfo, type: BuiltInChords.Major });
-        figures = [...triadFigures, '9'];
-    } else {
-        // If we used the dominant rescue above, compute figures from the base chord so
-        // inversion isn't lost due to over-filtering.
-        const useBaseForFigures = typeof chordInfo.type === 'string' && chordInfo.type.startsWith('Dominant');
-        figures = getFiguredBass(useBaseForFigures ? baseChord : filteredChord, chordInfo);
-    }
-
-    if (chordInfo.type === BuiltInChords.Dominant7b9) {
-        const idx = findFigureIndexByValue(figures, 9);
-        if (idx > -1) figures[idx] = '♭9';
-        else figures.push('♭9');
-    }
-    if (chordInfo.type === BuiltInChords.Dominant7sharp9) {
-        const idx = findFigureIndexByValue(figures, 9);
-        if (idx > -1) figures[idx] = '♯9';
-        else figures.push('♯9');
-    }
-    if (chordInfo.type === BuiltInChords.Dominant7sharp11) {
-        const idx = findFigureIndexByValue(figures, 11);
-        if (idx > -1) figures[idx] = '♯11';
-        else figures.push('♯11');
-    }
-    if (chordInfo.type === BuiltInChords.Dominant7b13) {
-        const idx = findFigureIndexByValue(figures, 13);
-        if (idx > -1) figures[idx] = '♭13';
-        else figures.push('♭13');
-    }
-
-    figures = normalizeFiguresVertical(figures);
-    return { roman: baseRomanSymbol, figures };
+    return { roman: baseRomanSymbol, figures: figuresL2 };
 }
 
 export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignature): StaffNote[] {
@@ -1952,11 +2305,68 @@ export function applyHarmonyRules(
             return undefined as ChordEvent | undefined;
         };
 
+        // For some off-beat notes (e.g. beat=2.5), the scan-point `chordEvents` can be sparse
+        // depending on how the timeline is quantized. When we need to know whether the *other*
+        // voices are stable across prev/cur/next, compute that from note spans directly.
+        const absBeatOf = (n: StaffNote) => ((n.measureIndex ?? 0) * beatsPerMeasure) + ((n.beat ?? 1) - 1);
+        const noteSpan = (n: StaffNote) => {
+            const s = absBeatOf(n);
+            return { start: s, end: s + Math.max(getDuration(n), 1e-6) };
+        };
+
+        const otherVoicesSignatureAtAbsBeat = (absBeat: number, excludeVoice: Voice): string => {
+            try {
+                const pcs: number[] = [];
+                for (const vv of [1, 2, 3, 4] as Voice[]) {
+                    if (vv === excludeVoice) continue;
+                    const line = notesByVoice[vv] || [];
+                    const active = line.find(nn => {
+                        if (!nn || (nn as any).isRest) return false;
+                        if (!Number.isFinite((nn as any).midi)) return false;
+                        const sp = noteSpan(nn);
+                        return sp.start <= absBeat + 1e-6 && sp.end > absBeat + 1e-6;
+                    });
+                    if (!active) continue;
+                    pcs.push(mod12(active.midi ?? 0));
+                }
+                const uniq = [...new Set(pcs)].sort((a, b) => a - b);
+                return uniq.join('-');
+            } catch {
+                return '';
+            }
+        };
+
         const semis = (a: StaffNote, b: StaffNote) => Math.abs((a.midi ?? 0) - (b.midi ?? 0));
         const sgn = (a: StaffNote, b: StaffNote) => Math.sign((b.midi ?? 0) - (a.midi ?? 0));
         const isWeakBeat = (note: StaffNote, ev?: ChordEvent) => {
             const beat = note.beat ?? ev?.beat ?? 1;
             return !strongBeats(beat);
+        };
+
+        const otherVoicesPcSignature = (ev: ChordEvent, excludeVoice: Voice): string => {
+            try {
+                const pcs: number[] = [];
+                if (ev.byVoice && typeof (ev.byVoice as any).entries === 'function') {
+                    for (const [voiceNum, n] of ev.byVoice.entries()) {
+                        if ((voiceNum as any) === excludeVoice) continue;
+                        if (!n || (n as any).isRest) continue;
+                        if (!Number.isFinite((n as any).midi)) continue;
+                        pcs.push(mod12(n.midi ?? 0));
+                    }
+                } else if (ev.notes) {
+                    for (const n of ev.notes) {
+                        const vn = (n.voice ?? 1) as Voice;
+                        if (vn === excludeVoice) continue;
+                        if (!n || (n as any).isRest) continue;
+                        if (!Number.isFinite((n as any).midi)) continue;
+                        pcs.push(mod12(n.midi ?? 0));
+                    }
+                }
+                const uniq = [...new Set(pcs)].sort((a, b) => a - b);
+                return uniq.join('-');
+            } catch {
+                return '';
+            }
         };
 
         // IMPORTANT: `isNoteInChord` (membership in the event's full vertical pitch-class set)
@@ -2008,6 +2418,31 @@ export function applyHarmonyRules(
         const isConsonantToHarmony = (note: StaffNote, ev: ChordEvent, _voice: Voice) => {
             try {
                 const notePc = pitchClassOf(note);
+
+                // If the *full* sonority at this event is a confident, non-sus chord and this note
+                // is a chord member (including chordal 7ths), treat it as consonant.
+                // This avoids misclassifying essential tones (e.g. the 7th of V7) as appoggiature
+                // just because the other voices happen to form a triad shell.
+                try {
+                    const fullAtEvent = otherNotesAtEvent(ev);
+                    const uniqueFullPcs = [...new Set((fullAtEvent || [])
+                        .filter(n => n && !(n as any).isRest)
+                        .filter(n => Number.isFinite((n as any).midi))
+                        .map(n => mod12(pitchClassOf(n)))
+                    )];
+
+                    const chordInfoFull = identifyChord(fullAtEvent);
+                    if (chordInfoFull && chordInfoFull.root && chordInfoFull.type && !String(chordInfoFull.type).includes('Sus')) {
+                        const formulaFull = (CHORD_FORMULAS as any)?.[chordInfoFull.type] as number[] | undefined;
+                        const rootPcFull = mod12((chordInfoFull.root as any).noteIndex ?? mod12((chordInfoFull.root as any).midi ?? 0));
+                        const intervalFromRootFull = mod12(mod12(notePc) - rootPcFull);
+                        const confident = uniqueFullPcs.length >= 3;
+                        if (confident && formulaFull && Array.isArray(formulaFull) && formulaFull.includes(intervalFromRootFull)) {
+                            return true;
+                        }
+                    }
+                } catch { /* ignore */ }
+
                 const others = otherNotesAtEvent(ev, note.id);
 
                 const uniqueOtherPcs = [...new Set((others || []).map(n => pitchClassOf(n)))];
@@ -2122,23 +2557,47 @@ export function applyHarmonyRules(
 
                 const curEv = findEventForNote(cur, v);
                 const nextEv = findEventForNote(next, v);
-                if (!curEv || !nextEv) continue;
+                if (!curEv) continue;
 
                 const prevEv = prev ? findEventForNote(prev, v) : null;
 
                 const prevCon = (prev && prevEv) ? isConsonantToHarmony(prev, prevEv, v) : true;
                 const curCon = isConsonantToHarmony(cur, curEv, v);
-                const nextCon = isConsonantToHarmony(next, nextEv, v);
+                // If `nextEv` is missing (sparse scanpoints), treat it as consonant-by-default.
+                // For neighbor detection we additionally require returnsSame + stable other voices.
+                const nextCon = nextEv ? isConsonantToHarmony(next, nextEv, v) : true;
 
                 // Neighbor tone: consonant -> dissonant step -> consonant, returning to same pitch.
-                if (prev && prevEv && !curCon && prevCon && nextCon) {
+                if (prev && prevEv && prevCon && nextCon) {
                     const returnsSame = (prev.midi ?? 0) === (next.midi ?? 0);
                     const stepIn = semis(prev, cur) <= 2 && semis(cur, next) <= 2;
                     const oppositeDir = sgn(prev, cur) !== 0 && sgn(prev, cur) === -sgn(cur, next);
                     // Require the ornament itself to be short; otherwise long chord tones (often unique
                     // in sparse textures) can be misread as neighbors.
                     const shortNeighbor = getDuration(cur) <= 0.5;
-                    if (returnsSame && stepIn && oppositeDir && shortNeighbor) {
+
+                    // In some suspension contexts a short return-to-same note can be a melodic neighbor
+                    // even if it is technically consonant in the instantaneous verticality.
+                    // Only allow that override when the *other voices* are stable across prev/cur/next.
+                    const stableOtherVoices = (() => {
+                        try {
+                            const aPrev = absBeatOf(prev);
+                            const aCur = absBeatOf(cur);
+                            const aNext = absBeatOf(next);
+                            const sPrev = otherVoicesSignatureAtAbsBeat(aPrev, v);
+                            const sCur = otherVoicesSignatureAtAbsBeat(aCur, v);
+                            const sNext = otherVoicesSignatureAtAbsBeat(aNext, v);
+                            if (!sPrev || !sCur || !sNext) return false;
+                            return sPrev === sCur && sCur === sNext;
+                        } catch {
+                            return false;
+                        }
+                    })();
+
+                    const allowConsonantNeighbor = shortNeighbor && isWeakBeat(cur, curEv) && stableOtherVoices;
+                    const treatAsNeighbor = (!curCon) || allowConsonantNeighbor;
+
+                    if (treatAsNeighbor && returnsSame && stepIn && oppositeDir && shortNeighbor) {
                         (cur as any).isNeighbor = true;
                         // Compact visual marker handled by renderer overlay (no dashed connections).
                         (cur as any).ornamentMark = 'v';
@@ -2171,6 +2630,7 @@ export function applyHarmonyRules(
                 // Heuristic: weak beat, not consonant now, but consonant in the *next* event,
                 // and the next note in the voice repeats the same pitch.
                 if (prev && prevEv && !curCon) {
+                    if (!nextEv) continue;
                     const repeats = (next.midi ?? 0) === (cur.midi ?? 0);
                     const short = getDuration(cur) <= 0.5;
 
@@ -2333,6 +2793,79 @@ export function applyHarmonyRules(
                 }
             }
         });
+
+        // Bass-only (very conservative): detect short interpolations in the bass line that should
+        // not drive harmony labels (e.g., "nota di volta" / passing bass with elisione).
+        // Criteria:
+        // - upper voices (1-3) pitch-class set stays stable across prev/cur/next events
+        // - bass middle note is short and on a weak beat
+        // - bass moves stepwise into the middle note and then either stepwise (passing) or leaps
+        //   out in opposite direction (escape-like)
+        try {
+            const upperSig = (ev: ChordEvent | null): string => {
+                try {
+                    if (!ev) return '';
+                    const ups = otherNotesAtEvent(ev).filter(n => (n.voice ?? 1) !== 4);
+                    const pcs = [...new Set((ups || [])
+                        .filter(n => n && !(n as any).isRest)
+                        .filter(n => Number.isFinite((n as any).midi))
+                        .map(n => mod12(pitchClassOf(n)))
+                    )].sort((a, b) => a - b);
+                    return pcs.join('-');
+                } catch {
+                    return '';
+                }
+            };
+
+            const v: Voice = 4;
+            const line = notesByVoice[v] || [];
+            for (let j = 1; j < line.length - 1; j++) {
+                const prev = line[j - 1];
+                const cur = line[j];
+                const next = line[j + 1];
+                if (!prev || !cur || !next) continue;
+                if ((cur as any).isSuspension || (next as any).isSuspension) continue;
+                if ((cur as any).isPassing || (cur as any).isNeighbor || (cur as any).isEscape || (cur as any).isAnticipation || (cur as any).isAppoggiatura) continue;
+
+                const prevEv = findEventForNote(prev, v);
+                const curEv = findEventForNote(cur, v);
+                const nextEv = findEventForNote(next, v);
+                if (!prevEv || !curEv || !nextEv) continue;
+
+                const sPrev = upperSig(prevEv);
+                const sCur = upperSig(curEv);
+                const sNext = upperSig(nextEv);
+                if (!sPrev || !sCur || !sNext) continue;
+                if (!(sPrev === sCur && sCur === sNext)) continue;
+
+                const short = getDuration(cur) <= 1.01;
+                if (!short) continue;
+                if (!isWeakBeat(cur, curEv)) continue;
+
+                const inSemis = semis(prev, cur);
+                const outSemis = semis(cur, next);
+                const stepIn = inSemis > 0 && inSemis <= 2;
+                if (!stepIn) continue;
+
+                const oppositeDir = sgn(prev, cur) !== 0 && sgn(prev, cur) === -sgn(cur, next);
+                const stepOut = outSemis > 0 && outSemis <= 2;
+                const leapOut = outSemis > 2;
+
+                if (stepOut) {
+                    (cur as any).isPassing = true;
+                    // No analysis-panel entry; this is a label-stability aid.
+                    continue;
+                }
+
+                if (leapOut && oppositeDir) {
+                    (cur as any).isEscape = true;
+                    // No analysis-panel entry; this is a label-stability aid.
+                    continue;
+                }
+            }
+        } catch {
+            // ignore
+        }
     }
 
     // -----------------------
@@ -2364,6 +2897,78 @@ export function applyHarmonyRules(
                 return pcs.join('-');
             } catch {
                 return '';
+            }
+        };
+
+        const isOrnamentalLike = (n: StaffNote | null | undefined): boolean => {
+            try {
+                if (!n) return false;
+                const anyN: any = n as any;
+                return !!(anyN.isPassing || anyN.isNeighbor || anyN.isAnticipation || anyN.isAppoggiatura || anyN.isEscape);
+            } catch {
+                return false;
+            }
+        };
+
+        const hasHarmonyChangeUnderHeldNote = (a: ChordEvent, b: ChordEvent, suspendedVoice: Voice): boolean => {
+            try {
+                const otherVoices = ([1, 2, 3, 4] as Voice[]).filter(v => v !== suspendedVoice);
+
+                const getEvNote = (ev: ChordEvent, v: Voice): StaffNote | null => {
+                    try {
+                        const n = ev.byVoice?.get(v);
+                        if (n && !(n as any).isRest && Number.isFinite((n as any).midi) && !isOrnamentalLike(n)) return n;
+                        const fallback = (ev.notes || []).find(nn => (nn.voice ?? 1) === v);
+                        if (fallback && !(fallback as any).isRest && Number.isFinite((fallback as any).midi) && !isOrnamentalLike(fallback)) return fallback;
+                        return null;
+                    } catch {
+                        return null;
+                    }
+                };
+
+                const otherNotesA = otherVoices.map(v => getEvNote(a, v)).filter(Boolean) as StaffNote[];
+                const otherNotesB = otherVoices.map(v => getEvNote(b, v)).filter(Boolean) as StaffNote[];
+
+                const sigOtherA = pcSignature(otherNotesA);
+                const sigOtherB = pcSignature(otherNotesB);
+                if (sigOtherA && sigOtherB && sigOtherA === sigOtherB) return false;
+
+                // If we have a sufficiently complete texture, avoid treating a single upper-voice
+                // change as a harmony change when it is likely ornamental (short duration).
+                // This prevents passing/appoggiatura notes in the preparation bar from creating
+                // false suspensions at the following beat.
+                if (otherNotesA.length >= 3 && otherNotesB.length >= 3) {
+                    const bassPcA = mod12(otherNotesA.slice().sort((x, y) => (x.midi ?? 0) - (y.midi ?? 0))[0].midi ?? 0);
+                    const bassPcB = mod12(otherNotesB.slice().sort((x, y) => (x.midi ?? 0) - (y.midi ?? 0))[0].midi ?? 0);
+                    const bassStable = bassPcA === bassPcB;
+
+                    if (bassStable) {
+                        const changedVoices: Voice[] = [];
+                        for (const ov of otherVoices) {
+                            const na = getEvNote(a, ov);
+                            const nb = getEvNote(b, ov);
+                            if (!na || !nb) continue;
+                            if (mod12(na.midi ?? 0) !== mod12(nb.midi ?? 0)) changedVoices.push(ov);
+                        }
+
+                        if (changedVoices.length === 1) {
+                            const ov = changedVoices[0];
+                            const na = getEvNote(a, ov);
+                            const nb = getEvNote(b, ov);
+                            if (na && nb) {
+                                const durA = (getNoteEnd(na) - getNoteStart(na));
+                                const durB = (getNoteEnd(nb) - getNoteStart(nb));
+                                const likelyOrnamental = Math.min(durA, durB) <= ORNAMENT_DUR + 1e-6;
+                                if (likelyOrnamental) return false;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: signatures differ (or sparse/unknown) => treat as a change.
+                return true;
+            } catch {
+                return true;
             }
         };
 
@@ -2416,9 +3021,7 @@ export function applyHarmonyRules(
                 // Important: a true suspension happens when the harmony changes *under* a held note.
                 // Checking only note *attacks* at b.absBeat misses cases where the change happens
                 // via note endings / ties, so compare pitch-class signatures across events.
-                const sigOtherA = pcSignature((a.notes || []).filter(n => (n.voice ?? 1) !== v));
-                const sigOtherB = pcSignature((b.notes || []).filter(n => (n.voice ?? 1) !== v));
-                if (sigOtherA && sigOtherB && sigOtherA === sigOtherB) {
+                if (!hasHarmonyChangeUnderHeldNote(a, b, v)) {
                     debugLog('[ANALYSIS] detectSuspensions skip-no-harmony-change-under-held-note', { voice: v, bAbs: b.absBeat, sId: S.id });
                     continue;
                 }
@@ -2486,6 +3089,13 @@ export function applyHarmonyRules(
                     ? false
                     : (intervalMod12 === 8 || intervalMod12 === 9);
 
+                // Some ritardi resolve to the *fundamental* of the next harmony while the bass is inverted/pedalled.
+                // In these cases, the held note may look consonant against the bass (e.g. 5-4 or 3-2 above the bass),
+                // but is still a true accented dissonance as a chordal 7th against the harmony root at B.
+                let chordalSeventhHeldAtB = false;
+                let chordMemberAtB = false;
+                let seventhRootPcAtB: number | null = null;
+
                 // Guard: don't treat chord members as suspensions.
                 // Example: in C major, C held into D7 is a chordal 7th (not a suspension).
                 // We must be careful: if we identify harmony from *all* sounding notes, true
@@ -2506,7 +3116,11 @@ export function applyHarmonyRules(
                     const sPc = mod12((typeof (S as any).noteIndex === 'number') ? (S as any).noteIndex : mod12(S.midi ?? 0));
 
                     // (1) Full-verticality check for real 7th chords (dominant/maj7/min7/ø7/°7).
-                    const chordInfoFull = identifyChord(notesAtBAll);
+                    // IMPORTANT: when the note is held into B (tie-like), exclude it from the
+                    // inferred sonority so it cannot "explain itself" as a chord member.
+                    const heldIntoB = (getNoteStart(S) < b.absBeat - 1e-6) || (getNoteEnd(prep) > b.absBeat - 1e-6);
+                    const fullForGuard = heldIntoB ? notesAtBAll.filter(n => n && n.id !== S.id) : notesAtBAll;
+                    const chordInfoFull = identifyChord(fullForGuard);
                     if (chordInfoFull && chordInfoFull.root && chordInfoFull.type && !String(chordInfoFull.type).includes('Sus')) {
                         const t = String(chordInfoFull.type);
                         const looksSeventh = t.includes('7') || t.includes('9') || t.includes('11') || t.includes('13') || t.includes('dim7') || t.includes('ø7');
@@ -2515,14 +3129,10 @@ export function applyHarmonyRules(
                             const rootPcFull = mod12((chordInfoFull.root as any).noteIndex ?? mod12((chordInfoFull.root as any).midi ?? 0));
                             const intervalFromRootFull = mod12(sPc - rootPcFull);
                             const isChordMember = !!(formulaFull && Array.isArray(formulaFull) && formulaFull.includes(intervalFromRootFull));
-                            // Only relevant when the note is held/tied into B (otherwise it's just a normal chord tone).
-                            // Use the same continuity logic as the suspension detector (notes can be split across events
-                            // but still behave as a tie via prepEnd overlap).
-                            const heldIntoB = (getNoteStart(S) < b.absBeat - 1e-6) || (getNoteEnd(prep) > b.absBeat - 1e-6);
                             const isSeventhLike = intervalFromRootFull === 9 || intervalFromRootFull === 10 || intervalFromRootFull === 11;
                             if (heldIntoB && isChordMember && isSeventhLike) {
-                                debugLog('[ANALYSIS] detectSuspensions skip-chordal-7th-at-B', { voice: v, sId: S.id, bAbs: b.absBeat, chordType: chordInfoFull?.type, intervalFromRootFull });
-                                continue;
+                                chordalSeventhHeldAtB = true;
+                                seventhRootPcAtB = rootPcFull;
                             }
                         }
                     }
@@ -2540,8 +3150,7 @@ export function applyHarmonyRules(
                     const rootPc = chordInfoB ? mod12((chordInfoB.root as any).noteIndex ?? mod12((chordInfoB.root as any).midi ?? 0)) : -1;
                     const intervalFromRoot = mod12(sPc - rootPc);
                     if (formula && Array.isArray(formula) && formula.includes(intervalFromRoot)) {
-                        debugLog('[ANALYSIS] detectSuspensions skip-chord-member-at-B', { voice: v, sId: S.id, bAbs: b.absBeat, chordType: chordInfoB?.type, intervalFromRoot });
-                        continue;
+                        chordMemberAtB = true;
                     }
                 } catch (_) { /* ignore */ }
 
@@ -2566,14 +3175,80 @@ export function applyHarmonyRules(
                     const cand = line[k];
                     const candStart = getNoteStart(cand);
                     if (candStart - b.absBeat > MAX_RESOLUTION_WINDOW) break;
+
                     // allow ornamentals (short notes) between S and a true resolution
                     const candDur = getNoteEnd(cand) - candStart;
-                    const candConsonant = isNoteInChord(cand, chordEvents.find(e=>Math.abs(e.absBeat - candStart) < 1e-6) || null);
+                    const candConsonant = isNoteInChord(cand, chordEvents.find(e => Math.abs(e.absBeat - candStart) < 1e-6) || null);
+
                     if (candConsonant) {
-                        resolved = cand;
-                        resolvedIdx = k;
-                        break;
+                        // Guard: a short consonant note can appear as a neighbor (nota di volta)
+                        // before the true resolution (e.g. F held, then a short G, then back to F,
+                        // then resolves). Do not treat that consonant neighbor as the resolution.
+                        try {
+                            if (candDur <= ORNAMENT_DUR + 1e-6) {
+                                const nextCand = line[k + 1];
+                                if (nextCand && Number.isFinite((nextCand as any).midi) && Number.isFinite((S as any).midi)) {
+                                    const nextStart = getNoteStart(nextCand);
+                                    const candEnd = getNoteEnd(cand);
+                                    const returnsImmediately = nextStart <= candEnd + 1e-6 && (nextCand.midi ?? 0) === (S.midi ?? 0);
+                                    if (returnsImmediately) {
+                                        continue;
+                                    }
+                                }
+                            }
+                        } catch {
+                            // ignore
+                        }
+
+                        // IMPORTANT: a consonant intermediate note (e.g. nota di volta) can appear
+                        // before the true suspension resolution. Only accept a candidate resolution
+                        // if it also resolves stepwise in an allowed direction.
+                        const sMidiAtDown = S.midi ?? 0;
+                        const rMidi = cand.midi ?? 0;
+                        const delta = rMidi - sMidiAtDown;
+                        const isStep = Math.abs(delta) <= 2;
+                        const isLeading = (sMidiAtDown % 12) === ctxLeadingPc;
+                        const allowedDesc = delta < 0 && isStep;
+
+                        // Ascending ritardi are rarer and we must be careful with false positives.
+                        // Allow stepwise upward resolution when:
+                        // - the held tone is the leading tone (classic 7-8 over a dominant bass), OR
+                        // - the suspension forms a clear 7-8 or 2-3 pattern *against the bass at B*.
+                        const allowedAsc = (() => {
+                            try {
+                                if (!(delta > 0 && isStep)) return false;
+                                if (isLeading) return true;
+                                if (!bassAtB) return false;
+
+                                const bassPos = getDiatonicPosition(bassAtB);
+                                const sPos = getDiatonicPosition(S);
+                                const rPos = getDiatonicPosition(cand);
+                                const fromNum = (sPos - bassPos) + 1;
+                                const toNum = (rPos - bassPos) + 1;
+                                const fn = ((fromNum - 1) % 7) + 1;
+                                const tn = ((toNum - 1) % 7) + 1;
+
+                                // 7->8 (tn wraps to 1 when toNum is an octave)
+                                if (fn === 7 && tn === 1 && (toNum - fromNum) === 1) return true;
+                                // 2->3 (often appears as compound 9->10 but should display as 2->3)
+                                if (fn === 2 && tn === 3 && (toNum - fromNum) === 1) return true;
+
+                                return false;
+                            } catch {
+                                return false;
+                            }
+                        })();
+
+                        if (allowedAsc || allowedDesc) {
+                            resolved = cand;
+                            resolvedIdx = k;
+                            break;
+                        }
+
+                        // Otherwise keep scanning for a later consonant that is a true resolution.
+                        continue;
                     }
+
                     // otherwise skip ornaments (short) and continue
                     if (candDur <= ORNAMENT_DUR) continue;
                 }
@@ -2582,23 +3257,16 @@ export function applyHarmonyRules(
                     continue;
                 }
 
-                // Direction & stepwise checks: resolution should be stepwise (<=2 semitones)
-                const sMidiAtDown = S.midi ?? 0;
-                const rMidi = resolved.midi ?? 0;
-                const delta = rMidi - sMidiAtDown;
-                const isStep = Math.abs(delta) <= 2;
-                const isLeading = (sMidiAtDown % 12) === ctxLeadingPc;
-                const allowedAsc = isLeading && delta > 0 && isStep;
-                const allowedDesc = delta < 0 && isStep;
-                if (!(allowedAsc || allowedDesc)) {
-                    debugLog('[ANALYSIS] detectSuspensions skip-direction-or-step', { sId: S.id, resolvedId: resolved.id, delta, isStep, allowedAsc, allowedDesc });
-                    continue;
-                }
+                // Direction & stepwise checks: already enforced during candidate selection above.
 
                 // Compute a display type (4-3,7-6,9-8) when possible
-                const getDiatonicPosition = (n: StaffNote) => {
-                    try { return getNotePosition(n.pitch, n.octave); } catch(_) { return 0; }
-                };
+                function getDiatonicPosition(n: StaffNote) {
+                    try {
+                        return getNotePosition(n.pitch, n.octave);
+                    } catch {
+                        return 0;
+                    }
+                }
                 const suspendedNote = prep;
                 const suspendedPos = getDiatonicPosition(suspendedNote);
                 const bass = (b.notes || []).slice().sort((x,y) => (x.midi ?? 0) - (y.midi ?? 0))[0];
@@ -2614,7 +3282,18 @@ export function applyHarmonyRules(
                     if (fn === 4 && tn === 3) displayType = '4-3';
                     else if (fn === 6 && tn === 5) displayType = '6-5';
                     else if (fn === 7 && tn === 6) displayType = '7-6';
+                    // Seventh-to-octave (7-8): the held note is a 7th above the bass and resolves
+                    // stepwise UP into the octave (e.g. B over C -> C over C).
+                    // Without this, the semitone fallback would misclassify B-over-C as 7-6.
+                    else if (fn === 7 && tn === 1 && (toNum - fromNum) === 1) displayType = '7-8';
+                    // Octave-to-seventh suspension: the held note and bass share the same
+                    // diatonic letter (fn===1), then resolve to a 7th (tn===7). This can
+                    // otherwise be misclassified by the semitone fallback as 7-6 (e.g. C over C♯).
+                    else if (fn === 1 && tn === 7 && fromNum > 7) displayType = '8-7';
                     else if (fn === 2 && tn === 1 && fromNum > 7) displayType = '9-8';
+                    else if (fn === 2 && tn === 3 && (toNum - fromNum) === 1) displayType = '2-3';
+                    else if (fn === 5 && tn === 4) displayType = '5-4';
+                    else if (fn === 3 && tn === 2) displayType = '3-2';
                     if (!displayType) {
                         const rawInterval = Math.abs(((suspendedNote.midi ?? 0) - (bass.midi ?? 0)));
                         const mod12Int = rawInterval % 12;
@@ -2625,10 +3304,117 @@ export function applyHarmonyRules(
                     }
                 }
 
+                // Normalize display numbers: for labels we generally want simple figures (3/2, 5/4, ...)
+                // rather than compound (10/9, 12/11, ...). Keep 9-8 explicitly as 9/8.
+                if (displayType === '4-3') { fromNum = 4; toNum = 3; }
+                else if (displayType === '6-5') { fromNum = 6; toNum = 5; }
+                else if (displayType === '7-6') { fromNum = 7; toNum = 6; }
+                else if (displayType === '7-8') { fromNum = 7; toNum = 8; }
+                else if (displayType === '8-7') { fromNum = 8; toNum = 7; }
+                else if (displayType === '9-8') { fromNum = 9; toNum = 8; }
+                else if (displayType === '2-3') { fromNum = 2; toNum = 3; }
+                else if (displayType === '5-4') { fromNum = 5; toNum = 4; }
+                else if (displayType === '3-2') { fromNum = 3; toNum = 2; }
+
+                // Strictly recognize the "ritardo sulla fondamentale" subtype:
+                // - S is a held chordal 7th (against the harmony root at B)
+                // - resolution is stepwise into the *root* of the resolution chord
+                // - bass pitch-class is stable from B to resolution
+                let isFundamentalDelay = false;
+                try {
+                    const resStart = getNoteStart(resolved);
+                    const evRes = chordEvents.find(e => Math.abs(e.absBeat - resStart) < 1e-6);
+                    if (evRes && evRes.notes && evRes.notes.length) {
+                        const bassAtRes = evRes.notes.slice().sort((x, y) => (x.midi ?? 0) - (y.midi ?? 0))[0];
+                        const bassStable = bassAtRes && typeof bassAtRes.midi === 'number' && mod12(bassAtRes.midi) === mod12(bassAtB.midi ?? 0);
+
+                        // Root at resolution
+                        let rootPcRes: number | null = null;
+                        try {
+                            const chordInfoRes = identifyChord(evRes.notes as any);
+                            if (chordInfoRes && chordInfoRes.root) {
+                                rootPcRes = mod12((chordInfoRes.root as any).noteIndex ?? mod12((chordInfoRes.root as any).midi ?? 0));
+                            } else {
+                                const cands = identifyChordCandidates(evRes.notes as any);
+                                const best = (cands && cands.length) ? cands[0] : null;
+                                if (best && best.root) rootPcRes = mod12((best.root as any).noteIndex ?? mod12((best.root as any).midi ?? 0));
+                            }
+                        } catch { /* ignore */ }
+
+                        const resolvedPc = mod12(resolved.midi ?? 0);
+                        const resolvesToRoot = rootPcRes != null && resolvedPc === rootPcRes;
+
+                        // Root at B (prefer the 7th-chord root when we detected it)
+                        let rootPcB: number | null = seventhRootPcAtB;
+                        if (rootPcB == null) {
+                            try {
+                                const chordInfoBFull2 = identifyChord((b.notes || []) as any);
+                                if (chordInfoBFull2 && chordInfoBFull2.root) {
+                                    rootPcB = mod12((chordInfoBFull2.root as any).noteIndex ?? mod12((chordInfoBFull2.root as any).midi ?? 0));
+                                } else {
+                                    const candsB = identifyChordCandidates((b.notes || []) as any);
+                                    const bestB = (candsB && candsB.length) ? candsB[0] : null;
+                                    if (bestB && bestB.root) rootPcB = mod12((bestB.root as any).noteIndex ?? mod12((bestB.root as any).midi ?? 0));
+                                }
+                            } catch { /* ignore */ }
+                        }
+
+                        const sPc = mod12(S.midi ?? 0);
+                        const seventhLikeAtB = rootPcB != null && [9, 10, 11].includes(mod12(sPc - rootPcB));
+                        isFundamentalDelay = bassStable && resolvesToRoot && seventhLikeAtB;
+                    }
+                } catch { /* ignore */ }
+
+                // If the note is a chord member at B, only allow it when it matches the
+                // strict "fundamental-delay" subtype above.
+                if ((chordMemberAtB || chordalSeventhHeldAtB) && !isFundamentalDelay) {
+                    debugLog('[ANALYSIS] detectSuspensions skip-chord-member-at-B', { voice: v, sId: S.id, bAbs: b.absBeat, chordMemberAtB, chordalSeventhHeldAtB });
+                    continue;
+                }
+
                 // If the note is consonant vs bass at B, only accept it as a suspension
                 // when it matches a true 6-5 pattern and the bass is stable.
                 if (isConsonantToBass) {
-                    if (!(isPotentialSixthSusp && displayType === '6-5')) {
+                    // Also allow 5-4 in 3rd-inversion 7th chords (V4/2-like): the suspended 5th is
+                    // consonant to the bass (a perfect 5th), but dissonant vs the underlying chord.
+                    const allow54InThirdInversionSeventh = (() => {
+                        try {
+                            if (displayType !== '5-4') return false;
+
+                            const otherVoicesAtB = (b.notes || [])
+                                .filter(n => n && !n.isRest && Number.isFinite((n as any).midi))
+                                .filter(n => (n.voice ?? 1) !== v && n.id !== S.id);
+                            if (!otherVoicesAtB.length) return false;
+
+                            // Infer the underlying harmony at B from the other voices (excluding the suspended voice).
+                            const cands = identifyChordCandidates(otherVoicesAtB as any);
+                            const best = (cands && cands.length) ? cands[0] : null;
+                            const chordInfoB = (best && best.root && best.type)
+                                ? { root: best.root as any, type: best.type as any }
+                                : identifyChord(otherVoicesAtB as any);
+                            if (!chordInfoB || !chordInfoB.root || !chordInfoB.type) return false;
+                            if (String(chordInfoB.type).includes('Sus')) return false;
+
+                            const formula = (CHORD_FORMULAS as any)[chordInfoB.type] as number[] | undefined;
+                            if (!formula || !Array.isArray(formula) || !formula.length) return false;
+
+                            const rootPc = mod12((chordInfoB.root as any).noteIndex ?? mod12((chordInfoB.root as any).midi ?? 0));
+                            const bassPc = mod12(bassAtB.midi ?? 0);
+                            const intervalRootToBass = mod12(bassPc - rootPc);
+                            const bassIsSeventh = intervalRootToBass === 9 || intervalRootToBass === 10 || intervalRootToBass === 11;
+                            const seventhLike = formula.includes(9) || formula.includes(10) || formula.includes(11) || String(chordInfoB.type).includes('7');
+                            if (!(bassIsSeventh && seventhLike)) return false;
+
+                            const resolvedPc = mod12(resolved.midi ?? 0);
+                            const resolvedInterval = mod12(resolvedPc - rootPc);
+                            const resolvesToChordTone = formula.includes(resolvedInterval);
+                            return resolvesToChordTone;
+                        } catch {
+                            return false;
+                        }
+                    })();
+
+                    if (!isFundamentalDelay && !(isPotentialSixthSusp && displayType === '6-5') && !allow54InThirdInversionSeventh) {
                         debugLog('[ANALYSIS] detectSuspensions skip-s-consonant-at-B', { sId: S.id, bAbs: b.absBeat, bassId: bassAtB.id, intervalMod12 });
                         continue;
                     }
@@ -2728,10 +3514,112 @@ export function applyHarmonyRules(
                 // Roman-numeral interpretation aligned with where the suspension
                 // actually happens.
                 (prep as any).isSuspension = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum };
-                // Clear any passing flags on involved notes
+                // Clear any passing/ornament flags on involved notes
                 if ((prep as any).isPassing) (prep as any).isPassing = false;
                 if ((S as any).isPassing) (S as any).isPassing = false;
                 if ((resolved as any).isPassing) (resolved as any).isPassing = false;
+                try {
+                    const clearOrn = (n: any) => {
+                        if (!n) return;
+                        if (n.isNeighbor) n.isNeighbor = false;
+                        if (n.isAnticipation) n.isAnticipation = false;
+                        if (n.isAppoggiatura) n.isAppoggiatura = false;
+                        if (n.isEscape) n.isEscape = false;
+                        if (n.ornamentMark) delete n.ornamentMark;
+                    };
+                    clearOrn(prep as any);
+                    clearOrn(S as any);
+                    clearOrn(resolved as any);
+                } catch { /* ignore */ }
+
+                // If the suspended pitch is re-articulated between the suspension onset and the
+                // resolution (common with repeated 8ths/16ths), treat those notes as part of the
+                // suspension so they don't get misclassified as passing notes and draw extra lines.
+                try {
+                    const clearOrn = (n: any) => {
+                        if (!n) return;
+                        if (n.isNeighbor) n.isNeighbor = false;
+                        if (n.isAnticipation) n.isAnticipation = false;
+                        if (n.isAppoggiatura) n.isAppoggiatura = false;
+                        if (n.isEscape) n.isEscape = false;
+                        if (n.ornamentMark) delete n.ornamentMark;
+                    };
+
+                    const suspensionPc = mod12(prep.midi ?? 0);
+                    const resolutionPc = mod12(resolved.midi ?? 0);
+                    const resolvedStart = getNoteStart(resolved);
+                    const vLine = notesByVoice[v] || [];
+                    const isWeakBeatNumber = (beat: number) => {
+                        try {
+                            // Conservative: in 4/4 treat beats 1 and 3 as strong; otherwise only 1.
+                            if (Math.abs(beat - 1) < 1e-6) return false;
+                            if (Math.abs(beatsPerMeasure - 4) < 1e-6 && Math.abs(beat - 3) < 1e-6) return false;
+                            return true;
+                        } catch {
+                            return true;
+                        }
+                    };
+
+                    for (let idx = 0; idx < vLine.length; idx++) {
+                        const n = vLine[idx];
+                        const ns = getNoteStart(n);
+                        if (!(ns > b.absBeat + 1e-6 && ns < resolvedStart - 1e-6)) continue;
+                        if (!Number.isFinite((n as any).midi)) continue;
+                        const ndur = getNoteEnd(n) - ns;
+
+                        const nPc = mod12(n.midi ?? 0);
+                        const prevN = idx > 0 ? vLine[idx - 1] : null;
+                        const nextN = idx + 1 < vLine.length ? vLine[idx + 1] : null;
+
+                        // (A) Re-articulation of the suspended pitch: treat as suspension continuation.
+                        if (nPc === suspensionPc && ndur <= 1.01) {
+                            (n as any).isSuspension = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum, continuation: true };
+                            if ((n as any).isPassing) (n as any).isPassing = false;
+                            clearOrn(n as any);
+                            continue;
+                        }
+
+                        // (B) Short note between two occurrences of the suspended pitch (e.g. F–G–F)
+                        // within the suspension span: treat as an ornament so it doesn't spawn
+                        // a harmony label (like I6 at beat 2) or add a passing-line overlay.
+                        if (ndur <= ORNAMENT_DUR + 1e-6 && prevN && nextN) {
+                            const prevPc = Number.isFinite((prevN as any).midi) ? mod12(prevN.midi ?? 0) : null;
+                            const nextPc = Number.isFinite((nextN as any).midi) ? mod12(nextN.midi ?? 0) : null;
+                            if (prevPc === suspensionPc && nextPc === suspensionPc) {
+                                const stepIn = Math.abs((n.midi ?? 0) - (prevN.midi ?? 0)) <= 2;
+                                const stepOut = Math.abs((nextN.midi ?? 0) - (n.midi ?? 0)) <= 2;
+                                const weak = isWeakBeatNumber((n.beat ?? 1) as number);
+                                if (stepIn && stepOut && weak) {
+                                    (n as any).isNeighbor = true;
+                                    (n as any).ornamentMark = 'v';
+                                    if ((n as any).isPassing) (n as any).isPassing = false;
+                                }
+                            }
+                        }
+
+                        // (C) Weak-beat ornament just before the resolution (e.g. F (susp) -> D (orn) -> E (res)).
+                        // This shows up as a "nota di volta inferiore" / lower appoggiatura-like figure
+                        // that can be consonant in the verticality (so generic ornament detectors may skip it),
+                        // but pedagogically we want it treated as ornamental inside the suspension span.
+                        if (prevN && nextN) {
+                            const nextStart = getNoteStart(nextN);
+                            const nextPc = Number.isFinite((nextN as any).midi) ? mod12(nextN.midi ?? 0) : null;
+                            const prevPc = Number.isFinite((prevN as any).midi) ? mod12(prevN.midi ?? 0) : null;
+
+                            const weak = isWeakBeatNumber((n.beat ?? 1) as number);
+                            const shortish = ndur <= 1.01;
+                            const resolvesToR = Math.abs(nextStart - resolvedStart) < 1e-6 && nextPc === resolutionPc;
+                            const stepOut = resolvesToR && Math.abs((nextN.midi ?? 0) - (n.midi ?? 0)) <= 2;
+                            const leapInFromSusp = (prevPc === suspensionPc) && (Math.abs((n.midi ?? 0) - (prevN.midi ?? 0)) > 2);
+
+                            if (weak && shortish && stepOut && leapInFromSusp) {
+                                (n as any).isNeighbor = true;
+                                (n as any).ornamentMark = 'v';
+                                if ((n as any).isPassing) (n as any).isPassing = false;
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
 
                 debugLog('[ANALYSIS] mark-suspension (strict)', { prepId: prep.id, sId: S.id, resolvedId: resolved.id, originStart, bAbs: b.absBeat });
 
@@ -2740,18 +3628,19 @@ export function applyHarmonyRules(
         }
     }
 
-    // Run suspension detection first, then passing-note detection (passing should not override suspensions)
-    try {
-        detectSuspensions(notesByVoice, chordEvents as ChordEvent[], beatsPerMeas);
-    } catch (err) {
-        console.warn('[ANALYSIS] detectSuspensions failed', err);
-    }
-
-    // Then classify other common ornaments (neighbor/appoggiatura/etc.) before generic passing notes.
+    // First classify common ornaments (neighbor/appoggiatura/etc.) so suspension detection can
+    // ignore ornamental notes when determining whether harmony changed under a held note.
     try {
         detectOrnaments(notesByVoice, chordEvents as ChordEvent[], beatsPerMeas);
     } catch (err) {
         console.warn('[ANALYSIS] detectOrnaments failed', err);
+    }
+
+    // Then detect suspensions (ritardi). Passing-note detection runs after and should not override suspensions.
+    try {
+        detectSuspensions(notesByVoice, chordEvents as ChordEvent[], beatsPerMeas);
+    } catch (err) {
+        console.warn('[ANALYSIS] detectSuspensions failed', err);
     }
 
     try {
@@ -2842,8 +3731,7 @@ export function applyHarmonyRules(
 
         // Helper: figured bass at an event.
         const figuresAt = (ev: ChordEvent) => {
-            const c = getContextAtAbsBeat(ev.absBeat);
-            return getRomanAnalysis(notesForRomanAt(ev), c.tonic, c.isMinor)?.figures ?? [];
+            return computeFiguredBassFromNotes(notesForRomanAt(ev), FIGURED_BASS_UI_OPTIONS).figures;
         };
 
         // Suspensions are stored on the preparation note object (`isSuspension.fromAbsBeat` is
