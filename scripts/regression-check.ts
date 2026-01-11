@@ -58,12 +58,21 @@ const loadFixtures = (): Fixture[] => {
     .readdirSync(fixturesDir)
     .filter((f) => f.endsWith('.json'))
     .sort();
-  return files.map((f) => {
+  const out: Fixture[] = [];
+  for (const f of files) {
     const full = path.join(fixturesDir, f);
     const raw = fs.readFileSync(full, 'utf8');
     const obj = JSON.parse(raw);
-    return obj as Fixture;
-  });
+
+    // Allow keeping non-test example JSONs in the fixtures folder.
+    if (!obj || !Array.isArray(obj.expects)) continue;
+
+    if (typeof obj.name !== 'string' || !obj.name) obj.name = f;
+    if (typeof obj.keyTonic !== 'string' || !obj.keyTonic) obj.keyTonic = obj.keySignatureRoot;
+
+    out.push(obj as Fixture);
+  }
+  return out;
 };
 
 const fail = (msg: string) => {

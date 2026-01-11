@@ -1,0 +1,35 @@
+{
+  "name": "Dubuois mis 5: ritardo fondamentale 9-8 is detected at bar 3 downbeat",
+  "keySignatureRoot": "F",
+  "keyTonic": "F",
+  "isMinorMode": false,
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "analysisContexts": [],
+  "notes": [
+    { "id": "4da2dbcd-935b-421c-97ff-204a614e91ea", "pitch": "F", "octave": 5, "position": 10, "midi": 77, "noteIndex": 5, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "startTick": 0, "durationTicks": 3840, "voice": 1, "isTiedToNext": true },
+    { "id": "6333c600-799e-4913-879d-42d042625442", "pitch": "A", "octave": 4, "position": 5, "midi": 69, "noteIndex": 9, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "startTick": 0, "durationTicks": 3840, "voice": 2 },
+    { "id": "2bce8d55-fab0-4682-860a-e62c675bf374", "pitch": "C", "octave": 4, "position": 0, "midi": 60, "noteIndex": 0, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "startTick": 0, "durationTicks": 3840, "voice": 3 },
+    { "id": "08afb3d3-8be9-48be-9245-fdb2ff3e5cc0", "pitch": "F", "octave": 3, "position": -4, "midi": 53, "noteIndex": 5, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "startTick": 0, "durationTicks": 3840, "voice": 4 },
+
+    { "id": "4670a7da-8d9e-4a81-b152-4dd9a1946bc5", "pitch": "F", "octave": 5, "position": 10, "midi": 77, "noteIndex": 5, "clef": "treble", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "startTick": 3840, "durationTicks": 1920, "voice": 1 },
+    { "id": "22d6ae79-57d9-46a4-a4ce-1361512fddb2", "pitch": "G", "octave": 4, "position": 4, "midi": 67, "noteIndex": 7, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "startTick": 3840, "durationTicks": 3840, "voice": 2 },
+    { "id": "fc1c1417-564b-45c9-a133-5495665d8fd9", "pitch": "B", "octave": 3, "position": -1, "midi": 58, "noteIndex": 10, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "startTick": 3840, "durationTicks": 3840, "voice": 3 },
+    { "id": "50078e3e-1f02-415a-b6a9-eff22e840686", "pitch": "C", "octave": 3, "position": -7, "midi": 48, "noteIndex": 0, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "startTick": 3840, "durationTicks": 3840, "voice": 4 },
+    { "id": "03575166-8831-4a91-b833-7d70a8bd7009", "pitch": "E", "octave": 5, "position": 9, "midi": 76, "noteIndex": 4, "clef": "treble", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 3, "startTick": 5760, "durationTicks": 1920, "voice": 1, "isTiedToNext": true },
+
+    { "id": "f52b0ee7-03c5-4229-8848-15caf27942ff", "pitch": "E", "octave": 5, "position": 9, "midi": 76, "noteIndex": 4, "clef": "treble", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 2, "beat": 1, "startTick": 7680, "durationTicks": 1920, "voice": 1 },
+    { "id": "6ace4be9-4aa7-4490-a76e-02b9320334bb", "pitch": "F", "octave": 4, "position": 3, "midi": 65, "noteIndex": 5, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 2, "beat": 1, "startTick": 7680, "durationTicks": 3840, "voice": 2 },
+    { "id": "832f9b64-97f9-415d-aca1-16b0275057b2", "pitch": "A", "octave": 3, "position": -2, "midi": 57, "noteIndex": 9, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 2, "beat": 1, "startTick": 7680, "durationTicks": 3840, "voice": 3 },
+    { "id": "ca3dc3fc-aa6b-4c96-9ba6-1217eeba4bcc", "pitch": "D", "octave": 3, "position": -6, "midi": 50, "noteIndex": 2, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 2, "beat": 1, "startTick": 7680, "durationTicks": 3840, "voice": 4 },
+    { "id": "6b8b4aae-29a6-41cc-851c-ad1414cb225d", "pitch": "D", "octave": 5, "position": 8, "midi": 74, "noteIndex": 2, "clef": "treble", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 2, "beat": 3, "startTick": 9600, "durationTicks": 1920, "voice": 1 }
+  ],
+  "expects": [
+    { "absBeat": 8, "figuresInclude": ["9"] }
+  ],
+  "expectsSuspensions": [
+    { "fromAbsBeat": 8, "voice": 1, "type": "9-8" }
+  ],
+  "expectsNoteFlags": [
+    { "id": "f52b0ee7-03c5-4229-8848-15caf27942ff", "voice": 1, "isSuspension": true, "suspensionFromAbsBeat": 8 }
+  ]
+}

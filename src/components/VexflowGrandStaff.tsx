@@ -594,7 +594,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           return (a.staffNote.xPosition ?? 0) - (b.staffNote.xPosition ?? 0);
         });
 
-        const bucket = (beat: number) => Math.floor((beat - 1) / 1);
+        const isCompound = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+        // `beat` is expressed in quarter-note units (1 = measure start).
+        // In 6/8 (compound), the natural beam group is 3 eighths = dotted-quarter = 1.5 quarter units.
+        const bucketSize = isCompound ? 1.5 : 1;
+        const bucket = (beat: number) => Math.floor((beat - 1) / bucketSize);
         let current: Array<{ staffNote: StaffNote; vfNote: StaveNote }> = [];
         let currentKey: string | null = null;
         const flush = () => {

@@ -239,6 +239,27 @@ function createMenu() {
       label: 'Vista',
       submenu: [
         {
+          label: 'Scale',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'scales' }); }
+        },
+        {
+          label: 'Accordi',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'chords' }); }
+        },
+        {
+          label: 'Intervalli',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'intervals' }); }
+        },
+        {
+          label: 'Editor',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'editor' }); }
+        },
+        {
+          label: 'Grand Staff',
+          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'grandStaff' }); }
+        },
+        { type: 'separator' },
+        {
           label: 'Riordina toolbar (drag)…',
           click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'toggle-toolbar-customize'); }
         },

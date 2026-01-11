@@ -21,42 +21,28 @@ const App: React.FC = () => {
             // errore silenziato
         });
     }, []);
+
+    // Native menu integration (Electron): allow switching app mode from "Vista".
+    useEffect(() => {
+        const api = (window as any).electronAPI;
+        if (!api?.onMenuAction) return;
+        const remove = api.onMenuAction((action: string, payload: any) => {
+            try {
+                if (action !== 'set-app-mode') return;
+                const next = String(payload?.mode || '');
+                if (next === 'scales' || next === 'chords' || next === 'intervals' || next === 'editor' || next === 'grandStaff') {
+                    setMode(next);
+                }
+            } catch {
+                // ignore
+            }
+        });
+        return () => { if (remove) remove(); };
+    }, []);
     
     return (
         <div className="h-screen overflow-hidden flex flex-col bg-gray-900 font-sans text-gray-100">
-            <div className="w-full px-2 pt-1 lg:px-4 flex flex-col flex-grow min-h-0 overflow-hidden">
-                 <div className="sticky top-0 z-[60] bg-slate-900 flex justify-center mb-1 border-b border-gray-700">
-                    <button
-                        onClick={() => setMode('scales')}
-                        className={`px-6 py-3 text-lg font-semibold transition-colors duration-200 focus:outline-none ${mode === 'scales' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Scale
-                    </button>
-                    <button
-                        onClick={() => setMode('chords')}
-                        className={`px-6 py-3 text-lg font-semibold transition-colors duration-200 focus:outline-none ${mode === 'chords' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Accordi
-                    </button>
-                    <button
-                        onClick={() => setMode('intervals')}
-                        className={`px-6 py-3 text-lg font-semibold transition-colors duration-200 focus:outline-none ${mode === 'intervals' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Intervalli
-                    </button>
-                    <button
-                        onClick={() => setMode('editor')}
-                        className={`px-6 py-3 text-lg font-semibold transition-colors duration-200 focus:outline-none ${mode === 'editor' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Editor
-                    </button>
-                     <button
-                        onClick={() => setMode('grandStaff')}
-                        className={`px-6 py-3 text-lg font-semibold transition-colors duration-200 focus:outline-none ${mode === 'grandStaff' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Grand Staff
-                    </button>
-                </div>
+            <div className="w-full px-2 lg:px-4 flex flex-col flex-grow min-h-0 overflow-hidden">
 
                 <div className={mode === 'scales' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
                     <ScalesVisualizer 

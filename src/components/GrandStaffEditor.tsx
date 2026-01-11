@@ -1302,15 +1302,70 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         return { currentTonic: keySignatureRoot, currentQuality: 'Maggiore' };
     }, [keySignatureRoot, isMinorMode]);
 
-    const notes = useMemo(() => calculateNoteBeats(rawNotes, timeSignature), [rawNotes, timeSignature]);
+    const normalizedRawNotes = useMemo(() => {
+        const basePc: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+        const sharpOrder = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+        const flatOrder = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+
+        const keySigAccidentalForLetter = (letter: string): number => {
+            const l = (letter || '').toUpperCase();
+            if (!l || !basePc.hasOwnProperty(l)) return 0;
+            if (keySignature.type === 'sharp' && keySignature.count > 0) {
+                return sharpOrder.slice(0, keySignature.count).includes(l) ? 1 : 0;
+            }
+            if (keySignature.type === 'flat' && keySignature.count > 0) {
+                return flatOrder.slice(0, keySignature.count).includes(l) ? -1 : 0;
+            }
+            return 0;
+        };
+
+        const accidentalToDelta = (acc: any): number => {
+            switch (acc) {
+                case 'sharp': return 1;
+                case 'flat': return -1;
+                case 'natural': return 0;
+                case 'doubleSharp': return 2;
+                case 'doubleFlat': return -2;
+                default: return 0;
+            }
+        };
+
+        return (rawNotes || []).map((n: any) => {
+            try {
+                if (!n || n.isRest) return n;
+                const letter = String(n.pitch || '').charAt(0).toUpperCase();
+                if (!basePc.hasOwnProperty(letter)) return n;
+                const octave = Number(n.octave);
+                if (!Number.isFinite(octave)) return n;
+
+                const explicit = (n.explicitAccidental ?? n.userAccidental ?? null) as any;
+                const delta = (explicit != null) ? accidentalToDelta(explicit) : keySigAccidentalForLetter(letter);
+
+                const noteIndex = ((basePc[letter] + delta) % 12 + 12) % 12;
+                const midi = (octave + 1) * 12 + noteIndex;
+
+                const curIdx = Number(n.noteIndex);
+                const curMidi = Number(n.midi);
+                const needsIdx = !Number.isFinite(curIdx) || (((curIdx % 12) + 12) % 12) !== noteIndex;
+                const needsMidi = !Number.isFinite(curMidi) || curMidi !== midi;
+
+                if (!needsIdx && !needsMidi) return n;
+                return { ...n, noteIndex, midi };
+            } catch {
+                return n;
+            }
+        });
+    }, [rawNotes, keySignature]);
+
+    const notes = useMemo(() => calculateNoteBeats(normalizedRawNotes, timeSignature), [normalizedRawNotes, timeSignature]);
 
     const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = useState(false);
 
 
     // Mantieni latestRawNotes aggiornato
     useEffect(() => {
-        latestRawNotes.current = rawNotes;
-    }, [rawNotes]);
+        latestRawNotes.current = normalizedRawNotes as any;
+    }, [normalizedRawNotes]);
     // (No external paste bridge globals here)
 
 
@@ -2365,6 +2420,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         // Note-off-only scanpoints can temporarily reduce the verticality (e.g. 2 notes)
         // and cause spurious chord identification (like #IV° ...) even when the harmony
         // is conceptually being held.
+        const isCompoundMeter = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+        const isStrongPulseInMeasure = (inMeasureBeats0: number) => {
+            try {
+                if (!Number.isFinite(inMeasureBeats0)) return false;
+                const EPS = 1e-3;
+                if (isCompoundMeter) {
+                    // dotted-quarter pulse: 3 eighths = 1.5 beats (quarter units)
+                    const pulse = 1.5;
+                    const r = ((inMeasureBeats0 % pulse) + pulse) % pulse;
+                    return Math.abs(r) < EPS || Math.abs(pulse - r) < EPS;
+                }
+                const nearInt = (x: number) => Math.abs(x - Math.round(x)) < EPS;
+                if (!nearInt(inMeasureBeats0)) return false;
+                const beat0 = Math.round(inMeasureBeats0);
+                return beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
+            } catch {
+                return false;
+            }
+        };
+
         const timelineForLabels = (timeline || []).filter((ev: any, idx: number) => {
             if (!ev) return false;
             if (idx === 0) return true;
@@ -2392,14 +2467,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 if (!Number.isFinite(absBeat)) return false;
                 const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
                 const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-
-                const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
-                if (!nearInt(inMeasure)) return false;
-                const beat0 = Math.round(inMeasure);
-
-                // Strong beats: 1 (beat0=0) and, when applicable, 3 (beat0=2) in common meters.
-                const isStrong = beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
-                return isStrong;
+                return isStrongPulseInMeasure(inMeasure);
             } catch {
                 return false;
             }
@@ -2634,11 +2702,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         try {
                             const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
                             const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                            const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
-                            if (!nearInt(inMeasure)) return false;
-                            const beat0 = Math.round(inMeasure);
-                            const isStrong = beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
-                            return !isStrong;
+                            return !isStrongPulseInMeasure(inMeasure);
                         } catch {
                             return false;
                         }
@@ -2652,7 +2716,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 // If the engine tagged a chord tone as neighbor/anticipation/appoggiatura, keep it
                 // in the structural snapshot when it belongs to a confident chord candidate.
                 try {
-                    const hasNctFlag = !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
+                    const isStrongBeat = (() => {
+                        try {
+                            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                            const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+                            return isStrongPulseInMeasure(inMeasure);
+                        } catch {
+                            return false;
+                        }
+                    })();
+
+                    // IMPORTANT: do not "rescue" weak-beat neighbors as chord tones.
+                    // Otherwise a short note di volta can form a plausible triad (e.g. D–F–A)
+                    // and incorrectly flip the harmony/figured bass at that scanpoint.
+                    const hasNctFlag = !!(n.isAnticipation || n.isAppoggiatura || (n.isNeighbor && isStrongBeat));
                     if (hasNctFlag) {
                         const fullIndex = indexByAbsBeat.get(absBeat);
                         const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
@@ -2716,12 +2793,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         try {
                             const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
                             const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                            const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
-                            if (nearInt(inMeasure)) {
-                                const beat0 = Math.round(inMeasure);
-                                const isStrong = beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
-                                if (isStrong) return false;
-                            }
+                            if (isStrongPulseInMeasure(inMeasure)) return false;
                         } catch { /* ignore */ }
                     }
                     return true;
@@ -2899,7 +2971,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             for (const n of fullNotes) {
                 if (!n || n.isRest) continue;
                 const v = (n?.voice ?? 1) as number;
+
+                // In compound meters (6/8, 9/8, 12/8), bass lines are often written as
+                // arpeggiations on the internal 8th/16th grid. Those short bass notes should
+                // not flip the harmony label/figures on weak subdivisions.
+                try {
+                    if (v === 4 && isCompoundMeter) {
+                        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                        const absBeat = Number(event.absBeat);
+                        const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+                        const strongPulse = isStrongPulseInMeasure(inMeasure);
+                        const base = ({ whole: 4, half: 2, quarter: 1, eighth: 0.5, sixteenth: 0.25, 'thirty-second': 0.125, 'sixty-fourth': 0.0625 } as any)[n.duration || 'quarter'] || 1;
+                        let dur = base;
+                        if (n.isDotted) dur *= 1.5;
+                        if (n.isTriplet) dur *= 2 / 3;
+                        if (n.isDuplet) dur *= 3 / 2;
+                        if (!strongPulse && dur <= 0.51) {
+                            // treat as non-structural bass motion (arpeggio/passing)
+                            continue;
+                        }
+                    }
+                } catch { /* ignore */ }
+
                 if (isNonChordToneAtLabelEvent(n, event.absBeat)) {
+                    // If the current active note for this voice is a suspension onset,
+                    // do not keep any structural note for this voice at this scanpoint.
+                    // For other ornaments (passing/neighbor/etc.), keep the previous structural note.
+                    try {
+                        const s = (n as any)?.isSuspension;
+                        if (s && typeof s.fromAbsBeat === 'number' && Math.abs((s.fromAbsBeat as number) - Number(event.absBeat)) < 1e-3) {
+                            lastStructural.delete(v);
+                        }
+                    } catch { /* ignore */ }
                     continue;
                 }
                 lastStructural.set(v, n);
@@ -2913,10 +3016,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             // If a suspension originates at this event, the held tone is a non-chord tone
             // against the new harmony. Exclude it from the chord-analysis snapshot so we
             // don't accidentally label the verticality as a sus/add sonority (e.g. V7/6).
+            const SUSP_EPS = 1e-3;
             const harmonicNotesNoSuspAtThisBeat = fallbackHarmonicNotes.filter((n: any) => {
                 const s = n?.isSuspension;
                 if (!s || typeof s.fromAbsBeat !== 'number') return true;
-                return Math.abs(s.fromAbsBeat - event.absBeat) >= 1e-6;
+                return Math.abs(s.fromAbsBeat - event.absBeat) >= SUSP_EPS;
             });
             const analysisNotes = (harmonicNotesNoSuspAtThisBeat.length >= 2)
                 ? harmonicNotesNoSuspAtThisBeat
@@ -2931,12 +3035,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
                     const absBeat = Number(event.absBeat);
                     const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                    const nearInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
-                    const isStrong = (() => {
-                        if (!nearInt(inMeasure)) return false;
-                        const beat0 = Math.round(inMeasure);
-                        return beat0 === 0 || (timeSignature.numerator >= 4 && beat0 === 2);
-                    })();
+                    const isStrong = isStrongPulseInMeasure(inMeasure);
 
                     if (!isStrong) return analysisNotes;
 
@@ -2953,7 +3052,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                         // Only drop/keep suspension behavior at its actual onset. During preparation,
                         // a note can be marked as isSuspension but should still count as chord tone.
-                        const isSuspStartHere = isSusp && Math.abs((s.fromAbsBeat as number) - absBeat) < 1e-6;
+                        const isSuspStartHere = isSusp && Math.abs((s.fromAbsBeat as number) - absBeat) < SUSP_EPS;
                         if (isSusp && isSuspStartHere) return n;
 
                         if (dissonantVsBass) return n;
@@ -3062,6 +3161,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     return false;
                 }
             })();
+
+            // Compound-meter noise guard:
+            // If we're on an internal 8th subdivision (non-strong pulse) and the bass hasn't changed,
+            // don't emit a new harmony label/figures just because upper voices arpeggiate/passage.
+            // Keep the previous label alive via a hidden marker so the hold-line renderer can show continuity.
+            try {
+                if (!hasSuspensionOnsetHere && isCompoundMeter) {
+                    const absBeat = Number(event.absBeat);
+                    const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+                    const strongPulse = isStrongPulseInMeasure(inMeasure);
+
+                    if (!strongPulse && prevCtx === ctxKey && prevBassPc != null && bassPc != null && prevBassPc === bassPc) {
+                        const prevRoman2 = lastRomanBySystem.get(systemIndex) || '';
+                        if (prevRoman2) {
+                            const x = getXForAbsBeat(event.absBeat, system);
+                            labelsBySystem[systemIndex].push({
+                                id: `hlabel-hidden-compound-${systemIndex}-${event.absBeat}`,
+                                x,
+                                roman: prevRoman2,
+                                figures: lastFiguresBySystem.get(systemIndex) || [],
+                                symbol: '',
+                                absBeat: event.absBeat,
+                                hiddenMarker: true,
+                            });
+                        }
+                        return;
+                    }
+                }
+            } catch { /* ignore */ }
 
             if (!hasSuspensionOnsetHere && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion)) {
                 // Keep the label stable, but record that *something happened* here (ornament/appoggiatura)
@@ -3395,17 +3523,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         }
                     } catch (_) {}
 
-                    if (resolvedRoman) {
-                        // Don't overwrite secondary dominants (V/x) at suspension onset.
-                        // In your cadence case, adding the resolution chord should not make V7/V disappear.
-                        if (!String(roman || '').includes('/')) {
-                            roman = resolvedRoman;
+                    // IMPORTANT: `analysisNotes` already excludes the suspended note at this beat,
+                    // so `roman` computed earlier is typically the correct *resolution harmony*.
+                    // Only fall back to a resolution-event Roman when we couldn't label the onset.
+                    if (!roman) {
+                        if (resolvedRoman) {
+                            // Don't overwrite secondary dominants (V/x) at suspension onset.
+                            if (!String(roman || '').includes('/')) {
+                                roman = resolvedRoman;
+                            }
+                        } else {
+                            // Fallback: underlying harmony at suspension onset.
+                            const rHere = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor);
+                            if (rHere) roman = rHere.roman || roman;
                         }
-                    } else {
-                        // Fallback: underlying harmony at suspension onset (already
-                        // excluding the suspended note at this beat via `labelNotes`).
-                        const rHere = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor);
-                        if (rHere) roman = rHere.roman || roman;
                     }
 
                     // In very sparse textures (e.g. G–E with the suspension filtered out),
@@ -3427,13 +3558,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                         const candidates = identifyChordCandidates(evNotes);
                         if (candidates && candidates.length) {
-                            const preferred = (bassPc == null)
-                                ? candidates[0]
-                                : (candidates.find(c => (c?.root?.noteIndex ?? null) === bassPc) || candidates[0]);
+                            // If we already have a Roman label, prefer the chord candidate that
+                            // agrees with it (important for inversions like ii6 over Ab bass).
+                            let preferred: any = candidates[0];
+                            try {
+                                const curRoman = String(roman || '').trim();
+                                if (curRoman) {
+                                    const matching = (candidates as any[]).find((c: any) => {
+                                        const rr = calculateRomanFromChordInfo({ root: c.root, type: c.type, intervals: c.intervals }, tonicHere, isMinorHere);
+                                        return rr === curRoman;
+                                    });
+                                    if (matching) preferred = matching;
+                                } else if (bassPc != null) {
+                                    preferred = (candidates as any[]).find(c => (c?.root?.noteIndex ?? null) === bassPc) || candidates[0];
+                                }
+                            } catch { /* ignore */ }
+
                             const forced = preferred
-                                ? calculateRomanFromChordInfo({ root: preferred.root, type: preferred.type }, tonicHere, isMinorHere)
+                                ? calculateRomanFromChordInfo({ root: preferred.root, type: preferred.type, intervals: preferred.intervals }, tonicHere, isMinorHere)
                                 : null;
-                            if (forced) roman = forced;
+                            if (forced && !roman) roman = forced;
                         }
                         }
                     } catch (_) {}
@@ -3802,8 +3946,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         if (!Number.isFinite(beatsPerMeasure) || beatsPerMeasure <= 0) return null;
 
+        // IMPORTANT: keep cursor X consistent with insertion snapping.
+        // Use tick-based mapping (startX + padding + localTicks * pxPerTick) instead of a
+        // proportional beat-in-measure mapping.
+        const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
+        if (!Number.isFinite(ticksPerMeasure) || ticksPerMeasure <= 0) return null;
+
         const measureIndex = Math.floor(absBeat / beatsPerMeasure);
-        const beatInMeasure = (absBeat - (measureIndex * beatsPerMeasure)) + 1;
+        const measureStartTick = measureIndex * ticksPerMeasure;
+        const absTicks = absBeat * TICKS_PER_QUARTER;
+        let localTicks = absTicks - measureStartTick;
+        if (!Number.isFinite(localTicks)) localTicks = 0;
+        if (localTicks < 0) localTicks = 0;
+        if (localTicks > ticksPerMeasure) localTicks = ticksPerMeasure;
 
         for (let systemIndex = 0; systemIndex < layoutData.systemsParams.length; systemIndex++) {
             const sys = layoutData.systemsParams[systemIndex];
@@ -3814,8 +3969,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             const endX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
             const measureWidth = Math.max(1, endX - startX);
             const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
-            const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / beatsPerMeasure));
-            const x = startX + MEASURE_PADDING_X + (rel * contentWidth);
+            const rawPxPerTick = (sys as any).pxPerTick;
+            const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
+                ? rawPxPerTick
+                : (contentWidth / Math.max(1, ticksPerMeasure));
+
+            let x = startX + MEASURE_PADDING_X + (localTicks * pxPerTick);
+            const minX = startX + MEASURE_PADDING_X;
+            const maxX = minX + contentWidth;
+            if (!Number.isFinite(x)) x = minX;
+            if (x < minX) x = minX;
+            if (x > maxX) x = maxX;
             return { x, systemIndex };
         }
 
@@ -3863,6 +4027,52 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             }
         };
     }, [audioService.audioContext, bpm, getPlayheadPosForAbsBeat, isPlaying]);
+
+    // Auto-scroll during playback so the playhead never disappears off-screen.
+    const lastAutoScrollAtRef = useRef<number>(0);
+    const lastAutoScrollSystemRef = useRef<number | null>(null);
+    useEffect(() => {
+        if (!isPlaying) return;
+        if (!playheadPosition) return;
+
+        const container = scoreScrollRef.current;
+        if (!container) return;
+
+        const sysEl = systemElementByIndexRef.current.get(playheadPosition.systemIndex);
+        if (!sysEl) return;
+
+        const now = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+        const sameSystem = lastAutoScrollSystemRef.current === playheadPosition.systemIndex;
+        if (sameSystem && (now - lastAutoScrollAtRef.current) < 60) return;
+
+        // Use DOM geometry rather than assuming constant top padding.
+        const playheadYLocal = (playheadYTopPx + playheadYBottomPx) / 2;
+        const playheadYAbs = sysEl.offsetTop + playheadYLocal;
+
+        const viewTop = container.scrollTop;
+        const viewBottom = viewTop + container.clientHeight;
+
+        const marginTop = 60;
+        const marginBottom = 140;
+
+        let targetTop: number | null = null;
+        if (playheadYAbs < (viewTop + marginTop)) {
+            targetTop = playheadYAbs - marginTop;
+        } else if (playheadYAbs > (viewBottom - marginBottom)) {
+            targetTop = playheadYAbs - (container.clientHeight - marginBottom);
+        }
+
+        if (targetTop == null) return;
+
+        const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+        const clamped = Math.max(0, Math.min(maxTop, targetTop));
+        if (Math.abs(clamped - container.scrollTop) <= 2) return;
+
+        // Immediate scroll keeps playback visually in sync.
+        container.scrollTo({ top: clamped, behavior: 'auto' });
+        lastAutoScrollAtRef.current = now;
+        lastAutoScrollSystemRef.current = playheadPosition.systemIndex;
+    }, [isPlaying, playheadPosition, playheadYBottomPx, playheadYTopPx]);
 
     const startPlayback = useCallback(async () => {
         if (!isAudioReady) return;
@@ -4091,6 +4301,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; curveHeight: number;
             }[] = [];
 
+            const TUPLET_LEFT_TRIM_PX = 20;
+
             // group consecutive triplet notes (simple: blocks of >=3 notes in same measure+voice)
             let run: StaffNote[] = [];
             const flush = () => {
@@ -4106,8 +4318,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 const ys = run.map(n => getNoteY(n.position, staffTop, clef));
                 const highestY = Math.min(...ys);
 
-                const x1 = (first.xPosition ?? 0) - 6;
+                let x1 = (first.xPosition ?? 0) - 6 + TUPLET_LEFT_TRIM_PX;
                 const x2 = (last.xPosition ?? 0) + 26;
+                // Keep sane ordering.
+                if (x1 > x2 - 12) x1 = x2 - 12;
                 const midX = (x1 + x2) / 2;
 
                 const bracketY = (highestY + yOffset) - 34;
@@ -4170,6 +4384,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; curveHeight: number;
             }[] = [];
 
+            const TUPLET_LEFT_TRIM_PX = 20;
+
             // group consecutive duplet notes in same measure+voice+clef (strictly pairs)
             let run: StaffNote[] = [];
             const flush = () => {
@@ -4185,8 +4401,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 const ys = run.map(n => getNoteY(n.position, staffTop, clef));
                 const highestY = Math.min(...ys);
 
-                const x1 = (first.xPosition ?? 0) - 6;
+                let x1 = (first.xPosition ?? 0) - 6 + TUPLET_LEFT_TRIM_PX;
                 const x2 = (last.xPosition ?? 0) + 26;
+                if (x1 > x2 - 12) x1 = x2 - 12;
                 const midX = (x1 + x2) / 2;
 
                 const bracketY = (highestY + yOffset) - 34;
@@ -4669,8 +4886,117 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const absBeat = (measureIndex * beatsPerMeasure) + (beat - 1);
         playbackCursorAbsBeatRef.current = absBeat;
+        // NOTE: the deterministic tick->x mapping can be slightly left of the actual rendered notehead
+        // (VexFlow applies its own glyph spacing). We keep x as a fallback and refine later when
+        // note hitpoints are available.
         setPlayheadPosition({ x, systemIndex });
     }, [timeSignature]);
+
+    const refinePlayheadXToRenderedNoteheads = useCallback((systemIndex: number, absTicks: number, fallbackX: number): number => {
+        try {
+            const ld = layoutDataRef.current;
+            if (!ld?.systemsParams?.[systemIndex] || !Array.isArray(ld.positionedNotes)) return fallbackX;
+            const sys = ld.systemsParams[systemIndex];
+            const measureSet = new Set<number>(sys.measureIndices || []);
+
+            // Collect note IDs that start exactly at this tick within the current system.
+            const ids: string[] = [];
+            for (const n of (ld.positionedNotes as any[]) || []) {
+                if (!n || !n.id) continue;
+                if (!measureSet.has(n.measureIndex ?? -1)) continue;
+                const st = (n as any).startTick;
+                if (typeof st === 'number' && st === absTicks) ids.push(String(n.id));
+            }
+            if (!ids.length) return fallbackX;
+
+            const hitPoints = systemNoteHitPointsRef.current?.[systemIndex] || [];
+            if (!hitPoints.length) return fallbackX;
+            const byId = new Map(hitPoints.filter((p: any) => p && !p.isGhost && p.id).map((p: any) => [String(p.id), p]));
+
+            const xs: number[] = [];
+            for (const id of ids) {
+                const p: any = byId.get(id);
+                if (p && Number.isFinite(p.x)) xs.push(Number(p.x));
+            }
+            if (!xs.length) return fallbackX;
+
+            // Average (stable for chords with multiple voices).
+            const x = xs.reduce((s, v) => s + v, 0) / xs.length;
+            return Number.isFinite(x) ? x : fallbackX;
+        } catch {
+            return fallbackX;
+        }
+    }, []);
+
+    // NOTE: playhead refinement effect is declared later (needs getPlayheadPosForAbsBeat).
+
+    const estimateNoteheadOffsetPxForSystem = useCallback((systemIndex: number): number => {
+        try {
+            const ld = layoutDataRef.current;
+            if (!ld?.systemsParams?.[systemIndex] || !Array.isArray(ld.positionedNotes)) return 0;
+            const sys = ld.systemsParams[systemIndex];
+            const measureSet = new Set<number>(sys.measureIndices || []);
+
+            const hitPoints = systemNoteHitPointsRef.current?.[systemIndex] || [];
+            if (!hitPoints.length) return 0;
+            const byId = new Map(hitPoints.filter((p: any) => p && !p.isGhost && p.id).map((p: any) => [String(p.id), p]));
+
+            const offsets: number[] = [];
+            for (const n of (ld.positionedNotes as any[]) || []) {
+                if (!n || !n.id) continue;
+                if (!measureSet.has(n.measureIndex ?? -1)) continue;
+                const p: any = byId.get(String(n.id));
+                if (!p || !Number.isFinite(p.x) || !Number.isFinite(n.xPosition)) continue;
+                const dx = Number(p.x) - Number(n.xPosition);
+                if (!Number.isFinite(dx)) continue;
+                // Keep only plausible glyph offsets (avoid outliers / beams).
+                if (dx < -40 || dx > 40) continue;
+                offsets.push(dx);
+                if (offsets.length >= 40) break;
+            }
+            if (!offsets.length) return 0;
+            offsets.sort((a, b) => a - b);
+            const mid = offsets[Math.floor(offsets.length / 2)];
+            return Number.isFinite(mid) ? mid : 0;
+        } catch {
+            return 0;
+        }
+    }, []);
+
+    // After re-layout (or cursor moves), refine the playhead X:
+    // - if a note exists at that tick, snap exactly to the rendered notehead
+    // - otherwise, apply the system's typical notehead offset so the playhead indicates
+    //   where an inserted notehead will appear (prevents the ~12px jump after insertion)
+    useEffect(() => {
+        if (isPlaying) return;
+        if (!layoutData) return;
+
+        const absBeat = playbackCursorAbsBeatRef.current;
+        if (!Number.isFinite(absBeat as any)) return;
+
+        const basePos = getPlayheadPosForAbsBeat(absBeat as number);
+        if (!basePos) return;
+
+        const absTicks = Math.round((absBeat as number) * TICKS_PER_QUARTER);
+        const snappedToNotehead = refinePlayheadXToRenderedNoteheads(basePos.systemIndex, absTicks, basePos.x);
+        const hasNoteheadSnap = Number.isFinite(snappedToNotehead) && Math.abs(snappedToNotehead - basePos.x) > 0.5;
+
+        const offset = hasNoteheadSnap ? 0 : estimateNoteheadOffsetPxForSystem(basePos.systemIndex);
+        const targetX = (hasNoteheadSnap ? snappedToNotehead : (basePos.x + offset));
+
+        if (!playheadPosition || playheadPosition.systemIndex !== basePos.systemIndex || Math.abs(playheadPosition.x - targetX) > 0.5) {
+            setPlayheadPosition({ x: targetX, systemIndex: basePos.systemIndex });
+        }
+
+        // Keep paste caret aligned to the same insertion suggestion.
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const measureIndex = Math.floor((absBeat as number) / beatsPerMeasure);
+        const beat = Math.round((((absBeat as number) - (measureIndex * beatsPerMeasure)) + 1) * 1e6) / 1e6;
+
+        if (!pasteCaret || pasteCaret.systemIndex !== basePos.systemIndex || Math.abs(pasteCaret.x - targetX) > 0.5) {
+            setPasteCaret({ x: targetX, systemIndex: basePos.systemIndex, measureIndex, beat });
+        }
+    }, [estimateNoteheadOffsetPxForSystem, getPlayheadPosForAbsBeat, isPlaying, layoutData, pasteCaret, playheadPosition, refinePlayheadXToRenderedNoteheads, timeSignature]);
 
     const getCurrentAbsBeatForPlayhead = useCallback(() => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -4705,6 +5031,145 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             return Array.from(set).sort((a, b) => a - b);
         });
     }, [getCurrentAbsBeatForPlayhead, playheadPosition, timeSignature]);
+
+    const insertMeasureAtPlayhead = useCallback(() => {
+        if (!playheadPosition) return;
+
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
+        if (!Number.isFinite(beatsPerMeasure) || beatsPerMeasure <= 0) return;
+        if (!Number.isFinite(ticksPerMeasure) || ticksPerMeasure <= 0) return;
+
+        const absBeat = Math.max(0, getCurrentAbsBeatForPlayhead());
+        const insertAtMeasureIndex = Math.max(0, Math.floor(absBeat / beatsPerMeasure));
+
+        type RestSeg = { duration: NoteDuration; isDotted: boolean; beats: number };
+        const buildMeasureRestSegments = (totalBeats: number): RestSeg[] => {
+            const EPS = 1e-6;
+            const baseDurations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'thirty-second', 'sixty-fourth'] as any;
+            const candidates: RestSeg[] = [];
+            for (const d of baseDurations) {
+                const b = (DURATION_VALUES as any)[d] as number;
+                if (!Number.isFinite(b) || b <= 0) continue;
+                candidates.push({ duration: d, isDotted: false, beats: b });
+                candidates.push({ duration: d, isDotted: true, beats: b * 1.5 });
+            }
+            candidates.sort((a, b) => b.beats - a.beats);
+
+            let remaining = totalBeats;
+            const out: RestSeg[] = [];
+            while (remaining > EPS) {
+                const pick = candidates.find(c => c.beats <= remaining + EPS);
+                if (!pick) break;
+                out.push(pick);
+                remaining -= pick.beats;
+                if (out.length > 32) break;
+            }
+            return out;
+        };
+
+        // Shift notes and inject a full-measure rest bar for each active voice.
+        setRawNotes(prev => {
+            const voicesInUse = Array.from(new Set((prev || []).map(n => Number((n as any)?.voice ?? 1)).filter(v => Number.isFinite(v))))
+                .filter(v => v >= 1 && v <= 4);
+            const voices = voicesInUse.length ? voicesInUse : [1];
+
+            const measureStartTick = insertAtMeasureIndex * ticksPerMeasure;
+            const segs = buildMeasureRestSegments(beatsPerMeasure);
+
+            const shifted = (prev || []).map((n: any) => {
+                const mi = Number(n?.measureIndex ?? 0);
+                if (!Number.isFinite(mi) || mi < insertAtMeasureIndex) return n;
+
+                const nextMeasureIndex = mi + 1;
+                const st = (typeof n?.startTick === 'number' && Number.isFinite(n.startTick))
+                    ? n.startTick
+                    : Math.round(((mi * beatsPerMeasure) + ((Number(n?.beat ?? 1) - 1))) * TICKS_PER_QUARTER);
+                const nextStartTick = st + ticksPerMeasure;
+                return { ...n, measureIndex: nextMeasureIndex, startTick: nextStartTick };
+            });
+
+            const injectedRests: StaffNote[] = [];
+            for (const v of voices) {
+                const clef = clefForVoice(v);
+                let localTicks = 0;
+                for (const seg of segs) {
+                    const durationTicks = Math.max(1, Math.round(seg.beats * TICKS_PER_QUARTER));
+                    injectedRests.push({
+                        id: crypto.randomUUID(),
+                        pitch: 'B',
+                        octave: clef === 'bass' ? 2 : 4,
+                        position: clef === 'bass' ? 4 : 8,
+                        midi: 0,
+                        noteIndex: 0,
+                        duration: seg.duration,
+                        isRest: true,
+                        isTriplet: false,
+                        isDuplet: false,
+                        isDotted: seg.isDotted,
+                        measureIndex: insertAtMeasureIndex,
+                        beat: (localTicks / TICKS_PER_QUARTER) + 1,
+                        startTick: measureStartTick + localTicks,
+                        durationTicks,
+                        clef,
+                        voice: v as any,
+                    });
+                    localTicks += durationTicks;
+                }
+            }
+
+            const next = [...shifted, ...injectedRests].sort((a: any, b: any) => {
+                const ma = Number(a?.measureIndex ?? 0);
+                const mb = Number(b?.measureIndex ?? 0);
+                if (ma !== mb) return ma - mb;
+                const sa = (typeof a?.startTick === 'number' ? a.startTick : 0);
+                const sb = (typeof b?.startTick === 'number' ? b.startTick : 0);
+                if (sa !== sb) return sa - sb;
+                const va = Number(a?.voice ?? 1);
+                const vb = Number(b?.voice ?? 1);
+                return va - vb;
+            });
+            return next;
+        });
+
+        // Shift key contexts (modulation/tonicization markers) after insertion.
+        setAnalysisContexts(prev => {
+            const next = (prev || []).map((c: any) => {
+                const abs = (typeof c?.absBeat === 'number' && Number.isFinite(c.absBeat)) ? c.absBeat : null;
+                if (abs != null) {
+                    const mi = Math.floor(abs / beatsPerMeasure);
+                    if (mi >= insertAtMeasureIndex) return { ...c, absBeat: abs + beatsPerMeasure };
+                    return c;
+                }
+                const mi = Number(c?.measureIndex);
+                if (Number.isFinite(mi) && mi >= insertAtMeasureIndex) return { ...c, measureIndex: mi + 1 };
+                return c;
+            });
+            return next.sort((a: any, b: any) => {
+                const aa = (typeof a?.absBeat === 'number') ? a.absBeat : ((a?.measureIndex ?? 0) * beatsPerMeasure);
+                const bb = (typeof b?.absBeat === 'number') ? b.absBeat : ((b?.measureIndex ?? 0) * beatsPerMeasure);
+                return aa - bb;
+            });
+        });
+
+        // Shift double barlines.
+        setDoubleBarlineMeasures(prev => (prev || [])
+            .map(m => (m >= insertAtMeasureIndex ? m + 1 : m))
+            .sort((a, b) => a - b)
+        );
+
+        // Ensure the score length grows by one measure.
+        setMinMeasureCount(prev => {
+            const next = Math.max(1, (prev || 1) + 1);
+            setMinMeasureCountDraft(String(next));
+            return next;
+        });
+
+        // Keep playhead/caret at the start of the inserted empty bar.
+        try {
+            playbackCursorAbsBeatRef.current = insertAtMeasureIndex * beatsPerMeasure;
+        } catch { /* ignore */ }
+    }, [clefForVoice, getCurrentAbsBeatForPlayhead, playheadPosition, setAnalysisContexts, timeSignature]);
 
     const handleStaffRightClick = useCallback((x: number, y: number, systemIndex: number, e: MouseEvent) => {
         if (!layoutData) return;
@@ -4751,7 +5216,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         durBeatsBase *= tupletFactor;
         if (!isFinite(durBeatsBase) || durBeatsBase <= 0) durBeatsBase = 1;
         const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
-        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+        // In compound meters (e.g. 6/8), allow placing longer notes on the 8th grid.
+        // Otherwise a quarter note at the 4th 8th would snap left to the previous quarter.
+        const isCompound = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+        const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
+        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
         const snapGridTicks = e.shiftKey
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
@@ -4820,7 +5289,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         // Snap grid: do NOT force the onset grid to be as coarse as the duration.
         // Example (6/4): a half note (2 beats) should be placeable at beat 4, not only at beats 1/3/5.
         // We cap the snap grid to 1 beat (quarter) so longer notes can still start on any beat.
-        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+        // In compound meters (e.g. 6/8), cap at the 8th grid so quarters can start on any 8th.
+        const isCompound = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+        const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
+        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
         const snapGridTicks = (e as any)?.shiftKey
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
@@ -5255,12 +5727,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             durBeatsBase *= tupletFactor;
             if (!isFinite(durBeatsBase) || durBeatsBase <= 0) durBeatsBase = 1;
             const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
-            const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+            const isCompound = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+            const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
+            const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
             return useFineStep ? Math.max(1, Math.floor(baseSnapGridTicks / 2)) : baseSnapGridTicks;
         } catch {
             return TICKS_PER_QUARTER;
         }
-    }, [selectedInsertion.duration, selectedInsertion.isDotted, tupletFactor]);
+    }, [selectedInsertion.duration, selectedInsertion.isDotted, timeSignature, tupletFactor]);
 
     const setPlayheadFromAbsBeat = useCallback((absBeat: number) => {
         try {
@@ -5974,6 +6448,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 return;
             }
 
+            // Alt/Option+T: toggle toolbar visibility (stable alternative to hover-to-hide).
+            if (!isMod && e.altKey && e.code === 'KeyT') {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsToolbarHidden(prev => !prev);
+                return;
+            }
+
             // Space: always toggle playback (avoid requiring focus on the Play button)
             if (!isMod && (key === ' ' || key === 'spacebar')) {
                 e.preventDefault();
@@ -6658,6 +7140,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 >
                     <span className="text-sm font-bold leading-none">||</span>
                 </button>
+                <button
+                    onClick={insertMeasureAtPlayhead}
+                    disabled={!playheadPosition}
+                    className="p-1 rounded-md transition-colors text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-gray-600"
+                    title={playheadPosition ? "Inserisci misura alla playhead (sposta avanti le successive)" : "Imposta prima la playhead (click sullo staff)"}
+                >
+                    <span className="text-sm font-bold leading-none">+|</span>
+                </button>
             </div>
         ),
         accidentals: (
@@ -6750,35 +7240,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 {isMoreMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">
                         {/* Staff system mode */}
-                        {staffSystemMode !== 'grandstaff' && (
-                            <button
-                                onClick={() => setStaffSystemMode('grandstaff')}
-                                className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                                title="Torna al Grand Staff (2 righi) — Alt/Option+L"
-                            >
-                                <span>Grand Staff (2 righi)</span>
-                            </button>
-                        )}
-
-                        {/* Toggles */}
                         <button
-                            onClick={async () => {
-                                const enabled = isMidiMenuOpen || !!selectedMidiOutput;
-                                if (enabled) {
-                                    setSelectedMidiOutput(null);
-                                    setIsMidiMenuOpen(false);
-                                    return;
-                                }
-                                if (midiOutputs.length === 0) {
-                                    try { await handleActivateMidi(); } catch (_) {}
-                                }
-                                setIsMidiMenuOpen(true);
-                            }}
+                            onClick={() => setStaffSystemMode('grandstaff')}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="MIDI"
+                            title="Torna al Grand Staff (2 righi) — Alt/Option+L"
                         >
-                            <span>MIDI</span>
-                            {(isMidiMenuOpen || !!selectedMidiOutput) && <span className="text-[11px]">✓</span>}
+                            <span>Grand Staff (2 righi)</span>
+                            {staffSystemMode === 'grandstaff' && <span className="text-[11px]">✓</span>}
+                        </button>
+
+                        <button
+                            onClick={() => setStaffSystemMode('treble_only')}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="Chiave di violino (1 rigo)"
+                        >
+                            <span>Chiave di violino (1 rigo)</span>
+                            {staffSystemMode === 'treble_only' && <span className="text-[11px]">✓</span>}
                         </button>
 
                         <button
@@ -6802,6 +7279,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         >
                             <span>Parti strette</span>
                             {staffLayoutMode === 'parti_strette' && staffSystemMode !== 'satb_ancient' && <span className="text-[11px]">✓</span>}
+                        </button>
+
+                        <div className="my-2 h-px bg-slate-700" />
+
+                        {/* Formato (radio) */}
+                        <div className="px-2 pb-1 text-[11px] text-slate-300">Formato</div>
+                        <button
+                            onClick={() => setCanvasFormat('page')}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="Page"
+                        >
+                            <span>Page</span>
+                            <span className="text-[11px]">{canvasFormat === 'page' ? '●' : '○'}</span>
+                        </button>
+                        <button
+                            onClick={() => setCanvasFormat('landscape')}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="Landscape"
+                        >
+                            <span>Landscape</span>
+                            <span className="text-[11px]">{canvasFormat === 'landscape' ? '●' : '○'}</span>
+                        </button>
+
+                        <div className="my-2 h-px bg-slate-700" />
+
+                        {/* MIDI (moved to bottom) */}
+                        <button
+                            onClick={async () => {
+                                const enabled = isMidiMenuOpen || !!selectedMidiOutput;
+                                if (enabled) {
+                                    setSelectedMidiOutput(null);
+                                    setIsMidiMenuOpen(false);
+                                    return;
+                                }
+                                if (midiOutputs.length === 0) {
+                                    try { await handleActivateMidi(); } catch (_) {}
+                                }
+                                setIsMidiMenuOpen(true);
+                            }}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                            title="MIDI"
+                        >
+                            <span>MIDI</span>
+                            {(isMidiMenuOpen || !!selectedMidiOutput) && <span className="text-[11px]">✓</span>}
                         </button>
 
                         {/* MIDI outputs (keeps existing behavior, nested under the MIDI toggle) */}
@@ -6841,27 +7362,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                 )}
                             </div>
                         )}
-
-                        <div className="my-2 h-px bg-slate-700" />
-
-                        {/* Formato (radio) */}
-                        <div className="px-2 pb-1 text-[11px] text-slate-300">Formato</div>
-                        <button
-                            onClick={() => setCanvasFormat('page')}
-                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="Page"
-                        >
-                            <span>Page</span>
-                            <span className="text-[11px]">{canvasFormat === 'page' ? '●' : '○'}</span>
-                        </button>
-                        <button
-                            onClick={() => setCanvasFormat('landscape')}
-                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="Landscape"
-                        >
-                            <span>Landscape</span>
-                            <span className="text-[11px]">{canvasFormat === 'landscape' ? '●' : '○'}</span>
-                        </button>
                     </div>
                 )}
             </div>
@@ -6872,9 +7372,52 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
 
+    // Toolbar visibility: stable toggle via shortcut.
+    const [isToolbarHidden, setIsToolbarHidden] = useState(false);
+    const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
+    const isToolbarVisible = forceToolbarVisible || !isToolbarHidden;
+
+    // Toolbar hover tooltip (shows even for disabled buttons).
+    const toolbarHoverRef = useRef<HTMLDivElement | null>(null);
+    const [toolbarHoverTip, setToolbarHoverTip] = useState<{ x: number; y: number; text: string } | null>(null);
+    const handleToolbarMouseMove = useCallback((e: React.MouseEvent) => {
+        try {
+            const root = toolbarHoverRef.current;
+            if (!root) return;
+
+            const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+            if (!el || !root.contains(el)) {
+                if (toolbarHoverTip) setToolbarHoverTip(null);
+                return;
+            }
+
+            const target = (el.closest('button,[role="button"],a,span') as HTMLElement | null) || el;
+            const title = (target?.getAttribute('title') || '').trim();
+            if (!title) {
+                if (toolbarHoverTip) setToolbarHoverTip(null);
+                return;
+            }
+
+            const x = e.clientX + 12;
+            const y = e.clientY + 12;
+
+            if (!toolbarHoverTip || toolbarHoverTip.text !== title || Math.abs(toolbarHoverTip.x - x) > 2 || Math.abs(toolbarHoverTip.y - y) > 2) {
+                setToolbarHoverTip({ x, y, text: title });
+            }
+        } catch {
+            // ignore
+        }
+    }, [toolbarHoverTip]);
+
     return (
-        <div className="flex-grow flex flex-col gap-4 min-h-0">
-            <div className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
+        <div className={`flex-grow flex flex-col ${isToolbarVisible ? 'gap-4' : 'gap-0'} min-h-0`}>
+            {isToolbarVisible && (
+            <div
+                ref={toolbarHoverRef}
+                onMouseMove={handleToolbarMouseMove}
+                onMouseLeave={() => setToolbarHoverTip(null)}
+                className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg"
+            >
                 <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
                     {visibleGroupIds.map((id, idx) => (
                         <React.Fragment key={id}>
@@ -6918,6 +7461,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                 </div>
             </div>
+            )}
+
+            {isToolbarVisible && toolbarHoverTip && (
+                <div
+                    className="fixed z-[9999] pointer-events-none bg-slate-900/90 text-slate-100 text-[11px] px-2 py-1 rounded shadow"
+                    style={{ left: toolbarHoverTip.x, top: toolbarHoverTip.y, maxWidth: 420 }}
+                >
+                    {toolbarHoverTip.text}
+                </div>
+            )}
             
             <div className="flex flex-row gap-4 flex-grow min-h-0">
                 <div
