@@ -755,6 +755,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Draw ties last so they appear above noteheads/beams.
         // We build ties only within this stave/clef group.
         try {
+          const tieGroup = (context as any).openGroup?.() as SVGGElement | undefined;
           const realPrepared = prepared
             .filter(p => p.staffNote.id !== '__ghost__')
             .filter(p => !p.staffNote.isRest);
@@ -769,6 +770,72 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             return (a.staffNote.xPosition ?? 0) - (b.staffNote.xPosition ?? 0);
           });
 
+          const tieDirectionFor = (staffNote: StaffNote, vfNote: any): 1 | -1 => {
+            const manualDir = (staffNote as any).manualTieDirection as ('up' | 'down' | undefined);
+            if (manualDir === 'up') return 1;
+            if (manualDir === 'down') return -1;
+            const stemDir = vfNote?.getStemDirection?.();
+            if (stemDir === 1) return -1;
+            if (stemDir === -1) return 1;
+            return 1;
+          };
+
+          const drawPartialTiePath = (fromX: number, toX: number, y: number, dir: 1 | -1) => {
+            try {
+              if (!tieGroup) return;
+              const svgNS = 'http://www.w3.org/2000/svg';
+              const dx = Math.max(10, toX - fromX);
+              const arch = 10;
+              const y0 = y + (dir === 1 ? -6 : 6);
+              const cy = y0 + (dir === 1 ? -arch : arch);
+              const c1x = fromX + dx * 0.25;
+              const c2x = fromX + dx * 0.75;
+              const path = document.createElementNS(svgNS, 'path');
+              path.setAttribute('d', `M ${fromX} ${y0} C ${c1x} ${cy} ${c2x} ${cy} ${toX} ${y0}`);
+              path.setAttribute('fill', 'none');
+              path.setAttribute('stroke', 'black');
+              path.setAttribute('stroke-width', '1.6');
+              path.setAttribute('stroke-linecap', 'round');
+              tieGroup.appendChild(path);
+            } catch {
+              // ignore
+            }
+          };
+
+          const getTieY = (vfNote: any, fallbackStave: any): number => {
+            const ys: number[] | undefined = vfNote?.getYs?.();
+            if (ys && ys.length > 0 && Number.isFinite(ys[0] as any)) return ys[0];
+            return fallbackStave.getYForLine(2);
+          };
+
+          const getTieRightX = (vfNote: any): number | null => {
+            const x = vfNote?.getTieRightX?.();
+            if (Number.isFinite(x as any)) return x;
+            const headEndX = vfNote?.getNoteHeadEndX?.();
+            if (Number.isFinite(headEndX as any)) return headEndX;
+            const absX = vfNote?.getAbsoluteX?.();
+            if (Number.isFinite(absX as any)) return absX;
+            return null;
+          };
+
+          const getTieLeftX = (vfNote: any): number | null => {
+            const x = vfNote?.getTieLeftX?.();
+            if (Number.isFinite(x as any)) return x;
+            const absX = vfNote?.getAbsoluteX?.();
+            if (Number.isFinite(absX as any)) return absX;
+            return null;
+          };
+
+          const staffEndX = (() => {
+            const right = stave.getX() + stave.getWidth();
+            return right - 10;
+          })();
+          const staffStartX = (() => {
+            const start = stave.getNoteStartX?.();
+            if (Number.isFinite(start as any)) return (start as number) - 10;
+            return stave.getX() + 10;
+          })();
+
           for (let i = 0; i < sorted.length; i++) {
             const cur = sorted[i].staffNote;
             if (!cur.isTiedToNext) continue;
@@ -780,7 +847,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               if ((cand.voice ?? 1) === curVoice) { next = sorted[j]; break; }
             }
 
-            if (!next) continue;
+            if (!next) {
+              // Tie continues into the next system/line: draw a partial outgoing tie.
+              const vf = sorted[i].vfNote as any;
+              const fromX = getTieRightX(vf);
+              if (fromX != null) {
+                const y = getTieY(vf, stave);
+                const dir = tieDirectionFor(cur, vf);
+                drawPartialTiePath(fromX, staffEndX, y, dir);
+              }
+              continue;
+            }
             if (next.staffNote.isRest) continue;
             if (next.staffNote.midi !== cur.midi) continue;
 
@@ -811,6 +888,40 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             } catch {
               // ignore
             }
+          }
+
+          // Incoming ties from previous system/line (the source note is not present in this system).
+          // We draw a partial tie from the left margin to the notehead.
+          for (let i = 0; i < sorted.length; i++) {
+            const cur = sorted[i].staffNote as any;
+            if (!cur?.isTiedFromPrev) continue;
+
+            // If a previous note in the *same system* exists for this voice and pitch, we already
+            // draw a full tie above, so skip.
+            const curVoice = (cur.voice ?? 1) as number;
+            let hasLocalPrev = false;
+            for (let j = i - 1; j >= 0; j--) {
+              const cand = sorted[j].staffNote as any;
+              if ((cand.voice ?? 1) !== curVoice) continue;
+              if ((cand.midi ?? null) === (cur.midi ?? null) && cand.isTiedToNext) {
+                hasLocalPrev = true;
+              }
+              break;
+            }
+            if (hasLocalPrev) continue;
+
+            const vf = sorted[i].vfNote as any;
+            const toX = getTieLeftX(vf);
+            if (toX == null) continue;
+            const y = getTieY(vf, stave);
+            const dir = tieDirectionFor(cur, vf);
+            drawPartialTiePath(staffStartX, toX, y, dir);
+          }
+
+          try {
+            (context as any).closeGroup?.();
+          } catch {
+            // ignore
           }
         } catch {
           // ignore

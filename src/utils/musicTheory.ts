@@ -839,8 +839,9 @@ const pitchClassOf = (n: StaffNote): number => {
     // Derive from spelling when possible.
     let spelledPc: number | null = null;
     try {
-        // Accept both letter-only pitches ("C") and pitches that already include accidentals ("C#", "DB").
-        if (/^[A-G]([#B]{1,2})?$/.test(pitch)) {
+        // Accept pitches that already include accidentals ("C#", "DB").
+        // IMPORTANT: do NOT match letter-only pitches here, otherwise we ignore explicitAccidental.
+        if (/^[A-G]([#B]{1,2})$/.test(pitch)) {
             const nameDirect = pitch.replace('B', 'b'); // normalize accidental casing
             const idxDirect = (noteNameToIndex as any)[nameDirect];
             if (Number.isFinite(idxDirect)) spelledPc = mod12(idxDirect);
@@ -856,6 +857,15 @@ const pitchClassOf = (n: StaffNote): number => {
             const idx = (noteNameToIndex as any)[name];
             if (Number.isFinite(idx)) spelledPc = mod12(idx);
         }
+    } catch { /* ignore */ }
+
+    // If the user explicitly set an accidental, trust the spelling over MIDI.
+    // This prevents common UI/edit states where the glyph (explicitAccidental) is updated
+    // but MIDI lags by ±1 semitone, which would otherwise mislabel secondary dominants in inversions
+    // (e.g. D/F# collapsing to ii6 if F# is treated as F).
+    try {
+        const hasExplicitAcc = anyN?.userAccidental != null || anyN?.explicitAccidental != null;
+        if (hasExplicitAcc && spelledPc != null) return spelledPc;
     } catch { /* ignore */ }
 
     // Prefer MIDI when available (it already encodes key-signature-implied spellings like Bb shown as 'B'),
@@ -1180,7 +1190,7 @@ export function identifyChordCandidates(notes: StaffNote[]) {
 }
 
 export function calculateRomanFromChordInfo(
-    chordInfo: { root: StaffNote; type: string },
+    chordInfo: { root: StaffNote; type: string; intervals?: Set<number> },
     keySignatureRoot: string,
     isMinorMode: boolean
 ): string | null {
@@ -1498,7 +1508,7 @@ function getVerticalFiguresFromNotes(notes: StaffNote[]): string[] {
 }
 
 function calculateRomanNumeral(
-    chordInfo: { root: StaffNote; type: string },
+    chordInfo: { root: StaffNote; type: string; intervals?: Set<number> },
     keyInfo: { tonicIndex: number; isMinor: boolean }
 ): string {
     const { root: chordRoot, type: quality } = chordInfo;
@@ -1530,16 +1540,38 @@ function calculateRomanNumeral(
     const scaleIntervals = isMinorMode ? scaleIntervalsMinorHarmonic : scaleIntervalsMajor;
     const romanNumerals = isMinorMode ? romanNumeralsMinorHarmonic : romanNumeralsMajor;
 
-    // Secondary dominants (V/x) are intentionally conservative here:
-    // only emit V/x when the sonority is explicitly a dominant-type chord.
-    // This avoids labeling diatonic major triads (e.g. III in minor) as V/VI, etc.
-    if (quality.startsWith('Dominant')) {
+    // Secondary dominants (V/x)
+    // - Dominant-type chords: allow directly.
+    // - Dominant *triads*: allow only when they contain the chromatic leading tone
+    //   of the target degree (prevents false V/VI readings like III in minor).
+    {
         const diatonicScaleIntervals = isMinorMode ? [0, 2, 3, 5, 7, 8, 10] : scaleIntervalsMajor;
-        for (let i = 1; i < diatonicScaleIntervals.length; i++) {
-            const diatonicDegreeRootIndex = (keyTonicIndex + diatonicScaleIntervals[i]) % 12;
-            const isDominantOfDegree = (chordRootIndex - diatonicDegreeRootIndex + 12) % 12 === 7;
-            if (isDominantOfDegree) {
-                if (chordRootIndex === keyTonicIndex && !quality.startsWith('Dominant')) continue;
+        const diatonicPcSet = new Set<number>(diatonicScaleIntervals.map(iv => mod12(keyTonicIndex + iv)));
+
+        const isDominantType = typeof quality === 'string' && quality.startsWith('Dominant');
+        const isMajorTriad = quality === BuiltInChords.Major;
+        const hasMajorThird = !!(chordInfo as any)?.intervals?.has?.(4);
+
+        // Only consider triads when we can confirm the major third is present.
+        const allowTriadSecondary = isMajorTriad && hasMajorThird;
+
+        // For dominant-type chords, require the major 3rd. Without it, many sonorities
+        // (e.g. ii6/5 = D–F–A–C) can be reinterpreted as a "dominant 7#9 without 3rd",
+        // which would incorrectly produce V/x labels.
+        if ((isDominantType && hasMajorThird) || allowTriadSecondary) {
+            for (let i = 1; i < diatonicScaleIntervals.length; i++) {
+                const targetRootIndex = mod12(keyTonicIndex + diatonicScaleIntervals[i]);
+                const isDominantOfDegree = mod12(chordRootIndex - targetRootIndex) === 7;
+                if (!isDominantOfDegree) continue;
+
+                // For triads, require the chromatic leading tone of the target degree.
+                // Example in F major: D major => V/ii because it contains F# (LT to G).
+                if (allowTriadSecondary) {
+                    const targetLeadingTonePc = mod12(targetRootIndex - 1);
+                    const isChromaticLt = !diatonicPcSet.has(targetLeadingTonePc);
+                    if (!isChromaticLt) continue;
+                }
+
                 const targetRoman = isMinorMode
                     ? ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'][i]
                     : romanNumeralsMajor[i];
@@ -1561,6 +1593,22 @@ function calculateRomanNumeral(
 
     let roman = romanNumerals[degreeIndex];
     const effectiveQuality = (quality === BuiltInChords.Add9) ? BuiltInChords.Major : quality;
+
+    // Functional preference: in tonal contexts, a major triad built on scale-degree II is
+    // overwhelmingly used as V/V (dominant of the dominant). If secondary-dominant detection
+    // above fails for any reason (e.g. candidate/root heuristics), prefer the functional label.
+    try {
+        // Apply only to a plain major triad. Do not coerce add/extension sonorities (e.g. II(add9))
+        // into secondary dominants; those are intentionally treated as chromatic II in this app.
+        const isPlainMajorTriad = quality === BuiltInChords.Major;
+        const hasMajorThird = !!(chordInfo as any)?.intervals?.has?.(4);
+        const hasFifth = !!(chordInfo as any)?.intervals?.has?.(7);
+        if (degreeIndex === 1 && isPlainMajorTriad && hasMajorThird && hasFifth) {
+            const targetRoman = romanNumerals[4] || 'V';
+            return `V/${targetRoman}`;
+        }
+    } catch { /* ignore */ }
+
     if (effectiveQuality === BuiltInChords.Major && roman.toLowerCase() === roman) roman = roman.toUpperCase();
     else if (quality === BuiltInChords.Minor && roman.toUpperCase() === roman) roman = roman.toLowerCase();
     else if (quality === BuiltInChords.Diminished && !roman.includes('°')) roman += '°';
@@ -1727,17 +1775,53 @@ export function getRomanAnalysis(
     try {
         const isDominantType = (t: any) => typeof t === 'string' && t.startsWith('Dominant');
         const allInfo = identifyChord(baseChord);
-        if (allInfo && isDominantType(allInfo.type)) {
+        if (allInfo) {
             const filteredIsDominant = chordInfo && isDominantType(chordInfo.type);
-            if (!filteredIsDominant) {
+            const allIsDominant = isDominantType(allInfo.type);
+
+            // Case 1: dominant-type rescue (existing behavior)
+            if (allIsDominant && !filteredIsDominant) {
                 chordInfo = allInfo;
             }
+
+            // Case 2: secondary-dominant triads in inversions:
+            // filtering can remove the chromatic LT (e.g. F#) and collapse V/V into II6.
+            // Prefer the unfiltered vertical ONLY when it yields a V/x label under the current key.
+            try {
+                const allRoman = calculateRomanNumeral(allInfo, keyInfo);
+                const filteredRoman = chordInfo ? calculateRomanNumeral(chordInfo, keyInfo) : '';
+                if (typeof allRoman === 'string' && allRoman.startsWith('V/') && !(String(filteredRoman || '').startsWith('V/'))) {
+                    chordInfo = allInfo;
+                }
+            } catch { /* ignore */ }
         }
     } catch { /* ignore */ }
 
     if (!chordInfo || !chordInfo.root || !chordInfo.type) return null;
 
-    const baseRomanSymbol = calculateRomanNumeral(chordInfo, keyInfo);
+    let baseRomanSymbol = calculateRomanNumeral(chordInfo, keyInfo);
+
+    // Secondary dominants in inversions:
+    // In 1st/2nd inversion, root-identification can prefer the bass (e.g. D/F# may be read as F#m).
+    // That makes the Roman numeral lose the V/x label and only the Arabic figures remain.
+    // Fix: if any high-confidence candidate yields a V/x under the current key context,
+    // prefer that V/x label over a non-secondary diatonic reading.
+    try {
+        const pcs = [...new Set(baseChord.map(pitchClassOf))];
+        if (pcs.length >= 3 && typeof baseRomanSymbol === 'string' && baseRomanSymbol && !baseRomanSymbol.includes('/')) {
+            const candidates = identifyChordCandidates(filteredChord.length >= 2 ? filteredChord : baseChord);
+            let bestSecondary: { roman: string; score: number } | null = null;
+            for (const c of candidates as any[]) {
+                const roman = calculateRomanNumeral({ root: c.root, type: c.type, intervals: c.intervals }, keyInfo);
+                if (!roman || !roman.startsWith('V/')) continue;
+                const score = Number.isFinite(c.score) ? (c.score as number) : 0;
+                if (!bestSecondary || score > bestSecondary.score) bestSecondary = { roman, score };
+            }
+            if (bestSecondary) {
+                baseRomanSymbol = bestSecondary.roman;
+            }
+        }
+    } catch { /* ignore */ }
 
     // Prefer bass-dyad diatonic inference for non-secondary romans.
     try {
@@ -2986,8 +3070,30 @@ export function applyHarmonyRules(
             const ctxLeadingPc = mod12(ctxTonicPc - 1);
 
             for (const v of [1,2,3,4] as Voice[]) {
-                const prep = a.byVoice.get(v);
-                if (!prep) continue; // no preparatory note in previous chord
+                // Preparation note: do NOT assume it started on the bar downbeat.
+                // In real counterpoint/chorale writing (and in your Dubuois example), the
+                // preparation can begin mid-measure, often as the resolution of a previous
+                // suspension. What matters is that a note of the same pitch is *held into*
+                // the harmony change at b.absBeat.
+                const epsBefore = 1e-4;
+                const heldBefore = (() => {
+                    try {
+                        const candidates = analyzedNotes
+                            .filter(n => (n.voice ?? 1) === v)
+                            .filter(n => {
+                                const s = getNoteStart(n);
+                                const e = getNoteEnd(n);
+                                return s < b.absBeat - 1e-6 && e > (b.absBeat - epsBefore);
+                            })
+                            .sort((x, y) => getNoteStart(y) - getNoteStart(x));
+                        return candidates[0] || null;
+                    } catch {
+                        return null;
+                    }
+                })();
+
+                const prep = heldBefore || a.byVoice.get(v) || null;
+                if (!prep) continue; // no preparatory note found
 
                 // find the sounding note at the downbeat in this voice (S)
                 const sounders = analyzedNotes.filter(n => (n.voice ?? 1) === v).filter(n => {
@@ -3003,9 +3109,30 @@ export function applyHarmonyRules(
                     debugLog('[ANALYSIS] detectSuspensions skip-prep-mismatch', { voice: v, prepId: prep.id, prepMidi: prep.midi, sId: S.id, sMidi: S.midi, aAbs: a.absBeat, bAbs: b.absBeat });
                     continue;
                 }
-                if (!isNoteInChord(prep, a)) {
-                    debugLog('[ANALYSIS] detectSuspensions skip-prep-not-consonant', { prepId: prep.id, aAbs: a.absBeat });
-                    continue; // prep must be consonant in previous chord
+
+                // Preparation consonance:
+                // allow the preparation to start on any beat; require that within the span
+                // from prep start up to the harmony change, the note is consonant in at least
+                // one chord event (typically right after it begins, or after resolving a
+                // previous suspension).
+                const prepStartAbs = getNoteStart(prep);
+                const prepConsonantSomewhere = (() => {
+                    try {
+                        for (let j = i; j >= 0; j--) {
+                            const ev = chordEvents[j];
+                            if (!ev) continue;
+                            if (ev.absBeat < prepStartAbs - 1e-6) break;
+                            if (ev.absBeat >= b.absBeat - 1e-6) continue;
+                            if (isNoteInChord(prep, ev)) return true;
+                        }
+                        return false;
+                    } catch {
+                        return false;
+                    }
+                })();
+                if (!prepConsonantSomewhere) {
+                    debugLog('[ANALYSIS] detectSuspensions skip-prep-not-consonant', { prepId: prep.id, aAbs: a.absBeat, prepStartAbs, bAbs: b.absBeat });
+                    continue;
                 }
 
                 // Rule 2: S must start before or at the downbeat (tied or began before change)
@@ -3115,6 +3242,52 @@ export function applyHarmonyRules(
                     const notesAtBAll = (b.notes || []) as StaffNote[];
                     const sPc = mod12((typeof (S as any).noteIndex === 'number') ? (S as any).noteIndex : mod12(S.midi ?? 0));
 
+                    const looksSeventhType = (t: string): boolean => {
+                        const s = String(t || '');
+                        return s.includes('7') || s.includes('9') || s.includes('11') || s.includes('13') || s.includes('dim7') || s.includes('ø7');
+                    };
+
+                    // Extra guard: if the full verticality *with* S forms a clear 7th-chord sonority
+                    // and S is the chordal 7th of that same-root chord (vs the chord inferred without S),
+                    // then this is a chordal seventh resolution, not a suspension/ritardo.
+                    // This is especially important when S is held (not attacked) so attacked-only
+                    // inference may miss the 7th.
+                    try {
+                        const heldIntoB = (getNoteStart(S) < b.absBeat - 1e-6) || (getNoteEnd(prep) > b.absBeat - 1e-6);
+                        if (heldIntoB) {
+                            const chordInfoWithS = identifyChord(notesAtBAll);
+                            const chordInfoWithoutS = identifyChord(notesAtBAll.filter(n => n && n.id !== S.id));
+
+                            if (
+                                chordInfoWithS && chordInfoWithS.root && chordInfoWithS.type &&
+                                chordInfoWithoutS && chordInfoWithoutS.root && chordInfoWithoutS.type &&
+                                !String(chordInfoWithS.type).includes('Sus')
+                            ) {
+                                const tWith = String(chordInfoWithS.type);
+                                const tWithout = String(chordInfoWithoutS.type);
+
+                                const rootPcWith = mod12((chordInfoWithS.root as any).noteIndex ?? mod12((chordInfoWithS.root as any).midi ?? 0));
+                                const rootPcWithout = mod12((chordInfoWithoutS.root as any).noteIndex ?? mod12((chordInfoWithoutS.root as any).midi ?? 0));
+
+                                const sameRoot = rootPcWith === rootPcWithout;
+                                const withoutAlreadySeventh = looksSeventhType(tWithout);
+                                const withIsSeventh = looksSeventhType(tWith);
+
+                                if (sameRoot && withIsSeventh && !withoutAlreadySeventh) {
+                                    const formulaWith = (CHORD_FORMULAS as any)[chordInfoWithS.type] as number[] | undefined;
+                                    const intervalFromRootWith = mod12(sPc - rootPcWith);
+                                    const isChordMemberWith = !!(formulaWith && Array.isArray(formulaWith) && formulaWith.includes(intervalFromRootWith));
+                                    const isSeventhLike = intervalFromRootWith === 9 || intervalFromRootWith === 10 || intervalFromRootWith === 11;
+
+                                    if (isChordMemberWith && isSeventhLike) {
+                                        chordalSeventhHeldAtB = true;
+                                        seventhRootPcAtB = rootPcWith;
+                                    }
+                                }
+                            }
+                        }
+                    } catch { /* ignore */ }
+
                     // (1) Full-verticality check for real 7th chords (dominant/maj7/min7/ø7/°7).
                     // IMPORTANT: when the note is held into B (tie-like), exclude it from the
                     // inferred sonority so it cannot "explain itself" as a chord member.
@@ -3123,7 +3296,7 @@ export function applyHarmonyRules(
                     const chordInfoFull = identifyChord(fullForGuard);
                     if (chordInfoFull && chordInfoFull.root && chordInfoFull.type && !String(chordInfoFull.type).includes('Sus')) {
                         const t = String(chordInfoFull.type);
-                        const looksSeventh = t.includes('7') || t.includes('9') || t.includes('11') || t.includes('13') || t.includes('dim7') || t.includes('ø7');
+                        const looksSeventh = looksSeventhType(t);
                         if (looksSeventh) {
                             const formulaFull = (CHORD_FORMULAS as any)[chordInfoFull.type] as number[] | undefined;
                             const rootPcFull = mod12((chordInfoFull.root as any).noteIndex ?? mod12((chordInfoFull.root as any).midi ?? 0));
@@ -3513,7 +3686,18 @@ export function applyHarmonyRules(
                 // (event `b`), not at the earlier preparation chord. This keeps the
                 // Roman-numeral interpretation aligned with where the suspension
                 // actually happens.
-                (prep as any).isSuspension = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum };
+                //
+                // IMPORTANT: when the held note is represented as two different note IDs
+                // across the barline (prep is tied-to-next, and S is the new note at b),
+                // also mark the downbeat note `S` so renderers can correctly filter and
+                // highlight the suspension at its actual onset.
+                const suspPayload = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum };
+                (prep as any).isSuspension = suspPayload;
+                try {
+                    if (S && S.id && prep.id && S.id !== prep.id) {
+                        (S as any).isSuspension = suspPayload;
+                    }
+                } catch { /* ignore */ }
                 // Clear any passing/ornament flags on involved notes
                 if ((prep as any).isPassing) (prep as any).isPassing = false;
                 if ((S as any).isPassing) (S as any).isPassing = false;
@@ -4040,7 +4224,13 @@ export function applyHarmonyRules(
             // If any voice is currently ornamenting (suspension/passing/neighbor/etc.),
             // chord-completeness warnings become very noisy and often misleading.
             // In those cases, skip this check.
-            const hasNonChordTone = present.some(n => isNonChordToneAtEvent(n, ev));
+            // Treat any suspension/ritardo as an exemption for chord-completeness warnings.
+            // Suspensions are often notated as tied notes whose *note onset* precedes the
+            // dissonance onset; in that case `fromAbsBeat` may not equal the current event.
+            // For the pedagogy/UI, we prefer to skip completeness warnings whenever a
+            // suspension is active in the verticality.
+            const hasSuspension = present.some(n => !!(n as any).isSuspension);
+            const hasNonChordTone = hasSuspension || present.some(n => isNonChordToneAtEvent(n, ev));
             if (hasNonChordTone) return;
 
             // Special-case: in minor, the pitch-class set of a leading-tone fully diminished 7th
@@ -4787,6 +4977,19 @@ export function applyHarmonyRules(
             const ok = stepUpToTonic(n1.midi, n2.midi, ctxTonicPc);
             if (ok) return;
 
+            // Guard-rail: if the *arrival harmony* (at the structural next event) does not
+            // contain the tonic at all, do not flag "missing" LT resolution. This avoids
+            // false positives in contexts like deceptive/redirected progressions where the
+            // tonic is not harmonically available in the following sonority.
+            try {
+                const evB = (typeof idx2 === 'number' && chordEvents[idx2]) ? chordEvents[idx2] : b;
+                const bStructural = getStructuralNotes(evB as any) || [];
+                const pcsB = new Set(bStructural.filter(n => n && !n.isRest).map(n => mod12(n.noteIndex)));
+                if (!pcsB.has(ctxTonicPc)) {
+                    return;
+                }
+            } catch { /* ignore */ }
+
             // 2. SE NON RISOLVE, controlliamo se è un'eccezione ammessa (Dubois §19)
             // Voce interna (Alto/Tenore) e Soprano canta la tonica
             const isInternalVoice = v === 2 || v === 3;
@@ -5085,16 +5288,54 @@ export function applyHarmonyRules(
         // added tones/anticipations/suspensions. Enforcing strict chord-7th resolution on such
         // textures tends to create false positives.
         const pcsFor7 = new Set(structuralFor7.map(n => mod12(n.noteIndex)));
-        const chordInfoA = (!isAug6Chord && pcsFor7.size <= 4) ? identifyChord(structuralFor7) : null;
+        // Still try to identify the chord even when the texture is "dirty" so that we can
+        // detect/report green exceptions (transfers/delays/free notes). However, only emit
+        // hard R-12 errors in the clean (<=4 pcs) case.
+        const strictR12 = (!isAug6Chord && pcsFor7.size <= 4);
+        const chordInfoA = (!isAug6Chord) ? identifyChord(structuralFor7) : null;
         if (chordInfoA?.root) {
-            const rootMidi = chordInfoA.root.midi;
-            const seventhNotes = getStructuralNotes(a)
+            let rootMidi = chordInfoA.root.midi;
+            let rootInferredForR12 = false;
+
+            let seventhNotes = getStructuralNotes(a)
                 .filter(n => !n.isRest)
                 .map(n => {
                     const rel = mod12(n.midi - rootMidi);
                     return { n, rel };
                 })
                 .filter(({ rel }) => rel === 10 || rel === 11);
+
+            // If no 7th is detected, try inferring a rootless dominant-7 shell.
+            // This supports cases like {B,D,F} in C: it can function as G7 without the root.
+            // We use this only to enable green exceptions (transference/delay/etc.), not to
+            // emit hard R-12 errors.
+            if (!seventhNotes.length) {
+                try {
+                    const pcs = [...new Set((structuralFor7 || []).filter(n => n && !n.isRest).map(n => mod12(n.noteIndex)))];
+                    if (pcs.length >= 3 && pcs.length <= 4) {
+                        let best: { rootPc: number; score: number } | null = null;
+                        for (let r = 0; r < 12; r++) {
+                            const set = new Set<number>([r, mod12(r + 4), mod12(r + 7), mod12(r + 10)]);
+                            if (!pcs.every(pc => set.has(pc))) continue;
+                            // Require 3rd + 7th present; otherwise we'd over-infer.
+                            if (!pcs.includes(mod12(r + 4)) || !pcs.includes(mod12(r + 10))) continue;
+                            // Prefer missing-root cases.
+                            const missingRootBonus = pcs.includes(r) ? 0 : 2;
+                            const hasFifthBonus = pcs.includes(mod12(r + 7)) ? 1 : 0;
+                            const score = missingRootBonus + hasFifthBonus;
+                            if (!best || score > best.score) best = { rootPc: r, score };
+                        }
+                        if (best) {
+                            rootMidi = 60 + best.rootPc;
+                            rootInferredForR12 = true;
+                            seventhNotes = getStructuralNotes(a)
+                                .filter(n => !n.isRest)
+                                .map(n => ({ n, rel: mod12(n.midi - rootMidi) }))
+                                .filter(({ rel }) => rel === 10 || rel === 11);
+                        }
+                    }
+                } catch { /* ignore */ }
+            }
 
             if (seventhNotes.length) {
                 seventhNotes.forEach(({ n: n7, rel }) => {
@@ -5126,13 +5367,168 @@ export function applyHarmonyRules(
                     const sameVoiceResolves = !!nNext && stepDown(n7.midi, nNext.midi);
                     if (sameVoiceResolves) return;
 
+                    // ================================
+                    // Exceptions for minor-7th resolution (rel === 10)
+                    // ================================
+                    const idxB = (typeof next?.index === 'number') ? (next.index as number) : (i + 1);
+                    const evBFor7 = (Number.isFinite(idxB) && chordEvents[idxB]) ? chordEvents[idxB] : b;
+                    const bStructuralFor7 = (() => {
+                        try { return getStructuralNotes(evBFor7 as any) || []; } catch { return []; }
+                    })();
+                    const pcsBFor7 = new Set(bStructuralFor7.filter(n => n && !n.isRest).map(n => mod12(n.noteIndex)));
+
+                    const stepUp = (fromMidi: number, toMidi: number) => (toMidi === fromMidi + 1) || (toMidi === fromMidi + 2);
+                    const isPerfectFourthUp = (fromMidi: number, toMidi: number) => (toMidi - fromMidi) === 5;
+
+                    const resolutionPcsFor7 = new Set([mod12(n7.midi - 1), mod12(n7.midi - 2)]);
+
+                    const findResolutionCarrierAtB = (): { note: StaffNote; kind: 'bass' | 'soprano' | 'lower' | 'other' } | null => {
+                        try {
+                            const byVoice = (evBFor7 as any)?.byVoice as Map<number, StaffNote> | undefined;
+                            const getV = (vv: number) => (byVoice?.get?.(vv) ?? null) as any;
+
+                            const bass = getV(4);
+                            if (bass && resolutionPcsFor7.has(mod12(bass.midi))) return { note: bass, kind: 'bass' };
+
+                            const sopr = getV(1);
+                            if (sopr && resolutionPcsFor7.has(mod12(sopr.midi))) return { note: sopr, kind: 'soprano' };
+
+                            if (v > 1) {
+                                const lower = getV(v - 1);
+                                if (lower && resolutionPcsFor7.has(mod12(lower.midi))) return { note: lower, kind: 'lower' };
+                            }
+
+                            const any = bStructuralFor7
+                                .filter(n => n && !n.isRest)
+                                .find(n => (n.voice ?? 1) !== v && resolutionPcsFor7.has(mod12(n.midi))) as StaffNote | undefined;
+                            return any ? { note: any, kind: 'other' } : null;
+                        } catch {
+                            return null;
+                        }
+                    };
+
+                    // Helper: treat only simple chord members (triad members) as consonant targets.
+                    const isConsonantChordMemberAtB = (note: StaffNote | null | undefined): boolean => {
+                        if (!note || note.isRest) return false;
+                        try {
+                            const infoB = identifyChord(bStructuralFor7);
+                            if (!infoB?.root) return false;
+                            const relB = mod12(note.midi - infoB.root.midi);
+                            // Root / 3rd / 5th (triad members)
+                            return relB === 0 || relB === 3 || relB === 4 || relB === 7;
+                        } catch {
+                            return false;
+                        }
+                    };
+
+                    // (1) Upward resolution (rare): allow the 7th to rise by step to a consonant member
+                    // of the arrival chord when this avoids an incomplete resolution harmony.
+                    // (2) Delamont "Transference": allow the 7th to rise by step when the expected
+                    // resolution tone is realized by another voice in the arrival sonority.
+                    if (rel === 10 && nNext && stepUp(n7.midi, nNext.midi)) {
+                        const carrier = findResolutionCarrierAtB();
+                        if (carrier) {
+                            addViolation({
+                                ruleId: 'EXC-7-TRANSFERRED-RES',
+                                severity: 'exception',
+                                description: 'Eccezione: risoluzione della 7a “presa in carico” da un’altra voce (transference)',
+                                suggestion:
+                                    carrier.kind === 'bass'
+                                        ? 'Ammesso: il basso realizza la nota di risoluzione.'
+                                        : carrier.kind === 'soprano'
+                                            ? 'Ammesso: il soprano realizza la nota di risoluzione.'
+                                            : carrier.kind === 'lower'
+                                                ? 'Ammesso: la voce immediatamente inferiore realizza la nota di risoluzione.'
+                                                : 'Ammesso: un’altra voce realizza la nota di risoluzione.',
+                                // 2 noteIds so we can render a green connection.
+                                noteIds: [n7.id, carrier.note.id],
+                            });
+                            return;
+                        }
+                    }
+
+                    if (rel === 10 && nNext && stepUp(n7.midi, nNext.midi) && isConsonantChordMemberAtB(nNext)) {
+                        addViolation({
+                            ruleId: 'EXC-7-UP',
+                            severity: 'exception',
+                            description: 'Eccezione: la 7a risolve per moto ascendente',
+                            suggestion: 'Ammesso in casi rari (esigenze di completezza dell’accordo di arrivo o logica cromatica).',
+                            noteIds: [n7.id, nNext.id],
+                        });
+                        return;
+                    }
+
+                    // (3) Delamont: upward perfect 4th to another minor seventh.
+                    // Accept when the arrival note is itself the chordal minor seventh of the arrival harmony.
+                    if (rel === 10 && nNext && isPerfectFourthUp(n7.midi, nNext.midi)) {
+                        try {
+                            const infoB = identifyChord(bStructuralFor7);
+                            if (infoB?.root) {
+                                const relToBRoot = mod12(nNext.midi - infoB.root.midi);
+                                if (relToBRoot === 10) {
+                                    addViolation({
+                                        ruleId: 'EXC-7-P4-TO7',
+                                        severity: 'exception',
+                                        description: 'Eccezione: salto di 4ª perfetta verso un’altra 7a minore',
+                                        suggestion: 'Ammesso in contesti specifici quando la nuova nota è la 7a dell’accordo successivo.',
+                                        noteIds: [n7.id, nNext.id],
+                                    });
+                                    return;
+                                }
+                            }
+                        } catch { /* ignore */ }
+                    }
+
+                    // (3) Stationary / reinterpreted: the 7th can be held if it becomes a consonant member
+                    // of the arrival harmony (e.g., V7 -> IV where the 7th becomes the root of IV).
+                    if (rel === 10 && nNext && (nNext.midi === n7.midi) && isConsonantChordMemberAtB(nNext)) {
+                        addViolation({
+                            ruleId: 'EXC-7-STATIC',
+                            severity: 'exception',
+                            description: 'Eccezione: permanenza della 7a (reinterpretata come nota consonante)',
+                            suggestion: 'Ammesso quando la nota diventa membro consonante dell’accordo successivo (es. V7→IV).',
+                            noteIds: [n7.id, nNext.id],
+                        });
+                        return;
+                    }
+
+                    // (6) Delayed/ornamental resolution: allow a delayed step-down within the same voice
+                    // over the next structural event(s).
+                    if (rel === 10) {
+                        try {
+                            let curIdx = idxB;
+                            let curNote: StaffNote | null = nNext || null;
+                            let hops = 0;
+                            while (curNote && hops < 2) {
+                                const nxt = findNextStructuralVoiceNote(curIdx, v, curNote.id);
+                                if (!nxt?.note) break;
+                                const cand = nxt.note as StaffNote;
+                                if (stepDown(n7.midi, cand.midi)) {
+                                    addViolation({
+                                        ruleId: 'EXC-7-DELAYED',
+                                        severity: 'exception',
+                                        description: 'Eccezione: risoluzione della 7a ritardata/ornamentale',
+                                        suggestion: 'Ammesso quando la 7a risolve per grado congiunto dopo un breve ritardo.',
+                                        noteIds: [n7.id, cand.id],
+                                    });
+                                    return;
+                                }
+                                curIdx = (typeof nxt.index === 'number') ? nxt.index : (curIdx + 1);
+                                curNote = cand;
+                                hops++;
+                            }
+                        } catch { /* ignore */ }
+                    }
+
                     // EXC-7m01 transferred resolution: resolution note appears in another voice.
                     // (Or the original voice is silent/absent, but another voice contains the resolution.)
                     const resolutionMidiCandidates = [n7.midi - 1, n7.midi - 2];
                     const transferredResolution = (() => {
                         // Prefer -1 semitone, then -2.
                         // Accept the resolution even if it appears in another octave (pitch-class match).
-                        const candidates = (b.notes || []).filter(n => !n.isRest) as StaffNote[];
+                        // Use the *structural arrival event* (not just the immediate next scanpoint),
+                        // otherwise micro-events can hide the resolution note.
+                        const candidates = ((evBFor7 as any)?.notes || b.notes || []).filter((n: any) => n && !n.isRest) as StaffNote[];
 
                         // 1) Exact MIDI match first.
                         for (const targetMidi of resolutionMidiCandidates) {
@@ -5170,16 +5566,63 @@ export function applyHarmonyRules(
                         return;
                     }
 
+                    // (2) Voice exchange / transferred 7th BEFORE resolution: the 7th can move to another
+                    // voice (same pitch-class) and then resolve there.
+                    if (rel === 10) {
+                        try {
+                            const pc7 = mod12(n7.midi);
+                            const other = bStructuralFor7
+                                .filter(n => n && !n.isRest)
+                                .find(n => (n.voice ?? 1) !== v && mod12(n.midi) === pc7) as StaffNote | undefined;
+
+                            if (other) {
+                                const nextOther = findNextStructuralVoiceNote(idxB, (other.voice ?? 1) as Voice, other.id);
+                                const otherRes = nextOther?.note as StaffNote | undefined;
+                                if (otherRes && stepDown(other.midi, otherRes.midi)) {
+                                    addViolation({
+                                        ruleId: 'EXC-7-TRANSFER',
+                                        severity: 'exception',
+                                        description: 'Eccezione: la 7a è trasferita ad altra voce prima della risoluzione',
+                                        suggestion: 'Ammesso tramite cambio di posizione delle voci superiori.',
+                                        noteIds: [n7.id, other.id],
+                                    });
+                                    return;
+                                }
+                            }
+                        } catch { /* ignore */ }
+                    }
+
+                    // (6) "Free" seventh / not harmonically available: if the arrival sonority contains
+                    // no plausible resolution pitch-class at all, do not flag as an error.
+                    if (rel === 10) {
+                        try {
+                            const targetPcs = new Set([mod12(n7.midi - 1), mod12(n7.midi - 2)]);
+                            const hasAnyResolutionTone = [...targetPcs].some(pc => pcsBFor7.has(pc));
+                            if (!hasAnyResolutionTone) {
+                                addViolation({
+                                    ruleId: 'EXC-7-FREE',
+                                    severity: 'exception',
+                                    description: 'Eccezione: la 7a non ha una risoluzione disponibile nella sonorità di arrivo',
+                                    suggestion: 'Ammesso in casi di risoluzioni eccezionali/implicite o contesto tardo-ottocentesco.',
+                                    noteIds: [n7.id, (nNext?.id ?? n7.id)],
+                                });
+                                return;
+                            }
+                        } catch { /* ignore */ }
+                    }
+
                     // No transferred resolution note exists; if the voice continues, flag the error.
                     if (!nNext) return;
 
-                    addViolation({
-                        ruleId: 'R-12',
-                        severity: 'error',
-                        description: 'Risoluzione errata della settima dell’accordo',
-                        suggestion: 'La 7a tende a risolvere scendendo di grado (per moto congiunto).',
-                        noteIds: [n7.id, nNext.id],
-                    });
+                    if (strictR12 && !rootInferredForR12) {
+                        addViolation({
+                            ruleId: 'R-12',
+                            severity: 'error',
+                            description: 'Risoluzione errata della settima dell’accordo',
+                            suggestion: 'La 7a tende a risolvere scendendo di grado (per moto congiunto).',
+                            noteIds: [n7.id, nNext.id],
+                        });
+                    }
                 });
             }
         }

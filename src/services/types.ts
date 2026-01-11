@@ -155,6 +155,7 @@ export type StaffNote = {
   isTriplet?: boolean;
   isDuplet?: boolean;
   groupId?: string;
+  isTiedFromPrev?: boolean;
   chordId?: string; // New property to group notes vertically in the same chord
   measureIndex?: number;
   beat?: number;

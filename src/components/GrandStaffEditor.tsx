@@ -2270,6 +2270,48 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         noteToSystemIndexRef.current = noteToSystemIndex;
     }, [measureToSystemIndex, noteToSystemIndex]);
 
+    // Render helper: determine which notes are the *target* of a tie coming from a previous note
+    // (possibly across a system/line break). Stored notes only mark the source with isTiedToNext.
+    const tiedFromPrevNoteIds = useMemo(() => {
+        const out = new Set<string>();
+        try {
+            const notes = (rawNotes || []).filter(n => n && !n.isRest && Number.isFinite((n as any).midi));
+            const byVoice = new Map<number, StaffNote[]>();
+            for (const n of notes) {
+                const v = (n.voice ?? 1) as number;
+                if (!byVoice.has(v)) byVoice.set(v, []);
+                byVoice.get(v)!.push(n);
+            }
+            for (const [v, arr] of byVoice.entries()) {
+                arr.sort((a, b) => {
+                    const ta = (a.startTick ?? 0);
+                    const tb = (b.startTick ?? 0);
+                    if (ta !== tb) return ta - tb;
+                    const ma = a.measureIndex ?? 0;
+                    const mb = b.measureIndex ?? 0;
+                    if (ma !== mb) return ma - mb;
+                    return (a.beat ?? 1) - (b.beat ?? 1);
+                });
+                for (let i = 0; i < arr.length; i++) {
+                    const cur = arr[i];
+                    if (!cur?.isTiedToNext) continue;
+                    const curMidi = cur.midi;
+                    for (let j = i + 1; j < arr.length; j++) {
+                        const next = arr[j];
+                        if (!next) continue;
+                        if (next.midi === curMidi) {
+                            if (typeof next.id === 'string' && next.id) out.add(next.id);
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return out;
+    }, [rawNotes]);
+
     const scrollScoreToViolationIndex = useCallback((index: number) => {
         const v = violations?.[index];
         if (!v || !Array.isArray(v.noteIds) || v.noteIds.length === 0) return;
@@ -3008,7 +3050,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 }
             })();
 
-            if ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion) {
+            const hasSuspensionOnsetHere = (() => {
+                try {
+                    return (analyzedNotes as any[] || []).some((n: any) =>
+                        n &&
+                        n.isSuspension &&
+                        typeof (n as any).isSuspension?.fromAbsBeat === 'number' &&
+                        Math.abs(((n as any).isSuspension.fromAbsBeat as number) - event.absBeat) < 1e-6,
+                    );
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (!hasSuspensionOnsetHere && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion)) {
                 // Keep the label stable, but record that *something happened* here (ornament/appoggiatura)
                 // so the renderer can draw a short hold-line across hidden beats.
                 if (hasOrnamentOnsetAtThisBeat || shouldSuppressAsCompletion) {
@@ -3050,6 +3105,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     roman = r.roman;
                     isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
                 }
+
+                // Rescue: secondary dominants (V/x) should stay visible even in inversions.
+                // In some sparse/incomplete verticalities (common when voices are tied or filtered as NCT),
+                // getRomanAnalysis can return null/empty, leaving only Arabic figures (6, 6/5, ...).
+                // If chord candidates yield a confident V/x under the current context, prefer that label.
+                try {
+                    if (!roman) {
+                        const candidates = identifyChordCandidates(analysisNotesForNaming as any);
+                        let bestSecondary: { roman: string; score: number } | null = null;
+                        for (const c of (candidates as any[]) || []) {
+                            const rr = calculateRomanFromChordInfo({ root: c.root, type: c.type, intervals: c.intervals }, contextTonic, contextIsMinor);
+                            if (!rr || !String(rr).startsWith('V/')) continue;
+                            const score = Number.isFinite((c as any).score) ? Number((c as any).score) : 0;
+                            if (!bestSecondary || score > bestSecondary.score) bestSecondary = { roman: rr, score };
+                        }
+                        if (bestSecondary) roman = bestSecondary.roman;
+                    }
+                } catch { /* ignore */ }
+
                 const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
                 const s = getChordSymbol(analysisNotesForNaming as any, contextKeySignature, contextTonic);
                 if (s) symbol = s;
@@ -3085,7 +3159,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         if (rootPc != null && rootPc >= 0) {
                             const virtualRootMidi = 60 + (((rootPc % 12) + 12) % 12);
                             const virtualRoot = ({ id: 'virtual-root', pitch: 'C', octave: 4, position: 0, midi: virtualRootMidi, noteIndex: rootPc } as any);
-                            const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: inferredType }, contextTonic, contextIsMinor);
+
+                            // IMPORTANT: include real pitch-class intervals so secondary dominants (V/x)
+                            // can be detected even when we're forcing the root from a slash symbol.
+                            const intervals = (() => {
+                                try {
+                                    const pcs = new Set<number>();
+                                    for (const n of (analysisNotesForNaming as any[]) || []) {
+                                        if (!n || n.isRest) continue;
+                                        const ni = (n as any).noteIndex;
+                                        const midi = (n as any).midi;
+                                        const pc = Number.isFinite(ni) ? ni : (Number.isFinite(midi) ? (midi % 12) : null);
+                                        if (pc == null) continue;
+                                        pcs.add(((pc % 12) + 12) % 12);
+                                    }
+                                    const out = new Set<number>();
+                                    for (const pc of pcs) out.add((((pc - rootPc) % 12) + 12) % 12);
+                                    return out;
+                                } catch {
+                                    return undefined;
+                                }
+                            })();
+
+                            const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: inferredType, intervals }, contextTonic, contextIsMinor);
                             if (forced) {
                                 roman = forced;
                             }
@@ -3443,6 +3539,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             // (e.g., the 2/4 ritardo we labeled with a resolving chord like ii).
             try {
                 const CLASSIC_TYPES = new Set(['4-3', '6-5', '7-6', '7-8', '8-7', '9-8', '2-3']);
+
+                const isSuspensionOnsetHere = (analyzedNotes as any[] || []).some((n: any) => {
+                    const s = n?.isSuspension;
+                    if (!s || typeof s.fromAbsBeat !== 'number') return false;
+                    return Math.abs(s.fromAbsBeat - event.absBeat) < 1e-6;
+                });
                 const resolvingSuspensions = (analyzedNotes || [])
                     .map(n => (n as any)?.isSuspension)
                     .filter((s: any) => s && typeof s.resolvedById === 'string' && s.resolvedById)
@@ -3451,7 +3553,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 if (resolvingSuspensions.length) {
                     const hasClassic = resolvingSuspensions.some((s: any) => CLASSIC_TYPES.has(String(s.type)));
                     const hasNonClassic = resolvingSuspensions.some((s: any) => !CLASSIC_TYPES.has(String(s.type)));
-                    if (hasClassic && !hasNonClassic) {
+                    if (!isSuspensionOnsetHere && hasClassic && !hasNonClassic) {
                         roman = '';
                         figures = [];
                         symbol = '';
@@ -3467,23 +3569,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             try {
                 const symRaw = String(symbol || '');
                 const sym = symRaw.replace('♯', '#').replace('♭', 'b');
+                // For functional inference we only care about the chord's root/quality;
+                // if the symbol includes a slash bass (inversion), keep only the part before '/'.
+                const symForFunction = sym.split('/')[0] || sym;
 
                 const isDominantSymbol = (() => {
-                    if (!sym) return false;
-                    if (sym.includes('/')) return false; // slash handled elsewhere
-                    if (/maj7/i.test(sym)) return false;
-                    if (/m7/i.test(sym)) return false;
-                    if (sym.includes('°') || /dim7/i.test(sym)) return false;
+                    if (!symForFunction) return false;
+                    if (/maj7/i.test(symForFunction)) return false;
+                    if (/m7/i.test(symForFunction)) return false;
+                    if (symForFunction.includes('°') || /dim7/i.test(symForFunction)) return false;
                     // IMPORTANT: do not treat "add9"/"sus" sonorities as dominants.
                     // Otherwise a plain tonic add9 like C–E–G–D becomes C7 => V/IV.
-                    if (/add/i.test(sym)) return false;
-                    if (/sus/i.test(sym)) return false;
+                    if (/add/i.test(symForFunction)) return false;
+                    if (/sus/i.test(symForFunction)) return false;
 
                     // Dominant-type spellings in this app: "7", "7b9", "7#9", "11", "13", etc.
                     // - If it explicitly contains '7' (and isn't maj7/m7/dim7), treat as dominant.
                     // - If it contains 9/11/13 without 'maj' or 'm', treat as dominant shorthand (e.g. "C9").
-                    if (/7/.test(sym)) return true;
-                    if (/(9|11|13)/.test(sym) && !/maj/i.test(sym) && !/\bm\b/i.test(sym) && !/m(?!aj)/i.test(sym)) {
+                    if (/7/.test(symForFunction)) return true;
+                    if (/(9|11|13)/.test(symForFunction) && !/maj/i.test(symForFunction) && !/\bm\b/i.test(symForFunction) && !/m(?!aj)/i.test(symForFunction)) {
                         return true;
                     }
                     return false;
@@ -3495,7 +3599,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 })();
 
                 if (isDominantSymbol && !String(roman || '').includes('/') && (looksLikeI47 || String(roman || '') === 'I')) {
-                    const m = sym.match(/^([A-G])([#b]?)/);
+                    const m = symForFunction.match(/^([A-G])([#b]?)/);
                     if (m) {
                         const rootName = `${m[1]}${m[2] || ''}`;
                         const rootPc = noteNameToChromaticIndex(rootName);
@@ -4647,7 +4751,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         durBeatsBase *= tupletFactor;
         if (!isFinite(durBeatsBase) || durBeatsBase <= 0) durBeatsBase = 1;
         const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
-        const snapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+        const snapGridTicks = e.shiftKey
+            ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
+            : baseSnapGridTicks;
 
         let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
         const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
@@ -4656,9 +4763,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
         const beat = Math.round(((snappedLocalTicks / TICKS_PER_QUARTER) + 1) * 1e6) / 1e6;
 
-        setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, beat);
+        // Use the snapped tick position for the playhead X so the cursor has a single, deterministic location.
+        const snappedX = (hit.measureStartX + MEASURE_PADDING_X) + (snappedLocalTicks * pxPerTick);
+
+        setPlaybackCursorFromMeasureBeat(systemIndex, snappedX, hit.measureIndex, beat);
         // Aggiorna sempre pasteCaret con beat quantizzato
-        setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat });
+        setPasteCaret({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat });
     }, [getCurrentAbsBeatForPlayhead, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
@@ -4710,7 +4820,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         // Snap grid: do NOT force the onset grid to be as coarse as the duration.
         // Example (6/4): a half note (2 beats) should be placeable at beat 4, not only at beats 1/3/5.
         // We cap the snap grid to 1 beat (quarter) so longer notes can still start on any beat.
-        const snapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+        const snapGridTicks = (e as any)?.shiftKey
+            ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
+            : baseSnapGridTicks;
 
         // Quantize strictly in ticks (left-biased to avoid occasional snap-forward jitter).
         let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
@@ -4759,9 +4872,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             }
         };
 
+        // Use the snapped tick position for the playhead X so the cursor has a single, deterministic location.
+        const snappedX = (hit.measureStartX + MEASURE_PADDING_X) + (snappedLocalTicks * pxPerTick);
+
         // Set playback cursor + visible playhead at the quantized point.
-        setPlaybackCursorFromMeasureBeat(systemIndex, x, hit.measureIndex, beatInMeasure);
-        setPasteCaret({ x, systemIndex, measureIndex: hit.measureIndex, beat: beatInMeasure });
+        setPlaybackCursorFromMeasureBeat(systemIndex, snappedX, hit.measureIndex, beatInMeasure);
+        setPasteCaret({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat: beatInMeasure });
 
         // Per compatibilità con i costruttori StaffNote che usano la shorthand "beat"
         const beat = beatInMeasure;
@@ -5131,6 +5247,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         activeAccidental,
         clipboard,
     ]);
+
+    const getPlayheadSnapGridTicks = useCallback((useFineStep: boolean): number => {
+        try {
+            let durBeatsBase = DURATION_VALUES[selectedInsertion.duration] ?? 1;
+            if (selectedInsertion.isDotted) durBeatsBase *= 1.5;
+            durBeatsBase *= tupletFactor;
+            if (!isFinite(durBeatsBase) || durBeatsBase <= 0) durBeatsBase = 1;
+            const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
+            const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, TICKS_PER_QUARTER));
+            return useFineStep ? Math.max(1, Math.floor(baseSnapGridTicks / 2)) : baseSnapGridTicks;
+        } catch {
+            return TICKS_PER_QUARTER;
+        }
+    }, [selectedInsertion.duration, selectedInsertion.isDotted, tupletFactor]);
+
+    const setPlayheadFromAbsBeat = useCallback((absBeat: number) => {
+        try {
+            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+            const safeAbs = Math.max(0, absBeat);
+            playbackCursorAbsBeatRef.current = safeAbs;
+            const pos = getPlayheadPosForAbsBeat(safeAbs);
+            if (pos) {
+                setPlayheadPosition(pos);
+                const measureIndex = Math.floor(safeAbs / beatsPerMeasure);
+                const beat = Math.round((((safeAbs - (measureIndex * beatsPerMeasure)) + 1)) * 1e6) / 1e6;
+                setPasteCaret({ x: pos.x, systemIndex: pos.systemIndex, measureIndex, beat });
+            }
+        } catch {
+            // ignore
+        }
+    }, [getPlayheadPosForAbsBeat, timeSignature]);
 
     // Bridge for rest-click overwrite behavior (see handleNoteClick).
     staffClickForInsertRef.current = handleBackgroundClick as any;
@@ -5701,6 +5848,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         return map;
     }, [layoutData]);
 
+    const noteTimeById = useMemo(() => {
+        const map = new Map<string, number>();
+        if (!layoutData) return map;
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        for (const n of layoutData.positionedNotes) {
+            const id = n?.id;
+            if (typeof id !== 'string' || !id) continue;
+            const st = (n as any)?.startTick;
+            if (typeof st === 'number' && Number.isFinite(st)) {
+                map.set(id, st);
+                continue;
+            }
+            const m = (n as any)?.measureIndex;
+            const b = (n as any)?.beat;
+            if (typeof m === 'number' && typeof b === 'number') {
+                const absBeat = (m * beatsPerMeasure) + (b - 1);
+                map.set(id, Math.round(absBeat * TICKS_PER_QUARTER));
+            }
+        }
+        return map;
+    }, [layoutData, timeSignature]);
+
     // Restore core shortcuts: deletion via Backspace/Delete.
     useEffect(() => {
         if (!isActive) return;
@@ -5810,6 +5979,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 e.preventDefault();
                 e.stopPropagation();
                 togglePlayback();
+                return;
+            }
+
+            // Left/Right arrows: nudge playhead on the current snap grid.
+            // - Step is derived from the currently selected duration (capped to 1 beat).
+            // - Holding Shift uses a finer half-step.
+            if (!isMod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const stepTicks = getPlayheadSnapGridTicks(!!e.shiftKey);
+                const stepBeats = stepTicks / TICKS_PER_QUARTER;
+                const curAbs = Math.max(0, getCurrentAbsBeatForPlayhead());
+                const nextAbs = e.key === 'ArrowLeft'
+                    ? Math.max(0, curAbs - stepBeats)
+                    : (curAbs + stepBeats);
+
+                // Quantize the result to the same grid to avoid float drift.
+                const nextTicks = Math.round(nextAbs * TICKS_PER_QUARTER);
+                const snappedTicks = Math.floor(nextTicks / stepTicks) * stepTicks;
+                const snappedAbs = snappedTicks / TICKS_PER_QUARTER;
+
+                setPlayheadFromAbsBeat(snappedAbs);
                 return;
             }
 
@@ -6724,14 +6916,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         </React.Fragment>
                     ))}
 
-                    <div className="ml-auto flex items-center gap-2">
-                        <div
-                            className="max-w-xs truncate text-xs text-slate-300"
-                            title={currentProjectFilePath ?? 'Senza nome'}
-                        >
-                            <span className="text-slate-400">File:</span> {currentProjectFileName ?? 'Senza nome'}
-                        </div>
-                    </div>
                 </div>
             </div>
             
@@ -6771,14 +6955,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                             // Render-only staff mapping by voice (allows toggling layouts without mutating stored notes).
                             const mappedClef: ClefType = clefForVoice(n.voice);
 
+                            const tieFromPrev = tiedFromPrevNoteIds.has(n.id);
+
                             // If the user explicitly chose an accidental for this note, keep it.
-                            if ((n as any).userAccidental) return { ...n, clef: mappedClef };
+                            if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
 
                             // Otherwise, recompute the accidental needed for the *existing pitch* under the
                             // current key signature, without changing the staff position/spelling.
                             const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
                             const nextExplicit = calculateAccidental(noteName, keyAccidentals);
-                            return { ...n, clef: mappedClef, explicitAccidental: nextExplicit };
+                            return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
                         });
 
                         const actualSystemWidth = system.width;
@@ -7286,7 +7472,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
 
                                                                                                         // extend line by 10px to left and right
                                                                                                         const lineStart = Math.max(figuresX, figuresEnd + 4 - 10);
-                                                                                                        const lineEnd = resX + 10;
+                                                                                                        const RESOLUTION_X_SHIFT_PX = -20;
+                                                                                                        const lineEnd = resX + 10 + RESOLUTION_X_SHIFT_PX;
                                                                                                         // original: figuresY0 - 6; lower by 16px as requested
                                                                                                         const lineY = figuresY0 + 10;
                                                                                                         // Place number below the figures (original behaviour)
@@ -7400,7 +7587,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                     {parts.map((t, i) => (
                                                                                                         <text
                                                                                                             key={`res-${i}-${t}`}
-                                                                                                            x={resX + 16}
+                                                                                                            x={resX + 16 + RESOLUTION_X_SHIFT_PX}
                                                                                                             y={baseY + (i * 12)}
                                                                                                             textAnchor="start"
                                                                                                             fontSize={12}
@@ -7417,7 +7604,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                     // Single suspension: keep existing placement (below the figures).
                                                                                     return (
                                                                                         <text
-                                                                                            x={resX + 16}
+                                                                                            x={resX + 16 + RESOLUTION_X_SHIFT_PX}
                                                                                             y={numberY}
                                                                                         textAnchor="start"
                                                                                         fontSize={12}
@@ -7452,7 +7639,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                     // to an actual violation entry. This prevents drawing ad-hoc connections
                                                                     // (e.g., suspension-only connections without panel entries) as dashed lines.
                                                                     const systemConnections = (errorConnections || []).filter(c => {
-                                                                        if (!systemNoteIdSet.has(c.noteId1) || !systemNoteIdSet.has(c.noteId2)) return false;
+                                                                        // Allow cross-system connections: if exactly one endpoint is in this system,
+                                                                        // we will render a split segment to the system edge.
+                                                                        const inThis1 = systemNoteIdSet.has(c.noteId1);
+                                                                        const inThis2 = systemNoteIdSet.has(c.noteId2);
+                                                                        if (!inThis1 && !inThis2) return false;
                                                                         // Do not render suspension-only connections (S-). We draw the
                                                                         // hold-line next to the Roman/figures instead — rendering the
                                                                         // S- connection here produced unwanted green dashed lines.
@@ -7531,21 +7722,65 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                             const p = notePositions.get(c.noteId2);
                                                                             return p ? applyOverlayShift(p, clef2, v2) : null;
                                                                         })();
-                                                                        if (!q1 || !q2) return null;
+                                                                        // For cross-system connections, we only require the in-system endpoint.
+                                                                        const sys1 = noteToSystemIndexRef.current.get(c.noteId1);
+                                                                        const sys2 = noteToSystemIndexRef.current.get(c.noteId2);
+                                                                        const inThis1 = (sys1 === systemIndex) || systemNoteIdSet.has(c.noteId1);
+                                                                        const inThis2 = (sys2 === systemIndex) || systemNoteIdSet.has(c.noteId2);
+
+                                                                        const staffEndX = lastNonEmptyMeasureEndX ?? ((actualSystemWidth ?? 0) - STAFF_MARGIN);
+                                                                        const staffStartX = Math.max(0, (system.startMeasuresX?.[0] ?? START_X) + 2);
 
                                                                         const isHovered = !!hoveredViolationNotes && (hoveredViolationNotes.includes(c.noteId1) || hoveredViolationNotes.includes(c.noteId2));
                                                                         const lvl = connectionLevel(c);
 
-                                                                        const x1 = c.type === 'vertical' ? (q1.x + q2.x) / 2 : q1.x;
-                                                                        const x2 = c.type === 'vertical' ? (q1.x + q2.x) / 2 : q2.x;
+                                                                        // Same-system: draw the full connection.
+                                                                        if (inThis1 && inThis2) {
+                                                                            if (!q1 || !q2) return null;
+
+                                                                            const x1 = c.type === 'vertical' ? (q1.x + q2.x) / 2 : q1.x;
+                                                                            const x2 = c.type === 'vertical' ? (q1.x + q2.x) / 2 : q2.x;
+
+                                                                            return (
+                                                                                <line
+                                                                                    key={`conn-${systemIndex}-${idx}-${c.noteId1}-${c.noteId2}`}
+                                                                                    x1={x1}
+                                                                                    y1={q1.y}
+                                                                                    x2={x2}
+                                                                                    y2={q2.y}
+                                                                                    stroke={connectionStroke(lvl)}
+                                                                                    strokeWidth={isHovered ? 3 : 2}
+                                                                                    strokeLinecap="round"
+                                                                                    strokeDasharray="5 4"
+                                                                                    opacity={0.9}
+                                                                                />
+                                                                            );
+                                                                        }
+
+                                                                        // Cross-system: draw a split segment to the nearest system edge.
+                                                                        const thisPoint = inThis1 ? q1 : (inThis2 ? q2 : null);
+                                                                        if (!thisPoint) return null;
+                                                                        const thisId = inThis1 ? c.noteId1 : c.noteId2;
+                                                                        const otherId = inThis1 ? c.noteId2 : c.noteId1;
+
+                                                                        const tThis = noteTimeById.get(thisId);
+                                                                        const tOther = noteTimeById.get(otherId);
+                                                                        let forward = true;
+                                                                        if (typeof tThis === 'number' && typeof tOther === 'number') {
+                                                                            forward = tThis <= tOther;
+                                                                        } else {
+                                                                            const otherSys = inThis1 ? sys2 : sys1;
+                                                                            forward = (typeof otherSys === 'number') ? (otherSys > systemIndex) : true;
+                                                                        }
+                                                                        const toX = forward ? staffEndX : staffStartX;
 
                                                                         return (
                                                                             <line
-                                                                                key={`conn-${systemIndex}-${idx}-${c.noteId1}-${c.noteId2}`}
-                                                                                x1={x1}
-                                                                                y1={q1.y}
-                                                                                x2={x2}
-                                                                                y2={q2.y}
+                                                                                key={`conn-split-${systemIndex}-${idx}-${c.noteId1}-${c.noteId2}`}
+                                                                                x1={thisPoint.x}
+                                                                                y1={thisPoint.y}
+                                                                                x2={toX}
+                                                                                y2={thisPoint.y}
                                                                                 stroke={connectionStroke(lvl)}
                                                                                 strokeWidth={isHovered ? 3 : 2}
                                                                                 strokeLinecap="round"

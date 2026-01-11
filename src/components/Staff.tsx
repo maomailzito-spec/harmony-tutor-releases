@@ -346,7 +346,9 @@ const Staff = forwardRef<SVGSVGElement, StaffProps>(({
 
                 {romanAnalysis?.map((analysisItem, index) => {
                     const yPos = staffTop + 4 * LINE_HEIGHT + 30;
-                    const [ , roman, figures] = analysisItem.analysis.match(/([ivIV°+ø]+)(.*)/) || ['', analysisItem.analysis, ''];
+                    // Support secondary-dominant style romans like "V/V" (and keep the remainder as figures).
+                    // The old regex dropped everything after the first slash, making labels misleading.
+                    const [ , roman, figures] = analysisItem.analysis.match(/([ivIV°+ø]+(?:\/[ivIV°+ø]+)?)(.*)/) || ['', analysisItem.analysis, ''];
                     return (
                         <text
                             key={`analysis-${index}`}

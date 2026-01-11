@@ -157,6 +157,9 @@ export type StaffNote = {
   isDuplet?: boolean;
   isDotted?: boolean;
   isTiedToNext?: boolean;
+  // Render hint: this note continues a tie from the previous system/line.
+  // (Computed in the editor; stored notes only need isTiedToNext on the source note.)
+  isTiedFromPrev?: boolean;
   groupId?: string;
   chordId?: string; // New property to group notes vertically in the same chord
   measureIndex?: number;
