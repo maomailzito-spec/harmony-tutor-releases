@@ -227,3 +227,12 @@ export interface HarmonyAnalysisResult {
     connections: ErrorConnection[];
     violations: RuleViolation[];
 }
+
+export type HarmonyLabelOverride = {
+  // Timeline position in quarter-note units from start (can be fractional).
+  absBeat: number;
+  roman?: string;
+  figures?: string[];
+  symbol?: string;
+  note?: string;
+};

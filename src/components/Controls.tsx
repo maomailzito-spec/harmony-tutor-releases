@@ -152,19 +152,6 @@ export const ShapeControls: React.FC<ShapeControlsProps> = ({
 }) => {
     const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-    useEffect(() => {
-        const map = itemRefs.current;
-        if (activeBoxId === null) return;
-        const activeItem = map.get(activeBoxId);
-
-        if (activeItem) {
-            activeItem.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest',
-            });
-        }
-    }, [activeBoxId]);
-
     const placedShapeIndicesInKey = useMemo(() => 
         new Set(placedBoxes.filter(b => b.scaleType === scaleType).map(b => b.shapeIndex)), 
     [placedBoxes, scaleType]);
@@ -174,37 +161,57 @@ export const ShapeControls: React.FC<ShapeControlsProps> = ({
             <div className="flex flex-col flex-grow min-h-0">
                 <h2 className="text-base font-bold mb-2 border-b border-gray-600 pb-1">Scale Shapes</h2>
                 <div className="grid grid-cols-2 gap-2 flex-grow overflow-y-auto pr-2 -mr-2 max-h-60">
-                    {placedBoxes.map(placedBox => {
-                        const shape = allShapes[placedBox.scaleType]?.[placedBox.shapeIndex];
-                        if (!shape) return null;
-                        return (
-                        <PlacedShapeItem
-                            key={placedBox.id}
-                            placedBox={placedBox}
-                            shape={shape}
-                            isSelected={placedBox.id === activeBoxId}
-                            onClick={() => onSelectBox(placedBox.id === activeBoxId ? null : placedBox.id)}
-                            onRemoveBox={onRemoveBox}
-                            onUpdateShapePosition={onUpdateShapePosition}
-                            isKeySelected={!!selectedKey}
-                            itemRef={el => {
-                            if (el) itemRefs.current.set(placedBox.id, el as HTMLDivElement);
-                            else itemRefs.current.delete(placedBox.id);
-                            }}
-                        />
-                        );
-                    })}
-
                     {availableShapes.map((shape, index) => {
-                        if (selectedKey) {
-                        if (placedShapeIndicesInKey.has(index)) return null;
+                        const placedBox = placedBoxes.find(b => b.shapeIndex === index && b.scaleType === scaleType);
+                        if (placedBox) {
+                            return (
+                                <PlacedShapeItem
+                                    key={placedBox.id}
+                                    placedBox={placedBox}
+                                    shape={shape}
+                                    isSelected={placedBox.id === activeBoxId}
+                                    onClick={() => onSelectBox(placedBox.id === activeBoxId ? null : placedBox.id)}
+                                    onRemoveBox={onRemoveBox}
+                                    onUpdateShapePosition={onUpdateShapePosition}
+                                    isKeySelected={!!selectedKey}
+                                    itemRef={el => {
+                                        if (el) itemRefs.current.set(placedBox.id, el as HTMLDivElement);
+                                        else itemRefs.current.delete(placedBox.id);
+                                    }}
+                                />
+                            );
+                        }
+
+                        // If no key is selected, keep the grid stable by showing a disabled placeholder.
+                        if (!selectedKey) {
+                            return (
+                                <div
+                                    key={`shape-placeholder-${index}`}
+                                    className="relative w-full h-full text-left p-1 pl-2 rounded-md bg-gray-900/40 text-gray-500 text-sm border border-gray-800 cursor-not-allowed"
+                                    title="Seleziona una tonalità per aggiungere una shape"
+                                >
+                                    <div
+                                        className="absolute left-0 top-0 h-full w-1 rounded-l-md"
+                                        style={{ backgroundColor: shape.color, opacity: 0.35 }}
+                                    ></div>
+                                    <div className="flex justify-between items-center gap-2 ml-1">
+                                        <ShapeIcon notes={shape.notes} color={shape.color} />
+                                        <div className="flex-grow">
+                                            <span className="font-semibold text-xs">{shape.name}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        // Key selected: offer to add this shape if not already placed.
                         return (
                             <button
                                 key={`add-shape-${index}`}
                                 onClick={() => onAddShapeInKey(index)}
                                 className="relative w-full h-full text-left p-1 pl-2 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors text-white text-sm border border-transparent hover:border-gray-500"
                             >
-                                <div 
+                                <div
                                     className="absolute left-0 top-0 h-full w-1 rounded-l-md"
                                     style={{ backgroundColor: shape.color }}
                                 ></div>
@@ -219,9 +226,6 @@ export const ShapeControls: React.FC<ShapeControlsProps> = ({
                                 </div>
                             </button>
                         );
-                        }
-                        
-                        return null;
                     })}
                     
                     {placedBoxes.length === 0 && !selectedKey && (

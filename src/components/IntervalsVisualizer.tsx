@@ -456,7 +456,8 @@ const IntervalsVisualizer: React.FC<IntervalsVisualizerProps> = ({ audioService,
     const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
 
     return (
-        <div className="w-full flex flex-col gap-4 interactive-selection" onClick={stopPropagation}>
+        <div className="w-full flex flex-col flex-grow min-h-0 overflow-y-auto interactive-selection" onClick={stopPropagation}>
+            <div className="w-full max-w-6xl mx-auto px-4 py-6 flex flex-col gap-4 min-h-full justify-center">
             <div className="w-full flex flex-col items-center">
                 <IntervalControls 
                     onIntervalSelect={handleIntervalSelect}
@@ -491,6 +492,7 @@ const IntervalsVisualizer: React.FC<IntervalsVisualizerProps> = ({ audioService,
                     allNotes={allNotes}
                     glowingMidis={glowingMidis}
                 />
+            </div>
             </div>
         </div>
     );

@@ -447,9 +447,22 @@ const ChordVisualizer: React.FC<ChordVisualizerProps> = ({ audioService, isAudio
 
 
     const handleRootNoteSelect = useCallback(async (noteIndex: number) => {
+        // Re-clicking the current root toggles enharmonic spelling (♯ <-> ♭)
+        // for pitch classes that have both spellings.
+        try {
+            const n = CHROMATIC_SCALE[noteIndex];
+            const isEnharmonic = !!n && n.sharp !== n.flat;
+            if (noteIndex === rootNoteIndex && isEnharmonic) {
+                setEnharmonicPreference(prev => prev === 'sharp' ? 'flat' : 'sharp');
+                return;
+            }
+        } catch {
+            // ignore
+        }
+
         setRootNoteIndex(noteIndex);
         await handleInteraction({ noteIndex, source: 'circle' });
-    }, [handleInteraction]);
+    }, [handleInteraction, rootNoteIndex]);
 
     const handlePlayChord = useCallback(async () => {
         if (isAudioReady) {

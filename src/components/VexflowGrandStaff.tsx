@@ -83,7 +83,7 @@ const accidentalTypeToVexflow = (accidental: AccidentalType | string | null | un
   }
 };
 
-const makeVfNote = (n: StaffNote, clef: ClefType) => {
+const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down') => {
   const key = `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`;
   const baseDur = durationToVexflow(n.duration);
   // Keep the duration string free of dots.
@@ -98,9 +98,11 @@ const makeVfNote = (n: StaffNote, clef: ClefType) => {
 
   // Stem direction:
   // - manualStemDirection overrides everything (set by the Flip Stem button)
+  // - stemOverride is an automatic layout hint (used to avoid collisions in close spacing)
   // - otherwise default by voice: S(1)↑ A(2)↓ T(3)↑ B(4)↓
   if (!n.isRest) {
     const desiredStem = n.manualStemDirection
+      ?? stemOverride
       ?? (n.voice ? ((n.voice === 1 || n.voice === 3) ? 'up' : 'down') : undefined);
     if (desiredStem) {
       try {
@@ -130,6 +132,13 @@ const makeVfNote = (n: StaffNote, clef: ClefType) => {
   }
   (note as any).__staffNoteId = n.id;
   return note;
+};
+
+const getNoteTimeKey = (n: StaffNote): string => {
+  const st = (n as any).startTick;
+  const dt = (n as any).durationTicks;
+  if (typeof st === 'number' && typeof dt === 'number') return `${st}|${dt}`;
+  return `${n.measureIndex ?? -1}|${n.beat ?? -1}|${n.duration ?? 'q'}|${n.isDotted ? 'd' : 'n'}`;
 };
 
 function keySignatureToVexflowString(keySignature: KeySignature): string {
@@ -345,6 +354,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           vfNote: StaveNote;
           dotFill: string;
           x: number;
+          isPrimaryRender: boolean;
         }> = [];
 
         // --- PATCH: Affiancamento teste tra voci adiacenti a distanza di seconda ---
@@ -354,6 +364,137 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           const absX = n.xPosition ?? (stave.getNoteStartX() + 10);
           if (!byX.has(absX)) byX.set(absX, []);
           byX.get(absX)!.push(n);
+        }
+
+        // --- NEW: Merge aligned SAT notes into a single chord (parti strette) ---
+        // When multiple voices share the same onset+duration on the same staff, drawing
+        // them as separate notes creates stacked stems/flags/beams, which can look like
+        // a shorter rhythm (e.g. 8ths visually reading as 16ths). For tight textures,
+        // we render a single chord with one stem/beam and rely on proximity hitpoints
+        // so each notehead remains selectable.
+        const chordKeyByNoteId = new Map<string, string>();
+        const chordNotesByKey = new Map<string, StaffNote[]>();
+        const chordVfByKey = new Map<string, { vf: StaveNote; primaryId: string; ids: string[] }>();
+
+        const isTightTreble = clef === 'treble' && staffNotes.some(n => n.voice === 2) && staffNotes.some(n => n.voice === 3);
+        if (isTightTreble) {
+          for (const [absX, group] of byX.entries()) {
+            const byTime = new Map<string, StaffNote[]>();
+            for (const n of group) {
+              const tk = getNoteTimeKey(n);
+              if (!byTime.has(tk)) byTime.set(tk, []);
+              byTime.get(tk)!.push(n);
+            }
+
+            for (const [tk, g] of byTime.entries()) {
+              const eligible = g
+                .filter(n => n.id !== '__ghost__')
+                .filter(n => !n.isRest)
+                .filter(n => n.voice === 1 || n.voice === 2 || n.voice === 3)
+                .filter(n => !n.manualStemDirection);
+
+              if (eligible.length < 2) continue;
+
+              // Require identical rhythmic value so a single chord glyph is correct.
+              const baseDur = eligible[0].duration;
+              const baseDotted = !!eligible[0].isDotted;
+              if (!eligible.every(n => n.duration === baseDur && !!n.isDotted === baseDotted)) continue;
+
+              const key = `${absX}|${tk}`;
+              const sorted = eligible.slice().sort((a, b) => a.midi - b.midi);
+              chordNotesByKey.set(key, sorted);
+              for (const n of sorted) chordKeyByNoteId.set(n.id, key);
+            }
+          }
+        }
+
+        const makeVfChordNote = (notesInChord: StaffNote[]): { vf: StaveNote; primaryId: string; ids: string[] } => {
+          const ids = notesInChord.map(n => n.id);
+          const keys = notesInChord.map(n => `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`);
+          const baseDur = durationToVexflow(notesInChord[0].duration);
+          const vf = new StaveNote({ clef: clef as any, keys, duration: `${baseDur}` });
+
+          // Stem direction from vertical placement (chord logic).
+          const MIDDLE_LINE_POS_TREBLE = 6; // B4 relative to C4=0
+          const avgPos = notesInChord.reduce((acc, n) => acc + (Number(n.position) || 0), 0) / Math.max(1, notesInChord.length);
+          const chordStem: 'up' | 'down' = avgPos >= MIDDLE_LINE_POS_TREBLE ? 'down' : 'up';
+          try {
+            vf.setStemDirection(chordStem === 'up' ? 1 : -1);
+          } catch {
+            // ignore
+          }
+
+          // Accidentals per key index.
+          for (let i = 0; i < notesInChord.length; i++) {
+            const n = notesInChord[i];
+            const accidentalToShow: AccidentalType | null =
+              n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
+            const vfAcc = accidentalTypeToVexflow(accidentalToShow);
+            if (!vfAcc) continue;
+            try {
+              vf.addModifier(new Accidental(vfAcc), i);
+            } catch {
+              // ignore
+            }
+          }
+
+          (vf as any).__mergedIds = ids;
+
+          // Use Alto as the default "beam voice" for merged SAT chords.
+          const primary = notesInChord.find(n => n.voice === 2) ?? notesInChord[0];
+          (primary as any).__beamVoiceOverride = 2;
+
+          return { vf, primaryId: primary.id, ids };
+        };
+
+        // --- Auto stem resolution (parti strette / tight textures) ---
+        // When voices 2 and 3 share the treble staff, the conventional SATB stem defaults
+        // can produce crossing stems in close spacing. We unify stem directions for close
+        // S/A or A/T at the same x-position to reduce clutter.
+        const stemOverrideById = new Map<string, 'up' | 'down'>();
+        // NOTE: stem collision avoidance is now handled primarily by chord-merging.
+        // Keep individual voices on conventional stem directions when rhythms differ.
+        const isTrebleTightTexture = false;
+        if (isTrebleTightTexture) {
+          const CLOSE_STEPS = 2; // within a third
+          const MIDDLE_LINE_POS_TREBLE = 6; // B4 relative to C4=0
+
+          for (const group of byX.values()) {
+            const g = group.filter(n => !n.isRest && n.id !== '__ghost__');
+            if (g.length < 2) continue;
+
+            const v1 = g.find(n => n.voice === 1);
+            const v2 = g.find(n => n.voice === 2);
+            const v3 = g.find(n => n.voice === 3);
+
+            const isManual = (n?: StaffNote) => !!n?.manualStemDirection;
+
+            const avgPos = g.reduce((acc, n) => acc + (Number(n.position) || 0), 0) / g.length;
+            const clusterDir: 'up' | 'down' = avgPos >= MIDDLE_LINE_POS_TREBLE ? 'down' : 'up';
+
+            const saClose = !!(v1 && v2 && Math.abs(v1.position - v2.position) <= CLOSE_STEPS);
+            const atClose = !!(v2 && v3 && Math.abs(v2.position - v3.position) <= CLOSE_STEPS);
+
+            const minPos = Math.min(...g.map(n => n.position));
+            const maxPos = Math.max(...g.map(n => n.position));
+            const tightCluster = (maxPos - minPos) <= (CLOSE_STEPS * 2);
+
+            if (tightCluster) {
+              for (const n of g) {
+                if (isManual(n)) continue;
+                if (n.voice === 1 || n.voice === 2 || n.voice === 3) stemOverrideById.set(n.id, clusterDir);
+              }
+              continue;
+            }
+
+            if (saClose) {
+              if (v1 && !isManual(v1)) stemOverrideById.set(v1.id, 'up');
+              if (v2 && !isManual(v2)) stemOverrideById.set(v2.id, 'up');
+            } else if (atClose) {
+              if (v2 && !isManual(v2)) stemOverrideById.set(v2.id, 'down');
+              if (v3 && !isManual(v3)) stemOverrideById.set(v3.id, 'down');
+            }
+          }
         }
         // Applica offset alle teste di note di voci adiacenti a distanza di seconda
         const NOTE_HEAD_RX = 6.3; // come NOTE_HEAD_RX_NORMAL
@@ -385,8 +526,22 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // --- FINE PATCH ---
         for (const n of staffNotes) {
           let vfNote: StaveNote | null = null;
+          let isPrimaryRender = true;
           try {
-            vfNote = makeVfNote(n, clef);
+            const chordKey = chordKeyByNoteId.get(n.id);
+            if (chordKey) {
+              let chord = chordVfByKey.get(chordKey);
+              if (!chord) {
+                const chordNotes = chordNotesByKey.get(chordKey) ?? [n];
+                chord = makeVfChordNote(chordNotes);
+                chordVfByKey.set(chordKey, chord);
+              }
+              vfNote = chord.vf;
+              isPrimaryRender = chord.primaryId === n.id;
+            } else {
+              vfNote = makeVfNote(n, clef, stemOverrideById.get(n.id));
+              isPrimaryRender = true;
+            }
             if (n.id === '__ghost__') {
               vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.85)', strokeStyle: 'rgba(14,165,233,1)', shadowColor: '#0ea5e9', shadowBlur: 8 });
               // If the ghost has an accidental, keep a smaller left shift so the
@@ -469,27 +624,31 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             }
             const xRaw = absoluteX - stave.getNoteStartX();
             const x = n.id === '__ghost__' ? Math.max(0, xRaw) : xRaw;
-            // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
-            const xShift = offsetMap.get(n.id) ?? 0;
-            const prevXShift = (vfNote as any).x_shift ?? 0;
-            vfNote.setXShift(prevXShift + xShift);
-            vfNote.setStave(stave);
-            vfNote.setContext(context);
-            const tc = new TickContext();
-            tc.addTickable(vfNote);
-            tc.preFormat();
-            tc.setX(x);
-            vfNote.setTickContext(tc);
-            (vfNote as any).preFormat?.();
-            (vfNote as any).postFormat?.();
-            prepared.push({ staffNote: n, vfNote, dotFill, x });
+
+            if (isPrimaryRender) {
+              // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
+              const xShift = offsetMap.get(n.id) ?? 0;
+              const prevXShift = (vfNote as any).x_shift ?? 0;
+              vfNote.setXShift(prevXShift + xShift);
+              vfNote.setStave(stave);
+              vfNote.setContext(context);
+              const tc = new TickContext();
+              tc.addTickable(vfNote);
+              tc.preFormat();
+              tc.setX(x);
+              vfNote.setTickContext(tc);
+              (vfNote as any).preFormat?.();
+              (vfNote as any).postFormat?.();
+            }
+
+            prepared.push({ staffNote: n, vfNote, dotFill, x, isPrimaryRender });
           } catch {
             // If pre-formatting fails, try a minimal ghost fallback; otherwise skip.
             if (n.id === '__ghost__') {
               try {
                 // Keep accidentals in the ghost fallback too; the whole point of the
                 // ghost is to preview the exact insertion (pitch + accidental).
-                const fallbackNote = makeVfNote({ ...n } as StaffNote, clef);
+                const fallbackNote = makeVfNote({ ...n } as StaffNote, clef, stemOverrideById.get(n.id));
                 fallbackNote.setStave(stave);
                 fallbackNote.setContext(context);
                 fallbackNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
@@ -509,6 +668,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   vfNote: fallbackNote,
                   dotFill: 'rgba(56,189,248,0.4)',
                   x,
+                  isPrimaryRender: true,
                 });
               } catch {
                 // skip
@@ -540,13 +700,71 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           return dur === '8' || dur === '16' || dur === '32' || dur === '64';
         };
 
+        const isTightTrebleForBeams = clef === 'treble' && staffNotes.some(n => n.voice === 2) && staffNotes.some(n => n.voice === 3);
+        const prepareTightTrebleBeamedNotes = (group: Array<{ staffNote: StaffNote; vfNote: StaveNote }>) => {
+          if (!isTightTrebleForBeams) return;
+
+          // Prefer a single clear beaming direction (opposite the bass): stems up.
+          for (const g of group) {
+            if (g.staffNote.manualStemDirection) continue;
+            try {
+              g.vfNote.setStemDirection(1);
+            } catch {
+              // ignore
+            }
+          }
+        };
+
+        const applyTightTrebleBeamHeuristics = (beam: Beam, group: Array<{ staffNote: StaffNote; vfNote: StaveNote }>) => {
+          if (!isTightTrebleForBeams) return;
+
+          // Force beam slope to follow the melodic contour (using notehead Y).
+          const yRef = (vf: any): number | null => {
+            try {
+              const ys: number[] | undefined = vf?.getYs?.();
+              if (ys && ys.length > 0) {
+                // Stems up => beam is above => follow the highest notehead.
+                return Math.min(...ys);
+              }
+              const topY = vf?.getStemExtents?.()?.topY;
+              return (typeof topY === 'number' && Number.isFinite(topY)) ? topY : null;
+            } catch {
+              return null;
+            }
+          };
+
+          const first = group[0]?.vfNote as any;
+          const last = group[group.length - 1]?.vfNote as any;
+          const firstY = yRef(first);
+          const lastY = yRef(last);
+          if (firstY == null || lastY == null) return;
+
+          const dy = lastY - firstY;
+          const THRESH_PX = 2;
+          let desiredSlope = 0;
+          if (dy <= -THRESH_PX) desiredSlope = -0.22;
+          else if (dy >= THRESH_PX) desiredSlope = 0.22;
+
+          try {
+            // IMPORTANT: VexFlow's Beam.calculateSlope iterates `for (slope = min; slope <= max; slope += increment)`.
+            // If min === max then increment=0 and the loop becomes infinite.
+            // So we keep a tiny range around the target slope.
+            const EPS = 0.0005;
+            (beam as any).render_options = (beam as any).render_options || {};
+            (beam as any).render_options.min_slope = desiredSlope - EPS;
+            (beam as any).render_options.max_slope = desiredSlope + EPS;
+          } catch {
+            // ignore
+          }
+        };
+
         // Build Beam instances BEFORE drawing notes, so VexFlow suppresses flags/stems on beamed notes.
         const beamInstances: Beam[] = [];
         const tieInstances: StaveTie[] = [];
 
         // Manual beam groups (set by the editor button).
         const manualGroups = new Map<string, Array<{ staffNote: StaffNote; vfNote: StaveNote }>>();
-        for (const p of prepared) {
+        for (const p of prepared.filter(p => p.isPrimaryRender)) {
           if (p.staffNote.id === '__ghost__') continue;
           if (!isBeamable(p.staffNote)) continue;
           if (p.staffNote.manualBeamDisabled) continue;
@@ -560,7 +778,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           if (group.length < 2) continue;
           group.sort((a, b) => (a.staffNote.xPosition ?? 0) - (b.staffNote.xPosition ?? 0));
           try {
-            beamInstances.push(new Beam(group.map(g => g.vfNote)));
+            // IMPORTANT: setStemDirection must happen BEFORE attaching a Beam.
+            // In VexFlow, setStemDirection() clears note.beam, which would re-enable flags.
+            prepareTightTrebleBeamedNotes(group);
+            const b = new Beam(group.map(g => g.vfNote));
+            applyTightTrebleBeamHeuristics(b, group);
+            beamInstances.push(b);
           } catch {
             // Skip invalid beam groups.
           }
@@ -575,6 +798,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         );
 
         const candidates = prepared
+          .filter(p => p.isPrimaryRender)
           .filter(p => p.staffNote.id !== '__ghost__')
           .filter(p => !manualOrDisabledIds.has(p.staffNote.id))
           .filter(p => isBeamable(p.staffNote))
@@ -585,8 +809,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           const ma = a.staffNote.measureIndex ?? 0;
           const mb = b.staffNote.measureIndex ?? 0;
           if (ma !== mb) return ma - mb;
-          const va = a.staffNote.voice ?? 1;
-          const vb = b.staffNote.voice ?? 1;
+          const va = (a.staffNote as any).__beamVoiceOverride ?? (a.staffNote.voice ?? 1);
+          const vb = (b.staffNote as any).__beamVoiceOverride ?? (b.staffNote.voice ?? 1);
           if (va !== vb) return va - vb;
           const ba = a.staffNote.beat ?? 1;
           const bb = b.staffNote.beat ?? 1;
@@ -604,7 +828,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const flush = () => {
           if (current.length >= 2) {
             try {
-              beamInstances.push(new Beam(current.map(c => c.vfNote)));
+              // Same rule as above: setStemDirection BEFORE attaching a Beam.
+              prepareTightTrebleBeamedNotes(current);
+              const b = new Beam(current.map(c => c.vfNote));
+              applyTightTrebleBeamHeuristics(b, current);
+              beamInstances.push(b);
             } catch {
               // ignore
             }
@@ -615,7 +843,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         for (const c of candidates) {
           const m = c.staffNote.measureIndex ?? 0;
-          const v = c.staffNote.voice ?? 1;
+          const v = (c.staffNote as any).__beamVoiceOverride ?? (c.staffNote.voice ?? 1);
           const b = c.staffNote.beat ?? 1;
           const key = `${m}|${v}|${bucket(b)}`;
           if (currentKey === null || key === currentKey) {
@@ -630,20 +858,29 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         flush();
 
         // Draw notes (noteheads, ledger lines, etc.). Beamed notes will not draw stems/flags.
-        for (const p of prepared) {
+        const drawn = new Set<StaveNote>();
+        for (const p of prepared.filter(p => p.isPrimaryRender)) {
           const n = p.staffNote;
           const vfNote = p.vfNote;
+          const isMergedChord = !!(vfNote as any).__mergedIds;
 
           // Wrap each note in a tagged SVG group so we can reliably detect clicks.
           const group = (context as any).openGroup?.() as SVGGElement | undefined;
           if (group) {
-            group.setAttribute('data-note-id', n.id);
-            if (n.id === '__ghost__') group.setAttribute('data-is-ghost', '1');
+            // For merged chords, don't tag a single id; rely on proximity hitpoints
+            // so individual noteheads remain selectable.
+            if (!isMergedChord) {
+              group.setAttribute('data-note-id', n.id);
+              if (n.id === '__ghost__') group.setAttribute('data-is-ghost', '1');
+            }
           }
 
           let didDraw = false;
           try {
-            vfNote.draw();
+            if (!drawn.has(vfNote)) {
+              vfNote.draw();
+              drawn.add(vfNote);
+            }
             didDraw = true;
           } catch {
             // If this is the ghost note, fall back to drawing it without accidentals.
@@ -656,7 +893,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     accidental: undefined,
                     userAccidental: undefined,
                   } as StaffNote,
-                  clef
+                  clef,
+                  stemOverrideById.get(n.id)
                 );
                 fallbackNote.setStave(stave);
                 fallbackNote.setContext(context);
@@ -682,9 +920,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           // Use vfNote Y coordinates when available; otherwise fall back to mid-line.
           try {
             const ys: number[] | undefined = (vfNote as any).getYs?.();
-            const yHit = (ys && ys.length > 0)
-              ? (ys.reduce((a, b) => a + b, 0) / ys.length)
-              : stave.getYForLine(2);
 
             // Prefer VexFlow's rendered X when available; this stays correct even when
             // noteheads are shifted due to multi-voice spacing / modifiers.
@@ -693,7 +928,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               ? vfAbsX
               : ((n.xPosition ?? (stave.getNoteStartX() + 10)) + (((vfNote as any).x_shift ?? 0) as number));
 
-            hitPoints.push({ id: n.id, x: xHit, y: yHit, isGhost: n.id === '__ghost__' });
+            const mergedIds: string[] | undefined = (vfNote as any).__mergedIds;
+            if (mergedIds && ys && ys.length >= mergedIds.length) {
+              for (let i = 0; i < mergedIds.length; i++) {
+                hitPoints.push({ id: mergedIds[i], x: xHit, y: ys[i], isGhost: false });
+              }
+            } else {
+              const yHit = (ys && ys.length > 0)
+                ? (ys.reduce((a, b) => a + b, 0) / ys.length)
+                : stave.getYForLine(2);
+              hitPoints.push({ id: n.id, x: xHit, y: yHit, isGhost: n.id === '__ghost__' });
+            }
           } catch {
             // ignore
           }
@@ -806,9 +1051,22 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             }
           };
 
-          const getTieY = (vfNote: any, fallbackStave: any): number => {
+          const getKeyIndexFor = (p: { staffNote: StaffNote; vfNote: StaveNote }): number => {
+            const mergedIds: string[] | undefined = (p.vfNote as any)?.__mergedIds;
+            if (mergedIds && mergedIds.length > 0) {
+              const idx = mergedIds.indexOf(p.staffNote.id);
+              return idx >= 0 ? idx : 0;
+            }
+            return 0;
+          };
+
+          const getTieY = (vfNote: any, fallbackStave: any, keyIndex: number): number => {
             const ys: number[] | undefined = vfNote?.getYs?.();
-            if (ys && ys.length > 0 && Number.isFinite(ys[0] as any)) return ys[0];
+            if (ys && ys.length > 0) {
+              const i = Math.max(0, Math.min(keyIndex, ys.length - 1));
+              const y = ys[i];
+              if (Number.isFinite(y as any)) return y;
+            }
             return fallbackStave.getYForLine(2);
           };
 
@@ -854,9 +1112,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             if (!next) {
               // Tie continues into the next system/line: draw a partial outgoing tie.
               const vf = sorted[i].vfNote as any;
+              const keyIndex = getKeyIndexFor(sorted[i]);
               const fromX = getTieRightX(vf);
               if (fromX != null) {
-                const y = getTieY(vf, stave);
+                const y = getTieY(vf, stave, keyIndex);
                 const dir = tieDirectionFor(cur, vf);
                 drawPartialTiePath(fromX, staffEndX, y, dir);
               }
@@ -865,11 +1124,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             if (next.staffNote.isRest) continue;
             if (next.staffNote.midi !== cur.midi) continue;
 
+            const firstIndex = getKeyIndexFor(sorted[i]);
+            const lastIndex = getKeyIndexFor(next);
             const tie = new StaveTie({
               first_note: sorted[i].vfNote,
               last_note: next.vfNote,
-              first_indices: [0],
-              last_indices: [0],
+              first_indices: [firstIndex],
+              last_indices: [lastIndex],
             });
 
             const manualDir = (cur as any).manualTieDirection as ('up' | 'down' | undefined);
@@ -917,7 +1178,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const vf = sorted[i].vfNote as any;
             const toX = getTieLeftX(vf);
             if (toX == null) continue;
-            const y = getTieY(vf, stave);
+            const keyIndex = getKeyIndexFor(sorted[i]);
+            const y = getTieY(vf, stave, keyIndex);
             const dir = tieDirectionFor(cur, vf);
             drawPartialTiePath(staffStartX, toX, y, dir);
           }

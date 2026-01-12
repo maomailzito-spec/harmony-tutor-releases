@@ -1665,13 +1665,26 @@ function calculateRomanNumeral(
         const isMajorTriad = quality === BuiltInChords.Major;
         const hasMajorThird = !!(chordInfo as any)?.intervals?.has?.(4);
 
+        // Under suspensions the 3rd can be delayed, so a real dominant 7th can appear as a
+        // "no_third" match. Allow secondary-dominant detection when we still have a strong
+        // dominant shell (P5 + m7) to avoid labeling it as a diatonic triad degree.
+        const hasDominantShell = (() => {
+            try {
+                const ints = (chordInfo as any)?.intervals;
+                return !!(ints?.has?.(7) && ints?.has?.(10));
+            } catch {
+                return false;
+            }
+        })();
+
         // Only consider triads when we can confirm the major third is present.
         const allowTriadSecondary = isMajorTriad && hasMajorThird;
 
-        // For dominant-type chords, require the major 3rd. Without it, many sonorities
-        // (e.g. ii6/5 = D–F–A–C) can be reinterpreted as a "dominant 7#9 without 3rd",
-        // which would incorrectly produce V/x labels.
-        if ((isDominantType && hasMajorThird) || allowTriadSecondary) {
+        // For dominant-type chords, we usually require the major 3rd. Without it, many sonorities
+        // (e.g. ii6/5 = D–F–A–C) can be reinterpreted as a "dominant 7#9 without 3rd".
+        // However, in suspension contexts the 3rd may be delayed; in that case, accept a
+        // dominant shell (P5+m7) as sufficient evidence.
+        if ((isDominantType && (hasMajorThird || hasDominantShell)) || allowTriadSecondary) {
             for (let i = 1; i < diatonicScaleIntervals.length; i++) {
                 const targetRootIndex = mod12(keyTonicIndex + diatonicScaleIntervals[i]);
                 const isDominantOfDegree = mod12(chordRootIndex - targetRootIndex) === 7;
@@ -1762,7 +1775,9 @@ export function getRomanAnalysis(
     };
 
     // Base filtering for both L2 figures and roman: remove surface ornaments.
-    const filteredChordForFigures = (chord || []).filter(n => {
+    // NOTE: some real chord tones can be mis-flagged as passing/escape in tight textures.
+    // If filtering becomes too aggressive (<2 notes), fall back to the raw verticality.
+    let filteredChordForFigures = (chord || []).filter(n => {
         if (!n || n.isRest) return false;
         const anyN = n as any;
         return !(
@@ -1774,6 +1789,9 @@ export function getRomanAnalysis(
         );
     });
 
+    if (filteredChordForFigures.length < 2) {
+        filteredChordForFigures = (chord || []).filter(n => n && !n.isRest);
+    }
     if (filteredChordForFigures.length < 2) return null;
 
     // Livello 2 (cifratura) is computed *only* from the vertical intervals,
@@ -2201,9 +2219,33 @@ export function applyHarmonyRules(
     timeSignature?: TimeSignature
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = false;
+    const DEBUG_SUSPENSIONS = (() => {
+        try {
+            // Vite sets import.meta.env.DEV in dev builds (Electron renderer included).
+            return !!((import.meta as any)?.env?.DEV);
+        } catch {
+            return false;
+        }
+    })();
     const debugLog = (...args: any[]) => {
         if (!DEBUG_ANALYSIS) return;
         try { console.log(...args); } catch (_) {}
+    };
+
+    const suspLog = (...args: any[]) => {
+        if (!DEBUG_SUSPENSIONS) return;
+        try { console.log(...args); } catch (_) {}
+    };
+
+    const absBeatToMeasureBeat = (absBeat: number) => {
+        try {
+            const bpm = (timeSignature ? (timeSignature.numerator * (4 / timeSignature.denominator)) : 4) || 4;
+            const m = Math.floor(absBeat / bpm);
+            const b0 = absBeat - m * bpm;
+            return { measureIndex: m, beat: b0 + 1 };
+        } catch {
+            return { measureIndex: null, beat: null };
+        }
     };
     // Defensive normalization: in some saved/edited states `noteIndex` can become stale.
     // Keep spelling-related fields intact; only align pitch-class for analysis.
@@ -2937,6 +2979,30 @@ export function applyHarmonyRules(
                 // For neighbor detection we additionally require returnsSame + stable other voices.
                 const nextCon = nextEv ? isConsonantToHarmony(next, nextEv, v) : true;
 
+                const isChordToneOfConfidentCandidate = (note: StaffNote, ev: ChordEvent | null): boolean => {
+                    try {
+                        if (!note || !ev || !ev.notes) return false;
+                        const notesHere = (ev.notes || []).filter(n => n && !n.isRest) as any[];
+                        if (notesHere.length < 3) return false;
+                        const cands = identifyChordCandidates(notesHere as any);
+                        const best = (cands && cands.length) ? (cands as any[])[0] : null;
+                        const matchType = (best as any)?.matchType;
+                        const chordType = String(best?.type || '');
+                        const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                        const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+                        if (!confident || isSusLike || !best?.root || !best?.type) return false;
+
+                        const rootPc = mod12((best.root as any)?.noteIndex ?? mod12((best.root as any)?.midi ?? 0));
+                        const notePc = mod12((note as any)?.noteIndex ?? mod12((note as any)?.midi ?? 0));
+                        const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                        if (!Array.isArray(formula) || !formula.length) return false;
+                        const rel = mod12(notePc - rootPc);
+                        return rel === 0 || formula.includes(rel);
+                    } catch {
+                        return false;
+                    }
+                };
+
                 // Neighbor tone: consonant -> dissonant step -> consonant, returning to same pitch.
                 if (prev && prevEv && prevCon && nextCon) {
                     const returnsSame = (prev.midi ?? 0) === (next.midi ?? 0);
@@ -2964,7 +3030,14 @@ export function applyHarmonyRules(
                         }
                     })();
 
-                    const allowConsonantNeighbor = shortNeighbor && isWeakBeat(cur, curEv) && stableOtherVoices;
+                    // Consonant-neighbor override is only safe when the note is NOT clearly a chord tone
+                    // of a confident harmonic candidate at this event. Otherwise we can end up tagging
+                    // real harmonic tones (e.g. delayed 3rds in dominants) as ornaments, distorting Roman.
+                    const allowConsonantNeighbor =
+                        shortNeighbor &&
+                        isWeakBeat(cur, curEv) &&
+                        stableOtherVoices &&
+                        !isChordToneOfConfidentCandidate(cur, curEv);
                     const treatAsNeighbor = (!curCon) || allowConsonantNeighbor;
 
                     if (treatAsNeighbor && returnsSame && stepIn && oppositeDir && shortNeighbor) {
@@ -3421,10 +3494,25 @@ export function applyHarmonyRules(
                     continue;
                 }
 
-                // Rule 2: S must start before or at the downbeat (tied or began before change)
+                // Rule 2: S must be truly *held into* the harmony change.
+                // A re-attack on the downbeat (same pitch, new note) is NOT a suspension.
                 const sStart = getNoteStart(S);
                 const prepEnd = getNoteEnd(prep);
-                const tiedOrStartedBefore = (S.id === prep.id) || (sStart < b.absBeat - 1e-6) || (prepEnd > b.absBeat - 1e-6);
+                const HOLD_EPS = 1e-3;
+                const isSameNoteObject = (S.id === prep.id);
+                const startedBeforeChange = (sStart < b.absBeat - HOLD_EPS);
+
+                // True tie across the harmony change can be represented either as a single long note
+                // (same id) OR as two adjacent note IDs where the first is marked isTiedToNext.
+                const hasExplicitTie = !!((prep as any)?.isTiedToNext) || !!((S as any)?.isTiedFromPrev);
+                const samePitch = Number.isFinite((prep as any)?.midi) && Number.isFinite((S as any)?.midi) && (prep.midi === S.midi);
+                const prepEndsAtChange = Math.abs(prepEnd - b.absBeat) <= HOLD_EPS;
+                const tiedAcrossChange = hasExplicitTie && samePitch && prepEndsAtChange;
+
+                // Without an explicit tie, require a real overlap (avoid re-attack false positives).
+                const prepOverlapsChange = (prepEnd > b.absBeat + HOLD_EPS);
+
+                const tiedOrStartedBefore = isSameNoteObject || startedBeforeChange || prepOverlapsChange || tiedAcrossChange;
                 if (!tiedOrStartedBefore) continue;
 
                 // S must be dissonant with the new chord at the downbeat.
@@ -4022,6 +4110,31 @@ export function applyHarmonyRules(
                         if (n.isEscape) n.isEscape = false;
                         if (n.ornamentMark) delete n.ornamentMark;
                     };
+
+                    const isChordToneAtAbsBeat = (note: any, abs: number): boolean => {
+                        try {
+                            if (!note || note.isRest) return false;
+                            const evHere = (chordEvents || []).find((e: any) => typeof e?.absBeat === 'number' && Math.abs(e.absBeat - abs) < 1e-6);
+                            const notesHere = (evHere?.notes || []).filter((nn: any) => nn && !nn.isRest) as any[];
+                            if (notesHere.length < 3) return false;
+                            const cands = identifyChordCandidates(notesHere as any);
+                            const best = (cands && cands.length) ? (cands as any[])[0] : null;
+                            const matchType = (best as any)?.matchType;
+                            const chordType = String(best?.type || '');
+                            const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                            const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+                            if (!confident || isSusLike || !best?.root || !best?.type) return false;
+
+                            const rootPc = mod12((best.root as any)?.noteIndex ?? mod12((best.root as any)?.midi ?? 0));
+                            const notePc = mod12((note as any)?.noteIndex ?? mod12((note as any)?.midi ?? 0));
+                            const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                            if (!Array.isArray(formula) || !formula.length) return false;
+                            const rel = mod12(notePc - rootPc);
+                            return rel === 0 || formula.includes(rel);
+                        } catch {
+                            return false;
+                        }
+                    };
                     clearOrn(prep as any);
                     clearOrn(S as any);
                     clearOrn(resolved as any);
@@ -4085,6 +4198,11 @@ export function applyHarmonyRules(
                                 const stepOut = Math.abs((nextN.midi ?? 0) - (n.midi ?? 0)) <= 2;
                                 const weak = isWeakBeatNumber((n.beat ?? 1) as number);
                                 if (stepIn && stepOut && weak) {
+                                    // If this note is actually a chord tone at its onset (e.g., delayed chord member),
+                                    // do not force it into a neighbor classification.
+                                    if (isChordToneAtAbsBeat(n as any, ns)) {
+                                        continue;
+                                    }
                                     (n as any).isNeighbor = true;
                                     (n as any).ornamentMark = 'v';
                                     if ((n as any).isPassing) (n as any).isPassing = false;
@@ -4108,12 +4226,35 @@ export function applyHarmonyRules(
                             const leapInFromSusp = (prevPc === suspensionPc) && (Math.abs((n.midi ?? 0) - (prevN.midi ?? 0)) > 2);
 
                             if (weak && shortish && stepOut && leapInFromSusp) {
+                                // If this note is actually a chord tone at its onset (e.g., delayed chord member),
+                                // keep it harmonic (don't tag as neighbor inside the suspension span).
+                                if (isChordToneAtAbsBeat(n as any, ns)) {
+                                    continue;
+                                }
                                 (n as any).isNeighbor = true;
                                 (n as any).ornamentMark = 'v';
                                 if ((n as any).isPassing) (n as any).isPassing = false;
                             }
                         }
                     }
+                } catch { /* ignore */ }
+
+                // Dev-only: log detected suspensions to help debugging misclassifications.
+                // The staff already shows the line; this log is just for quick inspection.
+                try {
+                    const mb = absBeatToMeasureBeat(Number(b.absBeat));
+                    suspLog('[SUSP] detected', {
+                        voice: v,
+                        type: displayType || 'susp',
+                        fromAbsBeat: b.absBeat,
+                        fromMeasure: mb.measureIndex,
+                        fromBeat: mb.beat,
+                        fromNum,
+                        toNum,
+                        prepId: prep.id,
+                        sId: S?.id,
+                        resolvedId: resolved.id,
+                    });
                 } catch { /* ignore */ }
 
                 debugLog('[ANALYSIS] mark-suspension (strict)', { prepId: prep.id, sId: S.id, resolvedId: resolved.id, originStart, bAbs: b.absBeat });

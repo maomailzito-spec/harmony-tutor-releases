@@ -49,10 +49,16 @@ const MAJOR_MODES: Set<ScaleType> = new Set([
   'Ionian', 'Lydian', 'Mixolydian', 'Lydian Augmented', 'Lydian Dominant', 'Mixolydian b6', 'Ionian #5', 'Phrygian Dominant', 'Lydian #2'
 ]);
 
+const noteIndexFromName = (name: string): number => {
+    if (!name) return -1;
+    return CHROMATIC_SCALE.findIndex(n => n.sharp === name || n.flat === name);
+};
+
 const getMinorRoot = (note: string): string => {
-  const noteIndex = NOTE_NAMES.indexOf(note);
+    const noteIndex = noteIndexFromName(note);
   const minorRootIndex = (noteIndex - 3 + 12) % 12;
-  return NOTE_NAMES[minorRootIndex];
+    const preferFlats = (note || '').includes('b');
+    return preferFlats ? CHROMATIC_SCALE[minorRootIndex].flat : CHROMATIC_SCALE[minorRootIndex].sharp;
 };
 
 const calculateLowestFretPositions = (key: Key, shapes: ScaleShape[], scaleType: ScaleType): { shapeIndex: number, fretPosition: number }[] => {
@@ -71,7 +77,8 @@ const calculateLowestFretPositions = (key: Key, shapes: ScaleShape[], scaleType:
         }
     }
     
-    const targetNoteIndex = NOTE_NAMES.indexOf(rootToFind);
+    const targetNoteIndex = noteIndexFromName(rootToFind);
+    if (targetNoteIndex === -1) return [];
     const allPositions: { shapeIndex: number, fretPosition: number }[] = [];
 
     shapes.forEach((shape, shapeIndex) => {
@@ -144,6 +151,14 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
         return { ...BUILT_IN_SCALE_INTERVALS, ...customIntervals };
     }, [customScales]);
 
+    const effectiveKeyQuality = useMemo((): 'Major' | 'Minor' => {
+        // Match the same enforcement logic used in handleKeyChange.
+        if (scaleType !== 'Pentatonic' && !customScales.find(s => s.name === scaleType)) {
+            return MAJOR_MODES.has(scaleType) ? 'Major' : 'Minor';
+        }
+        return selectedKey?.scale || 'Minor';
+    }, [scaleType, customScales, selectedKey]);
+
     const allShapes = useMemo((): Record<ScaleType, ScaleShape[]> => {
         const merged: Record<ScaleType, ScaleShape[]> = { ...ALL_SHAPES };
         Object.entries(customScaleShapes).forEach(([scale, shapes]) => {
@@ -187,7 +202,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
 
     const scaleNoteIndices = useMemo((): number[] => {
         if (!selectedKey) return [];
-        const rootNoteIndex = NOTE_NAMES.indexOf(selectedKey.note);
+        const rootNoteIndex = noteIndexFromName(selectedKey.note);
         if (rootNoteIndex === -1) return [];
 
         let intervals: number[] | undefined;
@@ -204,9 +219,10 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
     const allNotes = useMemo((): DisplayNote[] => {
         const noteMap = new Map<number, string>();
 
-        if (enharmonicMode === 'auto' && selectedKey) {
-            const rootNoteIndex = NOTE_NAMES.indexOf(selectedKey.note);
-            const useFlats = getEnharmonicPreference(selectedKey.note, scaleType, selectedKey.scale);
+        if (selectedKey) {
+            const rootNoteIndex = noteIndexFromName(selectedKey.note);
+            const keySig = getKeySignature(selectedKey.note, selectedKey.scale);
+            const useFlats = (enharmonicMode === 'flat') ? true : (enharmonicMode === 'sharp') ? false : (keySig.type === 'flat');
             
             for (let i = 0; i < 12; i++) {
                 const names = ALL_NOTE_SPELLINGS[i];
@@ -229,7 +245,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                 ? (selectedKey.scale === 'Major' ? allScaleIntervals['Major Pentatonic'] : allScaleIntervals['Pentatonic'])
                 : allScaleIntervals[scaleType];
 
-            if (intervals && intervals.length > 5) { // Apply theoretical spelling for heptatonic/etc scales
+            if (intervals && intervals.length > 5 && rootNoteIndex !== -1) { // Apply theoretical spelling for heptatonic/etc scales
                 const rootLetter = selectedKey.note.charAt(0);
                 const letterNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
                 const rootLetterIdx = letterNames.indexOf(rootLetter);
@@ -254,7 +270,16 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
             if (noteMap.has(index)) {
                 name = noteMap.get(index)!;
             } else {
-                name = enharmonicMode === 'flat' ? note.flat : note.sharp;
+                // For non-scale notes, respect the current preference.
+                if (enharmonicMode === 'flat') name = note.flat;
+                else if (enharmonicMode === 'sharp') name = note.sharp;
+                else {
+                    if (!selectedKey) name = note.sharp;
+                    else {
+                        const keySig = getKeySignature(selectedKey.note, selectedKey.scale);
+                        name = (keySig.type === 'flat') ? note.flat : note.sharp;
+                    }
+                }
             }
 
             return { ...note, name, isEnharmonic, originalIndex: index };
@@ -263,7 +288,8 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
     
     const displayScaleName = useMemo(() => {
         if (!selectedKey) return '';
-        const rootNoteName = allNotes[NOTE_NAMES.indexOf(selectedKey.note)]?.name || selectedKey.note;
+        const rootIdx = noteIndexFromName(selectedKey.note);
+        const rootNoteName = allNotes.find(n => n.originalIndex === rootIdx)?.name || selectedKey.note;
         if (scaleType === 'Pentatonic') {
             return `${rootNoteName} ${selectedKey.scale} Pentatonic`;
         }
@@ -849,6 +875,8 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                         scaleNoteIndices={scaleNoteIndices}
                         scaleType={scaleType}
                         allNotes={allNotes}
+                        enharmonicMode={enharmonicMode}
+                        keyQuality={effectiveKeyQuality}
                     />
                 </div>
                  <div className="lg:flex lg:justify-start w-full">
