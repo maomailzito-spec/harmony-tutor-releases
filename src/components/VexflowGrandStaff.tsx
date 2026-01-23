@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline } from 'vexflow';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature } from 'vexflow';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 
@@ -24,6 +24,7 @@ interface VexflowGrandStaffProps {
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
   showVoiceColors?: boolean;
+  timeSignatureChanges?: Array<{ x: number; numerator: number; denominator: number }>;
 }
 
 const DEFAULT_WIDTH = 900;
@@ -360,6 +361,7 @@ function keySignatureToVexflowString(keySignature: KeySignature): string {
 const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   notes,
   timeSignature,
+  timeSignatureChanges = [],
   keySignature,
   barlines = [],
   width = DEFAULT_WIDTH,
@@ -614,6 +616,37 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const lineLeft = new StaveConnector(satbSoprano, satbBass);
       lineLeft.setType(StaveConnector.type.SINGLE_LEFT);
       lineLeft.setContext(context).draw();
+    }
+
+    // Time signature changes (draw with VexFlow glyphs to match staff style)
+    try {
+      const drawTimeSignatureChange = (stave: Stave | null, x: number, n: number, d: number) => {
+        if (!stave) return;
+        const ts = new VFTimeSignature(`${n}/${d}`);
+        ts.setContext(context);
+        ts.setStave(stave);
+        ts.setX(x);
+        ts.draw();
+      };
+
+      (timeSignatureChanges || []).forEach(change => {
+        const n = Number(change?.numerator);
+        const d = Number(change?.denominator);
+        const x = Number(change?.x);
+        if (!Number.isFinite(n) || !Number.isFinite(d) || !Number.isFinite(x)) return;
+
+        if (staffMode === 'satb_ancient') {
+          drawTimeSignatureChange(satbSoprano, x, n, d);
+          drawTimeSignatureChange(satbAlto, x, n, d);
+          drawTimeSignatureChange(satbTenor, x, n, d);
+          drawTimeSignatureChange(satbBass, x, n, d);
+        } else {
+          drawTimeSignatureChange(treble, x, n, d);
+          drawTimeSignatureChange(bass, x, n, d);
+        }
+      });
+    } catch {
+      // ignore
     }
 
     // Draw barlines using the actual stave metrics so the line starts/ends
@@ -1094,7 +1127,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   const g = accidentalTypeToVexflow(accidentalGlyphById.get(n.id) ?? null);
                   return !!g;
                 });
-                if (withAcc.length === 0) continue;
+                if (withAcc.length < 2) continue;
 
                 for (const n of withAcc) openPositionAccidentalInsetById.set(n.id, INSET_PX);
             }

@@ -122,6 +122,7 @@ export const CHORD_FORMULAS: Partial<Record<ChordType, number[]>> = {
   // Sevenths
   [BuiltInChords.Major7]: [0, 4, 7, 11],
   [BuiltInChords.Minor7]: [0, 3, 7, 10],
+    [BuiltInChords.MinorMajor7]: [0, 3, 7, 11],
   [BuiltInChords.Dominant7]: [0, 4, 7, 10],
   [BuiltInChords.Diminished7]: [0, 3, 6, 9],
   [BuiltInChords.Minor7b5]: [0, 3, 6, 10],

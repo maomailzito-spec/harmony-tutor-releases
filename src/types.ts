@@ -67,6 +67,7 @@ export const BuiltInChords = {
   // Sevenths
   Major7: 'Major 7',
   Minor7: 'Minor 7',
+  MinorMajor7: 'Minor Maj7',
   Dominant7: 'Dominant 7',
   Diminished7: 'Diminished 7',
   Minor7b5: 'Minor 7♭5', // Half-Diminished
@@ -193,6 +194,15 @@ export type TimeSignature = {
   denominator: number;
 };
 
+export type TimeSignatureChange = {
+  // Timeline position in quarter-note units from start (can be fractional).
+  absBeat?: number;
+  // Legacy support (older state): measure boundary context.
+  measureIndex?: number;
+  numerator: number;
+  denominator: number;
+};
+
 // --- HARMONY ANALYSIS ---
 export type ErrorConnection = {
   type: 'vertical' | 'horizontal';
@@ -220,6 +230,8 @@ export type AnalysisContext = {
   measureIndex?: number;
     newTonic: string;
     newIsMinor: boolean;
+    // Optional custom label shown above the staff for this context.
+    label?: string;
 };
 
 export interface HarmonyAnalysisResult {

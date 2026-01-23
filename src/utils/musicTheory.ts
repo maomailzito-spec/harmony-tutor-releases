@@ -5,9 +5,54 @@
  */
 export function getActiveNotesTimeline(
     notes: StaffNote[],
-    timeSignature: TimeSignature
+    timeSignature: TimeSignature,
+    timeSignatureChanges?: TimeSignatureChange[]
 ): Array<{ absBeat: number; measureIndex: number; beat: number; notes: StaffNote[] }> {
-    const beatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
+    const baseBeatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
+    const normalizeChanges = (): { measureIndex: number; numerator: number; denominator: number }[] => {
+        const base = Math.max(1, Number.isFinite(baseBeatsPerMeas) ? baseBeatsPerMeas : 4);
+        return (timeSignatureChanges || [])
+            .map(c => {
+                const absBeat = Number(c.absBeat);
+                const m = Number.isFinite(c.measureIndex as any)
+                    ? Number(c.measureIndex)
+                    : (Number.isFinite(absBeat) ? Math.floor(absBeat / base) : 0);
+                const n = Math.max(1, Math.round(Number(c.numerator)));
+                const d = Math.max(1, Math.round(Number(c.denominator)));
+                return { measureIndex: m, numerator: n, denominator: d };
+            })
+            .filter(c => Number.isFinite(c.measureIndex))
+            .sort((a, b) => a.measureIndex - b.measureIndex);
+    };
+
+    const changes = normalizeChanges();
+    const getBeatsPerMeasureForIndex = (m: number): number => {
+        let active = timeSignature;
+        for (const c of changes) {
+            if (c.measureIndex <= m) {
+                active = { numerator: c.numerator, denominator: c.denominator };
+            } else {
+                break;
+            }
+        }
+        const bpm = active.numerator * (4 / active.denominator);
+        return Math.max(1, Number.isFinite(bpm) ? bpm : baseBeatsPerMeas || 4);
+    };
+
+    const maxMeasureIndex = Math.max(0, ...notes.map(n => Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : 0));
+    const measureStartAbsBeat: number[] = [];
+    let acc = 0;
+    for (let m = 0; m <= maxMeasureIndex + 1; m++) {
+        measureStartAbsBeat[m] = acc;
+        acc += getBeatsPerMeasureForIndex(m);
+    }
+
+    const findMeasureIndexForAbsBeat = (absBeat: number): number => {
+        for (let m = measureStartAbsBeat.length - 1; m >= 0; m--) {
+            if (absBeat >= measureStartAbsBeat[m] - 1e-9) return m;
+        }
+        return 0;
+    };
     // Helper per durata
     const getDuration = (n: StaffNote): number => {
         const base = (DURATION_VALUES as any)[n.duration] || 1;
@@ -23,7 +68,7 @@ export function getActiveNotesTimeline(
         if (n.isRest) return;
         const m = n.measureIndex ?? 0;
         const b = n.beat ?? 1;
-        const start = (m * beatsPerMeas) + (b - 1);
+        const start = (measureStartAbsBeat[m] ?? 0) + (b - 1);
         const end = start + getDuration(n);
         scanPointsSet.add(start);
         scanPointsSet.add(end);
@@ -35,16 +80,16 @@ export function getActiveNotesTimeline(
             if (n.isRest) return false;
             const m = n.measureIndex ?? 0;
             const b = n.beat ?? 1;
-            const start = (m * beatsPerMeas) + (b - 1);
+            const start = (measureStartAbsBeat[m] ?? 0) + (b - 1);
             const dur = getDuration(n);
             return start <= absBeat && absBeat < (start + dur - 1e-6);
         });
-        const measureIndex = Math.floor(absBeat / beatsPerMeas);
-        const beat = (absBeat % beatsPerMeas) + 1;
+        const measureIndex = findMeasureIndexForAbsBeat(absBeat);
+        const beat = (absBeat - (measureStartAbsBeat[measureIndex] ?? 0)) + 1;
         return { absBeat, measureIndex, beat, notes: activeNotes };
     });
 }
-import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext } from '../types';
+import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange } from '../types';
 import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 
 const STRING_BASE_MIDI = [64, 59, 55, 50, 45, 40];
@@ -1128,6 +1173,7 @@ const CHORD_CHECK_ORDER: ChordType[] = [
     BuiltInChords.Dominant7sharp11, BuiltInChords.Major9, BuiltInChords.Minor9,
     BuiltInChords.Dominant9, BuiltInChords.Dominant7b9, BuiltInChords.Dominant7sharp9,
     BuiltInChords.Minor11, BuiltInChords.Add9, BuiltInChords.Major7,
+    BuiltInChords.MinorMajor7,
     BuiltInChords.Minor7, BuiltInChords.Dominant7, BuiltInChords.Diminished7,
     BuiltInChords.Minor7b5, BuiltInChords.Major6, BuiltInChords.Minor6,
     BuiltInChords.Sus2, BuiltInChords.Sus4, BuiltInChords.Major,
@@ -1390,6 +1436,7 @@ const CHORD_TYPE_TO_SYMBOL: Partial<Record<ChordType, string>> = {
   [BuiltInChords.Sus4]: 'sus4',
   [BuiltInChords.Major7]: 'maj7',
   [BuiltInChords.Minor7]: 'm7',
+    [BuiltInChords.MinorMajor7]: 'm(maj7)',
   [BuiltInChords.Dominant7]: '7',
   [BuiltInChords.Diminished7]: '°7',
   [BuiltInChords.Minor7b5]: 'm7♭5',
@@ -1632,7 +1679,7 @@ export function getChordSymbol(
     try {
         const q = String(quality || '');
         const isSeventhLike = q.includes('7') || q.startsWith('Dominant');
-        if (isSeventhLike) {
+        if (isSeventhLike && quality !== BuiltInChords.MinorMajor7) {
             const allPcs = new Set<number>((chord || []).filter(n => n && !n.isRest).map(pitchClassOf).map(mod12));
             const ints = new Set<number>([...allPcs].map(pc => mod12(pc - chordRootPc)));
             const already = analysisText;
@@ -1803,6 +1850,16 @@ function calculateRomanNumeral(
         const hasMinorThird = !!ints?.has?.(3);
         const hasDimFifth = !!ints?.has?.(6);
 
+        // If the chord is already a *diatonic* diminished degree (e.g., ii° in minor),
+        // do NOT reinterpret it as a secondary leading-tone diminished chord.
+        try {
+            const degreeIndexPre = scaleIntervals.indexOf((chordRootIndex - keyTonicIndex + 12) % 12);
+            const diatonicRomanPre = degreeIndexPre >= 0 ? romanNumerals[degreeIndexPre] : null;
+            const isDiatonicDim = !!diatonicRomanPre && diatonicRomanPre.includes('°') && isDimQuality && hasMinorThird && hasDimFifth;
+            if (isDiatonicDim) {
+                // Skip secondary leading-tone logic; let the diatonic mapping handle it.
+            } else {
+
         // Seventh detection: dim7 uses 9, half-dim uses 10, maj7 uses 11.
         const hasSeventh = !!ints?.has?.(9) || !!ints?.has?.(10) || !!ints?.has?.(11) || /\b7\b/.test(typeStr) || /7/.test(typeStr);
         const isHalfDim = /Minor\s*7\s*♭?5/i.test(typeStr) || /m7\s*♭?5/i.test(typeStr) || /half\s*-?\s*diminished/i.test(typeStr) || (hasMinorThird && hasDimFifth && !!ints?.has?.(10));
@@ -1825,6 +1882,8 @@ function calculateRomanNumeral(
                 return `${prefix}/${targetRoman}`;
             }
         }
+            }
+        } catch { /* ignore */ }
     }
 
     // Secondary dominants (V/x)
@@ -1910,7 +1969,7 @@ function calculateRomanNumeral(
     } catch { /* ignore */ }
 
     if (effectiveQuality === BuiltInChords.Major && roman.toLowerCase() === roman) roman = roman.toUpperCase();
-    else if (quality === BuiltInChords.Minor && roman.toUpperCase() === roman) roman = roman.toLowerCase();
+    else if ((quality === BuiltInChords.Minor || quality === BuiltInChords.MinorMajor7) && roman.toUpperCase() === roman) roman = roman.toLowerCase();
     else if (quality === BuiltInChords.Diminished && !roman.includes('°')) roman += '°';
     else if (quality === BuiltInChords.Augmented && !roman.includes('+')) roman += '+';
 
@@ -2220,6 +2279,42 @@ export function getRomanAnalysis(
 
     let baseRomanSymbol = calculateRomanNumeral(chordInfo, keyInfo);
 
+    // If the verticality is an exact diatonic triad (by pitch-class set),
+    // prefer that diatonic label even if root-identification picked a different inversion.
+    try {
+        if (typeof baseRomanSymbol === 'string' && baseRomanSymbol && !baseRomanSymbol.includes('/')) {
+            const pcs = new Set<number>([...new Set((filteredChord || []).map(pitchClassOf).map(mod12))]);
+            if (pcs.size === 3) {
+                const scaleIntervals = keyInfo.isMinor
+                    ? [0, 2, 3, 5, 7, 8, 10] // natural minor diatonic triads
+                    : [0, 2, 4, 5, 7, 9, 11];
+                const romanMaj = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+                const romanMin = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+                const romans = keyInfo.isMinor ? romanMin : romanMaj;
+
+                const triadForRoman = (roman: string, rootPc: number) => {
+                    const isDim = roman.includes('°');
+                    const isAug = roman.includes('+');
+                    const isMin = !isDim && !isAug && roman === roman.toLowerCase();
+                    const third = isMin || isDim ? 3 : 4;
+                    const fifth = isAug ? 8 : (isDim ? 6 : 7);
+                    return new Set<number>([rootPc, mod12(rootPc + third), mod12(rootPc + fifth)]);
+                };
+
+                for (let i = 0; i < scaleIntervals.length; i++) {
+                    const rootPc = mod12(keyInfo.tonicIndex + scaleIntervals[i]);
+                    const roman = romans[i];
+                    const triadSet = triadForRoman(roman, rootPc);
+                    const matches = [...pcs].every(pc => triadSet.has(pc));
+                    if (matches) {
+                        baseRomanSymbol = roman;
+                        break;
+                    }
+                }
+            }
+        }
+    } catch { /* ignore */ }
+
     // Secondary dominants in inversions:
     // In 1st/2nd inversion, root-identification can prefer the bass (e.g. D/F# may be read as F#m).
     // That makes the Roman numeral lose the V/x label and only the Arabic figures remain.
@@ -2230,6 +2325,20 @@ export function getRomanAnalysis(
         if (pcs.length >= 3 && typeof baseRomanSymbol === 'string' && baseRomanSymbol && !baseRomanSymbol.includes('/')) {
             const candidates = identifyChordCandidates(filteredChord.length >= 2 ? filteredChord : baseChord);
             let bestSecondary: { roman: string; score: number } | null = null;
+            let baseScore = Number.NEGATIVE_INFINITY;
+            try {
+                for (const c of candidates as any[]) {
+                    if (!c) continue;
+                    const sameType = c.type === (chordInfo as any)?.type;
+                    const rootA = (c.root as any)?.noteIndex;
+                    const rootB = (chordInfo as any)?.root?.noteIndex;
+                    const sameRoot = (rootA != null && rootB != null) ? (mod12(rootA) === mod12(rootB)) : false;
+                    if (sameType && sameRoot) {
+                        baseScore = Number.isFinite(c.score) ? (c.score as number) : baseScore;
+                        break;
+                    }
+                }
+            } catch { /* ignore */ }
             for (const c of candidates as any[]) {
                 const roman = calculateRomanNumeral({ root: c.root, type: c.type, intervals: c.intervals }, keyInfo);
                 if (!roman || !roman.startsWith('V/')) continue;
@@ -2237,7 +2346,10 @@ export function getRomanAnalysis(
                 if (!bestSecondary || score > bestSecondary.score) bestSecondary = { roman, score };
             }
             if (bestSecondary) {
+                const threshold = Number.isFinite(baseScore) ? (baseScore + 2) : 0;
+                if (bestSecondary.score > threshold) {
                 baseRomanSymbol = bestSecondary.roman;
+                }
             }
         }
     } catch { /* ignore */ }
@@ -2294,7 +2406,7 @@ export function getRomanAnalysis(
     return { roman: baseRomanSymbol, figures: figuresL2 };
 }
 
-export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignature): StaffNote[] {
+export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignature, timeSignatureChanges?: TimeSignatureChange[]): StaffNote[] {
     // Self-heal stale/corrupt MIDI: many analysis and playback paths rely on `midi`.
     // If an editor operation updates octave/spelling but leaves `midi` stale (or missing),
     // labels can change "depending on context" (e.g. inversion appears correct only after
@@ -2316,7 +2428,35 @@ export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignat
         }
     });
 
-    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+    const baseBeatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+    const normalizeChanges = (): { measureIndex: number; numerator: number; denominator: number }[] => {
+        const base = Math.max(1, Number.isFinite(baseBeatsPerMeasure) ? baseBeatsPerMeasure : 4);
+        return (timeSignatureChanges || [])
+            .map(c => {
+                const absBeat = Number(c.absBeat);
+                const m = Number.isFinite(c.measureIndex as any)
+                    ? Number(c.measureIndex)
+                    : (Number.isFinite(absBeat) ? Math.floor(absBeat / base) : 0);
+                const n = Math.max(1, Math.round(Number(c.numerator)));
+                const d = Math.max(1, Math.round(Number(c.denominator)));
+                return { measureIndex: m, numerator: n, denominator: d };
+            })
+            .filter(c => Number.isFinite(c.measureIndex))
+            .sort((a, b) => a.measureIndex - b.measureIndex);
+    };
+    const changes = normalizeChanges();
+    const getBeatsPerMeasureForIndex = (m: number): number => {
+        let active = timeSignature;
+        for (const c of changes) {
+            if (c.measureIndex <= m) {
+                active = { numerator: c.numerator, denominator: c.denominator };
+            } else {
+                break;
+            }
+        }
+        const bpm = active.numerator * (4 / active.denominator);
+        return Math.max(1, Number.isFinite(bpm) ? bpm : baseBeatsPerMeasure || 4);
+    };
 
     const voices = new Map<Voice, StaffNote[]>();
     normalizedNotes.forEach(note => {
@@ -2342,6 +2482,7 @@ export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignat
 
             if (tupletContext) durationInBeats = tupletContext.beatsForGroup / tupletContext.notesInGroup;
 
+            const beatsPerMeasure = getBeatsPerMeasureForIndex(measureIndex);
             if (durationInMeasure + durationInBeats > beatsPerMeasure + 0.001) {
                 measureIndex++;
                 durationInMeasure = 0;

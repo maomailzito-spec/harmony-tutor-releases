@@ -11,7 +11,7 @@ declare global {
 }
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
-import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride } from '../types';
+import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
 import { AudioService } from '../services/AudioService';
 import { 
     WholeNoteIcon, HalfNoteIcon, QuarterNoteIcon, EighthNoteIcon, SixteenthNoteIcon, ThirtySecondNoteIcon, SixtyFourthNoteIcon,
@@ -346,6 +346,14 @@ const KEY_SIGNATURE_POSITIONS_BASS: Record<'sharp' | 'flat', { pitch: string, oc
     flat: [ { pitch: 'B', octave: 2 }, { pitch: 'E', octave: 3 }, { pitch: 'A', octave: 2 }, { pitch: 'D', octave: 3 }, { pitch: 'G', octave: 2 }, { pitch: 'C', octave: 3 }, { pitch: 'F', octave: 2 } ]
 };
 const NOTE_POSITIONS: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+const VALID_DENOMINATORS = [2, 4, 8, 16];
+const denominatorStepFn = (current: number, direction: 'up' | 'down') => {
+    const currentIndex = VALID_DENOMINATORS.indexOf(current);
+    if (direction === 'up') {
+        return VALID_DENOMINATORS[Math.min(VALID_DENOMINATORS.length - 1, currentIndex + 1)];
+    }
+    return VALID_DENOMINATORS[Math.max(0, currentIndex - 1)];
+};
 
 const TimeSignatureControlNumber: React.FC<{
     value: number;
@@ -434,16 +442,6 @@ const TimeSignatureControl: React.FC<{ value: TimeSignature; onChange: (newValue
     const handleNumeratorChange = (newNum: number) => onChange({ ...value, numerator: newNum });
     const handleDenominatorChange = (newDenom: number) => onChange({ ...value, denominator: newDenom });
     
-    const validDenominators = [2, 4, 8, 16];
-    const denominatorStepFn = (current: number, direction: 'up' | 'down') => {
-        const currentIndex = validDenominators.indexOf(current);
-        if (direction === 'up') {
-            return validDenominators[Math.min(validDenominators.length - 1, currentIndex + 1)];
-        } else {
-            return validDenominators[Math.max(0, currentIndex - 1)];
-        }
-    };
-
     return (
         <div className="flex flex-col items-center justify-center w-10 h-14 bg-gray-700 rounded-md text-white font-serif relative overflow-hidden divide-y divide-gray-600">
             <TimeSignatureControlNumber value={value.numerator} onChange={handleNumeratorChange} min={1} max={16} />
@@ -534,6 +532,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     
     const [copyPasteError, setCopyPasteError] = useState<string | null>(null);
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
+    const [timeSignatureChanges, setTimeSignatureChanges] = useState<TimeSignatureChange[]>([]);
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
     const [projectTitle, setProjectTitle] = useState<string>('');
     const [titleFontSize, setTitleFontSize] = useState<number>(18);
@@ -913,6 +912,48 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => { isLoopingRef.current = isLooping; }, [isLooping]);
     useEffect(() => { loopRangeRef.current = loopRange; }, [loopRange]);
     useEffect(() => { isMetronomeOnRef.current = isMetronomeOn; }, [isMetronomeOn]);
+
+    useEffect(() => {
+        if (!timeSignatureChanges || timeSignatureChanges.length === 0) return;
+        setRawNotes(prev => {
+            if (!prev || prev.length === 0) return prev;
+
+            const baseBeats = timeSignature.numerator * (4 / timeSignature.denominator);
+            const changes = (timeSignatureChanges || [])
+                .map(c => {
+                    const absBeat = Number(c.absBeat);
+                    const m = Number.isFinite(c.measureIndex as any)
+                        ? Number(c.measureIndex)
+                        : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
+                    return { measureIndex: m, numerator: c.numerator, denominator: c.denominator };
+                })
+                .filter(c => Number.isFinite(c.measureIndex))
+                .sort((a, b) => a.measureIndex - b.measureIndex);
+
+            const maxIdx = prev.reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : 0), 0);
+            const measureStartAbsBeat: number[] = [];
+            let acc = 0;
+            for (let m = 0; m <= maxIdx + 1; m++) {
+                measureStartAbsBeat[m] = acc;
+                let active = { numerator: timeSignature.numerator, denominator: timeSignature.denominator };
+                for (const c of changes) {
+                    if (c.measureIndex <= m) active = { numerator: c.numerator, denominator: c.denominator };
+                    else break;
+                }
+                const bpm = active.numerator * (4 / active.denominator);
+                acc += Math.max(1, Number.isFinite(bpm) ? bpm : baseBeats || 4);
+            }
+
+            return prev.map(n => {
+                const m = Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : 0;
+                const b = Number.isFinite(n.beat) ? (n.beat as number) : 1;
+                const startAbs = (measureStartAbsBeat[m] ?? (m * baseBeats)) + (b - 1);
+                const startTick = Math.round(startAbs * TICKS_PER_QUARTER);
+                if (!Number.isFinite(startTick)) return n;
+                return { ...n, startTick } as StaffNote;
+            });
+        });
+    }, [timeSignatureChanges, timeSignature, setRawNotes]);
     useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
     const canUseDuplet = useMemo(() => {
@@ -1016,11 +1057,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         stopMetronomeInternal();
 
         const safeBpm = Math.max(20, Math.min(300, bpm || 120));
+        const getTimeSignatureAtAbsBeatLocal = (absBeat: number): TimeSignature => {
+            const baseBeats = timeSignature.numerator * (4 / timeSignature.denominator);
+            const toAbsBeat = (c: any) => {
+                const ab = Number(c?.absBeat);
+                if (Number.isFinite(ab)) return ab;
+                const m = Number(c?.measureIndex) || 0;
+                return m * Math.max(1, baseBeats || 4);
+            };
+            const sorted = (timeSignatureChanges || []).slice().sort((a, b) => toAbsBeat(a) - toAbsBeat(b));
+            let active: TimeSignature = timeSignature;
+            for (const c of sorted) {
+                const at = toAbsBeat(c);
+                if (Number.isFinite(at) && at <= absBeat + 1e-6) {
+                    if (Number.isFinite(c.numerator) && Number.isFinite(c.denominator) && c.numerator > 0 && c.denominator > 0) {
+                        active = { numerator: c.numerator, denominator: c.denominator };
+                    }
+                } else {
+                    break;
+                }
+            }
+            return active;
+        };
         const beatDurationSec = 60 / safeBpm; // quarter note = 1 beat
         const unitBeats = metronomeUnit === 'eighth' ? 0.5 : (metronomeUnit === 'dotted-quarter' ? 1.5 : 1);
         const unitDurationSec = beatDurationSec * unitBeats;
-        const beatsPerMeasureRaw = (timeSignature?.numerator ?? 4) * (4 / (timeSignature?.denominator ?? 4));
-        const beatsPerMeasure = Math.max(1, Number.isFinite(beatsPerMeasureRaw) ? beatsPerMeasureRaw : 4);
 
         if (isAudioReady) {
             await audioService.ensureAudioIsReady();
@@ -1039,7 +1100,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         metronomeNextWhenRef.current = anchorWhenSec + unitsSinceAnchor * unitDurationSec;
 
         const isDownbeat = (absBeat: number) => {
-            if (!Number.isFinite(absBeat) || !Number.isFinite(beatsPerMeasure)) return false;
+            if (!Number.isFinite(absBeat)) return false;
+            const ts = getTimeSignatureAtAbsBeatLocal(absBeat);
+            const beatsPerMeasureRaw = (ts?.numerator ?? 4) * (4 / (ts?.denominator ?? 4));
+            const beatsPerMeasure = Math.max(1, Number.isFinite(beatsPerMeasureRaw) ? beatsPerMeasureRaw : 4);
             const mod = ((absBeat % beatsPerMeasure) + beatsPerMeasure) % beatsPerMeasure;
             return (mod < 1e-6) || (Math.abs(beatsPerMeasure - mod) < 1e-6);
         };
@@ -1077,7 +1141,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Start scheduling a bit ahead so the first click lands exactly on anchor.
         const firstDelayMs = Math.max(0, (metronomeNextWhenRef.current - nowSec - 0.03) * 1000);
         metronomeIntervalRef.current = window.setTimeout(scheduleNext, firstDelayMs);
-    }, [audioService, bpm, isAudioReady, metronomeUnit, stopMetronomeInternal, timeSignature?.denominator, timeSignature?.numerator]);
+    }, [audioService, bpm, isAudioReady, metronomeUnit, stopMetronomeInternal, timeSignature, timeSignatureChanges]);
 
     useEffect(() => {
         if (!isMetronomeOn) {
@@ -1469,7 +1533,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, [rawNotes, keySignature]);
 
-    const notes = useMemo(() => calculateNoteBeats(normalizedRawNotes, timeSignature), [normalizedRawNotes, timeSignature]);
+    const notes = useMemo(() => calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges), [normalizedRawNotes, timeSignature, timeSignatureChanges]);
 
     const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = useState(false);
 
@@ -1558,10 +1622,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 try {
                     if (copied && copied.length > 0) {
                         const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
-                        const absBeats = copied.map(n => ((n.measureIndex ?? 0) * beatsPerMeasureLocal) + ((n.beat ?? 1) - 1));
+                        const starts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+                        const absBeats = copied.map(n => ((starts && starts[n.measureIndex ?? 0] != null)
+                            ? (starts[n.measureIndex ?? 0] ?? 0)
+                            : ((n.measureIndex ?? 0) * beatsPerMeasureLocal)) + ((n.beat ?? 1) - 1));
                         const baseAbs = Math.min(...absBeats);
-                        const measureIdx = Math.max(0, Math.floor(baseAbs / beatsPerMeasureLocal));
-                        const beatInMeasure = Math.round(((baseAbs - (measureIdx * beatsPerMeasureLocal)) + 1) * 1e6) / 1e6;
+                        const { measureIndex: measureIdx, beat: beatInMeasure } = getMeasureIndexAndBeatFromAbsBeat(baseAbs);
                         let systemIndex = 0;
                         if (layoutData && layoutData.systemsParams) {
                             for (let si = 0; si < layoutData.systemsParams.length; si++) {
@@ -1650,7 +1716,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                 if (!caret && layoutData && Number.isFinite(playbackCursorAbsBeatRef.current) && playbackCursorAbsBeatRef.current >= 0) {
                     try {
-                        const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
                         const absBeat = playbackCursorAbsBeatRef.current as number;
 
                         const getDurationTicks = (n: StaffNote): number => {
@@ -1680,8 +1745,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const snappedAbsTicks = Math.floor(absTicks / gridTicks) * gridTicks;
                         const snappedAbsBeat = snappedAbsTicks / TICKS_PER_QUARTER;
 
-                        const measureIndex = Math.floor(snappedAbsBeat / beatsPerMeasureLocal);
-                        const beat = Math.round(((snappedAbsBeat - (measureIndex * beatsPerMeasureLocal)) + 1) * 1e6) / 1e6;
+                        const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(snappedAbsBeat);
 
                         let systemIndex = 0;
                         if (layoutData.systemsParams) {
@@ -1762,6 +1826,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setKeySignatureRoot('C');
                 setProjectTitle('');
                 setTimeSignature({ numerator: 4, denominator: 4 });
+                setTimeSignatureChanges([]);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setActiveTab('editor');
@@ -1807,6 +1872,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 titleFontSize,
                 titleFontFamily,
                 timeSignature,
+                timeSignatureChanges,
                 isMinorMode,
                 autoLeadingToneInMinor,
                 keyChangeMode,
@@ -1838,6 +1904,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setKeySignatureRoot('C');
             setProjectTitle('');
             setTimeSignature({ numerator: 4, denominator: 4 });
+            setTimeSignatureChanges([]);
             setIsMinorMode(false);
             setAutoLeadingToneInMinor(true);
             setKeyChangeMode('none');
@@ -1885,13 +1952,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // Convert legacy beat/measure floats to high-resolution ticks for stability.
                     try {
                         const ts = (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') ? loadedProject.timeSignature : { numerator: 4, denominator: 4 };
-                        const beatsPerMeasure = ts.numerator * (4 / ts.denominator);
+                        const baseBeats = ts.numerator * (4 / ts.denominator);
                         const ticksPerBeat = TICKS_PER_QUARTER; // quarter = 1 beat
+
+                        const changesRaw = Array.isArray(loadedProject.timeSignatureChanges) ? loadedProject.timeSignatureChanges : [];
+                        const changes = changesRaw
+                            .map((c: any) => {
+                                const absBeat = Number(c?.absBeat);
+                                const m = Number.isFinite(c?.measureIndex)
+                                    ? Number(c.measureIndex)
+                                    : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
+                                return {
+                                    measureIndex: m,
+                                    numerator: Math.max(1, Math.round(Number(c?.numerator) || 4)),
+                                    denominator: Math.max(1, Math.round(Number(c?.denominator) || 4)),
+                                };
+                            })
+                            .filter((c: any) => Number.isFinite(c.measureIndex))
+                            .sort((a: any, b: any) => a.measureIndex - b.measureIndex);
+
+                        const maxIdx = (normalizedNotes as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), 0);
+                        const measureStartAbsBeat: number[] = [];
+                        let acc = 0;
+                        for (let m = 0; m <= maxIdx + 1; m++) {
+                            measureStartAbsBeat[m] = acc;
+                            let active = ts as any;
+                            for (const c of changes) {
+                                if (c.measureIndex <= m) active = c;
+                                else break;
+                            }
+                            const bpm = active.numerator * (4 / active.denominator);
+                            acc += Math.max(1, Number.isFinite(bpm) ? bpm : baseBeats || 4);
+                        }
+
                         const withTicks = (normalizedNotes as any[]).map(n => {
                             try {
                                 const m = Number.isFinite(n.measureIndex) ? n.measureIndex : 0;
                                 const b = Number.isFinite(n.beat) ? n.beat : 1;
-                                const absBeat = (m * beatsPerMeasure) + (b - 1);
+                                const absBeat = (measureStartAbsBeat[m] ?? (m * baseBeats)) + (b - 1);
                                 const startTick = Math.round(absBeat * ticksPerBeat);
 
                                 // duration -> beats
@@ -1945,6 +2043,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             setTimeSignature({ numerator: n, denominator: d });
                         }
                     }
+                    if (Array.isArray(loadedProject.timeSignatureChanges)) {
+                        const baseBeats = (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object')
+                            ? ((Number((loadedProject.timeSignature as any).numerator) || 4) * (4 / (Number((loadedProject.timeSignature as any).denominator) || 4)))
+                            : (timeSignature.numerator * (4 / timeSignature.denominator));
+                        const normalized = loadedProject.timeSignatureChanges.map((c: any) => {
+                            const absBeat = Number(c?.absBeat);
+                            const m = Number.isFinite(c?.measureIndex)
+                                ? Number(c.measureIndex)
+                                : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
+                            return {
+                                absBeat: Number.isFinite(absBeat) ? absBeat : undefined,
+                                measureIndex: m,
+                                numerator: Math.max(1, Math.round(Number(c?.numerator) || 4)),
+                                denominator: Math.max(1, Math.round(Number(c?.denominator) || 4)),
+                            } as TimeSignatureChange;
+                        });
+                        setTimeSignatureChanges(normalized);
+                    }
                     if (typeof loadedProject.isMinorMode === 'boolean') {
                         setIsMinorMode(loadedProject.isMinorMode);
                     }
@@ -1996,6 +2112,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setProjectTitle('');
                 setCurrentProjectFilePath(null);
                 setHarmonyOverrides([]);
+                setTimeSignatureChanges([]);
             }
         } else if (action === 'set-show-measure-numbers') {
             setShowMeasureNumbers(!!payload?.enabled);
@@ -2166,19 +2283,61 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     };
 
     const analysisContextAbsBeat = useCallback((ctx: AnalysisContext) => {
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const legacyAbsBeat = (ctx.measureIndex ?? 0) * beatsPerMeasure;
+        const baseBeatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const legacyAbsBeat = (ctx.measureIndex ?? 0) * baseBeatsPerMeasure;
         return Number.isFinite(ctx.absBeat as any) ? (ctx.absBeat as number) : legacyAbsBeat;
     }, [timeSignature]);
 
-    const handleApplyContext = (absBeat: number, newTonic: string, newIsMinor: boolean) => {
+    const timeSignatureChangeAbsBeat = useCallback((tc: TimeSignatureChange) => {
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const legacyAbsBeat = (tc.measureIndex ?? 0) * beatsPerMeasure;
+        return Number.isFinite(tc.absBeat as any) ? (tc.absBeat as number) : legacyAbsBeat;
+    }, [timeSignature]);
+
+    const getTimeSignatureAtAbsBeat = useCallback((absBeat: number): TimeSignature => {
+        const sorted = (timeSignatureChanges || []).slice().sort((a, b) => timeSignatureChangeAbsBeat(a) - timeSignatureChangeAbsBeat(b));
+        let active: TimeSignature = timeSignature;
+        for (const c of sorted) {
+            const at = timeSignatureChangeAbsBeat(c);
+            if (Number.isFinite(at) && at <= absBeat + 1e-6) {
+                if (Number.isFinite(c.numerator) && Number.isFinite(c.denominator) && c.numerator > 0 && c.denominator > 0) {
+                    active = { numerator: c.numerator, denominator: c.denominator };
+                }
+            } else {
+                break;
+            }
+        }
+        return active;
+    }, [timeSignature, timeSignatureChangeAbsBeat, timeSignatureChanges]);
+
+    const handleApplyContext = (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => {
         const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
 
         setAnalysisContexts(prev => {
             const next = (prev || []).filter(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) > 1e-6);
-            next.push({ absBeat: safeAbsBeat, newTonic, newIsMinor });
+            next.push({ absBeat: safeAbsBeat, newTonic, newIsMinor, label: label?.trim() || undefined });
             return next.sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b));
         });
+        setContextMenu(null);
+    };
+
+    const handleApplyTimeSignatureChange = (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => {
+        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        const n = Math.max(1, Math.round(Number(numerator)));
+        const d = Math.max(1, Math.round(Number(denominator)));
+        const mIdx = Number.isFinite(measureIndex as any) ? (measureIndex as number) : Math.floor(safeAbsBeat / Math.max(1, timeSignature.numerator * (4 / timeSignature.denominator)));
+
+        setTimeSignatureChanges(prev => {
+            const next = (prev || []).filter(c => Math.abs(timeSignatureChangeAbsBeat(c) - safeAbsBeat) > 1e-6);
+            next.push({ absBeat: safeAbsBeat, measureIndex: mIdx, numerator: n, denominator: d });
+            return next.sort((a, b) => timeSignatureChangeAbsBeat(a) - timeSignatureChangeAbsBeat(b));
+        });
+        setContextMenu(null);
+    };
+
+    const handleRemoveTimeSignatureChange = (absBeat: number) => {
+        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        setTimeSignatureChanges(prev => (prev || []).filter(c => Math.abs(timeSignatureChangeAbsBeat(c) - safeAbsBeat) > 1e-6));
         setContextMenu(null);
     };
 
@@ -2192,6 +2351,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!contextMenu) return null;
         return (analysisContexts || []).find(c => Math.abs(analysisContextAbsBeat(c) - contextMenu.absBeat) <= 1e-6) || null;
     }, [analysisContextAbsBeat, contextMenu, analysisContexts]);
+
+    const existingTimeSignatureChangeForMenu = useMemo(() => {
+        if (!contextMenu) return null;
+        return (timeSignatureChanges || []).find(c => Math.abs(timeSignatureChangeAbsBeat(c) - contextMenu.absBeat) <= 1e-6) || null;
+    }, [contextMenu, timeSignatureChangeAbsBeat, timeSignatureChanges]);
 
 
     useEffect(() => {
@@ -2216,7 +2380,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const timeSigWidthWithPadding = timeSignature ? 55 : 0;
         const startOffset = START_X + keySigWidth + timeSigWidthWithPadding;
         const systemRightX = containerWidth - START_X;
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const baseBeatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const normalizedTimeSigChanges = (timeSignatureChanges || [])
+            .map(c => {
+                const absBeat = Number(c.absBeat);
+                const m = Number.isFinite(c.measureIndex as any)
+                    ? Number(c.measureIndex)
+                    : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeatsPerMeasure || 4)) : 0);
+                return {
+                    measureIndex: m,
+                    numerator: Math.max(1, Math.round(Number(c.numerator))),
+                    denominator: Math.max(1, Math.round(Number(c.denominator))),
+                };
+            })
+            .filter(c => Number.isFinite(c.measureIndex))
+            .sort((a, b) => a.measureIndex - b.measureIndex);
+        const getBeatsPerMeasureForIndex = (m: number): number => {
+            let active = timeSignature;
+            for (const c of normalizedTimeSigChanges) {
+                if (c.measureIndex <= m) {
+                    active = { numerator: c.numerator, denominator: c.denominator };
+                } else {
+                    break;
+                }
+            }
+            const bpm = active.numerator * (4 / active.denominator);
+            return Math.max(1, Number.isFinite(bpm) ? bpm : (baseBeatsPerMeasure || 4));
+        };
 
         // Build notes grouped by measure
         const notesByMeasure = new Map<number, StaffNote[]>();
@@ -2231,10 +2421,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const finalMeasureIndex = Math.max(0, Math.max((minMeasureCount - 1), maxMeasureIndex));
         const targetTotalMeasures = Math.max(minMeasureCount, maxMeasureIndex + 1);
 
+        const measureBeatsPerMeasure: number[] = [];
+        const measureStartAbsBeat: number[] = [];
+        const measureTicks: number[] = [];
+        let accBeat = 0;
+        for (let m = 0; m < targetTotalMeasures; m++) {
+            measureStartAbsBeat[m] = accBeat;
+            const bpm = getBeatsPerMeasureForIndex(m);
+            measureBeatsPerMeasure[m] = bpm;
+            measureTicks[m] = bpm * TICKS_PER_QUARTER;
+            accBeat += bpm;
+        }
+
         // Compute layout using ticks per system to ensure stable px-per-beat inside each system.
         const usablePageWidth = systemRightX - startOffset - STAFF_PADDING_X;
         const MIN_PX_PER_QUARTER = 48;
-        const ticksPerMeasure = beatsPerMeasure * TICKS_PER_QUARTER;
+        const ticksPerMeasureForIndex = (m: number) => measureTicks[m] ?? (Math.max(1, baseBeatsPerMeasure || 4) * TICKS_PER_QUARTER);
 
         // Build systems using the user-selected measures-per-line as the primary
         // constraint, while still splitting earlier if the line would overflow.
@@ -2245,7 +2447,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Natural width for a measure using the deterministic default px-per-tick
         // (used only for system splitting heuristics).
         const naturalMeasureWidth = (_mIdx: number, isFirstMeasureInSystem: boolean) => {
-            const measureTicks = ticksPerMeasure;
+            const measureTicks = ticksPerMeasureForIndex(_mIdx);
             const content = Math.round(measureTicks * DEFAULT_PX_PER_TICK);
             const extraLeft = isFirstMeasureInSystem ? (keySigWidth + timeSigWidthWithPadding) : 0;
             return content + (MEASURE_PADDING_X * 2) + extraLeft;
@@ -2277,7 +2479,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // (this prevents unexpected global reflow when inserting measures).
         const canUseDefaultPxPerTick = typeof DEFAULT_PX_PER_TICK === 'number' && isFinite(DEFAULT_PX_PER_TICK) && DEFAULT_PX_PER_TICK > 0 && tentativeSystems.every(sys => {
             const measureCount = sys.measureIndices.length;
-            const totalTicks = measureCount * ticksPerMeasure;
+            const totalTicks = sys.measureIndices.reduce((s, mi) => s + ticksPerMeasureForIndex(mi), 0);
             const totalPadding = measureCount * (MEASURE_PADDING_X * 2);
             const availableContentWidth = Math.max(40, usablePageWidth - totalPadding);
             const neededContentWidth = Math.round(totalTicks * DEFAULT_PX_PER_TICK);
@@ -2296,7 +2498,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const measureCount = sys.measureIndices.length;
             const totalPadding = measureCount * (MEASURE_PADDING_X * 2);
             const availableContentWidth = Math.max(40, usablePageWidth - totalPadding);
-            const totalTicks = sys.measureIndices.reduce((s, mi) => s + ticksPerMeasure, 0);
+            const totalTicks = sys.measureIndices.reduce((s, mi) => s + ticksPerMeasureForIndex(mi), 0);
 
             // Allow increasing pxPerTick beyond the default when notes are very dense
             // so small subdivisions (biscrome etc.) remain legible.
@@ -2309,14 +2511,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
                 const ticks = measureNotes.map(n => (typeof (n as any).startTick === 'number')
                     ? (n as any).startTick
-                    : Math.round((((n.measureIndex ?? 0) * beatsPerMeasure) + ((n.beat ?? 1) - 1)) * TICKS_PER_QUARTER));
+                    : Math.round((((measureStartAbsBeat[n.measureIndex ?? 0] ?? 0) + ((n.beat ?? 1) - 1))) * TICKS_PER_QUARTER));
                 ticks.sort((a, b) => a - b);
                 for (let i = 1; i < ticks.length; i++) {
                     const d = ticks[i] - ticks[i-1];
                     if (d > 0 && d < minDeltaTicks) minDeltaTicks = d;
                 }
             });
-            if (!isFinite(minDeltaTicks) || minDeltaTicks <= 0) minDeltaTicks = ticksPerMeasure;
+            if (!isFinite(minDeltaTicks) || minDeltaTicks <= 0) minDeltaTicks = ticksPerMeasureForIndex(sys.measureIndices[0] ?? 0);
 
             const neededPxPerTickFromNotes = MIN_PIXEL_SPACING / Math.max(1, minDeltaTicks);
             const defaultPx = (typeof DEFAULT_PX_PER_TICK === 'number' && DEFAULT_PX_PER_TICK > 0) ? DEFAULT_PX_PER_TICK : 0;
@@ -2326,7 +2528,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             let curX = curXStart;
             const startMeasuresX: number[] = [];
             sys.measureIndices.forEach((m, idx) => {
-                const measureTicks = ticksPerMeasure;
+                const measureTicks = ticksPerMeasureForIndex(m);
                 const contentWidthForMeasure = measureTicks * pxPerTick;
                 // If this is the first measure in the system, reserve space for key/time glyphs
                 // so notes don't overlap the clef/time.
@@ -2339,7 +2541,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                 // position notes using ticks when available (fallback to beat field)
                 const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
-                                const measureStartTick = beatsToTicks(m * beatsPerMeasure);
+                                const measureStartTick = beatsToTicks(measureStartAbsBeat[m] ?? 0);
                                 measureNotes.forEach(n => {
                                     // Ogni nota DEVE avere startTick
                                     if (typeof (n as any).startTick !== 'number') {
@@ -2407,7 +2609,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const sample = finalNotes.slice(0, 12).map(n => ({ id: n.id, measureIndex: n.measureIndex, beat: n.beat, startTick: (n as any).startTick, x: n.xPosition }));
             const firstMeasureIndex = 0;
             const sampleMeasureWidth = measureFinalWidths.get(firstMeasureIndex) || 0;
-            const samplePxPerQuarter = sampleMeasureWidth > 0 ? ((sampleMeasureWidth - (MEASURE_PADDING_X * 2)) / Math.max(1, beatsPerMeasure)) : 0;
+            const sampleBeats = measureBeatsPerMeasure[0] ?? baseBeatsPerMeasure;
+            const samplePxPerQuarter = sampleMeasureWidth > 0 ? ((sampleMeasureWidth - (MEASURE_PADDING_X * 2)) / Math.max(1, sampleBeats)) : 0;
             // Per-system diagnostics: report pxPerTick estimate and first positioned note
             systemsParams.forEach((sp, si) => {
                 const sysNotes = finalNotes.filter(n => sp.measureIndices.includes(n.measureIndex ?? -1));
@@ -2418,8 +2621,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch (e) {
             // ignore logging errors
         }
-        return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths };
-    }, [analyzedNotes, containerWidth, timeSignature, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures]);
+        return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
+    }, [analyzedNotes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures]);
 
     // Keep a ref to the latest layoutData so async callbacks can read current layout
     const layoutDataRef = useRef(layoutData);
@@ -2547,7 +2750,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!isAnalysisEnabled || !layoutData) return [];
 
         // Use the timeline of all active notes at each event (start/end of any note)
-        const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature);
+        const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges);
 
         // Labels should follow *structural onsets* rather than every scanpoint.
         // Note-off-only scanpoints can temporarily reduce the verticality (e.g. 2 notes)
@@ -2641,9 +2844,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Helper: compute xPosition for a given absBeat in a system
         function getXForAbsBeat(absBeat: number, system: any) {
-            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-            const measureIndex = Math.floor(absBeat / beatsPerMeasure);
-            const beatInMeasure = (absBeat - (measureIndex * beatsPerMeasure)) + 1;
+            const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+            const measureBeatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+            const findMeasureIndexForAbsBeat = (ab: number): number => {
+                if (!measureStartAbsBeat || measureStartAbsBeat.length === 0) {
+                    const bpm = timeSignature.numerator * (4 / timeSignature.denominator);
+                    return Math.floor(ab / bpm);
+                }
+                for (let m = measureStartAbsBeat.length - 1; m >= 0; m--) {
+                    if (ab >= (measureStartAbsBeat[m] ?? 0) - 1e-9) return m;
+                }
+                return 0;
+            };
+            const measureIndex = findMeasureIndexForAbsBeat(absBeat);
+            const beatsPerMeasure = (measureBeatsPerMeasure && measureBeatsPerMeasure[measureIndex])
+                ? measureBeatsPerMeasure[measureIndex]
+                : (timeSignature.numerator * (4 / timeSignature.denominator));
+            const beatInMeasure = (absBeat - ((measureStartAbsBeat && measureStartAbsBeat[measureIndex]) ? measureStartAbsBeat[measureIndex] : (measureIndex * beatsPerMeasure))) + 1;
             const idx = system.measureIndices.indexOf(measureIndex);
             if (idx === -1) return 0;
             const startX = system.startMeasuresX[idx];
@@ -3220,6 +3437,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const fallbackHarmonicNotes = (harmonicNotes.length >= 2)
                 ? harmonicNotes
                 : (fullNotes || []).filter((n: any) => n && !n.isRest);
+            const baseHarmonicNotes = (fallbackHarmonicNotes.length >= 2)
+                ? fallbackHarmonicNotes
+                : (fullNotes || []).filter((n: any) => n && !n.isRest);
 
             // If a suspension originates at this event, the held tone is a non-chord tone
             // against the new harmony. Exclude it from the chord-analysis snapshot so we
@@ -3287,8 +3507,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const bassPc = bassNote && Number.isFinite(bassNote.midi) ? (((bassNote.midi % 12) + 12) % 12) : null;
 
             // If the harmonic content doesn't change (only ornaments changed), skip.
-            const harmonicSig = signatureFromNotes(fallbackHarmonicNotes);
-            if (!harmonicSig || fallbackHarmonicNotes.length < 2) {
+            const harmonicSig = signatureFromNotes(baseHarmonicNotes);
+            const fullSig = signatureFromNotes(fullNotes || []);
+            if (!harmonicSig || baseHarmonicNotes.length < 2) {
                 return;
             }
 
@@ -3370,6 +3591,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             })();
 
+            const previewRoman = (() => {
+                try {
+                    const r = getRomanAnalysis((analysisNotesForNaming || []) as any, contextTonic, contextIsMinor);
+                    if (r?.roman) return String(r.roman);
+                    const rFull = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor);
+                    return rFull?.roman ? String(rFull.roman) : '';
+                } catch {
+                    return '';
+                }
+            })();
+
             // Compound-meter noise guard:
             // If we're on an internal 8th subdivision (non-strong pulse) and the bass hasn't changed,
             // don't emit a new harmony label/figures just because upper voices arpeggiate/passage.
@@ -3399,7 +3631,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             } catch { /* ignore */ }
 
-            if (!hasSuspensionOnsetHere && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion)) {
+            const hasHiddenChange = !!(fullSig && prevSig && fullSig !== prevSig);
+            if (!hasSuspensionOnsetHere && !hasHiddenChange && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion)) {
+                const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+                if (previewRoman && prevRoman && previewRoman !== prevRoman) {
+                    // Real harmonic change -> do not suppress.
+                } else {
                 // Keep the label stable, but record that *something happened* here (ornament/appoggiatura)
                 // so the renderer can draw a short hold-line across hidden beats.
                 if (hasOrnamentOnsetAtThisBeat || shouldSuppressAsCompletion) {
@@ -3418,6 +3655,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                 }
                 return;
+                }
             }
             lastSigBySystem.set(systemIndex, harmonicSig);
             lastCtxBySystem.set(systemIndex, ctxKey);
@@ -3914,9 +4152,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const hasClassic = resolvingSuspensions.some((s: any) => CLASSIC_TYPES.has(String(s.type)));
                     const hasNonClassic = resolvingSuspensions.some((s: any) => !CLASSIC_TYPES.has(String(s.type)));
                     if (!isSuspensionOnsetHere && hasClassic && !hasNonClassic) {
-                        roman = '';
-                        figures = [];
-                        symbol = '';
+                        // Only suppress if the harmony is unchanged (avoid hiding a real change).
+                        const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+                        if (!roman || roman === prevRoman) {
+                            roman = '';
+                            figures = [];
+                            symbol = '';
+                        }
                     }
                 }
             } catch (_) {}
@@ -4012,19 +4254,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData || analysisContexts.length === 0) return [] as { x: number; label: string }[][];
 
         const formatLabel = (ctx: AnalysisContext) => {
+            if (ctx.label && String(ctx.label).trim()) return String(ctx.label).trim();
             const quality = ctx.newIsMinor ? 'min' : 'Maj';
             return `[ ${ctx.newTonic} ${quality} ]`;
         };
 
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const markersBySystem: { x: number; label: string }[][] = layoutData.systemsParams.map(() => []);
+        const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeats = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+
+        const findMeasureIndexForAbsBeat = (ab: number): number => {
+            if (!measureStarts || measureStarts.length === 0) {
+                const bpm = timeSignature.numerator * (4 / timeSignature.denominator);
+                return Math.floor(ab / bpm);
+            }
+            for (let m = measureStarts.length - 1; m >= 0; m--) {
+                if (ab >= (measureStarts[m] ?? 0) - 1e-9) return m;
+            }
+            return 0;
+        };
 
         for (const ctx of analysisContexts) {
             const absBeat = analysisContextAbsBeat(ctx);
             if (!Number.isFinite(absBeat) || absBeat < 0) continue;
 
-            const measureIndex = Math.floor(absBeat / beatsPerMeasure);
-            const beatInMeasure = (absBeat - (measureIndex * beatsPerMeasure)) + 1;
+            const measureIndex = findMeasureIndexForAbsBeat(absBeat);
+            const bpm = (measureBeats && measureBeats[measureIndex])
+                ? measureBeats[measureIndex]
+                : (timeSignature.numerator * (4 / timeSignature.denominator));
+            const beatInMeasure = (absBeat - ((measureStarts && measureStarts[measureIndex] != null) ? measureStarts[measureIndex] : (measureIndex * bpm))) + 1;
 
             for (let systemIndex = 0; systemIndex < layoutData.systemsParams.length; systemIndex++) {
                 const sys = layoutData.systemsParams[systemIndex];
@@ -4035,7 +4293,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const endX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
                 const measureWidth = Math.max(1, endX - startX);
                 const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
-                const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / beatsPerMeasure));
+                const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / bpm));
                 const x = startX + MEASURE_PADDING_X + (rel * contentWidth);
 
                 markersBySystem[systemIndex].push({ x: x + 10, label: formatLabel(ctx) });
@@ -4046,6 +4304,45 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         markersBySystem.forEach(ms => ms.sort((a, b) => a.x - b.x));
         return markersBySystem;
     }, [analysisContextAbsBeat, analysisContexts, layoutData, timeSignature]);
+
+    const timeSignatureMarkersBySystem = useMemo(() => {
+        if (!layoutData || timeSignatureChanges.length === 0) return [] as { x: number; numerator: number; denominator: number }[][];
+
+        const markersBySystem: { x: number; numerator: number; denominator: number }[][] = layoutData.systemsParams.map(() => []);
+        const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeats = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+        const findMeasureIndexForAbsBeat = (ab: number): number => {
+            if (!measureStarts || measureStarts.length === 0) {
+                const bpm = timeSignature.numerator * (4 / timeSignature.denominator);
+                return Math.floor(ab / bpm);
+            }
+            for (let m = measureStarts.length - 1; m >= 0; m--) {
+                if (ab >= (measureStarts[m] ?? 0) - 1e-9) return m;
+            }
+            return 0;
+        };
+        const getXForMeasureStart = (system: any, measureIndex: number) => {
+            const idx = system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return 0;
+            return system.startMeasuresX[idx] + 6;
+        };
+
+        for (const tc of timeSignatureChanges) {
+            const absBeat = timeSignatureChangeAbsBeat(tc);
+            if (!Number.isFinite(absBeat)) continue;
+            const measureIndex = Number.isFinite(tc.measureIndex as any)
+                ? Number(tc.measureIndex)
+                : findMeasureIndexForAbsBeat(absBeat);
+            const sysIndex = layoutData.systemsParams.findIndex(sp => (sp.measureIndices || []).includes(measureIndex));
+            if (sysIndex < 0) continue;
+            const system = layoutData.systemsParams[sysIndex];
+            const x = getXForMeasureStart(system, measureIndex);
+            markersBySystem[sysIndex].push({ x, numerator: tc.numerator, denominator: tc.denominator });
+        }
+
+        markersBySystem.forEach(ms => ms.sort((a, b) => a.x - b.x));
+        return markersBySystem;
+    }, [layoutData, timeSignature, timeSignatureChangeAbsBeat, timeSignatureChanges]);
 
     // Violations -> noteId -> level (defensive extraction)
     const violationLevelByNoteId = useMemo(() => {
@@ -4171,7 +4468,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData) return null;
         if (!Number.isFinite(absBeat) || absBeat < 0) return null;
 
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+        const findMeasureIndexForAbsBeat = (ab: number): number => {
+            if (!measureStartAbsBeat || measureStartAbsBeat.length === 0) {
+                const bpm = timeSignature.numerator * (4 / timeSignature.denominator);
+                return Math.floor(ab / bpm);
+            }
+            for (let m = measureStartAbsBeat.length - 1; m >= 0; m--) {
+                if (ab >= (measureStartAbsBeat[m] ?? 0) - 1e-9) return m;
+            }
+            return 0;
+        };
+        const measureIndex = findMeasureIndexForAbsBeat(absBeat);
+        const beatsPerMeasure = (measureBeatsPerMeasure && measureBeatsPerMeasure[measureIndex])
+            ? measureBeatsPerMeasure[measureIndex]
+            : (timeSignature.numerator * (4 / timeSignature.denominator));
         if (!Number.isFinite(beatsPerMeasure) || beatsPerMeasure <= 0) return null;
 
         // IMPORTANT: keep cursor X consistent with insertion snapping.
@@ -4180,8 +4492,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
         if (!Number.isFinite(ticksPerMeasure) || ticksPerMeasure <= 0) return null;
 
-        const measureIndex = Math.floor(absBeat / beatsPerMeasure);
-        const measureStartTick = measureIndex * ticksPerMeasure;
+        const measureStartTick = Math.round(((measureStartAbsBeat && measureStartAbsBeat[measureIndex]) ? measureStartAbsBeat[measureIndex] : (measureIndex * beatsPerMeasure)) * TICKS_PER_QUARTER);
         const absTicks = absBeat * TICKS_PER_QUARTER;
         let localTicks = absTicks - measureStartTick;
         if (!Number.isFinite(localTicks)) localTicks = 0;
@@ -5195,14 +5506,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [layoutData]);
 
     const setPlaybackCursorFromMeasureBeat = useCallback((systemIndex: number, x: number, measureIndex: number, beat: number) => {
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const absBeat = (measureIndex * beatsPerMeasure) + (beat - 1);
+        const beatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure?.[measureIndex]
+            ?? (timeSignature.numerator * (4 / timeSignature.denominator));
+        const startAbs = (layoutData as any)?.measureStartAbsBeat?.[measureIndex] ?? (measureIndex * beatsPerMeasure);
+        const absBeat = startAbs + (beat - 1);
         playbackCursorAbsBeatRef.current = absBeat;
         // NOTE: the deterministic tick->x mapping can be slightly left of the actual rendered notehead
         // (VexFlow applies its own glyph spacing). We keep x as a fallback and refine later when
         // note hitpoints are available.
         setPlayheadPosition({ x, systemIndex });
-    }, [timeSignature]);
+    }, [layoutData, timeSignature]);
 
     const refinePlayheadXToRenderedNoteheads = useCallback((systemIndex: number, absTicks: number, fallbackX: number): number => {
         try {
@@ -5326,15 +5639,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return Number.isFinite(cur as any) ? (cur as number) : 0;
     }, [audioService.audioContext, bpm, timeSignature]);
 
+    const getMeasureIndexAndBeatFromAbsBeat = useCallback((absBeat: number) => {
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const starts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const beatsByMeasure = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+
+        if (starts && starts.length > 0) {
+            let m = 0;
+            for (let i = starts.length - 1; i >= 0; i--) {
+                if (absBeat >= (starts[i] ?? 0) - 1e-9) { m = i; break; }
+            }
+            const bpm = (beatsByMeasure && beatsByMeasure[m]) ? beatsByMeasure[m] : beatsPerMeasure;
+            const beat = Math.round(((absBeat - (starts[m] ?? (m * bpm))) + 1) * 1e6) / 1e6;
+            return { measureIndex: m, beat };
+        }
+
+        const measureIndex = Math.floor(absBeat / beatsPerMeasure);
+        const beat = Math.round(((absBeat - (measureIndex * beatsPerMeasure)) + 1) * 1e6) / 1e6;
+        return { measureIndex, beat };
+    }, [layoutData, timeSignature]);
+
     // (No external-paste handler)
 
     const toggleDoubleBarlineAtPlayhead = useCallback(() => {
         // Requires a playhead/cursor position so the user has explicit intent.
         if (!playheadPosition) return;
 
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const absBeat = Math.max(0, getCurrentAbsBeatForPlayhead());
-        const measureIndex = Math.max(0, Math.floor(absBeat / beatsPerMeasure));
+        const { measureIndex } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
 
         setDoubleBarlineMeasures(prev => {
             const set = new Set(prev);
@@ -5347,13 +5679,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const insertMeasureAtPlayhead = useCallback(() => {
         if (!playheadPosition) return;
 
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const absBeat = Math.max(0, getCurrentAbsBeatForPlayhead());
+        const { measureIndex: insertAtMeasureIndex } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
+        const beatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure?.[insertAtMeasureIndex]
+            ?? (timeSignature.numerator * (4 / timeSignature.denominator));
         const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
         if (!Number.isFinite(beatsPerMeasure) || beatsPerMeasure <= 0) return;
         if (!Number.isFinite(ticksPerMeasure) || ticksPerMeasure <= 0) return;
-
-        const absBeat = Math.max(0, getCurrentAbsBeatForPlayhead());
-        const insertAtMeasureIndex = Math.max(0, Math.floor(absBeat / beatsPerMeasure));
 
         type RestSeg = { duration: NoteDuration; isDotted: boolean; beats: number };
         const buildMeasureRestSegments = (totalBeats: number): RestSeg[] => {
@@ -5386,7 +5718,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 .filter(v => v >= 1 && v <= 4);
             const voices = voicesInUse.length ? voicesInUse : [1];
 
-            const measureStartTick = insertAtMeasureIndex * ticksPerMeasure;
+            const startAbs = (layoutData as any)?.measureStartAbsBeat?.[insertAtMeasureIndex] ?? (insertAtMeasureIndex * beatsPerMeasure);
+            const measureStartTick = Math.round(startAbs * TICKS_PER_QUARTER);
             const segs = buildMeasureRestSegments(beatsPerMeasure);
 
             const shifted = (prev || []).map((n: any) => {
@@ -5396,7 +5729,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const nextMeasureIndex = mi + 1;
                 const st = (typeof n?.startTick === 'number' && Number.isFinite(n.startTick))
                     ? n.startTick
-                    : Math.round(((mi * beatsPerMeasure) + ((Number(n?.beat ?? 1) - 1))) * TICKS_PER_QUARTER);
+                    : Math.round((((layoutData as any)?.measureStartAbsBeat?.[mi] ?? (mi * beatsPerMeasure)) + ((Number(n?.beat ?? 1) - 1))) * TICKS_PER_QUARTER);
                 const nextStartTick = st + ticksPerMeasure;
                 return { ...n, measureIndex: nextMeasureIndex, startTick: nextStartTick };
             });
@@ -5464,6 +5797,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             });
         });
 
+        setTimeSignatureChanges(prev => {
+            const next = (prev || []).map((c: any) => {
+                const abs = (typeof c?.absBeat === 'number' && Number.isFinite(c.absBeat)) ? c.absBeat : null;
+                if (abs != null) {
+                    const mi = Math.floor(abs / beatsPerMeasure);
+                    if (mi >= insertAtMeasureIndex) return { ...c, absBeat: abs + beatsPerMeasure, measureIndex: (Number(c.measureIndex) || 0) + 1 };
+                    return c;
+                }
+                const mi = Number(c?.measureIndex);
+                if (Number.isFinite(mi) && mi >= insertAtMeasureIndex) return { ...c, measureIndex: mi + 1 };
+                return c;
+            });
+            return next;
+        });
+
         // Shift double barlines.
         setDoubleBarlineMeasures(prev => (prev || [])
             .map(m => (m >= insertAtMeasureIndex ? m + 1 : m))
@@ -5479,9 +5827,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Keep playhead/caret at the start of the inserted empty bar.
         try {
-            playbackCursorAbsBeatRef.current = insertAtMeasureIndex * beatsPerMeasure;
+            playbackCursorAbsBeatRef.current = (layoutData as any)?.measureStartAbsBeat?.[insertAtMeasureIndex] ?? (insertAtMeasureIndex * beatsPerMeasure);
         } catch { /* ignore */ }
-    }, [clefForVoice, getCurrentAbsBeatForPlayhead, playheadPosition, setAnalysisContexts, timeSignature]);
+    }, [clefForVoice, getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, layoutData, playheadPosition, setAnalysisContexts, timeSignature]);
 
     const handleStaffRightClick = useCallback((x: number, y: number, systemIndex: number, e: MouseEvent) => {
         if (!layoutData) return;
@@ -5494,10 +5842,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Right-click *on the playhead* opens the modulation/tonicization menu at the playhead time.
         if (playheadPosition && playheadPosition.systemIndex === systemIndex && Math.abs(x - playheadPosition.x) <= PLAYHEAD_CONTEXT_HIT_PX) {
-            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
             const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
-            const measureIndex = Math.floor(absBeat / beatsPerMeasure);
-            const beat = Math.round((((absBeat - (measureIndex * beatsPerMeasure)) + 1)) * 1e6) / 1e6;
+            const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
 
             if (wantsHarmonyOverride) {
                 setHarmonyOverrideMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex, beat });
@@ -5510,7 +5856,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const hit = getSystemMeasureAtX(systemIndex, x);
         if (!hit) return;
 
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const beatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure?.[hit.measureIndex]
+            ?? (timeSignature.numerator * (4 / timeSignature.denominator));
         const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
 
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
@@ -5520,7 +5867,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
 
         // Tick-based snapping (same philosophy as left-click insertion).
-        const measureStartTick = hit.measureIndex * ticksPerMeasure;
+        const measureStartTick = Math.round((((layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex] ?? (hit.measureIndex * beatsPerMeasure))) * TICKS_PER_QUARTER);
 
         const rawPxPerTick = hit.pxPerTick;
         const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
@@ -5538,7 +5885,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
         // In compound meters (e.g. 6/8), allow placing longer notes on the 8th grid.
         // Otherwise a quarter note at the 4th 8th would snap left to the previous quarter.
-        const isCompound = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+        const isCompound = (timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3);
         const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
         const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
         const snapGridTicks = e.shiftKey
@@ -5560,10 +5907,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setPasteCaret({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat });
 
         if (wantsHarmonyOverride) {
-            const absBeat = Math.max(0, Math.round(((hit.measureIndex * beatsPerMeasure) + (beat - 1)) * 1e6) / 1e6);
+            const absBeat = Math.max(0, Math.round((((layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex] ?? (hit.measureIndex * beatsPerMeasure)) + (beat - 1)) * 1e6) / 1e6);
             setHarmonyOverrideMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex: hit.measureIndex, beat });
         }
-    }, [getCurrentAbsBeatForPlayhead, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
+    }, [getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
 
     const qAbsForOverrides = useCallback((x: number) => {
         try {
@@ -6932,14 +7279,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            // T: toggle tie (legatura) for selected notes.
-            if (!isMod && key === 't') {
+            // L: toggle tie (legatura) for selected notes.
+            if (!isMod && key === 'l') {
                 if (selectedNoteIds.size === 0) return;
                 e.preventDefault();
                 e.stopPropagation();
 
                 try {
-                    const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature);
+                    const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges);
                     const selected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
                     if (selected.length === 0) return;
 
@@ -6965,6 +7312,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 } catch {
                     // ignore
                 }
+                return;
+            }
+
+            // T: open text/modulation menu at the playhead position.
+            if (!isMod && key === 't') {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (!playheadPosition) return;
+                const container = staffContainerRef.current;
+                if (!container) return;
+                const sysEl = container.querySelector(`[data-system-index="${playheadPosition.systemIndex}"]`) as HTMLElement | null;
+                if (!sysEl) return;
+
+                const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
+                const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
+
+                const sysRect = sysEl.getBoundingClientRect();
+                const x = sysRect.left + playheadPosition.x;
+                const y = sysRect.top + 16;
+                setContextMenu({ x, y, absBeat, measureIndex, beat });
                 return;
             }
 
@@ -7193,7 +7561,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const handleToggleTie = useCallback(() => {
         if (selectedNoteIds.size === 0) return;
 
-        const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature);
+        const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges);
         const selected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
         if (selected.length === 0) return;
 
@@ -7491,7 +7859,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     <button
                         key={v}
                         onClick={() => setSelectedVoice(v as Voice)}
-                        className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${selectedVoice === v ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                        className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
                         title={v === 1 ? 'Soprano' : v === 2 ? 'Alto' : v === 3 ? 'Tenore' : 'Basso'}
                     >
                         {v === 1 ? 'S' : v === 2 ? 'A' : v === 3 ? 'T' : 'B'}
@@ -8192,6 +8560,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 key={`vf-${systemIndex}-${vexflowNonce}`}
                                                                 notes={systemNotesForRender}
                                 timeSignature={timeSignature}
+                                timeSignatureChanges={timeSignatureMarkersBySystem?.[systemIndex] || []}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
                                 width={actualSystemWidth}
@@ -8347,7 +8716,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             )}
 
                             {/* Overlay: analysis labels + violation highlights (adapter output) */}
-                                                        {(isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0) && (
+                                                        {(isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers */}
                                                                 {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
@@ -8364,6 +8733,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         {m.label}
                                                                     </text>
                                                                 ))}
+
 
                                 {/* Harmony labels (roman/symbol) + figured bass */}
                                 {showHarmony && systemHarmonyLabels.map((lbl, lblIndex) => {
@@ -9266,6 +9636,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onClose={() => setContextMenu(null)}
                     onApply={handleApplyContext}
                     onRemove={handleRemoveContext}
+                    onApplyTimeSignature={handleApplyTimeSignatureChange}
+                    onRemoveTimeSignature={handleRemoveTimeSignatureChange}
                     initialKey={(() => {
                         if (!existingContextForMenu) return keySignatureRoot;
                         if (!existingContextForMenu.newIsMinor) return existingContextForMenu.newTonic;
@@ -9277,6 +9649,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         return inverse[existingContextForMenu.newTonic] || existingContextForMenu.newTonic;
                     })()}
                     initialIsMinor={existingContextForMenu ? existingContextForMenu.newIsMinor : isMinorMode}
+                    initialLabel={existingContextForMenu?.label || ''}
+                    initialTimeSignature={existingTimeSignatureChangeForMenu ? { numerator: existingTimeSignatureChangeForMenu.numerator, denominator: existingTimeSignatureChangeForMenu.denominator } : timeSignature}
                 />
             )}
 
@@ -9316,14 +9690,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 const ModulationContextMenu: React.FC<{
     menuData: { x: number; y: number; absBeat: number; measureIndex: number; beat: number };
     onClose: () => void;
-    onApply: (absBeat: number, newTonic: string, newIsMinor: boolean) => void;
+    onApply: (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => void;
     onRemove: (absBeat: number) => void;
+    onApplyTimeSignature: (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => void;
+    onRemoveTimeSignature: (absBeat: number) => void;
     initialKey: string;
     initialIsMinor: boolean;
-}> = ({ menuData, onClose, onApply, onRemove, initialKey, initialIsMinor }) => {
+    initialLabel?: string;
+    initialTimeSignature: TimeSignature;
+}> = ({ menuData, onClose, onApply, onRemove, onApplyTimeSignature, onRemoveTimeSignature, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
+    const [tempLabel, setTempLabel] = useState(initialLabel || '');
+    const [tempNumerator, setTempNumerator] = useState<number>(initialTimeSignature.numerator);
+    const [tempDenominator, setTempDenominator] = useState<number>(initialTimeSignature.denominator);
     const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setTempLabel(initialLabel || '');
+        setTempNumerator(initialTimeSignature.numerator);
+        setTempDenominator(initialTimeSignature.denominator);
+    }, [initialLabel, initialTimeSignature.denominator, initialTimeSignature.numerator, menuData.absBeat]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -9337,7 +9724,7 @@ const ModulationContextMenu: React.FC<{
 
     const handleApplyClick = () => {
         const tonicToApply = tempIsMinor ? (relativeMinors[tempKey] || tempKey) : tempKey;
-        onApply(menuData.absBeat, tonicToApply, tempIsMinor);
+        onApply(menuData.absBeat, tonicToApply, tempIsMinor, tempLabel);
     };
 
     return (
@@ -9359,10 +9746,38 @@ const ModulationContextMenu: React.FC<{
                     <button onClick={() => setTempIsMinor(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>min</button>
                 </div>
             </div>
+            <div className="flex flex-col gap-2">
+                <label className="text-xs text-gray-300">Cambio di tempo (opzionale)</label>
+                <div className="flex items-center gap-2">
+                    <TimeSignatureControlNumber value={tempNumerator} onChange={setTempNumerator} min={1} max={16} />
+                    <TimeSignatureControlNumber value={tempDenominator} onChange={setTempDenominator} min={2} max={16} stepFunction={denominatorStepFn} />
+                    <button
+                        onClick={() => onApplyTimeSignature(menuData.absBeat, tempNumerator, tempDenominator, menuData.measureIndex)}
+                        className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
+                    >
+                        Applica
+                    </button>
+                    <button
+                        onClick={() => onRemoveTimeSignature(menuData.absBeat)}
+                        className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors"
+                    >
+                        Rimuovi
+                    </button>
+                </div>
+            </div>
+            <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-300">Testo (opzionale)</label>
+                <input
+                    value={tempLabel}
+                    onChange={e => setTempLabel(e.target.value)}
+                    className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
+                    placeholder="Es. Modulazione a Do Maggiore"
+                />
+            </div>
             <div className="flex gap-2 mt-2">
-                <button onClick={handleApplyClick} className="flex-1 px-3 py-1 text-sm rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Applica</button>
-                <button onClick={() => onRemove(menuData.absBeat)} className="px-3 py-1 text-sm rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
-                <button onClick={onClose} className="px-3 py-1 text-sm rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors">Annulla</button>
+                <button onClick={handleApplyClick} className="flex-1 px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Applica</button>
+                <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
+                <button onClick={onClose} className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors">Annulla</button>
             </div>
         </div>
     );
