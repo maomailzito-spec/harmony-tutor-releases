@@ -11,7 +11,9 @@ interface VexflowGrandStaffProps {
   width?: number;
   height?: number;
   staffMode?: 'grandstaff' | 'treble_only' | 'satb_ancient';
+  engravingMode?: 'legacy' | 'enhanced';
   onNoteClick?: (noteId: string, e: MouseEvent) => void;
+  onTieClick?: (fromNoteId: string, toNoteId: string, e: MouseEvent) => void;
   selectedNoteIds?: string[];
   onStaffClick?: (x: number, y: number, e: MouseEvent) => void;
   onStaffRightClick?: (x: number, y: number, e: MouseEvent) => void;
@@ -21,6 +23,7 @@ interface VexflowGrandStaffProps {
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
+  showVoiceColors?: boolean;
 }
 
 const DEFAULT_WIDTH = 900;
@@ -83,8 +86,52 @@ const accidentalTypeToVexflow = (accidental: AccidentalType | string | null | un
   }
 };
 
-const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down') => {
-  const key = `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`;
+const pitchLetterOf = (pitch: unknown): string => {
+  try {
+    const s = String(pitch || '').trim();
+    const m = /[A-Ga-g]/.exec(s);
+    return (m ? m[0] : 'C').toUpperCase();
+  } catch {
+    return 'C';
+  }
+};
+
+const staffNoteToVexflowKeyName = (n: StaffNote): string => {
+  // Keep the VexFlow key spelling *diatonic* (letter-only). Accidentals are rendered
+  // via modifiers using measure rules (and userAccidental overrides).
+  return pitchLetterOf((n as any)?.pitch).toLowerCase();
+};
+
+const normalizeAccidentalType = (accidental: AccidentalType | string | null | undefined): AccidentalType | null => {
+  if (!accidental) return null;
+  switch (accidental) {
+    case 'sharp':
+    case '#':
+    case '♯':
+      return 'sharp';
+    case 'flat':
+    case 'b':
+    case '♭':
+      return 'flat';
+    case 'natural':
+    case 'n':
+    case '♮':
+      return 'natural';
+    case 'double-sharp':
+    case '##':
+    case '𝄪':
+      return 'double-sharp';
+    case 'double-flat':
+    case 'bb':
+    case '𝄫':
+      return 'double-flat';
+    default:
+      return null;
+  }
+};
+
+const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down', hideStem?: boolean) => {
+  const key = `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`;
   const baseDur = durationToVexflow(n.duration);
   // Keep the duration string free of dots.
   // We render the dotted glyph ourselves as an SVG circle (more reliable when drawing
@@ -112,26 +159,185 @@ const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down') 
       }
     }
   }
-  // Display rule:
-  // - If `explicitAccidental` is present:
-  //   - `null` means “do not show” (implied by key signature)
-  //   - otherwise show that explicit accidental
-  // - If `explicitAccidental` is undefined (legacy notes), fall back to `accidental`.
-  if (!n.isRest) {
+
+  // In close-position (parti strette) fallback rendering, we sometimes draw separate notes
+  // but want a *single* visible stem (to avoid stacked stems/flags reading as shorter rhythm).
+  if (!n.isRest && hideStem) {
+    try {
+      (note as any).__hideStem = true;
+    } catch { /* ignore */ }
+    try {
+      if (typeof (note as any).setStemStyle === 'function') {
+        (note as any).setStemStyle({ strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,0)' });
+      }
+    } catch { /* ignore */ }
+    try {
+      if (typeof (note as any).setFlagStyle === 'function') {
+        (note as any).setFlagStyle({ strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,0)' });
+      }
+    } catch { /* ignore */ }
+    try {
+      const stem = (note as any).getStem?.();
+      if (stem && typeof stem.setStyle === 'function') {
+        stem.setStyle({ strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,0)' });
+      }
+    } catch { /* ignore */ }
+  }
+  // Ghost preview: keep the exact accidental glyph on the note itself.
+  // (Final notes use measure-state rules and add modifiers later.)
+  if (!n.isRest && n.id === '__ghost__') {
     const accidentalToShow: AccidentalType | null =
-      n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
+      normalizeAccidentalType((n as any).userAccidental)
+      ?? (n.explicitAccidental != null ? n.explicitAccidental : null)
+      ?? (n.accidental ?? null);
     const vfAccidental = accidentalTypeToVexflow(accidentalToShow);
     if (vfAccidental) {
       try {
         note.addModifier(new Accidental(vfAccidental), 0);
       } catch {
-        // Never crash rendering due to a bad/unknown accidental value.
-        // If VexFlow rejects it, we just skip the modifier.
+        // ignore
       }
     }
   }
   (note as any).__staffNoteId = n.id;
   return note;
+};
+
+const DIATONIC_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+const keySignatureDefaultAccidentalForLetter = (keySignature: KeySignature, letter: string): AccidentalType => {
+  const l = String(letter || '').toUpperCase();
+  if (!l) return 'natural';
+  if (keySignature.type === 'sharp' && keySignature.count > 0) {
+    const sharpOrder = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+    return sharpOrder.slice(0, keySignature.count).includes(l) ? 'sharp' : 'natural';
+  }
+  if (keySignature.type === 'flat' && keySignature.count > 0) {
+    const flatOrder = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+    return flatOrder.slice(0, keySignature.count).includes(l) ? 'flat' : 'natural';
+  }
+  return 'natural';
+};
+
+const accidentalFromMidiForLetter = (midi: number, letter: string, octave: number): AccidentalType => {
+  const l = String(letter || '').toUpperCase();
+  const base = DIATONIC_PC[l];
+  if (base == null) return 'natural';
+  const natMidi = (Number(octave) + 1) * 12 + base;
+  const diff = Number(midi) - natMidi;
+  if (diff === 1) return 'sharp';
+  if (diff === -1) return 'flat';
+  if (diff === 2) return 'double-sharp';
+  if (diff === -2) return 'double-flat';
+  return 'natural';
+};
+
+const accidentalFromPcForLetter = (pc: number, letter: string): AccidentalType => {
+  const l = String(letter || '').toUpperCase();
+  const base = DIATONIC_PC[l];
+  if (base == null) return 'natural';
+  // choose a signed diff in [-6..+6]
+  const raw = ((Number(pc) % 12) + 12) % 12;
+  const d = ((raw - base + 18) % 12) - 6;
+  if (d === 1) return 'sharp';
+  if (d === -1) return 'flat';
+  if (d === 2) return 'double-sharp';
+  if (d === -2) return 'double-flat';
+  return 'natural';
+};
+
+const computeMeasureAccidentalGlyphs = (
+  staffNotes: StaffNote[],
+  timeSignature: TimeSignature,
+  keySignature: KeySignature,
+): Map<string, AccidentalType | null> => {
+  const out = new Map<string, AccidentalType | null>();
+  const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+
+  const startTickOf = (n: StaffNote): number => {
+    const st = (n as any)?.startTick;
+    if (typeof st === 'number' && Number.isFinite(st)) return st;
+    const m = Number((n as any)?.measureIndex);
+    const b = Number((n as any)?.beat);
+    if (Number.isFinite(m) && Number.isFinite(b)) {
+      const absBeat = (m * beatsPerMeasure) + (b - 1);
+      return Math.round(absBeat * TICKS_PER_QUARTER);
+    }
+    return 0;
+  };
+
+  const groups = new Map<number, StaffNote[]>();
+  for (const n of staffNotes || []) {
+    if (!n || n.id === '__ghost__') continue;
+    if (n.isRest) continue;
+    const mi = Number((n as any).measureIndex);
+    if (!Number.isFinite(mi)) continue;
+    if (!groups.has(mi)) groups.set(mi, []);
+    groups.get(mi)!.push(n);
+  }
+
+  const sortedMeasures = Array.from(groups.keys()).sort((a, b) => a - b);
+  for (const mi of sortedMeasures) {
+    const g = (groups.get(mi) || []).slice();
+    g.sort((a, b) => startTickOf(a) - startTickOf(b) || Number(a.voice ?? 1) - Number(b.voice ?? 1) || Number(a.midi ?? 0) - Number(b.midi ?? 0));
+
+    const state = new Map<string, AccidentalType>();
+    const getState = (letter: string, octave: number): AccidentalType => {
+      const key = `${String(letter || '').toUpperCase()}/${Number(octave)}`;
+      const existing = state.get(key);
+      if (existing) return existing;
+      const d = keySignatureDefaultAccidentalForLetter(keySignature, letter);
+      state.set(key, d);
+      return d;
+    };
+    const setState = (letter: string, octave: number, acc: AccidentalType) => {
+      const key = `${String(letter || '').toUpperCase()}/${Number(octave)}`;
+      state.set(key, acc);
+    };
+
+    for (const n of g) {
+      const letter = pitchLetterOf((n as any).pitch);
+      const octave = Number((n as any).octave);
+      if (!letter || !Number.isFinite(octave) || DIATONIC_PC[letter] == null) {
+        out.set(n.id, null);
+        continue;
+      }
+
+      // Prefer user-entered accidental (can include double-sharp/flat) over derived MIDI.
+      const userAcc = normalizeAccidentalType((n as any).userAccidental);
+      const explicitAcc = normalizeAccidentalType((n as any).explicitAccidental);
+      const autoAcc = normalizeAccidentalType((n as any).accidental);
+
+      const actual: AccidentalType =
+        userAcc
+        ?? explicitAcc
+        ?? autoAcc
+        ?? (Number.isFinite((n as any).noteIndex)
+          ? accidentalFromPcForLetter(Number((n as any).noteIndex), letter)
+          : accidentalFromMidiForLetter(Number((n as any).midi), letter, octave));
+      const prev = getState(letter, octave);
+      // If the user explicitly picked an accidental, always render it.
+      if (userAcc) {
+        out.set(n.id, userAcc);
+        setState(letter, octave, userAcc);
+        continue;
+      }
+
+      if (actual !== prev) {
+        out.set(n.id, actual);
+        setState(letter, octave, actual);
+      } else {
+        // Precautionary/cautionary accidental: show even if redundant.
+        if ((n as any).forceAccidental) {
+          out.set(n.id, actual);
+        } else {
+          out.set(n.id, null);
+        }
+      }
+    }
+  }
+
+  return out;
 };
 
 const getNoteTimeKey = (n: StaffNote): string => {
@@ -159,7 +365,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
   staffMode = 'grandstaff',
+  engravingMode = 'enhanced',
   onNoteClick,
+  onTieClick,
   selectedNoteIds = [],
   onStaffClick,
   onStaffRightClick,
@@ -169,9 +377,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
+  showVoiceColors = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const enableEngravingEnhancements = engravingMode === 'enhanced';
   const noteHitPointsRef = useRef<Array<{ id: string; x: number; y: number; isGhost: boolean }>>([]);
+  const onTieClickRef = useRef<VexflowGrandStaffProps['onTieClick']>(onTieClick);
   const lastAltPickRef = useRef<{
     x: number;
     y: number;
@@ -179,6 +390,91 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     index: number;
     ts: number;
   } | null>(null);
+
+  useEffect(() => {
+    onTieClickRef.current = onTieClick;
+  }, [onTieClick]);
+  
+  const voiceColor = (v?: number): { fill: string; stroke: string } | null => {
+    // BTAS/SATB: voice 1=S, 2=A, 3=T, 4=B
+    switch (v) {
+      case 1: return { fill: '#3b82f6', stroke: '#1d4ed8' }; // Soprano - blue
+      case 2: return { fill: '#f59e0b', stroke: '#b45309' }; // Alto - amber
+      case 3: return { fill: '#22c55e', stroke: '#15803d' }; // Tenor - green
+      case 4: return { fill: '#ef4444', stroke: '#b91c1c' }; // Bass - red
+      default: return null;
+    }
+  };
+
+  const hexToRgba = (hex: string, alpha: number): string => {
+    try {
+      const h = (hex || '').trim();
+      const m = /^#?([0-9a-fA-F]{6})$/.exec(h);
+      if (!m) return hex;
+      const n = parseInt(m[1], 16);
+      const r = (n >> 16) & 0xff;
+      const g = (n >> 8) & 0xff;
+      const b = n & 0xff;
+      const a = Math.max(0, Math.min(1, alpha));
+      return `rgba(${r},${g},${b},${a})`;
+    } catch {
+      return hex;
+    }
+  };
+
+  const applyStemStyle = (vfNote: any, staffNote: StaffNote) => {
+    if (!showVoiceColors) return;
+    if (!vfNote || staffNote.id === '__ghost__' || staffNote.isRest) return;
+    // Respect our "single-stem" fallback: never recolor a stem we intentionally hid.
+    try {
+      if ((vfNote as any).__hideStem) return;
+    } catch {
+      // ignore
+    }
+    if (selectedNoteIds.includes(staffNote.id)) return;
+    if ((staffNote as any).errorType) return;
+    // If this is a merged chord note, avoid coloring the shared stem.
+    // (It can represent multiple voices; noteheads will be colored individually.)
+    try {
+      const mergedIds: string[] | undefined = vfNote?.__mergedIds;
+      if (Array.isArray(mergedIds) && mergedIds.length > 0) return;
+    } catch {
+      // ignore
+    }
+    const c = voiceColor(staffNote.voice);
+    if (!c) return;
+    try {
+      // VexFlow draws stems (especially for beamed groups) using stem style.
+      // Not all builds expose setStemStyle, so guard it.
+      if (typeof vfNote.setStemStyle === 'function') {
+        vfNote.setStemStyle({ strokeStyle: c.stroke, fillStyle: c.stroke });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const applyBeamStyle = (beam: any, group: Array<{ staffNote: StaffNote; vfNote: StaveNote }>) => {
+    if (!showVoiceColors) return;
+    if (!beam || !group || group.length === 0) return;
+    // Only color the beam if the whole group is a single voice.
+    const voices = new Set(group.map(g => g.staffNote.voice ?? null));
+    if (voices.size !== 1) return;
+    const v = Array.from(voices)[0] as any;
+    const c = voiceColor(typeof v === 'number' ? v : undefined);
+    if (!c) return;
+    try {
+      if (typeof beam.setStyle === 'function') {
+        beam.setStyle({ strokeStyle: c.stroke, fillStyle: c.stroke });
+      } else {
+        (beam as any).render_options = (beam as any).render_options || {};
+        (beam as any).render_options.stroke_style = c.stroke;
+        (beam as any).render_options.fill_style = c.stroke;
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   // Keep latest callbacks in refs so DOM listeners don't get torn down
   // on every React re-render (important for mousedown->mouseup gestures).
@@ -207,6 +503,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     moved: boolean;
     downNoteId: string | null;
     downIsGhost: boolean;
+    downTieFrom?: string | null;
+    downTieTo?: string | null;
   };
   const downRef = useRef<DownState | null>(null);
 
@@ -217,6 +515,38 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const effectiveHeight = staffMode === 'satb_ancient' ? Math.max(height, DEFAULT_HEIGHT_SATB) : height;
     renderer.resize(width, effectiveHeight);
     const context = renderer.getContext();
+
+    // Inject CSS for a subtle pulse effect on selected notes (no circles/overlays).
+    try {
+      const svgEl = containerRef.current.querySelector('svg');
+      if (svgEl) {
+        const existing = svgEl.querySelector('#ht-selection-style');
+        if (!existing) {
+          const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+          styleEl.setAttribute('id', 'ht-selection-style');
+          styleEl.textContent = `
+            @keyframes htSelPulse {
+              0%, 100% {
+                filter:
+                  drop-shadow(0px 0px 0.4px rgba(56, 189, 248, 0.35))
+                  drop-shadow(0px 0px 1.0px rgba(250, 204, 21, 0.28));
+              }
+              50% {
+                filter:
+                  drop-shadow(0px 0px 2.4px rgba(56, 189, 248, 1.0))
+                  drop-shadow(0px 0px 4.8px rgba(250, 204, 21, 1.0));
+              }
+            }
+            g[data-selected="1"] {
+              animation: htSelPulse 0.82s ease-in-out infinite;
+            }
+          `;
+          svgEl.appendChild(styleEl);
+        }
+      }
+    } catch {
+      // ignore
+    }
     const staffWidth = width - 2 * STAFF_MARGIN;
 
     const keyString = keySignatureToVexflowString(keySignature);
@@ -357,13 +687,26 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           isPrimaryRender: boolean;
         }> = [];
 
-        // --- PATCH: Affiancamento teste tra voci adiacenti a distanza di seconda ---
-        // Raggruppa per xPosition (battuta/beat) e ordina per posizione verticale
+        // Group by (rounded) xPosition so notes that should align don't miss each other
+        // due to sub-pixel differences.
         const byX = new Map<number, StaffNote[]>();
+        const X_BUCKET_PX = 4;
         for (const n of staffNotes) {
           const absX = n.xPosition ?? (stave.getNoteStartX() + 10);
-          if (!byX.has(absX)) byX.set(absX, []);
-          byX.get(absX)!.push(n);
+          // VexFlow layout can shift x slightly when accidentals are added/removed;
+          // use a small bucket so aligned onsets stay grouped.
+          const k = Math.round(absX / X_BUCKET_PX) * X_BUCKET_PX;
+          if (!byX.has(k)) byX.set(k, []);
+          byX.get(k)!.push(n);
+        }
+
+        // Group by musical onset (tick-space) so edits that change visual spacing do not
+        // break collision-avoidance logic (e.g., accidentals overlapping after a click).
+        const byTimeKeyAll = new Map<string, StaffNote[]>();
+        for (const n of staffNotes) {
+          const tk = getNoteTimeKey(n);
+          if (!byTimeKeyAll.has(tk)) byTimeKeyAll.set(tk, []);
+          byTimeKeyAll.get(tk)!.push(n);
         }
 
         // --- NEW: Merge aligned SAT notes into a single chord (parti strette) ---
@@ -376,8 +719,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const chordNotesByKey = new Map<string, StaffNote[]>();
         const chordVfByKey = new Map<string, { vf: StaveNote; primaryId: string; ids: string[] }>();
 
-        const isTightTreble = clef === 'treble' && staffNotes.some(n => n.voice === 2) && staffNotes.some(n => n.voice === 3);
-        if (isTightTreble) {
+        // Edge-case: seconds + accidentals in 3-voice close position can cause VF merged chords
+        // to collapse/vanish. In those cases, keep separate notes but hide stems for non-primary.
+        const forceSeparateButSingleStemIds = new Set<string>();
+
+        // Merge ONLY safe cases: 2-note seconds at the same onset+duration on treble.
+        // This produces a single stem (more conventional in close-position notation)
+        // while preserving per-note selection via proximity hitpoints.
+        const isTightTreble = clef === 'treble';
+        if (isTightTreble && enableEngravingEnhancements) {
           for (const [absX, group] of byX.entries()) {
             const byTime = new Map<string, StaffNote[]>();
             for (const n of group) {
@@ -393,12 +743,70 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 .filter(n => n.voice === 1 || n.voice === 2 || n.voice === 3)
                 .filter(n => !n.manualStemDirection);
 
-              if (eligible.length < 2) continue;
+              // Only merge small clusters (2 or 3 notes). This covers the common
+              // close-position case (e.g. G-A-C) without stepping into more complex
+              // edge-cases that previously caused VF glitches.
+              if (eligible.length < 2 || eligible.length > 3) continue;
+
+              // Only merge if the cluster contains at least one second on the staff.
+              // (That's where separate-note rendering becomes visually confusing.)
+              try {
+                const byPos = eligible.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                const hasSecond = byPos.some((n, i) => i > 0 && (Number(n.position) - Number(byPos[i - 1].position)) === 1);
+                if (!hasSecond) continue;
+              } catch {
+                continue;
+              }
 
               // Require identical rhythmic value so a single chord glyph is correct.
               const baseDur = eligible[0].duration;
               const baseDotted = !!eligible[0].isDotted;
               if (!eligible.every(n => n.duration === baseDur && !!n.isDotted === baseDotted)) continue;
+
+              // Problematic case reported: 3 voices with a second + accidentals (e.g. Gb–Bb–C).
+              // VF merged-chord layout can collapse noteheads in this situation.
+              // Instead, keep notes separate but force a single visible up-stem (handled later).
+              try {
+                const byPos = eligible.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                const anySeconds = byPos.some((n, i) => i > 0 && (Number(n.position) - Number(byPos[i - 1].position)) === 1);
+                const anyAcc = eligible.some((n: any) => {
+                  const acc = normalizeAccidentalType(n?.userAccidental)
+                    ?? normalizeAccidentalType(n?.explicitAccidental)
+                    ?? normalizeAccidentalType(n?.accidental);
+                  return !!acc;
+                });
+                if (eligible.length === 3 && anySeconds && anyAcc) {
+                  // Keep Alto as stem carrier, hide stems on Soprano+Tenor.
+                  for (const nn of eligible) {
+                    if (nn.voice !== 2) forceSeparateButSingleStemIds.add(nn.id);
+                  }
+                  continue;
+                }
+              } catch {
+                // ignore
+              }
+
+              // IMPORTANT: If two voices are in unison (same MIDI), merging would collapse
+              // them into a single notehead and make one voice appear to disappear.
+              // Keep them as separate notes in that case.
+              try {
+                const mids = eligible.map(n => Number((n as any).midi));
+                const finite = mids.filter(m => Number.isFinite(m));
+                const unique = new Set(finite);
+                if (unique.size !== finite.length) continue;
+              } catch {
+                continue;
+              }
+
+              // Also avoid merging if two notes share the same staff position (letter+octave).
+              // Even if MIDI differs (chromatic unison), a merged chord would visually collapse.
+              try {
+                const diatonicKeys = eligible.map(n => `${pitchLetterOf((n as any).pitch)}/${Number((n as any).octave)}`);
+                const unique = new Set(diatonicKeys);
+                if (unique.size !== diatonicKeys.length) continue;
+              } catch {
+                continue;
+              }
 
               const key = `${absX}|${tk}`;
               const sorted = eligible.slice().sort((a, b) => a.midi - b.midi);
@@ -410,33 +818,70 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         const makeVfChordNote = (notesInChord: StaffNote[]): { vf: StaveNote; primaryId: string; ids: string[] } => {
           const ids = notesInChord.map(n => n.id);
-          const keys = notesInChord.map(n => `${n.pitch?.toLowerCase?.() || 'c'}/${n.octave ?? 4}`);
+          const keys = notesInChord.map(n => `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`);
           const baseDur = durationToVexflow(notesInChord[0].duration);
           const vf = new StaveNote({ clef: clef as any, keys, duration: `${baseDur}` });
 
           // Stem direction from vertical placement (chord logic).
           const MIDDLE_LINE_POS_TREBLE = 6; // B4 relative to C4=0
-          const avgPos = notesInChord.reduce((acc, n) => acc + (Number(n.position) || 0), 0) / Math.max(1, notesInChord.length);
-          const chordStem: 'up' | 'down' = avgPos >= MIDDLE_LINE_POS_TREBLE ? 'down' : 'up';
+          const byPos = notesInChord.slice().sort((a, b) => Number(a.position) - Number(b.position));
+          const avgPos = byPos.reduce((acc, n) => acc + (Number(n.position) || 0), 0) / Math.max(1, byPos.length);
+          let chordStem: 'up' | 'down' = avgPos >= MIDDLE_LINE_POS_TREBLE ? 'down' : 'up';
+
+          // In parti strette we often have S/A/T all on the treble staff.
+          // Prefer a single UP stem for the merged chord to avoid clutter and to match
+          // the intended close-position engraving.
+          try {
+            const hasS = notesInChord.some(n => n.voice === 1);
+            const hasA = notesInChord.some(n => n.voice === 2);
+            const hasT = notesInChord.some(n => n.voice === 3);
+            if (hasS && hasA && hasT) chordStem = 'up';
+          } catch {
+            // ignore
+          }
+
+          // For seconds inside a chord, prefer the stem direction that produces the
+          // most natural head staggering:
+          // - if the second is at the bottom (lowest two adjacent), prefer stem DOWN so the lowest head shifts right
+          // - if the second is at the top (highest two adjacent), prefer stem UP
+          try {
+            const hasSecond = byPos.some((n, i) => i > 0 && (Number(n.position) - Number(byPos[i - 1].position)) === 1);
+            if (hasSecond && byPos.length >= 2) {
+              const bottomSecond = (Number(byPos[1].position) - Number(byPos[0].position)) === 1;
+              const topSecond = (Number(byPos[byPos.length - 1].position) - Number(byPos[byPos.length - 2].position)) === 1;
+              if (bottomSecond && !topSecond) chordStem = 'down';
+              else if (topSecond && !bottomSecond) chordStem = 'up';
+
+              // Open-position rule near a barline: when the onset is on beat 1 and we
+              // have accidentals, prefer the outer/head displacement to the RIGHT so
+              // accidentals don't get pushed into the barline.
+              try {
+                const isMeasureStart = notesInChord.some(n => {
+                  const b = Number((n as any).beat);
+                  if (!Number.isFinite(b)) return false;
+                  return Math.abs(b - 1) <= 1e-6;
+                });
+                const hasAcc = notesInChord.some((n: any) => {
+                  const acc = normalizeAccidentalType(n?.userAccidental)
+                    ?? normalizeAccidentalType(n?.explicitAccidental)
+                    ?? normalizeAccidentalType(n?.accidental);
+                  return !!acc;
+                });
+                if (isMeasureStart && hasAcc) chordStem = 'up';
+              } catch {
+                // ignore
+              }
+            }
+          } catch {
+            // ignore
+          }
           try {
             vf.setStemDirection(chordStem === 'up' ? 1 : -1);
           } catch {
             // ignore
           }
 
-          // Accidentals per key index.
-          for (let i = 0; i < notesInChord.length; i++) {
-            const n = notesInChord[i];
-            const accidentalToShow: AccidentalType | null =
-              n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
-            const vfAcc = accidentalTypeToVexflow(accidentalToShow);
-            if (!vfAcc) continue;
-            try {
-              vf.addModifier(new Accidental(vfAcc), i);
-            } catch {
-              // ignore
-            }
-          }
+          // Accidentals are added later using measure-state rules.
 
           (vf as any).__mergedIds = ids;
 
@@ -447,83 +892,250 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           return { vf, primaryId: primary.id, ids };
         };
 
-        // --- Auto stem resolution (parti strette / tight textures) ---
-        // When voices 2 and 3 share the treble staff, the conventional SATB stem defaults
-        // can produce crossing stems in close spacing. We unify stem directions for close
-        // S/A or A/T at the same x-position to reduce clutter.
+        // --- Close-position (parti strette) readability helpers ---
+        // In "parti strette" we can end up with 3 voices on the treble staff (S/A/T).
+        // Default SATB stems (S↑ A↓ T↑) often cross and clutter; we:
+        // 1) unify stems for tight clusters (based on vertical placement)
+        // 2) apply consistent X shifts for clusters of seconds (2nds) to avoid notehead overlap.
         const stemOverrideById = new Map<string, 'up' | 'down'>();
-        // NOTE: stem collision avoidance is now handled primarily by chord-merging.
-        // Keep individual voices on conventional stem directions when rhythms differ.
-        const isTrebleTightTexture = false;
-        if (isTrebleTightTexture) {
-          const CLOSE_STEPS = 2; // within a third
-          const MIDDLE_LINE_POS_TREBLE = 6; // B4 relative to C4=0
-
-          for (const group of byX.values()) {
-            const g = group.filter(n => !n.isRest && n.id !== '__ghost__');
-            if (g.length < 2) continue;
-
-            const v1 = g.find(n => n.voice === 1);
-            const v2 = g.find(n => n.voice === 2);
-            const v3 = g.find(n => n.voice === 3);
-
-            const isManual = (n?: StaffNote) => !!n?.manualStemDirection;
-
-            const avgPos = g.reduce((acc, n) => acc + (Number(n.position) || 0), 0) / g.length;
-            const clusterDir: 'up' | 'down' = avgPos >= MIDDLE_LINE_POS_TREBLE ? 'down' : 'up';
-
-            const saClose = !!(v1 && v2 && Math.abs(v1.position - v2.position) <= CLOSE_STEPS);
-            const atClose = !!(v2 && v3 && Math.abs(v2.position - v3.position) <= CLOSE_STEPS);
-
-            const minPos = Math.min(...g.map(n => n.position));
-            const maxPos = Math.max(...g.map(n => n.position));
-            const tightCluster = (maxPos - minPos) <= (CLOSE_STEPS * 2);
-
-            if (tightCluster) {
-              for (const n of g) {
-                if (isManual(n)) continue;
-                if (n.voice === 1 || n.voice === 2 || n.voice === 3) stemOverrideById.set(n.id, clusterDir);
-              }
-              continue;
-            }
-
-            if (saClose) {
-              if (v1 && !isManual(v1)) stemOverrideById.set(v1.id, 'up');
-              if (v2 && !isManual(v2)) stemOverrideById.set(v2.id, 'up');
-            } else if (atClose) {
-              if (v2 && !isManual(v2)) stemOverrideById.set(v2.id, 'down');
-              if (v3 && !isManual(v3)) stemOverrideById.set(v3.id, 'down');
-            }
-          }
-        }
-        // Applica offset alle teste di note di voci adiacenti a distanza di seconda
-        const NOTE_HEAD_RX = 6.3; // come NOTE_HEAD_RX_NORMAL
-        const offset = NOTE_HEAD_RX * 1.0 - 1; // offset ancora più stretto (~5.3px)
+        const hideStemById = new Map<string, boolean>();
         const offsetMap = new Map<string, number>();
-        for (const group of byX.values()) {
-          // Ordina per posizione verticale (dal basso verso l'alto)
-          const sorted = group.slice().sort((a, b) => a.position - b.position);
-          for (let i = 0; i < sorted.length - 1; i++) {
-            const n1 = sorted[i];
-            const n2 = sorted[i + 1];
-            // Solo se voci adiacenti e distanza di seconda
-            if (Math.abs((n1.voice ?? 0) - (n2.voice ?? 0)) === 1 && Math.abs(n1.position - n2.position) === 1) {
-              // S/A (1/2): Soprano (1, up) a sinistra, Alto (2, down) a destra
-              // A/T (2/3): Tenore (3, up) a sinistra, Alto (2, down) a destra (quando condividono lo stesso rigo)
-              // T/B (3/4): Tenore (3, up) a sinistra, Basso (4, down) a destra
-              if ((n1.voice === 1 && n2.voice === 2) || (n1.voice === 2 && n2.voice === 3) || (n1.voice === 3 && n2.voice === 4)) {
-                // n1 (up) a sinistra, n2 (down) a destra
-                offsetMap.set(n1.id, -offset);
-                offsetMap.set(n2.id, offset);
-              } else if ((n1.voice === 2 && n2.voice === 1) || (n1.voice === 3 && n2.voice === 2) || (n1.voice === 4 && n2.voice === 3)) {
-                // n2 (up) a sinistra, n1 (down) a destra
-                offsetMap.set(n2.id, -offset);
-                offsetMap.set(n1.id, offset);
+
+        const NOTE_HEAD_RX = 6.3; // keep consistent with editor constants
+        // For seconds, a small nudge is not enough: we need ~one notehead width to prevent overlap.
+        // VexFlow noteheads are roughly 2*rx wide.
+        const NOTEHEAD_TOUCH_SHIFT = (NOTE_HEAD_RX * 2.0) - 0.5; // ~12.1px
+        const MIDDLE_LINE_POS_TREBLE = 6; // B4 relative to C4=0
+
+        const isTrebleStaff = clef === 'treble';
+        const enableClosePositionHeuristics = isTrebleStaff && enableEngravingEnhancements;
+
+        const getSecondClusterOffsetsById = (
+          chord: StaffNote[],
+          isStemUp: boolean,
+          preferRight: boolean = false,
+        ): Map<string, number> => {
+          const offsets = new Map<string, number>();
+          if (!chord || chord.length < 2) return offsets;
+
+          // Expect chord sorted bottom->top by staff position.
+          let clusterStart = 0;
+          while (clusterStart < chord.length) {
+            let clusterEnd = clusterStart;
+            while (
+              clusterEnd < chord.length - 1
+              && (Number(chord[clusterEnd + 1].position) - Number(chord[clusterEnd].position)) === 1
+            ) {
+              clusterEnd++;
+            }
+
+            if (clusterEnd > clusterStart) {
+              const effectiveStemUp = preferRight ? true : isStemUp;
+              if (effectiveStemUp) {
+                // Stem up => stem on right: keep the bottom head aligned, shift alternating upper heads right.
+                // This matches the common engraving convention (e.g. Bb–C => C displaced right).
+                for (let i = clusterStart + 1; i <= clusterEnd; i++) {
+                  const distance = i - clusterStart;
+                  if (distance % 2 !== 0) offsets.set(chord[i].id, NOTEHEAD_TOUCH_SHIFT);
+                }
+              } else {
+                // Stem down => stem on left: keep the top head aligned, shift alternating lower heads left.
+                for (let i = clusterEnd - 1; i >= clusterStart; i--) {
+                  const distance = clusterEnd - i;
+                  if (distance % 2 !== 0) offsets.set(chord[i].id, -NOTEHEAD_TOUCH_SHIFT);
+                }
+              }
+            }
+
+            clusterStart = clusterEnd + 1;
+          }
+          return offsets;
+        };
+
+        if (enableClosePositionHeuristics) {
+          for (const group of byX.values()) {
+            const byTime = new Map<string, StaffNote[]>();
+            for (const n of group) {
+              const tk = getNoteTimeKey(n);
+              if (!byTime.has(tk)) byTime.set(tk, []);
+              byTime.get(tk)!.push(n);
+            }
+
+            for (const gRaw of byTime.values()) {
+              const g = gRaw
+                .filter(n => n.id !== '__ghost__')
+                .filter(n => !n.isRest)
+                .filter(n => n.voice === 1 || n.voice === 2 || n.voice === 3);
+
+              if (g.length < 2) continue;
+
+              const sorted = g.slice().sort((a, b) => Number(a.position) - Number(b.position));
+
+              // Only activate when there is an actual second (adjacent staff position)
+              // to avoid shifting noteheads in normal two-voice spacing.
+              const anySeconds = sorted.some((n, i) => i > 0 && (Number(n.position) - Number(sorted[i - 1].position)) === 1);
+              if (!anySeconds) continue;
+
+              // If we flagged this onset as a "force separate but single-stem" case,
+              // force all stems up and hide stems for non-Alto.
+              try {
+                const ids = sorted.map(x => x.id);
+                const hasForced = ids.some(id => forceSeparateButSingleStemIds.has(id));
+                if (hasForced) {
+                  const s = sorted.find(n => n.voice === 1);
+                  const a = sorted.find(n => n.voice === 2);
+                  const t = sorted.find(n => n.voice === 3);
+                  if (s) stemOverrideById.set(s.id, 'up');
+                  if (a) stemOverrideById.set(a.id, 'up');
+                  if (t) stemOverrideById.set(t.id, 'up');
+                  if (s) hideStemById.set(s.id, true);
+                  if (t) hideStemById.set(t.id, true);
+
+                  // Since these are rendered as separate notes at the same x, we MUST
+                  // apply manual x-shifts for seconds, otherwise noteheads will overlap.
+                  const xShifts = getSecondClusterOffsetsById(sorted, true /* stem up */);
+                  for (const [id, dx] of xShifts.entries()) {
+                    const nn = sorted.find(n => n.id === id);
+                    if (nn && !nn.manualStemDirection) offsetMap.set(id, dx);
+                  }
+
+                  // Done for this onset.
+                  continue;
+                }
+              } catch {
+                // ignore
+              }
+
+              const isManual = (n: StaffNote) => !!n.manualStemDirection;
+              const avgPos = sorted.reduce((acc, n) => acc + (Number(n.position) || 0), 0) / sorted.length;
+              const clusterDir: 'up' | 'down' = avgPos >= MIDDLE_LINE_POS_TREBLE ? 'down' : 'up';
+
+              const minPos = Number(sorted[0]?.position ?? 0);
+              const maxPos = Number(sorted[sorted.length - 1]?.position ?? 0);
+              const tightCluster = (maxPos - minPos) <= 3 || anySeconds;
+
+              if (tightCluster) {
+                for (const n of sorted) {
+                  if (isManual(n)) continue;
+                  stemOverrideById.set(n.id, clusterDir);
+                }
+              } else {
+                // Keep a stable visual separation when it isn't a tight cluster.
+                // Soprano stays up; Alto stays down; Tenor follows the cluster direction.
+                const s = sorted.find(n => n.voice === 1);
+                const a = sorted.find(n => n.voice === 2);
+                const t = sorted.find(n => n.voice === 3);
+                if (s && !isManual(s)) stemOverrideById.set(s.id, 'up');
+                if (a && !isManual(a)) stemOverrideById.set(a.id, 'down');
+                if (t && !isManual(t)) stemOverrideById.set(t.id, clusterDir);
+              }
+
+              // Apply notehead displacements for seconds clusters.
+              const dir = stemOverrideById.get(sorted[0].id) ?? clusterDir;
+              const preferRightAtBarline = (() => {
+                try {
+                  const isMeasureStart = sorted.some(n => {
+                    const b = Number((n as any).beat);
+                    if (!Number.isFinite(b)) return false;
+                    return Math.abs(b - 1) <= 1e-6;
+                  });
+                  if (!isMeasureStart) return false;
+                  const hasAcc = sorted.some((n: any) => {
+                    const acc = normalizeAccidentalType(n?.userAccidental)
+                      ?? normalizeAccidentalType(n?.explicitAccidental)
+                      ?? normalizeAccidentalType(n?.accidental);
+                    return !!acc;
+                  });
+                  return hasAcc;
+                } catch {
+                  return false;
+                }
+              })();
+              const xShifts = getSecondClusterOffsetsById(sorted, dir === 'up', preferRightAtBarline);
+              for (const [id, dx] of xShifts.entries()) {
+                // Don't override manual tweaks; user might have fixed a specific case.
+                const nn = sorted.find(n => n.id === id);
+                if (nn && !isManual(nn)) offsetMap.set(id, dx);
               }
             }
           }
         }
-        // --- FINE PATCH ---
+        // --- end close-position helpers ---
+        const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
+
+        // In open position ("parti late"), the default accidental layout can leave too much
+        // empty space between accidentals and the nearest notehead (especially early in a bar).
+        // Compute an inset (move accidentals closer to the cluster) for multi-voice onsets
+        // that do NOT contain seconds (we don't want to disturb the close-position rules).
+        const openPositionAccidentalInsetById = new Map<string, number>();
+        if (isTightTreble && enableEngravingEnhancements) {
+          try {
+            const INSET_PX = 14;
+            for (const onset of byTimeKeyAll.values()) {
+                const nonRest = onset
+                  .filter(n => n && n.id !== '__ghost__')
+                  .filter(n => !n.isRest);
+                if (nonRest.length < 2) continue; // only multi-voice onsets
+
+                // Only pull accidentals in when close to the barline (beat 1).
+                // Applying this globally can cause accidentals to collide with noteheads
+                // in normal spacing (e.g., stacked thirds with 3 accidentals).
+                const isMeasureStart = nonRest.some(n => {
+                  const b = Number((n as any).beat);
+                  return Number.isFinite(b) && Math.abs(b - 1) <= 1e-6;
+                });
+                if (!isMeasureStart) continue;
+
+                const sorted = nonRest.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                const hasSecond = sorted.some((n, i) => i > 0 && (Number(n.position) - Number(sorted[i - 1].position)) === 1);
+                if (hasSecond) continue;
+
+                const withAcc = sorted.filter(n => {
+                  const g = accidentalTypeToVexflow(accidentalGlyphById.get(n.id) ?? null);
+                  return !!g;
+                });
+                if (withAcc.length === 0) continue;
+
+                for (const n of withAcc) openPositionAccidentalInsetById.set(n.id, INSET_PX);
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        // When multiple voices share the same onset in close position, VexFlow can end up
+        // placing accidentals on top of each other (especially in the "separate but single stem"
+        // fallback path). Pre-compute an extra stagger per note id so accidentals fan out.
+        const accidentalStaggerById = new Map<string, number>();
+        if (isTightTreble && enableEngravingEnhancements) {
+          try {
+            const STAGGER_PX = 8;
+            for (const g of byTimeKeyAll.values()) {
+                const withAcc = g
+                  .filter(n => n && n.id !== '__ghost__')
+                  .filter(n => !n.isRest)
+                  .filter(n => {
+                    const glyph = accidentalGlyphById.get(n.id) ?? null;
+                    return !!accidentalTypeToVexflow(glyph);
+                  });
+                if (withAcc.length < 2) continue;
+
+                const sorted = withAcc.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                for (let i = 0; i < sorted.length; i++) {
+                  accidentalStaggerById.set(sorted[i].id, i * STAGGER_PX);
+                }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        // Quick lookup for per-chord collision heuristics (seconds + multiple accidentals).
+        const staffNoteById = new Map<string, StaffNote>();
+        for (const sn of staffNotes) {
+          if (sn && typeof sn.id === 'string') staffNoteById.set(sn.id, sn);
+        }
+
         for (const n of staffNotes) {
           let vfNote: StaveNote | null = null;
           let isPrimaryRender = true;
@@ -539,15 +1151,182 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               vfNote = chord.vf;
               isPrimaryRender = chord.primaryId === n.id;
             } else {
-              vfNote = makeVfNote(n, clef, stemOverrideById.get(n.id));
+              vfNote = makeVfNote(n, clef, stemOverrideById.get(n.id), hideStemById.get(n.id));
               isPrimaryRender = true;
             }
+
+            // Add accidentals following standard measure rules (skip ghost; ghost is handled separately).
+            try {
+              if (!n.isRest && n.id !== '__ghost__') {
+                const glyph = accidentalGlyphById.get(n.id) ?? null;
+                const vfGlyph = accidentalTypeToVexflow(glyph);
+                if (vfGlyph) {
+                  const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
+                  if (Array.isArray(mergedIds) && mergedIds.length > 0) {
+                    const keyStr = `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`;
+                    const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
+                    const keyIdx = keysArr.length ? keysArr.indexOf(keyStr) : -1;
+                    const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(n.id);
+                    if (idx >= 0) {
+                      const acc = new Accidental(vfGlyph);
+                      (vfNote as any).addModifier(acc, idx);
+
+                      // Only nudge accidentals when necessary (tight seconds / multiple accidentals).
+                      // Empirically (SVG renderer), increasing x-shift moves the accidental left.
+                      try {
+                        const chordNotes = mergedIds
+                          .map(id => staffNoteById.get(String(id)))
+                          .filter(Boolean) as StaffNote[];
+                        const sortedByPos = chordNotes.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                        const hasSecond = sortedByPos.some((nn, ii) => ii > 0 && (Number(nn.position) - Number(sortedByPos[ii - 1].position)) === 1);
+                        const accidentalKeyIdxs = chordNotes
+                          .map((sn) => {
+                            const g = accidentalTypeToVexflow(accidentalGlyphById.get(String(sn.id)) ?? null);
+                            if (!g) return null;
+                            const ks = `${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}`;
+                            const ki = keysArr.length ? keysArr.indexOf(ks) : -1;
+                            return ki >= 0 ? ki : null;
+                          })
+                          .filter((x): x is number => typeof x === 'number');
+                        const hasMultipleAccidentals = accidentalKeyIdxs.length >= 2;
+
+                        const needsNudge = hasSecond || hasMultipleAccidentals;
+                        if (needsNudge && enableEngravingEnhancements) {
+                          const isFlat = (vfGlyph === 'b' || vfGlyph === 'bb');
+                          const base = isFlat ? 12 : 6;
+                          // Use the same step used for close-position fixes.
+                          const STAGGER_PX = 8;
+
+                          // For seconds clusters (parti strette), order by chord key index is OK.
+                          // For open position (no seconds), prefer "outer" notes to stay closer
+                          // and push the more "inner" accidental further left to avoid colliding
+                          // with its own notehead.
+                          let stagger = 0;
+                          if (hasSecond) {
+                            const order = accidentalKeyIdxs.indexOf(idx);
+                            stagger = order >= 0 ? (order * STAGGER_PX) : 0;
+                          } else if (hasMultipleAccidentals) {
+                            try {
+                              const infos = chordNotes
+                                .map((sn) => {
+                                  const g = accidentalTypeToVexflow(accidentalGlyphById.get(String(sn.id)) ?? null);
+                                  if (!g) return null;
+                                  const ks = `${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}`;
+                                  const ki = keysArr.length ? keysArr.indexOf(ks) : -1;
+                                  if (ki < 0) return null;
+                                  const outerness = Math.abs(Number(sn.position) - MIDDLE_LINE_POS_TREBLE);
+                                  return { keyIdx: ki, outerness };
+                                })
+                                .filter((x): x is { keyIdx: number; outerness: number } => !!x);
+
+                              // Outer (larger distance) should get smaller shift.
+                              infos.sort((a, b) => b.outerness - a.outerness);
+                              const rank = infos.findIndex(x => x.keyIdx === idx);
+                              stagger = rank >= 0 ? (rank * STAGGER_PX) : 0;
+                            } catch {
+                              // ignore
+                            }
+                          }
+
+                          const extra = accidentalStaggerById.get(n.id) ?? 0;
+                          const cur = (typeof (acc as any).getXShift === 'function') ? ((acc as any).getXShift() ?? 0) : 0;
+                          // In open position (parti late), pull accidentals closer to the cluster.
+                          // Allow a small negative delta (move right) to remove visible empty gaps.
+                          const inset = (hasSecond ? 0 : (openPositionAccidentalInsetById.get(n.id) ?? 0));
+                          const desiredDelta = base + stagger + extra - inset;
+                          // Special case: beat-1 onsets with a 2-note second + multiple accidentals
+                          // can end up with accidentals too far from the noteheads due to our base shift.
+                          // Pull them back by ~14px (but never to the right of VF default).
+                          let beat1Inset = 0;
+                          try {
+                            const isMeasureStart = chordNotes.some(sn => {
+                              const b = Number((sn as any).beat);
+                              return Number.isFinite(b) && Math.abs(b - 1) <= 1e-6;
+                            });
+                            if (isMeasureStart && hasSecond && hasMultipleAccidentals) beat1Inset = 14;
+                          } catch {
+                            // ignore
+                          }
+
+                          const delta = hasSecond
+                            ? Math.max(0, desiredDelta - beat1Inset)
+                            : (inset ? Math.max(-inset, desiredDelta) : desiredDelta);
+                          if (typeof (acc as any).setXShift === 'function') (acc as any).setXShift(cur + delta);
+                        }
+                      } catch {
+                        // ignore
+                      }
+                    }
+                  } else {
+                    const acc = new Accidental(vfGlyph);
+                    (vfNote as any).addModifier(acc, 0);
+                    // Default spacing is usually correct, but in close-position multi-voice onsets
+                    // accidentals may overlap; apply a small per-note stagger when needed.
+                    if (enableEngravingEnhancements) {
+                      try {
+                        const extra = accidentalStaggerById.get(n.id) ?? 0;
+                        const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
+                        if ((extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
+                          const cur = (acc as any).getXShift() ?? 0;
+                          // extra pushes left; inset pulls back right.
+                          (acc as any).setXShift(cur + extra - inset);
+                        }
+                      } catch {
+                        // ignore
+                      }
+                    }
+                  }
+                }
+              }
+            } catch {
+              // ignore
+            }
+
+            // Base style: optional per-voice color (BTAS/SATB).
+            // Keep this before ghost/selection so those can override.
+            const vc = showVoiceColors ? voiceColor(n.voice) : null;
+            if (vc && n.id !== '__ghost__' && !n.isRest && !selectedNoteIds.includes(n.id) && !(n as any).errorType) {
+              try {
+                const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
+                if (Array.isArray(mergedIds) && mergedIds.length > 0 && typeof (vfNote as any)?.setKeyStyle === 'function') {
+                  const keyStr = `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`;
+                  const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
+                  const keyIdx = keysArr.length ? keysArr.indexOf(keyStr) : -1;
+                  const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(n.id);
+                  if (idx >= 0) {
+                    (vfNote as any).setKeyStyle(idx, { fillStyle: vc.fill, strokeStyle: vc.stroke });
+                  } else {
+                    vfNote.setStyle({ fillStyle: vc.fill, strokeStyle: vc.stroke });
+                  }
+                } else {
+                  vfNote.setStyle({ fillStyle: vc.fill, strokeStyle: vc.stroke });
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            // Ensure stems keep the same color (important for beamed notes).
+            applyStemStyle(vfNote as any, n);
+
             if (n.id === '__ghost__') {
-              vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.85)', strokeStyle: 'rgba(14,165,233,1)', shadowColor: '#0ea5e9', shadowBlur: 8 });
+              const gvc = voiceColor(n.voice);
+              if (gvc) {
+                vfNote.setStyle({
+                  fillStyle: hexToRgba(gvc.fill, 0.55),
+                  strokeStyle: hexToRgba(gvc.stroke, 0.95),
+                  shadowColor: gvc.stroke,
+                  shadowBlur: 8,
+                });
+              } else {
+                vfNote.setStyle({ fillStyle: 'rgba(56,189,248,0.85)', strokeStyle: 'rgba(14,165,233,1)', shadowColor: '#0ea5e9', shadowBlur: 8 });
+              }
               // If the ghost has an accidental, keep a smaller left shift so the
               // accidental doesn't get pushed out / trigger VF layout fallback.
               const accidentalToShow: AccidentalType | null =
-                n.explicitAccidental !== undefined ? n.explicitAccidental : (n.accidental ?? null);
+                normalizeAccidentalType((n as any).userAccidental)
+                ?? (n.explicitAccidental != null ? n.explicitAccidental : null)
+                ?? (n.accidental ?? null);
               const hasAccidental = !!accidentalTypeToVexflow(accidentalToShow);
               vfNote.setXShift(hasAccidental ? -6 : -18);
 
@@ -578,11 +1357,50 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 }
               }
             } else if (selectedNoteIds.includes(n.id)) {
-              vfNote.setStyle({ fillStyle: '#38bdf8', strokeStyle: '#0ea5e9' });
+              // UX: In voice-color mode (or when the note is error-colored), make selected notes use the
+              // standard "normal" ink color (black) so they pop out among colored noteheads.
+              // In normal mode (no voice colors and no errorType), keep the classic cyan selection.
+              const wantsBlackSelection = !!showVoiceColors || !!(n as any).errorType;
+              // In voice/error-color modes keep the ink black, but add a clearer selection cue:
+              // cyan outline + warm yellow glow.
+              const fill = wantsBlackSelection ? '#111827' : '#38bdf8';
+              const stroke = wantsBlackSelection ? '#38bdf8' : '#0ea5e9';
+              const baseStyle: any = {
+                fillStyle: fill,
+                strokeStyle: stroke,
+              };
+
+              try {
+                const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
+                if (Array.isArray(mergedIds) && mergedIds.length > 0 && typeof (vfNote as any)?.setKeyStyle === 'function') {
+                  const idx = mergedIds.indexOf(n.id);
+                  if (idx >= 0) {
+                    // Some VexFlow builds may ignore shadow* in key styles; keep it best-effort.
+                    (vfNote as any).setKeyStyle(idx, baseStyle);
+                  } else {
+                    vfNote.setStyle(baseStyle);
+                  }
+                } else {
+                  vfNote.setStyle(baseStyle);
+                }
+
+                // Match stem color to selection when possible.
+                try {
+                  if (typeof (vfNote as any)?.setStemStyle === 'function') {
+                    (vfNote as any).setStemStyle({ strokeStyle: stroke, fillStyle: stroke });
+                  }
+                } catch {
+                  // ignore
+                }
+              } catch {
+                vfNote.setStyle(baseStyle);
+              }
             }
             const dotFill = n.id === '__ghost__'
-              ? 'rgba(56,189,248,0.4)'
-              : (selectedNoteIds.includes(n.id) ? '#38bdf8' : 'black');
+              ? (voiceColor(n.voice) ? hexToRgba(voiceColor(n.voice)!.fill, 0.4) : 'rgba(56,189,248,0.4)')
+              : (selectedNoteIds.includes(n.id)
+                ? ((showVoiceColors || (n as any).errorType) ? '#111827' : '#38bdf8')
+                : (showVoiceColors && vc ? vc.fill : 'black'));
             // Prefer explicit layout xPosition; if missing, try to compute from ticks (fallback)
             let absoluteX: number;
             if (typeof n.xPosition === 'number') {
@@ -627,13 +1445,59 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
             if (isPrimaryRender) {
               // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
-              const xShift = offsetMap.get(n.id) ?? 0;
+              const isMergedChord = Array.isArray((vfNote as any)?.__mergedIds) && ((vfNote as any).__mergedIds.length > 0);
+              const xShift = isMergedChord ? 0 : (offsetMap.get(n.id) ?? 0);
               const prevXShift = (vfNote as any).x_shift ?? 0;
               vfNote.setXShift(prevXShift + xShift);
               vfNote.setStave(stave);
               vfNote.setContext(context);
               const tc = new TickContext();
               tc.addTickable(vfNote);
+
+              // IMPORTANT (parti strette): make sure VexFlow computes chord notehead displacements
+              // for seconds BEFORE formatting, otherwise close-position merged chords can collapse
+              // and upper voices appear to disappear.
+              try {
+                const isMergedChord = Array.isArray((vfNote as any)?.__mergedIds) && ((vfNote as any).__mergedIds.length > 0);
+                if (isMergedChord && typeof (vfNote as any).calcNoteDisplacements === 'function') {
+                  // Ensure key props exist (depends on clef + stave).
+                  try {
+                    if (typeof (vfNote as any).calculateKeyProps === 'function') {
+                      (vfNote as any).calculateKeyProps();
+                    }
+                  } catch { /* ignore */ }
+
+                  // Force displacement hints for explicit seconds (e.g. Bb–C).
+                  // Stem up => displace the upper notehead; stem down => displace the lower.
+                  try {
+                    const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
+                    if (Array.isArray(mergedIds) && mergedIds.length >= 2 && typeof (vfNote as any).setNoteDisplaced === 'function') {
+                      const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
+                      const chordNotes = mergedIds
+                        .map(id => staffNoteById.get(String(id)))
+                        .filter(Boolean) as StaffNote[];
+                      const sortedByPos = chordNotes.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                      const stemDir = (typeof (vfNote as any).getStemDirection === 'function') ? (Number((vfNote as any).getStemDirection()) || 0) : 0;
+                      for (let k = 1; k < sortedByPos.length; k++) {
+                        const low = sortedByPos[k - 1];
+                        const high = sortedByPos[k];
+                        if ((Number(high.position) - Number(low.position)) !== 1) continue;
+                        const displaceId = (stemDir >= 0) ? high.id : low.id;
+                        const sn = chordNotes.find(x => x.id === displaceId) as any;
+                        const keyStr = sn ? `${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}` : '';
+                        const keyIdx = keyStr && keysArr.length ? keysArr.indexOf(keyStr) : -1;
+                        const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(displaceId);
+                        if (idx >= 0) (vfNote as any).setNoteDisplaced(idx, true);
+                      }
+                    }
+                  } catch { /* ignore */ }
+
+                  (vfNote as any).calcNoteDisplacements();
+                }
+              } catch {
+                // ignore
+              }
+
               tc.preFormat();
               tc.setX(x);
               vfNote.setTickContext(tc);
@@ -648,7 +1512,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               try {
                 // Keep accidentals in the ghost fallback too; the whole point of the
                 // ghost is to preview the exact insertion (pitch + accidental).
-                const fallbackNote = makeVfNote({ ...n } as StaffNote, clef, stemOverrideById.get(n.id));
+                const fallbackNote = makeVfNote({ ...n } as StaffNote, clef, stemOverrideById.get(n.id), hideStemById.get(n.id));
                 fallbackNote.setStave(stave);
                 fallbackNote.setContext(context);
                 fallbackNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });
@@ -712,6 +1576,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             } catch {
               // ignore
             }
+
+            // Keep stems colored even after forcing stem direction.
+            try {
+              applyStemStyle(g.vfNote as any, g.staffNote);
+            } catch {
+              // ignore
+            }
           }
         };
 
@@ -759,8 +1630,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         };
 
         // Build Beam instances BEFORE drawing notes, so VexFlow suppresses flags/stems on beamed notes.
-        const beamInstances: Beam[] = [];
-        const tieInstances: StaveTie[] = [];
+        const beamInstances: Array<{ beam: Beam; isSelected: boolean }> = [];
+          const tieInstances: Array<{ tie: StaveTie; fromId: string; toId: string }> = [];
 
         // Manual beam groups (set by the editor button).
         const manualGroups = new Map<string, Array<{ staffNote: StaffNote; vfNote: StaveNote }>>();
@@ -783,7 +1654,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             prepareTightTrebleBeamedNotes(group);
             const b = new Beam(group.map(g => g.vfNote));
             applyTightTrebleBeamHeuristics(b, group);
-            beamInstances.push(b);
+            applyBeamStyle(b as any, group);
+            const isSelected = group.some(g => selectedNoteIds.includes(String(g.staffNote.id)));
+            beamInstances.push({ beam: b, isSelected });
           } catch {
             // Skip invalid beam groups.
           }
@@ -832,7 +1705,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               prepareTightTrebleBeamedNotes(current);
               const b = new Beam(current.map(c => c.vfNote));
               applyTightTrebleBeamHeuristics(b, current);
-              beamInstances.push(b);
+              applyBeamStyle(b as any, current);
+              const isSelected = current.some(c => selectedNoteIds.includes(String(c.staffNote.id)));
+              beamInstances.push({ beam: b, isSelected });
             } catch {
               // ignore
             }
@@ -862,11 +1737,24 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         for (const p of prepared.filter(p => p.isPrimaryRender)) {
           const n = p.staffNote;
           const vfNote = p.vfNote;
-          const isMergedChord = !!(vfNote as any).__mergedIds;
+          const mergedIds: string[] | undefined = (vfNote as any).__mergedIds;
+          const isMergedChord = !!mergedIds;
+
+          const isSelected = (() => {
+            try {
+              if (Array.isArray(mergedIds) && mergedIds.length > 0) {
+                return mergedIds.some(id => selectedNoteIds.includes(String(id)));
+              }
+              return selectedNoteIds.includes(n.id);
+            } catch {
+              return false;
+            }
+          })();
 
           // Wrap each note in a tagged SVG group so we can reliably detect clicks.
           const group = (context as any).openGroup?.() as SVGGElement | undefined;
           if (group) {
+            if (isSelected) group.setAttribute('data-selected', '1');
             // For merged chords, don't tag a single id; rely on proximity hitpoints
             // so individual noteheads remain selectable.
             if (!isMergedChord) {
@@ -992,10 +1880,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
 
         // Draw beams last (this also draws stems for beamed notes).
-        for (const beam of beamInstances) {
+        for (const entry of beamInstances) {
           try {
-            beam.setContext(context as any);
-            beam.draw();
+            const g = (context as any).openGroup?.() as SVGGElement | undefined;
+            if (g && entry.isSelected) g.setAttribute('data-selected', '1');
+            entry.beam.setContext(context as any);
+            entry.beam.draw();
+            (context as any).closeGroup?.();
           } catch {
             // ignore
           }
@@ -1029,7 +1920,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             return 1;
           };
 
-          const drawPartialTiePath = (fromX: number, toX: number, y: number, dir: 1 | -1) => {
+          const drawPartialTiePath = (fromX: number, toX: number, y: number, dir: 1 | -1, fromId?: string, toId?: string) => {
             try {
               if (!tieGroup) return;
               const svgNS = 'http://www.w3.org/2000/svg';
@@ -1045,6 +1936,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               path.setAttribute('stroke', 'black');
               path.setAttribute('stroke-width', '1.6');
               path.setAttribute('stroke-linecap', 'round');
+              // Make ties clickable/selectable.
+              // We tag the path so the global pointer handler can detect tie clicks.
+              // (We intentionally don't rely on VexFlow's internal DOM structure.)
+              if (fromId && toId) {
+                path.setAttribute('data-tie-from', fromId);
+                path.setAttribute('data-tie-to', toId);
+              }
+              path.style.pointerEvents = 'stroke';
               tieGroup.appendChild(path);
             } catch {
               // ignore
@@ -1098,6 +1997,58 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             return stave.getX() + 10;
           })();
 
+          const effectiveMidiForTie = (n: any): number | null => {
+            try {
+              if (!n || n.isRest) return null;
+
+              // Prefer spelling-derived MIDI; fall back to stored midi.
+              const letter = String(n.pitch || '').charAt(0).toUpperCase();
+              const octave = Number(n.octave);
+              const basePc: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+              if (!Object.prototype.hasOwnProperty.call(basePc, letter) || !Number.isFinite(octave)) {
+                const m0 = Number(n.midi);
+                return Number.isFinite(m0) ? m0 : null;
+              }
+
+              const hasExplicitAcc = (n.userAccidental != null) || (n.explicitAccidental != null);
+              const accRaw = (n.userAccidental ?? n.explicitAccidental ?? n.accidental ?? null);
+              const acc = String(accRaw ?? '')
+                .trim()
+                .replace(/♯/g, '#')
+                .replace(/♭/g, 'b')
+                .replace(/♮/g, 'natural')
+                .replace(/𝄪/g, '##')
+                .replace(/𝄫/g, 'bb')
+                .replace(/^x$/i, '##');
+
+              const offset = (() => {
+                if (acc === 'sharp' || acc === '#') return 1;
+                if (acc === 'flat' || acc === 'b') return -1;
+                if (acc === 'double-sharp' || acc === '##') return 2;
+                if (acc === 'double-flat' || acc === 'bb') return -2;
+                return 0;
+              })();
+
+              // NOTE: noteIndex can be stale in some edit/enharmonic cases.
+              // If the user explicitly spelled the accidental, trust the spelling.
+              const noteIndexRaw = (!hasExplicitAcc && Number.isFinite(Number(n.noteIndex)))
+                ? Number(n.noteIndex)
+                : (basePc[letter] + offset);
+              const noteIndex = ((noteIndexRaw % 12) + 12) % 12;
+              let midi = (octave + 1) * 12 + noteIndex;
+
+              const isFlatLike = acc === 'flat' || acc === 'double-flat' || acc === 'b' || acc === 'bb';
+              const isSharpLike = acc === 'sharp' || acc === 'double-sharp' || acc === '#' || acc === '##';
+              if (letter === 'C' && (noteIndex === 11 || noteIndex === 10) && (isFlatLike || !acc)) midi -= 12;
+              if (letter === 'B' && (noteIndex === 0 || noteIndex === 1) && (isSharpLike || !acc)) midi += 12;
+
+              return midi;
+            } catch {
+              const m0 = Number((n as any)?.midi);
+              return Number.isFinite(m0) ? m0 : null;
+            }
+          };
+
           for (let i = 0; i < sorted.length; i++) {
             const cur = sorted[i].staffNote;
             if (!cur.isTiedToNext) continue;
@@ -1106,7 +2057,59 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             let next: (typeof sorted)[number] | undefined;
             for (let j = i + 1; j < sorted.length; j++) {
               const cand = sorted[j].staffNote;
-              if ((cand.voice ?? 1) === curVoice) { next = sorted[j]; break; }
+              if ((cand.voice ?? 1) !== curVoice) continue;
+              if (cand.isRest) continue;
+              // Ties are only between *contiguous* notes of the same voice.
+              // We validate pitch via effective MIDI (spelling-aware) to support enharmonic ties.
+              next = sorted[j];
+              break;
+            }
+
+            // Fallback (still contiguous): if voice ids drift (common around enharmonic respellings),
+            // tie to the unique matching note at the immediately-next onset time.
+            if (!next) {
+              try {
+                const curStart = (Number.isFinite(Number((cur as any).startTick)) ? Number((cur as any).startTick) : null);
+
+                const timeKey = (n: any): string => {
+                  const st = Number(n?.startTick);
+                  if (Number.isFinite(st)) return `t:${st}`;
+                  const m = Number(n?.measureIndex ?? 0);
+                  const b = Number(n?.beat ?? 0);
+                  const x = Number(n?.xPosition ?? 0);
+                  return `m:${m}|b:${b}|x:${x}`;
+                };
+
+                // Find the next onset time after cur.
+                let nextKey: string | null = null;
+                for (let j = i + 1; j < sorted.length; j++) {
+                  const cand = sorted[j].staffNote as any;
+                  if (cand?.isRest) continue;
+                  if (curStart != null) {
+                    const st = Number(cand?.startTick);
+                    if (!Number.isFinite(st) || st <= curStart) continue;
+                  }
+                  const tk = timeKey(cand);
+                  nextKey = tk;
+                  break;
+                }
+                if (nextKey) {
+                  const emCur = effectiveMidiForTie(cur as any);
+                  if (emCur != null) {
+                    const atNext = [] as Array<(typeof sorted)[number]>;
+                    for (let j = i + 1; j < sorted.length; j++) {
+                      const cand = sorted[j].staffNote as any;
+                      if (cand?.isRest) continue;
+                      if (timeKey(cand) !== nextKey) continue;
+                      atNext.push(sorted[j]);
+                    }
+                    const matches = atNext.filter(p => effectiveMidiForTie(p.staffNote as any) === emCur);
+                    if (matches.length === 1) next = matches[0];
+                  }
+                }
+              } catch {
+                // ignore fallback
+              }
             }
 
             if (!next) {
@@ -1117,12 +2120,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               if (fromX != null) {
                 const y = getTieY(vf, stave, keyIndex);
                 const dir = tieDirectionFor(cur, vf);
+                // No concrete toId in this system, so we don't tag it as selectable.
                 drawPartialTiePath(fromX, staffEndX, y, dir);
               }
               continue;
             }
-            if (next.staffNote.isRest) continue;
-            if (next.staffNote.midi !== cur.midi) continue;
+
+            // Only tie if the sounding pitch matches (supports enharmonic respellings).
+            const emCur = effectiveMidiForTie(cur as any);
+            const emNext = effectiveMidiForTie(next.staffNote as any);
+            if (emCur == null || emNext == null || emCur !== emNext) continue;
 
             const firstIndex = getKeyIndexFor(sorted[i]);
             const lastIndex = getKeyIndexFor(next);
@@ -1143,13 +2150,67 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               else if (stemDir === -1) tie.setDirection(1);
             }
 
-            tieInstances.push(tie);
+            tieInstances.push({ tie, fromId: cur.id, toId: next.staffNote.id });
           }
 
-          for (const tie of tieInstances) {
+          for (const item of tieInstances) {
             try {
-              tie.setContext(context as any);
-              tie.draw();
+              // Wrap each tie in a tagged group so clicks can map to note IDs.
+              const g = (context as any).openGroup?.() as SVGGElement | undefined;
+              try {
+                if (g) {
+                  g.setAttribute('data-tie-from', item.fromId);
+                  g.setAttribute('data-tie-to', item.toId);
+                  // Prefer stroke hit-testing so we don't steal clicks from noteheads.
+                  (g.style as any).pointerEvents = 'stroke';
+                }
+              } catch {
+                // ignore
+              }
+
+              item.tie.setContext(context as any);
+              item.tie.draw();
+
+              // Tag the actual SVG elements VexFlow created so the pointer handler can
+              // detect tie clicks even if the group tagging is not sufficient.
+              try {
+                if (g) {
+                  const paths = Array.from(g.querySelectorAll('path')) as SVGPathElement[];
+                  for (const p of paths) {
+                    try {
+                      p.setAttribute('data-tie-from', item.fromId);
+                      p.setAttribute('data-tie-to', item.toId);
+                      (p.style as any).pointerEvents = 'stroke';
+
+                      // Add a wider invisible hitbox for easier selection.
+                      const d = p.getAttribute('d');
+                      if (d) {
+                        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        hit.setAttribute('d', d);
+                        hit.setAttribute('fill', 'none');
+                        hit.setAttribute('stroke', 'transparent');
+                        hit.setAttribute('stroke-width', '12');
+                        hit.setAttribute('stroke-linecap', 'round');
+                        hit.setAttribute('data-tie-from', item.fromId);
+                        hit.setAttribute('data-tie-to', item.toId);
+                        (hit.style as any).pointerEvents = 'stroke';
+                        // Insert before the visible path so it doesn't cover visuals.
+                        g.insertBefore(hit, p);
+                      }
+                    } catch {
+                      // ignore per-path
+                    }
+                  }
+                }
+              } catch {
+                // ignore
+              }
+
+              try {
+                (context as any).closeGroup?.();
+              } catch {
+                // ignore
+              }
             } catch {
               // ignore
             }
@@ -1168,8 +2229,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             for (let j = i - 1; j >= 0; j--) {
               const cand = sorted[j].staffNote as any;
               if ((cand.voice ?? 1) !== curVoice) continue;
-              if ((cand.midi ?? null) === (cur.midi ?? null) && cand.isTiedToNext) {
-                hasLocalPrev = true;
+              try {
+                const emCand = effectiveMidiForTie(cand);
+                const emCur = effectiveMidiForTie(cur);
+                if (emCand != null && emCur != null && emCand === emCur && cand.isTiedToNext) {
+                  hasLocalPrev = true;
+                }
+              } catch {
+                // ignore
               }
               break;
             }
@@ -1181,6 +2248,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const keyIndex = getKeyIndexFor(sorted[i]);
             const y = getTieY(vf, stave, keyIndex);
             const dir = tieDirectionFor(cur, vf);
+            // No concrete fromId in this system, so we don't tag it as selectable.
             drawPartialTiePath(staffStartX, toX, y, dir);
           }
 
@@ -1295,6 +2363,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       return { noteId, isGhost, tagged };
     };
 
+    const getTargetTieInfo = (target: EventTarget | null) => {
+      const el = target as Element | null;
+      const tagged = el?.closest?.('[data-tie-from][data-tie-to]') as HTMLElement | null;
+      const fromNoteId = tagged?.getAttribute?.('data-tie-from') ?? null;
+      const toNoteId = tagged?.getAttribute?.('data-tie-to') ?? null;
+      return { fromNoteId, toNoteId, tagged };
+    };
+
 
     const onWindowMouseUp = (e: MouseEvent) => {
       const down = downRef.current;
@@ -1313,6 +2389,22 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
       const { x, y } = clientToSvgCoords(svg, e);
       const { noteId: upNoteId, isGhost: upIsGhost } = getTargetNoteInfo(e.target);
+      const { fromNoteId: upTieFrom, toNoteId: upTieTo } = getTargetTieInfo(e.target);
+
+      // Tie click has priority over proximity-pick and background clicks.
+      // This prevents a tie click from accidentally selecting a nearby note.
+      if (down.downTieFrom && down.downTieTo) {
+        try { e.preventDefault(); } catch { /* ignore */ }
+        try { e.stopPropagation(); } catch { /* ignore */ }
+        onTieClickRef.current?.(down.downTieFrom, down.downTieTo, e);
+        return;
+      }
+      if (upTieFrom && upTieTo) {
+        try { e.preventDefault(); } catch { /* ignore */ }
+        try { e.stopPropagation(); } catch { /* ignore */ }
+        onTieClickRef.current?.(upTieFrom, upTieTo, e);
+        return;
+      }
 
       // Prefer the note we started the click on (mousedown), even if mouseup lands
       // on an untagged element (e.g., a Beam path). Fall back to the mouseup target.
@@ -1411,6 +2503,23 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // Only handle events that originate inside the SVG.
       if (!(e.target instanceof Element) || !svg.contains(e.target)) return;
 
+      // If the user pressed on a tie path, keep it from starting a marquee selection.
+      // We still allow mouseup to resolve the click.
+      const { fromNoteId: downTieFrom, toNoteId: downTieTo } = getTargetTieInfo(e.target);
+      if (downTieFrom && downTieTo) {
+        downRef.current = {
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          moved: false,
+          downNoteId: null,
+          downIsGhost: false,
+          downTieFrom,
+          downTieTo,
+        };
+        window.addEventListener('mouseup', onWindowMouseUp, { capture: true });
+        return;
+      }
+
       const { noteId, isGhost } = getTargetNoteInfo(e.target);
       downRef.current = {
         startClientX: e.clientX,
@@ -1418,6 +2527,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         moved: false,
         downNoteId: noteId,
         downIsGhost: isGhost,
+        downTieFrom: null,
+        downTieTo: null,
       };
 
       // Start rectangle selection only on background (or on ghost), not on real notes.

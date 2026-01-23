@@ -7,7 +7,8 @@ import MainEditor from './components/MainEditor';
 import GrandStaffEditor from './components/GrandStaffEditor';
 
 const App: React.FC = () => {
-    const [mode, setMode] = useState<'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff'>('scales');
+    const [mode, setMode] = useState<'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff'>('grandStaff');
+    const [pendingMenuAction, setPendingMenuAction] = useState<{ action: string; payload: any; nonce: number } | null>(null);
     
     // --- AUDIO STATE ---
     const audioServiceRef = useRef(new AudioService());
@@ -39,6 +40,35 @@ const App: React.FC = () => {
         });
         return () => { if (remove) remove(); };
     }, []);
+
+    // Native menu integration (Electron): surface menu errors and allow Import/Export MIDI to
+    // work even if the user is not currently on the GrandStaff view.
+    useEffect(() => {
+        const api = (window as any).electronAPI;
+        if (!api) return;
+
+        const removeErr = api.onMenuError?.((code: string, message: string) => {
+            try { window.alert(`${String(code || 'errore')}: ${String(message || '')}`); } catch { /* ignore */ }
+        });
+
+        const remove = api.onMenuAction?.((action: string, payload: any) => {
+            try {
+                if (action !== 'import-midi' && action !== 'export-midi') return;
+                // If we're not on the editor, switch and queue the action for when it mounts.
+                if (mode !== 'grandStaff') {
+                    setMode('grandStaff');
+                    setPendingMenuAction({ action, payload, nonce: Date.now() });
+                }
+            } catch {
+                // ignore
+            }
+        });
+
+        return () => {
+            if (removeErr) removeErr();
+            if (remove) remove();
+        };
+    }, [mode]);
     
     return (
         <div className="h-screen overflow-hidden flex flex-col bg-gray-900 font-sans text-gray-100">
@@ -75,6 +105,10 @@ const App: React.FC = () => {
                         isActive={mode === 'grandStaff'}
                         audioService={audioServiceRef.current}
                         isAudioReady={isAudioReady}
+                        pendingMenuAction={pendingMenuAction}
+                        onConsumePendingMenuAction={(nonce) => {
+                            setPendingMenuAction(prev => (prev && prev.nonce === nonce) ? null : prev);
+                        }}
                     />
                 </div>
             </div>

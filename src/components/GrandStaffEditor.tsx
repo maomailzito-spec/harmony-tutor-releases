@@ -27,11 +27,14 @@ import { GroupIcon } from './icons/GroupIcon';
 import { UngroupIcon } from './icons/UngroupIcon';
 import { FlipStemIcon } from './icons/FlipStemIcon';
 import VexflowGrandStaff from './VexflowGrandStaff';
+import PreferencesModal from './PreferencesModal';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
     audioService: AudioService;
     isAudioReady: boolean;
+    pendingMenuAction?: { action: string; payload: any; nonce: number } | null;
+    onConsumePendingMenuAction?: (nonce: number) => void;
 }
 
 type InsertionElement = { type: 'note' | 'rest', duration: NoteDuration, isDotted?: boolean };
@@ -45,6 +48,7 @@ type CanvasFormat = 'page' | 'landscape';
 type ActiveTab = 'editor' | 'analysis';
 type StaffLayoutMode = 'parti_late' | 'parti_strette';
 type StaffSystemMode = 'grandstaff' | 'treble_only' | 'satb_ancient';
+type EngravingMode = 'legacy' | 'enhanced';
 
 const LINE_HEIGHT = 12;
 const STAFF_LINES_HEIGHT = 4 * LINE_HEIGHT;
@@ -158,6 +162,7 @@ type ToolbarGroupId =
 
 const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
 const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
+const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
 const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'playback',
     'bpm',
@@ -486,7 +491,13 @@ class RenderErrorBoundary extends React.Component<
   }
 }
 
-const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioService, isAudioReady }) => {
+const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
+    isActive,
+    audioService,
+    isAudioReady,
+    pendingMenuAction,
+    onConsumePendingMenuAction,
+}) => {
         const measureGridStepRef = useRef<Map<number, number>>(new Map());
     const [rawNotes, setRawNotes, undoNotes, redoNotes] = useUndoableState<StaffNote[]>([]);
     // Ref per avere sempre il valore aggiornato di rawNotes
@@ -695,6 +706,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const [showRomanAnalysis, setShowRomanAnalysis] = useState(true);
     const [showSymbolAnalysis, setShowSymbolAnalysis] = useState(false);
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
+
+    const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+
+    const [engravingMode, setEngravingMode] = useState<EngravingMode>(() => {
+        try {
+            const raw = String(window.localStorage.getItem(ENGRAVING_MODE_KEY) || '').trim();
+            if (raw === 'legacy' || raw === 'enhanced') return raw;
+        } catch (_) {}
+        return 'enhanced';
+    });
+    useEffect(() => {
+        try { window.localStorage.setItem(ENGRAVING_MODE_KEY, engravingMode); } catch (_) {}
+    }, [engravingMode]);
+
+    const [showVoiceColors, setShowVoiceColors] = useState(false);
+
+    // Menu-driven toggles (Electron)
+    const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
+    const [showHarmonyDebug, setShowHarmonyDebug] = useState(false);
     const [toolbarGroupOrder, setToolbarGroupOrder] = useState<ToolbarGroupId[]>(() => {
         // Load toolbar prefs synchronously to avoid overwriting them with defaults on first mount.
         try {
@@ -754,6 +784,84 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
     const resetVexflow = useCallback(() => {
         setVexflowNonce(n => n + 1);
     }, []);
+
+    const runOverlapAudit = useCallback((mode: EngravingMode) => {
+        try {
+            setEngravingMode(mode);
+            setVexflowNonce(n => n + 1);
+
+            window.setTimeout(() => {
+                try {
+                    type Box = { x: number; y: number; w: number; h: number };
+                    const intersects = (a: Box, b: Box) => !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+
+                    const toBox = (el: SVGGraphicsElement): Box | null => {
+                        try {
+                            const bb = el.getBBox();
+                            if (!bb || !Number.isFinite(bb.x) || !Number.isFinite(bb.width)) return null;
+                            return { x: bb.x, y: bb.y, w: bb.width, h: bb.height };
+                        } catch {
+                            return null;
+                        }
+                    };
+
+                    const noteSelectors = ['.vf-notehead', '[class*="vf-notehead"]'].join(',');
+                    const accidentalSelectors = ['.vf-accidental', '[class*="vf-accidental"]'].join(',');
+
+                    let noteBoxes: Box[] = [];
+                    let accidentalBoxes: Box[] = [];
+
+                    for (const el of systemElementByIndexRef.current.values()) {
+                        const svg = el.querySelector('svg') as SVGSVGElement | null;
+                        if (!svg) continue;
+                        const noteEls = Array.from(svg.querySelectorAll(noteSelectors)) as SVGGraphicsElement[];
+                        const accEls = Array.from(svg.querySelectorAll(accidentalSelectors)) as SVGGraphicsElement[];
+                        noteBoxes.push(...(noteEls.map(toBox).filter(Boolean) as Box[]));
+                        accidentalBoxes.push(...(accEls.map(toBox).filter(Boolean) as Box[]));
+                    }
+
+                    let accVsNote = 0;
+                    for (const a of accidentalBoxes) {
+                        for (const n of noteBoxes) {
+                            if (intersects(a, n)) accVsNote++;
+                        }
+                    }
+
+                    let noteVsNote = 0;
+                    for (let i = 0; i < noteBoxes.length; i++) {
+                        for (let j = i + 1; j < noteBoxes.length; j++) {
+                            if (intersects(noteBoxes[i], noteBoxes[j])) noteVsNote++;
+                        }
+                    }
+
+                    window.alert(
+                        [
+                            `Audit collisioni (${mode})`,
+                            `noteheads: ${noteBoxes.length}`,
+                            `accidentals: ${accidentalBoxes.length}`,
+                            `overlap accidental↔notehead: ${accVsNote}`,
+                            `overlap notehead↔notehead: ${noteVsNote}`,
+                            '',
+                            'Nota: se i selettori SVG di VexFlow cambiano, il conteggio può risultare 0.',
+                        ].join('\n')
+                    );
+                } catch {
+                    try { window.alert(`Audit collisioni fallito (${mode}).`); } catch { /* ignore */ }
+                }
+            }, 250);
+        } catch {
+            // ignore
+        }
+    }, [setEngravingMode]);
+
+    useEffect(() => {
+        if (!pendingMenuAction) return;
+        try {
+            onConsumePendingMenuAction?.(pendingMenuAction.nonce);
+        } catch {
+            // ignore
+        }
+    }, [pendingMenuAction, onConsumePendingMenuAction]);
 
     // Stable layout parameters: keep `pxPerQuarter` stable across layout passes
     // to avoid global rescaling (which caused the drift). Reset when container
@@ -1893,6 +2001,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             setShowMeasureNumbers(!!payload?.enabled);
         } else if (action === 'toggle-toolbar-customize') {
             setIsToolbarCustomizeOpen(prev => !prev);
+        } else if (action === 'open-preferences') {
+            setIsPreferencesOpen(true);
+        } else if (action === 'set-show-voice-colors') {
+            setShowVoiceColors(!!payload?.enabled);
+        } else if (action === 'set-engraving-mode') {
+            const m = String(payload?.mode || '').trim();
+            if (m === 'legacy' || m === 'enhanced') setEngravingMode(m);
+        } else if (action === 'run-overlap-audit') {
+            const m = String(payload?.mode || '').trim();
+            if (m === 'legacy' || m === 'enhanced') runOverlapAudit(m);
+        } else if (action === 'set-quick-insert-bar') {
+            setShowQuickInsertBar(!!payload?.enabled);
+        } else if (action === 'set-show-harmony-debug') {
+            setShowHarmonyDebug(!!payload?.enabled);
         }
     }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode]);
 
@@ -2514,7 +2636,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         } catch { /* ignore */ }
 
         // For each system, collect all timeline events that fall within its measures
-        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string; absBeat?: number; hiddenMarker?: boolean; isOverride?: boolean }[][] = layoutData.systemsParams.map(() => []);
+        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string; absBeat?: number; hiddenMarker?: boolean; isOverride?: boolean; pcsSig?: string }[][] = layoutData.systemsParams.map(() => []);
 
 
         // Helper: compute xPosition for a given absBeat in a system
@@ -3876,6 +3998,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 symbol,
                 absBeat: event.absBeat,
                 isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)),
+                pcsSig: signatureFromNotes((fullNotes || []) as any),
             });
         });
 
@@ -4619,6 +4742,86 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         };
     }, [activeAccidental, keySignature]);
 
+    const computeDurationTicks = useCallback((n: StaffNote) => {
+        try {
+            const base = (DURATION_VALUES as any)[(n as any).duration || 'quarter'] || 1;
+            let durBeats = base;
+            if ((n as any).isDotted) durBeats *= 1.5;
+            if ((n as any).isTriplet) durBeats *= 2 / 3;
+            if ((n as any).isDuplet) durBeats *= 3 / 2;
+            return Math.round(durBeats * TICKS_PER_QUARTER);
+        } catch {
+            return (n as any).durationTicks;
+        }
+    }, []);
+
+    const applyEditToSelectedNotes = useCallback((
+        updateFn: (n: StaffNote) => StaffNote,
+        opts?: { rebuildTimeline?: boolean },
+    ) => {
+        if (!selectedNoteIds || selectedNoteIds.size === 0) return;
+
+        setRawNotes(prev => {
+            try {
+                const selected = prev.filter(n => selectedNoteIds.has(n.id));
+                if (selected.length === 0) return prev;
+
+                let next = prev.map(n => selectedNoteIds.has(n.id) ? updateFn(n) : n);
+
+                if (opts?.rebuildTimeline) {
+                    const affected = new Map<string, { m: number; v: Voice }>();
+                    for (const n of selected) {
+                        const m = (n as any).measureIndex;
+                        const v = (n as any).voice;
+                        if (typeof m === 'number' && typeof v === 'number') affected.set(`${m}|${v}`, { m, v: v as Voice });
+                    }
+                    for (const { m, v } of affected.values()) {
+                        const rebuilt = rebuildMeasureTimelineForVoice(next, m, v, timeSignature);
+                        const others = next.filter(nn => nn.measureIndex !== m || nn.voice !== v);
+                        next = [...others, ...rebuilt];
+                    }
+                }
+
+                return next.sort((a, b) => {
+                    if ((a.measureIndex ?? 0) !== (b.measureIndex ?? 0)) return (a.measureIndex ?? 0) - (b.measureIndex ?? 0);
+                    const aSt = (a as any).startTick;
+                    const bSt = (b as any).startTick;
+                    if (typeof aSt === 'number' && typeof bSt === 'number' && aSt !== bSt) return aSt - bSt;
+                    if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
+                    return (a.voice ?? 1) - (b.voice ?? 1);
+                });
+            } catch {
+                return prev;
+            }
+        });
+    }, [selectedNoteIds, setRawNotes, timeSignature]);
+
+    const applyAccidentalToSelectedNotes = useCallback((acc: AccidentalType | null) => {
+        if (!selectedNoteIds || selectedNoteIds.size === 0) return;
+        applyEditToSelectedNotes((n) => {
+            if (n.isRest) return n;
+            if (!acc) {
+                const { userAccidental, explicitAccidental, accidental, ...rest } = n as any;
+                return { ...(rest as StaffNote) };
+            }
+            return {
+                ...(n as any),
+                userAccidental: acc,
+                explicitAccidental: acc,
+                accidental: acc,
+            } as StaffNote;
+        });
+    }, [applyEditToSelectedNotes, selectedNoteIds]);
+
+    const applyDottedToSelectedNotes = useCallback((nextIsDotted: boolean) => {
+        if (!selectedNoteIds || selectedNoteIds.size === 0) return;
+        applyEditToSelectedNotes((n) => {
+            if (n.isRest) return n;
+            const updated = { ...(n as any), isDotted: nextIsDotted } as StaffNote;
+            return { ...(updated as any), durationTicks: computeDurationTicks(updated) } as StaffNote;
+        }, { rebuildTimeline: true });
+    }, [applyEditToSelectedNotes, computeDurationTicks, selectedNoteIds]);
+
     // -----------------------
     // Editor interaction (restored minimal)
     // -----------------------
@@ -4851,6 +5054,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         beat: newBeat,
                         startTick,
                         durationTicks,
+                        voice: selectedVoice,
+                        clef: clefForVoice(selectedVoice),
                         chordId: remapId(chordIdMap, (n as any).chordId),
                         groupId: remapId(groupIdMap, (n as any).groupId),
                         manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
@@ -4861,6 +5066,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                         id: crypto.randomUUID(),
                         measureIndex: newMeasureIndex,
                         beat: newBeat,
+                        voice: selectedVoice,
+                        clef: clefForVoice(selectedVoice),
                         chordId: remapId(chordIdMap, (n as any).chordId),
                         groupId: remapId(groupIdMap, (n as any).groupId),
                         manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
@@ -4952,7 +5159,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 }
             }, 60);
         }
-    }, [setRawNotes, setSelectedNoteIds, timeSignature]);
+    }, [clefForVoice, selectedVoice, setRawNotes, setSelectedNoteIds, timeSignature]);
 
     const getSystemMeasureAtX = useCallback((systemIndex: number, x: number) => {
         const sys = layoutData?.systemsParams?.[systemIndex];
@@ -6776,7 +6983,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     '7': 'sixty-fourth',
                 };
                 const duration = mapping[key];
-                if (duration) setSelectedInsertion(prev => ({ ...prev, duration }));
+                if (duration) {
+                    setSelectedInsertion(prev => ({ ...prev, duration }));
+
+                    if (selectedNoteIds.size > 0) {
+                        setRawNotes(prev => {
+                            try {
+                                const selected = prev.filter(n => selectedNoteIds.has(n.id));
+                                if (selected.length === 0) return prev;
+
+                                let next = prev.map(n => selectedNoteIds.has(n.id) ? ({ ...(n as any), duration } as StaffNote) : n);
+
+                                const affected = new Map<string, { m: number; v: Voice }>();
+                                for (const n of selected) {
+                                    const m = (n as any).measureIndex;
+                                    const v = (n as any).voice;
+                                    if (typeof m === 'number' && typeof v === 'number') affected.set(`${m}|${v}`, { m, v: v as Voice });
+                                }
+
+                                for (const { m, v } of affected.values()) {
+                                    const rebuilt = rebuildMeasureTimelineForVoice(next, m, v, timeSignature);
+                                    const others = next.filter(nn => nn.measureIndex !== m || nn.voice !== v);
+                                    next = [...others, ...rebuilt];
+                                }
+
+                                return next.sort((a, b) => {
+                                    if ((a.measureIndex ?? 0) !== (b.measureIndex ?? 0)) return (a.measureIndex ?? 0) - (b.measureIndex ?? 0);
+                                    const aSt = (a as any).startTick;
+                                    const bSt = (b as any).startTick;
+                                    if (typeof aSt === 'number' && typeof bSt === 'number' && aSt !== bSt) return aSt - bSt;
+                                    if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
+                                    return (a.voice ?? 1) - (b.voice ?? 1);
+                                });
+                            } catch {
+                                return prev;
+                            }
+                        });
+                    }
+                }
                 return;
             }
 
@@ -6793,7 +7037,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
             if (!isMod && (key === '.' || key === '>')) {
                 e.preventDefault();
                 e.stopPropagation();
-                setSelectedInsertion(prev => ({ ...prev, isDotted: !prev.isDotted }));
+                const next = !selectedInsertion.isDotted;
+                setSelectedInsertion(prev => ({ ...prev, isDotted: next }));
+                applyDottedToSelectedNotes(next);
                 return;
             }
 
@@ -6804,11 +7050,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 e.stopPropagation();
 
                 if (key === 'b') {
-                    setActiveAccidental(p => (p === 'flat' ? 'double-flat' : (p === 'double-flat' ? null : 'flat')));
+                    const next = (activeAccidental === 'flat' ? 'double-flat' : (activeAccidental === 'double-flat' ? null : 'flat')) as AccidentalType | null;
+                    setActiveAccidental(next);
+                    applyAccidentalToSelectedNotes(next);
                 } else if (key === 'n') {
-                    setActiveAccidental(p => (p === 'natural' ? null : 'natural'));
+                    const next = (activeAccidental === 'natural' ? null : 'natural') as AccidentalType | null;
+                    setActiveAccidental(next);
+                    applyAccidentalToSelectedNotes(next);
                 } else {
-                    setActiveAccidental(p => (p === 'sharp' ? 'double-sharp' : (p === 'double-sharp' ? null : 'sharp')));
+                    const next = (activeAccidental === 'sharp' ? 'double-sharp' : (activeAccidental === 'double-sharp' ? null : 'sharp')) as AccidentalType | null;
+                    setActiveAccidental(next);
+                    applyAccidentalToSelectedNotes(next);
                 }
 
                 return;
@@ -7264,18 +7516,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                 </button>
                 <div className="w-px h-5 bg-gray-600 mx-1"></div>
                 {durations.map(({ duration, label }) => (
-                    <button key={duration} onClick={() => { setSelectedInsertion(prev => ({ ...prev, duration })); }} className={`p-1 rounded-md transition-colors ${selectedInsertion.duration === duration ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`} title={label}>
+                    <button
+                        key={duration}
+                        onClick={() => {
+                            setSelectedInsertion(prev => ({ ...prev, duration }));
+                            if (selectedNoteIds.size > 0) {
+                                applyEditToSelectedNotes((n) => {
+                                    if (n.isRest) return n;
+                                    const updated = { ...(n as any), duration } as StaffNote;
+                                    return { ...(updated as any), durationTicks: computeDurationTicks(updated) } as StaffNote;
+                                }, { rebuildTimeline: true });
+                            }
+                        }}
+                        className={`p-1 rounded-md transition-colors ${selectedInsertion.duration === duration ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                        title={label}
+                    >
                         <IconComponent type={selectedInsertion.type} duration={duration} className={TOOLBAR_ICON_CLASS} />
                     </button>
                 ))}
                 <div className="w-px h-5 bg-gray-600 mx-1"></div>
                                 <button
-                                    onClick={() =>
+                                    onClick={() => {
+                                        const next = !selectedInsertion.isDotted;
                                         setSelectedInsertion(prev => ({
                                             ...prev,
-                                            isDotted: !prev.isDotted
-                                        }))
-                                    }
+                                            isDotted: next
+                                        }));
+                                        applyDottedToSelectedNotes(next);
+                                    }}
                                     className={`p-1 rounded-md transition-colors ${
                                         selectedInsertion.isDotted
                                             ? 'bg-cyan-600 text-white'
@@ -7347,11 +7615,61 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
         ),
         accidentals: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
-                <button onClick={() => setActiveAccidental(p => p === 'sharp' ? 'double-sharp' : (p === 'double-sharp' ? null : 'sharp'))} className={`p-1 rounded-md transition-colors ${activeAccidental === 'sharp' || activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`} title="Diesis (♯)"><SharpIcon className={TOOLBAR_ICON_CLASS} /></button>
-                <button onClick={() => setActiveAccidental(p => p === 'double-sharp' ? 'sharp' : (p === 'sharp' ? null : 'double-sharp'))} className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`} title="Doppio Diesis (𝄪)"><DoubleSharpIcon className={TOOLBAR_ICON_CLASS} /></button>
-                <button onClick={() => setActiveAccidental(p => p === 'flat' ? 'double-flat' : (p === 'double-flat' ? null : 'flat'))} className={`p-1 rounded-md transition-colors ${activeAccidental === 'flat' || activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`} title="Bemolle (♭)"><FlatIcon className={TOOLBAR_ICON_CLASS} /></button>
-                <button onClick={() => setActiveAccidental(p => p === 'double-flat' ? 'flat' : (p === 'flat' ? null : 'double-flat'))} className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`} title="Doppio Bemolle (♭♭)"><DoubleFlatIcon className={TOOLBAR_ICON_CLASS} /></button>
-                <button onClick={() => setActiveAccidental(p => p === 'natural' ? null : 'natural')} className={`p-1 rounded-md transition-colors ${activeAccidental === 'natural' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`} title="Bequadro (N)"><NaturalIcon className={TOOLBAR_ICON_CLASS} /></button>
+                <button
+                    onClick={() => {
+                        const next = (activeAccidental === 'sharp' ? 'double-sharp' : (activeAccidental === 'double-sharp' ? null : 'sharp')) as AccidentalType | null;
+                        setActiveAccidental(next);
+                        applyAccidentalToSelectedNotes(next);
+                    }}
+                    className={`p-1 rounded-md transition-colors ${activeAccidental === 'sharp' || activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                    title="Diesis (♯)"
+                >
+                    <SharpIcon className={TOOLBAR_ICON_CLASS} />
+                </button>
+                <button
+                    onClick={() => {
+                        const next = (activeAccidental === 'double-sharp' ? 'sharp' : (activeAccidental === 'sharp' ? null : 'double-sharp')) as AccidentalType | null;
+                        setActiveAccidental(next);
+                        applyAccidentalToSelectedNotes(next);
+                    }}
+                    className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                    title="Doppio Diesis (𝄪)"
+                >
+                    <DoubleSharpIcon className={TOOLBAR_ICON_CLASS} />
+                </button>
+                <button
+                    onClick={() => {
+                        const next = (activeAccidental === 'flat' ? 'double-flat' : (activeAccidental === 'double-flat' ? null : 'flat')) as AccidentalType | null;
+                        setActiveAccidental(next);
+                        applyAccidentalToSelectedNotes(next);
+                    }}
+                    className={`p-1 rounded-md transition-colors ${activeAccidental === 'flat' || activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                    title="Bemolle (♭)"
+                >
+                    <FlatIcon className={TOOLBAR_ICON_CLASS} />
+                </button>
+                <button
+                    onClick={() => {
+                        const next = (activeAccidental === 'double-flat' ? 'flat' : (activeAccidental === 'flat' ? null : 'double-flat')) as AccidentalType | null;
+                        setActiveAccidental(next);
+                        applyAccidentalToSelectedNotes(next);
+                    }}
+                    className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                    title="Doppio Bemolle (♭♭)"
+                >
+                    <DoubleFlatIcon className={TOOLBAR_ICON_CLASS} />
+                </button>
+                <button
+                    onClick={() => {
+                        const next = (activeAccidental === 'natural' ? null : 'natural') as AccidentalType | null;
+                        setActiveAccidental(next);
+                        applyAccidentalToSelectedNotes(next);
+                    }}
+                    className={`p-1 rounded-md transition-colors ${activeAccidental === 'natural' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                    title="Bequadro (N)"
+                >
+                    <NaturalIcon className={TOOLBAR_ICON_CLASS} />
+                </button>
             </div>
         ),
         notations: (
@@ -7666,6 +7984,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                     {toolbarHoverTip.text}
                 </div>
             )}
+
+            <PreferencesModal
+                isOpen={isPreferencesOpen}
+                onClose={() => setIsPreferencesOpen(false)}
+            />
+
+            {!isToolbarVisible && showQuickInsertBar && (
+                <div className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
+                    <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
+                        <div className="flex items-center gap-3">
+                            {toolbarGroups.voices}
+                            {toolbarGroups.insert}
+                            {toolbarGroups.accidentals}
+                            {toolbarGroups.notations}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {(showQuickInsertBar || showHarmonyDebug) && (
+                <div className="sticky top-0 z-40 mt-2 px-2">
+                    <div className="inline-flex items-center gap-2 rounded-md bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] text-slate-200">
+                        {showQuickInsertBar && <span className="px-1.5 py-0.5 rounded bg-slate-700">Quick Insert: ON</span>}
+                        {showHarmonyDebug && <span className="px-1.5 py-0.5 rounded bg-slate-700">Harmony Debug: ON</span>}
+                    </div>
+                </div>
+            )}
             
             <div className="flex flex-row gap-4 flex-grow min-h-0">
                 <div
@@ -7863,6 +8208,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                         systemNoteHitPointsRef.current[systemIndex] = points;
                                                                 }}
                                 ghostNote={ghost}
+                                                                engravingMode={engravingMode}
+                                                                showVoiceColors={showVoiceColors}
                               />
                             </RenderErrorBoundary> {/* FIX: this closing tag was missing */}
 
@@ -8095,6 +8442,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanW + 6;
 
+                                                                                        const pcsDebug = (() => {
+                                                                                            try {
+                                                                                                if (!showHarmonyDebug) return null;
+                                                                                                const s = String((lbl as any).pcsSig || '').trim();
+                                                                                                return s ? s : null;
+                                                                                            } catch {
+                                                                                                return null;
+                                                                                            }
+                                                                                        })();
+
                                                                                         // Harmony hold-line: extend from end of this label to the next *visible* label.
                                                                                         // NOTE: we do NOT trust array order here; use x-position to find the next obstacle.
                                                                                         const nextVisible = (() => {
@@ -8324,6 +8681,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({ isActive, audioServ
                                                                                                                     strokeWidth={2}
                                                                                                                     strokeLinecap="butt"
                                                                                                                 />
+
+                                                                                                                {pcsDebug && (
+                                                                                                                    <text
+                                                                                                                        x={romanX}
+                                                                                                                        y={romanBelowY + 12}
+                                                                                                                        textAnchor="start"
+                                                                                                                        fontSize={10}
+                                                                                                                        fontWeight={600}
+                                                                                                                        fill="black"
+                                                                                                                        opacity={0.6}
+                                                                                                                    >
+                                                                                                                        {pcsDebug}
+                                                                                                                    </text>
+                                                                                                                )}
                                                                                                                 {(() => {
                                                                                                                     if (hasSuspFigure) return null;
 
