@@ -24,7 +24,7 @@ interface VexflowGrandStaffProps {
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
   showVoiceColors?: boolean;
-  timeSignatureChanges?: Array<{ x: number; numerator: number; denominator: number }>;
+  timeSignatureChanges?: Array<{ x: number; numerator: number; denominator: number; measureIndex?: number }>;
 }
 
 const DEFAULT_WIDTH = 900;

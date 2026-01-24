@@ -511,6 +511,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [clipboard, setClipboard] = useState<StaffNote[] | null>(null);
     // Ref per clipboard aggiornata
     const latestClipboardRef = useRef<StaffNote[] | null>(clipboard);
+    const pasteToSelectedVoiceRef = useRef(false);
+    const skipPlayheadRefineOnceRef = useRef(false);
     useEffect(() => {
         latestClipboardRef.current = clipboard;
     }, [clipboard]);
@@ -1878,6 +1880,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 keyChangeMode,
                 modalTonicOverride,
                 analysisContexts,
+                doubleBarlineMeasures,
                 harmonyOverrides: latestHarmonyOverrides.current,
                 bpm,
                 isBpmActive,
@@ -2076,6 +2079,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (Array.isArray(loadedProject.analysisContexts)) {
                         setAnalysisContexts(loadedProject.analysisContexts);
                     }
+                    if (Array.isArray(loadedProject.doubleBarlineMeasures)) {
+                        const cleaned = loadedProject.doubleBarlineMeasures
+                            .map((m: any) => Number(m))
+                            .filter((m: any) => Number.isFinite(m) && m >= 0)
+                            .sort((a: number, b: number) => a - b);
+                        setDoubleBarlineMeasures(cleaned);
+                    }
                     if (Array.isArray(loadedProject.harmonyOverrides)) {
                         setHarmonyOverrides(loadedProject.harmonyOverrides);
                     }
@@ -2111,8 +2121,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setRawNotes([]);
                 setProjectTitle('');
                 setCurrentProjectFilePath(null);
+                setKeySignatureRoot('C');
+                setIsMinorMode(false);
+                setTimeSignature({ numerator: 4, denominator: 4 });
                 setHarmonyOverrides([]);
+                setAnalysisContexts([]);
                 setTimeSignatureChanges([]);
+                setDoubleBarlineMeasures([]);
+                setKeyChangeMode('none');
+                setModalTonicOverride('');
+                setAutoLeadingToneInMinor(true);
+                setMeasuresPerLine(4);
+                setMeasuresPerLineDraft('4');
+                setMinMeasureCount(4);
+                setMinMeasureCountDraft('4');
+                setBpm(120);
+                setIsBpmActive(false);
+                setIsMetronomeOn(false);
+                setMetronomeUnit('quarter');
+                setClipboard(null);
+                setSelectedNoteIds(new Set());
+                setPasteCaret(null);
+                setActiveAccidental(null);
+                setSelectedVoice(1);
             }
         } else if (action === 'set-show-measure-numbers') {
             setShowMeasureNumbers(!!payload?.enabled);
@@ -2317,6 +2348,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const next = (prev || []).filter(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) > 1e-6);
             next.push({ absBeat: safeAbsBeat, newTonic, newIsMinor, label: label?.trim() || undefined });
             return next.sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b));
+        });
+        setContextMenu(null);
+    };
+
+    const handleApplyContextLabelOnly = (absBeat: number, label?: string) => {
+        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        const cleanLabel = label?.trim() || undefined;
+
+        setAnalysisContexts(prev => {
+            const existing = (prev || []).find(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6);
+            if (existing) {
+                return (prev || []).map(c => (Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6)
+                    ? { ...c, label: cleanLabel }
+                    : c
+                );
+            }
+            const baseCtx = (prev || [])
+                .filter(c => analysisContextAbsBeat(c) <= safeAbsBeat + 1e-6)
+                .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
+            const baseTonic = baseCtx?.newTonic ?? currentTonic;
+            const baseIsMinor = baseCtx?.newIsMinor ?? isMinorMode;
+            const next = (prev || []).slice();
+            next.push({ absBeat: safeAbsBeat, newTonic: baseTonic, newIsMinor: baseIsMinor, label: cleanLabel });
+            return next.sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b));
+        });
+        setContextMenu(null);
+    };
+
+    const handleRemoveContextLabelOnly = (absBeat: number) => {
+        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        setAnalysisContexts(prev => {
+            const existing = (prev || []).find(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6);
+            if (!existing) return prev || [];
+            if (!existing.label) return prev || [];
+            return (prev || []).map(c => (Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6)
+                ? { ...c, label: undefined }
+                : c
+            );
         });
         setContextMenu(null);
     };
@@ -3704,6 +3773,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const s = getChordSymbol((fullNotes || []) as any, contextKeySignature, contextTonic);
                 if (s) symbol = s;
 
+                // Fallback for tonic minor-maj7: if symbol matches and roman is still empty, show I7.
+                try {
+                    if (!roman && symbol && contextIsMinor) {
+                        const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
+                        if (/m\(maj7\)|mmaj7|minmaj7/i.test(sym)) {
+                            const rootMatch = sym.match(/^([A-G])([#b]?)/);
+                            const rootName = rootMatch ? `${rootMatch[1]}${rootMatch[2] || ''}` : '';
+                            const rootPc = rootName ? noteNameToChromaticIndex(rootName) : null;
+                            const tonicPc = contextTonic ? noteNameToChromaticIndex(contextTonic) : null;
+                            if (rootPc != null && tonicPc != null && rootPc === tonicPc) {
+                                roman = 'I7';
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
+
                 // If the chord symbol explicitly indicates a slash (e.g. D7/F#),
                 // prefer roman derived from the *symbol root*.
                 // Under suspensions/ties, identifyChordCandidates can mis-root and collapse
@@ -4154,7 +4239,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (!isSuspensionOnsetHere && hasClassic && !hasNonClassic) {
                         // Only suppress if the harmony is unchanged (avoid hiding a real change).
                         const prevRoman = lastRomanBySystem.get(systemIndex) || '';
-                        if (!roman || roman === prevRoman) {
+                        const isMinorMajor7 = (() => {
+                            const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
+                            return /m\(maj7\)|mmaj7|minmaj7/i.test(sym);
+                        })();
+                        if ((!roman || roman === prevRoman) && !isMinorMajor7) {
                             roman = '';
                             figures = [];
                             symbol = '';
@@ -4254,9 +4343,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData || analysisContexts.length === 0) return [] as { x: number; label: string }[][];
 
         const formatLabel = (ctx: AnalysisContext) => {
-            if (ctx.label && String(ctx.label).trim()) return String(ctx.label).trim();
             const quality = ctx.newIsMinor ? 'min' : 'Maj';
-            return `[ ${ctx.newTonic} ${quality} ]`;
+            const tonicLabel = `[ ${ctx.newTonic} ${quality} ]`;
+            const custom = ctx.label && String(ctx.label).trim() ? String(ctx.label).trim() : '';
+            return custom ? `${custom} ${tonicLabel}` : tonicLabel;
         };
 
         const markersBySystem: { x: number; label: string }[][] = layoutData.systemsParams.map(() => []);
@@ -4306,9 +4396,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [analysisContextAbsBeat, analysisContexts, layoutData, timeSignature]);
 
     const timeSignatureMarkersBySystem = useMemo(() => {
-        if (!layoutData || timeSignatureChanges.length === 0) return [] as { x: number; numerator: number; denominator: number }[][];
+        if (!layoutData || timeSignatureChanges.length === 0) return [] as { x: number; numerator: number; denominator: number; measureIndex: number }[][];
 
-        const markersBySystem: { x: number; numerator: number; denominator: number }[][] = layoutData.systemsParams.map(() => []);
+        const markersBySystem: { x: number; numerator: number; denominator: number; measureIndex: number }[][] = layoutData.systemsParams.map(() => []);
         const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
         const measureBeats = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
         const findMeasureIndexForAbsBeat = (ab: number): number => {
@@ -4337,7 +4427,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (sysIndex < 0) continue;
             const system = layoutData.systemsParams[sysIndex];
             const x = getXForMeasureStart(system, measureIndex);
-            markersBySystem[sysIndex].push({ x, numerator: tc.numerator, denominator: tc.denominator });
+            markersBySystem[sysIndex].push({ x, numerator: tc.numerator, denominator: tc.denominator, measureIndex });
         }
 
         markersBySystem.forEach(ms => ms.sort((a, b) => a.x - b.x));
@@ -5313,17 +5403,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const targetAbsBeat = (targetMeasureIndex * beatsPerMeasure) + (targetBeat - 1);
+        const measureStarts = (layoutDataRef.current as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeats = (layoutDataRef.current as any)?.measureBeatsPerMeasure as number[] | undefined;
+
+        const absBeatForNote = (n: any) => {
+            const m = Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : 0;
+            const b = Number.isFinite(n?.beat) ? Number(n.beat) : 1;
+            const start = (measureStarts && measureStarts[m] != null)
+                ? measureStarts[m]
+                : (m * beatsPerMeasure);
+            return start + (b - 1);
+        };
+
+        const targetAbsBeat = (measureStarts && measureStarts[targetMeasureIndex] != null)
+            ? (measureStarts[targetMeasureIndex] + (targetBeat - 1))
+            : ((targetMeasureIndex * beatsPerMeasure) + (targetBeat - 1));
 
         const srcAbsBeats = dataToPaste
-            .map(n => {
-                const m = n.measureIndex ?? 0;
-                const b = n.beat ?? 1;
-                return (m * beatsPerMeasure) + (b - 1);
-            })
+            .map(n => absBeatForNote(n))
             .filter(Number.isFinite);
         const baseAbsBeat = srcAbsBeats.length ? Math.min(...srcAbsBeats) : 0;
         const delta = targetAbsBeat - baseAbsBeat;
+
+        const findMeasureIndexForAbsBeat = (abs: number): number => {
+            if (!measureStarts || measureStarts.length === 0) {
+                return Math.floor(abs / beatsPerMeasure);
+            }
+            for (let m = measureStarts.length - 1; m >= 0; m--) {
+                if (abs >= (measureStarts[m] ?? 0) - 1e-9) return m;
+            }
+            return 0;
+        };
 
         const chordIdMap = new Map<string, string>();
         const groupIdMap = new Map<string, string>();
@@ -5334,22 +5444,57 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return map.get(id)!;
         };
 
+        const buildMeasureRestSegments = (totalBeats: number): Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> => {
+            const EPS = 1e-6;
+            const baseDurations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'thirty-second', 'sixty-fourth'] as any;
+            const candidates: Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> = [];
+            for (const d of baseDurations) {
+                const b = (DURATION_VALUES as any)[d] as number;
+                if (!Number.isFinite(b) || b <= 0) continue;
+                candidates.push({ duration: d, isDotted: false, beats: b });
+                candidates.push({ duration: d, isDotted: true, beats: b * 1.5 });
+            }
+            candidates.sort((a, b) => b.beats - a.beats);
+
+            let remaining = totalBeats;
+            const out: Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> = [];
+            while (remaining > EPS) {
+                const pick = candidates.find(c => c.beats <= remaining + EPS);
+                if (!pick) break;
+                out.push(pick);
+                remaining -= pick.beats;
+                if (out.length > 32) break;
+            }
+            return out;
+        };
+
+        const forceSelectedVoice = pasteToSelectedVoiceRef.current;
         const pasted: StaffNote[] = dataToPaste
             .map(n => {
                 const m = n.measureIndex ?? 0;
                 const b = n.beat ?? 1;
-                const abs = (m * beatsPerMeasure) + (b - 1) + delta;
+                const abs = absBeatForNote(n) + delta;
                 if (!Number.isFinite(abs) || abs < 0) return null;
 
-                const newMeasureIndex = Math.floor(abs / beatsPerMeasure);
-                const inMeasure = abs - (newMeasureIndex * beatsPerMeasure);
+                const newMeasureIndex = findMeasureIndexForAbsBeat(abs);
+                const bpmLocal = (measureBeats && measureBeats[newMeasureIndex])
+                    ? measureBeats[newMeasureIndex]
+                    : beatsPerMeasure;
+                const startLocal = (measureStarts && measureStarts[newMeasureIndex] != null)
+                    ? measureStarts[newMeasureIndex]
+                    : (newMeasureIndex * bpmLocal);
+                const inMeasure = abs - startLocal;
                 const newBeat = Math.round((inMeasure + 1) * 1e6) / 1e6;
 
                 const { xPosition, ...rest } = n as any;
 
                 try {
-                    const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
-                    const absBeat = (newMeasureIndex * beatsPerMeasureLocal) + (newBeat - 1);
+                    const beatsPerMeasureLocal = (measureBeats && measureBeats[newMeasureIndex])
+                        ? measureBeats[newMeasureIndex]
+                        : (timeSignature.numerator * (4 / timeSignature.denominator));
+                    const absBeat = ((measureStarts && measureStarts[newMeasureIndex] != null)
+                        ? measureStarts[newMeasureIndex]
+                        : (newMeasureIndex * beatsPerMeasureLocal)) + (newBeat - 1);
                     const startTick = Math.round(absBeat * TICKS_PER_QUARTER);
                     const base = (DURATION_VALUES as any)[(n as any).duration || 'quarter'] || 1;
                     let durBeats = base;
@@ -5358,6 +5503,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if ((n as any).isDuplet) durBeats *= 3 / 2;
                     const durationTicks = Math.round(durBeats * TICKS_PER_QUARTER);
 
+                    const targetVoice = forceSelectedVoice ? selectedVoice : ((n as any).voice ?? selectedVoice);
                     return {
                         ...(rest as StaffNote),
                         id: crypto.randomUUID(),
@@ -5365,20 +5511,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         beat: newBeat,
                         startTick,
                         durationTicks,
-                        voice: selectedVoice,
-                        clef: clefForVoice(selectedVoice),
+                        voice: targetVoice,
+                        clef: clefForVoice(targetVoice as any),
                         chordId: remapId(chordIdMap, (n as any).chordId),
                         groupId: remapId(groupIdMap, (n as any).groupId),
                         manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
                     };
                 } catch (e) {
+                    const targetVoice = forceSelectedVoice ? selectedVoice : ((n as any).voice ?? selectedVoice);
                     return {
                         ...(rest as StaffNote),
                         id: crypto.randomUUID(),
                         measureIndex: newMeasureIndex,
                         beat: newBeat,
-                        voice: selectedVoice,
-                        clef: clefForVoice(selectedVoice),
+                        voice: targetVoice,
+                        clef: clefForVoice(targetVoice as any),
                         chordId: remapId(chordIdMap, (n as any).chordId),
                         groupId: remapId(groupIdMap, (n as any).groupId),
                         manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
@@ -5388,7 +5535,52 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             .filter(Boolean) as StaffNote[];
 
         if (pasted.length > 0) {
-            setRawNotes(prev => [...prev, ...pasted]);
+            const targetVoices = Array.from(new Set(pasted.map(n => Number((n as any).voice ?? selectedVoice)))).filter(v => Number.isFinite(v));
+
+            setRawNotes(prev => {
+                const existingNotes = prev || [];
+                const missingRests: StaffNote[] = [];
+
+                const hasNoteInVoiceMeasure = (voice: number, measureIndex: number) =>
+                    existingNotes.some(n => Number((n as any).voice ?? -1) === voice && Number(n.measureIndex ?? -1) === measureIndex);
+
+                for (const v of targetVoices) {
+                    for (let m = 0; m < targetMeasureIndex; m++) {
+                        if (hasNoteInVoiceMeasure(v, m)) continue;
+                        const beatsLocal = (measureBeats && measureBeats[m]) ? measureBeats[m] : beatsPerMeasure;
+                        const startAbs = (measureStarts && measureStarts[m] != null) ? measureStarts[m] : (m * beatsLocal);
+                        const startTick = Math.round(startAbs * TICKS_PER_QUARTER);
+                        const segs = buildMeasureRestSegments(beatsLocal);
+                        let localTicks = 0;
+                        const clef = clefForVoice(v as any);
+                        for (const seg of segs) {
+                            const durationTicks = Math.max(1, Math.round(seg.beats * TICKS_PER_QUARTER));
+                            missingRests.push({
+                                id: crypto.randomUUID(),
+                                pitch: 'B',
+                                octave: clef === 'bass' ? 2 : 4,
+                                position: clef === 'bass' ? 4 : 8,
+                                midi: 0,
+                                noteIndex: 0,
+                                duration: seg.duration,
+                                isRest: true,
+                                isTriplet: false,
+                                isDuplet: false,
+                                isDotted: seg.isDotted,
+                                measureIndex: m,
+                                beat: (localTicks / TICKS_PER_QUARTER) + 1,
+                                startTick: startTick + localTicks,
+                                durationTicks,
+                                clef,
+                                voice: v as any,
+                            });
+                            localTicks += durationTicks;
+                        }
+                    }
+                }
+
+                return [...existingNotes, ...missingRests, ...pasted];
+            });
             setSelectedNoteIds(new Set(pasted.map(n => n.id)));
 
             // After a tick, log positions to compare pre/post paste
@@ -5470,6 +5662,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             }, 60);
         }
+        pasteToSelectedVoiceRef.current = false;
     }, [clefForVoice, selectedVoice, setRawNotes, setSelectedNoteIds, timeSignature]);
 
     const getSystemMeasureAtX = useCallback((systemIndex: number, x: number) => {
@@ -5595,6 +5788,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         if (isPlaying) return;
         if (!layoutData) return;
+        if (skipPlayheadRefineOnceRef.current) {
+            skipPlayheadRefineOnceRef.current = false;
+            return;
+        }
 
         const absBeat = playbackCursorAbsBeatRef.current;
         if (!Number.isFinite(absBeat as any)) return;
@@ -5658,6 +5855,79 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const beat = Math.round(((absBeat - (measureIndex * beatsPerMeasure)) + 1) * 1e6) / 1e6;
         return { measureIndex, beat };
     }, [layoutData, timeSignature]);
+
+    const fillEmptyMeasuresWithRests = useCallback((voice: number, upToMeasureIndex: number) => {
+        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeats = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+
+        const buildMeasureRestSegments = (totalBeats: number): Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> => {
+            const EPS = 1e-6;
+            const baseDurations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'thirty-second', 'sixty-fourth'] as any;
+            const candidates: Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> = [];
+            for (const d of baseDurations) {
+                const b = (DURATION_VALUES as any)[d] as number;
+                if (!Number.isFinite(b) || b <= 0) continue;
+                candidates.push({ duration: d, isDotted: false, beats: b });
+                candidates.push({ duration: d, isDotted: true, beats: b * 1.5 });
+            }
+            candidates.sort((a, b) => b.beats - a.beats);
+
+            let remaining = totalBeats;
+            const out: Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> = [];
+            while (remaining > EPS) {
+                const pick = candidates.find(c => c.beats <= remaining + EPS);
+                if (!pick) break;
+                out.push(pick);
+                remaining -= pick.beats;
+                if (out.length > 32) break;
+            }
+            return out;
+        };
+
+        setRawNotes(prev => {
+            const existing = prev || [];
+            const missingRests: StaffNote[] = [];
+            const hasNoteInVoiceMeasure = (measureIndex: number) =>
+                existing.some(n => Number((n as any).voice ?? -1) === voice && Number(n.measureIndex ?? -1) === measureIndex);
+
+            for (let m = 0; m < upToMeasureIndex; m++) {
+                if (hasNoteInVoiceMeasure(m)) continue;
+                const beatsLocal = (measureBeats && measureBeats[m]) ? measureBeats[m] : beatsPerMeasure;
+                const startAbs = (measureStarts && measureStarts[m] != null) ? measureStarts[m] : (m * beatsLocal);
+                const startTick = Math.round(startAbs * TICKS_PER_QUARTER);
+                const segs = buildMeasureRestSegments(beatsLocal);
+                let localTicks = 0;
+                const clef = clefForVoice(voice as any);
+                for (const seg of segs) {
+                    const durationTicks = Math.max(1, Math.round(seg.beats * TICKS_PER_QUARTER));
+                    missingRests.push({
+                        id: crypto.randomUUID(),
+                        pitch: 'B',
+                        octave: clef === 'bass' ? 2 : 4,
+                        position: clef === 'bass' ? 4 : 8,
+                        midi: 0,
+                        noteIndex: 0,
+                        duration: seg.duration,
+                        isRest: true,
+                        isTriplet: false,
+                        isDuplet: false,
+                        isDotted: seg.isDotted,
+                        measureIndex: m,
+                        beat: (localTicks / TICKS_PER_QUARTER) + 1,
+                        startTick: startTick + localTicks,
+                        durationTicks,
+                        clef,
+                        voice: voice as any,
+                    });
+                    localTicks += durationTicks;
+                }
+            }
+
+            if (!missingRests.length) return existing;
+            return [...existing, ...missingRests];
+        });
+    }, [clefForVoice, layoutData, setRawNotes, timeSignature]);
 
     // (No external-paste handler)
 
@@ -5910,7 +6180,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const absBeat = Math.max(0, Math.round((((layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex] ?? (hit.measureIndex * beatsPerMeasure)) + (beat - 1)) * 1e6) / 1e6);
             setHarmonyOverrideMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex: hit.measureIndex, beat });
         }
-    }, [getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
+    }, [getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion, selectedVoice, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
 
     const qAbsForOverrides = useCallback((x: number) => {
         try {
@@ -5969,10 +6239,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!hit) return;
 
         // --- SNAP 100% tick-based (no beat-float snap) ---
-        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeats = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex]
+            ?? (hit.measureIndex * (timeSignature.numerator * (4 / timeSignature.denominator)));
+        const beatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure?.[hit.measureIndex]
+            ?? (timeSignature.numerator * (4 / timeSignature.denominator));
         const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
 
-        const measureStartTick = hit.measureIndex * ticksPerMeasure;
+        const measureStartTick = Math.round(measureStartAbsBeat * TICKS_PER_QUARTER);
         const measureEndTick = measureStartTick + ticksPerMeasure;
         void measureEndTick; // keep for clarity/debugging (clamp is local)
 
@@ -6002,7 +6277,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Example (6/4): a half note (2 beats) should be placeable at beat 4, not only at beats 1/3/5.
         // We cap the snap grid to 1 beat (quarter) so longer notes can still start on any beat.
         // In compound meters (e.g. 6/8), cap at the 8th grid so quarters can start on any 8th.
-        const isCompound = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+        const tsAtMeasureStart = getTimeSignatureAtAbsBeat(measureStartAbsBeat);
+        const isCompound = tsAtMeasureStart.denominator === 8 && (tsAtMeasureStart.numerator % 3 === 0) && tsAtMeasureStart.numerator > 3;
         const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
         const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
         const snapGridTicks = (e as any)?.shiftKey
@@ -6083,6 +6359,70 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Option/Alt+Click: selection-only gesture (no insertion).
         if (e?.altKey) return;
 
+        const appendMissingRestsForVoice = (prev: StaffNote[], voice: number, upToMeasureIndex: number): StaffNote[] => {
+            const buildMeasureRestSegments = (totalBeats: number): Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> => {
+                const EPS = 1e-6;
+                const baseDurations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'thirty-second', 'sixty-fourth'] as any;
+                const candidates: Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> = [];
+                for (const d of baseDurations) {
+                    const b = (DURATION_VALUES as any)[d] as number;
+                    if (!Number.isFinite(b) || b <= 0) continue;
+                    candidates.push({ duration: d, isDotted: false, beats: b });
+                    candidates.push({ duration: d, isDotted: true, beats: b * 1.5 });
+                }
+                candidates.sort((a, b) => b.beats - a.beats);
+
+                let remaining = totalBeats;
+                const out: Array<{ duration: NoteDuration; isDotted: boolean; beats: number }> = [];
+                while (remaining > EPS) {
+                    const pick = candidates.find(c => c.beats <= remaining + EPS);
+                    if (!pick) break;
+                    out.push(pick);
+                    remaining -= pick.beats;
+                    if (out.length > 32) break;
+                }
+                return out;
+            };
+
+            const hasNoteInVoiceMeasure = (measureIndex: number) =>
+                prev.some(n => Number((n as any).voice ?? -1) === voice && Number(n.measureIndex ?? -1) === measureIndex);
+
+            const missingRests: StaffNote[] = [];
+            for (let m = 0; m < upToMeasureIndex; m++) {
+                if (hasNoteInVoiceMeasure(m)) continue;
+                const beatsLocal = (measureBeats && measureBeats[m]) ? measureBeats[m] : beatsPerMeasure;
+                const startAbs = (measureStarts && measureStarts[m] != null) ? measureStarts[m] : (m * beatsLocal);
+                const startTick = Math.round(startAbs * TICKS_PER_QUARTER);
+                const segs = buildMeasureRestSegments(beatsLocal);
+                let localTicks = 0;
+                const clef = clefForVoice(voice as any);
+                for (const seg of segs) {
+                    const durationTicks = Math.max(1, Math.round(seg.beats * TICKS_PER_QUARTER));
+                    missingRests.push({
+                        id: crypto.randomUUID(),
+                        pitch: 'B',
+                        octave: clef === 'bass' ? 2 : 4,
+                        position: clef === 'bass' ? 4 : 8,
+                        midi: 0,
+                        noteIndex: 0,
+                        duration: seg.duration,
+                        isRest: true,
+                        isTriplet: false,
+                        isDuplet: false,
+                        isDotted: seg.isDotted,
+                        measureIndex: m,
+                        beat: (localTicks / TICKS_PER_QUARTER) + 1,
+                        startTick: startTick + localTicks,
+                        durationTicks,
+                        clef,
+                        voice: voice as any,
+                    });
+                    localTicks += durationTicks;
+                }
+            }
+            return missingRests.length ? [...prev, ...missingRests] : prev;
+        };
+
         if (selectedInsertion.type === 'rest') {
             // Strict manual rest insertion: use same snap/duration logic as notes, replace overlapping events, rebuild timeline for slot
             const rest: StaffNote = {
@@ -6105,8 +6445,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 voice: selectedVoice,
             };
             setRawNotes(prev => {
+                const withRests = appendMissingRestsForVoice(prev, Number(selectedVoice), hit.measureIndex);
                 // Replace anything overlapping this rest in tick-space.
-                const filtered = prev.filter(n => {
+                const filtered = withRests.filter(n => {
                     if (n.measureIndex !== rest.measureIndex) return true;
                     if ((n.voice as any) !== (rest.voice as any)) return true;
                     const r = getTickRangeForEvent(n);
@@ -6228,7 +6569,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         setRawNotes(prev => {
             // Replace anything overlapping this note in tick-space.
-            const filtered = prev.filter(n => {
+            const withRests = appendMissingRestsForVoice(prev, Number(selectedVoice), hit.measureIndex);
+            const filtered = withRests.filter(n => {
                 if (n.measureIndex !== newNote.measureIndex) return true;
                 if ((n.voice as any) !== (newNote.voice as any)) return true;
                 const r = getTickRangeForEvent(n);
@@ -7243,9 +7585,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             // Cmd/Ctrl+V: arm paste mode (next click selects paste location)
-            if (isMod && key === 'v') {
+            if (isMod && (key === 'v' || (e as any).code === 'KeyV')) {
                 e.preventDefault();
                 e.stopPropagation();
+
+                const clip = latestClipboardRef.current || [];
+                const voicesInClip = new Set(clip.map(n => (n as any).voice).filter(v => v != null));
+                const isSingleVoiceClip = voicesInClip.size <= 1;
+                pasteToSelectedVoiceRef.current = isSingleVoiceClip;
 
                 // Se clipboard locale è vuota, prova a leggere dagli appunti di sistema
                 if ((!clipboard || clipboard.length === 0) && navigator.clipboard && window.isSecureContext) {
@@ -7266,6 +7613,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
 
                 // Standard UX: paste at the current paste caret.
+                // Shift+Paste: force voice mapping and paste at playhead position.
                 if (pasteCaret && clipboard && clipboard.length > 0) {
                     pasteClipboardAt(pasteCaret.measureIndex, pasteCaret.beat);
                 }
@@ -8556,11 +8904,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 </div>
                                                         )}
                                                         <RenderErrorBoundary label={`VexflowGrandStaff(system ${systemIndex})`} onReset={resetVexflow}>
+                                                            {(() => {
+                                                                const systemStartMeasureIndex = layoutData?.systemsParams?.[systemIndex]?.measureIndices?.[0] ?? 0;
+                                                                const systemStartAbsBeat = (layoutData as any)?.measureStartAbsBeat?.[systemStartMeasureIndex]
+                                                                    ?? (systemStartMeasureIndex * (timeSignature.numerator * (4 / timeSignature.denominator)));
+                                                                const systemTimeSignature = getTimeSignatureAtAbsBeat(systemStartAbsBeat);
+                                                                const systemMarkers = (timeSignatureMarkersBySystem?.[systemIndex] || [])
+                                                                    .filter(m => m.measureIndex !== systemStartMeasureIndex);
+                                                                return (
                                                             <VexflowGrandStaff
                                 key={`vf-${systemIndex}-${vexflowNonce}`}
                                                                 notes={systemNotesForRender}
-                                timeSignature={timeSignature}
-                                timeSignatureChanges={timeSignatureMarkersBySystem?.[systemIndex] || []}
+                                timeSignature={systemTimeSignature}
+                                timeSignatureChanges={systemMarkers}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
                                 width={actualSystemWidth}
@@ -8580,6 +8936,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 engravingMode={engravingMode}
                                                                 showVoiceColors={showVoiceColors}
                               />
+                                                                                                                                );
+                                                                                                                        })()}
                             </RenderErrorBoundary> {/* FIX: this closing tag was missing */}
 
                                                         {/* Overlay: playhead */}
@@ -8723,7 +9081,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     <text
                                                                         key={`ctx-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        y={staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y - 12) : (TOP_STAFF_TOP - 12)}
+                                                                        y={staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4)}
                                                                         textAnchor="start"
                                                                         fontSize={11}
                                                                         fontWeight={600}
@@ -9635,6 +9993,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     menuData={contextMenu}
                     onClose={() => setContextMenu(null)}
                     onApply={handleApplyContext}
+                    onApplyLabel={handleApplyContextLabelOnly}
+                    onRemoveLabel={handleRemoveContextLabelOnly}
                     onRemove={handleRemoveContext}
                     onApplyTimeSignature={handleApplyTimeSignatureChange}
                     onRemoveTimeSignature={handleRemoveTimeSignatureChange}
@@ -9691,6 +10051,8 @@ const ModulationContextMenu: React.FC<{
     menuData: { x: number; y: number; absBeat: number; measureIndex: number; beat: number };
     onClose: () => void;
     onApply: (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => void;
+    onApplyLabel: (absBeat: number, label?: string) => void;
+    onRemoveLabel: (absBeat: number) => void;
     onRemove: (absBeat: number) => void;
     onApplyTimeSignature: (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => void;
     onRemoveTimeSignature: (absBeat: number) => void;
@@ -9698,7 +10060,7 @@ const ModulationContextMenu: React.FC<{
     initialIsMinor: boolean;
     initialLabel?: string;
     initialTimeSignature: TimeSignature;
-}> = ({ menuData, onClose, onApply, onRemove, onApplyTimeSignature, onRemoveTimeSignature, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
+}> = ({ menuData, onClose, onApply, onApplyLabel, onRemoveLabel, onRemove, onApplyTimeSignature, onRemoveTimeSignature, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
     const [tempLabel, setTempLabel] = useState(initialLabel || '');
@@ -9746,6 +10108,10 @@ const ModulationContextMenu: React.FC<{
                     <button onClick={() => setTempIsMinor(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>min</button>
                 </div>
             </div>
+            <div className="flex gap-2">
+                <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Inserisci</button>
+                <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
+            </div>
             <div className="flex flex-col gap-2">
                 <label className="text-xs text-gray-300">Cambio di tempo (opzionale)</label>
                 <div className="flex items-center gap-2">
@@ -9774,10 +10140,9 @@ const ModulationContextMenu: React.FC<{
                     placeholder="Es. Modulazione a Do Maggiore"
                 />
             </div>
-            <div className="flex gap-2 mt-2">
-                <button onClick={handleApplyClick} className="flex-1 px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Applica</button>
-                <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
-                <button onClick={onClose} className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors">Annulla</button>
+            <div className="flex gap-2">
+                <button onClick={() => onApplyLabel(menuData.absBeat, tempLabel)} className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors">Inserisci</button>
+                <button onClick={() => onRemoveLabel(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
             </div>
         </div>
     );

@@ -1318,6 +1318,11 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
 
         score += (CHORD_CHECK_ORDER.length - candidate.priority);
 
+        // Prefer exact tertian 7th chords (especially ø7/°7) even when inverted.
+        if (candidate.matchType === 'exact' && (candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7)) {
+            score += 30;
+        }
+
         // Guardrail: do not classify a sonority as a dominant-type chord unless it actually
         // contains the dominant 7th (minor 7th above the root). This prevents false V/x
         // labels caused by added 9ths/13ths without a tritone-bearing core.
@@ -1398,6 +1403,9 @@ export function identifyChordCandidates(notes: StaffNote[]) {
         else if (candidate.matchType === 'no_fifth') score += 10;
         else if (candidate.matchType === 'no_third') score += 9;
         score += (CHORD_CHECK_ORDER.length - candidate.priority);
+        if (candidate.matchType === 'exact' && (candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7)) {
+            score += 30;
+        }
         const isSymmetricDim7 = candidate.type === BuiltInChords.Diminished7;
         const allowBassRootBonus = !hasExactSeventhCandidate || !isSixthChord(candidate.type) || isSeventhLike(candidate.type);
         if (!isSymmetricDim7 && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
@@ -1679,7 +1687,7 @@ export function getChordSymbol(
     try {
         const q = String(quality || '');
         const isSeventhLike = q.includes('7') || q.startsWith('Dominant');
-        if (isSeventhLike && quality !== BuiltInChords.MinorMajor7) {
+        if (isSeventhLike && quality !== BuiltInChords.MinorMajor7 && quality !== BuiltInChords.Diminished7 && quality !== BuiltInChords.Minor7b5) {
             const allPcs = new Set<number>((chord || []).filter(n => n && !n.isRest).map(pitchClassOf).map(mod12));
             const ints = new Set<number>([...allPcs].map(pc => mod12(pc - chordRootPc)));
             const already = analysisText;
@@ -1950,6 +1958,10 @@ function calculateRomanNumeral(
         return roman;
     }
 
+    if (isMinorMode && degreeIndex === 0 && quality === BuiltInChords.MinorMajor7) {
+        return 'I7';
+    }
+
     let roman = romanNumerals[degreeIndex];
     const effectiveQuality = (quality === BuiltInChords.Add9) ? BuiltInChords.Major : quality;
 
@@ -2067,6 +2079,24 @@ export function getRomanAnalysis(
                         return { roman, figures: figuresL2 };
                     }
                 }
+            }
+        }
+    } catch { /* ignore */ }
+
+    // Prefer clear leading-tone half-diminished 7th (viiø7) when the full tertian set is present.
+    try {
+        const pcs = [...new Set((baseChord || []).map(pitchClassOf).map(mod12))];
+        if (pcs.length >= 4) {
+            const leadingPc = mod12(keyInfo.tonicIndex - 1);
+            const halfDimSet = new Set<number>([
+                leadingPc,
+                mod12(leadingPc + 3),
+                mod12(leadingPc + 6),
+                mod12(leadingPc + 10),
+            ]);
+            const hasAll = [...halfDimSet].every(pc => pcs.includes(pc));
+            if (hasAll) {
+                return { roman: 'viiø7', figures: figuresL2 };
             }
         }
     } catch { /* ignore */ }
@@ -2237,8 +2267,8 @@ export function getRomanAnalysis(
     let chordInfo = identifyChord(filteredChord);
 
     // Rescue: if filtering ornaments accidentally removes an essential chord tone and
-    // collapses a dominant-function sonority (common with V7/V resolutions), prefer the
-    // unfiltered vertical *only when* it yields a dominant-type chord.
+    // collapses a 7th-chord sonority, prefer the unfiltered vertical when it yields a
+    // clear tertian 7th (including ø7).
     try {
         const isDominantType = (t: any) => typeof t === 'string' && t.startsWith('Dominant');
         const allInfo = identifyChord(baseChord);
@@ -2270,6 +2300,22 @@ export function getRomanAnalysis(
                 const filteredRoman = chordInfo ? calculateRomanNumeral(chordInfo, keyInfo) : '';
                 if (typeof allRoman === 'string' && allRoman.startsWith('V/') && !(String(filteredRoman || '').startsWith('V/'))) {
                     chordInfo = allInfo;
+                }
+            } catch { /* ignore */ }
+
+            // Case 3: exact 7th-chord rescue (e.g. Bø7 over F should not collapse to ii).
+            try {
+                const isSeventhLike = (t: string) => {
+                    const s = String(t || '');
+                    return s.includes('7') || s.includes('9') || s.includes('11') || s.includes('13');
+                };
+                const filteredIsSeventh = chordInfo && isSeventhLike(chordInfo.type);
+                if (!hasDissonantSuspensionTone && !filteredIsSeventh) {
+                    const fullCandidates = identifyChordCandidates(baseChord);
+                    const bestExactSeventh = (fullCandidates || []).find(c => c.matchType === 'exact' && isSeventhLike(c.type));
+                    if (bestExactSeventh) {
+                        chordInfo = { root: bestExactSeventh.root, type: bestExactSeventh.type, intervals: bestExactSeventh.intervals };
+                    }
                 }
             } catch { /* ignore */ }
         }
