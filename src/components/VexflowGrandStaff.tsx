@@ -1101,6 +1101,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Compute an inset (move accidentals closer to the cluster) for multi-voice onsets
         // that do NOT contain seconds (we don't want to disturb the close-position rules).
         const openPositionAccidentalInsetById = new Map<string, number>();
+        const systemStartMeasureIndex = (() => {
+          try {
+            const indices = (staffNotes || [])
+              .map(n => Number((n as any)?.measureIndex))
+              .filter(n => Number.isFinite(n));
+            return indices.length ? Math.min(...indices) : null;
+          } catch {
+            return null;
+          }
+        })();
         if (isTightTreble && enableEngravingEnhancements) {
           try {
             const INSET_PX = 14;
@@ -1118,6 +1128,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   return Number.isFinite(b) && Math.abs(b - 1) <= 1e-6;
                 });
                 if (!isMeasureStart) continue;
+                const onsetMeasureIndex = Number((nonRest[0] as any)?.measureIndex);
+                const isSystemStartMeasure = Number.isFinite(onsetMeasureIndex)
+                  && systemStartMeasureIndex != null
+                  && onsetMeasureIndex === systemStartMeasureIndex;
+                if (isSystemStartMeasure) continue;
 
                 const sorted = nonRest.slice().sort((a, b) => Number(a.position) - Number(b.position));
                 const hasSecond = sorted.some((n, i) => i > 0 && (Number(n.position) - Number(sorted[i - 1].position)) === 1);
@@ -1265,7 +1280,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                           const cur = (typeof (acc as any).getXShift === 'function') ? ((acc as any).getXShift() ?? 0) : 0;
                           // In open position (parti late), pull accidentals closer to the cluster.
                           // Allow a small negative delta (move right) to remove visible empty gaps.
-                          const inset = (hasSecond ? 0 : (openPositionAccidentalInsetById.get(n.id) ?? 0));
+                          const chordMeasureIndex = Number((chordNotes[0] as any)?.measureIndex);
+                          const isSystemStartMeasure = Number.isFinite(chordMeasureIndex)
+                            && systemStartMeasureIndex != null
+                            && chordMeasureIndex === systemStartMeasureIndex;
+                          const inset = (hasSecond || isSystemStartMeasure) ? 0 : (openPositionAccidentalInsetById.get(n.id) ?? 0);
                           const desiredDelta = base + stagger + extra - inset;
                           // Special case: beat-1 onsets with a 2-note second + multiple accidentals
                           // can end up with accidentals too far from the noteheads due to our base shift.
@@ -1276,7 +1295,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                               const b = Number((sn as any).beat);
                               return Number.isFinite(b) && Math.abs(b - 1) <= 1e-6;
                             });
-                            if (isMeasureStart && hasSecond && hasMultipleAccidentals) beat1Inset = 14;
+                            if (isMeasureStart && hasSecond && hasMultipleAccidentals && !isSystemStartMeasure) beat1Inset = 14;
                           } catch {
                             // ignore
                           }

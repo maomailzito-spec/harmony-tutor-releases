@@ -5777,6 +5777,7 @@ export function applyHarmonyRules(
         // Compare pitch letters with different accidentals across voices between consecutive chords.
         const notesA = a.notes.filter(n => !n.isRest);
         const notesB = b.notes.filter(n => !n.isRest);
+        const normAcc = (a: any) => (a ?? 'natural');
         for (const n1 of notesA) {
             const p1 = (n1.pitch || '').toUpperCase();
             const acc1 = (n1.explicitAccidental ?? n1.accidental ?? null) as AccidentalType | null;
@@ -5786,8 +5787,22 @@ export function applyHarmonyRules(
                 const p2 = (n2.pitch || '').toUpperCase();
                 if (p1 !== p2) continue;
                 const acc2 = (n2.explicitAccidental ?? n2.accidental ?? null) as AccidentalType | null;
-                const norm = (a: any) => a ?? 'natural';
-                if (norm(acc1) !== norm(acc2)) {
+                if (normAcc(acc1) !== normAcc(acc2)) {
+                    // Exception: chromatic motion in the *same voice* attenuates the false relation.
+                    // If the voice of n2 already had the same letter in chord A with a different accidental,
+                    // we skip the R-09 violation.
+                    try {
+                        const prevSameVoice = aV[(n2.voice ?? 1) as Voice] as StaffNote | undefined;
+                        if (prevSameVoice) {
+                            const pPrev = (prevSameVoice.pitch || '').toUpperCase();
+                            const accPrev = (prevSameVoice.explicitAccidental ?? prevSameVoice.accidental ?? null) as AccidentalType | null;
+                            if (pPrev === p2 && normAcc(accPrev) !== normAcc(acc2)) {
+                                continue;
+                            }
+                        }
+                    } catch {
+                        // ignore
+                    }
                     addViolation({
                         ruleId: 'R-09',
                         severity: 'error',
