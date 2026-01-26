@@ -20,7 +20,8 @@ import {
 } from './icons/NoteValueIcons';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice } from '../utils/musicTheory';
+import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
@@ -553,12 +554,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [tool, setTool] = useState<Tool>('insert');
     const [selectedInsertion, setSelectedInsertion] = useState<InsertionElement>({ type: 'note', duration: 'quarter', isDotted: false });
     const isDotted = !!selectedInsertion.isDotted;
+
+    // One-shot behavior knobs:
+    // - If armed from HOTKEY: auto-disarm after the next insertion.
+    // - If armed from TOOLBAR: persist until manually toggled off.
+    const dottedOneShotRef = useRef<boolean>(false);
+    const accidentalOneShotRef = useRef<boolean>(false);
     const [isTriplet, setIsTriplet] = useState(false);
     const [isDuplet, setIsDuplet] = useState(false);
     const [isSwing, setIsSwing] = useState(false);
     const [tupletNoteCount, setTupletNoteCount] = useState(0);
     const [tripletBaseDuration, setTripletBaseDuration] = useState<NoteDuration | null>(null);
     const [activeAccidental, setActiveAccidental] = useState<AccidentalType | null>(null);
+    // Keyboard repeats / rapid double-presses can arrive before React state commits.
+    // Keep an immediate ref so `bb` / `##` reliably becomes double-flat/double-sharp.
+    const activeAccidentalRef = useRef<AccidentalType | null>(null);
+    useEffect(() => { activeAccidentalRef.current = activeAccidental; }, [activeAccidental]);
     const [selectedVoice, setSelectedVoice] = useState<Voice>(1);
     const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
     const [hoveredViolationNotes, setHoveredViolationNotes] = useState<string[] | null>(null);
@@ -2261,10 +2272,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     
     const analysisResult = useMemo(() => {
         if (!isAnalysisEnabled) {
-            return { analyzedNotes: notes, connections: [], violations: [] };
+            return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
         return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature);
     }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature]);
+
+    const effectiveAnalysisContexts = useMemo(() => {
+        // Manual contexts must win over inferred ones.
+        const inferred = ((analysisResult as any)?.inferredAnalysisContexts || []) as any[];
+        const manual = (analysisContexts || []) as any[];
+        return [...inferred, ...manual];
+    }, [analysisResult, analysisContexts]);
+
     const { analyzedNotes, connections: errorConnections, violations } = analysisResult;
 
     const getNoteY = (position: number, staffTop: number, clef: ClefType): number => {
@@ -2878,7 +2897,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         });
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const ctxAtAbsBeat = (absBeat: number) => (analysisContexts || [])
+        const ctxAtAbsBeat = (absBeat: number) => (effectiveAnalysisContexts || [])
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
             .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
 
@@ -2908,7 +2927,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch { /* ignore */ }
 
         // For each system, collect all timeline events that fall within its measures
-        const labelsBySystem: { id: string; x: number; roman: string; figures: string[]; symbol: string; absBeat?: number; hiddenMarker?: boolean; isOverride?: boolean; pcsSig?: string }[][] = layoutData.systemsParams.map(() => []);
+        const labelsBySystem: { id: string; x: number; roman: string; romanDisplay?: string; sequenceRoman?: string; figures: string[]; symbol: string; absBeat?: number; hiddenMarker?: boolean; isOverride?: boolean; pcsSig?: string }[][] = layoutData.systemsParams.map(() => []);
 
 
         // Helper: compute xPosition for a given absBeat in a system
@@ -3749,6 +3768,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
                 }
 
+                // Rescue: if naming-filter collapses a triad to a dyad, vii° can be a false positive.
+                // Prefer the analysis of the fuller verticality when it yields a plausible dominant/tonic label.
+                try {
+                    const rr0 = String(roman || '');
+                    const pcCount = (arr: any[]): number => {
+                        try {
+                            const set = new Set<number>();
+                            for (const n of (arr || [])) {
+                                if (!n || n.isRest) continue;
+                                const ni = Number(n.noteIndex);
+                                const mi = Number(n.midi);
+                                const pc = Number.isFinite(ni) ? ((ni % 12) + 12) % 12 : Number.isFinite(mi) ? ((mi % 12) + 12) % 12 : null;
+                                if (pc == null) continue;
+                                set.add(pc);
+                            }
+                            return set.size;
+                        } catch {
+                            return 0;
+                        }
+                    };
+                    const pcsNaming = pcCount(analysisNotesForNaming as any);
+                    const pcsAnalysis = pcCount(analysisNotes as any);
+                    const pcsFull = pcCount((fullNotes || []) as any);
+
+                    if (rr0.startsWith('vii') && pcsNaming > 0 && pcsNaming < 3 && (pcsAnalysis >= 3 || pcsFull >= 3)) {
+                        const alt1 = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor);
+                        const alt2 = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor);
+                        const isPlausible = (s: string) => s === 'V' || s === 'I' || s.startsWith('V/') || s.startsWith('I/');
+                        const pick = [alt1, alt2].find(x => x?.roman && isPlausible(String(x.roman)));
+                        if (pick?.roman) {
+                            roman = String(pick.roman);
+                            isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+
                 // Rescue: secondary dominants (V/x) should stay visible even in inversions.
                 // In some sparse/incomplete verticalities (common when voices are tied or filtered as NCT),
                 // getRomanAnalysis can return null/empty, leaving only Arabic figures (6, 6/5, ...).
@@ -3794,86 +3851,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // Under suspensions/ties, identifyChordCandidates can mis-root and collapse
                 // into misleading labels like I4/7.
                 try {
-                    // IMPORTANT: do not clobber diminished leading-tone analyses (e.g. vii°7)
-                    // with a dominant-from-symbol-root label like V7.
-                    const romanIsDiminished = (() => {
-                        const r = String(roman || '');
-                        return r.includes('°') || r.includes('ø');
-                    })();
-
-                    if (!isAug6Roman && symbol && (symbol.indexOf('/') >= 0) && !romanIsDiminished) {
-                        const symRaw = String(symbol || '').replace('♯', '#').replace('♭', 'b');
-                        const rootMatch = symRaw.match(/^([A-G])([#b]?)/);
-                        const rootName = rootMatch ? `${rootMatch[1]}${rootMatch[2] || ''}` : '';
-                        const rootPc = rootName ? noteNameToChromaticIndex(rootName) : -1;
-
-                        const inferredType = (() => {
-                            const s = symRaw;
-                            if (/maj7/i.test(s)) return 'Major 7';
-                            if (/m7/i.test(s)) return 'Minor 7';
-                            if (s.includes('°') || /dim7/i.test(s)) return 'Diminished 7';
-                            if (s.includes('7')) return 'Dominant 7';
-                            if (/\bm\b/i.test(s) || /m(?!aj)/i.test(s)) return 'Minor';
-                            return 'Major';
-                        })();
-
-                        if (rootPc != null && rootPc >= 0) {
-                            const virtualRootMidi = 60 + (((rootPc % 12) + 12) % 12);
-                            const virtualRoot = ({ id: 'virtual-root', pitch: 'C', octave: 4, position: 0, midi: virtualRootMidi, noteIndex: rootPc } as any);
-
-                            // IMPORTANT: include real pitch-class intervals so secondary dominants (V/x)
-                            // can be detected even when we're forcing the root from a slash symbol.
-                            const intervals = (() => {
-                                try {
-                                    const pcs = new Set<number>();
-                                    for (const n of (analysisNotesForNaming as any[]) || []) {
-                                        if (!n || n.isRest) continue;
-                                        const ni = (n as any).noteIndex;
-                                        const midi = (n as any).midi;
-                                        const pc = Number.isFinite(ni) ? ni : (Number.isFinite(midi) ? (midi % 12) : null);
-                                        if (pc == null) continue;
-                                        pcs.add(((pc % 12) + 12) % 12);
-                                    }
-                                    const out = new Set<number>();
-                                    for (const pc of pcs) out.add((((pc - rootPc) % 12) + 12) % 12);
-                                    return out;
-                                } catch {
-                                    return undefined;
-                                }
-                            })();
-
-                            const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: inferredType, intervals }, contextTonic, contextIsMinor);
-                            if (forced) {
-                                roman = forced;
-                            }
-                        }
-                    }
-                } catch (_) {}
-            } catch (err) {
-                // Removed debug log
-                return;
-            }
-
-            // If the current verticality is *exactly* a diatonic triad with the bass as its root,
-            // prefer the diatonic degree inferred from the bass. This is a robust guard against
-            // occasional mis-rooting under ties/suspensions and ensures stable labels like I5
-            // for plain tonic triads (e.g. Bb–D–F over Bb in Bb major).
-            try {
-                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
-                if (!isAug6Roman && !isSecondaryOrSlashRoman && bassPc != null) {
-                    const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
-                    if (inferred) {
-                        const pcs = pcSetFromNotes(analysisNotes as any);
-                        if (pcs.size === 3 && bassPc === inferred.triad.root) {
-                            const triadSet = new Set<number>([inferred.triad.root, inferred.triad.third, inferred.triad.fifth]);
-                            const ok = Array.from(pcs).every(p => triadSet.has(p));
-                            if (ok) {
-                                roman = inferred.roman;
-                            }
-                        }
-                    }
-                }
-            } catch { /* ignore */ }
+                    // (slash-root roman override removed)
+                } catch { /* ignore */ }
 
             // If we only have a dyad (2 pitch classes), roman labeling is inherently ambiguous.
             // Prefer a diatonic bass-inferred label to avoid V/III misreads on power-chord shells
@@ -3958,6 +3937,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         }
                     }
                 }
+            } catch (_) {
+                // ignore
+            }
+
             } catch (_) {
                 // ignore
             }
@@ -4316,7 +4299,55 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             } catch { /* ignore */ }
 
+            // Final rescue: if we still ended up with vii° but the *unfiltered* verticality spells the
+            // dominant major triad in the current key, prefer V.
+            try {
+                const rr = String(roman || '');
+                if (rr.startsWith('vii')) {
+                    const tonicPc = noteNameToChromaticIndex(contextTonic);
+                    if (tonicPc != null && tonicPc >= 0) {
+                        const domPc = (((tonicPc + 7) % 12) + 12) % 12;
+                        const domTriad = new Set<number>([domPc, (domPc + 4) % 12, (domPc + 7) % 12]);
+                        const pcs = new Set<number>();
+                        for (const n of (fullNotes || []) as any[]) {
+                            if (!n || n.isRest) continue;
+                            const ni = Number((n as any).noteIndex);
+                            const mi = Number((n as any).midi);
+                            const pc = Number.isFinite(ni) ? (((ni % 12) + 12) % 12) : Number.isFinite(mi) ? (((mi % 12) + 12) % 12) : null;
+                            if (pc == null) continue;
+                            pcs.add(pc);
+                        }
+                        const matchesDom = pcs.size >= 3 && [...domTriad].every(x => pcs.has(x));
+                        // Do not override a confident tonic label (I/i) to V.
+                        // This prevents cadential barlines (e.g. Db→Gb in Gb major) from being displayed as V
+                        // just because dominant chord tones may still be present in the full verticality.
+                        if (matchesDom && !(roman === 'I' || roman === 'i')) roman = 'V';
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // Display-only: when we are in a tonicization/modulation context, show pivot tonics as `I=V`.
+            // This keeps the analysis context in the new key (so following chords aren't distorted),
+            // while still showing the functional relation to the global key.
+            let romanDisplay: string | undefined = undefined;
+            try {
+                const inNonGlobalContext = !!(applicableContext && (contextTonic !== currentTonic || contextIsMinor !== isMinorMode));
+                const localRoman = String(roman || '');
+                const localIsTonic = localRoman === 'I' || localRoman === 'i';
+                if (inNonGlobalContext && localIsTonic) {
+                    const global = getRomanAnalysis((analysisNotesForNaming || []) as any, currentTonic, isMinorMode);
+                    const globalRoman = String(global?.roman || '');
+                    if (globalRoman && globalRoman !== localRoman) {
+                        // Common/pedagogical: show I=V on dominant-key pivot.
+                        if (globalRoman === 'V' || globalRoman.startsWith('V/')) {
+                            romanDisplay = `${localRoman}=${globalRoman}`;
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
             if (!roman && !symbol && !(figures && figures.length)) return;
+
 
             // Anchor label to the current timeline event's beat (not just the note's attack)
             const x = getXForAbsBeat(event.absBeat, system);
@@ -4325,6 +4356,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 id: `hlabel-${systemIndex}-${event.absBeat}`,
                 x,
                 roman,
+                romanDisplay,
                 figures,
                 symbol,
                 absBeat: event.absBeat,
@@ -4337,6 +4369,925 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
         return labelsBySystem;
     }, [analysisContextAbsBeat, analysisContexts, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, timeSignature]);
+
+    // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
+    // This is intentionally conservative: it looks for repeated *functional shapes* rather than
+    // exact roman equality (e.g. I…V/ii repeating as ii…V/bIII).
+    const progressionMarkersBySystem = useMemo(() => {
+        if (!layoutData) return [] as Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>>;
+
+        const beatsPerMeasureBase = timeSignature.numerator * (4 / timeSignature.denominator);
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+
+        const findMeasureIndexForAbsBeat = (ab: number): number => {
+            if (!Number.isFinite(ab)) return 0;
+            if (!measureStartAbsBeat || measureStartAbsBeat.length === 0) {
+                return Math.floor(ab / beatsPerMeasureBase);
+            }
+            for (let m = measureStartAbsBeat.length - 1; m >= 0; m--) {
+                if (ab >= (measureStartAbsBeat[m] ?? 0) - 1e-9) return m;
+            }
+            return 0;
+        };
+
+        const parseRoman = (r0: string): { main: string; secondary: string | null; trailing: string } => {
+            // Robust Roman parser for formats like:
+            // - V6, I64
+            // - V/ii
+            // - V6/ii, V65/ii
+            // - V/ii6
+            // We normalize accidentals (b/#) so matching is stable.
+            const raw = String(r0 || '').trim();
+            const normalizeGlyphs = (s: string) => s
+                .replace(/♭/g, 'b')
+                .replace(/♯/g, '#')
+                .replace(/𝄫/g, 'bb')
+                .replace(/𝄪/g, '##');
+            const r = normalizeGlyphs(raw);
+
+            const parts = r.split('/');
+            const left = String(parts[0] || '').trim();
+            const right = parts.length > 1 ? String(parts[1] || '').trim() : '';
+
+            const splitRomanAndDigits = (seg: string): { roman: string; digits: string; rest: string } => {
+                const m = seg.match(/^([ivIV°+ø#b]+)(\d*)(.*)$/);
+                if (!m) return { roman: seg, digits: '', rest: '' };
+                return { roman: String(m[1] || ''), digits: String(m[2] || ''), rest: String(m[3] || '') };
+            };
+
+            const l = splitRomanAndDigits(left);
+            const r2 = right ? splitRomanAndDigits(right) : { roman: '', digits: '', rest: '' };
+
+            // Anything after the roman+digits on either side is treated as trailing too.
+            const trailing = `${l.digits || ''}${r2.digits || ''}${l.rest || ''}${r2.rest || ''}`.trim();
+            const main = String(l.roman || '').trim();
+            const secondary = r2.roman ? String(r2.roman).trim() : null;
+            return { main, secondary: secondary || null, trailing };
+        };
+        const normFigures = (figs: any): string => {
+            try {
+                if (!Array.isArray(figs)) return '';
+                return figs.map((x: any) => String(x)).filter(Boolean).join('');
+            } catch {
+                return '';
+            }
+        };
+
+        type HarmonyEv = { absBeat: number; measureIndex: number; roman: string; figuresKey: string };
+        const events: HarmonyEv[] = [];
+        if (isAnalysisEnabled) {
+            try {
+                (harmonyLabelsBySystem || []).forEach((arr: any[]) => {
+                    (arr || []).forEach((lbl: any) => {
+                        const absBeat = Number(lbl?.absBeat);
+                        const roman = String(lbl?.roman ?? '');
+                        if (!Number.isFinite(absBeat) || !roman) return;
+                        if (lbl?.hiddenMarker) return;
+                        events.push({
+                            absBeat,
+                            measureIndex: findMeasureIndexForAbsBeat(absBeat),
+                            roman,
+                            figuresKey: normFigures(lbl?.figures),
+                        });
+                    });
+                });
+            } catch { /* ignore */ }
+        }
+
+        // Fallback: if the label pipeline produced zero harmony labels (events=0) but analysis is enabled,
+        // compute a minimal roman timeline by sampling 3 structural points per measure.
+        // This avoids false negatives caused by label-suppression heuristics.
+        let usedFallback = false;
+        if (isAnalysisEnabled && events.length === 0) {
+            try {
+                const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges);
+                const ctxAtAbsBeatLocal = (absBeat: number) => (effectiveAnalysisContexts || [])
+                    .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
+                    .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
+
+                const measuresInScore = (() => {
+                    const s = new Set<number>();
+                    (layoutData.positionedNotes || []).forEach((n: any) => {
+                        const mi = Number(n?.measureIndex);
+                        if (Number.isFinite(mi)) s.add(mi);
+                    });
+                    return Array.from(s).sort((a, b) => a - b);
+                })();
+
+                // Walk timeline once; for each sample absBeat, pick last event <= sample.
+                const getNotesAt = (absBeat: number): any[] => {
+                    try {
+                        let best: any = null;
+                        for (const ev of (timeline || [])) {
+                            if (!ev || typeof ev.absBeat !== 'number') continue;
+                            if (ev.absBeat <= absBeat + 1e-6) best = ev;
+                            else break;
+                        }
+                        return (best?.notes || []) as any[];
+                    } catch {
+                        return [];
+                    }
+                };
+
+                for (const m of measuresInScore) {
+                    const start = (measureStartAbsBeat && typeof measureStartAbsBeat[m] === 'number')
+                        ? (measureStartAbsBeat[m] as number)
+                        : (m * beatsPerMeasureBase);
+                    const bpm = (measureBeatsPerMeasure && typeof measureBeatsPerMeasure[m] === 'number')
+                        ? Math.max(1, Number(measureBeatsPerMeasure[m]))
+                        : Math.max(1, beatsPerMeasureBase);
+
+                    const sampleAbs = [0, 1 / 3, 2 / 3].map(fr => start + fr * bpm);
+                    for (const a of sampleAbs) {
+                        const notesHere = getNotesAt(a);
+                        if (!notesHere || notesHere.length < 2) continue;
+                        const ctx = ctxAtAbsBeatLocal(a);
+                        const tonic = (ctx?.newTonic || currentTonic) as any;
+                        const isMinor = typeof ctx?.newIsMinor === 'boolean' ? ctx.newIsMinor : isMinorMode;
+                        const r = getRomanAnalysis(notesHere as any, tonic, isMinor);
+                        const roman = String(r?.roman || '').trim();
+                        if (!roman) continue;
+                        events.push({ absBeat: a, measureIndex: m, roman, figuresKey: Array.isArray(r?.figures) ? r!.figures.join('') : '' });
+                        usedFallback = true;
+                    }
+                }
+            } catch { /* ignore */ }
+        }
+
+        const byMeasure = new Map<number, HarmonyEv[]>();
+        if (events.length) {
+            for (const ev of events) {
+                if (!byMeasure.has(ev.measureIndex)) byMeasure.set(ev.measureIndex, []);
+                byMeasure.get(ev.measureIndex)!.push(ev);
+            }
+            for (const [m, arr] of byMeasure.entries()) {
+                arr.sort((a, b) => a.absBeat - b.absBeat);
+                byMeasure.set(m, arr);
+            }
+        }
+
+        const maxMeasureIndex = (() => {
+            try {
+                const xs = (layoutData?.systemsParams || []).flatMap((s: any) => Array.isArray(s?.measureIndices) ? s.measureIndices : []);
+                const maxFromSystems = xs.length ? Math.max(...xs) : 0;
+                const maxFromNotes = Math.max(0, ...((layoutData?.positionedNotes || []) as any[])
+                    .map(n => Number(n?.measureIndex))
+                    .filter(v => Number.isFinite(v)) as number[]);
+                return Math.max(maxFromSystems, maxFromNotes);
+            } catch {
+                return 0;
+            }
+        })();
+
+        const measureIndices = Array.from({ length: Math.max(0, maxMeasureIndex) + 1 }, (_, i) => i);
+
+        const measureTokenSeq = (m: number): Array<{ main: string; secondary: string | null; fig: string }> => {
+            const arr = (byMeasure.get(m) || []).slice();
+            if (!arr.length) return [];
+
+            // Normalize within a measure: many pieces have 3 functional snapshots per bar,
+            // but the analyzer may emit extra labels (ornaments, releases on strong points, etc.).
+            // Bucket events into 3 equal slices of the measure and pick the first per bucket.
+            const start = (measureStartAbsBeat && typeof measureStartAbsBeat[m] === 'number')
+                ? (measureStartAbsBeat[m] as number)
+                : (m * beatsPerMeasureBase);
+            const bpm = (measureBeatsPerMeasure && typeof measureBeatsPerMeasure[m] === 'number')
+                ? Math.max(1, Number(measureBeatsPerMeasure[m]))
+                : Math.max(1, beatsPerMeasureBase);
+
+            arr.sort((a, b) => a.absBeat - b.absBeat);
+
+            // Bucket to exactly 3 slots (0,1,2). Fill gaps with nearest previous/next so
+            // the signature length stays stable across blocks.
+            const bucketEv: Array<HarmonyEv | null> = [null, null, null];
+            for (const ev of arr) {
+                const rel = (ev.absBeat - start) / bpm;
+                const bucket = Math.max(0, Math.min(2, Math.floor(rel * 3)));
+                if (!bucketEv[bucket]) bucketEv[bucket] = ev;
+            }
+
+            // Fill forward from previous
+            for (let i = 0; i < 3; i++) {
+                if (!bucketEv[i] && i > 0) bucketEv[i] = bucketEv[i - 1];
+            }
+            // Fill backward from next
+            for (let i = 2; i >= 0; i--) {
+                if (!bucketEv[i] && i < 2) bucketEv[i] = bucketEv[i + 1];
+            }
+            // If still empty (shouldn't), bail.
+            if (!bucketEv[0] && !bucketEv[1] && !bucketEv[2]) return [];
+
+            const tokens = bucketEv
+                .filter(Boolean)
+                .map((ev) => {
+                    const p = parseRoman((ev as HarmonyEv).roman);
+                    const fig = `${(ev as HarmonyEv).figuresKey || ''}${p.trailing || ''}`;
+                    return { main: p.main, secondary: p.secondary, fig };
+                });
+
+            // Keep 3 slots, but collapse exact duplicates to avoid "T,T,T" noise.
+            const out: Array<{ main: string; secondary: string | null; fig: string }> = [];
+            for (const t of tokens) {
+                const prev = out[out.length - 1];
+                if (prev && prev.main === t.main && prev.secondary === t.secondary) continue;
+                out.push(t);
+            }
+            return out;
+        };
+
+        const isDominantFunction = (t: { main: string; secondary: string | null; fig: string }): boolean => {
+            try {
+                const main = String(t?.main || '').trim();
+                if (!main) return false;
+                // Treat V and vii° (and common ascii variants like "viio") as dominant-function.
+                if (main === 'V' || main === 'v') return true;
+                if (/^vii/i.test(main)) return true;
+            } catch { /* ignore */ }
+            return false;
+        };
+
+        const measureRoleSeq = (m: number): string[] => {
+            const toks = measureTokenSeq(m);
+            if (!toks.length) return [];
+
+            // Convert 3-slot-ish tokens to roles for matching. We want to recognize
+            // the Dubois consonant progression shape X–D–X even when X changes (I, ii, iii...).
+            const roles: string[] = toks.map(t => {
+                if (isDominantFunction(t)) return 'D';
+                if (t.secondary && String(t.main || '').toUpperCase() === 'V') return 'Dsec';
+                return `${t.main}${t.secondary ? '/' + t.secondary : ''}`;
+            });
+
+            // If first and last are the same non-dominant harmony, collapse to X ... X.
+            // This makes I–V–I and ii–V–ii comparable.
+            if (roles.length >= 3) {
+                const first = roles[0];
+                const last = roles[roles.length - 1];
+                if (first === last && first !== 'D' && first !== 'Dsec') {
+                    roles[0] = 'X';
+                    roles[roles.length - 1] = 'X';
+                }
+                // Also collapse any remaining non-dominant degrees to X if we have X endpoints.
+                // This avoids mismatches like X,D,IV for ornaments.
+                if (roles[0] === 'X' && roles[roles.length - 1] === 'X') {
+                    for (let i = 1; i < roles.length - 1; i++) {
+                        if (roles[i] !== 'D' && roles[i] !== 'Dsec') roles[i] = 'Xmid';
+                    }
+                }
+            }
+            return roles;
+        };
+
+        const blockSignature = (mStart: number): string => {
+            const a0 = measureRoleSeq(mStart);
+            const a1 = measureRoleSeq(mStart + 1);
+            if (!a0.length || !a1.length) return '';
+            return `${a0.join(',')}|${a1.join(',')}`;
+        };
+
+        const spans: Array<{ startMeasure: number; endMeasure: number; repeats?: number; source: 'auto' | 'annotated' | 'note' }> = [];
+
+        // ---------------------------------------------------------
+        // NOTE-MOTION detector (voice-leading pattern repetition)
+        // ---------------------------------------------------------
+        // Detect a 2-measure "motif" repeating in the next 2 measures by comparing
+        // interval patterns on the bass and soprano lines (and their vertical interval).
+        // This is designed to work even when Roman labels are unstable.
+        try {
+            const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges);
+            const absBeats = (timeline || []).map(ev => Number(ev?.absBeat)).filter(Number.isFinite) as number[];
+
+            const getNotesAtAbsBeat = (absBeat: number): any[] => {
+                try {
+                    if (!timeline?.length) return [];
+                    // binary search: last event <= absBeat
+                    let lo = 0;
+                    let hi = absBeats.length - 1;
+                    let best = 0;
+                    while (lo <= hi) {
+                        const mid = (lo + hi) >> 1;
+                        const v = absBeats[mid];
+                        if (v <= absBeat + 1e-6) {
+                            best = mid;
+                            lo = mid + 1;
+                        } else {
+                            hi = mid - 1;
+                        }
+                    }
+                    const ev: any = (timeline as any[])[best];
+                    return (ev?.notes || []) as any[];
+                } catch {
+                    return [];
+                }
+            };
+
+            const midiForVoice = (notesHere: any[], voice: number): number | null => {
+                try {
+                    const pool = (notesHere || [])
+                        .filter(n => n && !n.isRest && Number.isFinite(n.midi) && (n.voice ?? 1) === voice)
+                        .map(n => Number(n.midi));
+                    if (!pool.length) return null;
+                    // In SATB each voice is monophonic; still, be safe.
+                    if (voice === 4) return Math.min(...pool);
+                    if (voice === 1) return Math.max(...pool);
+                    // inner voices: pick median-ish
+                    const sorted = pool.slice().sort((a, b) => a - b);
+                    return sorted[Math.floor(sorted.length / 2)] ?? null;
+                } catch {
+                    return null;
+                }
+            };
+
+            const beatsPerMeasureAt = (m: number): number => {
+                const bpm = (measureBeatsPerMeasure && typeof measureBeatsPerMeasure[m] === 'number')
+                    ? Number(measureBeatsPerMeasure[m])
+                    : beatsPerMeasureBase;
+                return Math.max(1, Number.isFinite(bpm) ? bpm : beatsPerMeasureBase);
+            };
+
+            const startAbsBeatOfMeasure = (m: number): number => {
+                if (measureStartAbsBeat && typeof measureStartAbsBeat[m] === 'number') return Number(measureStartAbsBeat[m]);
+                return m * beatsPerMeasureBase;
+            };
+
+            const sampleAbsBeatsForMeasure = (m: number): number[] => {
+                const start = startAbsBeatOfMeasure(m);
+                const bpm = beatsPerMeasureAt(m);
+                return [0, 1 / 3, 2 / 3].map(fr => start + fr * bpm);
+            };
+
+            const noteAbsBeat = (n: any): number => {
+                const m = Number(n?.measureIndex ?? 0);
+                const b = Number(n?.beat ?? 1);
+                const start = startAbsBeatOfMeasure(m);
+                return start + (b - 1);
+            };
+
+            const voiceOnsetSeqInWindow = (voice: number, startAbs: number, endAbs: number): { mids: number[]; timesQ: number[] } => {
+                try {
+                    const raw = ((layoutData.positionedNotes || []) as any[])
+                        .filter(n => n && !n.isRest && Number.isFinite(n.midi) && (n.voice ?? 1) === voice)
+                        .map(n => ({ abs: noteAbsBeat(n), midi: Number(n.midi) }))
+                        .filter(x => Number.isFinite(x.abs) && x.abs >= startAbs - 1e-6 && x.abs < endAbs - 1e-6)
+                        .sort((a, b) => a.abs - b.abs);
+
+                    if (!raw.length) return { mids: [], timesQ: [] };
+
+                    const mids: number[] = [];
+                    const timesQ: number[] = [];
+                    const span = Math.max(1e-6, endAbs - startAbs);
+                    for (const x of raw) {
+                        const last = mids[mids.length - 1];
+                        if (last != null && x.midi === last) continue;
+                        mids.push(x.midi);
+                        // quantize normalized time to reduce jitter (1/48 of the block)
+                        const t = (x.abs - startAbs) / span;
+                        const tq = Math.round(t * 48) / 48;
+                        timesQ.push(tq);
+                    }
+                    return { mids, timesQ };
+                } catch {
+                    return { mids: [], timesQ: [] };
+                }
+            };
+
+            const eqDelta = (d1: number, d2: number): boolean => {
+                if (!Number.isFinite(d1) || !Number.isFinite(d2)) return false;
+                if (d1 === d2) return true;
+                // Allow octave-equivalence with preserved direction.
+                const s1 = Math.sign(d1);
+                const s2 = Math.sign(d2);
+                if (s1 !== 0 && s2 !== 0 && s1 !== s2) return false;
+                const diff = d1 - d2;
+                return Math.abs(diff % 12) < 1e-6;
+            };
+
+            const mod12 = (x: number): number => {
+                const v = ((x % 12) + 12) % 12;
+                return v;
+            };
+
+            type NoteSig = {
+                bassD: number[];
+                sopD: number[];
+                vert12: number[];
+                bassSeq: Array<number | null>;
+                sopSeq: Array<number | null>;
+            };
+
+            type OnsetSig = {
+                bassD: number[];
+                sopD: number[];
+                bassTimes: number[];
+                sopTimes: number[];
+            };
+
+            const sigForTwoMeasures = (mStart: number): NoteSig | null => {
+                try {
+                    const points = [...sampleAbsBeatsForMeasure(mStart), ...sampleAbsBeatsForMeasure(mStart + 1)];
+                    const bassSeq: Array<number | null> = [];
+                    const sopSeq: Array<number | null> = [];
+                    for (const a of points) {
+                        const notesHere = getNotesAtAbsBeat(a);
+                        bassSeq.push(midiForVoice(notesHere, 4));
+                        sopSeq.push(midiForVoice(notesHere, 1));
+                    }
+
+                    const bassD: number[] = [];
+                    const sopD: number[] = [];
+                    const vert12: number[] = [];
+
+                    for (let i = 0; i < points.length - 1; i++) {
+                        const b0 = bassSeq[i];
+                        const b1 = bassSeq[i + 1];
+                        if (b0 != null && b1 != null) bassD.push(b1 - b0);
+                    }
+                    for (let i = 0; i < points.length - 1; i++) {
+                        const s0 = sopSeq[i];
+                        const s1 = sopSeq[i + 1];
+                        if (s0 != null && s1 != null) sopD.push(s1 - s0);
+                    }
+                    for (let i = 0; i < points.length; i++) {
+                        const b = bassSeq[i];
+                        const s = sopSeq[i];
+                        if (b != null && s != null) vert12.push(mod12(s - b));
+                    }
+
+                    // Require some data; otherwise skip.
+                    if (bassD.length < 2 || vert12.length < 3) return null;
+                    return { bassD, sopD, vert12, bassSeq, sopSeq };
+                } catch {
+                    return null;
+                }
+            };
+
+            const noteMatch = (a: NoteSig, b: NoteSig): boolean => {
+                // Compare bass deltas (strong signal)
+                const nBass = Math.min(a.bassD.length, b.bassD.length);
+                let bassOK = 0;
+                for (let i = 0; i < nBass; i++) if (eqDelta(a.bassD[i], b.bassD[i])) bassOK++;
+                if (nBass < 2 || bassOK !== nBass) return false;
+
+                // Compare vertical intervals (mod 12) at sampled points.
+                const nVert = Math.min(a.vert12.length, b.vert12.length);
+                let vertOK = 0;
+                for (let i = 0; i < nVert; i++) if (a.vert12[i] === b.vert12[i]) vertOK++;
+                if (nVert < 3 || vertOK < nVert - 1) return false; // allow 1 mismatch
+
+                // Soprano deltas: optional, but if we have enough, require a decent match.
+                const nS = Math.min(a.sopD.length, b.sopD.length);
+                if (nS >= 2) {
+                    let sopOK = 0;
+                    for (let i = 0; i < nS; i++) if (eqDelta(a.sopD[i], b.sopD[i])) sopOK++;
+                    if (sopOK < nS - 1) return false;
+                }
+                return true;
+            };
+
+            const onsetSigForTwoMeasures = (mStart: number): OnsetSig | null => {
+                try {
+                    const startAbs = startAbsBeatOfMeasure(mStart);
+                    const endAbs = startAbsBeatOfMeasure(mStart + 2);
+                    const bass = voiceOnsetSeqInWindow(4, startAbs, endAbs);
+                    const sop = voiceOnsetSeqInWindow(1, startAbs, endAbs);
+
+                    const deltas = (mids: number[]) => {
+                        const out: number[] = [];
+                        for (let i = 0; i < mids.length - 1; i++) out.push(mids[i + 1] - mids[i]);
+                        return out;
+                    };
+
+                    const bassD = deltas(bass.mids);
+                    const sopD = deltas(sop.mids);
+                    if (bassD.length < 2) return null;
+                    return { bassD, sopD, bassTimes: bass.timesQ, sopTimes: sop.timesQ };
+                } catch {
+                    return null;
+                }
+            };
+
+            const onsetMatch = (a: OnsetSig, b: OnsetSig): boolean => {
+                const nBass = Math.min(a.bassD.length, b.bassD.length);
+                if (nBass < 2) return false;
+                for (let i = 0; i < nBass; i++) {
+                    if (!eqDelta(a.bassD[i], b.bassD[i])) return false;
+                }
+
+                // Compare (quantized) onset timing patterns for bass.
+                const nT = Math.min(a.bassTimes.length, b.bassTimes.length);
+                if (nT >= 3) {
+                    let ok = 0;
+                    for (let i = 0; i < nT; i++) if (a.bassTimes[i] === b.bassTimes[i]) ok++;
+                    if (ok < nT - 1) return false;
+                }
+
+                // Soprano optional: if both have enough deltas, require approximate match.
+                const nS = Math.min(a.sopD.length, b.sopD.length);
+                if (nS >= 2) {
+                    let ok = 0;
+                    for (let i = 0; i < nS; i++) if (eqDelta(a.sopD[i], b.sopD[i])) ok++;
+                    if (ok < nS - 1) return false;
+                }
+                return true;
+            };
+
+            const maxM = Math.max(0, maxMeasureIndex);
+            for (let m0 = 0; m0 <= maxM - 3; m0++) {
+                const oa = onsetSigForTwoMeasures(m0);
+                const ob = onsetSigForTwoMeasures(m0 + 2);
+                const a = sigForTwoMeasures(m0);
+                const b = sigForTwoMeasures(m0 + 2);
+                const onsetOK = !!oa && !!ob && onsetMatch(oa, ob);
+                const sampleOK = !!a && !!b && noteMatch(a, b);
+                if (onsetOK || sampleOK) {
+                    spans.push({ startMeasure: m0, endMeasure: m0 + 3, repeats: 2, source: 'note' });
+                    m0 += 3;
+                }
+            }
+
+            // (debug logging removed)
+        } catch {
+            // ignore
+        }
+        if (measureIndices.length >= 4) {
+            for (let m0 = 0; m0 <= measureIndices.length - 4; m0++) {
+
+                const sigA = blockSignature(m0);
+                const sigB = blockSignature(m0 + 2);
+                if (!sigA || !sigB) continue;
+
+                if (sigA && sigA === sigB) {
+                    spans.push({ startMeasure: m0, endMeasure: m0 + 3, repeats: 2, source: 'auto' });
+                    m0 += 3;
+                }
+            }
+        }
+
+        // Also support explicit annotations inside `analysisContexts`.
+        // You can mark a progression span with labels like "inizio progressione" and "fine progressione".
+        try {
+            const starts = (analysisContexts || [])
+                .filter((c: any) => typeof c?.label === 'string' && /inizio\s+progressione/i.test(String(c.label)))
+                .map((c: any) => Number(c.absBeat))
+                .filter((a: number) => Number.isFinite(a))
+                .sort((a: number, b: number) => a - b);
+            const ends = (analysisContexts || [])
+                .filter((c: any) => typeof c?.label === 'string' && /fine\s+progressione/i.test(String(c.label)))
+                .map((c: any) => Number(c.absBeat))
+                .filter((a: number) => Number.isFinite(a))
+                .sort((a: number, b: number) => a - b);
+
+            // Pair each start with the next end after it.
+            let endIdx = 0;
+            for (const s of starts) {
+                while (endIdx < ends.length && ends[endIdx] <= s + 1e-6) endIdx++;
+                if (endIdx >= ends.length) break;
+                const e = ends[endIdx];
+                endIdx++;
+
+                const sm = findMeasureIndexForAbsBeat(s);
+                const em = findMeasureIndexForAbsBeat(Math.max(s, e - 1e-6));
+                if (Number.isFinite(sm) && Number.isFinite(em) && em >= sm) {
+                    spans.push({ startMeasure: sm, endMeasure: em, source: 'annotated' });
+                }
+            }
+        } catch {
+            // ignore
+        }
+
+        // De-dupe spans (prefer note > auto > annotated when identical).
+        const uniq = new Map<string, { startMeasure: number; endMeasure: number; repeats?: number; source: 'auto' | 'annotated' | 'note' }>();
+        for (const sp of spans) {
+            const key = `${sp.startMeasure}-${sp.endMeasure}`;
+            const existing = uniq.get(key);
+            if (!existing) {
+                uniq.set(key, sp);
+                continue;
+            }
+            const prio = (s: any) => (s === 'note' ? 3 : (s === 'auto' ? 2 : 1));
+            if (prio(sp.source) > prio(existing.source)) uniq.set(key, sp);
+        }
+        const spansFinal = Array.from(uniq.values()).sort((a, b) => a.startMeasure - b.startMeasure || a.endMeasure - b.endMeasure);
+
+        // (debug logging removed)
+
+        if (!spansFinal.length) return layoutData.systemsParams.map(() => []);
+
+        const markersBySystem: Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>> = layoutData.systemsParams.map(() => []);
+
+        const staffTopY = staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 18) : (TOP_STAFF_TOP + 18);
+        const textY = staffTopY - 6;
+
+        const measureStartXInSystem = (system: any, measureIndex: number): number | null => {
+            const idx = system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return null;
+            return Number(system.startMeasuresX?.[idx] ?? 0);
+        };
+        const measureEndXInSystem = (system: any, measureIndex: number): number | null => {
+            const idx = system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return null;
+            const staffEndX = (system.width ?? 0) - STAFF_MARGIN;
+            const nextX = (idx < system.measureIndices.length - 1) ? Number(system.startMeasuresX?.[idx + 1] ?? staffEndX) : staffEndX;
+            return nextX;
+        };
+
+        spansFinal.forEach((sp, k) => {
+            for (let si = 0; si < layoutData.systemsParams.length; si++) {
+                const system = layoutData.systemsParams[si];
+                const sysMeasures = system.measureIndices || [];
+                const sysMin = sysMeasures.length ? Math.min(...sysMeasures) : null;
+                const sysMax = sysMeasures.length ? Math.max(...sysMeasures) : null;
+                if (sysMin == null || sysMax == null) continue;
+                if (sp.endMeasure < sysMin || sp.startMeasure > sysMax) continue;
+
+                const localStart = Math.max(sp.startMeasure, sysMin);
+                const localEnd = Math.min(sp.endMeasure, sysMax);
+                const x1 = measureStartXInSystem(system, localStart);
+                const x2 = measureEndXInSystem(system, localEnd);
+                if (x1 == null || x2 == null) continue;
+
+                const pad = 6;
+                const xx1 = x1 + pad;
+                const xx2 = x2 - pad;
+                const midX = (xx1 + xx2) / 2;
+                markersBySystem[si].push({
+                    id: `prog-${sp.startMeasure}-${sp.endMeasure}-${k}-${si}`,
+                    x1: xx1,
+                    x2: xx2,
+                    midX,
+                    y: staffTopY,
+                    textY,
+                    label: sp.source === 'auto'
+                        ? `Prog. (${sp.repeats ?? 2}×2 mis.)`
+                        : (sp.source === 'note' ? 'Prog. (note)' : 'Prog. (annotata)'),
+                });
+            }
+        });
+
+        return markersBySystem;
+    }, [analysisContexts, harmonyLabelsBySystem, isAnalysisEnabled, layoutData, staffSystemMode, timeSignature]);
+
+    const sequenceMatches = useMemo(() => {
+        if (!isAnalysisEnabled) return [];
+        const labelPoints = (harmonyLabelsBySystem || [])
+            .flat()
+            .map((lbl: any) => ({
+                absBeat: Number(lbl?.absBeat),
+                roman: typeof lbl?.roman === 'string' ? lbl.roman : undefined,
+                symbol: typeof lbl?.symbol === 'string' ? lbl.symbol : undefined,
+                figures: Array.isArray(lbl?.figures) ? lbl.figures : undefined,
+            }));
+        return detectVoiceLeadingSequences(notes, timeSignature, timeSignatureChanges, labelPoints);
+    }, [harmonyLabelsBySystem, isAnalysisEnabled, notes, timeSignature, timeSignatureChanges]);
+
+    const harmonyLabelsBySystemSequenced = useMemo(() => {
+        if (!harmonyLabelsBySystem?.length || !sequenceMatches.length) return harmonyLabelsBySystem || [];
+
+        const labelsBySystem = (harmonyLabelsBySystem || []).map(arr => arr.map(lbl => ({ ...lbl })));
+        const flat = labelsBySystem.flatMap((arr, systemIndex) =>
+            arr.map((lbl, labelIndex) => ({
+                systemIndex,
+                labelIndex,
+                label: lbl,
+                tick: Number.isFinite(lbl?.absBeat as number) ? beatsToTicks(Number(lbl.absBeat)) : Number.NaN,
+            }))
+        ).filter(x => Number.isFinite(x.tick));
+
+        flat.sort((a, b) => a.tick - b.tick);
+
+        const findNearestLabelIndex = (tick: number) => {
+            if (!flat.length) return null;
+            let lo = 0;
+            let hi = flat.length - 1;
+            while (lo < hi) {
+                const mid = Math.floor((lo + hi) / 2);
+                if (flat[mid].tick < tick) lo = mid + 1;
+                else hi = mid;
+            }
+            const candidates = [flat[lo], flat[lo - 1]].filter(Boolean) as typeof flat;
+            let best: (typeof flat)[number] | null = null;
+            let bestDist = Infinity;
+            for (const c of candidates) {
+                const dist = Math.abs(c.tick - tick);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = c;
+                }
+            }
+            const TOL_TICKS = 12;
+            if (!best || bestDist > TOL_TICKS) return null;
+            return best;
+        };
+
+        const ctxAtAbsBeat = (absBeat: number) => (effectiveAnalysisContexts || [])
+            .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
+            .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
+
+        const normalizeRomanDegree = (romanRaw: string) => {
+            const raw = String(romanRaw || '').trim();
+            if (!raw) return '';
+            const r = raw
+                .replace(/♭/g, 'b')
+                .replace(/♯/g, '#')
+                .replace(/𝄫/g, 'bb')
+                .replace(/𝄪/g, '##');
+            const left = r.split('/')[0];
+            const m = left.match(/^([#b]*)(vii[°+ø]?|[ivIV]+)/);
+            return m ? `${m[1] || ''}${m[2] || ''}` : left.replace(/\d+/g, '');
+        };
+
+        const hasAccidentalPrefix = (romanRaw: string) => {
+            const r = String(romanRaw || '')
+                .trim()
+                .replace(/♭/g, 'b')
+                .replace(/♯/g, '#')
+                .replace(/𝄫/g, 'bb')
+                .replace(/𝄪/g, '##');
+            return /^([#b]+)/.test(r);
+        };
+
+        for (const seq of sequenceMatches) {
+            if (Number.isFinite(seq.transpositionSemitones as number) && Number(seq.transpositionSemitones) === 0) continue;
+            const slots = seq.slotTicks || [];
+            if (!slots.length) continue;
+            const L = seq.lengthSteps;
+            const repeats = Math.max(2, Number(seq.repeatsCount ?? 2));
+            const stripSecondary = (roman: string) => {
+                const raw = String(roman || '').trim();
+                if (!raw) return raw;
+                const parts = raw.split('/');
+                return String(parts[0] || '').trim();
+            };
+            for (let r = 1; r < repeats; r += 1) {
+                for (let k = 0; k <= L; k += 1) {
+                    const slotA = slots[seq.startSlotIdx + k];
+                    const slotB = slots[seq.startSlotIdx + r * L + k];
+                    if (!Number.isFinite(slotA) || !Number.isFinite(slotB)) continue;
+                    const labA = findNearestLabelIndex(slotA);
+                    const labB = findNearestLabelIndex(slotB);
+                    if (!labA || !labB) continue;
+                    const templateRoman = String(labA.label?.roman ?? '').trim();
+                    if (!templateRoman) continue;
+                    const target = labelsBySystem[labB.systemIndex]?.[labB.labelIndex];
+                    if (!target) continue;
+                    target.sequenceRoman = stripSecondary(templateRoman);
+                }
+            }
+        }
+
+        return labelsBySystem;
+    }, [harmonyLabelsBySystem, sequenceMatches]);
+
+    const sequenceMarkersBySystem = useMemo(() => {
+        if (!layoutData || !sequenceMatches.length) return [] as Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>>;
+
+        const markersBySystem: Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>> = layoutData.systemsParams.map(() => []);
+        const staffTopY = staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 36) : (TOP_STAFF_TOP + 36);
+        const textY = staffTopY - 6;
+
+        const measureStartXInSystem = (system: any, measureIndex: number): number | null => {
+            const idx = system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return null;
+            return Number(system.startMeasuresX?.[idx] ?? 0);
+        };
+        const measureEndXInSystem = (system: any, measureIndex: number): number | null => {
+            const idx = system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return null;
+            const staffEndX = (system.width ?? 0) - STAFF_MARGIN;
+            const nextX = (idx < system.measureIndices.length - 1) ? Number(system.startMeasuresX?.[idx + 1] ?? staffEndX) : staffEndX;
+            return nextX;
+        };
+
+        sequenceMatches.forEach((seq, k) => {
+            for (let si = 0; si < layoutData.systemsParams.length; si++) {
+                const system = layoutData.systemsParams[si];
+                const sysMeasures = system.measureIndices || [];
+                const sysMin = sysMeasures.length ? Math.min(...sysMeasures) : null;
+                const sysMax = sysMeasures.length ? Math.max(...sysMeasures) : null;
+                if (sysMin == null || sysMax == null) continue;
+                if (seq.endMeasure < sysMin || seq.startMeasure > sysMax) continue;
+
+                const localStart = Math.max(seq.startMeasure, sysMin);
+                const localEnd = Math.min(seq.endMeasure, sysMax);
+                const x1 = measureStartXInSystem(system, localStart);
+                const x2 = measureEndXInSystem(system, localEnd);
+                if (x1 == null || x2 == null) continue;
+
+                const pad = 6;
+                const xx1 = x1 + pad;
+                const xx2 = x2 - pad;
+                const midX = (xx1 + xx2) / 2;
+                const conf = Math.round(seq.confidence * 100);
+                const modelRange = (seq.modelStartMeasure != null && seq.modelEndMeasure != null)
+                    ? (seq.modelStartMeasure === seq.modelEndMeasure
+                        ? `m${seq.modelStartMeasure + 1}`
+                        : `m${seq.modelStartMeasure + 1}-${seq.modelEndMeasure + 1}`)
+                    : '';
+                const repeatRange = (seq.repeatStartMeasure != null && seq.repeatEndMeasure != null)
+                    ? (seq.repeatStartMeasure === seq.repeatEndMeasure
+                        ? `m${seq.repeatStartMeasure + 1}`
+                        : `m${seq.repeatStartMeasure + 1}-${seq.repeatEndMeasure + 1}`)
+                    : '';
+                markersBySystem[si].push({
+                    id: `seq-${seq.startMeasure}-${seq.endMeasure}-${k}-${si}`,
+                    x1: xx1,
+                    x2: xx2,
+                    midX,
+                    y: staffTopY,
+                    textY,
+                    label: `Seq. ${modelRange}→${repeatRange}`,
+                });
+            }
+        });
+
+        return markersBySystem;
+    }, [layoutData, sequenceMatches, staffSystemMode]);
+
+    // Subtle highlight for the *model* range of each sequence (discreet visual cue).
+    const sequenceModelMarkersBySystem = useMemo(() => {
+        if (!layoutData || !sequenceMatches.length) return [] as Array<Array<{ id: string; x1: number; x2: number; y: number }>>;
+
+        const markersBySystem: Array<Array<{ id: string; x1: number; x2: number; y: number }>> = layoutData.systemsParams.map(() => []);
+        const staffTopY = staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 36) : (TOP_STAFF_TOP + 36);
+
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+        const beatsFallback = timeSignature.numerator * (4 / timeSignature.denominator);
+
+        const beatsInMeasure = (m: number): number => {
+            const b = (measureBeatsPerMeasure && typeof measureBeatsPerMeasure[m] === 'number') ? Number(measureBeatsPerMeasure[m]) : beatsFallback;
+            return Number.isFinite(b) && b > 0 ? b : beatsFallback;
+        };
+        const startAbsForMeasure = (m: number): number => {
+            if (measureStartAbsBeat && typeof measureStartAbsBeat[m] === 'number') return Number(measureStartAbsBeat[m]);
+            return m * beatsFallback;
+        };
+
+        const findMeasureIndexForAbsBeat = (ab: number): number => {
+            if (!measureStartAbsBeat || measureStartAbsBeat.length === 0) return Math.floor(ab / beatsFallback);
+            for (let m = measureStartAbsBeat.length - 1; m >= 0; m--) {
+                if (ab >= (measureStartAbsBeat[m] ?? 0) - 1e-9) return m;
+            }
+            return 0;
+        };
+
+        const getXForAbsBeat = (absBeat: number, system: any) => {
+            const measureIndex = findMeasureIndexForAbsBeat(absBeat);
+            const bpm = beatsInMeasure(measureIndex);
+            const startAbs = startAbsForMeasure(measureIndex);
+            const beatInMeasure = (absBeat - startAbs) + 1;
+            const idx = system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return 0;
+            const startX = system.startMeasuresX[idx];
+            const endX = idx < system.measureIndices.length - 1 ? system.startMeasuresX[idx + 1] : (system.width - START_X);
+            const measureWidth = Math.max(1, endX - startX);
+            const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
+            const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / bpm));
+            return startX + MEASURE_PADDING_X + (rel * contentWidth);
+        };
+
+        sequenceMatches.forEach((seq, k) => {
+            const slots = seq.slotTicks || [];
+            const L = seq.lengthSteps;
+            const modelStartTick = Number(seq.startTick);
+            const repeatStartTick = Number(slots[seq.startSlotIdx + L]);
+            if (!Number.isFinite(modelStartTick) || !Number.isFinite(repeatStartTick)) return;
+
+            const absStart = modelStartTick / TICKS_PER_QUARTER;
+            const absEnd = repeatStartTick / TICKS_PER_QUARTER;
+            if (!Number.isFinite(absStart) || !Number.isFinite(absEnd) || absEnd <= absStart) return;
+
+            for (let si = 0; si < layoutData.systemsParams.length; si++) {
+                const system = layoutData.systemsParams[si];
+                const sysMeasures = system.measureIndices || [];
+                if (!sysMeasures.length) continue;
+                const sysMin = Math.min(...sysMeasures);
+                const sysMax = Math.max(...sysMeasures);
+                const sysAbsStart = startAbsForMeasure(sysMin);
+                const sysAbsEnd = startAbsForMeasure(sysMax) + beatsInMeasure(sysMax);
+
+                const oStart = Math.max(absStart, sysAbsStart);
+                const oEnd = Math.min(absEnd, sysAbsEnd);
+                if (!(oEnd > oStart + 1e-6)) continue;
+
+                let x1 = getXForAbsBeat(oStart, system);
+                let x2 = getXForAbsBeat(oEnd, system);
+                if (!Number.isFinite(x1) || !Number.isFinite(x2)) continue;
+                if (x2 < x1) [x1, x2] = [x2, x1];
+
+                const pad = 6;
+                markersBySystem[si].push({
+                    id: `seq-model-${seq.startSlotIdx}-${k}-${si}`,
+                    x1: x1 + pad,
+                    x2: x2 - pad,
+                    y: staffTopY + 3,
+                });
+            }
+        });
+
+        return markersBySystem;
+    }, [layoutData, sequenceMatches, staffSystemMode]);
 
     // Modulation / tonicization markers per system (from analysisContexts)
     const contextMarkersBySystem = useMemo(() => {
@@ -4495,13 +5446,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return `${n}${octave}`;
     }, []);
 
-    const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number) => {
+    const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number, whenMs?: number) => {
         if (!output || note.isRest) return;
         const midi = (note.midi ?? 0) + playbackTransposeSemitones;
         if (!Number.isFinite(midi) || midi <= 0) return;
         const vel = 100;
-        output.send([0x90, midi, vel]);
-        output.send([0x80, midi, 0], window.performance.now() + durationSec * 1000);
+        const t0 = (typeof whenMs === 'number' && Number.isFinite(whenMs)) ? whenMs : window.performance.now();
+        // Use WebMIDI scheduling to avoid chord notes being slightly staggered.
+        output.send([0x90, midi, vel], t0);
+        output.send([0x80, midi, 0], t0 + durationSec * 1000);
     }, [playbackTransposeSemitones]);
 
     const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8) => {
@@ -4528,7 +5481,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const playNote = useCallback(async (note: StaffNote, durationSec = 0.8) => {
         if (selectedMidiOutput) {
-            sendMidiNote(note, selectedMidiOutput, durationSec);
+            sendMidiNote(note, selectedMidiOutput, durationSec, window.performance.now());
             return;
         }
         await playNoteSound(note, durationSec);
@@ -4863,6 +5816,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
+        // IMPORTANT: preload all needed samples before scheduling.
+        // If a note's buffer is fetched/decoded on-demand, it may miss its intended `when`
+        // and start late, causing "rolled" chords. Preloading keeps chord attacks aligned.
+        if (!selectedMidiOutput && audioService.audioContext) {
+            try {
+                const needed = new Set<string>();
+                for (const ev of eventsToPlay) {
+                    for (const it of ev.items) {
+                        const n = it.note;
+                        if (!n || n.isRest) continue;
+                        const midi = (n.midi ?? 0) + playbackTransposeSemitones;
+                        if (!Number.isFinite(midi) || midi < 21 || midi > 108) continue;
+                        needed.add(midiToName(midi));
+                    }
+                }
+                await audioService.preloadNotes(Array.from(needed));
+            } catch {
+                // ignore preload failures; playback will still attempt on-demand load
+            }
+        }
+
         eventsToPlay.forEach((ev) => {
             const delayMs = (ev.absBeat - startAbsBeat) * beatDurationSec * 1000;
             const when = audioStartTime + (delayMs / 1000);
@@ -4874,11 +5848,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setPlayingNoteIds(playable.map(n => n.id));
 
                 if (selectedMidiOutput) {
+                    const midiWhenMs = startMs + delayMs;
                     ev.items.forEach((it) => {
                         const n = it.note;
                         if (n.isRest) return;
                         const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
-                        sendMidiNote(n, selectedMidiOutput, durSec);
+                        sendMidiNote(n, selectedMidiOutput, durSec, midiWhenMs);
                     });
                 } else if (audioService.audioContext) {
                     ev.items.forEach((it) => {
@@ -5214,6 +6189,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, [applyEditToSelectedNotes, selectedNoteIds]);
 
+    const setActiveAccidentalAndApply = useCallback((next: AccidentalType | null) => {
+        activeAccidentalRef.current = next;
+        setActiveAccidental(next);
+        applyAccidentalToSelectedNotes(next);
+    }, [applyAccidentalToSelectedNotes]);
+
+    const setActiveAccidentalAndApplyFromSource = useCallback((next: AccidentalType | null, source: 'hotkey' | 'toolbar') => {
+        // One-shot only when (re-)arming from hotkey.
+        accidentalOneShotRef.current = (source === 'hotkey') && !!next;
+        setActiveAccidentalAndApply(next);
+    }, [setActiveAccidentalAndApply]);
+
     const applyDottedToSelectedNotes = useCallback((nextIsDotted: boolean) => {
         if (!selectedNoteIds || selectedNoteIds.size === 0) return;
         applyEditToSelectedNotes((n) => {
@@ -5222,6 +6209,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return { ...(updated as any), durationTicks: computeDurationTicks(updated) } as StaffNote;
         }, { rebuildTimeline: true });
     }, [applyEditToSelectedNotes, computeDurationTicks, selectedNoteIds]);
+
+    const setDottedFromSource = useCallback((nextIsDotted: boolean, source: 'hotkey' | 'toolbar') => {
+        dottedOneShotRef.current = (source === 'hotkey') && !!nextIsDotted;
+        setSelectedInsertion(prev => ({ ...prev, isDotted: nextIsDotted }));
+        applyDottedToSelectedNotes(nextIsDotted);
+    }, [applyDottedToSelectedNotes, setSelectedInsertion]);
 
     // -----------------------
     // Editor interaction (restored minimal)
@@ -6518,6 +7511,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 } catch (e) { /* ignore */ }
                 return next;
             });
+            // Auto-disarm dotted only when armed via hotkey.
+            try {
+                if (selectedInsertion.isDotted && dottedOneShotRef.current) {
+                    dottedOneShotRef.current = false;
+                    setSelectedInsertion(prev => ({ ...prev, isDotted: false }));
+                }
+            } catch { /* ignore */ }
             return;
         }
 
@@ -6548,6 +7548,125 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
         props = applyAutoLeadingToneInMinor(props);
         props = applyActiveAccidental(props);
+
+        // Measure accidental carry (standard engraving rule):
+        // if an accidental was used earlier in the same measure for the same pitch (letter+octave)
+        // on the same staff/clef, subsequent notes inherit that pitch even if the glyph is omitted.
+        // This only applies when the user is NOT explicitly arming an accidental.
+        if (!activeAccidental) {
+            try {
+                const DIATONIC_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                const normalizeAcc = (a: any): AccidentalType | null => {
+                    if (!a) return null;
+                    if (a === 'sharp' || a === '#' || a === '♯') return 'sharp';
+                    if (a === 'flat' || a === 'b' || a === '♭') return 'flat';
+                    if (a === 'natural' || a === 'n' || a === '♮') return 'natural';
+                    if (a === 'double-sharp' || a === '##' || a === '𝄪') return 'double-sharp';
+                    if (a === 'double-flat' || a === 'bb' || a === '𝄫') return 'double-flat';
+                    return null;
+                };
+                const pitchLetterOf = (pitch: any): string => {
+                    try {
+                        const s = String(pitch || '').trim();
+                        const m = /[A-Ga-g]/.exec(s);
+                        return (m ? m[0] : 'C').toUpperCase();
+                    } catch {
+                        return 'C';
+                    }
+                };
+                const keySigDefaultAccForLetter = (letter: string): AccidentalType => {
+                    const l = String(letter || '').toUpperCase();
+                    if (!l) return 'natural';
+                    if (keySignature.type === 'sharp' && keySignature.count > 0) {
+                        const sharpOrder = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+                        return sharpOrder.slice(0, keySignature.count).includes(l) ? 'sharp' : 'natural';
+                    }
+                    if (keySignature.type === 'flat' && keySignature.count > 0) {
+                        const flatOrder = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+                        return flatOrder.slice(0, keySignature.count).includes(l) ? 'flat' : 'natural';
+                    }
+                    return 'natural';
+                };
+                const accidentalFromPcForLetter = (pc: number, letter: string): AccidentalType => {
+                    const l = String(letter || '').toUpperCase();
+                    const base = DIATONIC_PC[l];
+                    if (base == null) return 'natural';
+                    const raw = (((Number(pc) % 12) + 12) % 12);
+                    const d = ((raw - base + 18) % 12) - 6;
+                    if (d === 1) return 'sharp';
+                    if (d === -1) return 'flat';
+                    if (d === 2) return 'double-sharp';
+                    if (d === -2) return 'double-flat';
+                    return 'natural';
+                };
+                const accOffset = (acc: AccidentalType): number => {
+                    switch (acc) {
+                        case 'sharp': return 1;
+                        case 'flat': return -1;
+                        case 'double-sharp': return 2;
+                        case 'double-flat': return -2;
+                        default: return 0;
+                    }
+                };
+                const startTickOf = (n: any): number => {
+                    const st = Number(n?.startTick);
+                    if (Number.isFinite(st)) return st;
+                    const m = Number(n?.measureIndex);
+                    const b = Number(n?.beat);
+                    const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+                    if (Number.isFinite(m) && Number.isFinite(b)) {
+                        const absBeat = (m * beatsPerMeasureLocal) + (b - 1);
+                        return Math.round(absBeat * TICKS_PER_QUARTER);
+                    }
+                    return 0;
+                };
+
+                const letter = pitchLetterOf((props as any)?.pitch);
+                const octave = Number((props as any)?.octave);
+                const basePc = DIATONIC_PC[letter];
+                if (letter && Number.isFinite(octave) && basePc != null) {
+                    const measureIndex = Number(hit.measureIndex);
+                    const beforeTick = Number(insertedStartTick);
+                    const relevant = (rawNotes || [])
+                        .filter((n: any) => n && !n.isRest)
+                        .filter((n: any) => Number(n.measureIndex) === measureIndex)
+                        .filter((n: any) => {
+                            const c = (n.clef || ((n.voice === 3 || n.voice === 4) ? 'bass' : 'treble')) as ClefType;
+                            return c === targetClef;
+                        })
+                        .filter((n: any) => startTickOf(n) < beforeTick - 1e-6)
+                        .slice()
+                        .sort((a: any, b: any) => startTickOf(a) - startTickOf(b) || Number(a.voice ?? 1) - Number(b.voice ?? 1));
+
+                    let stateAcc: AccidentalType = keySigDefaultAccForLetter(letter);
+                    for (const n of relevant) {
+                        const l2 = pitchLetterOf(n.pitch);
+                        const o2 = Number(n.octave);
+                        if (l2 !== letter || o2 !== octave) continue;
+                        const userAcc = normalizeAcc((n as any).userAccidental);
+                        const explicitAcc = normalizeAcc((n as any).explicitAccidental);
+                        const autoAcc = normalizeAcc((n as any).accidental);
+                        const derived = Number.isFinite(Number(n.noteIndex))
+                            ? accidentalFromPcForLetter(Number(n.noteIndex), l2)
+                            : 'natural';
+                        stateAcc = userAcc ?? explicitAcc ?? autoAcc ?? derived;
+                    }
+
+                    // Apply the carried accidental to the new note's pitch (without forcing glyph rendering).
+                    const desiredPcRaw = basePc + accOffset(stateAcc);
+                    // Avoid rare edge-cases like B# that would wrap across octaves in this data model.
+                    if (desiredPcRaw >= 0 && desiredPcRaw <= 11) {
+                        const desiredPc = desiredPcRaw;
+                        const desiredMidi = (octave + 1) * 12 + desiredPc;
+                        (props as any).noteIndex = desiredPc;
+                        (props as any).midi = desiredMidi;
+                        (props as any).accidental = stateAcc;
+                    }
+                }
+            } catch {
+                // ignore
+            }
+        }
 
         // startTick is computed by the tick-based snap above.
 
@@ -6676,7 +7795,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return finalNotes;
         });
         void playNote(newNote);
-        if (activeAccidental) setActiveAccidental(null);
+        // Auto-disarm accidental only when armed via hotkey.
+        if (activeAccidental && accidentalOneShotRef.current) {
+            accidentalOneShotRef.current = false;
+            activeAccidentalRef.current = null;
+            setActiveAccidental(null);
+        }
+        // Auto-disarm dotted only when armed via hotkey.
+        try {
+            if (selectedInsertion.isDotted && dottedOneShotRef.current) {
+                dottedOneShotRef.current = false;
+                setSelectedInsertion(prev => ({ ...prev, isDotted: false }));
+            }
+        } catch { /* ignore */ }
         // Log after a tick to capture updated positions
         setTimeout(() => {
             try {
@@ -7754,8 +8885,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
                 const next = !selectedInsertion.isDotted;
-                setSelectedInsertion(prev => ({ ...prev, isDotted: next }));
-                applyDottedToSelectedNotes(next);
+                setDottedFromSource(!!next, 'hotkey');
                 return;
             }
 
@@ -7765,18 +8895,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
 
+                const cur = activeAccidentalRef.current;
+
                 if (key === 'b') {
-                    const next = (activeAccidental === 'flat' ? 'double-flat' : (activeAccidental === 'double-flat' ? null : 'flat')) as AccidentalType | null;
-                    setActiveAccidental(next);
-                    applyAccidentalToSelectedNotes(next);
+                    const next = (cur === 'flat' ? 'double-flat' : (cur === 'double-flat' ? null : 'flat')) as AccidentalType | null;
+                    setActiveAccidentalAndApplyFromSource(next, 'hotkey');
                 } else if (key === 'n') {
-                    const next = (activeAccidental === 'natural' ? null : 'natural') as AccidentalType | null;
-                    setActiveAccidental(next);
-                    applyAccidentalToSelectedNotes(next);
+                    const next = (cur === 'natural' ? null : 'natural') as AccidentalType | null;
+                    setActiveAccidentalAndApplyFromSource(next, 'hotkey');
                 } else {
-                    const next = (activeAccidental === 'sharp' ? 'double-sharp' : (activeAccidental === 'double-sharp' ? null : 'sharp')) as AccidentalType | null;
-                    setActiveAccidental(next);
-                    applyAccidentalToSelectedNotes(next);
+                    const next = (cur === 'sharp' ? 'double-sharp' : (cur === 'double-sharp' ? null : 'sharp')) as AccidentalType | null;
+                    setActiveAccidentalAndApplyFromSource(next, 'hotkey');
                 }
 
                 return;
@@ -7859,6 +8988,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         undoNotes,
         redoNotes,
         setActiveAccidental,
+        setActiveAccidentalAndApplyFromSource,
         keySignature,
         getNotePropertiesFromMidi,
         clipboard,
@@ -7869,6 +8999,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         getPlayheadPosForAbsBeat,
         toggleMetronome,
         setSelectedInsertion,
+        setDottedFromSource,
         timeSignature,
         staffSystemMode,
         setStaffSystemMode,
@@ -8254,11 +9385,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 <button
                                     onClick={() => {
                                         const next = !selectedInsertion.isDotted;
-                                        setSelectedInsertion(prev => ({
-                                            ...prev,
-                                            isDotted: next
-                                        }));
-                                        applyDottedToSelectedNotes(next);
+                                        setDottedFromSource(!!next, 'toolbar');
                                     }}
                                     className={`p-1 rounded-md transition-colors ${
                                         selectedInsertion.isDotted
@@ -8333,9 +9460,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
                 <button
                     onClick={() => {
-                        const next = (activeAccidental === 'sharp' ? 'double-sharp' : (activeAccidental === 'double-sharp' ? null : 'sharp')) as AccidentalType | null;
-                        setActiveAccidental(next);
-                        applyAccidentalToSelectedNotes(next);
+                        const cur = activeAccidentalRef.current;
+                        const next = (cur === 'sharp' ? 'double-sharp' : (cur === 'double-sharp' ? null : 'sharp')) as AccidentalType | null;
+                        setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'sharp' || activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                     title="Diesis (♯)"
@@ -8344,9 +9471,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 </button>
                 <button
                     onClick={() => {
-                        const next = (activeAccidental === 'double-sharp' ? 'sharp' : (activeAccidental === 'sharp' ? null : 'double-sharp')) as AccidentalType | null;
-                        setActiveAccidental(next);
-                        applyAccidentalToSelectedNotes(next);
+                        const cur = activeAccidentalRef.current;
+                        const next = (cur === 'double-sharp' ? 'sharp' : (cur === 'sharp' ? null : 'double-sharp')) as AccidentalType | null;
+                        setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                     title="Doppio Diesis (𝄪)"
@@ -8355,9 +9482,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 </button>
                 <button
                     onClick={() => {
-                        const next = (activeAccidental === 'flat' ? 'double-flat' : (activeAccidental === 'double-flat' ? null : 'flat')) as AccidentalType | null;
-                        setActiveAccidental(next);
-                        applyAccidentalToSelectedNotes(next);
+                        const cur = activeAccidentalRef.current;
+                        const next = (cur === 'flat' ? 'double-flat' : (cur === 'double-flat' ? null : 'flat')) as AccidentalType | null;
+                        setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'flat' || activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                     title="Bemolle (♭)"
@@ -8366,9 +9493,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 </button>
                 <button
                     onClick={() => {
-                        const next = (activeAccidental === 'double-flat' ? 'flat' : (activeAccidental === 'flat' ? null : 'double-flat')) as AccidentalType | null;
-                        setActiveAccidental(next);
-                        applyAccidentalToSelectedNotes(next);
+                        const cur = activeAccidentalRef.current;
+                        const next = (cur === 'double-flat' ? 'flat' : (cur === 'flat' ? null : 'double-flat')) as AccidentalType | null;
+                        setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                     title="Doppio Bemolle (♭♭)"
@@ -8377,9 +9504,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 </button>
                 <button
                     onClick={() => {
-                        const next = (activeAccidental === 'natural' ? null : 'natural') as AccidentalType | null;
-                        setActiveAccidental(next);
-                        applyAccidentalToSelectedNotes(next);
+                        const cur = activeAccidentalRef.current;
+                        const next = (cur === 'natural' ? null : 'natural') as AccidentalType | null;
+                        setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'natural' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                     title="Bequadro (N)"
@@ -8782,7 +9909,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const systemDuplets = dupletGroupsBySystem[systemIndex] || [];
                         const systemTriplets = tripletGroupsBySystem[systemIndex] || [];
 
-                        const systemHarmonyLabels = (harmonyLabelsBySystem?.[systemIndex] || []);
+                        const systemHarmonyLabels = (harmonyLabelsBySystemSequenced?.[systemIndex] || []);
 
                         // Clamp the *final* harmony hold-line to the end of the last measure
                         // that actually contains notes in this system (so it won't extend into
@@ -9074,7 +10201,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             )}
 
                             {/* Overlay: analysis labels + violation highlights (adapter output) */}
-                                                        {(isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0) && (
+                                                        {((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers */}
                                                                 {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
@@ -9091,6 +10218,73 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         {m.label}
                                                                     </text>
                                                                 ))}
+
+                                                                {/* Progression (sequenza) markers */}
+                                                                {(progressionMarkersBySystem?.[systemIndex] || []).map((p) => {
+                                                                    const hook = 7;
+                                                                    const y = p.y;
+                                                                    return (
+                                                                        <g key={p.id} opacity={0.9}>
+                                                                            <path
+                                                                                d={`M ${p.x1} ${y} L ${p.x1} ${y + hook} M ${p.x1} ${y} L ${p.x2} ${y} M ${p.x2} ${y} L ${p.x2} ${y + hook}`}
+                                                                                fill="none"
+                                                                                stroke="black"
+                                                                                strokeWidth={1.2}
+                                                                            />
+                                                                            <text
+                                                                                x={p.midX}
+                                                                                y={p.textY}
+                                                                                textAnchor="middle"
+                                                                                fontSize={11}
+                                                                                fontWeight={700}
+                                                                                fill="black"
+                                                                            >
+                                                                                {p.label}
+                                                                            </text>
+                                                                        </g>
+                                                                    );
+                                                                })}
+
+                                                                {(sequenceModelMarkersBySystem?.[systemIndex] || []).map((p) => {
+                                                                    return (
+                                                                        <g key={p.id} opacity={0.35}>
+                                                                            <line
+                                                                                x1={p.x1}
+                                                                                y1={p.y}
+                                                                                x2={p.x2}
+                                                                                y2={p.y}
+                                                                                stroke="#0ea5e9"
+                                                                                strokeWidth={4}
+                                                                                strokeLinecap="round"
+                                                                            />
+                                                                        </g>
+                                                                    );
+                                                                })}
+
+                                                                {(sequenceMarkersBySystem?.[systemIndex] || []).map((p) => {
+                                                                    const hook = 7;
+                                                                    const y = p.y;
+                                                                    return (
+                                                                        <g key={p.id} opacity={0.9}>
+                                                                            <path
+                                                                                d={`M ${p.x1} ${y} L ${p.x1} ${y + hook} M ${p.x1} ${y} L ${p.x2} ${y} M ${p.x2} ${y} L ${p.x2} ${y + hook}`}
+                                                                                fill="none"
+                                                                                stroke="#0f172a"
+                                                                                strokeWidth={1.1}
+                                                                            />
+                                                                            <text
+                                                                                x={p.midX}
+                                                                                y={p.textY}
+                                                                                textAnchor="middle"
+                                                                                fontSize={10}
+                                                                                fontWeight={700}
+                                                                                fill="#0f172a"
+                                                                            >
+                                                                                {p.label}
+                                                                            </text>
+                                                                        </g>
+                                                                    );
+                                                                })}
 
 
                                 {/* Harmony labels (roman/symbol) + figured bass */}
@@ -9127,7 +10321,57 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     // Keep a consistent left edge reference for both roman and symbols.
                                                                     const romanFont = '700 14px serif';
                                                                     const refW = measureTextWidth('V', romanFont);
-                                                                    const baseX = lbl.x + RB_SHIFT_X - refW;
+
+                                                                    // Clamp the analysis label within the current measure.
+                                                                    // This avoids the previous-measure label (e.g. V near the barline)
+                                                                    // overlapping and hiding the next measure's beat-1 label (e.g. I).
+                                                                    const clampToMeasure = (() => {
+                                                                        try {
+                                                                            const absBeat = Number((lbl as any).absBeat);
+                                                                            const starts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+                                                                            if (!Number.isFinite(absBeat) || !starts || starts.length === 0) return null;
+
+                                                                            let m = 0;
+                                                                            for (let i = starts.length - 1; i >= 0; i--) {
+                                                                                if (absBeat >= (starts[i] ?? 0) - 1e-9) { m = i; break; }
+                                                                            }
+                                                                            const sys = layoutData.systemsParams?.[systemIndex];
+                                                                            const idx = sys?.measureIndices?.indexOf(m);
+                                                                            if (idx == null || idx < 0) return null;
+
+                                                                            const startX = Number(sys.startMeasuresX?.[idx]);
+                                                                            const endX = (idx < (sys.measureIndices.length - 1))
+                                                                                ? Number(sys.startMeasuresX?.[idx + 1])
+                                                                                : (Number(sys.width) - START_X);
+                                                                            if (!Number.isFinite(startX) || !Number.isFinite(endX) || endX <= startX) return null;
+
+                                                                            const romanBaseText = showHarmonyDebug
+                                                                                ? String((lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                                : String((lbl as any).romanDisplay ?? lbl.roman ?? '');
+                                                                            const romanW = measureTextWidth(romanBaseText, romanFont);
+                                                                            const figFont = '700 12px serif';
+                                                                            const figures = (lbl.figures || []) as any[];
+                                                                            const figuresW = figures.length
+                                                                                ? Math.max(...figures.map(f => measureTextWidth(String(f), figFont)))
+                                                                                : 0;
+                                                                            const symText = String((lbl as any).symbol || '');
+                                                                            const symW = symText ? measureTextWidth(symText, romanFont) : 0;
+
+                                                                            const blockW = Math.max(symW, (romanW + (figuresW ? (6 + figuresW) : 0)));
+                                                                            const pad = MEASURE_PADDING_X;
+                                                                            const minX = startX + pad;
+                                                                            const maxX = Math.max(minX, (endX - pad - blockW));
+                                                                            return { minX, maxX };
+                                                                        } catch {
+                                                                            return null;
+                                                                        }
+                                                                    })();
+
+                                                                    const baseX = (() => {
+                                                                        const raw = lbl.x + RB_SHIFT_X - refW;
+                                                                        if (!clampToMeasure) return raw;
+                                                                        return Math.min(clampToMeasure.maxX, Math.max(clampToMeasure.minX, raw));
+                                                                    })();
 
                                   return (
                                     <g key={lbl.id}>
@@ -9153,7 +10397,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         // without changing the underlying roman used for stability heuristics.
                                                                                         const needsDim7Suffix = (() => {
                                                                                             try {
-                                                                                                const base = String(lbl.roman || '');
+                                                                                                const base = showHarmonyDebug
+                                                                                                    ? String((lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                                                    : String((lbl as any).romanDisplay ?? lbl.roman ?? '');
                                                                                                 if (!(base.includes('°') || base.includes('ø'))) return false;
                                                                                                 const figTexts = (lbl.figures || []) as string[];
                                                                                                 const has7th = figTexts.some(t => String(t).includes('7'));
@@ -9165,7 +10411,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                             }
                                                                                         })();
 
-                                                                                        const romanText = (lbl.roman || '') + (needsDim7Suffix ? '7' : '');
+                                                                                        const romanBaseText = showHarmonyDebug
+                                                                                            ? String((lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                                            : String((lbl as any).romanDisplay ?? lbl.roman ?? '');
+                                                                                        const romanText = romanBaseText + (needsDim7Suffix ? '7' : '');
                                                                                         const romanW = measureTextWidth(romanText, romanFont);
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanW + 6;
@@ -9290,7 +10539,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     fontWeight={700}
                                                                                                     fill="black"
                                                                                                 >
-                                                                                                    {lbl.roman}
+                                                                                                    {showHarmonyDebug
+                                                                                                        ? ((lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman)
+                                                                                                        : ((lbl as any).romanDisplay ?? lbl.roman)}
                                                                                                 </text>
 
                                                                                                 {lbl.figures?.length ? (
@@ -9966,6 +11217,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         {isAnalysisEnabled ? (
                             <HarmonyAnalysisPanel
                                 violations={violations}
+                                sequenceMatches={sequenceMatches}
                                 onHoverViolation={setHoveredViolationNotes}
                                 selectedViolationIndex={selectedViolationIndex}
                                 onSelectViolation={index => {

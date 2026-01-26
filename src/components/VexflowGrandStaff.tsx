@@ -283,17 +283,24 @@ const computeMeasureAccidentalGlyphs = (
     g.sort((a, b) => startTickOf(a) - startTickOf(b) || Number(a.voice ?? 1) - Number(b.voice ?? 1) || Number(a.midi ?? 0) - Number(b.midi ?? 0));
 
     const state = new Map<string, AccidentalType>();
-    const getState = (letter: string, octave: number): AccidentalType => {
-      const key = `${String(letter || '').toUpperCase()}/${Number(octave)}`;
+    const clefOf = (n: StaffNote): ClefType => {
+      const c = (n as any)?.clef as ClefType | undefined;
+      if (c === 'bass' || c === 'treble') return c;
+      // Fallback: voices 3/4 are typically bass.
+      const v = Number((n as any)?.voice ?? 1);
+      return (v === 3 || v === 4) ? 'bass' : 'treble';
+    };
+    const keyOf = (clef: ClefType, letter: string, octave: number) => `${clef}:${String(letter || '').toUpperCase()}/${Number(octave)}`;
+    const getState = (clef: ClefType, letter: string, octave: number): AccidentalType => {
+      const key = keyOf(clef, letter, octave);
       const existing = state.get(key);
       if (existing) return existing;
       const d = keySignatureDefaultAccidentalForLetter(keySignature, letter);
       state.set(key, d);
       return d;
     };
-    const setState = (letter: string, octave: number, acc: AccidentalType) => {
-      const key = `${String(letter || '').toUpperCase()}/${Number(octave)}`;
-      state.set(key, acc);
+    const setState = (clef: ClefType, letter: string, octave: number, acc: AccidentalType) => {
+      state.set(keyOf(clef, letter, octave), acc);
     };
 
     for (const n of g) {
@@ -303,6 +310,8 @@ const computeMeasureAccidentalGlyphs = (
         out.set(n.id, null);
         continue;
       }
+
+      const clef = clefOf(n);
 
       // Prefer user-entered accidental (can include double-sharp/flat) over derived MIDI.
       const userAcc = normalizeAccidentalType((n as any).userAccidental);
@@ -316,17 +325,11 @@ const computeMeasureAccidentalGlyphs = (
         ?? (Number.isFinite((n as any).noteIndex)
           ? accidentalFromPcForLetter(Number((n as any).noteIndex), letter)
           : accidentalFromMidiForLetter(Number((n as any).midi), letter, octave));
-      const prev = getState(letter, octave);
-      // If the user explicitly picked an accidental, always render it.
-      if (userAcc) {
-        out.set(n.id, userAcc);
-        setState(letter, octave, userAcc);
-        continue;
-      }
+      const prev = getState(clef, letter, octave);
 
       if (actual !== prev) {
         out.set(n.id, actual);
-        setState(letter, octave, actual);
+        setState(clef, letter, octave, actual);
       } else {
         // Precautionary/cautionary accidental: show even if redundant.
         if ((n as any).forceAccidental) {

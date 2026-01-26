@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "electron": "cross-env NODE_ENV=development wait-on http-get://127.0.0.1:5173 && electron .",
     "electron:dev": "concurrently -k \"cross-env NODE_ENV=development npm run dev\" \"cross-env NODE_ENV=development npm run electron\"",
+    "electron:dev:enh": "cross-env VITE_ENHARMONIC_WARNINGS=1 npm run electron:dev",
     "electron:prod": "npm run build && cross-env NODE_ENV=production electron .",
     "regress": "tsx scripts/regression-check.ts",
     "debug:m5": "tsx scripts/debug-m5-bb7ab.ts",

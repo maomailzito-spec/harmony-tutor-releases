@@ -238,7 +238,29 @@ export interface HarmonyAnalysisResult {
     analyzedNotes: StaffNote[];
     connections: ErrorConnection[];
     violations: RuleViolation[];
+  // Optional: contexts inferred by the engine (tonicizations/modulations).
+  // The editor can merge these with user-provided `analysisContexts`.
+  inferredAnalysisContexts?: AnalysisContext[];
 }
+
+export type SequenceMatch = {
+  startSlotIdx: number;
+  endSlotIdx: number;
+  lengthSteps: number;
+  confidence: number;
+  repeatsCount?: number;
+  startTick: number;
+  endTick: number;
+  startMeasure: number;
+  endMeasure: number;
+  modelStartMeasure?: number;
+  modelEndMeasure?: number;
+  repeatStartMeasure?: number;
+  repeatEndMeasure?: number;
+  slotTicks?: number[];
+  transpositionSemitones?: number | null;
+  label?: string;
+};
 
 export type HarmonyLabelOverride = {
   // Timeline position in quarter-note units from start (can be fractional).

@@ -210,3 +210,22 @@ export interface HarmonyAnalysisResult {
     connections: ErrorConnection[];
     violations: RuleViolation[];
 }
+
+export type SequenceMatch = {
+  startSlotIdx: number;
+  endSlotIdx: number;
+  lengthSteps: number;
+  confidence: number;
+  repeatsCount?: number;
+  startTick: number;
+  endTick: number;
+  startMeasure: number;
+  endMeasure: number;
+  modelStartMeasure?: number;
+  modelEndMeasure?: number;
+  repeatStartMeasure?: number;
+  repeatEndMeasure?: number;
+  slotTicks?: number[];
+  transpositionSemitones?: number | null;
+  label?: string;
+};
