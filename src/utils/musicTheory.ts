@@ -2900,6 +2900,97 @@ export function getRomanAnalysis(
     return { roman: baseRomanSymbol, figures: figuresL2 };
 }
 
+export function normalizeNotePitchFieldsWithKey(note: any, keySignature: any): any {
+    try {
+        if (!note || typeof note !== 'object') return note;
+        if (note.isRest) {
+            return {
+                ...note,
+                midi: Number.isFinite(note.midi) ? note.midi : 0,
+                noteIndex: 0,
+            };
+        }
+
+        const mod12Local = (n: number) => ((n % 12) + 12) % 12;
+
+        // If MIDI is present, treat it as the source of truth for pitch class.
+        const midi = Number(note.midi);
+        if (Number.isFinite(midi)) {
+            return {
+                ...note,
+                midi,
+                noteIndex: mod12Local(midi),
+            };
+        }
+
+        // Otherwise, try to derive pitch class from spelling under the current key.
+        const letter = String(note.pitch || '').toUpperCase().charAt(0);
+        const accFromType = (t: any): string => {
+            switch (t) {
+                case 'sharp':
+                case '#':
+                case '♯':
+                    return '#';
+                case 'flat':
+                case 'b':
+                case '♭':
+                    return 'b';
+                case 'natural':
+                case 'n':
+                case '♮':
+                    return '';
+                case 'double-sharp':
+                case '##':
+                case '𝄪':
+                    return '##';
+                case 'double-flat':
+                case 'bb':
+                case '𝄫':
+                    return 'bb';
+                default:
+                    return '';
+            }
+        };
+        const explicitAcc = accFromType(note.userAccidental) || accFromType(note.explicitAccidental) || accFromType(note.accidental);
+
+        const defaultAccForLetter = (l: string): string => {
+            try {
+                if (!l) return '';
+                const ks = keySignature;
+                const type = String(ks?.type || 'natural');
+                const count = Number(ks?.count || 0);
+                const SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+                const FLAT_ORDER = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+                if (type === 'sharp' && count > 0) return SHARP_ORDER.slice(0, count).includes(l) ? '#' : '';
+                if (type === 'flat' && count > 0) return FLAT_ORDER.slice(0, count).includes(l) ? 'b' : '';
+                return '';
+            } catch {
+                return '';
+            }
+        };
+
+        if (letter) {
+            const name = `${letter}${explicitAcc || defaultAccForLetter(letter)}`.replace('♯', '#').replace('♭', 'b');
+            const idx = (noteNameToIndex as any)[name];
+            if (Number.isFinite(idx)) {
+                return {
+                    ...note,
+                    noteIndex: mod12Local(Number(idx)),
+                };
+            }
+        }
+
+        // Last resort: keep whatever noteIndex exists, but normalize it.
+        const ni = Number(note.noteIndex);
+        if (Number.isFinite(ni)) {
+            return { ...note, noteIndex: mod12Local(ni) };
+        }
+        return note;
+    } catch {
+        return note;
+    }
+}
+
 export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignature, timeSignatureChanges?: TimeSignatureChange[]): StaffNote[] {
     // Self-heal stale/corrupt MIDI: many analysis and playback paths rely on `midi`.
     // If an editor operation updates octave/spelling but leaves `midi` stale (or missing),

@@ -4,6 +4,8 @@ import { RuleViolation, SequenceMatch } from '../types';
 interface HarmonyAnalysisPanelProps {
     violations: RuleViolation[];
     sequenceMatches?: SequenceMatch[];
+    sequencesEnabled?: boolean;
+    onToggleSequences?: () => void;
     onHoverViolation: (noteIds: string[] | null) => void;
     selectedViolationIndex?: number | null;
     onSelectViolation?: (index: number) => void;
@@ -35,7 +37,7 @@ const ExceptionIcon: React.FC = () => (
 );
 
 
-const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
+const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     const FILTERS_STORAGE_KEY = 'harmony.analysis.filters.v1';
 
     const [showError, setShowError] = useState(true);
@@ -199,7 +201,18 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
 
             {sequences.length > 0 && (
                 <div className="mb-4">
-                    <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">Sequenze trovate</p>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                        <p className="text-xs uppercase tracking-wide text-gray-400">Sequenze trovate</p>
+                        {typeof onToggleSequences === 'function' ? (
+                            <button
+                                onClick={onToggleSequences}
+                                className={`px-2 py-0.5 text-[11px] font-semibold rounded-md border transition-colors ${sequencesEnabled ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600'}`}
+                                title={sequencesEnabled ? 'Disattiva evidenziazione sequenze' : 'Attiva evidenziazione sequenze'}
+                            >
+                                {sequencesEnabled ? 'Sequenze: ON' : 'Sequenze: OFF'}
+                            </button>
+                        ) : null}
+                    </div>
                     <ul className="space-y-2">
                         {sequences.map((seq, idx) => {
                             const conf = Math.round(seq.confidence * 100);

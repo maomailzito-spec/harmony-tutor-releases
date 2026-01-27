@@ -17,7 +17,7 @@ export type SequenceDetectionOptions = {
     maxMatches?: number;
 };
 
-const DEBUG_SEQUENCE = true;
+const DEBUG_SEQUENCE = false;
 
 const mod = (n: number, m: number) => ((n % m) + m) % m;
 const mod12 = (n: number) => mod(n, 12);
