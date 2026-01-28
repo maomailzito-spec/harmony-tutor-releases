@@ -241,6 +241,9 @@ export interface HarmonyAnalysisResult {
   // Optional: contexts inferred by the engine (tonicizations/modulations).
   // The editor can merge these with user-provided `analysisContexts`.
   inferredAnalysisContexts?: AnalysisContext[];
+  // Optional: label overrides inferred by the engine (e.g. local cadences IV–V–I / ii–V–I).
+  // The editor may apply these as display-only overrides (user overrides should still win).
+  autoHarmonyLabelOverrides?: HarmonyLabelOverride[];
 }
 
 export type SequenceMatch = {
@@ -266,6 +269,8 @@ export type HarmonyLabelOverride = {
   // Timeline position in quarter-note units from start (can be fractional).
   absBeat: number;
   roman?: string;
+  // Optional display-only roman (e.g. I=VI). If set, it should be preferred for rendering.
+  romanDisplay?: string;
   figures?: string[];
   symbol?: string;
   note?: string;

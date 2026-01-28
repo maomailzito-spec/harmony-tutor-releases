@@ -709,6 +709,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return Math.round((c4Y - yAdj) / halfStep);
     }, [isSvgYWithinClefStaff, staffSystemMode, vfC4YForClef, vfStaveTopYForClef]);
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
+    const [newContextLabelDraft, setNewContextLabelDraft] = useState<string>('');
+    const [newContextKeyDraft, setNewContextKeyDraft] = useState<string>('C');
+    const [newContextIsMinorDraft, setNewContextIsMinorDraft] = useState<boolean>(false);
     const [harmonyOverrides, setHarmonyOverrides] = useState<HarmonyLabelOverride[]>([]);
     const latestHarmonyOverrides = useRef<HarmonyLabelOverride[]>([]);
     useEffect(() => { latestHarmonyOverrides.current = harmonyOverrides || []; }, [harmonyOverrides]);
@@ -731,6 +734,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
 
     const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+
+    useEffect(() => {
+        // Keep panel drafts aligned with the current global key.
+        // Users can still change them manually before inserting a context.
+        try { setNewContextKeyDraft(String(keySignatureRoot || 'C')); } catch { /* ignore */ }
+        try { setNewContextIsMinorDraft(!!isMinorMode); } catch { /* ignore */ }
+    }, [keySignatureRoot, isMinorMode]);
 
     const [engravingMode, setEngravingMode] = useState<EngravingMode>(() => {
         try {
@@ -2857,6 +2867,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         };
 
+        const isBeatBoundaryInMeasure = (inMeasureBeats0: number) => {
+            try {
+                if (!Number.isFinite(inMeasureBeats0)) return false;
+                const EPS = 1e-3;
+                if (isCompoundMeter) return isStrongPulseInMeasure(inMeasureBeats0);
+                return Math.abs(inMeasureBeats0 - Math.round(inMeasureBeats0)) < EPS;
+            } catch {
+                return false;
+            }
+        };
+
         const timelineForLabels = (timeline || []).filter((ev: any, idx: number) => {
             if (!ev) return false;
             if (idx === 0) return true;
@@ -2884,7 +2905,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (!Number.isFinite(absBeat)) return false;
                 const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
                 const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                return isStrongPulseInMeasure(inMeasure);
+                // In simple meters (4/4, 3/4, ...), real harmony changes often happen on weak beats
+                // via note releases/ties (e.g. beat 4 leading to beat 1). Keep beat-boundary releases.
+                return isBeatBoundaryInMeasure(inMeasure);
             } catch {
                 return false;
             }
@@ -2929,11 +2952,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 overrideByAbsBeat.set(qAbs(a), {
                     absBeat: a,
                     roman: typeof o?.roman === 'string' ? o.roman : undefined,
+                    romanDisplay: typeof o?.romanDisplay === 'string' ? o.romanDisplay : undefined,
                     symbol: typeof o?.symbol === 'string' ? o.symbol : undefined,
                     figures: Array.isArray(o?.figures) ? o.figures.map((x: any) => String(x)) : undefined,
                     note: typeof o?.note === 'string' ? o.note : undefined,
                 });
             });
+        } catch { /* ignore */ }
+
+        // Engine-provided label-only cadence overrides (IV–V–I / ii–V–I).
+        // These are lower priority than user overrides.
+        const engineOverrideByAbsBeat = new Map<number, HarmonyLabelOverride>();
+        try {
+            const arr = (analysisResult as any)?.autoHarmonyLabelOverrides;
+            if (Array.isArray(arr)) {
+                for (const o of arr) {
+                    const a = Number(o?.absBeat);
+                    if (!Number.isFinite(a)) continue;
+                    engineOverrideByAbsBeat.set(qAbs(a), {
+                        absBeat: a,
+                        roman: typeof o?.roman === 'string' ? o.roman : undefined,
+                        romanDisplay: typeof o?.romanDisplay === 'string' ? o.romanDisplay : undefined,
+                        symbol: typeof o?.symbol === 'string' ? o.symbol : undefined,
+                        figures: Array.isArray(o?.figures) ? o.figures.map((x: any) => String(x)) : undefined,
+                        note: typeof o?.note === 'string' ? o.note : undefined,
+                    });
+                }
+            }
         } catch { /* ignore */ }
 
         // ---------------------------------------------------------
@@ -2991,6 +3036,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
                 const r = getRomanAnalysis((ev?.notes || []) as any, ctxTonic, ctxIsMinor);
+                const rootPc = (() => {
+                    try {
+                        // Prefer a pitch-class-inferred triad root when available.
+                        // This avoids odd roman labels (e.g. "V♭6") caused by mis-rooting.
+                        const pcs = pcSetFromNotes((ev?.notes || []) as any);
+                        if (pcs && pcs.size === 3) {
+                            const arr = Array.from(pcs.values());
+                            for (const pc of arr) {
+                                const maj = new Set<number>([pc, (pc + 4) % 12, (pc + 7) % 12]);
+                                const min = new Set<number>([pc, (pc + 3) % 12, (pc + 7) % 12]);
+                                const dim = new Set<number>([pc, (pc + 3) % 12, (pc + 6) % 12]);
+                                const aug = new Set<number>([pc, (pc + 4) % 12, (pc + 8) % 12]);
+                                const matches = (s: Set<number>) => arr.every(x => s.has(x));
+                                if (matches(maj) || matches(min) || matches(dim) || matches(aug)) {
+                                    return pc;
+                                }
+                            }
+                        }
+                        // Fallback to candidate root.
+                        const cands = identifyChordCandidates((ev?.notes || []) as any);
+                        const best = Array.isArray(cands) ? cands[0] : null;
+                        const pc = Number(best?.root?.noteIndex);
+                        return Number.isFinite(pc) ? (((pc % 12) + 12) % 12) : null;
+                    } catch {
+                        return null;
+                    }
+                })();
                 return {
                     ev,
                     absBeat,
@@ -2998,6 +3070,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     ctxTonic,
                     ctxIsMinor,
                     roman: String(r?.roman || ''),
+                    rootPc,
                 };
             }).filter(x => Number.isFinite(x.absBeat));
 
@@ -3095,6 +3168,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                 }
             }
+
+            // Cadence detection now lives in the analysis engine (applyHarmonyRules)
+            // and arrives via analysisResult.autoHarmonyLabelOverrides.
         } catch { /* ignore */ }
 
         // For each system, collect all timeline events that fall within its measures
@@ -3401,22 +3477,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // chord tone as passing/escape, keep it when it fits a confident chord candidate.
                 try {
                     if (n.isPassing || n.isEscape) {
-                        const isStrongBeat = (() => {
+                        const isBeatBoundary = (() => {
                             try {
                                 const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
                                 const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                                return isStrongPulseInMeasure(inMeasure);
+                                const isCompoundMeter = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+                                const EPS = 1e-3;
+                                if (isCompoundMeter) return isStrongPulseInMeasure(inMeasure);
+                                return Math.abs(inMeasure - Math.round(inMeasure)) < EPS;
                             } catch {
                                 return false;
                             }
                         })();
 
-                        if (isStrongBeat) {
+                        // Mis-tag guard on beat boundaries: derive chord from other (non-ornamental)
+                        // notes excluding the current one, then keep this note if it fits that chord.
+                        // This prevents real changes on weak beats (e.g. beat 4) from disappearing.
+                        if (isBeatBoundary) {
                             const fullIndex = indexByAbsBeat.get(absBeat);
                             const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
-                            const notesHere = (curEv?.notes || []) as any[];
-                            if (notesHere.length >= 3) {
-                                const cands = identifyChordCandidates(notesHere as any);
+                            const notesHereAll = (curEv?.notes || []) as any[];
+                            const supportNotes = (notesHereAll || []).filter((x: any) => {
+                                if (!x || x.isRest) return false;
+                                if (String(x?.id ?? '') === String(n?.id ?? '')) return false;
+                                // exclude other ornaments so we don't "learn" the harmony from them
+                                if (x.isPassing || x.isEscape || x.isNeighbor || x.isAnticipation || x.isAppoggiatura) return false;
+                                return true;
+                            });
+                            if (supportNotes.length >= 3) {
+                                const cands = identifyChordCandidates(supportNotes as any);
                                 const best = (cands && cands.length) ? cands[0] : null;
                                 const matchType = (best as any)?.matchType;
                                 const chordType = String(best?.type || '');
@@ -3927,6 +4016,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             let roman = '';
             let symbol = '';
             let isAug6Roman = false;
+
+            // Display-only roman (e.g. I=VI). Must be declared before any override blocks.
+            let romanDisplay: string | undefined = undefined;
 
             const prevRoman = lastRomanBySystem.get(systemIndex) || '';
             const prevRootPc = lastChordRootPcBySystem.get(systemIndex);
@@ -4461,14 +4553,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             } catch { /* ignore */ }
 
             // Auto (analysis) overrides: label-only tonicization. Never beats a user override.
+            let isAutoOverrideHere = false;
             try {
                 const a = qAbs(event.absBeat);
                 if (!overrideByAbsBeat.has(a)) {
+                    // 1) Engine-provided cadence overrides
+                    const eng = getNear(engineOverrideByAbsBeat, a);
+                    if (eng) {
+                        if (eng.roman !== undefined) roman = eng.roman;
+                        if (eng.symbol !== undefined) symbol = eng.symbol;
+                        if (eng.figures !== undefined) figures = eng.figures;
+                        if (eng.romanDisplay !== undefined) romanDisplay = eng.romanDisplay;
+                        isAutoOverrideHere = true;
+                    }
+
+                    // 2) Editor-local overrides (legacy)
                     const auto = getNear(autoOverrideByAbsBeat, a);
                     if (auto) {
                         if (auto.roman !== undefined) roman = auto.roman;
                         if (auto.symbol !== undefined) symbol = auto.symbol;
                         if (auto.figures !== undefined) figures = auto.figures;
+                        isAutoOverrideHere = true;
                     }
                 }
             } catch { /* ignore */ }
@@ -4478,6 +4583,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const ov = overrideByAbsBeat.get(qAbs(event.absBeat));
                 if (ov) {
                     if (ov.roman !== undefined) roman = ov.roman;
+                    if (ov.romanDisplay !== undefined) romanDisplay = ov.romanDisplay;
                     if (ov.symbol !== undefined) symbol = ov.symbol;
                     if (ov.figures !== undefined) figures = ov.figures;
                 }
@@ -4513,12 +4619,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Display-only: when we are in a tonicization/modulation context, show pivot tonics as `I=V`.
             // This keeps the analysis context in the new key (so following chords aren't distorted),
             // while still showing the functional relation to the global key.
-            let romanDisplay: string | undefined = undefined;
 
             // Display-only (label-only tonicization): show resolution pivot as i=ii, I=V, etc.
             try {
                 const a = qAbs(event.absBeat);
-                if (!overrideByAbsBeat.has(a)) {
+                if (!overrideByAbsBeat.has(a) && !romanDisplay) {
                     const autoDisp = getNear(autoRomanDisplayByAbsBeat, a);
                     if (autoDisp) {
                         // If the override is a pure slash-function label (e.g. ii°/iii),
@@ -4534,6 +4639,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                 }
             } catch { /* ignore */ }
+
+            // If an auto override changed the roman label, make it win in rendering.
+            // Otherwise sequence functional relabeling can still be displayed on top.
+            try {
+                if (isAutoOverrideHere && roman && !romanDisplay) {
+                    romanDisplay = String(roman);
+                }
+            } catch { /* ignore */ }
             try {
                 const inNonGlobalContext = !!(applicableContext && (contextTonic !== currentTonic || contextIsMinor !== isMinorMode));
                 const localRoman = String(roman || '');
@@ -4541,8 +4654,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (inNonGlobalContext && localIsTonic) {
                     const global = getRomanAnalysis((analysisNotesForNaming || []) as any, currentTonic, isMinorMode);
                     const globalRoman = String(global?.roman || '');
-                    if (globalRoman && globalRoman !== localRoman) {
-                        // Common/pedagogical: show I=V on dominant-key pivot.
+                    const ctxLabelRaw = String((applicableContext as any)?.label || '').trim();
+                    const ctxLabel = (() => {
+                        // Keep it compact: take the first token (so "IV (subdom)" works).
+                        const t = ctxLabelRaw.split(/\s+/g)[0] || '';
+                        return t
+                            .replace(/♭/g, 'b')
+                            .replace(/♯/g, '#')
+                            .replace(/𝄫/g, 'bb')
+                            .replace(/𝄪/g, '##');
+                    })();
+                    const labelLooksRoman = (() => {
+                        if (!ctxLabel) return false;
+                        // Allow things like IV, ii, V/vi, bVII, #iv°, etc.
+                        return /^([#b]*)(vii[°+ø]?|vi|iv|v|iii|ii|i)(\d+)?(\/(vii[°+ø]?|vi|iv|v|iii|ii|i))?$/i.test(ctxLabel);
+                    })();
+
+                    // Prefer explicit user label when provided.
+                    if (!romanDisplay && labelLooksRoman) {
+                        romanDisplay = `${localRoman}=${ctxLabel}`;
+                    }
+
+                    // Fallback: common/pedagogical I=V on dominant-key pivot.
+                    if (!romanDisplay && globalRoman && globalRoman !== localRoman) {
                         if (globalRoman === 'V' || globalRoman.startsWith('V/')) {
                             romanDisplay = `${localRoman}=${globalRoman}`;
                         }
@@ -4564,7 +4698,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 figures,
                 symbol,
                 absBeat: event.absBeat,
-                isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)),
+                isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)) || isAutoOverrideHere,
                 pcsSig: signatureFromNotes((fullNotes || []) as any),
             });
         });
@@ -4572,7 +4706,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Sort labels in each system by x
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, timeSignature]);
+    }, [analysisContextAbsBeat, analysisContexts, analysisResult, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, timeSignature]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
@@ -4752,7 +4886,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // Normalize within a measure: many pieces have 3 functional snapshots per bar,
             // but the analyzer may emit extra labels (ornaments, releases on strong points, etc.).
-            // Bucket events into 3 equal slices of the measure and pick the first per bucket.
+            // Bucket events into beat-aligned slots for simple meters.
+            // A fixed 3-slice scheme can miss patterns like IV6–V6–I–vi in 4/4 where changes fall on beat 4 and beat 2.
             const start = (measureStartAbsBeat && typeof measureStartAbsBeat[m] === 'number')
                 ? (measureStartAbsBeat[m] as number)
                 : (m * beatsPerMeasureBase);
@@ -4760,27 +4895,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 ? Math.max(1, Number(measureBeatsPerMeasure[m]))
                 : Math.max(1, beatsPerMeasureBase);
 
+            const isCompoundMeter = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
+            const slotCount = (() => {
+                if (isCompoundMeter) return 3;
+                const n = Math.round(bpm);
+                // Keep it bounded; typical cases are 2..6.
+                return Math.max(2, Math.min(8, Number.isFinite(n) ? n : 3));
+            })();
+
             arr.sort((a, b) => a.absBeat - b.absBeat);
 
-            // Bucket to exactly 3 slots (0,1,2). Fill gaps with nearest previous/next so
+            // Bucket to a fixed number of slots per measure. Fill gaps with nearest previous/next so
             // the signature length stays stable across blocks.
-            const bucketEv: Array<HarmonyEv | null> = [null, null, null];
+            const bucketEv: Array<HarmonyEv | null> = Array.from({ length: slotCount }, () => null);
             for (const ev of arr) {
                 const rel = (ev.absBeat - start) / bpm;
-                const bucket = Math.max(0, Math.min(2, Math.floor(rel * 3)));
+                const bucket = Math.max(0, Math.min(slotCount - 1, Math.floor(rel * slotCount)));
                 if (!bucketEv[bucket]) bucketEv[bucket] = ev;
             }
 
             // Fill forward from previous
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < slotCount; i++) {
                 if (!bucketEv[i] && i > 0) bucketEv[i] = bucketEv[i - 1];
             }
             // Fill backward from next
-            for (let i = 2; i >= 0; i--) {
-                if (!bucketEv[i] && i < 2) bucketEv[i] = bucketEv[i + 1];
+            for (let i = slotCount - 1; i >= 0; i--) {
+                if (!bucketEv[i] && i < (slotCount - 1)) bucketEv[i] = bucketEv[i + 1];
             }
             // If still empty (shouldn't), bail.
-            if (!bucketEv[0] && !bucketEv[1] && !bucketEv[2]) return [];
+            if (bucketEv.every(x => !x)) return [];
 
             const tokens = bucketEv
                 .filter(Boolean)
@@ -5233,7 +5376,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [analysisContexts, harmonyLabelsBySystem, isAnalysisEnabled, layoutData, staffSystemMode, timeSignature]);
 
     const sequenceMatches = useMemo(() => {
-        if (!isAnalysisEnabled || !isSequencesEnabled) return [];
+        // IMPORTANT: sequences are a theoretical feature and affect functional labeling.
+        // The UI toggle should only affect rendering (markers/highlights), not the analysis itself.
+        if (!isAnalysisEnabled) return [];
 
         // IMPORTANT: build labelPoints from a global timeline so results are stable
         // even when layout changes (e.g. measures-per-line causes different system breaks).
@@ -5260,6 +5405,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         };
 
+        const isBeatBoundaryInMeasure = (inMeasureBeats0: number) => {
+            try {
+                if (!Number.isFinite(inMeasureBeats0)) return false;
+                const EPS = 1e-3;
+                if (isCompoundMeter) return isStrongPulseInMeasure(inMeasureBeats0);
+                return Math.abs(inMeasureBeats0 - Math.round(inMeasureBeats0)) < EPS;
+            } catch {
+                return false;
+            }
+        };
+
         const timelineForLabels = (timeline || []).filter((ev: any, idx: number) => {
             if (!ev) return false;
             if (idx === 0) return true;
@@ -5278,7 +5434,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const absBeat = Number(ev?.absBeat);
                 if (!Number.isFinite(absBeat)) return false;
                 const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                return isStrongPulseInMeasure(inMeasure);
+                return isBeatBoundaryInMeasure(inMeasure);
             } catch {
                 return false;
             }
@@ -5350,7 +5506,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }).filter(Boolean) as Array<{ absBeat: number; roman?: string; symbol?: string; figures?: string[] }>;
 
         return detectVoiceLeadingSequences(notes, timeSignature, timeSignatureChanges, labelPoints);
-    }, [analyzedNotes, currentTonic, effectiveAnalysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, isSequencesEnabled, notes, timeSignature, timeSignatureChanges]);
+    }, [analyzedNotes, currentTonic, effectiveAnalysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, notes, timeSignature, timeSignatureChanges]);
 
     const harmonyLabelsBySystemSequenced = useMemo(() => {
         if (!harmonyLabelsBySystem?.length || !sequenceMatches.length) return harmonyLabelsBySystem || [];
@@ -5389,6 +5545,69 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const TOL_TICKS = 12;
             if (!best || bestDist > TOL_TICKS) return null;
             return best;
+        };
+
+        // If a sequence slot falls on a beat with no nearby rendered harmony label,
+        // fall back to computing the roman at that tick by sampling the global note timeline.
+        // This keeps sequence imitation stable even when the harmony-label pipeline suppresses
+        // some events (e.g., no onset on weak beats).
+        const timelineForRoman = getActiveNotesTimeline((analyzedNotes || notes) as any, timeSignature, timeSignatureChanges);
+        const getNotesAtAbsBeat = (absBeat: number): any[] => {
+            try {
+                let best: any = null;
+                for (const ev of (timelineForRoman || [])) {
+                    if (!ev || typeof ev.absBeat !== 'number') continue;
+                    if (ev.absBeat <= absBeat + 1e-6) best = ev;
+                    else break;
+                }
+                return (best?.notes || []) as any[];
+            } catch {
+                return [];
+            }
+        };
+
+        const qAbs = (x: number) => {
+            try {
+                const q = 192;
+                return Math.round(Number(x) * q) / q;
+            } catch {
+                return Number(x) || 0;
+            }
+        };
+
+        const overrideByAbsBeat = new Map<number, HarmonyLabelOverride>();
+        try {
+            (harmonyOverrides || []).forEach((o: any) => {
+                const a = Number(o?.absBeat);
+                if (!Number.isFinite(a)) return;
+                overrideByAbsBeat.set(qAbs(a), {
+                    absBeat: a,
+                    roman: typeof o?.roman === 'string' ? o.roman : undefined,
+                    symbol: typeof o?.symbol === 'string' ? o.symbol : undefined,
+                    figures: Array.isArray(o?.figures) ? o.figures.map((x: any) => String(x)) : undefined,
+                    note: typeof o?.note === 'string' ? o.note : undefined,
+                    romanDisplay: typeof o?.romanDisplay === 'string' ? o.romanDisplay : undefined,
+                });
+            });
+        } catch { /* ignore */ }
+
+        const computeRomanAtTick = (tick: number): string => {
+            try {
+                if (!Number.isFinite(tick)) return '';
+                const absBeat = tick / TICKS_PER_QUARTER;
+                const ctx = ctxAtAbsBeat(absBeat);
+                const tonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
+                const isMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
+                const r = getRomanAnalysis(getNotesAtAbsBeat(absBeat) as any, tonic, isMinor);
+                let roman = String(r?.roman || '');
+
+                // Apply user override if present.
+                const ov = overrideByAbsBeat.get(qAbs(absBeat));
+                if (ov && ov.roman != null) roman = String(ov.roman);
+                return roman;
+            } catch {
+                return '';
+            }
         };
 
         const ctxAtAbsBeat = (absBeat: number) => (effectiveAnalysisContexts || [])
@@ -5558,28 +5777,54 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             for (let kk = 0; kk <= L; kk += 1) {
                 const slot = slots[seq.startSlotIdx + kk];
                 const lab = Number.isFinite(slot) ? findNearestLabelIndex(slot) : null;
-                const src = String(lab?.label?.roman ?? '').trim();
+                let src = String(lab?.label?.roman ?? '').trim();
+                if (!src && Number.isFinite(slot)) {
+                    // No nearby rendered label for this slot: compute directly at slot tick.
+                    src = String(computeRomanAtTick(slot)).trim();
+                }
                 if (src) tmplRomans.push(src);
                 templateByK.push({ lab, src, stripped: stripSecondary(src), functional: src });
             }
             const inferred0 = inferLocalTonicFromTemplate(tmplRomans);
-            // If we have no explicit tonicization evidence but the sequence is truly transposed,
-            // allow a fallback where the first template chord is treated as the local tonic,
-            // ONLY when it's a plausible tonic substitute (I/iii/vi). This makes patterns like
-            // "iii – V" display as "I – V" without breaking diatonic cadences like IV–V–I–vi.
             const inferred = (() => {
                 try {
+                    // A) Treat auto pivot displays like `i=iii` as explicit tonicization evidence.
+                    // This fixes cases where the engine labels the local tonic as `iii` globally,
+                    // while the UI also computes a pedagogical pivot display.
+                    for (const row of templateByK) {
+                        const disp = String((row as any)?.lab?.label?.romanDisplay ?? '').trim();
+                        if (!disp || !disp.includes('=')) continue;
+                        const [left0, right0] = disp.split('=');
+                        const left = String(left0 || '').trim();
+                        const right = String(right0 || '').trim();
+                        if (!right) continue;
+                        const isTonicLeft = /^i(?!i)|^I(?!I)/.test(left);
+                        if (!isTonicLeft) continue;
+                        const d = degreeIndexFromRomanLoose(right);
+                        if (d == null) continue;
+                        // `normalizeFunctionalRomanInSequence` currently only needs a non-null boolean.
+                        const isMinor = left === left.toLowerCase();
+                        return { degreeIdx: d, isMinor };
+                    }
+
                     if (inferred0.degreeIdx != null && inferred0.isMinor != null) return inferred0;
-                    const transp = Number(seq.transpositionSemitones);
-                    if (!Number.isFinite(transp) || Math.abs(transp) < 1e-6) return inferred0;
+
+                    // B) Safe fallback for tonic–dominant motifs: if template starts on I/iii/vi and next
+                    // chord is V-ish, treat the first chord as local tonic so `iii – V` becomes `I – V`.
                     const first = String(templateByK[0]?.src || '').trim();
-                    if (!first) return inferred0;
-                    const d = degreeIndexFromRomanLoose(first);
-                    if (d == null) return inferred0;
-                    // Only I (0), iii (2), vi (5) qualify.
-                    if (!(d === 0 || d === 2 || d === 5)) return inferred0;
-                    const isMinor = first === first.toLowerCase();
-                    return { degreeIdx: d, isMinor };
+                    const second = String(templateByK[1]?.src || '').trim();
+                    const d0 = degreeIndexFromRomanLoose(first);
+                    if (d0 == null) return inferred0;
+                    if (!(d0 === 0 || d0 === 2 || d0 === 5)) return inferred0;
+                    const isVLike = (r: string) => {
+                        const s = String(r || '').trim();
+                        if (!s) return false;
+                        const head = stripSecondary(s);
+                        return /^V(?!I)/i.test(head) || /^vii/i.test(head);
+                    };
+                    if (!isVLike(second)) return inferred0;
+
+                    return { degreeIdx: d0, isMinor: false };
                 } catch {
                     return inferred0;
                 }
@@ -5632,9 +5877,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
 
         return labelsBySystem;
-    }, [harmonyLabelsBySystem, sequenceMatches]);
+    }, [analysisContextAbsBeat, analyzedNotes, currentTonic, effectiveAnalysisContexts, harmonyLabelsBySystem, harmonyOverrides, isMinorMode, notes, sequenceMatches, timeSignature, timeSignatureChanges]);
 
     const sequenceMarkersBySystem = useMemo(() => {
+        if (!isSequencesEnabled) return [] as Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>>;
         if (!layoutData || !sequenceMatches.length) return [] as Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>>;
 
         const markersBySystem: Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>> = layoutData.systemsParams.map(() => []);
@@ -5794,10 +6040,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
 
         return markersBySystem;
-    }, [layoutData, sequenceMatches, staffSystemMode]);
+    }, [isSequencesEnabled, layoutData, sequenceMatches, staffSystemMode]);
 
     // Subtle highlight for the *model* range of each sequence (discreet visual cue).
     const sequenceModelMarkersBySystem = useMemo(() => {
+        if (!isSequencesEnabled) return [] as Array<Array<{ id: string; x1: number; x2: number; y: number }>>;
         if (!layoutData || !sequenceMatches.length) return [] as Array<Array<{ id: string; x1: number; x2: number; y: number }>>;
 
         const markersBySystem: Array<Array<{ id: string; x1: number; x2: number; y: number }>> = layoutData.systemsParams.map(() => []);
@@ -5906,7 +6153,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
 
         return markersBySystem;
-    }, [layoutData, sequenceMatches, staffSystemMode]);
+    }, [isSequencesEnabled, layoutData, sequenceMatches, staffSystemMode]);
 
     // Modulation / tonicization markers per system (from analysisContexts)
     const contextMarkersBySystem = useMemo(() => {
@@ -6938,8 +7185,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Aggiorna la violation selezionata se la nota è coinvolta in una violation
         if (!shiftKey) {
             if (next.size === 1 && next.has(noteId) && Array.isArray(violations)) {
-                const idx = violations.findIndex(v => v.noteIds.includes(noteId));
-                setSelectedViolationIndex(idx !== -1 ? idx : null);
+                const candidates = (violations as any[])
+                    .map((v, idx) => ({ v, idx }))
+                    .filter(x => x.v && Array.isArray(x.v.noteIds) && x.v.noteIds.includes(noteId));
+
+                if (candidates.length > 0) {
+                    const sevRank: Record<string, number> = { error: 0, warning: 1, exception: 2 };
+                    candidates.sort((a, b) => {
+                        const la = Array.isArray(a.v.noteIds) ? a.v.noteIds.length : 99;
+                        const lb = Array.isArray(b.v.noteIds) ? b.v.noteIds.length : 99;
+                        if (la !== lb) return la - lb; // prefer tighter (e.g. 2-note) violations
+                        const sa = sevRank[String(a.v.severity)] ?? 99;
+                        const sb = sevRank[String(b.v.severity)] ?? 99;
+                        if (sa !== sb) return sa - sb;
+                        return a.idx - b.idx;
+                    });
+                    setSelectedViolationIndex(candidates[0].idx);
+                } else {
+                    setSelectedViolationIndex(null);
+                }
             } else {
                 setSelectedViolationIndex(null);
             }
@@ -7467,6 +7731,55 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const beat = Math.round(((absBeat - (measureIndex * beatsPerMeasure)) + 1) * 1e6) / 1e6;
         return { measureIndex, beat };
     }, [layoutData, timeSignature]);
+
+    const openModulationMenuAtPlayhead = useCallback(() => {
+        const container = staffContainerRef.current;
+
+        const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
+        const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
+
+        if (!container) {
+            setContextMenu({ x: 120, y: 120, absBeat, measureIndex, beat });
+            return;
+        }
+
+        // If the playhead isn't explicitly placed yet, derive it from the current absBeat.
+        let pos = playheadPosition;
+        if (!pos) {
+            const derived = getPlayheadPosForAbsBeat(absBeat);
+            if (derived) {
+                setPlayheadPosition(derived);
+                pos = derived;
+            }
+        }
+        if (!pos) {
+            setContextMenu({ x: 120, y: 120, absBeat, measureIndex, beat });
+            return;
+        }
+
+        const safeX = Number.isFinite(pos.x as any) ? (pos.x as number) : 40;
+
+        // Prefer the ref-map (more reliable than querying large DOMs repeatedly).
+        let sysEl = systemElementByIndexRef.current.get(pos.systemIndex) as HTMLElement | null;
+        if (!sysEl) sysEl = container.querySelector(`[data-system-index="${pos.systemIndex}"]`) as HTMLElement | null;
+        if (!sysEl) sysEl = container.querySelector('[data-system-index]') as HTMLElement | null;
+
+        if (sysEl) {
+            const sysRect = sysEl.getBoundingClientRect();
+            const x = sysRect.left + safeX;
+            const y = sysRect.top + 16;
+            setContextMenu({ x, y, absBeat, measureIndex, beat });
+            return;
+        }
+
+        // Last-resort fallback: anchor to the score container.
+        try {
+            const r = container.getBoundingClientRect();
+            setContextMenu({ x: r.left + 120, y: r.top + 60, absBeat, measureIndex, beat });
+        } catch {
+            setContextMenu({ x: 120, y: 120, absBeat, measureIndex, beat });
+        }
+    }, [getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, getPlayheadPosForAbsBeat, playheadPosition]);
 
     const fillEmptyMeasuresWithRests = useCallback((voice: number, upToMeasureIndex: number) => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -9418,19 +9731,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
 
-                if (!playheadPosition) return;
-                const container = staffContainerRef.current;
-                if (!container) return;
-                const sysEl = container.querySelector(`[data-system-index="${playheadPosition.systemIndex}"]`) as HTMLElement | null;
-                if (!sysEl) return;
-
-                const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
-                const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
-
-                const sysRect = sysEl.getBoundingClientRect();
-                const x = sysRect.left + playheadPosition.x;
-                const y = sysRect.top + 16;
-                setContextMenu({ x, y, absBeat, measureIndex, beat });
+                openModulationMenuAtPlayhead();
                 return;
             }
 
@@ -10966,7 +11267,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 : (Number(sys.width) - START_X);
                                                                             if (!Number.isFinite(startX) || !Number.isFinite(endX) || endX <= startX) return null;
 
-                                                                            const romanShown = String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
+                                                                            const romanShown = String(
+                                                                                (lbl as any).isOverride
+                                                                                    ? ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
+                                                                                    : ((lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                            );
                                                                             const romanBaseText = showHarmonyDebug
                                                                                 ? romanShown
                                                                                 : romanShown;
@@ -11019,7 +11324,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         // without changing the underlying roman used for stability heuristics.
                                                                                         const needsDim7Suffix = (() => {
                                                                                             try {
-                                                                                                const base = String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
+                                                                                                const base = String(
+                                                                                                    (lbl as any).isOverride
+                                                                                                        ? ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
+                                                                                                        : ((lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                                                );
                                                                                                 if (!(base.includes('°') || base.includes('ø'))) return false;
                                                                                                 const figTexts = (lbl.figures || []) as string[];
                                                                                                 const has7th = figTexts.some(t => String(t).includes('7'));
@@ -11031,7 +11340,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                             }
                                                                                         })();
 
-                                                                                        const romanBaseText = String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
+                                                                                        const romanBaseText = String(
+                                                                                            (lbl as any).isOverride
+                                                                                                ? ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
+                                                                                                : ((lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                                        );
                                                                                         const romanText = romanBaseText + (needsDim7Suffix ? '7' : '');
                                                                                         const romanW = measureTextWidth(romanText, romanFont);
                                                                                         const romanX = baseX;
@@ -11157,7 +11470,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     fontWeight={700}
                                                                                                     fill="black"
                                                                                                 >
-                                                                                                    {String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')}
+                                                                                                    {String(
+                                                                                                        (lbl as any).isOverride
+                                                                                                            ? ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
+                                                                                                            : ((lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                                                    )}
                                                                                                 </text>
 
                                                                                                 {lbl.figures?.length ? (
@@ -11831,21 +12148,162 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 {activeTab === 'analysis' && (
                     <div className="w-full max-w-sm flex-shrink-0 h-full min-h-0">
                         {isAnalysisEnabled ? (
-                            <HarmonyAnalysisPanel
-                                violations={violations}
-                                sequenceMatches={sequenceMatches}
-                                sequencesEnabled={isSequencesEnabled}
-                                onToggleSequences={() => setIsSequencesEnabled(prev => !prev)}
-                                onHoverViolation={setHoveredViolationNotes}
-                                selectedViolationIndex={selectedViolationIndex}
-                                onSelectViolation={index => {
-                                    setSelectedViolationIndex(index);
-                                    if (index != null && violations[index]) {
-                                        setSelectedNoteIds(new Set(violations[index].noteIds));
-                                    }
-                                    if (typeof index === 'number') scrollScoreToViolationIndex(index);
-                                }}
-                            />
+                            <div className="h-full min-h-0 flex flex-col gap-2">
+                                <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/40">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-xs uppercase tracking-wide text-gray-400">Tonalità manuali / label</p>
+                                        <p className="text-[11px] text-gray-400">{analysisContexts.length}</p>
+                                    </div>
+
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <input
+                                            value={newContextLabelDraft}
+                                            onChange={e => setNewContextLabelDraft(e.target.value)}
+                                            className="flex-1 bg-gray-700/60 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 placeholder:text-gray-400"
+                                            placeholder="Nuova label al playhead (es. IV, V/vi, modulazione a C)"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
+                                                const s = String(newContextLabelDraft || '').trim();
+                                                if (!s) return;
+                                                handleApplyContextLabelOnly(absBeat, s);
+                                                setNewContextLabelDraft('');
+                                            }}
+                                            className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
+                                            title="Inserisce (o aggiorna) solo il testo/label al playhead (non cambia tonalità)"
+                                        >
+                                            Label
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <select
+                                            value={newContextKeyDraft}
+                                            onChange={e => setNewContextKeyDraft(e.target.value)}
+                                            className="flex-1 bg-gray-700/60 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100"
+                                            title="Tonalità da inserire al playhead"
+                                        >
+                                            {keySignatureOptions.map(opt => (
+                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                        </select>
+                                        <div className="relative flex p-0.5 bg-gray-900/50 rounded-md flex-shrink-0">
+                                            <div
+                                                className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform"
+                                                style={{ transform: `translateX(${newContextIsMinorDraft ? '100%' : '0%'}) ` }}
+                                            ></div>
+                                            <button
+                                                onClick={() => setNewContextIsMinorDraft(false)}
+                                                className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!newContextIsMinorDraft ? 'text-gray-900' : 'text-gray-300'}`}
+                                                title="Maggiore"
+                                            >
+                                                Mag
+                                            </button>
+                                            <button
+                                                onClick={() => setNewContextIsMinorDraft(true)}
+                                                className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${newContextIsMinorDraft ? 'text-gray-900' : 'text-gray-300'}`}
+                                                title="Minore"
+                                            >
+                                                min
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
+                                                const tonicToApply = newContextIsMinorDraft
+                                                    ? (relativeMinors[newContextKeyDraft] || newContextKeyDraft)
+                                                    : newContextKeyDraft;
+                                                const label = String(newContextLabelDraft || '').trim() || undefined;
+                                                handleApplyContext(absBeat, tonicToApply, newContextIsMinorDraft, label);
+                                            }}
+                                            className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
+                                            title="Inserisce una tonalità (contesto) al playhead; usa anche la label se presente"
+                                        >
+                                            Tonalità
+                                        </button>
+                                        <button
+                                            onClick={() => openModulationMenuAtPlayhead()}
+                                            className="px-2 py-1 text-[11px] rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600"
+                                            title="Apri il menu Testo/Tempo/Tonalità al playhead (equivalente al tasto T)"
+                                        >
+                                            Menu
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-2 max-h-40 overflow-y-auto pr-1 space-y-1">
+                                        {(analysisContexts || []).slice().sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b)).map((ctx, idx) => {
+                                            const ab = analysisContextAbsBeat(ctx);
+                                            const mb = getMeasureIndexAndBeatFromAbsBeat(ab);
+                                            const mTxt = mb?.measureIndex != null ? (mb.measureIndex + 1) : '?';
+                                            const bTxt = mb?.beat != null ? (Number.isInteger(mb.beat) ? mb.beat : mb.beat.toFixed(3)) : '?';
+                                            const keyTxt = `${ctx.newTonic}${ctx.newIsMinor ? ' min' : ' Maj'}`;
+                                            return (
+                                                <div key={`ctx-${idx}-${ab}`} className="bg-gray-900/30 border border-gray-700/50 rounded-md p-2">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <p className="text-[11px] text-gray-300">
+                                                            m{mTxt} b{bTxt} · <span className="text-gray-400">{keyTxt}</span>
+                                                        </p>
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                onClick={() => handleRemoveContextLabelOnly(ab)}
+                                                                className="px-2 py-0.5 text-[11px] rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600"
+                                                                title="Rimuove solo la label (non la tonalità)"
+                                                            >
+                                                                No label
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRemoveContext(ab)}
+                                                                className="px-2 py-0.5 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors"
+                                                                title="Rimuove il contesto"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <input
+                                                        defaultValue={String(ctx.label || '')}
+                                                        onBlur={(e) => {
+                                                            const v = String(e.target.value || '').trim();
+                                                            handleApplyContextLabelOnly(ab, v);
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                const v = String((e.target as any).value || '').trim();
+                                                                handleApplyContextLabelOnly(ab, v);
+                                                            }
+                                                        }}
+                                                        className="mt-1 w-full bg-gray-700/60 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 placeholder:text-gray-400"
+                                                        placeholder="Label (opzionale)"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="mt-2 text-[11px] text-gray-400">
+                                        Suggerimento: puoi anche fare click destro sullo spartito per inserire/modificare una modulazione/tonicizzazione con label.
+                                    </p>
+                                </div>
+
+                                <div className="flex-1 min-h-0">
+                                    <HarmonyAnalysisPanel
+                                        violations={violations}
+                                        sequenceMatches={sequenceMatches}
+                                        sequencesEnabled={isSequencesEnabled}
+                                        onToggleSequences={() => setIsSequencesEnabled(prev => !prev)}
+                                        onHoverViolation={setHoveredViolationNotes}
+                                        selectedViolationIndex={selectedViolationIndex}
+                                        onSelectViolation={index => {
+                                            setSelectedViolationIndex(index);
+                                            if (index != null && violations[index]) {
+                                                setSelectedNoteIds(new Set(violations[index].noteIds));
+                                            }
+                                            if (typeof index === 'number') scrollScoreToViolationIndex(index);
+                                        }}
+                                    />
+                                </div>
+                            </div>
                         ) : (
                             <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto flex items-center justify-center text-center text-gray-400">
                                 <div>

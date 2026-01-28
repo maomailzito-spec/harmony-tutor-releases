@@ -209,6 +209,8 @@ export interface HarmonyAnalysisResult {
     analyzedNotes: StaffNote[];
     connections: ErrorConnection[];
     violations: RuleViolation[];
+  inferredAnalysisContexts?: AnalysisContext[];
+  autoHarmonyLabelOverrides?: { absBeat: number; roman?: string; romanDisplay?: string; figures?: string[]; symbol?: string; note?: string }[];
 }
 
 export type SequenceMatch = {

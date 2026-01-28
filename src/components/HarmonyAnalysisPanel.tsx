@@ -199,10 +199,10 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                 </div>
             </div>
 
-            {sequences.length > 0 && (
+            {(typeof onToggleSequences === 'function' || sequences.length > 0) && (
                 <div className="mb-4">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                        <p className="text-xs uppercase tracking-wide text-gray-400">Sequenze trovate</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-400">Sequenze</p>
                         {typeof onToggleSequences === 'function' ? (
                             <button
                                 onClick={onToggleSequences}
@@ -213,8 +213,14 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                             </button>
                         ) : null}
                     </div>
-                    <ul className="space-y-2">
-                        {sequences.map((seq, idx) => {
+
+                    {sequences.length === 0 ? (
+                        <p className="text-xs text-gray-400">
+                            {sequencesEnabled ? 'Nessuna sequenza trovata.' : 'Sequenze disattivate.'}
+                        </p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {sequences.map((seq, idx) => {
                             const conf = Math.round(seq.confidence * 100);
                             const range = seq.startMeasure === seq.endMeasure
                                 ? `Misura ${seq.startMeasure + 1}`
@@ -242,8 +248,9 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                     )}
                                 </li>
                             );
-                        })}
-                    </ul>
+                            })}
+                        </ul>
+                    )}
                 </div>
             )}
             {filtered.length === 0 ? (
