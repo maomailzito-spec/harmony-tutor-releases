@@ -9,7 +9,7 @@ declare global {
         };
     }
 }
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
 import { AudioService } from '../services/AudioService';
@@ -709,9 +709,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return Math.round((c4Y - yAdj) / halfStep);
     }, [isSvgYWithinClefStaff, staffSystemMode, vfC4YForClef, vfStaveTopYForClef]);
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
-    const [newContextLabelDraft, setNewContextLabelDraft] = useState<string>('');
-    const [newContextKeyDraft, setNewContextKeyDraft] = useState<string>('C');
-    const [newContextIsMinorDraft, setNewContextIsMinorDraft] = useState<boolean>(false);
     const [harmonyOverrides, setHarmonyOverrides] = useState<HarmonyLabelOverride[]>([]);
     const latestHarmonyOverrides = useRef<HarmonyLabelOverride[]>([]);
     useEffect(() => { latestHarmonyOverrides.current = harmonyOverrides || []; }, [harmonyOverrides]);
@@ -734,13 +731,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
 
     const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
-
-    useEffect(() => {
-        // Keep panel drafts aligned with the current global key.
-        // Users can still change them manually before inserting a context.
-        try { setNewContextKeyDraft(String(keySignatureRoot || 'C')); } catch { /* ignore */ }
-        try { setNewContextIsMinorDraft(!!isMinorMode); } catch { /* ignore */ }
-    }, [keySignatureRoot, isMinorMode]);
 
     const [engravingMode, setEngravingMode] = useState<EngravingMode>(() => {
         try {
@@ -2280,12 +2270,61 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature);
     }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature]);
 
+    const ENABLE_INFERRED_CONTEXTS_PREF_KEY = 'HT_ENABLE_INFERRED_CONTEXTS';
+    const [enableInferredContexts, setEnableInferredContexts] = useState<boolean>(() => {
+        try {
+            const raw = String(window.localStorage.getItem(ENABLE_INFERRED_CONTEXTS_PREF_KEY) || '').trim().toLowerCase();
+            return raw === '1' || raw === 'true' || raw === 'on';
+        } catch {
+            return false;
+        }
+    });
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(ENABLE_INFERRED_CONTEXTS_PREF_KEY, enableInferredContexts ? '1' : '0');
+        } catch {
+            // ignore
+        }
+    }, [enableInferredContexts]);
+
     const effectiveAnalysisContexts = useMemo(() => {
         // NOTE: inferred contexts can be helpful for experimentation, but they can also
         // mis-fire on short tonicizations (e.g. V/iii) and distort Roman labels.
         // For stability/pedagogy, only apply user-authored contexts here.
-        return (analysisContexts || []) as any[];
-    }, [analysisResult, analysisContexts]);
+        const manual = (analysisContexts || []) as any[];
+        if (!enableInferredContexts) return manual;
+
+        const inferred = ((analysisResult as any)?.inferredAnalysisContexts || []) as any[];
+        const inferredArr = Array.isArray(inferred) ? inferred : [];
+        if (!inferredArr.length) return manual;
+
+        // If the user has manual contexts, do not override them.
+        // However, allow inferred contexts to continue *after* the last manual context,
+        // so the analysis can return to the global key later without forcing the user
+        // to add a second manual marker.
+        if (manual.length) {
+            let lastManualAbs = -Infinity;
+            try {
+                for (const c of manual) {
+                    const a = analysisContextAbsBeat(c as any);
+                    if (Number.isFinite(a) && a > lastManualAbs) lastManualAbs = a;
+                }
+            } catch { /* ignore */ }
+
+            const after = inferredArr.filter((c: any) => {
+                try {
+                    const a = analysisContextAbsBeat(c);
+                    return Number.isFinite(a) && a > (lastManualAbs + 1e-6);
+                } catch {
+                    return false;
+                }
+            });
+            return [...manual, ...after];
+        }
+
+        return inferredArr;
+    }, [analysisResult, analysisContexts, enableInferredContexts]);
 
     const { analyzedNotes, connections: errorConnections, violations } = analysisResult;
 
@@ -2374,44 +2413,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setContextMenu(null);
     };
 
-    const handleApplyContextLabelOnly = (absBeat: number, label?: string) => {
-        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
-        const cleanLabel = label?.trim() || undefined;
-
-        setAnalysisContexts(prev => {
-            const existing = (prev || []).find(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6);
-            if (existing) {
-                return (prev || []).map(c => (Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6)
-                    ? { ...c, label: cleanLabel }
-                    : c
-                );
-            }
-            const baseCtx = (prev || [])
-                .filter(c => analysisContextAbsBeat(c) <= safeAbsBeat + 1e-6)
-                .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
-            const baseTonic = baseCtx?.newTonic ?? currentTonic;
-            const baseIsMinor = baseCtx?.newIsMinor ?? isMinorMode;
-            const next = (prev || []).slice();
-            next.push({ absBeat: safeAbsBeat, newTonic: baseTonic, newIsMinor: baseIsMinor, label: cleanLabel });
-            return next.sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b));
-        });
-        setContextMenu(null);
-    };
-
-    const handleRemoveContextLabelOnly = (absBeat: number) => {
-        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
-        setAnalysisContexts(prev => {
-            const existing = (prev || []).find(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6);
-            if (!existing) return prev || [];
-            if (!existing.label) return prev || [];
-            return (prev || []).map(c => (Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6)
-                ? { ...c, label: undefined }
-                : c
-            );
-        });
-        setContextMenu(null);
-    };
-
     const handleApplyTimeSignatureChange = (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => {
         const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
         const n = Math.max(1, Math.round(Number(numerator)));
@@ -2442,6 +2443,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!contextMenu) return null;
         return (analysisContexts || []).find(c => Math.abs(analysisContextAbsBeat(c) - contextMenu.absBeat) <= 1e-6) || null;
     }, [analysisContextAbsBeat, contextMenu, analysisContexts]);
+
+    const existingHarmonyOverrideForContextMenu = useMemo(() => {
+        try {
+            if (!contextMenu) return null;
+            const q = (x: number) => Math.round(Number(x) * 192) / 192;
+            const a = q(contextMenu.absBeat);
+            return (harmonyOverrides || []).find(o => q(Number(o?.absBeat)) === a) || null;
+        } catch {
+            return null;
+        }
+    }, [contextMenu, harmonyOverrides]);
 
     const existingTimeSignatureChangeForMenu = useMemo(() => {
         if (!contextMenu) return null;
@@ -2718,6 +2730,131 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Keep a ref to the latest layoutData so async callbacks can read current layout
     const layoutDataRef = useRef(layoutData);
     useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
+
+    const deleteMeasureAtIndex = useCallback((measureIndex: number) => {
+        try {
+            const m = Math.max(0, Math.trunc(Number(measureIndex)));
+            if (!Number.isFinite(m)) return;
+
+            const ld: any = layoutDataRef.current;
+            const starts = ld?.measureStartAbsBeat as number[] | undefined;
+            const beatsArr = ld?.measureBeatsPerMeasure as number[] | undefined;
+
+            const baseBeats = timeSignature.numerator * (4 / timeSignature.denominator);
+            const fallbackBeats = Math.max(1, Number.isFinite(baseBeats) && baseBeats > 0 ? baseBeats : 4);
+            const startAbs = (starts && typeof starts[m] === 'number') ? Number(starts[m]) : (m * fallbackBeats);
+            const beatsInMeasure = (beatsArr && typeof beatsArr[m] === 'number') ? Math.max(1, Number(beatsArr[m])) : fallbackBeats;
+            const endAbs = startAbs + beatsInMeasure;
+            const deltaBeats = beatsInMeasure;
+            const endTick = Math.round(endAbs * TICKS_PER_QUARTER);
+            const deltaTicks = Math.round(deltaBeats * TICKS_PER_QUARTER);
+
+            const ok = (() => {
+                try {
+                    return window.confirm(`Cancellare davvero la misura ${m + 1}?\n\nLa misura verrà rimossa e tutto ciò che segue verrà spostato indietro di una misura.`);
+                } catch {
+                    return true;
+                }
+            })();
+            if (!ok) return;
+
+            setRawNotes(prev => {
+                const arr = (prev || []) as StaffNote[];
+                if (!arr.length) return arr;
+                return arr
+                    .filter(n => {
+                        const mi = Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : null;
+                        if (mi == null) return true;
+                        return mi !== m;
+                    })
+                    .map(n => {
+                        const mi = Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : null;
+                        const next: any = { ...n };
+                        if (mi != null && mi > m) next.measureIndex = mi - 1;
+
+                        const st = Number((n as any).startTick);
+                        if (Number.isFinite(st) && st >= endTick) next.startTick = st - deltaTicks;
+                        return next as StaffNote;
+                    });
+            });
+
+            setAnalysisContexts(prev => {
+                const arr = (prev || []) as AnalysisContext[];
+                return arr
+                    .filter(c => {
+                        const ab = Number((c as any).absBeat);
+                        if (Number.isFinite(ab)) return !(ab >= startAbs - 1e-9 && ab < endAbs - 1e-9);
+                        const mi = Number.isFinite((c as any).measureIndex) ? Number((c as any).measureIndex) : null;
+                        return mi == null ? true : mi !== m;
+                    })
+                    .map(c => {
+                        const next: any = { ...c };
+                        const ab = Number((c as any).absBeat);
+                        if (Number.isFinite(ab) && ab >= endAbs - 1e-9) next.absBeat = ab - deltaBeats;
+                        const mi = Number.isFinite((c as any).measureIndex) ? Number((c as any).measureIndex) : null;
+                        if (mi != null && mi > m) next.measureIndex = mi - 1;
+                        return next as AnalysisContext;
+                    });
+            });
+
+            setHarmonyOverrides(prev => {
+                const arr = (prev || []) as HarmonyLabelOverride[];
+                return arr
+                    .filter(o => {
+                        const ab = Number((o as any).absBeat);
+                        if (!Number.isFinite(ab)) return true;
+                        return !(ab >= startAbs - 1e-9 && ab < endAbs - 1e-9);
+                    })
+                    .map(o => {
+                        const next: any = { ...o };
+                        const ab = Number((o as any).absBeat);
+                        if (Number.isFinite(ab) && ab >= endAbs - 1e-9) next.absBeat = ab - deltaBeats;
+                        return next as HarmonyLabelOverride;
+                    });
+            });
+
+            setTimeSignatureChanges(prev => {
+                const arr = (prev || []) as TimeSignatureChange[];
+                return arr
+                    .filter(c => {
+                        const ab = Number((c as any).absBeat);
+                        if (Number.isFinite(ab)) {
+                            return !(ab > startAbs + 1e-9 && ab < endAbs - 1e-9);
+                        }
+                        const mi = Number.isFinite((c as any).measureIndex) ? Number((c as any).measureIndex) : null;
+                        return mi == null ? true : mi !== m;
+                    })
+                    .map(c => {
+                        const next: any = { ...c };
+                        const mi = Number.isFinite((c as any).measureIndex) ? Number((c as any).measureIndex) : null;
+                        if (mi != null && mi > m) next.measureIndex = mi - 1;
+                        const ab = Number((c as any).absBeat);
+                        if (Number.isFinite(ab) && ab >= endAbs - 1e-9) next.absBeat = ab - deltaBeats;
+                        return next as TimeSignatureChange;
+                    });
+            });
+
+            setDoubleBarlineMeasures(prev => (prev || [])
+                .filter(x => Number.isFinite(x) && x !== m)
+                .map(x => (x > m ? x - 1 : x))
+                .filter((x, i, a) => a.indexOf(x) === i)
+                .sort((a, b) => a - b)
+            );
+
+            setMinMeasureCount(prev => Math.max(1, (Number.isFinite(prev) ? prev : 1) - 1));
+            setMinMeasureCountDraft(prev => {
+                const v = Math.trunc(Number(prev));
+                const base = Number.isFinite(v) ? v : 1;
+                return String(Math.max(1, base - 1));
+            });
+
+            setContextMenu(null);
+            setHarmonyOverrideMenu(null);
+            setSelectedNoteIds(new Set());
+        } catch {
+            // ignore
+        }
+    }, [layoutDataRef, setRawNotes, setAnalysisContexts, setHarmonyOverrides, setTimeSignatureChanges, setDoubleBarlineMeasures, setMinMeasureCount, setMinMeasureCountDraft, setContextMenu, setHarmonyOverrideMenu, setSelectedNoteIds, timeSignature]);
 
     const measureToSystemIndex = useMemo(() => {
         const map = new Map<number, number>();
@@ -4055,14 +4192,58 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const pcsAnalysis = pcCount(analysisNotes as any);
                     const pcsFull = pcCount((fullNotes || []) as any);
 
-                    if (rr0.startsWith('vii') && pcsNaming > 0 && pcsNaming < 3 && (pcsAnalysis >= 3 || pcsFull >= 3)) {
+                    // Common failure mode: a dominant 7th loses its root (often filtered as NCT/held noise),
+                    // leaving the leading-tone diminished shell (e.g. B–D–F) -> vii°.
+                    // If the *full* verticality contains extra pitch-classes beyond the naming snapshot,
+                    // re-run the roman on fuller sets and prefer V/Vx labels.
+                    const hasMoreInfoInFull = pcsFull > pcsNaming && pcsFull >= 4;
+                    if (rr0.startsWith('vii') && ((pcsNaming > 0 && pcsNaming < 3 && (pcsAnalysis >= 3 || pcsFull >= 3)) || hasMoreInfoInFull)) {
                         const alt1 = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor);
                         const alt2 = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor);
-                        const isPlausible = (s: string) => s === 'V' || s === 'I' || s.startsWith('V/') || s.startsWith('I/');
+                        const isPlausible = (s: string) => {
+                            const t = String(s || '').trim();
+                            return t === 'V' || t === 'I' || t === 'v' || t === 'i' || t.startsWith('V/') || t.startsWith('I/') || t.startsWith('v/') || t.startsWith('i/');
+                        };
                         const pick = [alt1, alt2].find(x => x?.roman && isPlausible(String(x.roman)));
                         if (pick?.roman) {
                             roman = String(pick.roman);
                             isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+
+                // Rescue: if a local context makes a clear global dominant look like III.
+                // Example (reported): in A major, E/B (V6/4) can be displayed as III6/4 when the
+                // active context is (wrongly) treated as C# minor. If the chord resolves to I (A)
+                // shortly after, prefer the global dominant reading.
+                try {
+                    const rrHere = String(roman || '').trim();
+                    if (rrHere === 'III' || rrHere === 'iii') {
+                        const g = getRomanAnalysis(analysisNotesForNaming as any, currentTonic, isMinorMode);
+                        const gRoman = String(g?.roman || '').trim();
+                        const isGlobalDominant = gRoman === 'V' || gRoman === 'v' || gRoman.startsWith('V/') || gRoman.startsWith('v/');
+                        if (isGlobalDominant) {
+                            const maxAhead = (beatsPerMeasure * 2) + 1e-6;
+                            let resolvesToGlobalI = false;
+                            for (let t = eventIndex + 1; t < timelineForLabels.length; t++) {
+                                const ev2: any = timelineForLabels[t];
+                                if (!ev2) continue;
+                                const dt = Number(ev2.absBeat) - Number(event.absBeat);
+                                if (!Number.isFinite(dt) || dt < -1e-6) continue;
+                                if (dt > maxAhead) break;
+                                const r2 = getRomanAnalysis((ev2?.notes || []) as any, currentTonic, isMinorMode);
+                                const rr2 = String(r2?.roman || '').trim();
+                                if (rr2 === (isMinorMode ? 'i' : 'I')) {
+                                    resolvesToGlobalI = true;
+                                    break;
+                                }
+                            }
+                            if (resolvesToGlobalI) {
+                                roman = gRoman;
+                                isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                            }
                         }
                     }
                 } catch {
@@ -4092,6 +4273,47 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // while roman/figures follow the structural snapshot.
                 const s = getChordSymbol((fullNotes || []) as any, contextKeySignature, contextTonic);
                 if (s) symbol = s;
+
+                // Rescue: slash chords + stuck context.
+                // If the symbol root is clear (e.g. E/B) and that root is the dominant of the GLOBAL key,
+                // but the current context yields III/iii (common when a local context gets "stuck"),
+                // prefer the global dominant roman derived from the symbol root.
+                try {
+                    const rrHere = String(roman || '').trim();
+                    if (symbol && (rrHere === 'III' || rrHere === 'iii')) {
+                        const symRaw = String(symbol || '');
+                        const symNorm = symRaw.replace('♯', '#').replace('♭', 'b');
+                        const symForFunction = (symNorm.split('/')[0] || symNorm).trim();
+                        const m = symForFunction.match(/^([A-G])([#b]?)/);
+                        if (m) {
+                            const rootName = `${m[1]}${m[2] || ''}`;
+                            const rootPc = noteNameToChromaticIndex(rootName);
+                            const tonicPc = noteNameToChromaticIndex(String(currentTonic || 'C'));
+                            const domOfGlobal = (rootPc != null && tonicPc != null) && ((((rootPc - tonicPc) % 12) + 12) % 12) === 7;
+
+                            const looksMajorish = (() => {
+                                if (!symForFunction) return false;
+                                if (/maj7/i.test(symForFunction)) return false;
+                                if (/m7/i.test(symForFunction)) return false;
+                                if (/\bm(?!aj)/i.test(symForFunction)) return false;
+                                if (symForFunction.includes('°') || /dim/i.test(symForFunction)) return false;
+                                if (/sus/i.test(symForFunction) || /add/i.test(symForFunction)) return false;
+                                return true;
+                            })();
+
+                            if (domOfGlobal && looksMajorish) {
+                                const virtualRootMidi = 60 + ((((rootPc as number) % 12) + 12) % 12);
+                                const virtualRoot = ({ id: 'virtual-root', pitch: 'C', octave: 4, position: 0, midi: virtualRootMidi, noteIndex: rootPc } as any);
+                                const has7 = /7|9|11|13/.test(symForFunction);
+                                const forcedGlobal = calculateRomanFromChordInfo({ root: virtualRoot, type: has7 ? 'Dominant 7' : 'Major' }, currentTonic, isMinorMode);
+                                if (forcedGlobal && (String(forcedGlobal).startsWith('V') || String(forcedGlobal).startsWith('v'))) {
+                                    roman = String(forcedGlobal);
+                                    isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                                }
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
 
                 // Fallback for tonic minor-maj7: if symbol matches and roman is still empty, show I7.
                 try {
@@ -4484,12 +4706,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const hasNonClassic = resolvingSuspensions.some((s: any) => !CLASSIC_TYPES.has(String(s.type)));
                     if (!isSuspensionOnsetHere && hasClassic && !hasNonClassic) {
                         // Only suppress if the harmony is unchanged (avoid hiding a real change).
-                        const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+                        const prevRomanForCompare = prevRoman || '';
                         const isMinorMajor7 = (() => {
                             const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
                             return /m\(maj7\)|mmaj7|minmaj7/i.test(sym);
                         })();
-                        if ((!roman || roman === prevRoman) && !isMinorMajor7) {
+                        if ((!roman || roman === prevRomanForCompare) && !isMinorMajor7) {
                             roman = '';
                             figures = [];
                             symbol = '';
@@ -4545,6 +4767,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             const virtualRoot = ({ id: 'virtual-root', pitch: 'C', octave: 4, position: 0, midi: virtualRootMidi, noteIndex: rootPc } as any);
                             const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: 'Dominant 7' }, contextTonic, contextIsMinor);
                             if (forced && String(forced).includes('/')) {
+                                roman = forced;
+                            }
+                        }
+                    }
+                }
+
+                // Rescue: diminished roman from missing/filtered dominant root.
+                // If the symbol indicates a dominant-type chord (e.g. G7) but the roman analysis
+                // landed on vii°/viiø7, prefer the dominant-function roman derived from the symbol root.
+                // This specifically targets cases where the root was present in the full verticality
+                // but got filtered out of the structural snapshot (ties/suspensions/NCT guards).
+                if (isDominantSymbol && /^vii/i.test(String(roman || '').trim())) {
+                    const m = symForFunction.match(/^([A-G])([#b]?)/);
+                    if (m) {
+                        const rootName = `${m[1]}${m[2] || ''}`;
+                        const rootPc = noteNameToChromaticIndex(rootName);
+                        if (rootPc != null && rootPc >= 0) {
+                            const virtualRootMidi = 60 + (((rootPc % 12) + 12) % 12);
+                            const virtualRoot = ({ id: 'virtual-root', pitch: 'C', octave: 4, position: 0, midi: virtualRootMidi, noteIndex: rootPc } as any);
+                            const forced = calculateRomanFromChordInfo({ root: virtualRoot, type: 'Dominant 7' }, contextTonic, contextIsMinor);
+                            if (forced && (String(forced).startsWith('V') || String(forced).startsWith('v'))) {
                                 roman = forced;
                             }
                         }
@@ -4706,7 +4949,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Sort labels in each system by x
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, analysisResult, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, timeSignature]);
+    }, [analysisContextAbsBeat, analysisContexts, analysisResult, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, timeSignature, enableInferredContexts]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
@@ -5615,6 +5858,72 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
 
         const mod7 = (n: number) => ((n % 7) + 7) % 7;
+        const mod12Local = (n: number) => ((n % 12) + 12) % 12;
+
+        // --- Sequence-only trigger: chromatic evidence inside the imitation ---
+        // We only want to "freeze" the model's Roman pattern across repetitions when the sequence
+        // actually behaves tonicizing/modulating (in the broad pedagogical sense).
+        // A reliable, simple signal is: notes outside the current scale (per active context) within
+        // the imitation window. This does NOT change base harmony analysis; it only gates copying.
+        const hasOutOfScalePcAt = (absBeat: number): boolean => {
+            try {
+                const ctx = ctxAtAbsBeat(absBeat);
+                const tonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
+                const isMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
+                const tonicPc = noteNameToChromaticIndex(tonic);
+                if (!(tonicPc >= 0)) return false;
+
+                const majorInts = [0, 2, 4, 5, 7, 9, 11];
+                // Minor: allow both natural (b7) and raised leading tone (7) to avoid false alarms.
+                const minorInts = [0, 2, 3, 5, 7, 8, 10, 11];
+                const ints = isMinor ? minorInts : majorInts;
+                const allowed = new Set<number>(ints.map(iv => mod12Local(tonicPc + iv)));
+
+                const notesHere = getNotesAtAbsBeat(absBeat);
+                const usable = (notesHere || [])
+                    .filter((n: any) => n && !n.isRest)
+                    // Prefer harmonic skeleton when available.
+                    .filter((n: any) => !n.isPassing && !n.isNeighbor && !n.isSuspension)
+                    .filter((n: any) => Number.isFinite((n as any).noteIndex) || Number.isFinite((n as any).midi));
+                for (const n of usable) {
+                    const ni = Number((n as any).noteIndex);
+                    const pc = Number.isFinite(ni) ? mod12Local(ni) : mod12Local(Number((n as any).midi));
+                    if (!allowed.has(pc)) return true;
+                }
+                return false;
+            } catch {
+                return false;
+            }
+        };
+
+        const sequenceHasChromaticEvidenceInImitation = (seq: any): boolean => {
+            try {
+                const slots = seq?.slotTicks || [];
+                const L = Number(seq?.lengthSteps ?? 0);
+                const repeats = Math.max(2, Number(seq?.repeatsCount ?? 2));
+                if (!slots.length || L <= 0 || repeats < 2) return false;
+
+                // Only look at repetitions beyond the model (r>=1), as requested.
+                for (let r = 1; r < repeats; r += 1) {
+                    for (let k = 0; k <= L; k += 1) {
+                        const tick = slots[seq.startSlotIdx + r * L + k];
+                        if (!Number.isFinite(tick)) continue;
+                        const absBeat = tick / TICKS_PER_QUARTER;
+
+                        // Strongest signal: actual out-of-scale pitch classes.
+                        if (hasOutOfScalePcAt(absBeat)) return true;
+
+                        // Secondary signals (cheap): the roman label itself indicates chromaticism.
+                        const rr = String(computeRomanAtTick(tick) || '').trim();
+                        if (rr.includes('/')) return true;
+                        if (hasAccidentalPrefix(rr)) return true;
+                    }
+                }
+                return false;
+            } catch {
+                return false;
+            }
+        };
 
         const degreeIndexFromRomanLoose = (romanRaw: string): number | null => {
             try {
@@ -5764,6 +6073,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         for (const seq of sequenceMatches) {
             if (Number.isFinite(seq.transpositionSemitones as number) && Number(seq.transpositionSemitones) === 0) continue;
+
+            // Only apply sequence-based Roman copying when the imitation shows chromatic/tonicizing evidence.
+            // This prevents diatonic sequences from being mislabeled as modulant.
+            const chromaticImitation = sequenceHasChromaticEvidenceInImitation(seq);
+            if (!chromaticImitation) continue;
+
             const slots = seq.slotTicks || [];
             if (!slots.length) continue;
             const L = seq.lengthSteps;
@@ -5809,8 +6124,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                     if (inferred0.degreeIdx != null && inferred0.isMinor != null) return inferred0;
 
-                    // B) Safe fallback for tonic–dominant motifs: if template starts on I/iii/vi and next
-                    // chord is V-ish, treat the first chord as local tonic so `iii – V` becomes `I – V`.
+                    // B) Safe fallback for tonic–dominant motifs, ONLY when the sequence is chromatic/tonicizing.
+                    // This avoids diatonic false positives (e.g. plain IV–V–I–vi sequences).
+                    if (!chromaticImitation) return inferred0;
+
                     const first = String(templateByK[0]?.src || '').trim();
                     const second = String(templateByK[1]?.src || '').trim();
                     const d0 = degreeIndexFromRomanLoose(first);
@@ -10751,6 +11068,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             <PreferencesModal
                 isOpen={isPreferencesOpen}
                 onClose={() => setIsPreferencesOpen(false)}
+                enableInferredContexts={enableInferredContexts}
+                onToggleEnableInferredContexts={setEnableInferredContexts}
             />
 
             {!isToolbarVisible && showQuickInsertBar && (
@@ -12144,165 +12463,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     </div>
                 </div>
 
-                {/* Restore analysis panel */}
                 {activeTab === 'analysis' && (
                     <div className="w-full max-w-sm flex-shrink-0 h-full min-h-0">
                         {isAnalysisEnabled ? (
-                            <div className="h-full min-h-0 flex flex-col gap-2">
-                                <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/40">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="text-xs uppercase tracking-wide text-gray-400">Tonalità manuali / label</p>
-                                        <p className="text-[11px] text-gray-400">{analysisContexts.length}</p>
-                                    </div>
-
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <input
-                                            value={newContextLabelDraft}
-                                            onChange={e => setNewContextLabelDraft(e.target.value)}
-                                            className="flex-1 bg-gray-700/60 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 placeholder:text-gray-400"
-                                            placeholder="Nuova label al playhead (es. IV, V/vi, modulazione a C)"
-                                        />
-                                        <button
-                                            onClick={() => {
-                                                const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
-                                                const s = String(newContextLabelDraft || '').trim();
-                                                if (!s) return;
-                                                handleApplyContextLabelOnly(absBeat, s);
-                                                setNewContextLabelDraft('');
-                                            }}
-                                            className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
-                                            title="Inserisce (o aggiorna) solo il testo/label al playhead (non cambia tonalità)"
-                                        >
-                                            Label
-                                        </button>
-                                    </div>
-
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <select
-                                            value={newContextKeyDraft}
-                                            onChange={e => setNewContextKeyDraft(e.target.value)}
-                                            className="flex-1 bg-gray-700/60 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100"
-                                            title="Tonalità da inserire al playhead"
-                                        >
-                                            {keySignatureOptions.map(opt => (
-                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                            ))}
-                                        </select>
-                                        <div className="relative flex p-0.5 bg-gray-900/50 rounded-md flex-shrink-0">
-                                            <div
-                                                className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform"
-                                                style={{ transform: `translateX(${newContextIsMinorDraft ? '100%' : '0%'}) ` }}
-                                            ></div>
-                                            <button
-                                                onClick={() => setNewContextIsMinorDraft(false)}
-                                                className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!newContextIsMinorDraft ? 'text-gray-900' : 'text-gray-300'}`}
-                                                title="Maggiore"
-                                            >
-                                                Mag
-                                            </button>
-                                            <button
-                                                onClick={() => setNewContextIsMinorDraft(true)}
-                                                className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${newContextIsMinorDraft ? 'text-gray-900' : 'text-gray-300'}`}
-                                                title="Minore"
-                                            >
-                                                min
-                                            </button>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
-                                                const tonicToApply = newContextIsMinorDraft
-                                                    ? (relativeMinors[newContextKeyDraft] || newContextKeyDraft)
-                                                    : newContextKeyDraft;
-                                                const label = String(newContextLabelDraft || '').trim() || undefined;
-                                                handleApplyContext(absBeat, tonicToApply, newContextIsMinorDraft, label);
-                                            }}
-                                            className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
-                                            title="Inserisce una tonalità (contesto) al playhead; usa anche la label se presente"
-                                        >
-                                            Tonalità
-                                        </button>
-                                        <button
-                                            onClick={() => openModulationMenuAtPlayhead()}
-                                            className="px-2 py-1 text-[11px] rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600"
-                                            title="Apri il menu Testo/Tempo/Tonalità al playhead (equivalente al tasto T)"
-                                        >
-                                            Menu
-                                        </button>
-                                    </div>
-
-                                    <div className="mt-2 max-h-40 overflow-y-auto pr-1 space-y-1">
-                                        {(analysisContexts || []).slice().sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b)).map((ctx, idx) => {
-                                            const ab = analysisContextAbsBeat(ctx);
-                                            const mb = getMeasureIndexAndBeatFromAbsBeat(ab);
-                                            const mTxt = mb?.measureIndex != null ? (mb.measureIndex + 1) : '?';
-                                            const bTxt = mb?.beat != null ? (Number.isInteger(mb.beat) ? mb.beat : mb.beat.toFixed(3)) : '?';
-                                            const keyTxt = `${ctx.newTonic}${ctx.newIsMinor ? ' min' : ' Maj'}`;
-                                            return (
-                                                <div key={`ctx-${idx}-${ab}`} className="bg-gray-900/30 border border-gray-700/50 rounded-md p-2">
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <p className="text-[11px] text-gray-300">
-                                                            m{mTxt} b{bTxt} · <span className="text-gray-400">{keyTxt}</span>
-                                                        </p>
-                                                        <div className="flex items-center gap-1">
-                                                            <button
-                                                                onClick={() => handleRemoveContextLabelOnly(ab)}
-                                                                className="px-2 py-0.5 text-[11px] rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600"
-                                                                title="Rimuove solo la label (non la tonalità)"
-                                                            >
-                                                                No label
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleRemoveContext(ab)}
-                                                                className="px-2 py-0.5 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors"
-                                                                title="Rimuove il contesto"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    <input
-                                                        defaultValue={String(ctx.label || '')}
-                                                        onBlur={(e) => {
-                                                            const v = String(e.target.value || '').trim();
-                                                            handleApplyContextLabelOnly(ab, v);
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                const v = String((e.target as any).value || '').trim();
-                                                                handleApplyContextLabelOnly(ab, v);
-                                                            }
-                                                        }}
-                                                        className="mt-1 w-full bg-gray-700/60 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 placeholder:text-gray-400"
-                                                        placeholder="Label (opzionale)"
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <p className="mt-2 text-[11px] text-gray-400">
-                                        Suggerimento: puoi anche fare click destro sullo spartito per inserire/modificare una modulazione/tonicizzazione con label.
-                                    </p>
-                                </div>
-
-                                <div className="flex-1 min-h-0">
-                                    <HarmonyAnalysisPanel
-                                        violations={violations}
-                                        sequenceMatches={sequenceMatches}
-                                        sequencesEnabled={isSequencesEnabled}
-                                        onToggleSequences={() => setIsSequencesEnabled(prev => !prev)}
-                                        onHoverViolation={setHoveredViolationNotes}
-                                        selectedViolationIndex={selectedViolationIndex}
-                                        onSelectViolation={index => {
-                                            setSelectedViolationIndex(index);
-                                            if (index != null && violations[index]) {
-                                                setSelectedNoteIds(new Set(violations[index].noteIds));
-                                            }
-                                            if (typeof index === 'number') scrollScoreToViolationIndex(index);
-                                        }}
-                                    />
-                                </div>
+                            <div className="h-full min-h-0">
+                                <HarmonyAnalysisPanel
+                                    violations={violations}
+                                    sequenceMatches={sequenceMatches}
+                                    sequencesEnabled={isSequencesEnabled}
+                                    onToggleSequences={() => setIsSequencesEnabled(prev => !prev)}
+                                    onHoverViolation={setHoveredViolationNotes}
+                                    selectedViolationIndex={selectedViolationIndex}
+                                    onSelectViolation={index => {
+                                        setSelectedViolationIndex(index);
+                                        if (index != null && violations[index]) {
+                                            setSelectedNoteIds(new Set(violations[index].noteIds));
+                                        }
+                                        if (typeof index === 'number') scrollScoreToViolationIndex(index);
+                                    }}
+                                />
                             </div>
                         ) : (
                             <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto flex items-center justify-center text-center text-gray-400">
@@ -12321,11 +12500,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     menuData={contextMenu}
                     onClose={() => setContextMenu(null)}
                     onApply={handleApplyContext}
-                    onApplyLabel={handleApplyContextLabelOnly}
-                    onRemoveLabel={handleRemoveContextLabelOnly}
                     onRemove={handleRemoveContext}
+                    onDeleteMeasure={(measureIndex) => {
+                        deleteMeasureAtIndex(measureIndex);
+                    }}
                     onApplyTimeSignature={handleApplyTimeSignatureChange}
                     onRemoveTimeSignature={handleRemoveTimeSignatureChange}
+                    existingHarmonyOverride={existingHarmonyOverrideForContextMenu}
+                    onApplyHarmonyOverride={applyHarmonyOverride}
+                    onRemoveHarmonyOverride={removeHarmonyOverride}
                     initialKey={(() => {
                         if (!existingContextForMenu) return keySignatureRoot;
                         if (!existingContextForMenu.newIsMinor) return existingContextForMenu.newTonic;
@@ -12379,16 +12562,18 @@ const ModulationContextMenu: React.FC<{
     menuData: { x: number; y: number; absBeat: number; measureIndex: number; beat: number };
     onClose: () => void;
     onApply: (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => void;
-    onApplyLabel: (absBeat: number, label?: string) => void;
-    onRemoveLabel: (absBeat: number) => void;
     onRemove: (absBeat: number) => void;
+    onDeleteMeasure: (measureIndex: number) => void;
     onApplyTimeSignature: (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => void;
     onRemoveTimeSignature: (absBeat: number) => void;
+    existingHarmonyOverride: HarmonyLabelOverride | null;
+    onApplyHarmonyOverride: (absBeat: number, roman: string, figures: string[], symbol: string) => void;
+    onRemoveHarmonyOverride: (absBeat: number) => void;
     initialKey: string;
     initialIsMinor: boolean;
     initialLabel?: string;
     initialTimeSignature: TimeSignature;
-}> = ({ menuData, onClose, onApply, onApplyLabel, onRemoveLabel, onRemove, onApplyTimeSignature, onRemoveTimeSignature, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
+}> = ({ menuData, onClose, onApply, onRemove, onDeleteMeasure, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
     const [tempLabel, setTempLabel] = useState(initialLabel || '');
@@ -12396,11 +12581,129 @@ const ModulationContextMenu: React.FC<{
     const [tempDenominator, setTempDenominator] = useState<number>(initialTimeSignature.denominator);
     const menuRef = useRef<HTMLDivElement>(null);
 
+    const [floatingPos, setFloatingPos] = useState<{ top: number; left: number }>({ top: menuData.y, left: menuData.x });
+    const menuSizeRef = useRef<{ w: number; h: number }>({ w: 360, h: 420 });
+    const dragRef = useRef<{ dragging: boolean; startX: number; startY: number; baseTop: number; baseLeft: number }>({ dragging: false, startX: 0, startY: 0, baseTop: 0, baseLeft: 0 });
+
+    const clampPos = useCallback((top0: number, left0: number) => {
+        try {
+            const pad = 12;
+            const vw = window.innerWidth || 0;
+            const vh = window.innerHeight || 0;
+            const w = menuSizeRef.current.w || 0;
+            const h = menuSizeRef.current.h || 0;
+
+            let top = Number(top0);
+            let left = Number(left0);
+            if (!Number.isFinite(top)) top = pad;
+            if (!Number.isFinite(left)) left = pad;
+
+            if (left + w > vw - pad) left = Math.max(pad, vw - pad - w);
+            if (top + h > vh - pad) top = Math.max(pad, vh - pad - h);
+            if (left < pad) left = pad;
+            if (top < pad) top = pad;
+            return { top, left };
+        } catch {
+            return { top: top0, left: left0 };
+        }
+    }, []);
+
+    const [roman, setRoman] = useState<string>(existingHarmonyOverride?.roman || '');
+    const [symbol, setSymbol] = useState<string>(existingHarmonyOverride?.symbol || '');
+    const [figuresRaw, setFiguresRaw] = useState<string>(() => {
+        try {
+            const figs = (existingHarmonyOverride?.figures || []).map(f => String(f));
+            return figs.join('/');
+        } catch {
+            return '';
+        }
+    });
+
     useEffect(() => {
         setTempLabel(initialLabel || '');
         setTempNumerator(initialTimeSignature.numerator);
         setTempDenominator(initialTimeSignature.denominator);
     }, [initialLabel, initialTimeSignature.denominator, initialTimeSignature.numerator, menuData.absBeat]);
+
+    useLayoutEffect(() => {
+        try {
+            const el = menuRef.current;
+            if (!el) return;
+
+            // Clamp inside viewport so the menu is always reachable.
+            const pad = 12;
+            window.requestAnimationFrame(() => {
+                const rect = el.getBoundingClientRect();
+                if (rect && Number.isFinite(rect.width) && Number.isFinite(rect.height)) {
+                    menuSizeRef.current = { w: rect.width, h: rect.height };
+                }
+                const vw = window.innerWidth || 0;
+                const vh = window.innerHeight || 0;
+
+                let top = Number(menuData.y);
+                let left = Number(menuData.x);
+                if (!Number.isFinite(top)) top = pad;
+                if (!Number.isFinite(left)) left = pad;
+
+                if (left + rect.width > vw - pad) left = Math.max(pad, vw - pad - rect.width);
+                if (top + rect.height > vh - pad) top = Math.max(pad, vh - pad - rect.height);
+                if (left < pad) left = pad;
+                if (top < pad) top = pad;
+
+                setFloatingPos(clampPos(top, left));
+            });
+        } catch {
+            // ignore
+        }
+    }, [clampPos, menuData.x, menuData.y, menuData.absBeat]);
+
+    useEffect(() => {
+        const handleMove = (e: MouseEvent) => {
+            try {
+                if (!dragRef.current.dragging) return;
+                const dx = e.clientX - dragRef.current.startX;
+                const dy = e.clientY - dragRef.current.startY;
+                setFloatingPos(clampPos(dragRef.current.baseTop + dy, dragRef.current.baseLeft + dx));
+            } catch {
+                // ignore
+            }
+        };
+        const handleUp = () => {
+            dragRef.current.dragging = false;
+        };
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMove);
+            window.removeEventListener('mouseup', handleUp);
+        };
+    }, [clampPos]);
+
+    const beginDrag = (e: React.MouseEvent) => {
+        try {
+            if ((e as any).button != null && (e as any).button !== 0) return;
+            dragRef.current.dragging = true;
+            dragRef.current.startX = e.clientX;
+            dragRef.current.startY = e.clientY;
+            dragRef.current.baseTop = floatingPos.top;
+            dragRef.current.baseLeft = floatingPos.left;
+            e.preventDefault();
+            e.stopPropagation();
+        } catch {
+            // ignore
+        }
+    };
+
+    useEffect(() => {
+        setRoman(existingHarmonyOverride?.roman || '');
+        setSymbol(existingHarmonyOverride?.symbol || '');
+        try {
+            const figs = (existingHarmonyOverride?.figures || []).map(f => String(f));
+            setFiguresRaw(figs.join('/'));
+        } catch {
+            setFiguresRaw('');
+        }
+    }, [existingHarmonyOverride, menuData.absBeat]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -12417,14 +12720,42 @@ const ModulationContextMenu: React.FC<{
         onApply(menuData.absBeat, tonicToApply, tempIsMinor, tempLabel);
     };
 
+    const parseFigures = (raw: string): string[] => {
+        const s = String(raw || '').trim();
+        if (!s) return [];
+        return s
+            .split(/[\/\s,]+/g)
+            .map(x => x.trim())
+            .filter(Boolean);
+    };
+
+    const handleApplyHarmonyOverride = () => {
+        onApplyHarmonyOverride(menuData.absBeat, roman, parseFigures(figuresRaw), symbol);
+    };
+
     return (
         <div
             ref={menuRef}
-            style={{ top: menuData.y, left: menuData.x }}
-            className="fixed z-50 bg-slate-800 p-4 rounded-lg shadow-xl border border-slate-600 flex flex-col gap-3"
+            style={{ top: floatingPos.top, left: floatingPos.left }}
+            className="fixed z-50 bg-slate-800 p-4 rounded-lg shadow-xl border border-slate-600 flex flex-col gap-3 w-[360px] max-w-[90vw] max-h-[85vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
         >
-            <h3 className="text-white font-bold text-sm">Modulazione / tonicizzazione (Misura {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)})</h3>
+            <div className="flex items-center justify-between gap-2">
+                <h3
+                    className="text-white font-bold text-sm cursor-move select-none"
+                    title="Trascina per spostare"
+                    onMouseDown={beginDrag}
+                >
+                    Modulazione / tonicizzazione (Misura {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)})
+                </h3>
+                <button
+                    onClick={onClose}
+                    className="px-2 py-0.5 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors flex-shrink-0"
+                    title="Chiudi"
+                >
+                    ✕
+                </button>
+            </div>
             <div className="flex items-center gap-2">
                  <select value={tempKey} onChange={e => setTempKey(e.target.value)} className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-full">
                     <optgroup label="Diesis (♯)">{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
@@ -12437,8 +12768,18 @@ const ModulationContextMenu: React.FC<{
                 </div>
             </div>
             <div className="flex gap-2">
-                <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Inserisci</button>
+                <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Applica contesto</button>
                 <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
+            </div>
+            <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-300">Misura</label>
+                <button
+                    onClick={() => onDeleteMeasure(menuData.measureIndex)}
+                    className="px-2 py-1 text-[11px] rounded-md bg-red-800 hover:bg-red-700 font-semibold transition-colors"
+                >
+                    Cancella misura
+                </button>
+                <div className="text-[10px] text-gray-400">Elimina la misura e sposta indietro tutto ciò che segue.</div>
             </div>
             <div className="flex flex-col gap-2">
                 <label className="text-xs text-gray-300">Cambio di tempo (opzionale)</label>
@@ -12468,9 +12809,57 @@ const ModulationContextMenu: React.FC<{
                     placeholder="Es. Modulazione a Do Maggiore"
                 />
             </div>
-            <div className="flex gap-2">
-                <button onClick={() => onApplyLabel(menuData.absBeat, tempLabel)} className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors">Inserisci</button>
-                <button onClick={() => onRemoveLabel(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
+
+            <div className="h-px bg-slate-600/60" />
+
+            <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs text-gray-300">Override armonia (funzionale)</label>
+                    <span className="text-[10px] text-gray-400">sostituisce Roman/figure/sigla</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-300">Roman</label>
+                    <input
+                        value={roman}
+                        onChange={e => setRoman(e.target.value)}
+                        className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
+                        placeholder="es. I, V/vi, Ger+"
+                    />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-300">Figure (separate da / o spazio)</label>
+                    <input
+                        value={figuresRaw}
+                        onChange={e => setFiguresRaw(e.target.value)}
+                        className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
+                        placeholder="es. 6/5"
+                    />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-300">Simbolo accordo (opzionale)</label>
+                    <input
+                        value={symbol}
+                        onChange={e => setSymbol(e.target.value)}
+                        className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
+                        placeholder="es. D7/F#"
+                    />
+                </div>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleApplyHarmonyOverride}
+                        className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
+                        title="Applica override armonico a questo beat"
+                    >
+                        Applica override
+                    </button>
+                    <button
+                        onClick={() => onRemoveHarmonyOverride(menuData.absBeat)}
+                        className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors"
+                        title="Rimuove l'override armonico a questo beat"
+                    >
+                        Rimuovi override
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -12485,6 +12874,9 @@ const HarmonyOverrideContextMenu: React.FC<{
     onRemove: (absBeat: number) => void;
 }> = ({ menuData, existing, onClose, onApply, onRemove }) => {
     const menuRef = useRef<HTMLDivElement>(null);
+    const [floatingPos, setFloatingPos] = useState<{ top: number; left: number }>({ top: menuData.y, left: menuData.x });
+    const menuSizeRef = useRef<{ w: number; h: number }>({ w: 320, h: 260 });
+    const dragRef = useRef<{ dragging: boolean; startX: number; startY: number; baseTop: number; baseLeft: number }>({ dragging: false, startX: 0, startY: 0, baseTop: 0, baseLeft: 0 });
     const [roman, setRoman] = useState<string>(existing?.roman || '');
     const [symbol, setSymbol] = useState<string>(existing?.symbol || '');
     const [figuresRaw, setFiguresRaw] = useState<string>(() => {
@@ -12517,6 +12909,97 @@ const HarmonyOverrideContextMenu: React.FC<{
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [onClose]);
 
+    useLayoutEffect(() => {
+        try {
+            const el = menuRef.current;
+            if (!el) return;
+
+            window.requestAnimationFrame(() => {
+                const pad = 12;
+                const rect = el.getBoundingClientRect();
+                if (rect && Number.isFinite(rect.width) && Number.isFinite(rect.height)) {
+                    menuSizeRef.current = { w: rect.width, h: rect.height };
+                }
+                const vw = window.innerWidth || 0;
+                const vh = window.innerHeight || 0;
+
+                let top = Number(menuData.y);
+                let left = Number(menuData.x);
+                if (!Number.isFinite(top)) top = pad;
+                if (!Number.isFinite(left)) left = pad;
+
+                if (left + rect.width > vw - pad) left = Math.max(pad, vw - pad - rect.width);
+                if (top + rect.height > vh - pad) top = Math.max(pad, vh - pad - rect.height);
+                if (left < pad) left = pad;
+                if (top < pad) top = pad;
+
+                setFloatingPos({ top, left });
+            });
+        } catch {
+            // ignore
+        }
+    }, [menuData.x, menuData.y, menuData.absBeat]);
+
+    const clampPos = useCallback((top0: number, left0: number) => {
+        try {
+            const pad = 12;
+            const vw = window.innerWidth || 0;
+            const vh = window.innerHeight || 0;
+            const w = menuSizeRef.current.w || 0;
+            const h = menuSizeRef.current.h || 0;
+
+            let top = Number(top0);
+            let left = Number(left0);
+            if (!Number.isFinite(top)) top = pad;
+            if (!Number.isFinite(left)) left = pad;
+
+            if (left + w > vw - pad) left = Math.max(pad, vw - pad - w);
+            if (top + h > vh - pad) top = Math.max(pad, vh - pad - h);
+            if (left < pad) left = pad;
+            if (top < pad) top = pad;
+            return { top, left };
+        } catch {
+            return { top: top0, left: left0 };
+        }
+    }, []);
+
+    useEffect(() => {
+        const handleMove = (e: MouseEvent) => {
+            try {
+                if (!dragRef.current.dragging) return;
+                const dx = e.clientX - dragRef.current.startX;
+                const dy = e.clientY - dragRef.current.startY;
+                setFloatingPos(clampPos(dragRef.current.baseTop + dy, dragRef.current.baseLeft + dx));
+            } catch {
+                // ignore
+            }
+        };
+        const handleUp = () => {
+            dragRef.current.dragging = false;
+        };
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMove);
+            window.removeEventListener('mouseup', handleUp);
+        };
+    }, [clampPos]);
+
+    const beginDrag = (e: React.MouseEvent) => {
+        try {
+            if ((e as any).button != null && (e as any).button !== 0) return;
+            dragRef.current.dragging = true;
+            dragRef.current.startX = e.clientX;
+            dragRef.current.startY = e.clientY;
+            dragRef.current.baseTop = floatingPos.top;
+            dragRef.current.baseLeft = floatingPos.left;
+            e.preventDefault();
+            e.stopPropagation();
+        } catch {
+            // ignore
+        }
+    };
+
     const parseFigures = (raw: string): string[] => {
         const s = String(raw || '').trim();
         if (!s) return [];
@@ -12533,13 +13016,26 @@ const HarmonyOverrideContextMenu: React.FC<{
     return (
         <div
             ref={menuRef}
-            style={{ top: menuData.y, left: menuData.x }}
-            className="fixed z-50 bg-slate-800 p-4 rounded-lg shadow-xl border border-slate-600 flex flex-col gap-3 w-[320px]"
+            style={{ top: floatingPos.top, left: floatingPos.left }}
+            className="fixed z-50 bg-slate-800 p-4 rounded-lg shadow-xl border border-slate-600 flex flex-col gap-3 w-[320px] max-w-[90vw] max-h-[85vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
         >
-            <h3 className="text-white font-bold text-sm">
-                Override analisi (Misura {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)})
-            </h3>
+            <div className="flex items-center justify-between gap-2">
+                <h3
+                    className="text-white font-bold text-sm cursor-move select-none"
+                    title="Trascina per spostare"
+                    onMouseDown={beginDrag}
+                >
+                    Override analisi (Misura {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)})
+                </h3>
+                <button
+                    onClick={onClose}
+                    className="px-2 py-0.5 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors flex-shrink-0"
+                    title="Chiudi"
+                >
+                    ✕
+                </button>
+            </div>
             <div className="flex flex-col gap-2">
                 <label className="text-xs text-gray-300">Roman</label>
                 <input

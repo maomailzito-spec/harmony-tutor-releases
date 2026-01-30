@@ -203,6 +203,8 @@ export type AnalysisContext = {
   measureIndex?: number;
     newTonic: string;
     newIsMinor: boolean;
+    score?: number;
+    source?: 'manual' | 'inferred';
 };
 
 export interface HarmonyAnalysisResult {

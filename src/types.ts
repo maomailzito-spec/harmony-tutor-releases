@@ -232,6 +232,10 @@ export type AnalysisContext = {
     newIsMinor: boolean;
     // Optional custom label shown above the staff for this context.
     label?: string;
+    // Optional: inference confidence score (used only for engine-inferred contexts).
+    score?: number;
+    // Optional: source tag for UI/debug.
+    source?: 'manual' | 'inferred';
 };
 
 export interface HarmonyAnalysisResult {

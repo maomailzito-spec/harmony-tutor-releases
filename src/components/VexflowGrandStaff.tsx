@@ -1154,28 +1154,130 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
 
-        // When multiple voices share the same onset in close position, VexFlow can end up
-        // placing accidentals on top of each other (especially in the "separate but single stem"
-        // fallback path). Pre-compute an extra stagger per note id so accidentals fan out.
+        // When multiple voices share the same onset, VexFlow can place accidentals on top of
+        // each other because each voice may be formatted independently. Pre-compute a per-note
+        // stagger (extra x-shift) so accidentals fan out into columns.
+        //
+        // NOTE: this is sequence/engraving-only and does not affect harmony analysis.
         const accidentalStaggerById = new Map<string, number>();
-        if (isTightTreble && enableEngravingEnhancements) {
+        const accidentalBaseShiftById = new Map<string, number>();
+        const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+        const accidentalDesiredShiftById = new Map<string, number>();
+        const maxAccidentalShift = (vfGlyph: string, n: StaffNote): number => {
           try {
-            const STAGGER_PX = 8;
-            for (const g of byTimeKeyAll.values()) {
-                const withAcc = g
-                  .filter(n => n && n.id !== '__ghost__')
-                  .filter(n => !n.isRest)
-                  .filter(n => {
-                    const glyph = accidentalGlyphById.get(n.id) ?? null;
-                    return !!accidentalTypeToVexflow(glyph);
-                  });
-                if (withAcc.length < 2) continue;
+            const mi = Number((n as any).measureIndex);
+            const b = Number((n as any).beat);
+            const isSystemStartMeasure = Number.isFinite(mi)
+              && systemStartMeasureIndex != null
+              && mi === systemStartMeasureIndex;
+            const isBeat1 = Number.isFinite(b) && Math.abs(b - 1) <= 1e-6;
+            const isSystemStartBeat1 = isSystemStartMeasure && isBeat1;
 
-                const sorted = withAcc.slice().sort((a, b) => Number(a.position) - Number(b.position));
-                for (let i = 0; i < sorted.length; i++) {
-                  accidentalStaggerById.set(sorted[i].id, i * STAGGER_PX);
-                }
-            }
+            // Caps are in px of xShift (bigger => further left). We keep them conservative
+            // at the start of a system so accidentals never drift onto key/time signatures.
+            if (vfGlyph === 'bb' || vfGlyph === '##') return isSystemStartBeat1 ? 14 : 24;
+            if (vfGlyph === 'b') return isSystemStartBeat1 ? 12 : 22;
+            if (vfGlyph === '#') return isSystemStartBeat1 ? 10 : 20;
+            if (vfGlyph === 'n') return isSystemStartBeat1 ? 10 : 18;
+            return isSystemStartBeat1 ? 10 : 20;
+          } catch {
+            return 18;
+          }
+        };
+        const desiredAccidentalXShift = (vfGlyph: string, n: StaffNote, base: number, extra: number, inset: number): number => {
+          // Prefer group-computed shift if present (already scaled to avoid key/time overlap).
+          const groupShift = accidentalDesiredShiftById.get(n.id);
+          const rawNoInset = (typeof groupShift === 'number') ? groupShift : (base + extra);
+          const raw = rawNoInset - inset;
+          const lo = 0;
+          const hi = maxAccidentalShift(vfGlyph, n);
+          return clamp(raw, lo, hi);
+        };
+        if (enableEngravingEnhancements) {
+          try {
+            const midLinePosForClef = (clef === 'bass') ? -6 : MIDDLE_LINE_POS_TREBLE;
+
+            const applyAccidentalColumns = (group: StaffNote[]) => {
+              const withAcc = (group || [])
+                .filter(n => n && n.id !== '__ghost__')
+                .filter(n => !n.isRest)
+                .map(n => {
+                  const glyph = accidentalGlyphById.get(n.id) ?? null;
+                  const vfGlyph = accidentalTypeToVexflow(glyph);
+                  if (!vfGlyph) return null;
+                  const pos = Number((n as any).position);
+                  const outerness = Number.isFinite(pos) ? Math.abs(pos - midLinePosForClef) : 0;
+                  return { n, outerness, pos, vfGlyph };
+                })
+                .filter((x): x is { n: StaffNote; outerness: number; pos: number; vfGlyph: string } => !!x);
+
+              if (withAcc.length < 2) return;
+
+              // Strong spacing: sharps/flats can collide in thirds even without seconds.
+              const hasFlatLike = withAcc.some(x => x.vfGlyph === 'b' || x.vfGlyph === 'bb');
+              const hasDouble = withAcc.some(x => x.vfGlyph === 'bb' || x.vfGlyph === '##');
+              const stepPx = hasFlatLike
+                ? (hasDouble ? 28 : 24)
+                : (hasDouble ? 20 : 16);
+
+              // Give every accidental in the group a small baseline left shift.
+              // Without this, the "column 0" accidental can stay at VF default and collide
+              // with its own notehead when voices are offset.
+              for (const x of withAcc) {
+                const id = x.n.id;
+                const isFlat = (x.vfGlyph === 'b' || x.vfGlyph === 'bb');
+                const isDouble = (x.vfGlyph === 'bb' || x.vfGlyph === '##');
+                // Baseline shift: must be strong enough that a column-0 accidental never
+                // sits on top of its own notehead in multi-voice onsets.
+                const base = isFlat ? (isDouble ? 20 : 16) : (isDouble ? 16 : 10);
+                const prevBase = accidentalBaseShiftById.get(id);
+                if (prevBase == null || base > prevBase) accidentalBaseShiftById.set(id, base);
+              }
+
+              // Outer notes get the smallest shift (closest to noteheads), inner notes go further left.
+              withAcc.sort((a, b) => {
+                if (b.outerness !== a.outerness) return b.outerness - a.outerness;
+                return a.pos - b.pos;
+              });
+
+              // Compute raw shifts and, if needed, scale the entire group down so it doesn't
+              // invade the key/time signature area (especially at system start beat 1).
+              let maxRaw = 0;
+              let cap = Infinity;
+              const rawById = new Map<string, number>();
+              for (let i = 0; i < withAcc.length; i++) {
+                const id = withAcc[i].n.id;
+                const base = accidentalBaseShiftById.get(id) ?? 0;
+                const raw = base + (i * stepPx);
+                rawById.set(id, raw);
+                if (raw > maxRaw) maxRaw = raw;
+                cap = Math.min(cap, maxAccidentalShift(withAcc[i].vfGlyph, withAcc[i].n));
+              }
+              if (!Number.isFinite(cap)) cap = 18;
+              const scale = (maxRaw > 0 && maxRaw > cap) ? (cap / maxRaw) : 1;
+
+              for (let i = 0; i < withAcc.length; i++) {
+                const id = withAcc[i].n.id;
+                const raw = rawById.get(id) ?? 0;
+                const scaled = raw * scale;
+
+                const prev = accidentalStaggerById.get(id);
+                const staggerOnly = i * stepPx;
+                if (prev == null || staggerOnly > prev) accidentalStaggerById.set(id, staggerOnly);
+
+                const prevDesired = accidentalDesiredShiftById.get(id);
+                // Prefer the larger desired shift if a note belongs to multiple heuristic groups.
+                if (prevDesired == null || scaled > prevDesired) accidentalDesiredShiftById.set(id, scaled);
+              }
+            };
+
+            // 1) Ideal: group by musical onset.
+            for (const g of byTimeKeyAll.values()) applyAccidentalColumns(g);
+
+            // 2) Fallback: group by visual X alignment.
+            // This fixes cases where notes align in x but have different timeKeys
+            // (e.g. different durationTicks / prolongations).
+            for (const g of byX.values()) applyAccidentalColumns(g);
           } catch {
             // ignore
           }
@@ -1221,6 +1323,23 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     if (idx >= 0) {
                       const acc = new Accidental(vfGlyph);
                       (vfNote as any).addModifier(acc, idx);
+
+                      // Always apply precomputed column staggering in enhanced mode.
+                      // This fixes cases where VexFlow would keep one accidental at the default
+                      // position (overlapping its own notehead) because our old heuristic didn't
+                      // classify the chord as "needsNudge".
+                      if (enableEngravingEnhancements) {
+                        try {
+                          const base = accidentalBaseShiftById.get(n.id) ?? 0;
+                          const extra = accidentalStaggerById.get(n.id) ?? 0;
+                          const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
+                          if ((base || extra || inset) && typeof (acc as any).setXShift === 'function') {
+                            (acc as any).setXShift(desiredAccidentalXShift(vfGlyph, n, base, extra, inset));
+                          }
+                        } catch {
+                          // ignore
+                        }
+                      }
 
                       // Only nudge accidentals when necessary (tight seconds / multiple accidentals).
                       // Empirically (SVG renderer), increasing x-shift moves the accidental left.
@@ -1306,7 +1425,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                           const delta = hasSecond
                             ? Math.max(0, desiredDelta - beat1Inset)
                             : (inset ? Math.max(-inset, desiredDelta) : desiredDelta);
-                          if (typeof (acc as any).setXShift === 'function') (acc as any).setXShift(cur + delta);
+                          if (typeof (acc as any).setXShift === 'function') {
+                            const target = clamp((cur + delta), 0, maxAccidentalShift(vfGlyph, n));
+                            (acc as any).setXShift(target);
+                          }
                         }
                       } catch {
                         // ignore
@@ -1319,12 +1441,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     // accidentals may overlap; apply a small per-note stagger when needed.
                     if (enableEngravingEnhancements) {
                       try {
+                        const base = accidentalBaseShiftById.get(n.id) ?? 0;
                         const extra = accidentalStaggerById.get(n.id) ?? 0;
                         const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
-                        if ((extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
-                          const cur = (acc as any).getXShift() ?? 0;
-                          // extra pushes left; inset pulls back right.
-                          (acc as any).setXShift(cur + extra - inset);
+                        if ((base || extra || inset) && typeof (acc as any).setXShift === 'function') {
+                          (acc as any).setXShift(desiredAccidentalXShift(vfGlyph, n, base, extra, inset));
                         }
                       } catch {
                         // ignore

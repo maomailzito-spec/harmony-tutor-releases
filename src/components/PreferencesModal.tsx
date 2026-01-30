@@ -6,6 +6,8 @@ export type PreferencesModalProps = {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: PreferencesTabId;
+  enableInferredContexts?: boolean;
+  onToggleEnableInferredContexts?: (next: boolean) => void;
 };
 
 const TAB_LABEL: Record<PreferencesTabId, string> = {
@@ -15,7 +17,13 @@ const TAB_LABEL: Record<PreferencesTabId, string> = {
   analysis: 'Analisi',
 };
 
-const PreferencesModal: React.FC<PreferencesModalProps> = ({ isOpen, onClose, initialTab = 'editor' }) => {
+const PreferencesModal: React.FC<PreferencesModalProps> = ({
+  isOpen,
+  onClose,
+  initialTab = 'editor',
+  enableInferredContexts,
+  onToggleEnableInferredContexts,
+}) => {
   const tabs = useMemo(() => (Object.keys(TAB_LABEL) as PreferencesTabId[]), []);
   const [activeTab, setActiveTab] = useState<PreferencesTabId>(initialTab);
 
@@ -116,9 +124,24 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({ isOpen, onClose, in
             {activeTab === 'analysis' && (
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-slate-100">Analisi</div>
-                <div className="text-sm text-slate-300">
-                  Placeholder: opzioni dell’analisi armonica, visualizzazioni, livelli, filtri, ecc.
-                </div>
+                <div className="text-sm text-slate-300">Opzioni dell’analisi armonica.</div>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!enableInferredContexts}
+                    onChange={(e) => onToggleEnableInferredContexts?.(!!e.target.checked)}
+                    disabled={!onToggleEnableInferredContexts}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Inferisci contesti (modulazioni) automaticamente</div>
+                    <div className="text-xs text-slate-400">
+                      Se attivo (e se non hai inserito contesti manuali), l’app può applicare cambi di tonalità inferiti per far tornare Romani come V7 dentro una modulazione (es. sezione in Eb/Cm).
+                      Può però alterare alcune etichette anche in presenza di tonicizzazioni brevi.
+                    </div>
+                  </div>
+                </label>
               </div>
             )}
           </div>

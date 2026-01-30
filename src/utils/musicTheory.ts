@@ -2367,6 +2367,39 @@ export function getRomanAnalysis(
         }
     };
 
+    // Guard for inversions: chord tones can be dissonant vs the bass (e.g. 4/2 inversions).
+    // If the engine tagged a chord tone as a suspension, do NOT drop it from the Roman snapshot
+    // when it belongs to a confident chord candidate for the current verticality.
+    const isChordToneOfConfidentCandidate = (note: any, notesHere: StaffNote[]): boolean => {
+        try {
+            if (!note || (note as any).isRest) return false;
+            const notes = (notesHere || []).filter(n => n && !(n as any).isRest);
+            if (notes.length < 3) return false;
+            const cands = identifyChordCandidates(notes as any);
+            const best = (cands && cands.length) ? (cands as any[])[0] : null;
+            const matchType = (best as any)?.matchType;
+            const chordType = String(best?.type || '');
+            const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+            const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+            if (!confident || isSusLike || !best?.root || !best?.type) return false;
+
+            const rootPc = Number.isFinite((best.root as any).noteIndex)
+                ? mod12((best.root as any).noteIndex)
+                : (Number.isFinite((best.root as any).midi) ? mod12((best.root as any).midi) : null);
+            const notePc = Number.isFinite((note as any)?.midi)
+                ? mod12((note as any).midi)
+                : (typeof (note as any).noteIndex === 'number' ? mod12((note as any).noteIndex) : null);
+            if (rootPc == null || notePc == null) return false;
+
+            const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+            if (!Array.isArray(formula) || !formula.length) return false;
+            const intervalFromRoot = mod12(notePc - rootPc);
+            return formula.includes(intervalFromRoot);
+        } catch {
+            return false;
+        }
+    };
+
     // Base filtering for both L2 figures and roman: remove surface ornaments.
     // NOTE: some real chord tones can be mis-flagged as passing/escape in tight textures.
     // If filtering becomes too aggressive (<2 notes), fall back to the raw verticality.
@@ -2424,16 +2457,36 @@ export function getRomanAnalysis(
                 const dominantBassPc = mod12(keyTonicIndex + 7);
                 if (bassPc !== dominantBassPc) {
                     // Not a cadential 6/4: keep the suspension-removal behavior.
-                    filteredChord = filteredChordForFigures.filter((n: any) => !(n?.isSuspension && isDissonantVsBass(n)));
+                    filteredChord = filteredChordForFigures.filter((n: any) => {
+                        if (!(n as any)?.isSuspension) return true;
+                        if (!isDissonantVsBass(n)) return true;
+                        if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
+                        return false;
+                    });
                 }
             } else {
-                filteredChord = filteredChordForFigures.filter((n: any) => !(n?.isSuspension && isDissonantVsBass(n)));
+                filteredChord = filteredChordForFigures.filter((n: any) => {
+                    if (!(n as any)?.isSuspension) return true;
+                    if (!isDissonantVsBass(n)) return true;
+                    if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
+                    return false;
+                });
             }
         } else {
-            filteredChord = filteredChordForFigures.filter((n: any) => !(n?.isSuspension && isDissonantVsBass(n)));
+            filteredChord = filteredChordForFigures.filter((n: any) => {
+                if (!(n as any)?.isSuspension) return true;
+                if (!isDissonantVsBass(n)) return true;
+                if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
+                return false;
+            });
         }
     } catch {
-        filteredChord = filteredChordForFigures.filter((n: any) => !(n?.isSuspension && isDissonantVsBass(n)));
+        filteredChord = filteredChordForFigures.filter((n: any) => {
+            if (!(n as any)?.isSuspension) return true;
+            if (!isDissonantVsBass(n)) return true;
+            if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
+            return false;
+        });
     }
     if (filteredChord.length < 2) filteredChord = filteredChordForFigures;
 
@@ -3189,10 +3242,15 @@ export function applyHarmonyRules(
 
     const ENABLE_INFERRED_ANALYSIS_CONTEXTS = (() => {
         try {
-            const v = String(((import.meta as any)?.env?.VITE_ENABLE_INFERRED_CONTEXTS ?? '')).trim();
-            return v === '1' || v.toLowerCase() === 'true';
+            // Default ON (feature requested for long modulations).
+            // Can be disabled explicitly via VITE_ENABLE_INFERRED_CONTEXTS=0/false.
+            const raw = (import.meta as any)?.env?.VITE_ENABLE_INFERRED_CONTEXTS;
+            const v = String(raw ?? '').trim().toLowerCase();
+            if (v === '0' || v === 'false' || v === 'off') return false;
+            if (v === '1' || v === 'true' || v === 'on') return true;
+            return true;
         } catch {
-            return false;
+            return true;
         }
     })();
 
@@ -5857,9 +5915,37 @@ export function applyHarmonyRules(
 
             const inferredSoFar = (): AnalysisContext[] => {
                 try {
-                    return Array.from(bestByAbsBeat.values())
+                    const raw = Array.from(bestByAbsBeat.values())
                         .sort((a, b) => qAbs(a.absBeat) - qAbs(b.absBeat))
-                        .map(x => ({ absBeat: x.absBeat, newTonic: x.newTonic, newIsMinor: x.newIsMinor, label: x.label }));
+                        .map(x => ({
+                            absBeat: x.absBeat,
+                            newTonic: x.newTonic,
+                            newIsMinor: x.newIsMinor,
+                            label: x.label,
+                            score: x.score,
+                            source: 'inferred' as const,
+                        }));
+
+                    // Post-filter: drop weak or overly-frequent inferred contexts.
+                    // This reduces “spray” tonicizations on diatonic stretches.
+                    const MIN_SCORE = 8;
+                    const MIN_GAP = Math.max(1, beatsPerMeasLocal * 0.9);
+                    const out: AnalysisContext[] = [];
+                    for (const c of raw as any[]) {
+                        const sc = Number(c?.score);
+                        const isReturnToGlobal = String(c?.newTonic || '') === String(keyTonic || '');
+                        const minScoreHere = isReturnToGlobal ? 6 : MIN_SCORE;
+                        if (Number.isFinite(sc) && sc < minScoreHere) continue;
+                        const prev = out.length ? out[out.length - 1] : null;
+                        if (prev) {
+                            const sameKey = String(prev.newTonic) === String(c.newTonic) && !!prev.newIsMinor === !!c.newIsMinor;
+                            if (sameKey) continue;
+                            const dt = Number(c.absBeat) - Number(prev.absBeat);
+                            if (Number.isFinite(dt) && dt < MIN_GAP) continue;
+                        }
+                        out.push(c);
+                    }
+                    return out;
                 } catch {
                     return [];
                 }
@@ -5877,10 +5963,58 @@ export function applyHarmonyRules(
                 };
             };
 
+            const isStrongBeatForInference = (beat: number): boolean => {
+                // Be conservative: only allow mid-measure inference on strong beats.
+                // - 4/4: beats 1 and 3
+                // - 6/8: beats 1 and 4 (if the beat counter is in eighths)
+                // Fallback: beat 1.
+                try {
+                    if (!Number.isFinite(beat as any)) return false;
+                    const b = Number(beat);
+                    if (Math.abs(b - 1) <= 1e-3) return true;
+                    const ts = timeSignature;
+                    if (!ts) return false;
+                    if (ts.denominator === 4 && ts.numerator === 4) return Math.abs(b - 3) <= 1e-3;
+                    if (ts.denominator === 8 && ts.numerator === 6) return Math.abs(b - 4) <= 1e-3;
+                    return false;
+                } catch {
+                    return false;
+                }
+            };
+
+            const isReturnHomeCadenceBoundary = (a: ChordEvent, b: ChordEvent): boolean => {
+                try {
+                    if (!b || !a) return false;
+                    if (!(b.absBeat > a.absBeat)) return false;
+                    if (!isStrongBeatForInference(b.beat)) return false;
+
+                    // Only used to detect a return to the *global* key.
+                    const ctxAtB = getContextAtAbsBeatInferred(b.absBeat);
+                    if (String(ctxAtB.tonic || '') === String(keyTonic || '')) return false;
+
+                    // Require a tight cadence window.
+                    if ((b.absBeat - a.absBeat) > 2.01) return false;
+
+                    // Check functional pattern under the global key.
+                    const bRomanGlobal = String(getRomanAnalysis(b.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
+                    if (!(bRomanGlobal === (isMinor ? 'i' : 'I'))) return false;
+
+                    const aRomanGlobal = String(getRomanAnalysis(a.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
+                    const aLow = aRomanGlobal.toLowerCase();
+                    if (!(aLow.startsWith('v') || aLow.startsWith('vii'))) return false;
+
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+
             for (let i = 0; i < chordEvents.length - 1; i++) {
                 const a = chordEvents[i];
                 const b = chordEvents[i + 1];
-                if (!isCadenceBoundary(a, b)) continue;
+                // Default: barline-only inference. Special case: allow a strong mid-measure
+                // cadence back to the global key to avoid getting stuck in a tonicized context.
+                if (!isCadenceBoundary(a, b) && !isReturnHomeCadenceBoundary(a, b)) continue;
 
                 const aInfo = chordRootPcAndBassPc(a);
                 const bInfo = chordRootPcAndBassPc(b);
@@ -5940,7 +6074,9 @@ export function applyHarmonyRules(
                     const aRoman = String(getRomanAnalysis(a.notes || [], tonic, isMinorCand)?.roman || '');
                     const aLooksFunctionalToTonic = (() => {
                         const r = String(aRoman || '').replace(/\s+/g, '').toLowerCase();
-                        return r.startsWith('v') || r.startsWith('ii') || r.startsWith('iv') || r.startsWith('vii');
+                        // For inferring an actual context change, require a strong dominant pull.
+                        // Predominants like ii/iv are too permissive and create false positives.
+                        return r.startsWith('v') || r.startsWith('vii');
                     })();
 
                     const rootMotionIsDomToTonic = mod12(aInfo.rootPc - tonicPc) === 7;
@@ -5968,18 +6104,44 @@ export function applyHarmonyRules(
                     const currentOut = countNonDiatonicPcsInEvents(window as any, ctxAtB0.tonic, ctxAtB0.isMinor);
                     const candidateOut = countNonDiatonicPcsInEvents(window as any, tonic, isMinorCand);
 
-                    const ok = requireStricter
-                        ? (candidateOut <= 1 && (candidateOut + 2) < currentOut)
-                        : ((candidateOut + 1) < currentOut || candidateOut <= 1);
-                    if (!ok) continue;
-
                     const improvement = (Number.isFinite(currentOut) && Number.isFinite(candidateOut)) ? (currentOut - candidateOut) : 0;
+
+                    // Special case: return to the *global* key.
+                    // When a sequence/tonicization temporarily made another key diatonic (e.g. C# minor)
+                    // and we later cadence V→I back to the project tonic (e.g. E→A), the diatonic-fit
+                    // improvement can be 0 (both keys are diatonic over a short window). Still, musically,
+                    // the cadence is strong evidence of returning home.
+                    const isReturnToGlobalKey = String(tonic || '') === String(keyTonic || '')
+                        && String(ctxAtB0.tonic || '') !== String(keyTonic || '');
+                    const okReturnHome = isReturnToGlobalKey
+                        && (rootMotionIsDomToTonic || aLooksFunctionalToTonic)
+                        && candidateOut <= 2;
+
+                    // Key-change inference must *improve* diatonic fit, otherwise it becomes a
+                    // re-labeling machine on fully diatonic material (e.g. I6 read as V6/IV).
+                    // Allow weaker improvements only when there's an explicit dominant pull.
+                    const ok = requireStricter
+                        ? (candidateOut <= 1 && improvement > 2)
+                        : (
+                            improvement >= 2 ||
+                            (improvement >= 1 && (rootMotionIsDomToTonic || aLooksFunctionalToTonic))
+                          );
+                                        if (!ok && !okReturnHome) continue;
                     const score =
                         5 + // bLooksLikeTonic always true here
                         (rootMotionIsDomToTonic ? 3 : 0) +
                         (aLooksFunctionalToTonic ? 2 : 0) +
                         Math.max(0, improvement) -
                         (requireStricter ? 2 : 0);
+
+                    // Boost score for an explicit cadence back to the *global* tonic.
+                    // This prevents the return-home context from being filtered out when the
+                    // diatonic-fit improvement is ~0 and root-motion detection is unreliable.
+                    const scoreBoostReturnHome = (String(tonic || '') === String(keyTonic || '')
+                        && String(ctxAtB0.tonic || '') !== String(keyTonic || '')
+                        && (rootMotionIsDomToTonic || aLooksFunctionalToTonic))
+                        ? 2
+                        : 0;
 
                     const cand: TonicCand = {
                         tonicPc,
@@ -5994,7 +6156,7 @@ export function applyHarmonyRules(
                         windowLen,
                         currentOut,
                         candidateOut,
-                        score,
+                        score: score + scoreBoostReturnHome,
                     };
 
                     if (!bestCand || cand.score > bestCand.score) bestCand = cand;
@@ -6022,6 +6184,19 @@ export function applyHarmonyRules(
                 try {
                     const backPropOk = !requireStricter && bLooksLikeTonic && aLooksFunctionalToTonic && (b.absBeat - a.absBeat) <= 2.01;
                     if (backPropOk) startAbsBeat = a.absBeat;
+
+                    // One-step extra back-prop: if we already moved to the previous event (typically V→I),
+                    // also include the immediately previous inversion/neighbor event if it still functions
+                    // as V or vii° in the inferred key (common for V7 in 4/2 or arpeggiations).
+                    if (backPropOk && Math.abs(startAbsBeat - a.absBeat) < 1e-6) {
+                        const p = (i - 1) >= 0 ? chordEvents[i - 1] : null;
+                        if (p && Number.isFinite(p.absBeat) && (a.absBeat - p.absBeat) <= 1.01) {
+                            const pr = String(getRomanAnalysis(p.notes || [], inferredTonic, inferredIsMinor)?.roman || '').replace(/\s+/g, '');
+                            const prLow = pr.toLowerCase();
+                            const ok = prLow.startsWith('v') || prLow.startsWith('vii');
+                            if (ok) startAbsBeat = p.absBeat;
+                        }
+                    }
                 } catch { /* ignore */ }
 
                 // If a manual context starts at the chosen start, don't override it.
