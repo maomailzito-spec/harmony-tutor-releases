@@ -6089,7 +6089,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // for each copied label.
             const templateByK: Array<{ lab: typeof flat[number] | null; src: string; stripped: string; functional: string }> = [];
             const tmplRomans: string[] = [];
-            for (let kk = 0; kk <= L; kk += 1) {
+            // IMPORTANT: lengthSteps (L) is the motif length in slots.
+            // Slots are indexed [0..L-1] for the template; slot L is the *start of the imitation*.
+            // Using <= L leaks the sequence functional label one slot beyond the sequence end.
+            for (let kk = 0; kk < L; kk += 1) {
                 const slot = slots[seq.startSlotIdx + kk];
                 const lab = Number.isFinite(slot) ? findNearestLabelIndex(slot) : null;
                 let src = String(lab?.label?.roman ?? '').trim();
@@ -6156,7 +6159,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // Annotate the TEMPLATE occurrence itself, so the whole sequence reads consistently.
             try {
-                for (let kk = 0; kk <= L; kk += 1) {
+                for (let kk = 0; kk < L; kk += 1) {
                     const row = templateByK[kk];
                     if (!row?.lab) continue;
                     const lbl = labelsBySystem[row.lab.systemIndex]?.[row.lab.labelIndex];
@@ -6174,7 +6177,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             for (let r = 1; r < repeats; r += 1) {
-                for (let k = 0; k <= L; k += 1) {
+                for (let k = 0; k < L; k += 1) {
                     const slotB = slots[seq.startSlotIdx + r * L + k];
                     const labB = findNearestLabelIndex(slotB);
                     if (!Number.isFinite(slotB) || !labB) continue;

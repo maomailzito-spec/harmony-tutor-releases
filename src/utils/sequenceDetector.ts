@@ -250,7 +250,10 @@ const computeTranspositionSemitones = (
     lengthSteps: number
 ): number | null => {
     let deltaAll: number | null = null;
-    for (let k = 0; k <= lengthSteps; k += 1) {
+    // lengthSteps is the motif length in slots; compare exactly those slots.
+    // Using <= lengthSteps includes the first slot of the next block and can
+    // make transposition inference unstable at the sequence boundary.
+    for (let k = 0; k < lengthSteps; k += 1) {
         const snapA = snapshots[startSlotIdx + k];
         const snapB = snapshots[startSlotIdx + lengthSteps + k];
         if (!snapA || !snapB) return null;
