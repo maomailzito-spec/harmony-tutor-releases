@@ -22,6 +22,7 @@ import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
+import { computeHarmonyLabelsBySystem } from '../utils/computeHarmonyLabelsBySystem';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { GroupIcon } from './icons/GroupIcon';
@@ -2975,6 +2976,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Timeline-based harmony labels per system (roman+figures and symbol)
     const harmonyLabelsBySystem = useMemo(() => {
+        return computeHarmonyLabelsBySystem({
+            isAnalysisEnabled,
+            layoutData,
+            timeSignature,
+            timeSignatureChanges,
+            effectiveAnalysisContexts,
+            analysisContextAbsBeat,
+            currentTonic,
+            isMinorMode,
+            harmonyOverrides,
+            analysisResult,
+            analyzedNotes,
+            noteNameToChromaticIndex,
+            startX: START_X,
+            measurePaddingX: MEASURE_PADDING_X,
+        });
+
         if (!isAnalysisEnabled || !layoutData) return [];
 
         // Use the timeline of all active notes at each event (start/end of any note)
