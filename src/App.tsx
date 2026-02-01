@@ -5,9 +5,14 @@ import ChordVisualizer from './components/ChordVisualizer';
 import IntervalsVisualizer from './components/IntervalsVisualizer';
 import MainEditor from './components/MainEditor';
 import GrandStaffEditor from './components/GrandStaffEditor';
+import { getAppFlavor, isModeEnabled } from './flavor';
+
+type AppMode = 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff';
 
 const App: React.FC = () => {
-    const [mode, setMode] = useState<'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff'>('grandStaff');
+    const flavor = getAppFlavor();
+    const defaultMode: AppMode = (flavor === 'guitar') ? 'editor' : 'grandStaff';
+    const [mode, setMode] = useState<AppMode>(defaultMode);
     const [pendingMenuAction, setPendingMenuAction] = useState<{ action: string; payload: any; nonce: number } | null>(null);
     
     // --- AUDIO STATE ---
@@ -32,18 +37,20 @@ const App: React.FC = () => {
                 if (action !== 'set-app-mode') return;
                 const next = String(payload?.mode || '');
                 if (next === 'scales' || next === 'chords' || next === 'intervals' || next === 'editor' || next === 'grandStaff') {
-                    setMode(next);
+                    if (!isModeEnabled(flavor, next)) return;
+                    setMode(next as AppMode);
                 }
             } catch {
                 // ignore
             }
         });
         return () => { if (remove) remove(); };
-    }, []);
+    }, [flavor]);
 
     // Native menu integration (Electron): surface menu errors and allow Import/Export MIDI to
     // work even if the user is not currently on the GrandStaff view.
     useEffect(() => {
+        if (!isModeEnabled(flavor, 'grandStaff')) return;
         const api = (window as any).electronAPI;
         if (!api) return;
 
@@ -68,7 +75,7 @@ const App: React.FC = () => {
             if (removeErr) removeErr();
             if (remove) remove();
         };
-    }, [mode]);
+    }, [mode, flavor]);
     
     return (
         <div className="h-screen overflow-hidden flex flex-col bg-gray-900 font-sans text-gray-100">
@@ -100,7 +107,7 @@ const App: React.FC = () => {
                         isActive={mode === 'editor'}
                     />
                 </div>
-                <div className={mode === 'grandStaff' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
+                <div className={(mode === 'grandStaff' && isModeEnabled(flavor, 'grandStaff')) ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
                     <GrandStaffEditor
                         isActive={mode === 'grandStaff'}
                         audioService={audioServiceRef.current}

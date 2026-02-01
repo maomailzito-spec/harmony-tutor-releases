@@ -15,6 +15,13 @@ let showQuickInsertBarEnabled = true;
 const DEV_BUILD_TAG = 'restore-2026-01-23';
 const SHOW_BUILD_TAG_DIALOG = String(process.env.ELECTRON_SHOW_BUILD_TAG_DIALOG || '') === '1';
 
+function getAppFlavor() {
+  const raw = String(process.env.APP_FLAVOR || '').toLowerCase();
+  if (raw === 'grandstaff') return 'grandstaff';
+  if (raw === 'guitar') return 'guitar';
+  return 'united';
+}
+
 // Project file extension (short, app-specific).
 // Keep JSON compatibility for older saves.
 const PROJECT_EXT = 'htp';
@@ -89,7 +96,24 @@ function ensureProjectExtension(fp) {
 // Setting a stable app name here ensures the macOS menu bar and window titles
 // show the correct product name both in dev and when packaged.
 try {
-  app.setName('Harmony Tutor');
+  const flavor = getAppFlavor();
+  const name = (flavor === 'grandstaff')
+    ? 'Harmony Tutor Grand Staff'
+    : (flavor === 'guitar')
+      ? 'Harmony Tutor Guitar'
+      : 'Harmony Tutor';
+  app.setName(name);
+
+  // Ensure flavours can run side-by-side (separate single-instance lock + storage).
+  // Keep the "united" flavour on the default userData to preserve existing data.
+  if (flavor !== 'united') {
+    try {
+      const appData = app.getPath('appData');
+      app.setPath('userData', path.join(appData, `harmony-tutor-${flavor}`));
+    } catch {
+      // ignore
+    }
+  }
 } catch {
   // ignore
 }
@@ -129,6 +153,28 @@ function saveRecentFiles() {
   }
 }
 
+// --- Guitar library persistence (custom scales/chords/shapes/voicings) ---
+// Stored in userData so it works offline and survives cache clears.
+function getGuitarLibraryPath() {
+  try {
+    const userData = app.getPath('userData');
+    return path.join(userData, 'guitar-library.json');
+  } catch {
+    return null;
+  }
+}
+
+function defaultGuitarLibrary() {
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    customScales: [],
+    customChords: [],
+    customScaleShapes: {},
+    customVoicings: [],
+  };
+}
+
 function touchRecentFile(filePath) {
   if (!filePath || typeof filePath !== 'string') return;
   recentFiles = [filePath, ...recentFiles.filter((p) => p !== filePath)].slice(0, 10);
@@ -155,6 +201,9 @@ function setWindowTitleForPath(filePath) {
 function createMenu() {
   const isMac = process.platform === 'darwin';
   const isDev = String(process.env.NODE_ENV || '').toLowerCase() === 'development';
+  const flavor = getAppFlavor();
+  const enableGrandStaff = flavor !== 'guitar';
+  const enableGuitar = flavor !== 'grandstaff';
   const showShortcutsDialog = () => {
     try {
       if (!mainWindow) return;
@@ -232,7 +281,7 @@ function createMenu() {
     }] : []),
     {
       label: 'File',
-      submenu: [
+      submenu: enableGrandStaff ? [
         {
           label: 'Recent',
           submenu: (recentFiles.length === 0) ? [ { label: 'Nessun file recente', enabled: false } ] : recentFiles.map(fp => ({
@@ -337,6 +386,8 @@ function createMenu() {
             }
           }
         }
+      ] : [
+        { role: isMac ? 'close' : 'quit' }
       ]
     },
     {
@@ -426,95 +477,101 @@ function createMenu() {
           click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'open-preferences'); }
         },
         { type: 'separator' },
-        {
-          label: 'Scale',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'scales' }); }
-        },
-        {
-          label: 'Accordi',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'chords' }); }
-        },
-        {
-          label: 'Intervalli',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'intervals' }); }
-        },
-        {
-          label: 'Editor',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'editor' }); }
-        },
-        {
-          label: 'Grand Staff',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'grandStaff' }); }
-        },
-        { type: 'separator' },
-        {
-          label: 'Modalità incisione',
-          submenu: [
-            {
-              label: 'Enhanced',
-              type: 'radio',
-              checked: true,
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-engraving-mode', { mode: 'enhanced' }); }
-            },
-            {
-              label: 'Legacy',
-              type: 'radio',
-              checked: false,
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-engraving-mode', { mode: 'legacy' }); }
-            },
-            { type: 'separator' },
-            {
-              label: 'Verifica collisioni (Enhanced)…',
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'run-overlap-audit', { mode: 'enhanced' }); }
-            },
-            {
-              label: 'Verifica collisioni (Legacy)…',
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'run-overlap-audit', { mode: 'legacy' }); }
-            }
-          ]
-        },
+        ...(enableGuitar ? [
+          {
+            label: 'Scale',
+            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'scales' }); }
+          },
+          {
+            label: 'Accordi',
+            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'chords' }); }
+          },
+          {
+            label: 'Intervalli',
+            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'intervals' }); }
+          },
+          {
+            label: 'Editor',
+            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'editor' }); }
+          },
+        ] : []),
+        ...(enableGrandStaff ? [
+          {
+            label: 'Grand Staff',
+            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'grandStaff' }); }
+          },
+          { type: 'separator' },
+          {
+            label: 'Modalità incisione',
+            submenu: [
+              {
+                label: 'Enhanced',
+                type: 'radio',
+                checked: true,
+                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-engraving-mode', { mode: 'enhanced' }); }
+              },
+              {
+                label: 'Legacy',
+                type: 'radio',
+                checked: false,
+                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-engraving-mode', { mode: 'legacy' }); }
+              },
+              { type: 'separator' },
+              {
+                label: 'Verifica collisioni (Enhanced)…',
+                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'run-overlap-audit', { mode: 'enhanced' }); }
+              },
+              {
+                label: 'Verifica collisioni (Legacy)…',
+                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'run-overlap-audit', { mode: 'legacy' }); }
+              }
+            ]
+          },
+        ] : []),
         {
           label: 'Riordina toolbar (drag)…',
           click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'toggle-toolbar-customize'); }
         },
-        {
-          label: 'Quick Insert (toolbar chiusa)',
-          type: 'checkbox',
-          checked: !!showQuickInsertBarEnabled,
-          click: (menuItem) => {
-            showQuickInsertBarEnabled = !!menuItem.checked;
-            if (mainWindow) mainWindow.webContents.send('menu-action', 'set-quick-insert-bar', { enabled: showQuickInsertBarEnabled });
-          }
-        },
-        { type: 'separator' },
-        {
-          label: 'Numeri misure',
-          type: 'checkbox',
-          checked: !!showMeasureNumbersEnabled,
-          click: (menuItem) => {
-            showMeasureNumbersEnabled = !!menuItem.checked;
-            if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-measure-numbers', { enabled: showMeasureNumbersEnabled });
-          }
-        },
-        {
-          label: 'Debug harmony labels (pcs)',
-          type: 'checkbox',
-          checked: !!showHarmonyDebugEnabled,
-          click: (menuItem) => {
-            showHarmonyDebugEnabled = !!menuItem.checked;
-            if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-harmony-debug', { enabled: showHarmonyDebugEnabled });
-          }
-        },
-        {
-          label: 'Colori voci (BTAS)',
-          type: 'checkbox',
-          accelerator: 'Alt+C',
-          checked: !!showVoiceColorsEnabled,
-          click: (menuItem) => {
-            showVoiceColorsEnabled = !!menuItem.checked;
-            if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-voice-colors', { enabled: showVoiceColorsEnabled });
-          }
-        },
+        ...(enableGrandStaff ? [
+          {
+            label: 'Quick Insert (toolbar chiusa)',
+            type: 'checkbox',
+            checked: !!showQuickInsertBarEnabled,
+            click: (menuItem) => {
+              showQuickInsertBarEnabled = !!menuItem.checked;
+              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-quick-insert-bar', { enabled: showQuickInsertBarEnabled });
+            }
+          },
+          { type: 'separator' },
+          {
+            label: 'Numeri misure',
+            type: 'checkbox',
+            checked: !!showMeasureNumbersEnabled,
+            click: (menuItem) => {
+              showMeasureNumbersEnabled = !!menuItem.checked;
+              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-measure-numbers', { enabled: showMeasureNumbersEnabled });
+            }
+          },
+          {
+            label: 'Debug harmony labels (pcs)',
+            type: 'checkbox',
+            checked: !!showHarmonyDebugEnabled,
+            click: (menuItem) => {
+              showHarmonyDebugEnabled = !!menuItem.checked;
+              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-harmony-debug', { enabled: showHarmonyDebugEnabled });
+            }
+          },
+          {
+            label: 'Colori voci (BTAS)',
+            type: 'checkbox',
+            accelerator: 'Alt+C',
+            checked: !!showVoiceColorsEnabled,
+            click: (menuItem) => {
+              showVoiceColorsEnabled = !!menuItem.checked;
+              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-voice-colors', { enabled: showVoiceColorsEnabled });
+            }
+          },
+        ] : []),
         { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
@@ -633,25 +690,28 @@ app.on('open-file', (event, filePath) => {
 });
 
 // Windows/Linux: ensure single instance; second-instance provides argv with file paths.
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  try { app.quit(); } catch { /* ignore */ }
-} else {
-  app.on('second-instance', (event, argv) => {
-    try {
-      const fp = extractProjectPathFromArgv(argv);
-      if (!fp) return;
-      if (mainWindow) {
-        try {
-          if (mainWindow.isMinimized()) mainWindow.restore();
-          mainWindow.focus();
-        } catch { /* ignore */ }
-        sendOpenToRenderer(fp);
-      } else {
-        pendingOpenFilePath = fp;
-      }
-    } catch { /* ignore */ }
-  });
+const shouldLockSingleInstance = getAppFlavor() === 'united';
+if (shouldLockSingleInstance) {
+  const gotTheLock = app.requestSingleInstanceLock();
+  if (!gotTheLock) {
+    try { app.quit(); } catch { /* ignore */ }
+  } else {
+    app.on('second-instance', (event, argv) => {
+      try {
+        const fp = extractProjectPathFromArgv(argv);
+        if (!fp) return;
+        if (mainWindow) {
+          try {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+          } catch { /* ignore */ }
+          sendOpenToRenderer(fp);
+        } else {
+          pendingOpenFilePath = fp;
+        }
+      } catch { /* ignore */ }
+    });
+  }
 }
 
 ipcMain.handle('save-file-dialog', async (event, content) => {
@@ -721,6 +781,43 @@ ipcMain.handle('save-binary-file', async (event, base64, targetPath, filters) =>
   } catch (err) {
     console.error('Errore salvataggio binario:', err);
     return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('guitar-library-load', async () => {
+  const filePath = getGuitarLibraryPath();
+  if (!filePath) return defaultGuitarLibrary();
+  try {
+    if (!fs.existsSync(filePath)) return defaultGuitarLibrary();
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    const base = defaultGuitarLibrary();
+    return {
+      ...base,
+      ...((parsed && typeof parsed === 'object') ? parsed : {}),
+    };
+  } catch (err) {
+    console.warn('[MAIN] Failed to load guitar library:', err);
+    return defaultGuitarLibrary();
+  }
+});
+
+ipcMain.handle('guitar-library-save', async (_event, library) => {
+  const filePath = getGuitarLibraryPath();
+  if (!filePath) return { success: false, error: 'userData non disponibile' };
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const base = defaultGuitarLibrary();
+    const next = {
+      ...base,
+      ...((library && typeof library === 'object') ? library : {}),
+      updatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf-8');
+    return { success: true };
+  } catch (err) {
+    console.error('[MAIN] Failed to save guitar library:', err);
+    return { success: false, error: String(err && err.message ? err.message : err) };
   }
 });
 
