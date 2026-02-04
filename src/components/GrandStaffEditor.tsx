@@ -755,15 +755,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (staffSystemMode !== 'satb_ancient') lastNonSatbModeRef.current = staffSystemMode;
     }, [staffSystemMode]);
 
-    // Keep native Electron menu checkmarks in sync with renderer state.
-    useMenuStateSync({
-        selectOnlyCurrentVoiceEnabled: marqueeSelectOnlyCurrentVoice,
-        showMeasureNumbersEnabled: showMeasureNumbers,
-        showHarmonyDebugEnabled: showHarmonyDebug,
-        showVoiceColorsEnabled: showVoiceColors,
-        showQuickInsertBarEnabled: showQuickInsertBar,
-        engravingMode,
-    });
     const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
     const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
 
@@ -1539,6 +1530,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const notes = useMemo(() => calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges), [normalizedRawNotes, timeSignature, timeSignatureChanges]);
 
     const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = useState(false);
+
+    // Keep native Electron menu checkmarks in sync with renderer state.
+    useMenuStateSync({
+        selectOnlyCurrentVoiceEnabled: marqueeSelectOnlyCurrentVoice,
+        showMeasureNumbersEnabled: showMeasureNumbers,
+        showHarmonyDebugEnabled: showHarmonyDebug,
+        showVoiceColorsEnabled: showVoiceColors,
+        showQuickInsertBarEnabled: showQuickInsertBar,
+        engravingMode,
+    });
 
 
     // Mantieni latestRawNotes aggiornato
