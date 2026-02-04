@@ -24,8 +24,6 @@ import HarmonyLabelExplainModal, { type HarmonyExplainData } from './HarmonyLabe
 import type { MenuAction, MenuActionPayloadMap } from '../../shared/menuActionRegistry';
 import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
 import { usePreference } from '../preferences/usePreference';
-import { TOOLBAR_PREFS_KEY } from '../storage/storageKeys';
-import { getJSON, setJSON } from '../storage/localStorage';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 
 interface GrandStaffEditorProps {
@@ -718,21 +716,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Menu-driven toggles (Electron)
     const [showQuickInsertBar, setShowQuickInsertBar] = usePreference<boolean>('editor.showQuickInsertBar');
     const [showHarmonyDebug, setShowHarmonyDebug] = usePreference<boolean>('debug.showHarmonyDebug');
-    const [toolbarGroupOrder, setToolbarGroupOrder] = useState<ToolbarGroupId[]>(() => {
-        // Load toolbar prefs synchronously to avoid overwriting them with defaults on first mount.
+    const [toolbarPrefs, setToolbarPrefs] = usePreference<{ order: string[] }>('editor.toolbarPrefs');
+    const toolbarGroupOrder = useMemo<ToolbarGroupId[]>(() => {
         try {
-            const parsed = getJSON<any>(TOOLBAR_PREFS_KEY, null);
-            if (!parsed) return DEFAULT_TOOLBAR_ORDER;
-            const order: ToolbarGroupId[] = Array.isArray(parsed?.order) ? parsed.order : [];
-
+            const orderRaw: any[] = Array.isArray(toolbarPrefs?.order) ? toolbarPrefs.order : [];
             const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
-            const cleanedOrder = order.filter((id: any): id is ToolbarGroupId => all.has(id));
+            const cleanedOrder = orderRaw.filter((id: any): id is ToolbarGroupId => all.has(id));
             const fullOrder: ToolbarGroupId[] = Array.from(new Set([...cleanedOrder, ...DEFAULT_TOOLBAR_ORDER]));
             return fullOrder;
         } catch {
             return DEFAULT_TOOLBAR_ORDER;
         }
-    });
+    }, [toolbarPrefs]);
+    const setToolbarGroupOrder = useCallback((next: ToolbarGroupId[] | ((prev: ToolbarGroupId[]) => ToolbarGroupId[])) => {
+        setToolbarPrefs(prev => {
+            const prevRaw: any[] = Array.isArray(prev?.order) ? prev.order : [];
+            const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
+            const cleanedPrev = prevRaw.filter((id: any): id is ToolbarGroupId => all.has(id));
+            const prevOrder: ToolbarGroupId[] = Array.from(new Set([...cleanedPrev, ...DEFAULT_TOOLBAR_ORDER]));
+            const computed = (typeof next === 'function') ? (next as any)(prevOrder) : next;
+            return { ...(prev || {}), order: computed };
+        });
+    }, [setToolbarPrefs]);
     const [isToolbarCustomizeOpen, setIsToolbarCustomizeOpen] = useState(false);
 
     const [currentProjectFilePath, setCurrentProjectFilePath] = useState<string | null>(null);
@@ -978,14 +983,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         setMeasuresPerLineDraft(String(measuresPerLine));
     }, [measuresPerLine]);
-
-    useEffect(() => {
-        try {
-            setJSON(TOOLBAR_PREFS_KEY, { order: toolbarGroupOrder });
-        } catch {
-            // ignore quota/errors
-        }
-    }, [toolbarGroupOrder]);
 
     const reorderToolbarGroups = useCallback((dragId: ToolbarGroupId, overId: ToolbarGroupId) => {
         setToolbarGroupOrder(prev => {

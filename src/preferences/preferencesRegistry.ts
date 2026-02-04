@@ -14,6 +14,8 @@ import {
   TOOLBAR_HIDDEN_KEY,
   HARMONY_ANALYSIS_PROFILE_CUSTOMIZED_KEY,
   HARMONY_ANALYSIS_PROFILE_DEFAULT_KEY,
+  HARMONY_ANALYSIS_FILTERS_KEY,
+  TOOLBAR_PREFS_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
@@ -21,6 +23,7 @@ export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'E
 export type PreferenceId =
   | 'editor.staffSystemMode'
   | 'editor.toolbarHidden'
+  | 'editor.toolbarPrefs'
   | 'editor.showMeasureNumbers'
   | 'editor.showVoiceColors'
   | 'editor.showQuickInsertBar'
@@ -33,6 +36,7 @@ export type PreferenceId =
   | 'analysis.sequencesEnabled'
   | 'analysis.enableInferredContexts'
   | 'analysis.harmonyLabelMinSpanBeats'
+  | 'analysis.filters'
   | 'debug.showHarmonyDebug';
 
 export type PreferenceDef<T> = {
@@ -41,13 +45,24 @@ export type PreferenceDef<T> = {
   label: string;
   storageKey: string;
   defaultValue: T;
-  kind: 'boolean' | 'enum' | 'number';
+  kind: 'boolean' | 'enum' | 'number' | 'json';
   options?: Array<{ value: string; label: string }>;
   min?: number;
   max?: number;
   step?: number;
   parse: (raw: string | null) => T;
   serialize: (value: T) => string;
+};
+
+export type HarmonyAnalysisFiltersPref = {
+  showError: boolean;
+  showWarning: boolean;
+  showException: boolean;
+  disabledRuleIds: Record<string, boolean>;
+};
+
+export type ToolbarPrefs = {
+  order: string[];
 };
 
 const parseBool = (raw: string | null, fallback: boolean): boolean => {
@@ -104,6 +119,33 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     kind: 'boolean',
     parse: (raw) => parseBool(raw, false),
     serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'editor.toolbarPrefs': {
+    id: 'editor.toolbarPrefs',
+    section: 'Editor',
+    label: 'Toolbar prefs (ordine)',
+    storageKey: TOOLBAR_PREFS_KEY,
+    defaultValue: { order: [] } as ToolbarPrefs,
+    kind: 'json',
+    parse: (raw) => {
+      try {
+        if (!raw) return { order: [] };
+        const parsed = JSON.parse(String(raw));
+        const order = Array.isArray(parsed?.order) ? parsed.order.filter((x: any) => typeof x === 'string') : [];
+        return { order };
+      } catch {
+        return { order: [] };
+      }
+    },
+    serialize: (value: ToolbarPrefs) => {
+      try {
+        const order = Array.isArray(value?.order) ? value.order : [];
+        return JSON.stringify({ order });
+      } catch {
+        return JSON.stringify({ order: [] });
+      }
+    },
   },
 
   'editor.showMeasureNumbers': {
@@ -256,6 +298,48 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
       return v >= 0 ? v : 0;
     },
     serialize: (value: number) => String(Number.isFinite(value) ? value : 0),
+  },
+
+  'analysis.filters': {
+    id: 'analysis.filters',
+    section: 'Analysis',
+    label: 'Filtri analisi (error/warn/exception + disabled)',
+    storageKey: HARMONY_ANALYSIS_FILTERS_KEY,
+    defaultValue: {
+      showError: true,
+      showWarning: true,
+      showException: true,
+      disabledRuleIds: {},
+    } as HarmonyAnalysisFiltersPref,
+    kind: 'json',
+    parse: (raw) => {
+      try {
+        if (!raw) {
+          return { showError: true, showWarning: true, showException: true, disabledRuleIds: {} };
+        }
+        const p = JSON.parse(String(raw));
+        const showError = typeof p?.showError === 'boolean' ? p.showError : true;
+        const showWarning = typeof p?.showWarning === 'boolean' ? p.showWarning : true;
+        const showException = typeof p?.showException === 'boolean' ? p.showException : true;
+        const disabledRuleIds = (p?.disabledRuleIds && typeof p.disabledRuleIds === 'object') ? p.disabledRuleIds : {};
+        return { showError, showWarning, showException, disabledRuleIds };
+      } catch {
+        return { showError: true, showWarning: true, showException: true, disabledRuleIds: {} };
+      }
+    },
+    serialize: (value: HarmonyAnalysisFiltersPref) => {
+      try {
+        const v = value || ({} as any);
+        return JSON.stringify({
+          showError: !!v.showError,
+          showWarning: !!v.showWarning,
+          showException: !!v.showException,
+          disabledRuleIds: (v.disabledRuleIds && typeof v.disabledRuleIds === 'object') ? v.disabledRuleIds : {},
+        });
+      } catch {
+        return JSON.stringify({ showError: true, showWarning: true, showException: true, disabledRuleIds: {} });
+      }
+    },
   },
 
   'debug.showHarmonyDebug': {

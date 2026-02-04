@@ -3,8 +3,7 @@ import { ANALYSIS_PROFILE_PRESETS, type AnalysisProfileBaseId } from '../utils/a
 import { usePreference } from '../preferences/usePreference';
 import { PREFERENCE_DEFS, type PreferenceDef, type PreferenceSectionId, getPreferenceIdsBySection } from '../preferences/preferencesRegistry';
 import { resetPreferences } from '../preferences/preferencesStore';
-import { HARMONY_ANALYSIS_FILTERS_KEY } from '../storage/storageKeys';
-import { setJSON } from '../storage/localStorage';
+import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 
 export type PreferencesModalProps = {
   isOpen: boolean;
@@ -44,6 +43,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [sequencesEnabled, setSequencesEnabled] = usePreference<boolean>('analysis.sequencesEnabled');
   const [enableInferredContexts, setEnableInferredContexts] = usePreference<boolean>('analysis.enableInferredContexts');
   const [harmonyLabelMinSpanBeats, setHarmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
+  const [, setAnalysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
 
   const analysisProfileSelectionValue = useMemo(() => {
     return profileCustomized ? 'custom' : profileBaseId;
@@ -59,9 +59,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
     setShowSymbolAnalysis(!!preset.showSymbolAnalysis);
     setSequencesEnabled(!!preset.sequencesEnabled);
 
-    // Keep the analysis panel filters in sync (legacy storage + event).
+    // Keep the analysis panel filters in sync.
     try {
-      setJSON(HARMONY_ANALYSIS_FILTERS_KEY, {
+      setAnalysisFilters({
         showError: preset.analysisFilters.showError,
         showWarning: preset.analysisFilters.showWarning,
         showException: preset.analysisFilters.showException,

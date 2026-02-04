@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RuleViolation, SequenceMatch } from '../types';
-import { HARMONY_ANALYSIS_FILTERS_KEY } from '../storage/storageKeys';
-import { getJSON, setJSON } from '../storage/localStorage';
+import { usePreference } from '../preferences/usePreference';
+import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 
 interface HarmonyAnalysisPanelProps {
     violations: RuleViolation[];
@@ -40,34 +40,21 @@ const ExceptionIcon: React.FC = () => (
 
 
 const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
-    const [showError, setShowError] = useState(true);
-    const [showWarning, setShowWarning] = useState(true);
-    const [showException, setShowException] = useState(true);
-    const [disabledRuleIds, setDisabledRuleIds] = useState<Record<string, boolean>>({});
+    const [filters, setFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
+    const showError = !!filters?.showError;
+    const showWarning = !!filters?.showWarning;
+    const showException = !!filters?.showException;
+    const disabledRuleIds = (filters?.disabledRuleIds && typeof filters.disabledRuleIds === 'object') ? filters.disabledRuleIds : {};
     const [ruleSearch, setRuleSearch] = useState('');
 
-    const suppressPersistRef = useRef(false);
+    const suppressBroadcastRef = useRef(false);
 
-    // Load persisted filters.
+    // Broadcast changes for overlays that listen to the legacy event.
     useEffect(() => {
-        const parsed = getJSON<any>(HARMONY_ANALYSIS_FILTERS_KEY, null);
-        if (!parsed || typeof parsed !== 'object') return;
-        if (typeof parsed?.showError === 'boolean') setShowError(parsed.showError);
-        if (typeof parsed?.showWarning === 'boolean') setShowWarning(parsed.showWarning);
-        if (typeof parsed?.showException === 'boolean') setShowException(parsed.showException);
-        if (parsed?.disabledRuleIds && typeof parsed.disabledRuleIds === 'object') setDisabledRuleIds(parsed.disabledRuleIds);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // Persist filters.
-    useEffect(() => {
-        if (suppressPersistRef.current) {
-            suppressPersistRef.current = false;
+        if (suppressBroadcastRef.current) {
+            suppressBroadcastRef.current = false;
             return;
         }
-        setJSON(HARMONY_ANALYSIS_FILTERS_KEY, { showError, showWarning, showException, disabledRuleIds });
-
-        // Notify the editor overlay (same-window) so connection lines update immediately.
         try {
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('harmony-analysis-filters-changed', {
@@ -77,7 +64,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
         } catch {
             // ignore
         }
-    }, [showError, showWarning, showException, disabledRuleIds]);
+    }, [disabledRuleIds, showError, showException, showWarning]);
 
     // Listen for external updates (e.g. profile presets) and sync UI.
     useEffect(() => {
@@ -85,11 +72,16 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
             try {
                 const d = ev?.detail;
                 if (!d || typeof d !== 'object') return;
-                suppressPersistRef.current = true;
-                if (typeof d.showError === 'boolean') setShowError(d.showError);
-                if (typeof d.showWarning === 'boolean') setShowWarning(d.showWarning);
-                if (typeof d.showException === 'boolean') setShowException(d.showException);
-                if (d.disabledRuleIds && typeof d.disabledRuleIds === 'object') setDisabledRuleIds(d.disabledRuleIds);
+                suppressBroadcastRef.current = true;
+                setFilters(prev => {
+                    const next: HarmonyAnalysisFiltersPref = {
+                        showError: typeof d.showError === 'boolean' ? d.showError : !!prev.showError,
+                        showWarning: typeof d.showWarning === 'boolean' ? d.showWarning : !!prev.showWarning,
+                        showException: typeof d.showException === 'boolean' ? d.showException : !!prev.showException,
+                        disabledRuleIds: (d.disabledRuleIds && typeof d.disabledRuleIds === 'object') ? d.disabledRuleIds : (prev.disabledRuleIds || {}),
+                    };
+                    return next;
+                });
             } catch {
                 // ignore
             }
@@ -123,6 +115,22 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
         if (!q) return uniqueRuleIds;
         return uniqueRuleIds.filter(rid => rid.toLowerCase().includes(q));
     }, [uniqueRuleIds, ruleSearch]);
+
+    const setShowError = useCallback((next: boolean) => {
+        setFilters(prev => ({ ...prev, showError: !!next }));
+    }, [setFilters]);
+
+    const setShowWarning = useCallback((next: boolean) => {
+        setFilters(prev => ({ ...prev, showWarning: !!next }));
+    }, [setFilters]);
+
+    const setShowException = useCallback((next: boolean) => {
+        setFilters(prev => ({ ...prev, showException: !!next }));
+    }, [setFilters]);
+
+    const setDisabledRuleIds = useCallback((next: Record<string, boolean>) => {
+        setFilters(prev => ({ ...prev, disabledRuleIds: next || {} }));
+    }, [setFilters]);
 
     const counts = useMemo(() => {
         const c = { error: 0, warning: 0, exception: 0 };
