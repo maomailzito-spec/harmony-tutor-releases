@@ -31,6 +31,7 @@ Qualità “pro” = risultati affidabili + UX didattica chiara + export/import 
 - Tipi: `src/types.ts`
 - Electron: `electron/main.js` + `electron/preload.js`
 - Mappa funzioni/surface area: [docs/capabilities.md](capabilities.md)
+- Roadmap baseline (Professional + Split): [docs/roadmap-professional.md](roadmap-professional.md)
 
 ## 4) “Contratti” da stabilizzare (per evitare regressioni)
 
