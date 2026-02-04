@@ -173,7 +173,7 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
   'editor.showQuickInsertBar': {
     id: 'editor.showQuickInsertBar',
     section: 'Editor',
-    label: 'Quick Insert (toolbar chiusa)',
+    label: 'Transport (toolbar chiusa)',
     storageKey: SHOW_QUICK_INSERT_BAR_KEY,
     defaultValue: true,
     kind: 'boolean',

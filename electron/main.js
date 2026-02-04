@@ -559,7 +559,7 @@ function createMenu() {
         },
         ...(enableGrandStaff ? [
           {
-            label: 'Quick Insert (toolbar chiusa)',
+            label: 'Transport (toolbar chiusa)',
             type: 'checkbox',
             checked: !!showQuickInsertBarEnabled,
             click: (menuItem) => {

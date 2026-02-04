@@ -11137,6 +11137,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
     const isToolbarVisible = forceToolbarVisible || !isToolbarHidden;
 
+    // Transport bar (draggable overlay shown when toolbar is hidden).
+    const [transportPos, setTransportPos] = useState<{ x: number; y: number } | null>(null);
+    const [isDraggingTransport, setIsDraggingTransport] = useState(false);
+    const [transportDrag, setTransportDrag] = useState<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+
+    useEffect(() => {
+        if (!isDraggingTransport || !transportDrag) return;
+        const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+        const onMove = (e: MouseEvent) => {
+            try {
+                e.preventDefault();
+                const dx = e.clientX - transportDrag.startX;
+                const dy = e.clientY - transportDrag.startY;
+                const nextX = transportDrag.originX + dx;
+                const nextY = transportDrag.originY + dy;
+                const margin = 8;
+                const maxX = Math.max(margin, window.innerWidth - margin - 240);
+                const maxY = Math.max(margin, window.innerHeight - margin - 80);
+                setTransportPos({ x: clamp(nextX, margin, maxX), y: clamp(nextY, margin, maxY) });
+            } catch {
+                // ignore
+            }
+        };
+
+        const onUp = () => {
+            setIsDraggingTransport(false);
+            setTransportDrag(null);
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+    }, [isDraggingTransport, transportDrag]);
+
     // Toolbar hover tooltip (shows even for disabled buttons).
     const toolbarHoverRef = useRef<HTMLDivElement | null>(null);
     const [toolbarHoverTip, setToolbarHoverTip] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -11170,7 +11208,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [toolbarHoverTip]);
 
     return (
-        <div className={`flex-grow flex flex-col ${isToolbarVisible ? 'gap-4' : 'gap-0'} min-h-0`}>
+        <div className={`relative flex-grow flex flex-col ${isToolbarVisible ? 'gap-4' : 'gap-0'} min-h-0`}>
             {isToolbarVisible && (
             <div
                 ref={toolbarHoverRef}
@@ -11244,22 +11282,45 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             />
 
             {!isToolbarVisible && showQuickInsertBar && (
-                <div className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
-                    <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
-                        <div className="flex items-center gap-3">
-                            {toolbarGroups.voices}
-                            {toolbarGroups.insert}
-                            {toolbarGroups.accidentals}
-                            {toolbarGroups.notations}
+                <div className="absolute z-50" style={transportPos ? { left: transportPos.x, top: transportPos.y } : { left: 12, top: 12 }}>
+                    <div className="pointer-events-auto rounded-lg bg-slate-800/95 border border-slate-700 shadow-lg overflow-hidden">
+                        <div
+                            className="flex items-center justify-between gap-2 px-2 py-1 border-b border-slate-700 cursor-move"
+                            onMouseDown={(e) => {
+                                if (e.button !== 0) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const cur = transportPos ?? { x: 12, y: 12 };
+                                setIsDraggingTransport(true);
+                                setTransportDrag({ startX: e.clientX, startY: e.clientY, originX: cur.x, originY: cur.y });
+                            }}
+                            title="Transport (trascina per spostare)"
+                        >
+                            <div className="text-[11px] font-semibold text-slate-200">Transport</div>
+                            <button
+                                className="px-2 py-0.5 text-[11px] font-semibold rounded bg-slate-700/60 border border-slate-600 text-slate-100 hover:bg-slate-700"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => setShowQuickInsertBar(false)}
+                                title="Chiudi transport"
+                                type="button"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="p-2">
+                            <div className="flex flex-row items-center flex-wrap gap-x-3 gap-y-2">
+                                {toolbarGroups.voices}
+                                {toolbarGroups.insert}
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {(showQuickInsertBar || showHarmonyDebug) && (
-                <div className="sticky top-0 z-40 mt-2 px-2">
-                    <div className="inline-flex items-center gap-2 rounded-md bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] text-slate-200">
-                        {showQuickInsertBar && <span className="px-1.5 py-0.5 rounded bg-slate-700">Quick Insert: ON</span>}
+            {showHarmonyDebug && (
+                <div className="absolute top-2 right-2 z-40 pointer-events-none">
+                    <div className="inline-flex items-center gap-2 rounded-md bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] text-slate-200 shadow">
                         {showHarmonyDebug && <span className="px-1.5 py-0.5 rounded bg-slate-700">Harmony Debug: ON</span>}
                     </div>
                 </div>
