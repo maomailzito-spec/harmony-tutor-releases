@@ -26,6 +26,7 @@ import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
 import { usePreference } from '../preferences/usePreference';
 import { TOOLBAR_PREFS_KEY } from '../storage/storageKeys';
 import { getJSON, setJSON } from '../storage/localStorage';
+import { useMenuStateSync } from '../controllers/useMenuStateSync';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -715,7 +716,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [showVoiceColors, setShowVoiceColors] = useState(false);
 
     // Menu-driven toggles (Electron)
-    const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
+    const [showQuickInsertBar, setShowQuickInsertBar] = useState(true);
     const [showHarmonyDebug, setShowHarmonyDebug] = useState(false);
     const [toolbarGroupOrder, setToolbarGroupOrder] = useState<ToolbarGroupId[]>(() => {
         // Load toolbar prefs synchronously to avoid overwriting them with defaults on first mount.
@@ -753,6 +754,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         if (staffSystemMode !== 'satb_ancient') lastNonSatbModeRef.current = staffSystemMode;
     }, [staffSystemMode]);
+
+    // Keep native Electron menu checkmarks in sync with renderer state.
+    useMenuStateSync({
+        selectOnlyCurrentVoiceEnabled: marqueeSelectOnlyCurrentVoice,
+        showMeasureNumbersEnabled: showMeasureNumbers,
+        showHarmonyDebugEnabled: showHarmonyDebug,
+        showVoiceColorsEnabled: showVoiceColors,
+        showQuickInsertBarEnabled: showQuickInsertBar,
+        engravingMode,
+    });
     const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
     const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
 
