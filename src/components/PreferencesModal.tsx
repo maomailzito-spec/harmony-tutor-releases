@@ -1,44 +1,101 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ANALYSIS_PROFILE_PRESETS, AnalysisProfileBaseId, AnalysisProfileSelectionValue } from '../utils/analysisProfiles';
-
-type PreferencesTabId = 'editor' | 'midi' | 'font' | 'analysis';
+import { ANALYSIS_PROFILE_PRESETS, type AnalysisProfileBaseId } from '../utils/analysisProfiles';
+import { usePreference } from '../preferences/usePreference';
+import { PREFERENCE_DEFS, type PreferenceDef, type PreferenceSectionId, getPreferenceIdsBySection } from '../preferences/preferencesRegistry';
+import { resetPreferences } from '../preferences/preferencesStore';
+import { HARMONY_ANALYSIS_FILTERS_KEY } from '../storage/storageKeys';
+import { setJSON } from '../storage/localStorage';
 
 export type PreferencesModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: PreferencesTabId;
-  analysisProfileValue?: AnalysisProfileSelectionValue;
-  analysisProfileBaseId?: AnalysisProfileBaseId;
-  onApplyAnalysisProfileBase?: (baseId: AnalysisProfileBaseId) => void;
-  onMarkAnalysisProfileCustomized?: () => void;
-  enableInferredContexts?: boolean;
-  onToggleEnableInferredContexts?: (next: boolean) => void;
-  harmonyLabelMinSpanBeats?: number;
-  onChangeHarmonyLabelMinSpanBeats?: (next: number) => void;
+  initialTab?: PreferenceSectionId;
 };
 
-const TAB_LABEL: Record<PreferencesTabId, string> = {
-  editor: 'Editor',
-  midi: 'MIDI',
-  font: 'Font / Render',
-  analysis: 'Analisi',
+const TAB_LABEL: Record<PreferenceSectionId, string> = {
+  Editor: 'Editor',
+  Analysis: 'Analisi',
+  Render: 'Render',
+  MIDI: 'MIDI',
+  Export: 'Export',
+  Debug: 'Debug',
 };
 
 const PreferencesModal: React.FC<PreferencesModalProps> = ({
   isOpen,
   onClose,
-  initialTab = 'editor',
-  analysisProfileValue,
-  analysisProfileBaseId,
-  onApplyAnalysisProfileBase,
-  onMarkAnalysisProfileCustomized,
-  enableInferredContexts,
-  onToggleEnableInferredContexts,
-  harmonyLabelMinSpanBeats,
-  onChangeHarmonyLabelMinSpanBeats,
+  initialTab = 'Editor',
 }) => {
-  const tabs = useMemo(() => (Object.keys(TAB_LABEL) as PreferencesTabId[]), []);
-  const [activeTab, setActiveTab] = useState<PreferencesTabId>(initialTab);
+  const tabs = useMemo(() => (Object.keys(TAB_LABEL) as PreferenceSectionId[]), []);
+  const [activeTab, setActiveTab] = useState<PreferenceSectionId>(initialTab);
+
+  const defsForTab = useMemo(() => {
+    return PREFERENCE_DEFS
+      .filter((d) => d.section === activeTab)
+      .slice()
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [activeTab]);
+
+  const [profileBaseId, setProfileBaseId] = usePreference<AnalysisProfileBaseId>('analysis.profileBaseId');
+  const [profileCustomized, setProfileCustomized] = usePreference<boolean>('analysis.profileCustomized');
+
+  const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
+  const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
+  const [sequencesEnabled, setSequencesEnabled] = usePreference<boolean>('analysis.sequencesEnabled');
+  const [enableInferredContexts, setEnableInferredContexts] = usePreference<boolean>('analysis.enableInferredContexts');
+  const [harmonyLabelMinSpanBeats, setHarmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
+
+  const analysisProfileSelectionValue = useMemo(() => {
+    return profileCustomized ? 'custom' : profileBaseId;
+  }, [profileBaseId, profileCustomized]);
+
+  const applyAnalysisProfileBase = (baseId: AnalysisProfileBaseId) => {
+    const preset = ANALYSIS_PROFILE_PRESETS[baseId]?.preset;
+    if (!preset) return;
+
+    setProfileBaseId(baseId);
+    setProfileCustomized(false);
+    setShowRomanAnalysis(!!preset.showRomanAnalysis);
+    setShowSymbolAnalysis(!!preset.showSymbolAnalysis);
+    setSequencesEnabled(!!preset.sequencesEnabled);
+
+    // Keep the analysis panel filters in sync (legacy storage + event).
+    try {
+      setJSON(HARMONY_ANALYSIS_FILTERS_KEY, {
+        showError: preset.analysisFilters.showError,
+        showWarning: preset.analysisFilters.showWarning,
+        showException: preset.analysisFilters.showException,
+        disabledRuleIds: {},
+      });
+      window.dispatchEvent(
+        new CustomEvent('harmony-analysis-filters-changed', {
+          detail: {
+            showError: preset.analysisFilters.showError,
+            showWarning: preset.analysisFilters.showWarning,
+            showException: preset.analysisFilters.showException,
+            disabledRuleIds: {},
+          },
+        })
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    // Auto-maintain “custom” state when the three core toggles diverge from the base preset.
+    try {
+      const preset = ANALYSIS_PROFILE_PRESETS[profileBaseId]?.preset;
+      if (!preset) return;
+      const matches =
+        !!preset.showRomanAnalysis === !!showRomanAnalysis &&
+        !!preset.showSymbolAnalysis === !!showSymbolAnalysis &&
+        !!preset.sequencesEnabled === !!sequencesEnabled;
+      setProfileCustomized(!matches);
+    } catch {
+      // ignore
+    }
+  }, [profileBaseId, sequencesEnabled, setProfileCustomized, showRomanAnalysis, showSymbolAnalysis]);
 
   // Draggable modal position (screen coords).
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -110,6 +167,89 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
   if (!isOpen) return null;
 
+  const resetCurrentSection = () => {
+    try {
+      resetPreferences(getPreferenceIdsBySection(activeTab));
+    } catch {
+      // ignore
+    }
+  };
+
+  const resetAll = () => {
+    try {
+      resetPreferences(PREFERENCE_DEFS.map((d) => d.id));
+    } catch {
+      // ignore
+    }
+  };
+
+  const PreferenceRow: React.FC<{ def: PreferenceDef<any> }> = ({ def }) => {
+    const [val, setVal] = usePreference<any>(def.id);
+    if (def.kind === 'boolean') {
+      return (
+        <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={!!val}
+            onChange={(e) => setVal(!!e.target.checked)}
+          />
+          <div>
+            <div className="text-sm font-semibold text-slate-100">{def.label}</div>
+            <div className="text-[11px] text-slate-400">Default: {def.defaultValue ? 'ON' : 'OFF'}</div>
+          </div>
+        </label>
+      );
+    }
+    if (def.kind === 'enum') {
+      return (
+        <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+          <div className="text-sm font-semibold text-slate-100">{def.label}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              className="bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
+              value={String(val)}
+              onChange={(e) => setVal(String(e.target.value))}
+            >
+              {(def.options || []).map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">Default: {String(def.defaultValue)}</div>
+        </div>
+      );
+    }
+    if (def.kind === 'number') {
+      const min = typeof def.min === 'number' ? def.min : undefined;
+      const max = typeof def.max === 'number' ? def.max : undefined;
+      const step = typeof def.step === 'number' ? def.step : 1;
+      return (
+        <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+          <div className="text-sm font-semibold text-slate-100">{def.label}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="number"
+              className="w-28 bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
+              value={Number(val)}
+              min={min}
+              max={max}
+              step={step}
+              onChange={(e) => setVal(Number(e.target.value) || 0)}
+            />
+            {(min != null || max != null) && (
+              <span className="text-[11px] text-slate-400">
+                {min != null ? `min ${min}` : ''}{min != null && max != null ? ' · ' : ''}{max != null ? `max ${max}` : ''}
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">Default: {String(def.defaultValue)}</div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="fixed inset-0 z-[11000]">
       <div className="absolute inset-0 bg-black/40" onMouseDown={onClose} />
@@ -138,13 +278,24 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
               <div className="text-sm font-semibold text-slate-100">Preferenze</div>
               <div className="text-[11px] text-slate-400">Raggruppa impostazioni non essenziali alla toolbar.</div>
             </div>
-            <button
-              className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700"
-              onClick={onClose}
-              title="Chiudi (Esc)"
-            >
-              Chiudi
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700"
+                onClick={resetCurrentSection}
+                title="Reset preferenze della sezione corrente"
+                type="button"
+              >
+                Reset sezione
+              </button>
+              <button
+                className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700"
+                onClick={onClose}
+                title="Chiudi (Esc)"
+                type="button"
+              >
+                Chiudi
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-700 bg-slate-900/70">
@@ -166,38 +317,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
           </div>
 
           <div className="p-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
-            {activeTab === 'editor' && (
-              <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-100">Editor</div>
-                <div className="text-sm text-slate-300">
-                  Placeholder: qui confluiranno opzioni dell’editor che oggi sono sparse tra toolbar e menu.
-                </div>
-                <div className="text-xs text-slate-400">
-                  Nota: per ora questa finestra non sposta né modifica alcuna funzione esistente.
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'midi' && (
-              <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-100">MIDI</div>
-                <div className="text-sm text-slate-300">
-                  Placeholder: qui confluiranno le impostazioni MIDI (input/output, step input, canali, ecc.).
-                </div>
-                <div className="text-xs text-slate-400">Il pannello MIDI attuale resta invariato.</div>
-              </div>
-            )}
-
-            {activeTab === 'font' && (
-              <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-100">Font / Render</div>
-                <div className="text-sm text-slate-300">
-                  Placeholder: opzioni di resa grafica, font del titolo, dimensioni, ecc.
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'analysis' && (
+            {activeTab === 'Analysis' && (
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-slate-100">Analisi</div>
                 <div className="text-sm text-slate-300">Opzioni dell’analisi armonica.</div>
@@ -212,18 +332,17 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     <label className="text-xs text-slate-300">Profilo:</label>
                     <select
                       className="bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
-                      value={String(analysisProfileValue ?? 'academic')}
+                      value={String(analysisProfileSelectionValue ?? 'academic')}
                       onChange={(e) => {
                         const v = String(e.target.value || '').trim();
                         if (v === 'custom') {
-                          onMarkAnalysisProfileCustomized?.();
+                          setProfileCustomized(true);
                           return;
                         }
                         if (v === 'academic' || v === 'symbols') {
-                          onApplyAnalysisProfileBase?.(v as AnalysisProfileBaseId);
+                          applyAnalysisProfileBase(v as AnalysisProfileBaseId);
                         }
                       }}
-                      disabled={!onApplyAnalysisProfileBase && !onMarkAnalysisProfileCustomized}
                     >
                       <option value="academic">{ANALYSIS_PROFILE_PRESETS.academic.label}</option>
                       <option value="symbols">{ANALYSIS_PROFILE_PRESETS.symbols.label}</option>
@@ -233,10 +352,10 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     <button
                       className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={() => {
-                        if (!analysisProfileBaseId) return;
-                        onApplyAnalysisProfileBase?.(analysisProfileBaseId);
+                        if (!profileBaseId) return;
+                        applyAnalysisProfileBase(profileBaseId);
                       }}
-                      disabled={!analysisProfileBaseId || !onApplyAnalysisProfileBase}
+                      disabled={!profileBaseId}
                       title="Re-applica il preset del profilo base (ripristina defaults)"
                       type="button"
                     >
@@ -246,7 +365,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
                   <div className="mt-2 text-[11px] text-slate-400">
                     {(() => {
-                      const base = analysisProfileBaseId ?? 'academic';
+                      const base = profileBaseId ?? 'academic';
                       return ANALYSIS_PROFILE_PRESETS[base]?.description ?? '';
                     })()}
                   </div>
@@ -256,9 +375,44 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   <input
                     type="checkbox"
                     className="mt-1"
+                    checked={!!showRomanAnalysis}
+                    onChange={(e) => setShowRomanAnalysis(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Mostra numeri romani</div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!showSymbolAnalysis}
+                    onChange={(e) => setShowSymbolAnalysis(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Mostra sigle accordi</div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!sequencesEnabled}
+                    onChange={(e) => setSequencesEnabled(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Rileva sequenze (progressioni)</div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
                     checked={!!enableInferredContexts}
-                    onChange={(e) => onToggleEnableInferredContexts?.(!!e.target.checked)}
-                    disabled={!onToggleEnableInferredContexts}
+                    onChange={(e) => setEnableInferredContexts(!!e.target.checked)}
                   />
                   <div>
                     <div className="text-sm font-semibold text-slate-100">Inferisci contesti (modulazioni) automaticamente</div>
@@ -281,8 +435,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     <select
                       className="bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
                       value={Number(harmonyLabelMinSpanBeats ?? 0)}
-                      onChange={(e) => onChangeHarmonyLabelMinSpanBeats?.(Number(e.target.value) || 0)}
-                      disabled={!onChangeHarmonyLabelMinSpanBeats}
+                      onChange={(e) => setHarmonyLabelMinSpanBeats(Number(e.target.value) || 0)}
                     >
                       <option value={0}>Off (tutte)</option>
                       <option value={0.25}>1/16 (semicroma)</option>
@@ -294,6 +447,31 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                 </div>
               </div>
             )}
+
+            {activeTab !== 'Analysis' && (
+              <div className="space-y-2">
+                <div className="text-sm text-slate-300">Impostazioni {TAB_LABEL[activeTab]}.</div>
+                {defsForTab.length === 0 ? (
+                  <div className="text-xs text-slate-400">(Nessuna preferenza in questa sezione per ora.)</div>
+                ) : (
+                  defsForTab.map((def) => (
+                    <PreferenceRow key={def.id} def={def} />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-700 bg-slate-900/60">
+            <div className="text-[11px] text-slate-400">Le preferenze sono salvate localmente.</div>
+            <button
+              className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700"
+              onClick={resetAll}
+              title="Reset di tutte le preferenze ai default"
+              type="button"
+            >
+              Reset tutto
+            </button>
           </div>
         </div>
       </div>

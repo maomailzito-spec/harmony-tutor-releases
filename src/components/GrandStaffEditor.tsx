@@ -702,9 +702,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
     const [isSequencesEnabled, setIsSequencesEnabled] = usePreference<boolean>('analysis.sequencesEnabled');
-    const [showRomanAnalysis, setShowRomanAnalysis] = useState(true);
-    const [showSymbolAnalysis, setShowSymbolAnalysis] = useState(false);
-    const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
+    const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
+    const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
+    const [showMeasureNumbers, setShowMeasureNumbers] = usePreference<boolean>('editor.showMeasureNumbers');
 
     const [isHarmonyExplainOpen, setIsHarmonyExplainOpen] = useState(false);
     const [harmonyExplainData, setHarmonyExplainData] = useState<HarmonyExplainData | null>(null);
@@ -713,11 +713,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [engravingMode, setEngravingMode] = usePreference<EngravingMode>('render.engravingMode');
 
-    const [showVoiceColors, setShowVoiceColors] = useState(false);
+    const [showVoiceColors, setShowVoiceColors] = usePreference<boolean>('editor.showVoiceColors');
 
     // Menu-driven toggles (Electron)
-    const [showQuickInsertBar, setShowQuickInsertBar] = useState(true);
-    const [showHarmonyDebug, setShowHarmonyDebug] = useState(false);
+    const [showQuickInsertBar, setShowQuickInsertBar] = usePreference<boolean>('editor.showQuickInsertBar');
+    const [showHarmonyDebug, setShowHarmonyDebug] = usePreference<boolean>('debug.showHarmonyDebug');
     const [toolbarGroupOrder, setToolbarGroupOrder] = useState<ToolbarGroupId[]>(() => {
         // Load toolbar prefs synchronously to avoid overwriting them with defaults on first mount.
         try {
@@ -1529,7 +1529,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const notes = useMemo(() => calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges), [normalizedRawNotes, timeSignature, timeSignatureChanges]);
 
-    const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = useState(false);
+    const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = usePreference<boolean>('editor.selectOnlyCurrentVoice');
 
     // Keep native Electron menu checkmarks in sync with renderer state.
     useMenuStateSync({
@@ -11136,7 +11136,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
 
     // Toolbar visibility: stable toggle via shortcut.
-    const [isToolbarHidden, setIsToolbarHidden] = useState(false);
+    const [isToolbarHidden, setIsToolbarHidden] = usePreference<boolean>('editor.toolbarHidden');
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
     const isToolbarVisible = forceToolbarVisible || !isToolbarHidden;
 
@@ -11238,10 +11238,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             <PreferencesModal
                 isOpen={isPreferencesOpen}
                 onClose={() => setIsPreferencesOpen(false)}
-                enableInferredContexts={enableInferredContexts}
-                onToggleEnableInferredContexts={setEnableInferredContexts}
-                harmonyLabelMinSpanBeats={harmonyLabelMinSpanBeats}
-                onChangeHarmonyLabelMinSpanBeats={setHarmonyLabelMinSpanBeats}
             />
 
             <HarmonyLabelExplainModal

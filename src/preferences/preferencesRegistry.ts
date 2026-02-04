@@ -4,16 +4,36 @@ import {
   HARMONY_LABEL_MIN_SPAN_BEATS_KEY,
   HARMONY_SEQUENCES_ENABLED_KEY,
   STAFF_SYSTEM_MODE_KEY,
+  SELECT_ONLY_CURRENT_VOICE_KEY,
+  SHOW_HARMONY_DEBUG_KEY,
+  SHOW_MEASURE_NUMBERS_KEY,
+  SHOW_ROMAN_ANALYSIS_KEY,
+  SHOW_QUICK_INSERT_BAR_KEY,
+  SHOW_SYMBOL_ANALYSIS_KEY,
+  SHOW_VOICE_COLORS_KEY,
+  TOOLBAR_HIDDEN_KEY,
+  HARMONY_ANALYSIS_PROFILE_CUSTOMIZED_KEY,
+  HARMONY_ANALYSIS_PROFILE_DEFAULT_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
 
 export type PreferenceId =
   | 'editor.staffSystemMode'
+  | 'editor.toolbarHidden'
+  | 'editor.showMeasureNumbers'
+  | 'editor.showVoiceColors'
+  | 'editor.showQuickInsertBar'
+  | 'editor.selectOnlyCurrentVoice'
   | 'render.engravingMode'
+  | 'analysis.showRomanAnalysis'
+  | 'analysis.showSymbolAnalysis'
+  | 'analysis.profileBaseId'
+  | 'analysis.profileCustomized'
   | 'analysis.sequencesEnabled'
   | 'analysis.enableInferredContexts'
-  | 'analysis.harmonyLabelMinSpanBeats';
+  | 'analysis.harmonyLabelMinSpanBeats'
+  | 'debug.showHarmonyDebug';
 
 export type PreferenceDef<T> = {
   id: PreferenceId;
@@ -21,6 +41,11 @@ export type PreferenceDef<T> = {
   label: string;
   storageKey: string;
   defaultValue: T;
+  kind: 'boolean' | 'enum' | 'number';
+  options?: Array<{ value: string; label: string }>;
+  min?: number;
+  max?: number;
+  step?: number;
   parse: (raw: string | null) => T;
   serialize: (value: T) => string;
 };
@@ -57,11 +82,72 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Layout righi (grandstaff / SATB / treble-only)',
     storageKey: STAFF_SYSTEM_MODE_KEY,
     defaultValue: 'grandstaff' as StaffSystemModePref,
+    kind: 'enum',
+    options: [
+      { value: 'grandstaff', label: 'Grand staff' },
+      { value: 'satb_ancient', label: 'SATB (chiavi antiche)' },
+      { value: 'treble_only', label: 'Treble only' },
+    ],
     parse: (raw) => {
       const v = String(raw ?? '').trim();
       return (v === 'grandstaff' || v === 'treble_only' || v === 'satb_ancient') ? v : 'grandstaff';
     },
     serialize: (value: StaffSystemModePref) => String(value),
+  },
+
+  'editor.toolbarHidden': {
+    id: 'editor.toolbarHidden',
+    section: 'Editor',
+    label: 'Nascondi toolbar',
+    storageKey: TOOLBAR_HIDDEN_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'editor.showMeasureNumbers': {
+    id: 'editor.showMeasureNumbers',
+    section: 'Editor',
+    label: 'Numeri misure',
+    storageKey: SHOW_MEASURE_NUMBERS_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'editor.showVoiceColors': {
+    id: 'editor.showVoiceColors',
+    section: 'Editor',
+    label: 'Colori voci (BTAS)',
+    storageKey: SHOW_VOICE_COLORS_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'editor.showQuickInsertBar': {
+    id: 'editor.showQuickInsertBar',
+    section: 'Editor',
+    label: 'Quick Insert (toolbar chiusa)',
+    storageKey: SHOW_QUICK_INSERT_BAR_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'editor.selectOnlyCurrentVoice': {
+    id: 'editor.selectOnlyCurrentVoice',
+    section: 'Editor',
+    label: 'Seleziona solo voce corrente (rettangolo)',
+    storageKey: SELECT_ONLY_CURRENT_VOICE_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
   'render.engravingMode': {
@@ -70,11 +156,67 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Engraving mode (legacy/enhanced)',
     storageKey: ENGRAVING_MODE_KEY,
     defaultValue: 'enhanced' as EngravingModePref,
+    kind: 'enum',
+    options: [
+      { value: 'enhanced', label: 'Enhanced' },
+      { value: 'legacy', label: 'Legacy' },
+    ],
     parse: (raw) => {
       const v = String(raw ?? '').trim();
       return (v === 'legacy' || v === 'enhanced') ? v : 'enhanced';
     },
     serialize: (value: EngravingModePref) => String(value),
+  },
+
+  'analysis.showRomanAnalysis': {
+    id: 'analysis.showRomanAnalysis',
+    section: 'Analysis',
+    label: 'Mostra numeri romani',
+    storageKey: SHOW_ROMAN_ANALYSIS_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'analysis.showSymbolAnalysis': {
+    id: 'analysis.showSymbolAnalysis',
+    section: 'Analysis',
+    label: 'Mostra sigle accordi',
+    storageKey: SHOW_SYMBOL_ANALYSIS_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'analysis.profileBaseId': {
+    id: 'analysis.profileBaseId',
+    section: 'Analysis',
+    label: 'Profilo analisi (base)',
+    storageKey: HARMONY_ANALYSIS_PROFILE_DEFAULT_KEY,
+    defaultValue: 'academic' as const,
+    kind: 'enum',
+    options: [
+      { value: 'academic', label: 'Accademico' },
+      { value: 'symbols', label: 'Sigle' },
+    ],
+    parse: (raw) => {
+      const v = String(raw ?? '').trim();
+      return (v === 'academic' || v === 'symbols') ? v : 'academic';
+    },
+    serialize: (value: 'academic' | 'symbols') => String(value),
+  },
+
+  'analysis.profileCustomized': {
+    id: 'analysis.profileCustomized',
+    section: 'Analysis',
+    label: 'Profilo analisi: custom',
+    storageKey: HARMONY_ANALYSIS_PROFILE_CUSTOMIZED_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
   'analysis.sequencesEnabled': {
@@ -83,6 +225,7 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Sequenze (ON/OFF)',
     storageKey: HARMONY_SEQUENCES_ENABLED_KEY,
     defaultValue: true,
+    kind: 'boolean',
     parse: (raw) => parseBool(raw, true),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
@@ -93,6 +236,7 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Inferisci contesti (modulazioni) automaticamente',
     storageKey: ENABLE_INFERRED_CONTEXTS_PREF_KEY,
     defaultValue: false,
+    kind: 'boolean',
     parse: (raw) => parseBool(raw, false),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
@@ -103,10 +247,31 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Filtro anti-rumore: durata minima label (beats)',
     storageKey: HARMONY_LABEL_MIN_SPAN_BEATS_KEY,
     defaultValue: 0,
+    kind: 'number',
+    min: 0,
+    max: 8,
+    step: 0.25,
     parse: (raw) => {
       const v = parseNumber(raw, 0);
       return v >= 0 ? v : 0;
     },
     serialize: (value: number) => String(Number.isFinite(value) ? value : 0),
   },
+
+  'debug.showHarmonyDebug': {
+    id: 'debug.showHarmonyDebug',
+    section: 'Debug',
+    label: 'Debug harmony labels (pcs)',
+    storageKey: SHOW_HARMONY_DEBUG_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
 };
+
+export const PREFERENCE_DEFS: PreferenceDef<any>[] = Object.values(PREFERENCES);
+
+export function getPreferenceIdsBySection(section: PreferenceSectionId): PreferenceId[] {
+  return PREFERENCE_DEFS.filter((d) => d.section === section).map((d) => d.id);
+}

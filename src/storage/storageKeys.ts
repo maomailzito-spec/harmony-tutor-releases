@@ -8,8 +8,19 @@ export const ENABLE_INFERRED_CONTEXTS_PREF_KEY = 'HT_ENABLE_INFERRED_CONTEXTS' a
 
 export const HARMONY_ANALYSIS_FILTERS_KEY = 'harmony.analysis.filters.v1' as const;
 export const HARMONY_ANALYSIS_PROFILE_DEFAULT_KEY = 'harmony.analysis.profileDefault.v1' as const;
+export const HARMONY_ANALYSIS_PROFILE_CUSTOMIZED_KEY = 'harmony.analysis.profileCustomized.v1' as const;
 export const HARMONY_SEQUENCES_ENABLED_KEY = 'harmony.analysis.sequencesEnabled.v1' as const;
 export const HARMONY_LABEL_MIN_SPAN_BEATS_KEY = 'harmony.analysis.labelMinSpanBeats.v1' as const;
+
+// GrandStaff editor/view toggles (persisted preferences)
+export const SHOW_MEASURE_NUMBERS_KEY = 'harmony-tutor.showMeasureNumbers.v1' as const;
+export const SHOW_VOICE_COLORS_KEY = 'harmony-tutor.showVoiceColors.v1' as const;
+export const SHOW_QUICK_INSERT_BAR_KEY = 'harmony-tutor.showQuickInsertBar.v1' as const;
+export const SHOW_HARMONY_DEBUG_KEY = 'harmony-tutor.showHarmonyDebug.v1' as const;
+export const SELECT_ONLY_CURRENT_VOICE_KEY = 'harmony-tutor.selectOnlyCurrentVoice.v1' as const;
+export const SHOW_ROMAN_ANALYSIS_KEY = 'harmony-tutor.showRomanAnalysis.v1' as const;
+export const SHOW_SYMBOL_ANALYSIS_KEY = 'harmony-tutor.showSymbolAnalysis.v1' as const;
+export const TOOLBAR_HIDDEN_KEY = 'harmony-tutor.toolbarHidden.v1' as const;
 
 export const HARMONY_DEV_LOG_R06_KEY = 'harmony.dev.logR06' as const;
 
