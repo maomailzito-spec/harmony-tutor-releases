@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ScaleShape, Voicing } from '../types';
+import {
+  GUITAR_CUSTOM_CHORDS_KEY,
+  GUITAR_CUSTOM_SCALES_KEY,
+  GUITAR_CUSTOM_SCALE_SHAPES_KEY,
+  GUITAR_CUSTOM_VOICINGS_KEY,
+} from '../storage/storageKeys';
+import { getJSON, setJSON } from '../storage/localStorage';
 
 export interface CustomScale {
   name: string;
@@ -20,29 +27,7 @@ export interface CustomVoicing {
   voicing: Voicing;
 }
 
-const CUSTOM_SCALES_KEY = 'guitarAppCustomScales';
-const CUSTOM_CHORDS_KEY = 'guitarAppCustomChords';
-const CUSTOM_SCALE_SHAPES_KEY = 'guitarAppCustomScaleShapes';
-const CUSTOM_VOICINGS_KEY = 'guitarAppCustomVoicings';
-
 const CUSTOM_DATA_UPDATED_EVENT = 'guitarAppCustomDataUpdated';
-
-const loadFromStorage = <T>(key: string, defaultValue: T): T => {
-  try {
-    const item = window.localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
-  } catch (error) {
-    return defaultValue;
-  }
-};
-
-const saveToStorage = (key: string, value: unknown) => {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    // errore silenziato
-  }
-};
 
 const notifyCustomDataUpdated = () => {
   try {
@@ -75,20 +60,20 @@ function getElectronGuitarLibraryAPI(): null | {
 }
 
 export const useCustomData = () => {
-  const [customScales, setCustomScales] = useState<CustomScale[]>(() => loadFromStorage<CustomScale[]>(CUSTOM_SCALES_KEY, []));
-  const [customChords, setCustomChords] = useState<CustomChord[]>(() => loadFromStorage<CustomChord[]>(CUSTOM_CHORDS_KEY, []));
-  const [customScaleShapes, setCustomScaleShapes] = useState<Record<string, ScaleShape[]>>(() => loadFromStorage<Record<string, ScaleShape[]>>(CUSTOM_SCALE_SHAPES_KEY, {}));
-  const [customVoicings, setCustomVoicings] = useState<CustomVoicing[]>(() => loadFromStorage<CustomVoicing[]>(CUSTOM_VOICINGS_KEY, []));
+  const [customScales, setCustomScales] = useState<CustomScale[]>(() => getJSON<CustomScale[]>(GUITAR_CUSTOM_SCALES_KEY, []));
+  const [customChords, setCustomChords] = useState<CustomChord[]>(() => getJSON<CustomChord[]>(GUITAR_CUSTOM_CHORDS_KEY, []));
+  const [customScaleShapes, setCustomScaleShapes] = useState<Record<string, ScaleShape[]>>(() => getJSON<Record<string, ScaleShape[]>>(GUITAR_CUSTOM_SCALE_SHAPES_KEY, {}));
+  const [customVoicings, setCustomVoicings] = useState<CustomVoicing[]>(() => getJSON<CustomVoicing[]>(GUITAR_CUSTOM_VOICINGS_KEY, []));
 
   useEffect(() => {
     let cancelled = false;
     const gl = getElectronGuitarLibraryAPI();
 
     const reloadFromLocal = () => {
-      setCustomScales(loadFromStorage<CustomScale[]>(CUSTOM_SCALES_KEY, []));
-      setCustomChords(loadFromStorage<CustomChord[]>(CUSTOM_CHORDS_KEY, []));
-      setCustomScaleShapes(loadFromStorage<Record<string, ScaleShape[]>>(CUSTOM_SCALE_SHAPES_KEY, {}));
-      setCustomVoicings(loadFromStorage<CustomVoicing[]>(CUSTOM_VOICINGS_KEY, []));
+      setCustomScales(getJSON<CustomScale[]>(GUITAR_CUSTOM_SCALES_KEY, []));
+      setCustomChords(getJSON<CustomChord[]>(GUITAR_CUSTOM_CHORDS_KEY, []));
+      setCustomScaleShapes(getJSON<Record<string, ScaleShape[]>>(GUITAR_CUSTOM_SCALE_SHAPES_KEY, {}));
+      setCustomVoicings(getJSON<CustomVoicing[]>(GUITAR_CUSTOM_VOICINGS_KEY, []));
     };
 
     const reloadFromElectron = async () => {
@@ -116,10 +101,10 @@ export const useCustomData = () => {
     const onStorage = (e: StorageEvent) => {
       if (!e.key) return;
       if (
-        e.key === CUSTOM_SCALES_KEY ||
-        e.key === CUSTOM_CHORDS_KEY ||
-        e.key === CUSTOM_SCALE_SHAPES_KEY ||
-        e.key === CUSTOM_VOICINGS_KEY
+        e.key === GUITAR_CUSTOM_SCALES_KEY ||
+        e.key === GUITAR_CUSTOM_CHORDS_KEY ||
+        e.key === GUITAR_CUSTOM_SCALE_SHAPES_KEY ||
+        e.key === GUITAR_CUSTOM_VOICINGS_KEY
       ) {
         reload();
       }
@@ -156,7 +141,7 @@ export const useCustomData = () => {
         ? prev.map(s => (s.name.toLowerCase() === trimmedName.toLowerCase() ? { name: trimmedName, intervals } : s))
         : [...prev, { name: trimmedName, intervals }];
 
-      saveToStorage(CUSTOM_SCALES_KEY, next);
+      setJSON(GUITAR_CUSTOM_SCALES_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales: next, customChords, customScaleShapes, customVoicings });
       return next;
@@ -166,7 +151,7 @@ export const useCustomData = () => {
   const deleteCustomScale = useCallback((name: string) => {
     setCustomScales(prev => {
       const next = prev.filter(s => s.name !== name);
-      saveToStorage(CUSTOM_SCALES_KEY, next);
+      setJSON(GUITAR_CUSTOM_SCALES_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales: next, customChords, customScaleShapes, customVoicings });
       return next;
@@ -181,7 +166,7 @@ export const useCustomData = () => {
         ? prev.map(c => (c.name.toLowerCase() === trimmedName.toLowerCase() ? { name: trimmedName, formula, color } : c))
         : [...prev, { name: trimmedName, formula, color }];
 
-      saveToStorage(CUSTOM_CHORDS_KEY, next);
+      setJSON(GUITAR_CUSTOM_CHORDS_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales, customChords: next, customScaleShapes, customVoicings });
       return next;
@@ -191,7 +176,7 @@ export const useCustomData = () => {
   const deleteCustomChord = useCallback((name: string) => {
     setCustomChords(prev => {
       const next = prev.filter(c => c.name !== name);
-      saveToStorage(CUSTOM_CHORDS_KEY, next);
+      setJSON(GUITAR_CUSTOM_CHORDS_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales, customChords: next, customScaleShapes, customVoicings });
       return next;
@@ -213,7 +198,7 @@ export const useCustomData = () => {
         : [...existingShapes, nextShape];
 
       const next = { ...prev, [trimmedScaleType]: nextShapes };
-      saveToStorage(CUSTOM_SCALE_SHAPES_KEY, next);
+      setJSON(GUITAR_CUSTOM_SCALE_SHAPES_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales, customChords, customScaleShapes: next, customVoicings });
       return next;
@@ -229,7 +214,7 @@ export const useCustomData = () => {
       const existingShapes = prev[trimmedScaleType] ?? [];
       const nextShapes = existingShapes.filter(s => s.name !== trimmedName);
       const next = { ...prev, [trimmedScaleType]: nextShapes };
-      saveToStorage(CUSTOM_SCALE_SHAPES_KEY, next);
+      setJSON(GUITAR_CUSTOM_SCALE_SHAPES_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales, customChords, customScaleShapes: next, customVoicings });
       return next;
@@ -250,7 +235,7 @@ export const useCustomData = () => {
 
       if (existing) {
         const next = prev.map(v => (v.id === existing.id ? { ...v, name: trimmedName, voicing } : v));
-        saveToStorage(CUSTOM_VOICINGS_KEY, next);
+        setJSON(GUITAR_CUSTOM_VOICINGS_KEY, next);
         notifyCustomDataUpdated();
         void persistToElectron({ customScales, customChords, customScaleShapes, customVoicings: next });
         return next;
@@ -258,7 +243,7 @@ export const useCustomData = () => {
 
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const next = [...prev, { id, chordType: trimmedChordType, rootNoteIndex, name: trimmedName, voicing }];
-      saveToStorage(CUSTOM_VOICINGS_KEY, next);
+      setJSON(GUITAR_CUSTOM_VOICINGS_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales, customChords, customScaleShapes, customVoicings: next });
       return next;
@@ -268,7 +253,7 @@ export const useCustomData = () => {
   const deleteCustomVoicing = useCallback((id: string) => {
     setCustomVoicings(prev => {
       const next = prev.filter(v => v.id !== id);
-      saveToStorage(CUSTOM_VOICINGS_KEY, next);
+      setJSON(GUITAR_CUSTOM_VOICINGS_KEY, next);
       notifyCustomDataUpdated();
       void persistToElectron({ customScales, customChords, customScaleShapes, customVoicings: next });
       return next;

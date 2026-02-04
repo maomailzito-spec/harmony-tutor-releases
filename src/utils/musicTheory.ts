@@ -91,6 +91,8 @@ export function getActiveNotesTimeline(
 }
 import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange } from '../types';
 import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
+import { HARMONY_DEV_LOG_R06_KEY } from '../storage/storageKeys';
+import { getString } from '../storage/localStorage';
 
 const STRING_BASE_MIDI = [64, 59, 55, 50, 45, 40];
 const GUITAR_TUNING_INDICES = GUITAR_TUNING;
@@ -2151,7 +2153,7 @@ function getVerticalFiguresFromNotes(notes: StaffNote[]): string[] {
 
 function calculateRomanNumeral(
     chordInfo: { root: StaffNote; type: string; intervals?: Set<number> },
-    keyInfo: { tonicIndex: number; isMinor: boolean }
+    keyInfo: { tonicIndex: number; isMinor: boolean; minorScaleMode?: 'off' | 'natural' | 'harmonic' }
 ): string {
     const { root: chordRoot, type: quality } = chordInfo;
     // Prefer explicit pitch-class (`noteIndex`) when available. This is required for
@@ -2160,6 +2162,25 @@ function calculateRomanNumeral(
         ? mod12((chordRoot as any).noteIndex)
         : mod12((chordRoot as any).midi);
     const { tonicIndex: keyTonicIndex, isMinor: isMinorMode } = keyInfo;
+
+    // Neutral behavior in minor: decide natural vs harmonic *per chord*.
+    // This is mostly about the 7th degree (♭VII vs leading-tone vii°), and keeps room
+    // for future heuristics as the analysis improves.
+    if (isMinorMode && keyInfo.minorScaleMode === 'off') {
+        const intervalFromTonic = mod12(chordRootIndex - keyTonicIndex);
+        const isDimQuality = quality === BuiltInChords.Diminished || /°|dim/i.test(String(quality || '')) || /b5/i.test(String(quality || ''));
+
+        const naturalRoman = calculateRomanNumeral(chordInfo, { ...keyInfo, minorScaleMode: 'natural' });
+        const harmonicRoman = calculateRomanNumeral(chordInfo, { ...keyInfo, minorScaleMode: 'harmonic' });
+
+        // Subtonic root (♭VII) -> natural minor by default.
+        if (intervalFromTonic === 10) return naturalRoman;
+        // Leading-tone root (#7) -> harmonic if it's diminished-like, otherwise keep neutral/chromatic.
+        if (intervalFromTonic === 11) return isDimQuality ? harmonicRoman : naturalRoman;
+
+        // Default: prefer harmonic (tonal default) when the choice doesn't affect diatonic degree.
+        return harmonicRoman;
+    }
 
     const isNeapolitanRoot = chordRootIndex === (keyTonicIndex + 1) % 12;
     if (isNeapolitanRoot && quality === BuiltInChords.Major) return 'N';
@@ -2176,11 +2197,19 @@ function calculateRomanNumeral(
     const romanNumeralsMajor = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
     // In minor, the III degree is not *always* augmented; it depends on the actual chord spelling.
     // Keep the base numeral as 'III' and let quality logic append '+' only when appropriate.
+    const romanNumeralsMinorNatural = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
     const romanNumeralsMinorHarmonic = ['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°'];
     const scaleIntervalsMajor = [0, 2, 4, 5, 7, 9, 11];
+    const scaleIntervalsMinorNatural = [0, 2, 3, 5, 7, 8, 10];
     const scaleIntervalsMinorHarmonic = [0, 2, 3, 5, 7, 8, 11];
-    const scaleIntervals = isMinorMode ? scaleIntervalsMinorHarmonic : scaleIntervalsMajor;
-    const romanNumerals = isMinorMode ? romanNumeralsMinorHarmonic : romanNumeralsMajor;
+    // Back-compat: when unspecified, default to harmonic minor (previous engine behavior).
+    const minorMode: 'natural' | 'harmonic' = keyInfo.minorScaleMode === 'natural' ? 'natural' : 'harmonic';
+    const scaleIntervals = isMinorMode
+        ? (minorMode === 'harmonic' ? scaleIntervalsMinorHarmonic : scaleIntervalsMinorNatural)
+        : scaleIntervalsMajor;
+    const romanNumerals = isMinorMode
+        ? (minorMode === 'harmonic' ? romanNumeralsMinorHarmonic : romanNumeralsMinorNatural)
+        : romanNumeralsMajor;
 
     // Secondary leading-tone diminished chords (vii°/x)
     // Common tonicization device: a diminished triad/7th a semitone below the target degree.
@@ -2209,15 +2238,13 @@ function calculateRomanNumeral(
         const isDiminishedTriadLike = isDimQuality && hasMinorThird && hasDimFifth;
         if (isDiminishedTriadLike) {
             // Use diatonic degrees for targets (avoid producing vii°/I; keep that as plain vii°).
-            const diatonicScaleIntervals = isMinorMode ? [0, 2, 3, 5, 7, 8, 10] : scaleIntervalsMajor;
+            const diatonicScaleIntervals = isMinorMode ? scaleIntervals : scaleIntervalsMajor;
             for (let i = 1; i < diatonicScaleIntervals.length; i++) {
                 const targetRootIndex = mod12(keyTonicIndex + diatonicScaleIntervals[i]);
                 const isLeadingToneToTarget = mod12(targetRootIndex - chordRootIndex) === 1;
                 if (!isLeadingToneToTarget) continue;
 
-                const targetRoman = isMinorMode
-                    ? ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'][i]
-                    : romanNumeralsMajor[i];
+                const targetRoman = romanNumerals[i];
 
                 const prefix = hasSeventh
                     ? (isHalfDim ? 'viiø7' : 'vii°7')
@@ -2234,7 +2261,7 @@ function calculateRomanNumeral(
     // - Dominant *triads*: allow only when they contain the chromatic leading tone
     //   of the target degree (prevents false V/VI readings like III in minor).
     {
-        const diatonicScaleIntervals = isMinorMode ? [0, 2, 3, 5, 7, 8, 10] : scaleIntervalsMajor;
+        const diatonicScaleIntervals = isMinorMode ? scaleIntervals : scaleIntervalsMajor;
         const diatonicPcSet = new Set<number>(diatonicScaleIntervals.map(iv => mod12(keyTonicIndex + iv)));
 
         const isDominantType = typeof quality === 'string' && quality.startsWith('Dominant');
@@ -2274,9 +2301,7 @@ function calculateRomanNumeral(
                     if (!isChromaticLt) continue;
                 }
 
-                const targetRoman = isMinorMode
-                    ? ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'][i]
-                    : romanNumeralsMajor[i];
+                const targetRoman = romanNumerals[i];
                 return `V/${targetRoman}`;
             }
         }
@@ -2326,7 +2351,8 @@ function calculateRomanNumeral(
 export function getRomanAnalysis(
     chord: StaffNote[],
     keySignatureRoot: string,
-    isMinorMode: boolean
+    isMinorMode: boolean,
+    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic' }
 ): { roman: string; figures: string[] } | null {
     if (!chord || chord.length < 2) return null;
 
@@ -2437,7 +2463,8 @@ export function getRomanAnalysis(
 
     const keyTonicIndex = noteNameToIndex[keySignatureRoot];
     if (keyTonicIndex === undefined) return null;
-    const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode };
+    const minorScaleMode = (opts as any)?.minorScaleMode;
+    const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode, minorScaleMode };
 
     // Special case: cadential 6/4 over the dominant bass.
     // If we remove dissonant suspension tones for Roman analysis, the 4th above the bass
@@ -2621,11 +2648,18 @@ export function getRomanAnalysis(
             if (!bass) return null;
             const bassPc = mod12(pitchClassOf(bass));
 
+            // Default back-compat: harmonic when unspecified.
+            // Neutral/off: use natural diatonic degrees (no forced leading tone).
+            const minorMode = (minorScaleMode === 'natural') ? 'natural' : (minorScaleMode === 'off' ? 'natural' : 'harmonic');
             const scaleIntervals = isMinorMode
-                ? [0, 2, 3, 5, 7, 8, 10] // natural minor
+                ? (minorMode === 'harmonic'
+                    ? [0, 2, 3, 5, 7, 8, 11]
+                    : [0, 2, 3, 5, 7, 8, 10])
                 : [0, 2, 4, 5, 7, 9, 11];
             const romanMaj = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
-            const romanMin = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+            const romanMin = (minorMode === 'harmonic')
+                ? ['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°']
+                : ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
             const romans = isMinorMode ? romanMin : romanMaj;
 
             let degree = -1;
@@ -2695,11 +2729,18 @@ export function getRomanAnalysis(
             })();
 
             const tonicPc = mod12(keyInfo.tonicIndex);
+            // Default back-compat: harmonic when unspecified.
+            // Neutral/off: use natural diatonic degrees.
+            const minorMode = (minorScaleMode === 'natural') ? 'natural' : (minorScaleMode === 'off' ? 'natural' : 'harmonic');
             const scaleIntervals = isMinorMode
-                ? [0, 2, 3, 5, 7, 8, 10] // natural minor
+                ? (minorMode === 'harmonic'
+                    ? [0, 2, 3, 5, 7, 8, 11]
+                    : [0, 2, 3, 5, 7, 8, 10])
                 : [0, 2, 4, 5, 7, 9, 11];
             const romanMaj = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
-            const romanMin = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+            const romanMin = (minorMode === 'harmonic')
+                ? ['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°']
+                : ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
             const romans = isMinorMode ? romanMin : romanMaj;
 
             let best: { score: number; i: number } | null = null;
@@ -4509,16 +4550,29 @@ export function applyHarmonyRules(
                 if ((cur as any).isSuspension || (next as any).isSuspension) continue;
                 if ((cur as any).isPassing || (cur as any).isNeighbor || (cur as any).isEscape || (cur as any).isAnticipation || (cur as any).isAppoggiatura) continue;
 
-                const prevEv = findEventForNote(prev, v);
+                // Choose a previous "anchor" bass note that is not itself ornamental.
+                // This avoids using an already-marked passing/neighbor note as the harmonic reference,
+                // which can cause the return-to-chord-tone to be mislabeled as passing.
+                let anchorPrev: any = prev as any;
+                for (let k = j - 1; k >= 0; k--) {
+                    const cand: any = line[k] as any;
+                    if (!cand || cand.isRest) continue;
+                    if (cand.isPassing || cand.isNeighbor || cand.isEscape || cand.isAnticipation || cand.isAppoggiatura) continue;
+                    anchorPrev = cand;
+                    break;
+                }
+
+                const prevEv = findEventForNote(anchorPrev, v);
                 const curEv = findEventForNote(cur, v);
                 const nextEv = findEventForNote(next, v);
                 if (!prevEv || !curEv || !nextEv) continue;
 
+                // Only apply this heuristic when the *upper voices* are stable from the anchor
+                // event to the current event (i.e., bass motion under a held chord).
                 const sPrev = upperSig(prevEv);
                 const sCur = upperSig(curEv);
-                const sNext = upperSig(nextEv);
-                if (!sPrev || !sCur || !sNext) continue;
-                if (!(sPrev === sCur && sCur === sNext)) continue;
+                if (!sPrev || !sCur) continue;
+                if (sPrev !== sCur) continue;
 
                 const short = getDuration(cur) <= 1.01;
                 if (!short) continue;
@@ -4533,8 +4587,45 @@ export function applyHarmonyRules(
                 const stepOut = outSemis > 0 && outSemis <= 2;
                 const leapOut = outSemis > 2;
 
+                // Harmonic membership test against the anchored harmony (prevEv).
+                // If we can't identify a confident chord, stay conservative and do not tag.
+                const isChordToneAgainstAnchor = (() => {
+                    try {
+                        const chordNotes = (prevEv.notes || []).filter((n: any) => n && !n.isRest);
+                        if (chordNotes.length < 3) return true;
+                        const cands = identifyChordCandidates(chordNotes as any);
+                        const best: any = (cands && cands.length) ? cands[0] : null;
+                        const matchType = String(best?.matchType || '');
+                        const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                        if (!confident || !best?.root || !best?.type) return true;
+
+                        const rootPc = Number.isFinite((best.root as any).noteIndex)
+                            ? mod12((best.root as any).noteIndex)
+                            : mod12((best.root as any).midi ?? 0);
+                        const notePc = mod12((cur as any).noteIndex ?? mod12((cur as any).midi ?? 0));
+                        const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                        if (!Array.isArray(formula) || !formula.length) return true;
+                        const rel = mod12(notePc - rootPc);
+                        return rel === 0 || formula.includes(rel);
+                    } catch {
+                        return true;
+                    }
+                })();
+
                 if (stepOut) {
-                    (cur as any).isPassing = true;
+                    // Opposite-direction stepwise motion under a held upper chord -> neighbor (nota di volta)
+                    if (oppositeDir) {
+                        if (!isChordToneAgainstAnchor) {
+                            (cur as any).isNeighbor = true;
+                            (cur as any).ornamentMark = 'v';
+                        }
+                        continue;
+                    }
+
+                    // Same-direction stepwise motion under a held upper chord -> passing (bass)
+                    if (!isChordToneAgainstAnchor) {
+                        (cur as any).isPassing = true;
+                    }
                     // No analysis-panel entry; this is a label-stability aid.
                     continue;
                 }
@@ -5329,6 +5420,45 @@ export function applyHarmonyRules(
                 // across the barline (prep is tied-to-next, and S is the new note at b),
                 // also mark the downbeat note `S` so renderers can correctly filter and
                 // highlight the suspension at its actual onset.
+                // Pedagogical/robustness policy: treat non-classic tags like 5-4 / 3-2 as NCTs
+                // (typically appoggiatura/accented passing) rather than true suspensions.
+                // These can be musically ambiguous and often generate confusing overlays and
+                // unwanted interaction with harmony labeling.
+                if (displayType === '5-4' || displayType === '3-2') {
+                    try {
+                        // Only mark as NCT if there's an actual onset at b.absBeat.
+                        // If the note is held from earlier (same note id), tagging it would
+                        // incorrectly declass the harmony at its real onset.
+                        const target = (S && S.id && prep.id && S.id !== prep.id) ? (S as any) : null;
+                        const startsAtB = (n: any): boolean => {
+                            try {
+                                const s = getNoteStart(n);
+                                return Number.isFinite(s) && Math.abs(Number(s) - Number(b.absBeat)) < 1e-6;
+                            } catch {
+                                return false;
+                            }
+                        };
+
+                        if (target && startsAtB(target)) {
+                            (target as any).isAppoggiatura = true;
+                            if ((target as any).isSuspension) delete (target as any).isSuspension;
+                            if ((target as any).isPassing) (target as any).isPassing = false;
+                            if ((target as any).isNeighbor) (target as any).isNeighbor = false;
+                            if ((target as any).isAnticipation) (target as any).isAnticipation = false;
+                            if ((target as any).isEscape) (target as any).isEscape = false;
+                            if ((target as any).ornamentMark) delete (target as any).ornamentMark;
+                        }
+
+                        // Do not keep any suspension marking for these ambiguous cases.
+                        if ((prep as any).isSuspension) delete (prep as any).isSuspension;
+                        if (S && (S as any).isSuspension) delete (S as any).isSuspension;
+                        if ((prep as any).isPassing) (prep as any).isPassing = false;
+                        if (S && (S as any).isPassing) (S as any).isPassing = false;
+                        if ((resolved as any).isPassing) (resolved as any).isPassing = false;
+                    } catch { /* ignore */ }
+                    continue;
+                }
+
                 const suspPayload = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum };
                 (prep as any).isSuspension = suspPayload;
                 try {
@@ -8142,7 +8272,7 @@ export function applyHarmonyRules(
             const quality = getIntervalQuality(diatonicSize, simpleSemi);
             if (quality === 'Augmented' || quality === 'Diminished') {
                 try {
-                    const dbg = (typeof localStorage !== 'undefined') ? localStorage.getItem('harmony.dev.logR06') : null;
+                    const dbg = getString(HARMONY_DEV_LOG_R06_KEY, '');
                     if (dbg === '1') {
                         // eslint-disable-next-line no-console
                         console.warn('[R-06][DBG]', {

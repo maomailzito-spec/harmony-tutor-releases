@@ -6,6 +6,8 @@ import IntervalsVisualizer from './components/IntervalsVisualizer';
 import MainEditor from './components/MainEditor';
 import GrandStaffEditor from './components/GrandStaffEditor';
 import { getAppFlavor, isModeEnabled } from './flavor';
+import { MENU_ACTIONS } from './contracts/menuActionRuntime';
+import type { MenuAction, MenuActionPayloadMap } from '../shared/menuActionRegistry';
 
 type AppMode = 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff';
 
@@ -13,7 +15,11 @@ const App: React.FC = () => {
     const flavor = getAppFlavor();
     const defaultMode: AppMode = (flavor === 'guitar') ? 'editor' : 'grandStaff';
     const [mode, setMode] = useState<AppMode>(defaultMode);
-    const [pendingMenuAction, setPendingMenuAction] = useState<{ action: string; payload: any; nonce: number } | null>(null);
+    const [pendingMenuAction, setPendingMenuAction] = useState<{
+        action: MenuAction;
+        payload: MenuActionPayloadMap[MenuAction];
+        nonce: number;
+    } | null>(null);
     
     // --- AUDIO STATE ---
     const audioServiceRef = useRef(new AudioService());
@@ -30,16 +36,15 @@ const App: React.FC = () => {
 
     // Native menu integration (Electron): allow switching app mode from "Vista".
     useEffect(() => {
-        const api = (window as any).electronAPI;
+        const api = window.electronAPI;
         if (!api?.onMenuAction) return;
-        const remove = api.onMenuAction((action: string, payload: any) => {
+        const remove = api.onMenuAction((action, payload) => {
             try {
-                if (action !== 'set-app-mode') return;
-                const next = String(payload?.mode || '');
-                if (next === 'scales' || next === 'chords' || next === 'intervals' || next === 'editor' || next === 'grandStaff') {
-                    if (!isModeEnabled(flavor, next)) return;
-                    setMode(next as AppMode);
-                }
+                if (action !== MENU_ACTIONS.SET_APP_MODE) return;
+                const next = payload?.mode;
+                if (!next) return;
+                if (!isModeEnabled(flavor, next)) return;
+                setMode(next as AppMode);
             } catch {
                 // ignore
             }
@@ -51,20 +56,20 @@ const App: React.FC = () => {
     // work even if the user is not currently on the GrandStaff view.
     useEffect(() => {
         if (!isModeEnabled(flavor, 'grandStaff')) return;
-        const api = (window as any).electronAPI;
+        const api = window.electronAPI;
         if (!api) return;
 
         const removeErr = api.onMenuError?.((code: string, message: string) => {
             try { window.alert(`${String(code || 'errore')}: ${String(message || '')}`); } catch { /* ignore */ }
         });
 
-        const remove = api.onMenuAction?.((action: string, payload: any) => {
+        const remove = api.onMenuAction?.((action, payload) => {
             try {
-                if (action !== 'import-midi' && action !== 'export-midi') return;
+                if (action !== MENU_ACTIONS.IMPORT_MIDI && action !== MENU_ACTIONS.EXPORT_MIDI) return;
                 // If we're not on the editor, switch and queue the action for when it mounts.
                 if (mode !== 'grandStaff') {
                     setMode('grandStaff');
-                    setPendingMenuAction({ action, payload, nonce: Date.now() });
+                    setPendingMenuAction({ action, payload: payload as any, nonce: Date.now() });
                 }
             } catch {
                 // ignore

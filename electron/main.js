@@ -2,6 +2,14 @@ const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const {
+  MENU_ACTIONS,
+  sendMenuAction,
+  sendMenuError,
+} = require('../shared/menuActionRegistry');
+
+const { IPC_CHANNELS } = require('../shared/ipcChannels');
+
 let mainWindow;
 let recentFiles = [];
 let selectOnlyCurrentVoiceEnabled = false;
@@ -9,6 +17,17 @@ let showMeasureNumbersEnabled = true;
 let showHarmonyDebugEnabled = false;
 let showVoiceColorsEnabled = false;
 let showQuickInsertBarEnabled = true;
+let engravingMode = 'enhanced';
+
+function sendAction(action, payload) {
+  if (!mainWindow) return false;
+  return sendMenuAction(mainWindow.webContents, action, payload);
+}
+
+function sendError(code, message) {
+  if (!mainWindow) return false;
+  return sendMenuError(mainWindow.webContents, code, message);
+}
 
 // Dev build tag (helps verify you're running the workspace build).
 // Bump this when debugging analysis changes so users can confirm the correct app instance.
@@ -61,7 +80,7 @@ function sendOpenToRenderer(filePath) {
     touchRecentFile(filePath);
     const send = () => {
       try {
-        mainWindow.webContents.send('menu-action', 'open', { data, filePath });
+        sendAction(MENU_ACTIONS.OPEN, { data, filePath });
         setWindowTitleForPath(filePath);
       } catch (err) {
         console.error('Errore invio open al renderer:', err);
@@ -76,7 +95,7 @@ function sendOpenToRenderer(filePath) {
   } catch (err) {
     console.error('Errore lettura file associato:', err);
     try {
-      mainWindow.webContents.send('menu-error', 'open-failed', err.message);
+      sendError('open-failed', err.message);
     } catch { /* ignore */ }
   }
 }
@@ -273,7 +292,7 @@ function createMenu() {
         {
           label: 'Preferenze…',
           accelerator: 'CmdOrCtrl+,',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'open-preferences'); }
+          click: () => { sendAction(MENU_ACTIONS.OPEN_PREFERENCES); }
         },
         { type: 'separator' },
         { role: 'quit' }
@@ -291,7 +310,7 @@ function createMenu() {
               try {
                 const data = fs.readFileSync(fp, 'utf-8');
                 touchRecentFile(fp);
-                mainWindow.webContents.send('menu-action', 'open', { data, filePath: fp });
+                sendAction(MENU_ACTIONS.OPEN, { data, filePath: fp });
                 setWindowTitleForPath(fp);
               } catch (err) {
                 console.error('Errore apertura file recente:', err);
@@ -304,7 +323,7 @@ function createMenu() {
           accelerator: 'CmdOrCtrl+N',
           click: () => {
             if (mainWindow) {
-              mainWindow.webContents.send('menu-action', 'new');
+              sendAction(MENU_ACTIONS.NEW);
               setWindowTitleForPath(null);
             }
           }
@@ -323,11 +342,11 @@ function createMenu() {
             const filePath = filePaths[0];
             try {
               const data = fs.readFileSync(filePath, 'utf-8');
-              mainWindow.webContents.send('menu-action', 'open', { data, filePath });
+              sendAction(MENU_ACTIONS.OPEN, { data, filePath });
               setWindowTitleForPath(filePath);
             } catch (err) {
               console.error("Errore lettura file:", err);
-              mainWindow.webContents.send('menu-error', 'open-failed', err.message);
+              sendError('open-failed', err.message);
             }
           }
         },
@@ -345,34 +364,34 @@ function createMenu() {
             try {
               const buf = fs.readFileSync(filePath);
               const base64 = Buffer.from(buf).toString('base64');
-              mainWindow.webContents.send('menu-action', 'import-midi', { base64, filePath });
+              sendAction(MENU_ACTIONS.IMPORT_MIDI, { base64, filePath });
             } catch (err) {
               console.error('Errore import MIDI:', err);
-              mainWindow.webContents.send('menu-error', 'import-midi-failed', err.message);
+              sendError('import-midi-failed', err.message);
             }
           }
         },
         {
           label: 'Esporta MIDI...',
           accelerator: 'CmdOrCtrl+Shift+E',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'export-midi'); }
+          click: () => { sendAction(MENU_ACTIONS.EXPORT_MIDI); }
         },
         { type: 'separator' },
         {
           label: 'Stampa',
           accelerator: 'CmdOrCtrl+P',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'print'); }
+          click: () => { sendAction(MENU_ACTIONS.PRINT); }
         },
         { type: 'separator' },
         {
           label: 'Salva',
           accelerator: 'CmdOrCtrl+S',
-          click: () => mainWindow && mainWindow.webContents.send('menu-action', 'save')
+          click: () => sendAction(MENU_ACTIONS.SAVE)
         },
         {
           label: 'Salva con nome...',
           accelerator: 'CmdOrCtrl+Shift+S',
-          click: () => mainWindow && mainWindow.webContents.send('menu-action', 'save-as')
+          click: () => sendAction(MENU_ACTIONS.SAVE_AS)
         },
         { type: 'separator' },
         {
@@ -381,7 +400,7 @@ function createMenu() {
           click: () => {
             if (mainWindow) {
               console.log('[MAIN] Menu: Chiudi progetto cliccato (File menu)');
-              mainWindow.webContents.send('menu-action', 'close-project');
+              sendAction(MENU_ACTIONS.CLOSE_PROJECT);
               setWindowTitleForPath(null);
             }
           }
@@ -396,33 +415,33 @@ function createMenu() {
         {
           label: 'Annulla',
           accelerator: 'CmdOrCtrl+Z',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'undo'); }
+          click: () => { sendAction(MENU_ACTIONS.UNDO); }
         },
         {
           label: 'Ripeti',
           accelerator: 'Shift+CmdOrCtrl+Z',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'redo'); }
+          click: () => { sendAction(MENU_ACTIONS.REDO); }
         },
         { type: 'separator' },
         {
           label: 'Taglia',
           accelerator: 'CmdOrCtrl+X',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'cut' }); }
+          click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'cut' }); }
         },
         {
           label: 'Copia',
           accelerator: 'CmdOrCtrl+C',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'copy' }); }
+          click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'copy' }); }
         },
         {
           label: 'Incolla',
           accelerator: 'CmdOrCtrl+V',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'paste' }); }
+          click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'paste' }); }
         },
         {
           label: 'Seleziona tutto',
           accelerator: 'CmdOrCtrl+A',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'edit-command', { command: 'selectAll' }); }
+          click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'selectAll' }); }
         },
         { type: 'separator' },
         {
@@ -432,9 +451,7 @@ function createMenu() {
           checked: !!selectOnlyCurrentVoiceEnabled,
           click: (menuItem) => {
             selectOnlyCurrentVoiceEnabled = !!menuItem.checked;
-            if (mainWindow) {
-              mainWindow.webContents.send('menu-action', 'set-select-only-voice', { enabled: selectOnlyCurrentVoiceEnabled });
-            }
+            sendAction(MENU_ACTIONS.SET_SELECT_ONLY_VOICE, { enabled: selectOnlyCurrentVoiceEnabled });
           }
         },
         { type: 'separator' },
@@ -443,26 +460,26 @@ function createMenu() {
           submenu: [
             {
               label: 'Serif',
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-title-font-family', { family: 'serif' }); }
+              click: () => { sendAction(MENU_ACTIONS.SET_TITLE_FONT_FAMILY, { family: 'serif' }); }
             },
             {
               label: 'Sans-serif',
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-title-font-family', { family: 'sans-serif' }); }
+              click: () => { sendAction(MENU_ACTIONS.SET_TITLE_FONT_FAMILY, { family: 'sans-serif' }); }
             },
             {
               label: 'Monospace',
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-title-font-family', { family: 'monospace' }); }
+              click: () => { sendAction(MENU_ACTIONS.SET_TITLE_FONT_FAMILY, { family: 'monospace' }); }
             },
             { type: 'separator' },
             {
               label: 'Aumenta dimensione titolo',
               accelerator: 'CmdOrCtrl+]',
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'increase-title-font'); }
+              click: () => { sendAction(MENU_ACTIONS.INCREASE_TITLE_FONT); }
             },
             {
               label: 'Diminuisci dimensione titolo',
               accelerator: 'CmdOrCtrl+[',
-              click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'decrease-title-font'); }
+              click: () => { sendAction(MENU_ACTIONS.DECREASE_TITLE_FONT); }
             }
           ]
         }
@@ -474,31 +491,31 @@ function createMenu() {
         {
           label: 'Preferenze…',
           accelerator: 'CmdOrCtrl+,',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'open-preferences'); }
+          click: () => { sendAction(MENU_ACTIONS.OPEN_PREFERENCES); }
         },
         { type: 'separator' },
         ...(enableGuitar ? [
           {
             label: 'Scale',
-            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'scales' }); }
+            click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'scales' }); }
           },
           {
             label: 'Accordi',
-            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'chords' }); }
+            click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'chords' }); }
           },
           {
             label: 'Intervalli',
-            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'intervals' }); }
+            click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'intervals' }); }
           },
           {
             label: 'Editor',
-            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'editor' }); }
+            click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'editor' }); }
           },
         ] : []),
         ...(enableGrandStaff ? [
           {
             label: 'Grand Staff',
-            click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-app-mode', { mode: 'grandStaff' }); }
+            click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'grandStaff' }); }
           },
           { type: 'separator' },
           {
@@ -507,30 +524,38 @@ function createMenu() {
               {
                 label: 'Enhanced',
                 type: 'radio',
-                checked: true,
-                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-engraving-mode', { mode: 'enhanced' }); }
+                checked: engravingMode === 'enhanced',
+                click: () => {
+                  engravingMode = 'enhanced';
+                  sendAction(MENU_ACTIONS.SET_ENGRAVING_MODE, { mode: 'enhanced' });
+                  try { createMenu(); } catch { /* ignore */ }
+                }
               },
               {
                 label: 'Legacy',
                 type: 'radio',
-                checked: false,
-                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'set-engraving-mode', { mode: 'legacy' }); }
+                checked: engravingMode === 'legacy',
+                click: () => {
+                  engravingMode = 'legacy';
+                  sendAction(MENU_ACTIONS.SET_ENGRAVING_MODE, { mode: 'legacy' });
+                  try { createMenu(); } catch { /* ignore */ }
+                }
               },
               { type: 'separator' },
               {
                 label: 'Verifica collisioni (Enhanced)…',
-                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'run-overlap-audit', { mode: 'enhanced' }); }
+                click: () => { sendAction(MENU_ACTIONS.RUN_OVERLAP_AUDIT, { mode: 'enhanced' }); }
               },
               {
                 label: 'Verifica collisioni (Legacy)…',
-                click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'run-overlap-audit', { mode: 'legacy' }); }
+                click: () => { sendAction(MENU_ACTIONS.RUN_OVERLAP_AUDIT, { mode: 'legacy' }); }
               }
             ]
           },
         ] : []),
         {
           label: 'Riordina toolbar (drag)…',
-          click: () => { if (mainWindow) mainWindow.webContents.send('menu-action', 'toggle-toolbar-customize'); }
+          click: () => { sendAction(MENU_ACTIONS.TOGGLE_TOOLBAR_CUSTOMIZE); }
         },
         ...(enableGrandStaff ? [
           {
@@ -539,7 +564,7 @@ function createMenu() {
             checked: !!showQuickInsertBarEnabled,
             click: (menuItem) => {
               showQuickInsertBarEnabled = !!menuItem.checked;
-              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-quick-insert-bar', { enabled: showQuickInsertBarEnabled });
+              sendAction(MENU_ACTIONS.SET_QUICK_INSERT_BAR, { enabled: showQuickInsertBarEnabled });
             }
           },
           { type: 'separator' },
@@ -549,7 +574,7 @@ function createMenu() {
             checked: !!showMeasureNumbersEnabled,
             click: (menuItem) => {
               showMeasureNumbersEnabled = !!menuItem.checked;
-              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-measure-numbers', { enabled: showMeasureNumbersEnabled });
+              sendAction(MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS, { enabled: showMeasureNumbersEnabled });
             }
           },
           {
@@ -558,7 +583,7 @@ function createMenu() {
             checked: !!showHarmonyDebugEnabled,
             click: (menuItem) => {
               showHarmonyDebugEnabled = !!menuItem.checked;
-              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-harmony-debug', { enabled: showHarmonyDebugEnabled });
+              sendAction(MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG, { enabled: showHarmonyDebugEnabled });
             }
           },
           {
@@ -568,7 +593,7 @@ function createMenu() {
             checked: !!showVoiceColorsEnabled,
             click: (menuItem) => {
               showVoiceColorsEnabled = !!menuItem.checked;
-              if (mainWindow) mainWindow.webContents.send('menu-action', 'set-show-voice-colors', { enabled: showVoiceColorsEnabled });
+              sendAction(MENU_ACTIONS.SET_SHOW_VOICE_COLORS, { enabled: showVoiceColorsEnabled });
             }
           },
         ] : []),
@@ -606,8 +631,38 @@ function createMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-ipcMain.on('add-recent', (event, filePath) => {
+ipcMain.on(IPC_CHANNELS.ADD_RECENT, (event, filePath) => {
   touchRecentFile(filePath);
+});
+
+ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
+  try {
+    if (!state || typeof state !== 'object') return;
+
+    if (typeof state.selectOnlyCurrentVoiceEnabled === 'boolean') {
+      selectOnlyCurrentVoiceEnabled = state.selectOnlyCurrentVoiceEnabled;
+    }
+    if (typeof state.showMeasureNumbersEnabled === 'boolean') {
+      showMeasureNumbersEnabled = state.showMeasureNumbersEnabled;
+    }
+    if (typeof state.showHarmonyDebugEnabled === 'boolean') {
+      showHarmonyDebugEnabled = state.showHarmonyDebugEnabled;
+    }
+    if (typeof state.showVoiceColorsEnabled === 'boolean') {
+      showVoiceColorsEnabled = state.showVoiceColorsEnabled;
+    }
+    if (typeof state.showQuickInsertBarEnabled === 'boolean') {
+      showQuickInsertBarEnabled = state.showQuickInsertBarEnabled;
+    }
+
+    if (state.engravingMode === 'legacy' || state.engravingMode === 'enhanced') {
+      engravingMode = state.engravingMode;
+    }
+
+    createMenu();
+  } catch (err) {
+    console.warn('set-menu-state failed:', err);
+  }
 });
 
 function createWindow() {
@@ -714,7 +769,7 @@ if (shouldLockSingleInstance) {
   }
 }
 
-ipcMain.handle('save-file-dialog', async (event, content) => {
+ipcMain.handle(IPC_CHANNELS.SAVE_FILE_DIALOG, async (event, content) => {
   if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
 
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -735,7 +790,7 @@ ipcMain.handle('save-file-dialog', async (event, content) => {
   }
 });
 
-ipcMain.handle('save-file', async (event, content, targetPath) => {
+ipcMain.handle(IPC_CHANNELS.SAVE_FILE, async (event, content, targetPath) => {
   if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
 
   try {
@@ -761,7 +816,7 @@ ipcMain.handle('save-file', async (event, content, targetPath) => {
   }
 });
 
-ipcMain.handle('save-binary-file', async (event, base64, targetPath, filters) => {
+ipcMain.handle(IPC_CHANNELS.SAVE_BINARY_FILE, async (event, base64, targetPath, filters) => {
   if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
   try {
     let outPath = (targetPath && typeof targetPath === 'string') ? targetPath : null;
@@ -784,7 +839,7 @@ ipcMain.handle('save-binary-file', async (event, base64, targetPath, filters) =>
   }
 });
 
-ipcMain.handle('guitar-library-load', async () => {
+ipcMain.handle(IPC_CHANNELS.GUITAR_LIBRARY_LOAD, async () => {
   const filePath = getGuitarLibraryPath();
   if (!filePath) return defaultGuitarLibrary();
   try {
@@ -802,7 +857,7 @@ ipcMain.handle('guitar-library-load', async () => {
   }
 });
 
-ipcMain.handle('guitar-library-save', async (_event, library) => {
+ipcMain.handle(IPC_CHANNELS.GUITAR_LIBRARY_SAVE, async (_event, library) => {
   const filePath = getGuitarLibraryPath();
   if (!filePath) return { success: false, error: 'userData non disponibile' };
   try {

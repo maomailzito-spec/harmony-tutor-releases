@@ -1,5 +1,13 @@
 # React + TypeScript + Vite
 
+## Start here (direttive progetto)
+
+Se riparti dopo tempo o la chat si resetta, leggi:
+
+- START-HERE.md
+- docs/project-directives.md
+- docs/capabilities.md
+
 ## Harmony Tutor – Regole/UX implementate
 
 ### Selezione

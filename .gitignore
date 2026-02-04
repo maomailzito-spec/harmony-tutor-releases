@@ -26,5 +26,15 @@ dist-ssr
 # Local debug scratch
 .tmp-debug/
 
+# Backups / local history exports (do not commit)
+recovered/
+**/recovered/
+**/vscode-history/
+**/vscode-localhistory-export/
+
+# Legacy manual snapshot (do not commit)
+ultima-versione--sabato-13_12_25-ore-16,19/
+ultima-versione--sabato-13_12_25-ore-16,19.zip
+
 # Generated layout audit dumps (debug)
 layout-audit-*.json

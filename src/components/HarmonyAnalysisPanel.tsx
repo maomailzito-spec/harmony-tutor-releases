@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RuleViolation, SequenceMatch } from '../types';
+import { HARMONY_ANALYSIS_FILTERS_KEY } from '../storage/storageKeys';
+import { getJSON, setJSON } from '../storage/localStorage';
 
 interface HarmonyAnalysisPanelProps {
     violations: RuleViolation[];
@@ -38,38 +40,74 @@ const ExceptionIcon: React.FC = () => (
 
 
 const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
-    const FILTERS_STORAGE_KEY = 'harmony.analysis.filters.v1';
-
     const [showError, setShowError] = useState(true);
     const [showWarning, setShowWarning] = useState(true);
     const [showException, setShowException] = useState(true);
     const [disabledRuleIds, setDisabledRuleIds] = useState<Record<string, boolean>>({});
     const [ruleSearch, setRuleSearch] = useState('');
 
+    const suppressPersistRef = useRef(false);
+
     // Load persisted filters.
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
-            if (!raw) return;
-            const parsed = JSON.parse(raw);
-            if (typeof parsed?.showError === 'boolean') setShowError(parsed.showError);
-            if (typeof parsed?.showWarning === 'boolean') setShowWarning(parsed.showWarning);
-            if (typeof parsed?.showException === 'boolean') setShowException(parsed.showException);
-            if (parsed?.disabledRuleIds && typeof parsed.disabledRuleIds === 'object') setDisabledRuleIds(parsed.disabledRuleIds);
-        } catch {
-            // ignore
-        }
+        const parsed = getJSON<any>(HARMONY_ANALYSIS_FILTERS_KEY, null);
+        if (!parsed || typeof parsed !== 'object') return;
+        if (typeof parsed?.showError === 'boolean') setShowError(parsed.showError);
+        if (typeof parsed?.showWarning === 'boolean') setShowWarning(parsed.showWarning);
+        if (typeof parsed?.showException === 'boolean') setShowException(parsed.showException);
+        if (parsed?.disabledRuleIds && typeof parsed.disabledRuleIds === 'object') setDisabledRuleIds(parsed.disabledRuleIds);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Persist filters.
     useEffect(() => {
+        if (suppressPersistRef.current) {
+            suppressPersistRef.current = false;
+            return;
+        }
+        setJSON(HARMONY_ANALYSIS_FILTERS_KEY, { showError, showWarning, showException, disabledRuleIds });
+
+        // Notify the editor overlay (same-window) so connection lines update immediately.
         try {
-            localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ showError, showWarning, showException, disabledRuleIds }));
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('harmony-analysis-filters-changed', {
+                    detail: { showError, showWarning, showException, disabledRuleIds },
+                }));
+            }
         } catch {
             // ignore
         }
     }, [showError, showWarning, showException, disabledRuleIds]);
+
+    // Listen for external updates (e.g. profile presets) and sync UI.
+    useEffect(() => {
+        const onExternal = (ev: any) => {
+            try {
+                const d = ev?.detail;
+                if (!d || typeof d !== 'object') return;
+                suppressPersistRef.current = true;
+                if (typeof d.showError === 'boolean') setShowError(d.showError);
+                if (typeof d.showWarning === 'boolean') setShowWarning(d.showWarning);
+                if (typeof d.showException === 'boolean') setShowException(d.showException);
+                if (d.disabledRuleIds && typeof d.disabledRuleIds === 'object') setDisabledRuleIds(d.disabledRuleIds);
+            } catch {
+                // ignore
+            }
+        };
+        try {
+            window.addEventListener('harmony-analysis-filters-changed', onExternal as any);
+        } catch {
+            // ignore
+        }
+        return () => {
+            try {
+                window.removeEventListener('harmony-analysis-filters-changed', onExternal as any);
+            } catch {
+                // ignore
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const uniqueRuleIds = useMemo(() => {
         const ids = new Set<string>();

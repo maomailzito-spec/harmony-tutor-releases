@@ -1,21 +1,48 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const { IPC_CHANNELS } = require('../shared/ipcChannels');
+const { isMenuAction, normalizeMenuActionPayload } = require('../shared/menuActionRegistry');
+
 contextBridge.exposeInMainWorld('electronAPI', {
   onMenuAction: (callback) => {
     const subscription = (_event, action, payload) => {
-      console.log('[PRELOAD] menu-action ricevuto:', action, payload);
-      callback(action, payload);
+      try {
+        if (!isMenuAction(action)) return;
+        const normalized = normalizeMenuActionPayload(action, payload);
+        if (normalized === null) return;
+        callback(action, normalized);
+      } catch {
+        // ignore
+      }
     };
-    ipcRenderer.on('menu-action', subscription);
-    return () => ipcRenderer.removeListener('menu-action', subscription);
+    ipcRenderer.on(IPC_CHANNELS.MENU_ACTION, subscription);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_ACTION, subscription);
+  },
+  onMenuError: (callback) => {
+    const subscription = (_event, code, message) => {
+      try {
+        callback(code, message);
+      } catch {
+        // ignore
+      }
+    };
+    ipcRenderer.on(IPC_CHANNELS.MENU_ERROR, subscription);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_ERROR, subscription);
   },
   // saveFile(content, path?) -> if path provided, main writes directly; otherwise shows Save dialog
-  saveFile: (content, targetPath) => ipcRenderer.invoke('save-file', content, targetPath),
-  addRecentFile: (filePath) => ipcRenderer.send('add-recent', filePath),
+  saveFile: (content, targetPath) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_FILE, content, targetPath),
+
+  // Legacy/optional: explicitly show Save dialog for text content.
+  // Prefer saveFile(content) unless you need the structured response.
+  saveFileDialog: (content) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_FILE_DIALOG, content),
+
+  // Save a base64-encoded binary payload (e.g. MIDI export).
+  saveBinaryFile: (base64, targetPath, filters) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_BINARY_FILE, base64, targetPath, filters),
+  addRecentFile: (filePath) => ipcRenderer.send(IPC_CHANNELS.ADD_RECENT, filePath),
   // Keep native app menu in sync with renderer state (for checkmarks)
-  setMenuState: (state) => ipcRenderer.send('set-menu-state', state),
+  setMenuState: (state) => ipcRenderer.send(IPC_CHANNELS.SET_MENU_STATE, state),
   guitarLibrary: {
-    load: () => ipcRenderer.invoke('guitar-library-load'),
-    save: (library) => ipcRenderer.invoke('guitar-library-save', library)
+    load: () => ipcRenderer.invoke(IPC_CHANNELS.GUITAR_LIBRARY_LOAD),
+    save: (library) => ipcRenderer.invoke(IPC_CHANNELS.GUITAR_LIBRARY_SAVE, library)
   }
 });

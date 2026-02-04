@@ -1,14 +1,3 @@
-// ...existing code...
-// TypeScript: dichiarazione per window.electronAPI
-declare global {
-    interface Window {
-        electronAPI?: {
-            onMenuAction: (handler: (action: string, payload: any) => void) => (() => void) | void;
-            saveFile: (content: string, targetPath?: string) => Promise<any>;
-            addRecentFile: (filePath: string) => Promise<any>;
-        };
-    }
-}
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
@@ -30,12 +19,16 @@ import { UngroupIcon } from './icons/UngroupIcon';
 import { FlipStemIcon } from './icons/FlipStemIcon';
 import VexflowGrandStaff from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
+import HarmonyLabelExplainModal, { type HarmonyExplainData } from './HarmonyLabelExplainModal';
+
+import type { MenuAction, MenuActionPayloadMap } from '../../shared/menuActionRegistry';
+import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
     audioService: AudioService;
     isAudioReady: boolean;
-    pendingMenuAction?: { action: string; payload: any; nonce: number } | null;
+    pendingMenuAction?: { action: MenuAction; payload: MenuActionPayloadMap[MenuAction]; nonce: number } | null;
     onConsumePendingMenuAction?: (nonce: number) => void;
 }
 
@@ -730,6 +723,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [showRomanAnalysis, setShowRomanAnalysis] = useState(true);
     const [showSymbolAnalysis, setShowSymbolAnalysis] = useState(false);
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
+
+    const [isHarmonyExplainOpen, setIsHarmonyExplainOpen] = useState(false);
+    const [harmonyExplainData, setHarmonyExplainData] = useState<HarmonyExplainData | null>(null);
 
     const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
 
@@ -1591,8 +1587,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         printWindow.focus();
     }, []);
 
-    const handleMenuAction = useCallback(async (action: string, payload: any) => {
-        const api = (window as any).electronAPI;
+    const handleMenuActionLegacy = useCallback(async (action: MenuAction, payload: any) => {
+        const api = window.electronAPI;
 
         if (action === 'increase-title-font') {
             setTitleFontSize(s => Math.min(72, s + 1));
@@ -2168,8 +2164,53 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setShowQuickInsertBar(!!payload?.enabled);
         } else if (action === 'set-show-harmony-debug') {
             setShowHarmonyDebug(!!payload?.enabled);
+        } else if (action === 'set-title-font-family') {
+            const family = String(payload?.family || '').trim();
+            if (family === 'serif' || family === 'sans-serif' || family === 'monospace') setTitleFontFamily(family);
+        } else if (action === 'set-select-only-voice') {
+            setMarqueeSelectOnlyCurrentVoice(!!payload?.enabled);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice]);
+
+    // Switch esaustivo: garantisce che l'editor “conosca” tutte le azioni del menu.
+    const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {
+        switch (action) {
+            case MENU_ACTIONS.NEW:
+            case MENU_ACTIONS.OPEN:
+            case MENU_ACTIONS.IMPORT_MIDI:
+            case MENU_ACTIONS.EXPORT_MIDI:
+            case MENU_ACTIONS.PRINT:
+            case MENU_ACTIONS.SAVE:
+            case MENU_ACTIONS.SAVE_AS:
+            case MENU_ACTIONS.CLOSE_PROJECT:
+            case MENU_ACTIONS.UNDO:
+            case MENU_ACTIONS.REDO:
+            case MENU_ACTIONS.EDIT_COMMAND:
+            case MENU_ACTIONS.OPEN_PREFERENCES:
+            case MENU_ACTIONS.TOGGLE_TOOLBAR_CUSTOMIZE:
+            case MENU_ACTIONS.SET_QUICK_INSERT_BAR:
+            case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
+            case MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG:
+            case MENU_ACTIONS.SET_SHOW_VOICE_COLORS:
+            case MENU_ACTIONS.SET_ENGRAVING_MODE:
+            case MENU_ACTIONS.RUN_OVERLAP_AUDIT:
+            case MENU_ACTIONS.SET_TITLE_FONT_FAMILY:
+            case MENU_ACTIONS.INCREASE_TITLE_FONT:
+            case MENU_ACTIONS.DECREASE_TITLE_FONT:
+            case MENU_ACTIONS.SET_SELECT_ONLY_VOICE:
+                void handleMenuActionLegacy(action, payload);
+                return;
+
+            case MENU_ACTIONS.SET_APP_MODE:
+                // gestito a livello App (routing)
+                return;
+
+            default: {
+                const _exhaustive: never = action;
+                return _exhaustive;
+            }
+        }
+    }, [handleMenuActionLegacy]);
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
@@ -2181,12 +2222,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         //
         const removeListener = api.onMenuAction((action, payload) => {
-            handleMenuAction(action, payload);
+            try {
+                dispatchMenuAction(action, payload);
+            } catch {
+                // ignore
+            }
         });
         return () => {
             if (removeListener) removeListener();
         };
-    }, [handleMenuAction]);
+    }, [dispatchMenuAction]);
 
     // Listen for native copy events (keyboard) to set the paste marker as well
     useEffect(() => {
@@ -8070,6 +8115,141 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return { measureIndex, beat };
     }, [layoutData, timeSignature]);
 
+    const harmonyExplainTimeline = useMemo(() => {
+        try {
+            return getActiveNotesTimeline((analyzedNotes || notes) as any, timeSignature, timeSignatureChanges);
+        } catch {
+            return [] as any[];
+        }
+    }, [analyzedNotes, notes, timeSignature, timeSignatureChanges]);
+
+    const ctxAtAbsBeatForExplain = useCallback((absBeat: number) => {
+        try {
+            return (effectiveAnalysisContexts || [])
+                .filter(c => analysisContextAbsBeat(c as any) <= absBeat + 1e-6)
+                .sort((a, b) => analysisContextAbsBeat(b as any) - analysisContextAbsBeat(a as any))[0];
+        } catch {
+            return null;
+        }
+    }, [analysisContextAbsBeat, effectiveAnalysisContexts]);
+
+    const getNotesAtAbsBeatForExplain = useCallback((absBeat: number): any[] => {
+        try {
+            const tl = harmonyExplainTimeline as any[];
+            let best: any = null;
+            for (const ev of tl || []) {
+                if (!ev || typeof ev.absBeat !== 'number') continue;
+                if (ev.absBeat <= absBeat + 1e-6) best = ev;
+                else break;
+            }
+            return (best?.notes || []) as any[];
+        } catch {
+            return [];
+        }
+    }, [harmonyExplainTimeline]);
+
+    const openHarmonyExplainForLabel = useCallback((lbl: any) => {
+        try {
+            const absBeat = Number(lbl?.absBeat);
+            if (!Number.isFinite(absBeat)) return;
+
+            const ctx = ctxAtAbsBeatForExplain(absBeat);
+            const tonic = ctx ? String((ctx as any).newTonic || '') : String(currentTonic || 'C');
+            const isMinor = ctx ? !!(ctx as any).newIsMinor : !!isMinorMode;
+
+            const notesHere = getNotesAtAbsBeatForExplain(absBeat) as StaffNote[];
+            const debugSnapshot = getRomanAnalysisDebugSnapshot(notesHere as any, tonic, isMinor);
+
+            const candidatesRaw = (() => {
+                try { return identifyChordCandidates(notesHere as any) as any[]; } catch { return []; }
+            })();
+            const candidates = (candidatesRaw || []).slice(0, 10).map((c: any) => {
+                const rootPc = (() => {
+                    try {
+                        const ni = c?.root?.noteIndex;
+                        if (Number.isFinite(ni)) return (((Number(ni) % 12) + 12) % 12);
+                        const m = c?.root?.midi;
+                        if (Number.isFinite(m)) return (((Number(m) % 12) + 12) % 12);
+                        return null;
+                    } catch {
+                        return null;
+                    }
+                })();
+                return {
+                    rootPc,
+                    type: String(c?.type || ''),
+                    matchType: String(c?.matchType || ''),
+                    score: Number.isFinite(c?.score) ? Number(c.score) : 0,
+                };
+            });
+
+            const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
+            const preferFlats = (() => {
+                const t = String(tonic || '');
+                if (t.includes('b') || t.includes('♭')) return true;
+                return flatKeyValues.includes(t);
+            })();
+
+            const uniqPcCount = (() => {
+                try {
+                    const pcs = new Set<number>();
+                    (notesHere || []).forEach((n: any) => {
+                        if (!n || n.isRest) return;
+                        const m = Number(n?.midi);
+                        if (Number.isFinite(m)) pcs.add((((m % 12) + 12) % 12));
+                        else if (Number.isFinite(n?.noteIndex)) pcs.add((((Number(n.noteIndex) % 12) + 12) % 12));
+                    });
+                    return pcs.size;
+                } catch {
+                    return 0;
+                }
+            })();
+
+            const confidence = (() => {
+                const reasons: string[] = [];
+                const isOverride = !!lbl?.isOverride;
+                if (isOverride) reasons.push('Override: etichetta impostata manualmente/da engine.');
+                reasons.push(`Note considerate: ${Array.isArray(notesHere) ? notesHere.filter((n: any) => n && !n.isRest).length : 0}`);
+                reasons.push(`Pitch classes: ${uniqPcCount}`);
+
+                let level: 'high' | 'medium' | 'low' = 'low';
+                if (isOverride) level = 'high';
+                else if (uniqPcCount >= 3) level = 'high';
+                else if (uniqPcCount === 2) level = 'medium';
+                else level = 'low';
+
+                return { level, reasons };
+            })();
+
+            const data: HarmonyExplainData = {
+                absBeat,
+                ui: {
+                    measureIndex,
+                    beatInMeasure: beat,
+                    preferFlats,
+                },
+                context: { tonic, isMinor },
+                label: {
+                    roman: typeof lbl?.roman === 'string' ? lbl.roman : undefined,
+                    romanDisplay: typeof lbl?.romanDisplay === 'string' ? lbl.romanDisplay : undefined,
+                    symbol: typeof lbl?.symbol === 'string' ? lbl.symbol : undefined,
+                    figures: Array.isArray(lbl?.figures) ? lbl.figures.map((x: any) => String(x)) : undefined,
+                    pcsSig: typeof lbl?.pcsSig === 'string' ? lbl.pcsSig : undefined,
+                    isOverride: !!lbl?.isOverride,
+                },
+                notes: (notesHere || []) as any,
+                debugSnapshot,
+                candidates,
+                confidence,
+            };
+
+            setHarmonyExplainData(data);
+            setIsHarmonyExplainOpen(true);
+        } catch {
+            // ignore
+        }
+    }, [ctxAtAbsBeatForExplain, currentTonic, getMeasureIndexAndBeatFromAbsBeat, getNotesAtAbsBeatForExplain, isMinorMode]);
+
     const openModulationMenuAtPlayhead = useCallback(() => {
         const container = staffContainerRef.current;
 
@@ -11093,6 +11273,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 onToggleEnableInferredContexts={setEnableInferredContexts}
             />
 
+            <HarmonyLabelExplainModal
+                isOpen={isHarmonyExplainOpen}
+                onClose={() => { setIsHarmonyExplainOpen(false); setHarmonyExplainData(null); }}
+                data={harmonyExplainData}
+            />
+
             {!isToolbarVisible && showQuickInsertBar && (
                 <div className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
                     <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
@@ -11651,6 +11837,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                     fontSize={14}
                                                                                     fontWeight={700}
                                                                                     fill="black"
+                                                                                    pointerEvents="all"
+                                                                                    style={{ cursor: 'pointer' }}
+                                                                                    onMouseDown={(e) => {
+                                                                                        try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+                                                                                        openHarmonyExplainForLabel(lbl as any);
+                                                                                    }}
                                                                                 >
                                                                                     {(lbl as any).symbol}
                                                                                 </text>
@@ -11809,12 +12001,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     fontSize={14}
                                                                                                     fontWeight={700}
                                                                                                     fill="black"
+                                                                                                    pointerEvents="all"
+                                                                                                    style={{ cursor: 'pointer' }}
+                                                                                                    onMouseDown={(e) => {
+                                                                                                        try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+                                                                                                        openHarmonyExplainForLabel(lbl as any);
+                                                                                                    }}
                                                                                                 >
-                                                                                                    {String(
-                                                                                                        (lbl as any).isOverride
-                                                                                                            ? ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
-                                                                                                            : ((lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
-                                                                                                    )}
+                                                                                                    {romanText}
                                                                                                 </text>
 
                                                                                                 {lbl.figures?.length ? (

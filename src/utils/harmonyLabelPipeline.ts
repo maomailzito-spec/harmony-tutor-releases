@@ -295,6 +295,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
     beatsPerMeasure: number;
     currentTonic: string;
     isMinorMode: boolean;
+    minorScaleMode?: 'off' | 'natural' | 'harmonic';
     ctxAtAbsBeat: (absBeat: number) => any;
     noteNameToChromaticIndex: (name: string) => number;
     getRomanAnalysis: (notes: any[], tonic: string, isMinor: boolean) => any;
@@ -316,6 +317,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
             beatsPerMeasure,
             currentTonic,
             isMinorMode,
+            minorScaleMode,
             ctxAtAbsBeat,
             noteNameToChromaticIndex,
             getRomanAnalysis,
@@ -356,11 +358,13 @@ export function computeLookaheadTonicizationOverrides(opts: {
             return null;
         };
 
-        const scaleIntervalsForContext = (isMinor: boolean): number[] => (
-            isMinor
-                ? [0, 2, 3, 5, 7, 8, 10]
-                : [0, 2, 4, 5, 7, 9, 11]
-        );
+        const scaleIntervalsForContext = (isMinor: boolean): number[] => {
+            if (!isMinor) return [0, 2, 4, 5, 7, 9, 11];
+            const mode = (minorScaleMode === 'harmonic') ? 'harmonic' : 'natural';
+            return mode === 'harmonic'
+                ? [0, 2, 3, 5, 7, 8, 11]
+                : [0, 2, 3, 5, 7, 8, 10];
+        };
 
         const base = (timelineForLabels || []).map((ev: any) => {
             const absBeat = Number(ev?.absBeat);

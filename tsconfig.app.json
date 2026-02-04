@@ -24,5 +24,13 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src", "shared"],
+  "exclude": [
+    "**/recovered/**",
+    "**/vscode-history/**",
+    "**/vscode-localhistory-export/**",
+    "**/_split/**",
+    "**/dist/**",
+    "**/node_modules/**"
+  ]
 }

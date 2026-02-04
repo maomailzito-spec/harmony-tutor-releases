@@ -351,6 +351,14 @@ const getNoteTimeKey = (n: StaffNote): string => {
   return `${n.measureIndex ?? -1}|${n.beat ?? -1}|${n.duration ?? 'q'}|${n.isDotted ? 'd' : 'n'}`;
 };
 
+// Like getNoteTimeKey, but ignores duration so we can detect same-onset collisions
+// (e.g. half note vs quarter note starting together).
+const getNoteOnsetKey = (n: StaffNote): string => {
+  const st = (n as any).startTick;
+  if (typeof st === 'number') return `${st}`;
+  return `${n.measureIndex ?? -1}|${n.beat ?? -1}`;
+};
+
 function keySignatureToVexflowString(keySignature: KeySignature): string {
   const sharpKeys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
   const flatKeys = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
@@ -745,6 +753,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           byTimeKeyAll.get(tk)!.push(n);
         }
 
+        // Group by onset only (ignores duration) so we can fix collisions between
+        // voices with different rhythmic values at the same start time.
+        const byOnsetKeyAll = new Map<string, StaffNote[]>();
+        for (const n of staffNotes) {
+          const ok = getNoteOnsetKey(n);
+          if (!byOnsetKeyAll.has(ok)) byOnsetKeyAll.set(ok, []);
+          byOnsetKeyAll.get(ok)!.push(n);
+        }
+
         // --- NEW: Merge aligned SAT notes into a single chord (parti strette) ---
         // When multiple voices share the same onset+duration on the same staff, drawing
         // them as separate notes creates stacked stems/flags/beams, which can look like
@@ -946,6 +963,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const isTrebleStaff = clef === 'treble';
         const enableClosePositionHeuristics = isTrebleStaff && enableEngravingEnhancements;
 
+        const stemDirForNote = (n: StaffNote): 'up' | 'down' => {
+          const manual = (n as any)?.manualStemDirection;
+          if (manual === 'up' || manual === 'down') return manual;
+          if (n.voice === 1 || n.voice === 3) return 'up';
+          return 'down';
+        };
+
         const getSecondClusterOffsetsById = (
           chord: StaffNote[],
           isStemUp: boolean,
@@ -1097,6 +1121,136 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
         // --- end close-position helpers ---
+
+        // --- Generic seconds collision avoidance (ALL modes) ---
+        // Even in legacy mode (or outside tight-treble heuristics), seconds across
+        // separately-rendered notes can overlap because they don't share a single chord glyph.
+        // We apply the same head-stagger rule by shifting selected noteheads by ~one head width.
+        try {
+          for (const onset of byOnsetKeyAll.values()) {
+            const gAll = (onset || [])
+              .filter(n => n && n.id !== '__ghost__')
+              .filter(n => !n.isRest);
+            if (gAll.length < 2) continue;
+
+            // If notes are merged into a VF chord, do not apply per-note xShift.
+            const g = gAll.filter(n => !chordKeyByNoteId.has(n.id));
+            if (g.length < 2) continue;
+
+            const sorted = g.slice().sort((a, b) => Number(a.position) - Number(b.position));
+
+            const preferRightAtBarline = (() => {
+              try {
+                const isMeasureStart = sorted.some(n => {
+                  const b = Number((n as any).beat);
+                  if (!Number.isFinite(b)) return false;
+                  return Math.abs(b - 1) <= 1e-6;
+                });
+                if (!isMeasureStart) return false;
+                const hasAcc = sorted.some((n: any) => {
+                  const acc = normalizeAccidentalType(n?.userAccidental)
+                    ?? normalizeAccidentalType(n?.explicitAccidental)
+                    ?? normalizeAccidentalType(n?.accidental);
+                  return !!acc;
+                });
+                return hasAcc;
+              } catch {
+                return false;
+              }
+            })();
+
+            const setOffsetMax = (id: string, dx: number) => {
+              const prev = offsetMap.get(id) ?? 0;
+              if (Math.abs(dx) > Math.abs(prev)) offsetMap.set(id, dx);
+            };
+
+            // Unisons (same staff position) need explicit side-by-side heads.
+            // Group by a stable "notehead slot" key.
+            const byUnisonSlot = new Map<string, StaffNote[]>();
+            for (const n of sorted) {
+              const slot = `${Number((n as any).position)}`;
+              if (!byUnisonSlot.has(slot)) byUnisonSlot.set(slot, []);
+              byUnisonSlot.get(slot)!.push(n);
+            }
+
+            const INTERNAL_STEM_LEFT_INSET_PX = 10;
+            const LEFT_SHIFT = -Math.max(0, NOTEHEAD_TOUCH_SHIFT - INTERNAL_STEM_LEFT_INSET_PX);
+
+            for (const groupSamePos of byUnisonSlot.values()) {
+              if (!groupSamePos || groupSamePos.length < 2) continue;
+
+              const dirsHere = groupSamePos.map(n => stemDirForNote(n));
+              const hasUpHere = dirsHere.includes('up');
+              const hasDownHere = dirsHere.includes('down');
+
+              if (hasUpHere && hasDownHere) {
+                // Internal stems for unison:
+                // stem up head LEFT, stem down head RIGHT.
+                for (const n of groupSamePos) {
+                  if ((n as any).manualStemDirection) continue;
+                  const dir = stemDirForNote(n);
+                  if (dir === 'up') setOffsetMax(n.id, LEFT_SHIFT);
+                  else setOffsetMax(n.id, +NOTEHEAD_TOUCH_SHIFT);
+                }
+              } else {
+                // Same stem direction: alternate heads left/right to make both visible.
+                const ordered = groupSamePos
+                  .slice()
+                  .sort((a, b) => (a.voice ?? 0) - (b.voice ?? 0) || String(a.id).localeCompare(String(b.id)));
+                for (let i = 0; i < ordered.length; i++) {
+                  const n = ordered[i];
+                  if ((n as any).manualStemDirection) continue;
+                  const dx = (i % 2 === 0) ? 0 : (+NOTEHEAD_TOUCH_SHIFT);
+                  setOffsetMax(n.id, dx);
+                }
+              }
+            }
+
+            // Seconds: keep the existing rule, but don't require identical duration.
+            const anySeconds = sorted.some((n, i) => i > 0 && (Number(n.position) - Number(sorted[i - 1].position)) === 1);
+            if (!anySeconds) continue;
+
+            // If we have both stem directions present, prefer "internal stems":
+            // - stem down (left stem) shifts RIGHT
+            // - stem up (right stem) shifts LEFT
+            // so stems sit between the two heads (standard two-voice engraving).
+            const dirs = sorted.map(n => stemDirForNote(n));
+            const hasUp = dirs.includes('up');
+            const hasDown = dirs.includes('down');
+            if (hasUp && hasDown) {
+              for (let i = 1; i < sorted.length; i++) {
+                const low = sorted[i - 1];
+                const high = sorted[i];
+                if ((Number(high.position) - Number(low.position)) !== 1) continue;
+
+                const lowDir = stemDirForNote(low);
+                const highDir = stemDirForNote(high);
+
+                if (!(low as any).manualStemDirection) {
+                  if (lowDir === 'down' && highDir === 'up') setOffsetMax(low.id, +NOTEHEAD_TOUCH_SHIFT);
+                  else if (lowDir === 'up' && highDir === 'down') setOffsetMax(low.id, LEFT_SHIFT);
+                }
+                if (!(high as any).manualStemDirection) {
+                  if (lowDir === 'down' && highDir === 'up') setOffsetMax(high.id, LEFT_SHIFT);
+                  else if (lowDir === 'up' && highDir === 'down') setOffsetMax(high.id, +NOTEHEAD_TOUCH_SHIFT);
+                }
+              }
+              continue;
+            }
+
+            // Otherwise, fall back to the single-stem-direction staggering.
+            const upCount = sorted.reduce((acc, n) => acc + (stemDirForNote(n) === 'up' ? 1 : 0), 0);
+            const isStemUp = preferRightAtBarline ? true : (upCount >= (sorted.length - upCount));
+            const xShifts = getSecondClusterOffsetsById(sorted, isStemUp, preferRightAtBarline);
+            for (const [id, dx] of xShifts.entries()) {
+              const nn = sorted.find(n => n.id === id);
+              if (nn && !(nn as any).manualStemDirection) setOffsetMax(id, dx);
+            }
+          }
+        } catch {
+          // ignore
+        }
+        // --- end generic seconds helpers ---
         const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
 
         // In open position ("parti late"), the default accidental layout can leave too much
@@ -1647,7 +1801,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   // Stem up => displace the upper notehead; stem down => displace the lower.
                   try {
                     const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
-                    if (Array.isArray(mergedIds) && mergedIds.length >= 2 && typeof (vfNote as any).setNoteDisplaced === 'function') {
+                    const setDisplaced = (idx: number, v: boolean) => {
+                      try {
+                        if (typeof (vfNote as any).setKeyDisplaced === 'function') (vfNote as any).setKeyDisplaced(idx, v);
+                        else if (typeof (vfNote as any).setNoteDisplaced === 'function') (vfNote as any).setNoteDisplaced(idx, v);
+                      } catch {
+                        // ignore
+                      }
+                    };
+                    if (Array.isArray(mergedIds) && mergedIds.length >= 2) {
                       const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
                       const chordNotes = mergedIds
                         .map(id => staffNoteById.get(String(id)))
@@ -1663,7 +1825,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                         const keyStr = sn ? `${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}` : '';
                         const keyIdx = keyStr && keysArr.length ? keysArr.indexOf(keyStr) : -1;
                         const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(displaceId);
-                        if (idx >= 0) (vfNote as any).setNoteDisplaced(idx, true);
+                        if (idx >= 0) setDisplaced(idx, true);
                       }
                     }
                   } catch { /* ignore */ }
@@ -2477,8 +2639,24 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // on the wrong staff line under the cursor.
       const rect = svg.getBoundingClientRect();
       const vb = svg.viewBox?.baseVal;
-      const svgW = vb?.width && vb.width > 0 ? vb.width : rect.width;
-      const svgH = vb?.height && vb.height > 0 ? vb.height : rect.height;
+      const attrW = (() => {
+        try {
+          const v = parseFloat(String(svg.getAttribute('width') || ''));
+          return Number.isFinite(v) && v > 0 ? v : null;
+        } catch {
+          return null;
+        }
+      })();
+      const attrH = (() => {
+        try {
+          const v = parseFloat(String(svg.getAttribute('height') || ''));
+          return Number.isFinite(v) && v > 0 ? v : null;
+        } catch {
+          return null;
+        }
+      })();
+      const svgW = vb?.width && vb.width > 0 ? vb.width : (attrW ?? rect.width);
+      const svgH = vb?.height && vb.height > 0 ? vb.height : (attrH ?? rect.height);
       const scaleX = rect.width ? (svgW / rect.width) : 1;
       const scaleY = rect.height ? (svgH / rect.height) : 1;
       return {
