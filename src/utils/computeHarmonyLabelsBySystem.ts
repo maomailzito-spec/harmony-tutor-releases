@@ -55,6 +55,7 @@ export function computeHarmonyLabelsBySystem(opts: {
     noteNameToChromaticIndex: (name: string) => number;
     startX: number;
     measurePaddingX: number;
+    harmonyLabelMinSpanBeats?: number;
 }): HarmonyLabelPoint[][] {
     const {
         isAnalysisEnabled,
@@ -72,6 +73,7 @@ export function computeHarmonyLabelsBySystem(opts: {
         noteNameToChromaticIndex,
         startX,
         measurePaddingX,
+        harmonyLabelMinSpanBeats,
     } = opts;
 
     if (!isAnalysisEnabled || !layoutData) return [];
@@ -88,7 +90,11 @@ export function computeHarmonyLabelsBySystem(opts: {
     const isCompoundMeterFlag = isCompoundMeter(timeSignature);
     const isStrongPulseInMeasureFn = (inMeasureBeats0: number) => isStrongPulseInMeasure(timeSignature, inMeasureBeats0);
 
-    const timelineForLabels = filterTimelineForHarmonyLabels(timeline as any, timeSignature) as any[];
+    const timelineForLabels = filterTimelineForHarmonyLabels(
+        timeline as any,
+        timeSignature,
+        Number(harmonyLabelMinSpanBeats) || 0
+    ) as any[];
     const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
 
     const ctxAtAbsBeat = (absBeat: number) => (effectiveAnalysisContexts || [])

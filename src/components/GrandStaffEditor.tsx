@@ -23,6 +23,9 @@ import HarmonyLabelExplainModal, { type HarmonyExplainData } from './HarmonyLabe
 
 import type { MenuAction, MenuActionPayloadMap } from '../../shared/menuActionRegistry';
 import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
+import { usePreference } from '../preferences/usePreference';
+import { TOOLBAR_PREFS_KEY } from '../storage/storageKeys';
+import { getJSON, setJSON } from '../storage/localStorage';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -155,9 +158,6 @@ type ToolbarGroupId =
     | 'analysis'
     | 'more';
 
-const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
-const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
-const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
 const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'playback',
     'bpm',
@@ -606,16 +606,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Staff system mode:
     // - grandstaff: standard treble+bass system (chorale / piano style)
     // - treble_only: single treble staff (guitar-style; written pitches sound an octave lower)
-    const [staffSystemMode, setStaffSystemMode] = useState<StaffSystemMode>(() => {
-        try {
-            const raw = window.localStorage.getItem(STAFF_SYSTEM_MODE_KEY);
-            if (raw === 'grandstaff' || raw === 'treble_only' || raw === 'satb_ancient') return raw;
-        } catch (_) {}
-        return 'grandstaff';
-    });
-    useEffect(() => {
-        try { window.localStorage.setItem(STAFF_SYSTEM_MODE_KEY, staffSystemMode); } catch (_) {}
-    }, [staffSystemMode]);
+    const [staffSystemMode, setStaffSystemMode] = usePreference<StaffSystemMode>('editor.staffSystemMode');
 
     // Staff layout (render-only mapping by voice):
     // - parti_late: S/A on treble, T/B on bass (current behavior)
@@ -709,17 +700,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [harmonyOverrideMenu, setHarmonyOverrideMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
-    const [isSequencesEnabled, setIsSequencesEnabled] = useState(() => {
-        try {
-            const raw = String(localStorage.getItem('harmony.analysis.sequencesEnabled.v1') || '').trim();
-            if (raw === '0') return false;
-            if (raw === '1') return true;
-        } catch { /* ignore */ }
-        return true;
-    });
-    useEffect(() => {
-        try { localStorage.setItem('harmony.analysis.sequencesEnabled.v1', isSequencesEnabled ? '1' : '0'); } catch { /* ignore */ }
-    }, [isSequencesEnabled]);
+    const [isSequencesEnabled, setIsSequencesEnabled] = usePreference<boolean>('analysis.sequencesEnabled');
     const [showRomanAnalysis, setShowRomanAnalysis] = useState(true);
     const [showSymbolAnalysis, setShowSymbolAnalysis] = useState(false);
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
@@ -729,16 +710,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
 
-    const [engravingMode, setEngravingMode] = useState<EngravingMode>(() => {
-        try {
-            const raw = String(window.localStorage.getItem(ENGRAVING_MODE_KEY) || '').trim();
-            if (raw === 'legacy' || raw === 'enhanced') return raw;
-        } catch (_) {}
-        return 'enhanced';
-    });
-    useEffect(() => {
-        try { window.localStorage.setItem(ENGRAVING_MODE_KEY, engravingMode); } catch (_) {}
-    }, [engravingMode]);
+    const [engravingMode, setEngravingMode] = usePreference<EngravingMode>('render.engravingMode');
 
     const [showVoiceColors, setShowVoiceColors] = useState(false);
 
@@ -748,9 +720,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [toolbarGroupOrder, setToolbarGroupOrder] = useState<ToolbarGroupId[]>(() => {
         // Load toolbar prefs synchronously to avoid overwriting them with defaults on first mount.
         try {
-            const raw = localStorage.getItem(TOOLBAR_PREFS_KEY);
-            if (!raw) return DEFAULT_TOOLBAR_ORDER;
-            const parsed = JSON.parse(raw);
+            const parsed = getJSON<any>(TOOLBAR_PREFS_KEY, null);
+            if (!parsed) return DEFAULT_TOOLBAR_ORDER;
             const order: ToolbarGroupId[] = Array.isArray(parsed?.order) ? parsed.order : [];
 
             const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
@@ -1008,7 +979,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     useEffect(() => {
         try {
-            localStorage.setItem(TOOLBAR_PREFS_KEY, JSON.stringify({ order: toolbarGroupOrder }));
+            setJSON(TOOLBAR_PREFS_KEY, { order: toolbarGroupOrder });
         } catch {
             // ignore quota/errors
         }
@@ -2316,23 +2287,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature);
     }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature]);
 
-    const ENABLE_INFERRED_CONTEXTS_PREF_KEY = 'HT_ENABLE_INFERRED_CONTEXTS';
-    const [enableInferredContexts, setEnableInferredContexts] = useState<boolean>(() => {
-        try {
-            const raw = String(window.localStorage.getItem(ENABLE_INFERRED_CONTEXTS_PREF_KEY) || '').trim().toLowerCase();
-            return raw === '1' || raw === 'true' || raw === 'on';
-        } catch {
-            return false;
-        }
-    });
-
-    useEffect(() => {
-        try {
-            window.localStorage.setItem(ENABLE_INFERRED_CONTEXTS_PREF_KEY, enableInferredContexts ? '1' : '0');
-        } catch {
-            // ignore
-        }
-    }, [enableInferredContexts]);
+    const [enableInferredContexts, setEnableInferredContexts] = usePreference<boolean>('analysis.enableInferredContexts');
+    const [harmonyLabelMinSpanBeats, setHarmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
 
     const effectiveAnalysisContexts = useMemo(() => {
         // NOTE: inferred contexts can be helpful for experimentation, but they can also
@@ -3036,6 +2992,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             noteNameToChromaticIndex,
             startX: START_X,
             measurePaddingX: MEASURE_PADDING_X,
+            harmonyLabelMinSpanBeats,
         });
 
         if (!isAnalysisEnabled || !layoutData) return [];
@@ -5012,7 +4969,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Sort labels in each system by x
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, analysisResult, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, timeSignature, enableInferredContexts]);
+    }, [analysisContextAbsBeat, analysisContexts, analysisResult, analyzedNotes, currentTonic, effectiveAnalysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, noteNameToChromaticIndex, timeSignature, timeSignatureChanges, enableInferredContexts, harmonyLabelMinSpanBeats]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
@@ -11271,6 +11228,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 onClose={() => setIsPreferencesOpen(false)}
                 enableInferredContexts={enableInferredContexts}
                 onToggleEnableInferredContexts={setEnableInferredContexts}
+                harmonyLabelMinSpanBeats={harmonyLabelMinSpanBeats}
+                onChangeHarmonyLabelMinSpanBeats={setHarmonyLabelMinSpanBeats}
             />
 
             <HarmonyLabelExplainModal
@@ -12686,7 +12645,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     violations={violations}
                                     sequenceMatches={sequenceMatches}
                                     sequencesEnabled={isSequencesEnabled}
-                                    onToggleSequences={() => setIsSequencesEnabled(prev => !prev)}
+                                    onToggleSequences={() => setIsSequencesEnabled(!isSequencesEnabled)}
                                     onHoverViolation={setHoveredViolationNotes}
                                     selectedViolationIndex={selectedViolationIndex}
                                     onSelectViolation={index => {

@@ -102,8 +102,14 @@ export function isStrongPulseInMeasure(timeSignature: TimeSignature, inMeasureBe
     }
 }
 
-export function filterTimelineForHarmonyLabels(timeline: any[], timeSignature: TimeSignature): any[] {
+export function filterTimelineForHarmonyLabels(
+    timeline: any[],
+    timeSignature: TimeSignature,
+    harmonyLabelMinSpanBeats: number = 0
+): any[] {
     const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+    const minSpan = Number(harmonyLabelMinSpanBeats) || 0;
+    const EPS = 1e-6;
 
     return (timeline || []).filter((ev: any, idx: number) => {
         if (!ev) return false;
@@ -117,20 +123,42 @@ export function filterTimelineForHarmonyLabels(timeline: any[], timeSignature: T
             const id = String(n?.id ?? '');
             return id && !prevIds.has(id);
         });
-        if (hasOnset) return true;
 
-        try {
-            const curIds = new Set<string>(curNotes.map(n => String(n?.id ?? '')).filter(Boolean));
-            const removed = Array.from(prevIds).some(id => id && !curIds.has(id));
-            if (!removed) return false;
+        const passesStructuralGate = (() => {
+            if (hasOnset) return true;
 
-            const absBeat = Number(ev?.absBeat);
-            if (!Number.isFinite(absBeat)) return false;
-            const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-            return isStrongPulseInMeasure(timeSignature, inMeasure);
-        } catch {
-            return false;
+            // Also keep note-off-only events on strong pulses.
+            try {
+                const curIds = new Set<string>(curNotes.map(n => String(n?.id ?? '')).filter(Boolean));
+                const removed = Array.from(prevIds).some(id => id && !curIds.has(id));
+                if (!removed) return false;
+
+                const absBeat = Number(ev?.absBeat);
+                if (!Number.isFinite(absBeat)) return false;
+                const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
+                return isStrongPulseInMeasure(timeSignature, inMeasure);
+            } catch {
+                return false;
+            }
+        })();
+
+        if (!passesStructuralGate) return false;
+
+        // Optional anti-noise filter: drop very short segments (next scanpoint too close).
+        if (minSpan > EPS && idx < (timeline || []).length - 1) {
+            try {
+                const a0 = Number(ev?.absBeat);
+                const a1 = Number((timeline || [])[idx + 1]?.absBeat);
+                if (Number.isFinite(a0) && Number.isFinite(a1)) {
+                    const span = a1 - a0;
+                    if (Number.isFinite(span) && span + EPS < minSpan) return false;
+                }
+            } catch {
+                // ignore
+            }
         }
+
+        return true;
     });
 }
 
