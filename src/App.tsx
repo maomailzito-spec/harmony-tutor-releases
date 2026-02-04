@@ -7,6 +7,7 @@ import MainEditor from './components/MainEditor';
 import GrandStaffEditor from './components/GrandStaffEditor';
 import { getAppFlavor, isModeEnabled } from './flavor';
 import { MENU_ACTIONS } from './contracts/menuActionRuntime';
+import { getMenuActionTarget } from './contracts/menuActionTargets';
 import type { MenuAction, MenuActionPayloadMap } from '../shared/menuActionRegistry';
 
 type AppMode = 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff';
@@ -65,12 +66,11 @@ const App: React.FC = () => {
 
         const remove = api.onMenuAction?.((action, payload) => {
             try {
-                if (action !== MENU_ACTIONS.IMPORT_MIDI && action !== MENU_ACTIONS.EXPORT_MIDI) return;
-                // If we're not on the editor, switch and queue the action for when it mounts.
-                if (mode !== 'grandStaff') {
-                    setMode('grandStaff');
-                    setPendingMenuAction({ action, payload: payload as any, nonce: Date.now() });
-                }
+                // If the action targets GrandStaff but we're not there, switch and queue it.
+                if (getMenuActionTarget(action) !== 'grandStaff') return;
+                if (mode === 'grandStaff') return;
+                setMode('grandStaff');
+                setPendingMenuAction({ action, payload: payload as any, nonce: Date.now() });
             } catch {
                 // ignore
             }

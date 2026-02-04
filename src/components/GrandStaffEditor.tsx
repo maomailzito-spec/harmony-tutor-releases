@@ -23,6 +23,7 @@ import HarmonyLabelExplainModal, { type HarmonyExplainData } from './HarmonyLabe
 
 import type { MenuAction, MenuActionPayloadMap } from '../../shared/menuActionRegistry';
 import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
+import { getMenuActionTarget } from '../contracts/menuActionTargets';
 import { usePreference } from '../preferences/usePreference';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 
@@ -2152,44 +2153,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
     }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice]);
 
-    // Switch esaustivo: garantisce che l'editor “conosca” tutte le azioni del menu.
+    // Routing: single source of truth for where actions are handled.
     const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {
-        switch (action) {
-            case MENU_ACTIONS.NEW:
-            case MENU_ACTIONS.OPEN:
-            case MENU_ACTIONS.IMPORT_MIDI:
-            case MENU_ACTIONS.EXPORT_MIDI:
-            case MENU_ACTIONS.PRINT:
-            case MENU_ACTIONS.SAVE:
-            case MENU_ACTIONS.SAVE_AS:
-            case MENU_ACTIONS.CLOSE_PROJECT:
-            case MENU_ACTIONS.UNDO:
-            case MENU_ACTIONS.REDO:
-            case MENU_ACTIONS.EDIT_COMMAND:
-            case MENU_ACTIONS.OPEN_PREFERENCES:
-            case MENU_ACTIONS.TOGGLE_TOOLBAR_CUSTOMIZE:
-            case MENU_ACTIONS.SET_QUICK_INSERT_BAR:
-            case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
-            case MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG:
-            case MENU_ACTIONS.SET_SHOW_VOICE_COLORS:
-            case MENU_ACTIONS.SET_ENGRAVING_MODE:
-            case MENU_ACTIONS.RUN_OVERLAP_AUDIT:
-            case MENU_ACTIONS.SET_TITLE_FONT_FAMILY:
-            case MENU_ACTIONS.INCREASE_TITLE_FONT:
-            case MENU_ACTIONS.DECREASE_TITLE_FONT:
-            case MENU_ACTIONS.SET_SELECT_ONLY_VOICE:
-                void handleMenuActionLegacy(action, payload);
-                return;
-
-            case MENU_ACTIONS.SET_APP_MODE:
-                // gestito a livello App (routing)
-                return;
-
-            default: {
-                const _exhaustive: never = action;
-                return _exhaustive;
-            }
-        }
+        if (getMenuActionTarget(action) !== 'grandStaff') return;
+        void handleMenuActionLegacy(action, payload);
     }, [handleMenuActionLegacy]);
 
     // Listener Electron: registrazione unica e cleanup
