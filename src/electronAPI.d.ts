@@ -1,4 +1,5 @@
 import type { MenuAction, MenuActionPayloadMap } from '../shared/menuActionRegistry';
+import type { MenuState } from '../shared/menuStateRegistry';
 
 declare global {
   interface Window {
@@ -20,14 +21,7 @@ declare global {
       addRecentFile: (filePath: string) => void;
 
       // Renderer -> main: keep native menu checkmarks in sync
-      setMenuState: (state: Partial<{
-        selectOnlyCurrentVoiceEnabled: boolean;
-        showMeasureNumbersEnabled: boolean;
-        showHarmonyDebugEnabled: boolean;
-        showVoiceColorsEnabled: boolean;
-        showQuickInsertBarEnabled: boolean;
-        engravingMode: 'legacy' | 'enhanced';
-      }>) => void;
+      setMenuState: (state: MenuState) => void;
 
       guitarLibrary?: {
         load: () => Promise<any>;

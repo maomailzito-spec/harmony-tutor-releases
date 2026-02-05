@@ -24,6 +24,7 @@ import HarmonyLabelExplainModal, { type HarmonyExplainData } from './HarmonyLabe
 import type { MenuAction, MenuActionPayloadMap } from '../../shared/menuActionRegistry';
 import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
 import { getMenuActionTarget } from '../contracts/menuActionTargets';
+import { electronBridge } from '../services/electronBridge';
 import { usePreference } from '../preferences/usePreference';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 
@@ -2161,23 +2162,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
-        const api = (window).electronAPI;
-        //
-        if (!api) {
-            // Removed debug log
-            return;
-        }
-        //
-        const removeListener = api.onMenuAction((action, payload) => {
+        const removeListener = electronBridge.onMenuAction((action, payload) => {
             try {
                 dispatchMenuAction(action, payload);
             } catch {
                 // ignore
             }
         });
-        return () => {
-            if (removeListener) removeListener();
-        };
+        return () => removeListener();
     }, [dispatchMenuAction]);
 
     // Listen for native copy events (keyboard) to set the paste marker as well

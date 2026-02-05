@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
-export type MenuState = Parameters<NonNullable<Window['electronAPI']>['setMenuState']>[0];
+import type { MenuState } from '../../shared/menuStateRegistry';
+import { electronBridge } from '../services/electronBridge';
 
 type Key = keyof MenuState;
 
@@ -26,15 +27,12 @@ export function useMenuStateSync(state: MenuState): void {
   const prevRef = useRef<MenuState | null>(null);
 
   useEffect(() => {
-    const api = window.electronAPI;
-    if (!api?.setMenuState) return;
-
     // Avoid spamming the main process with identical states.
     if (shallowEqualByKeys(prevRef.current, state)) return;
     prevRef.current = state;
 
     try {
-      api.setMenuState(state);
+      electronBridge.setMenuState(state);
     } catch {
       // ignore
     }

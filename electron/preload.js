@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const { IPC_CHANNELS } = require('../shared/ipcChannels');
 const { isMenuAction, normalizeMenuActionPayload } = require('../shared/menuActionRegistry');
+const { normalizeMenuState } = require('../shared/menuStateRegistry');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   onMenuAction: (callback) => {
@@ -40,7 +41,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveBinaryFile: (base64, targetPath, filters) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_BINARY_FILE, base64, targetPath, filters),
   addRecentFile: (filePath) => ipcRenderer.send(IPC_CHANNELS.ADD_RECENT, filePath),
   // Keep native app menu in sync with renderer state (for checkmarks)
-  setMenuState: (state) => ipcRenderer.send(IPC_CHANNELS.SET_MENU_STATE, state),
+  setMenuState: (state) => {
+    const normalized = normalizeMenuState(state);
+    if (!normalized) return;
+    ipcRenderer.send(IPC_CHANNELS.SET_MENU_STATE, normalized);
+  },
   guitarLibrary: {
     load: () => ipcRenderer.invoke(IPC_CHANNELS.GUITAR_LIBRARY_LOAD),
     save: (library) => ipcRenderer.invoke(IPC_CHANNELS.GUITAR_LIBRARY_SAVE, library)

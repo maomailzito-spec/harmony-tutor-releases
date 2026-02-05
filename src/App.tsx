@@ -8,6 +8,7 @@ import GrandStaffEditor from './components/GrandStaffEditor';
 import { getAppFlavor, isModeEnabled } from './flavor';
 import { MENU_ACTIONS } from './contracts/menuActionRuntime';
 import { getMenuActionTarget } from './contracts/menuActionTargets';
+import { electronBridge } from './services/electronBridge';
 import type { MenuAction, MenuActionPayloadMap } from '../shared/menuActionRegistry';
 
 type AppMode = 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff';
@@ -37,9 +38,7 @@ const App: React.FC = () => {
 
     // Native menu integration (Electron): allow switching app mode from "Vista".
     useEffect(() => {
-        const api = window.electronAPI;
-        if (!api?.onMenuAction) return;
-        const remove = api.onMenuAction((action, payload) => {
+        const remove = electronBridge.onMenuAction((action, payload) => {
             try {
                 if (action !== MENU_ACTIONS.SET_APP_MODE) return;
                 const next = payload?.mode;
@@ -50,21 +49,19 @@ const App: React.FC = () => {
                 // ignore
             }
         });
-        return () => { if (remove) remove(); };
+        return () => remove();
     }, [flavor]);
 
     // Native menu integration (Electron): surface menu errors and allow Import/Export MIDI to
     // work even if the user is not currently on the GrandStaff view.
     useEffect(() => {
         if (!isModeEnabled(flavor, 'grandStaff')) return;
-        const api = window.electronAPI;
-        if (!api) return;
 
-        const removeErr = api.onMenuError?.((code: string, message: string) => {
+        const removeErr = electronBridge.onMenuError((code: string, message: string) => {
             try { window.alert(`${String(code || 'errore')}: ${String(message || '')}`); } catch { /* ignore */ }
         });
 
-        const remove = api.onMenuAction?.((action, payload) => {
+        const remove = electronBridge.onMenuAction((action, payload) => {
             try {
                 // If the action targets GrandStaff but we're not there, switch and queue it.
                 if (getMenuActionTarget(action) !== 'grandStaff') return;
@@ -77,8 +74,8 @@ const App: React.FC = () => {
         });
 
         return () => {
-            if (removeErr) removeErr();
-            if (remove) remove();
+            removeErr();
+            remove();
         };
     }, [mode, flavor]);
     
