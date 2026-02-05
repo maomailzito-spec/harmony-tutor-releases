@@ -1,3 +1,5 @@
+import type { StorageKey } from './storageKeys';
+
 export function getStorage(): Storage | null {
   try {
     const ls = (globalThis as any)?.localStorage as Storage | undefined;
@@ -7,7 +9,7 @@ export function getStorage(): Storage | null {
   }
 }
 
-export function getString(key: string, fallback = ''): string {
+export function getString(key: StorageKey, fallback = ''): string {
   const ls = getStorage();
   if (!ls) return fallback;
   try {
@@ -18,7 +20,7 @@ export function getString(key: string, fallback = ''): string {
   }
 }
 
-export function setString(key: string, value: string): void {
+export function setString(key: StorageKey, value: string): void {
   const ls = getStorage();
   if (!ls) return;
   try {
@@ -28,7 +30,7 @@ export function setString(key: string, value: string): void {
   }
 }
 
-export function getJSON<T>(key: string, fallback: T): T {
+export function getJSON<T>(key: StorageKey, fallback: T): T {
   const ls = getStorage();
   if (!ls) return fallback;
   try {
@@ -40,7 +42,7 @@ export function getJSON<T>(key: string, fallback: T): T {
   }
 }
 
-export function setJSON(key: string, value: unknown): void {
+export function setJSON(key: StorageKey, value: unknown): void {
   const ls = getStorage();
   if (!ls) return;
   try {
