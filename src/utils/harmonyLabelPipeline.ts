@@ -282,9 +282,27 @@ export function computeStructuralSnapshotForHarmonyLabelEvent(opts: {
     }
 
     const harmonicNotes = Array.from(lastStructural.values()).filter(Boolean);
+
+    const fullNotesNoOrn = (() => {
+        try {
+            return (fullNotes || []).filter((n: any) => {
+                if (!n || n.isRest) return false;
+                // Surface ornaments should not drive fallback harmony labeling.
+                return !(
+                    n.isPassing ||
+                    n.isNeighbor ||
+                    n.isAnticipation ||
+                    n.isAppoggiatura ||
+                    n.isEscape
+                );
+            });
+        } catch {
+            return (fullNotes || []).filter((n: any) => n && !n.isRest);
+        }
+    })();
     const fallbackHarmonicNotes = (harmonicNotes.length >= 2)
         ? harmonicNotes
-        : (fullNotes || []).filter((n: any) => n && !n.isRest);
+        : ((fullNotesNoOrn.length >= 2) ? fullNotesNoOrn : (fullNotes || []).filter((n: any) => n && !n.isRest));
     const baseHarmonicNotes = (fallbackHarmonicNotes.length >= 2)
         ? fallbackHarmonicNotes
         : (fullNotes || []).filter((n: any) => n && !n.isRest);

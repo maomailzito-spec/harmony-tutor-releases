@@ -309,6 +309,62 @@ const runDuboisN2P7DiminishedConfusionRegressions = () => {
   }
 };
 
+const runDuboisN2P7R07SequenceRegression = () => {
+  const file = './tests/Dubois N2 p.7.json';
+  const name = 'Dubois N2 p7: R-07 in sequence is exception at m4';
+  if (!fs.existsSync(file)) {
+    console.log(`SKIP  ${name} (missing ${file})`);
+    return;
+  }
+
+  try {
+    const fx = JSON.parse(fs.readFileSync(file, 'utf8')) as any;
+    const beatsPerMeasure = fx.timeSignature.numerator * (4 / fx.timeSignature.denominator);
+    const ks = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
+    const res: any = applyHarmonyRules(
+      fx.notes,
+      ks as any,
+      fx.keySignatureRoot,
+      fx.isMinorMode,
+      fx.analysisContexts || [],
+      fx.timeSignature,
+    );
+
+    const violations = (res.violations || []) as any[];
+    const r07 = violations.filter((v) => String(v?.ruleId) === 'R-07');
+
+    const uiMeasureOfViolation = (v: any): number | null => {
+      try {
+        const ids = Array.isArray(v?.noteIds) ? (v.noteIds as any[]).map(String) : [];
+        let minAbs = Number.POSITIVE_INFINITY;
+        for (const id of ids) {
+          const n = (res.analyzedNotes as any[]).find((x: any) => x && String(x.id) === id);
+          if (!n) continue;
+          const ab = Number(n.measureIndex) * beatsPerMeasure + (Number(n.beat) - 1);
+          if (Number.isFinite(ab)) minAbs = Math.min(minAbs, ab);
+        }
+        if (!Number.isFinite(minAbs)) return null;
+        return Math.floor(minAbs / beatsPerMeasure) + 1;
+      } catch {
+        return null;
+      }
+    };
+
+    const hitsM4 = r07.filter((v) => (uiMeasureOfViolation(v) ?? -1) === 4);
+    const bad = hitsM4.filter((v) => String(v?.severity) !== 'exception');
+    const ok = bad.length === 0;
+    if (!ok) {
+      fail(`[${name}] expected no warning/error R-07 at m4; got: ${JSON.stringify(bad.map((h) => ({ severity: h.severity, desc: h.description, noteIds: (h.noteIds || []).length })))}`);
+    }
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+};
+
 const runDuboisN3WarningRegressions = () => {
   const file = './tests/Dubois n3 p12.htp';
   if (!fs.existsSync(file)) {
@@ -449,6 +505,7 @@ const main = () => {
   runInferredContextRegression();
   runDuboisN2P7ContextRegression();
   runDuboisN2P7DiminishedConfusionRegressions();
+  runDuboisN2P7R07SequenceRegression();
   runDuboisN3WarningRegressions();
 
   const fixtures = loadFixtures();

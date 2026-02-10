@@ -1,0 +1,69 @@
+Sto lavorando su Harmony Tutor (React+Vite+Electron+Tailwind; renderer senza fs/path, solo window.electronAPI; VexFlow only). Ho appena introdotto e/o toccato queste aree
+
+Sei un “coding agent” su un progetto Electron + React (Vite) + Tailwind. Rendering musicale solo VexFlow. Nel renderer NON usare fs/path: solo window.electronAPI. Priorità assoluta: stabilità e regressioni (npm run regress). Cambiamenti piccoli e verificabili, niente refactor invasivi.
+
+Repo: Harmony Tutor (analisi armonica “spelling-first”).
+
+Stato attuale (già implementato e verificato)
+
+Ho introdotto scoring spelling-aware nell’inferenza dei contesti tonali per ridurre flip enarmonici spurî (specie con diminuiti).
+I regress sono verdi.
+Modifiche già presenti:
+
+musicTheory.ts
+
+Nell’area “Auto key-context inference (tonicization/modulation)” è stata aggiunta una funzione che calcola una penalità “spelling mismatch” per una tonalità candidata:
+conta quante note nella finestra hanno accidental espliciti (userAccidental/explicitAccidental o pitch con b/#) che risultano cromatici rispetto alla key signature candidata (usa calculateAccidental + keyAccidentals).
+Questa penalità viene applicata:
+nella parte cadence-based (aggiunta a currentOutAdj/candidateOutAdj con peso SPELL_W=2)
+nella parte window-based scanner (outAdj += spell*2)
+Obiettivo: evitare inferenze tipo “B minor” quando il materiale è scritto con bemolli e non giustifica quella lettura (pitch-class-only false positives).
+regression-check.ts
+
+Aggiunta regressione: “Dubois N2 p7: no spurious Bm inferred context”
+Scopo: assicurare che in Dubois N2 p7 non venga più inferito B minor (prima succedeva a mis 6 b3).
+Verifica recente:
+
+npm run regress (tsx scripts/regression-check.ts) è tutto OK e include:
+OK Dubois N2 p7: no spurious Bm inferred context
+OK Appoggiature should not change roman labels
+altri OK già presenti.
+Problema attuale (da risolvere)
+Ho caricato un nuovo esercizio: Dubois N2 p.7.json (G major, modulazioni a toni lontani).
+
+A mis 3 b1 entra modulazione verso E♭ (oggi l’inferenza la etichetta come D# per preferenza enarmonica; ok per ora).
+A mis 5 sembra modulare verso Gm e viene rilevato correttamente.
+Dopo i miglioramenti spelling-aware ci sono progressi (non inferisce più Bm a mis 6 b3), ma l’engine continua a fare confusione con i diminuiti in punti successivi:
+mis 7 b3
+mis 11 b1
+Il problema non è solo “bloccare un caso”, ma migliorare il ragionamento sui diminuiti: distinguere ii° vs vii°/x, usare spelling-first come vincolo forte (leading tone corretta, accidentali espliciti), e preferire conferme contestuali (risoluzione/contesto) evitando interpretazioni enarmoniche arbitrarie.
+Richiesta
+
+Riproduci e diagnostica mis 7 b3 e mis 11 b1 in Dubois N2 p7:
+stampa: note attive (pitch+octave, midi, noteIndex, explicitAccidental/userAccidental), pcs set, contesto inferito attivo (tonic/isMinor/absBeat), roman calcolato nel contesto attivo
+confronta roman dello stesso verticale in tonalità candidate pertinenti (Eb Maj, Gm, G Maj, ecc.)
+conferma se l’errore è:
+(a) roman analysis su diminuiti troppo permissiva
+(b) inferenza contesti ancora sbagliata
+(c) entrambe
+Suggerimento tecnico: evita one-liner con “!” perché zsh history expansion può rompere i comandi. Preferisci script in scripts/ e poi esegui npx tsx scripts/<script>.ts.
+
+Implementa fix MIRATO ai diminuiti, coerente con “spelling-first”:
+
+Quando un diminuito viene letto come leading-tone (vii° di X), richiedi evidenza spelling-aware della sensibile (accidentale esplicito coerente) o comunque penalizza fortemente candidature che richiedono reinterpretazioni (A naturale non può comportarsi come A# per “vii° di B”).
+Non fare refactor grandi: patch chirurgiche in musicTheory.ts.
+Mantieni tutti i regress verdi.
+Aggiungi regressioni nuove per Dubois N2 p7:
+
+almeno un check che garantisca che ai punti problematici (mis 7 b3, mis 11 b1) non venga prodotta la lettura errata (specificare cosa consideriamo “errato”: contesto inferito spurio? roman specifico sbagliato?).
+Mantieni invariati gli altri test.
+Vincoli
+
+Non introdurre nuove feature UI.
+Non toccare contratti IPC.
+Cambiamenti piccoli e verificabili, con npm run regress verde come criterio.
+Comandi utili
+
+npm run regress
+npm run build
+Output atteso: spiegazione del perché oggi sbaglia su m7 b3 / m11 b1 + patch engine + nuovi regress che coprono quei casi, con regress totali verdi.

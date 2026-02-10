@@ -13272,7 +13272,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             return ids.includes(c.noteId1) && ids.includes(c.noteId2);
                                                                         });
                                                                         if (!match) {
-                                                                            try { console.log('[RENDER] skipping-connection-no-violation', { noteId1: c.noteId1, noteId2: c.noteId2, ruleId: c.ruleId }); } catch(_) {}
+                                                                            // (was noisy debug log)
                                                                             return false;
                                                                         }
                                                                         return true;

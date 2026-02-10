@@ -3532,7 +3532,13 @@ export function applyHarmonyRules(
     analysisContexts: AnalysisContext[],
     timeSignature?: TimeSignature
 ): HarmonyAnalysisResult {
-    const DEBUG_ANALYSIS = false;
+    const DEBUG_ANALYSIS = (() => {
+        try {
+            return String(((import.meta as any)?.env?.VITE_ANALYSIS_DEBUG ?? '')).trim() === '1';
+        } catch {
+            return false;
+        }
+    })();
     const ENABLE_ENHARMONIC_WARNINGS = (() => {
         try {
             return String(((import.meta as any)?.env?.VITE_ENHARMONIC_WARNINGS ?? '')).trim() === '1';
@@ -3540,10 +3546,10 @@ export function applyHarmonyRules(
             return false;
         }
     })();
-    const DEBUG_SUSPENSIONS = (() => {
+    const ENABLE_DEV_ANALYSIS_WARNINGS = (() => {
         try {
-            // Vite sets import.meta.env.DEV in dev builds (Electron renderer included).
-            return !!((import.meta as any)?.env?.DEV);
+            // Opt-in only: dev-only analysis warnings are useful for debugging but can spam.
+            return String(((import.meta as any)?.env?.VITE_ANALYSIS_DEV_WARNINGS ?? '')).trim() === '1';
         } catch {
             return false;
         }
@@ -3608,11 +3614,6 @@ export function applyHarmonyRules(
             return false;
         }
     })();
-
-    const suspLog = (...args: any[]) => {
-        if (!DEBUG_SUSPENSIONS) return;
-        try { console.log(...args); } catch (_) {}
-    };
 
     const absBeatToMeasureBeat = (absBeat: number) => {
         try {
@@ -3756,7 +3757,10 @@ export function applyHarmonyRules(
     const beatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
 
     // 2. Trova tutti i punti temporali in cui succede qualcosa (INIZIO o FINE nota)
+    //    Keep track of onsets separately so chord-completeness warnings can ignore
+    //    “pure release” instants that create artificial sparse verticalities.
     const scanPointsSet = new Set<number>();
+    const onsetPointsSet = new Set<number>();
     analyzedNotes.forEach(n => {
         if (n.isRest) return;
         const m = n.measureIndex ?? 0;
@@ -3765,6 +3769,7 @@ export function applyHarmonyRules(
         const end = start + getDuration(n);
         scanPointsSet.add(start);
         scanPointsSet.add(end);
+        onsetPointsSet.add(start);
     });
     const scanPoints = Array.from(scanPointsSet).sort((a, b) => a - b);
 
@@ -6017,24 +6022,6 @@ export function applyHarmonyRules(
                     }
                 } catch { /* ignore */ }
 
-                // Dev-only: log detected suspensions to help debugging misclassifications.
-                // The staff already shows the line; this log is just for quick inspection.
-                try {
-                    const mb = absBeatToMeasureBeat(Number(b.absBeat));
-                    suspLog('[SUSP] detected', {
-                        voice: v,
-                        type: displayType || 'susp',
-                        fromAbsBeat: b.absBeat,
-                        fromMeasure: mb.measureIndex,
-                        fromBeat: mb.beat,
-                        fromNum,
-                        toNum,
-                        prepId: prep.id,
-                        sId: S?.id,
-                        resolvedId: resolved.id,
-                    });
-                } catch { /* ignore */ }
-
                 debugLog('[ANALYSIS] mark-suspension (strict)', { prepId: prep.id, sId: S.id, resolvedId: resolved.id, originStart, bAbs: b.absBeat });
 
                 connections.push({ type: 'horizontal', noteId1: prep.id, noteId2: resolved.id, severity: 'exception', ruleId: `S-strict` });
@@ -7727,7 +7714,7 @@ export function applyHarmonyRules(
     // This helps catch cases where the panel entry isn't actually tied to the rendered passing note.
     try {
         const isDev = typeof import.meta !== 'undefined' && !!(import.meta as any).env?.DEV;
-        if (isDev) {
+        if (isDev && ENABLE_DEV_ANALYSIS_WARNINGS) {
             const esc = (violations as any[]).filter(v => (v?.ruleId === 'ORN-ESC' || v?.ruleId === 'R-ORN-ESC'));
             if (esc.length) {
                 const passMap = new Map<string, boolean>();
@@ -7764,8 +7751,24 @@ export function applyHarmonyRules(
             return Math.abs(r - 0) < 1e-6;
         }
 
-        // Otherwise, keep existing behavior (treat every event as potentially meaningful).
-        return true;
+        // In simple meters, chord-completeness is pedagogically useful only on strong beats.
+        // Weak beats frequently host passing/ornamental motion or voice exchanges which can
+        // create legitimate sparse verticalities (and noisy false warnings).
+        const isIntegerBeat = Math.abs(beat - Math.round(beat)) < 1e-6;
+        if (!isIntegerBeat) return false;
+        const bInt = Math.round(beat);
+
+        // Common simple meters.
+        if (ts.denominator === 4) {
+            if (ts.numerator === 4) return bInt === 1 || bInt === 3;
+            if (ts.numerator === 3) return bInt === 1;
+            if (ts.numerator === 2) return bInt === 1;
+            if (ts.numerator === 6) return bInt === 1 || bInt === 4; // 6/4 (simple)
+            return bInt === 1;
+        }
+
+        // Conservative fallback: downbeat only.
+        return bInt === 1;
     };
 
     chordEvents.forEach(ev => {
@@ -7796,6 +7799,10 @@ export function applyHarmonyRules(
         // - Triads should contain at least root + 3rd.
         // - Seventh chords should contain at least root + 3rd + 7th (5th may be omitted).
         try {
+            // Ignore scan points that are only note endings (no attacks). These instants are
+            // frequent with ornaments/ties and tend to create misleading “incomplete chord” warnings.
+            if (!onsetPointsSet.has(ev.absBeat)) return;
+
             // In 6/8-like meters, many textures are written as arpeggiations/passing notes on the
             // internal 8th subdivisions; a strict vertical snapshot becomes noisy.
             // Evaluate completeness only on the strong dotted-quarter pulses.
@@ -8901,9 +8908,40 @@ export function applyHarmonyRules(
             } catch { /* ignore */ }
             addViolation({
                 ruleId: 'R-07',
-                severity: (v === 1 || v === 4) ? 'error' : 'warning',
-                description: 'Risoluzione errata della sensibile',
-                suggestion: 'La sensibile tende a salire alla tonica (specie nelle voci esterne).',
+                severity: (() => {
+                    // Attenuation inside imitated progressions (sequences): the symmetry of the
+                    // model/repetition can justify “non-standard” leading-tone handling.
+                    let isInsideSequence = false;
+                    try {
+                        const tickRaw = Number((n1 as any).startTick);
+                        const tick = Number.isFinite(tickRaw) ? tickRaw : null;
+                        isInsideSequence = isTickInsideImitatedSequence(tick);
+                    } catch { /* ignore */ }
+                    if (isInsideSequence) return 'exception';
+                    return (v === 1 || v === 4) ? 'error' : 'warning';
+                })(),
+                description: (() => {
+                    let isInsideSequence = false;
+                    try {
+                        const tickRaw = Number((n1 as any).startTick);
+                        const tick = Number.isFinite(tickRaw) ? tickRaw : null;
+                        isInsideSequence = isTickInsideImitatedSequence(tick);
+                    } catch { /* ignore */ }
+                    return isInsideSequence
+                        ? 'Risoluzione della sensibile (tollerata in sequenza/imitazione)'
+                        : 'Risoluzione errata della sensibile';
+                })(),
+                suggestion: (() => {
+                    let isInsideSequence = false;
+                    try {
+                        const tickRaw = Number((n1 as any).startTick);
+                        const tick = Number.isFinite(tickRaw) ? tickRaw : null;
+                        isInsideSequence = isTickInsideImitatedSequence(tick);
+                    } catch { /* ignore */ }
+                    return isInsideSequence
+                        ? 'Eccezione: in una progressione imitativa (sequenza), la simmetria del disegno può giustificare una risoluzione non immediata della sensibile.'
+                        : 'La sensibile tende a salire alla tonica (specie nelle voci esterne).';
+                })(),
                 noteIds: [n1.id, n2.id],
             });
         });

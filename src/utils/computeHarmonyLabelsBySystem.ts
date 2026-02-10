@@ -340,6 +340,48 @@ export function computeHarmonyLabelsBySystem(opts: {
             if (!n) return true;
             if (n.isRest) return true;
             const v = (n?.voice ?? 1) as number;
+
+            const isChordToneOfConfidentCandidateAtThisEvent = (note: any): boolean => {
+                try {
+                    const fullIndex = indexByAbsBeat.get(absBeat);
+                    const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
+                    const notesHereAll = (curEv?.notes || []) as any[];
+                    if (!notesHereAll || notesHereAll.length < 3) return false;
+
+                    const notesForCands = (notesHereAll || []).filter((x: any) => {
+                        if (!x || x.isRest) return false;
+                        const isThis = String(x?.id ?? '') === String(note?.id ?? '');
+                        if (isThis) return true;
+                        if (x.isPassing || x.isEscape || x.isNeighbor || x.isAnticipation || x.isAppoggiatura) return false;
+                        return true;
+                    });
+
+                    if (!Array.isArray(notesForCands) || notesForCands.length < 3) return false;
+                    const cands = identifyChordCandidates(notesForCands as any);
+                    const best = (cands && cands.length) ? cands[0] : null;
+                    const matchType = (best as any)?.matchType;
+                    const chordType = String(best?.type || '');
+                    const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                    const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+                    if (!(confident && !isSusLike && best?.root && best?.type)) return false;
+
+                    const rootPc = Number.isFinite((best.root as any).noteIndex)
+                        ? (((best.root as any).noteIndex % 12) + 12) % 12
+                        : (Number.isFinite((best.root as any).midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
+                    const notePc = Number.isFinite(note?.midi)
+                        ? (((note.midi % 12) + 12) % 12)
+                        : (typeof note.noteIndex === 'number' ? (((note.noteIndex % 12) + 12) % 12) : null);
+                    if (rootPc == null || notePc == null) return false;
+
+                    const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                    if (!Array.isArray(formula) || !formula.length) return false;
+                    const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
+                    return intervalFromRoot === 0 || formula.includes(intervalFromRoot);
+                } catch {
+                    return false;
+                }
+            };
+
             if (v === 4) {
                 const isBassOrnFlag = !!(n.isPassing || n.isEscape || n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
                 if (!isBassOrnFlag) return false;
@@ -367,7 +409,10 @@ export function computeHarmonyLabelsBySystem(opts: {
                     }
                 })();
 
-                if (weak && dur <= 1.01) return true;
+                if (weak && dur <= 1.01) {
+                    if (isChordToneOfConfidentCandidateAtThisEvent(n)) return false;
+                    return true;
+                }
                 return false;
             }
 
@@ -444,30 +489,46 @@ export function computeHarmonyLabelsBySystem(opts: {
                             if (x.isPassing || x.isEscape || x.isNeighbor || x.isAnticipation || x.isAppoggiatura) return false;
                             return true;
                         });
-                        if (supportNotes.length >= 3) {
-                            const cands = identifyChordCandidates(supportNotes as any);
-                            const best = (cands && cands.length) ? cands[0] : null;
-                            const matchType = (best as any)?.matchType;
-                            const chordType = String(best?.type || '');
-                            const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
-                            const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
-                            if (confident && !isSusLike && best?.root && best?.type) {
+
+                        const keepIfFitsConfidentChord = (notesForCands: any[]): boolean => {
+                            try {
+                                if (!Array.isArray(notesForCands) || notesForCands.length < 3) return false;
+                                const cands = identifyChordCandidates(notesForCands as any);
+                                const best = (cands && cands.length) ? cands[0] : null;
+                                const matchType = (best as any)?.matchType;
+                                const chordType = String(best?.type || '');
+                                const confident = matchType === 'exact' || matchType === 'no_fifth' || matchType === 'no_third';
+                                const isSusLike = chordType.includes('Sus') || chordType.includes('sus') || chordType.includes('Add') || chordType.includes('add');
+                                if (!(confident && !isSusLike && best?.root && best?.type)) return false;
+
                                 const rootPc = Number.isFinite((best.root as any).noteIndex)
                                     ? (((best.root as any).noteIndex % 12) + 12) % 12
                                     : (Number.isFinite((best.root as any).midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
                                 const notePc = Number.isFinite(n?.midi)
                                     ? (((n.midi % 12) + 12) % 12)
                                     : (typeof n.noteIndex === 'number' ? (((n.noteIndex % 12) + 12) % 12) : null);
-                                if (rootPc != null && notePc != null) {
-                                    const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
-                                    if (Array.isArray(formula) && formula.length) {
-                                        const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
-                                        if (formula.includes(intervalFromRoot)) {
-                                            return false;
-                                        }
-                                    }
-                                }
+                                if (rootPc == null || notePc == null) return false;
+
+                                const formula = (CHORD_FORMULAS as any)?.[best.type] as number[] | undefined;
+                                if (!Array.isArray(formula) || !formula.length) return false;
+                                const intervalFromRoot = (((notePc - rootPc) % 12) + 12) % 12;
+                                return formula.includes(intervalFromRoot);
+                            } catch {
+                                return false;
                             }
+                        };
+
+                        if (supportNotes.length >= 3) {
+                            if (keepIfFitsConfidentChord(supportNotes)) return false;
+                        } else {
+                            const supportWithThis = (notesHereAll || []).filter((x: any) => {
+                                if (!x || x.isRest) return false;
+                                const isThis = String(x?.id ?? '') === String(n?.id ?? '');
+                                if (isThis) return true;
+                                if (x.isPassing || x.isEscape || x.isNeighbor || x.isAnticipation || x.isAppoggiatura) return false;
+                                return true;
+                            });
+                            if (keepIfFitsConfidentChord(supportWithThis)) return false;
                         }
                     }
                     return true;
@@ -508,7 +569,10 @@ export function computeHarmonyLabelsBySystem(opts: {
             }
 
             const s = n.isSuspension;
-            if (s && typeof s.fromAbsBeat === 'number' && Math.abs(s.fromAbsBeat - absBeat) < 1e-6) return true;
+            if (s && typeof s.fromAbsBeat === 'number' && Math.abs(s.fromAbsBeat - absBeat) < 1e-6) {
+                if (isChordToneOfConfidentCandidateAtThisEvent(n)) return false;
+                return true;
+            }
             if (isResolvingDissonanceForLabels(n, absBeat)) return true;
         } catch {
             // ignore
@@ -736,6 +800,42 @@ export function computeHarmonyLabelsBySystem(opts: {
                     const rel = (((pc - rootPc) % 12) + 12) % 12;
                     return rel === 0 || formula.includes(rel);
                 };
+
+                const isChordToneInCandidate = (cand: any, note: any): boolean => {
+                    try {
+                        const mt2 = String((cand as any)?.matchType || '');
+                        const confident2 = mt2 === 'exact' || mt2 === 'no_fifth' || mt2 === 'no_third';
+                        const chordType2 = String(cand?.type || '');
+                        const isSusLike2 = chordType2.includes('Sus') || chordType2.includes('sus') || chordType2.includes('Add') || chordType2.includes('add');
+                        if (!confident2 || isSusLike2 || !cand?.root || !cand?.type) return false;
+
+                        const rootPc2 = Number.isFinite((cand.root as any).noteIndex)
+                            ? (((cand.root as any).noteIndex % 12) + 12) % 12
+                            : (Number.isFinite((cand.root as any).midi) ? (((cand.root as any).midi % 12) + 12) % 12 : null);
+                        const formula2 = (CHORD_FORMULAS as any)?.[cand.type] as number[] | undefined;
+                        if (rootPc2 == null || !Array.isArray(formula2) || !formula2.length) return false;
+
+                        const pc = pcOf(note);
+                        if (pc == null) return false;
+                        const rel = (((pc - rootPc2) % 12) + 12) % 12;
+                        return rel === 0 || formula2.includes(rel);
+                    } catch {
+                        return false;
+                    }
+                };
+
+                // Guard against false positives where the bass actually completes a diminished triad.
+                // Example: support voices spell F–Ab (suggesting Fm) while bass is D (making D°),
+                // and the next bass is F. In that case we must not anticipate the resolution.
+                try {
+                    const supportPlusBass = (support as any[]).slice();
+                    supportPlusBass.push(curBass);
+                    const c2 = identifyChordCandidates(supportPlusBass as any);
+                    const best2: any = (c2 && c2.length) ? c2[0] : null;
+                    if (best2 && isChordToneInCandidate(best2, curBass)) return null;
+                } catch {
+                    // ignore
+                }
 
                 if (isChordTone(curBass)) return null;
                 if (!isChordTone(nextBass.note)) return null;
@@ -1008,7 +1108,14 @@ export function computeHarmonyLabelsBySystem(opts: {
                 const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
                 const strongPulse = isStrongPulseInMeasureFn(inMeasure);
 
-                if (!strongPulse && prevCtx === ctxKey && prevBassPc != null && bassPc != null && prevBassPc === bassPc) {
+                if (!strongPulse
+                    && prevCtx === ctxKey
+                    && prevBassPc != null
+                    && bassPc != null
+                    && prevBassPc === bassPc
+                    && prevSig
+                    && harmonicSig
+                    && prevSig === harmonicSig) {
                     const prevRoman2 = lastRomanBySystem.get(systemIndex) || '';
                     if (prevRoman2) {
                         const x = getXForAbsBeat(event.absBeat, system);
