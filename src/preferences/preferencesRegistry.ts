@@ -16,6 +16,8 @@ import {
   HARMONY_ANALYSIS_PROFILE_DEFAULT_KEY,
   HARMONY_ANALYSIS_FILTERS_KEY,
   TOOLBAR_PREFS_KEY,
+  EXPORT_INCLUDE_TITLE_KEY,
+  ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
@@ -37,6 +39,7 @@ export type PreferenceId =
   | 'analysis.enableInferredContexts'
   | 'analysis.harmonyLabelMinSpanBeats'
   | 'analysis.filters'
+  | 'export.includeTitle'
   | 'debug.showHarmonyDebug';
 
 export type PreferenceDef<T> = {
@@ -276,10 +279,10 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     id: 'analysis.enableInferredContexts',
     section: 'Analysis',
     label: 'Inferisci contesti (modulazioni) automaticamente',
-    storageKey: ENABLE_INFERRED_CONTEXTS_PREF_KEY,
-    defaultValue: false,
+     storageKey: ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY,
+    defaultValue: true,
     kind: 'boolean',
-    parse: (raw) => parseBool(raw, false),
+    parse: (raw) => parseBool(raw, true),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
@@ -340,6 +343,17 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
         return JSON.stringify({ showError: true, showWarning: true, showException: true, disabledRuleIds: {} });
       }
     },
+  },
+
+  'export.includeTitle': {
+    id: 'export.includeTitle',
+    section: 'Export',
+    label: 'Includi titolo in stampa/export',
+    storageKey: EXPORT_INCLUDE_TITLE_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
   'debug.showHarmonyDebug': {

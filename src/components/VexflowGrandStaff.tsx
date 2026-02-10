@@ -2771,6 +2771,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         return;
       }
 
+      // Cmd/Ctrl+Click is used by the editor to place the paste caret without clearing selection.
+      // In this mode, do NOT steal the click via proximity-pick (which can accidentally select a
+      // nearby note in the next measure when the target measure is empty).
+      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+        onStaffClickRef.current?.(x, y, e);
+        return;
+      }
+
       const proximityPick = (radiusPx: number, yBandPx: number) => {
         const candidates: Array<{ id: string; d2: number; dx: number; dy: number }> = [];
         for (const p of noteHitPointsRef.current) {

@@ -41,13 +41,21 @@ async function main() {
     return;
   }
 
-  const child = spawn(electronPath, ['.'], {
+  // Options must come before the app path.
+  const electronArgs = [
+    '--disable-gpu',
+    '--disable-gpu-compositing',
+    '.',
+  ];
+
+  const child = spawn(electronPath, electronArgs, {
     stdio: 'inherit',
     env: {
       ...process.env,
       ELECTRON_START_URL: url,
     },
   });
+
 
   child.on('exit', (code, signal) => {
     if (signal) process.kill(process.pid, signal);

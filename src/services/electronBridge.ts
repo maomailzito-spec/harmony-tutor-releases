@@ -61,4 +61,22 @@ export const electronBridge = {
     if (!api?.saveBinaryFile) return Promise.resolve({ success: false, error: 'electronAPI.saveBinaryFile unavailable' });
     return api.saveBinaryFile(base64, targetPath, filters);
   },
+
+  exportPdfFromHtml(
+    html: string,
+    options?: { pageSize?: 'A4' | 'Letter'; landscape?: boolean; marginsType?: 0 | 1 | 2; scaleFactor?: number }
+  ) {
+    const api = getAPI();
+    if (!api?.exportPdfFromHtml) return Promise.resolve({ success: false, error: 'electronAPI.exportPdfFromHtml unavailable', canceled: false });
+    return api.exportPdfFromHtml(html, options);
+  },
+
+  exportPngFromHtml(
+    html: string,
+    options?: { scaleFactor?: number; tileMaxHeightPx?: number }
+  ) {
+    const api = getAPI();
+    if (!api?.exportPngFromHtml) return Promise.resolve({ success: false, error: 'electronAPI.exportPngFromHtml unavailable', canceled: false });
+    return api.exportPngFromHtml(html, options);
+  },
 } as const;

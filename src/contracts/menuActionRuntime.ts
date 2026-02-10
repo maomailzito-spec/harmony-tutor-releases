@@ -9,7 +9,10 @@ export const MENU_ACTIONS = {
   NEW: 'new',
   OPEN: 'open',
   IMPORT_MIDI: 'import-midi',
+  IMPORT_MUSICXML: 'import-musicxml',
   EXPORT_MIDI: 'export-midi',
+  EXPORT_PDF: 'export-pdf',
+  EXPORT_PNG: 'export-png',
   PRINT: 'print',
   SAVE: 'save',
   SAVE_AS: 'save-as',
@@ -66,6 +69,14 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
       const filePath = typeof p?.filePath === 'string' ? p.filePath : '';
       if (!base64 || !filePath) return null;
       return { base64, filePath } as MenuActionPayloadMap[A];
+    }
+
+    case MENU_ACTIONS.IMPORT_MUSICXML: {
+      const p = payload as any;
+      const xml = typeof p?.xml === 'string' ? p.xml : '';
+      const filePath = typeof p?.filePath === 'string' ? p.filePath : '';
+      if (!xml || !filePath) return null;
+      return { xml, filePath } as MenuActionPayloadMap[A];
     }
 
     case MENU_ACTIONS.EDIT_COMMAND: {

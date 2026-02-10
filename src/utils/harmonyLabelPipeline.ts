@@ -37,13 +37,40 @@ export function buildUserHarmonyOverrideMap(harmonyOverrides: any[]): Map<number
         (harmonyOverrides || []).forEach((o: any) => {
             const a = Number(o?.absBeat);
             if (!Number.isFinite(a)) return;
+
+            const roman0 = typeof o?.roman === 'string' ? o.roman : undefined;
+            const romanDisplay0 = typeof o?.romanDisplay === 'string' ? o.romanDisplay : undefined;
+            const symbol0 = typeof o?.symbol === 'string' ? o.symbol : undefined;
+            const figuresRaw = Array.isArray(o?.figures) ? o.figures.map((x: any) => String(x)) : undefined;
+            const note0 = typeof o?.note === 'string' ? o.note : undefined;
+
+            // Normalize empty fields to `undefined` so they don't clear computed labels.
+            const roman = (roman0 != null && String(roman0).trim()) ? String(roman0) : undefined;
+            const romanDisplay = (romanDisplay0 != null && String(romanDisplay0).trim()) ? String(romanDisplay0) : undefined;
+            const symbol = (symbol0 != null && String(symbol0).trim()) ? String(symbol0) : undefined;
+            const figures0 = (figuresRaw || []).map(s => String(s || '').trim()).filter(Boolean);
+            const figures = figures0.length ? figures0 : undefined;
+            const note = (note0 != null && String(note0).trim()) ? String(note0) : undefined;
+
+            const hasAny = !!roman || !!romanDisplay || !!symbol || !!(figures && figures.length) || !!note;
+
+            // Special case: an empty override acts as a "force label here" marker.
+            // It prevents suppression at this absBeat without overriding content.
+            if (!hasAny) {
+                overrideByAbsBeat.set(qAbsBeat(a), {
+                    absBeat: a,
+                    force: true,
+                });
+                return;
+            }
+
             overrideByAbsBeat.set(qAbsBeat(a), {
                 absBeat: a,
-                roman: typeof o?.roman === 'string' ? o.roman : undefined,
-                romanDisplay: typeof o?.romanDisplay === 'string' ? o.romanDisplay : undefined,
-                symbol: typeof o?.symbol === 'string' ? o.symbol : undefined,
-                figures: Array.isArray(o?.figures) ? o.figures.map((x: any) => String(x)) : undefined,
-                note: typeof o?.note === 'string' ? o.note : undefined,
+                roman,
+                romanDisplay,
+                symbol,
+                figures,
+                note,
             });
         });
     } catch {
@@ -432,8 +459,58 @@ export function computeLookaheadTonicizationOverrides(opts: {
                 ctxIsMinor,
                 roman: String(r?.roman || ''),
                 rootPc,
+                notes: (ev?.notes || []) as any[],
             };
         }).filter((x: any) => Number.isFinite(x.absBeat));
+
+        // Pre-modulation pivots: when the context changes (inferred modulation), relabel the last
+        // beat(s) before the boundary in the *new* key as a display/auto override.
+        // This fixes common cases where a chord is correctly a bVII in the old key but is a clear
+        // V/V (or similar) in the upcoming key.
+        try {
+            const maxLookbackShort = Math.min(2.01, beatsPerMeasure);
+            const maxLookbackLong = Math.min(beatsPerMeasure * 2, 8.01);
+            for (let j = 1; j < base.length; j++) {
+                const prev = base[j - 1];
+                const cur = base[j];
+                if (!prev || !cur) continue;
+                const ctxKeyPrev = `${prev.ctxTonic}|${prev.ctxIsMinor ? 'm' : 'M'}`;
+                const ctxKeyCur = `${cur.ctxTonic}|${cur.ctxIsMinor ? 'm' : 'M'}`;
+                if (!prev.ctxTonic || !cur.ctxTonic) continue;
+                if (ctxKeyPrev === ctxKeyCur) continue;
+
+                for (let p = j - 1; p >= 0; p--) {
+                    const bp = base[p];
+                    if (!bp) continue;
+                    const dt = (cur.absBeat - bp.absBeat);
+                    if (dt > maxLookbackLong + 1e-6) break;
+
+                    const pq = Number(bp.q);
+                    if (!Number.isFinite(pq)) continue;
+                    if (overrideByAbsBeat.has(pq)) continue;
+                    if (autoRomanDisplayByAbsBeat.has(pq)) continue;
+
+                    const rp = String(bp.roman || '').trim();
+                    if (!rp) continue;
+                    if (rp.includes('/')) continue;
+
+                    const local = String(getRomanAnalysis((bp.notes || []) as any, cur.ctxTonic, !!cur.ctxIsMinor)?.roman || '').trim();
+                    if (!local) continue;
+
+                    // Only apply if the new-key reading is clearly functional.
+                    const functional = local.includes('/') || /^V(?!I)/.test(local) || /^ii/i.test(local) || /^iv/i.test(local);
+                    if (!functional) continue;
+
+                    // For a longer lookback window, require an explicit secondary-dominant style label.
+                    // This keeps the relabeling conservative and avoids broad re-interpretations.
+                    if (dt > maxLookbackShort + 1e-6 && !local.includes('/')) continue;
+
+                    autoRomanDisplayByAbsBeat.set(pq, local);
+                }
+            }
+        } catch {
+            // ignore
+        }
 
         const maxLookaheadBeats = beatsPerMeasure * 2;
         for (let j = 0; j < base.length; j++) {
@@ -452,10 +529,13 @@ export function computeLookaheadTonicizationOverrides(opts: {
                     break;
                 }
             }
-            if (k < 0) continue;
+
+            // Even if we cannot find an explicit `targetRoman` event nearby, an explicit V/x label
+            // is already strong evidence of tonicization. We still use it to relabel the immediate
+            // predominant(s) before V/x in the tonicized key.
 
             try {
-                const bk = base[k];
+                const bk = (k >= 0) ? base[k] : null;
                 if (bk && Number.isFinite(bk.q)) protectedAbsBeats.add(bk.q);
             } catch {
                 // ignore
@@ -472,10 +552,40 @@ export function computeLookaheadTonicizationOverrides(opts: {
             const tonicizedIsMinor = targetRoman === targetRoman.toLowerCase();
 
             try {
-                const bk = base[k];
+                const bk = (k >= 0) ? base[k] : null;
                 if (bk && Number.isFinite(bk.q) && !overrideByAbsBeat.has(bk.q)) {
-                    const display = `${tonicizedIsMinor ? 'i' : 'I'}=${targetRoman}`;
-                    autoRomanDisplayByAbsBeat.set(bk.q, display);
+                    // Intentionally do not add a tonicization tag on the resolution chord.
+                    // It tends to clutter the editor and is redundant with nearby V/x labels.
+                }
+            } catch {
+                // ignore
+            }
+
+            // Also label the immediate predominant(s) BEFORE the secondary dominant in the tonicized key.
+            // This helps tonal grammar: predominant -> V/x -> (i= x), and avoids odd readings like
+            // minor-V in major or bVII when the tonicization clearly points to a minor target.
+            try {
+                const maxLookback = Math.min(2.01, beatsPerMeasure); // only a short window
+                for (let p = j - 1; p >= 0; p--) {
+                    const bp = base[p];
+                    if (!bp || !Number.isFinite(bp.absBeat)) continue;
+                    if ((bj.absBeat - bp.absBeat) > maxLookback + 1e-6) break;
+
+                    const pq = Number(bp.q);
+                    if (!Number.isFinite(pq)) continue;
+                    if (overrideByAbsBeat.has(pq)) continue;
+                    if (autoRomanDisplayByAbsBeat.has(pq)) continue;
+
+                    const rp = String(bp.roman || '').trim();
+                    if (!rp) continue;
+                    if (rp.includes('/')) continue; // already secondary; don't relabel
+
+                    const tonicizedRoman = String(getRomanAnalysis((bp.notes || []) as any, tonicizedTonic, tonicizedIsMinor)?.roman || '').trim();
+                    if (!tonicizedRoman) continue;
+                    const isPredLike = /^iv/i.test(tonicizedRoman) || /^ii/i.test(tonicizedRoman) || /^VI/i.test(tonicizedRoman) || /^iio/i.test(tonicizedRoman) || /°/.test(tonicizedRoman);
+                    if (!isPredLike) continue;
+
+                    autoRomanDisplayByAbsBeat.set(pq, tonicizedRoman);
                 }
             } catch {
                 // ignore
@@ -495,6 +605,226 @@ export function computeLookaheadTonicizationOverrides(opts: {
             } catch {
                 // ignore
             }
+        }
+
+        // Implicit tonicizations: infer V/x even when getRomanAnalysis did not emit a slash.
+        // Example: a dominant-like sonority resolves to a diatonic degree within a short window,
+        // and contains the chromatic leading tone of that target. This lets the engine use
+        // tonal grammar even when the local chord snapshot is incomplete.
+        try {
+            const romanMaj = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+            const romanMin = ['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°'];
+
+            const pcSet = (notes: any[]): Set<number> | null => {
+                try {
+                    return pcSetFromNotes ? (pcSetFromNotes(notes as any) as any) : null;
+                } catch {
+                    return null;
+                }
+            };
+
+            const isDominantLikeCandidate = (notes: any[], rootPc: number): boolean => {
+                try {
+                    const cands = identifyChordCandidates((notes || []) as any);
+                    if (!Array.isArray(cands) || cands.length === 0) return false;
+                    const cand = cands.find((c: any) => Number(c?.root?.noteIndex) === rootPc) || cands[0];
+                    if (!cand) return false;
+                    const t = String(cand.type || '');
+                    const ints: Set<number> | undefined = (cand as any)?.intervals;
+                    const hasM3 = !!ints?.has?.(4);
+                    const hasP5 = !!ints?.has?.(7);
+                    const hasm7 = !!ints?.has?.(10);
+                    const isMajTriad = t === 'Major' || t === BuiltInChords.Major;
+                    const isDomType = t.startsWith('Dominant');
+                    // Triad: require M3; Seventh: require a dominant shell (P5+m7) even if 3rd is delayed.
+                    if (isMajTriad) return hasM3;
+                    if (isDomType) return (hasM3 && hasm7) || (hasP5 && hasm7);
+                    return false;
+                } catch {
+                    return false;
+                }
+            };
+
+            const countFlatAccidentals = (notes: any[]): number => {
+                try {
+                    let c = 0;
+                    for (const n of (notes || []) as any[]) {
+                        if (!n || n.isRest) continue;
+                        const ea = String((n as any).explicitAccidental ?? '').toLowerCase();
+                        const ua = String((n as any).userAccidental ?? '').toLowerCase();
+                        if (ea === 'flat' || ua === 'flat') c++;
+                    }
+                    return c;
+                } catch {
+                    return 0;
+                }
+            };
+
+            for (let j = 0; j < base.length; j++) {
+                const bj = base[j];
+                if (!bj || !Number.isFinite(bj.absBeat)) continue;
+                const rj0 = String(bj.roman || '').trim();
+                if (!rj0) continue;
+                if (rj0.includes('/')) continue;
+
+                const bjQ = Number(bj.q);
+                if (!Number.isFinite(bjQ)) continue;
+                if (overrideByAbsBeat.has(bjQ)) continue;
+                if (autoOverrideByAbsBeat.has(bjQ)) continue;
+
+                const tonicPc = noteNameToChromaticIndex(String(bj.ctxTonic || 'C'));
+                if (!(tonicPc >= 0)) continue;
+
+                const ints = scaleIntervalsForContext(!!bj.ctxIsMinor);
+                const romans = bj.ctxIsMinor ? romanMin : romanMaj;
+                const diatonicPcSet = new Set<number>(ints.map(iv => (((tonicPc + iv) % 12) + 12) % 12));
+
+                const rootPc = Number(bj.rootPc);
+                if (!Number.isFinite(rootPc)) continue;
+
+                // Consider targets other than I (degree 0).
+                for (let degIdx = 1; degIdx < 7; degIdx++) {
+                    const targetRoman = String(romans[degIdx] || '').trim();
+                    if (!targetRoman) continue;
+
+                    const targetRootPc = (((tonicPc + (ints[degIdx] ?? 0)) % 12) + 12) % 12;
+                    const expectedDomRootPc = (((targetRootPc + 7) % 12) + 12) % 12;
+                    if (rootPc !== expectedDomRootPc) continue;
+
+                    const pcs = pcSet(bj.notes || []);
+                    if (!pcs || pcs.size < 3) continue;
+
+                    const targetIsNonDiatonic = !diatonicPcSet.has(targetRootPc);
+
+                    // Default: require chromatic LT to the target (prevents diatonic V readings like V/V in major).
+                    // Exception: if the *target* is non-diatonic in the current context, a dominant-7th + resolution
+                    // is already strong evidence of tonicization even when the LT is diatonic in the global key.
+                    // Example: in C major, B♭7 -> E♭ (V/♭III) has LT = D, which is diatonic in C.
+                    if (!targetIsNonDiatonic) {
+                        const ltPc = (((targetRootPc - 1) % 12) + 12) % 12;
+                        const hasLt = pcs.has(ltPc);
+                        const isLtChromatic = !diatonicPcSet.has(ltPc);
+                        if (!hasLt || !isLtChromatic) continue;
+                    }
+
+                    if (!isDominantLikeCandidate(bj.notes || [], rootPc)) continue;
+
+                    // Look for a resolution to the target degree nearby.
+                    let k = -1;
+                    for (let t = j + 1; t < base.length; t++) {
+                        if ((base[t].absBeat - bj.absBeat) > maxLookaheadBeats + 1e-6) break;
+                        const bt = base[t];
+                        if (!bt) continue;
+                        const rt = String(bt.roman || '').trim();
+                        if (rt === targetRoman) { k = t; break; }
+                        if (Number.isFinite(Number(bt.rootPc)) && Number(bt.rootPc) === targetRootPc) { k = t; break; }
+                    }
+                    if (k < 0) continue;
+
+                    const tonicizedTonic = pcToName(targetRootPc);
+                    const tonicizedIsMinor = targetRoman === targetRoman.toLowerCase();
+
+                    try {
+                        const bk = base[k];
+                        if (bk && Number.isFinite(bk.q)) protectedAbsBeats.add(Number(bk.q));
+                    } catch { /* ignore */ }
+
+                    try {
+                        const bk = base[k];
+                        if (bk && Number.isFinite(bk.q) && !overrideByAbsBeat.has(Number(bk.q))) {
+                            const display = `${tonicizedIsMinor ? 'i' : 'I'}=${targetRoman}`;
+                            autoRomanDisplayByAbsBeat.set(Number(bk.q), display);
+                        }
+                    } catch { /* ignore */ }
+
+                    // Predominant display immediately before the inferred V/x.
+                    try {
+                        const maxLookback = Math.min(2.01, beatsPerMeasure);
+                        for (let p = j - 1; p >= 0; p--) {
+                            const bp = base[p];
+                            if (!bp || !Number.isFinite(bp.absBeat)) continue;
+                            if ((bj.absBeat - bp.absBeat) > maxLookback + 1e-6) break;
+                            const pq = Number(bp.q);
+                            if (!Number.isFinite(pq)) continue;
+                            if (overrideByAbsBeat.has(pq)) continue;
+                            if (autoRomanDisplayByAbsBeat.has(pq)) continue;
+                            const rp = String(bp.roman || '').trim();
+                            if (!rp || rp.includes('/')) continue;
+                            const tonicizedRoman = String(getRomanAnalysis((bp.notes || []) as any, tonicizedTonic, tonicizedIsMinor)?.roman || '').trim();
+                            if (!tonicizedRoman) continue;
+                            const isPredLike = /^iv/i.test(tonicizedRoman) || /^ii/i.test(tonicizedRoman) || /^VI/i.test(tonicizedRoman) || /^iio/i.test(tonicizedRoman) || /°/.test(tonicizedRoman);
+                            if (!isPredLike) continue;
+                            autoRomanDisplayByAbsBeat.set(pq, tonicizedRoman);
+                        }
+                    } catch { /* ignore */ }
+
+                    // Finally, auto-override the current event to V/target.
+                    autoOverrideByAbsBeat.set(bjQ, {
+                        absBeat: bj.absBeat,
+                        roman: `V/${targetRoman}`,
+                        note: `tonicization:${tonicizedTonic}${tonicizedIsMinor ? 'm' : ''}`,
+                    });
+
+                    // One inferred target is enough.
+                    break;
+                }
+
+                // Borrowed targets (major-mode only): ♭III / ♭VI / ♭VII.
+                // These degrees are not diatonic in major, so the diatonic-only loop above cannot mark
+                // tonicizations like B♭7 -> E♭m in C major. We keep this conservative:
+                // - require a dominant-like sonority,
+                // - require multiple flats in spelling (strong key-signature cue),
+                // - require multiple non-diatonic pcs vs current context,
+                // - require a near resolution to a chord whose root matches the borrowed target.
+                try {
+                    if (bj.ctxIsMinor) continue;
+                    if (autoOverrideByAbsBeat.has(bjQ)) continue;
+
+                    const flatCount = countFlatAccidentals(bj.notes || []);
+                    if (flatCount < 2) continue;
+
+                    const pcsHere = pcSet(bj.notes || []);
+                    if (!pcsHere || pcsHere.size < 3) continue;
+                    const nonDia = Array.from(pcsHere.values()).filter(pc => !diatonicPcSet.has(pc)).length;
+                    if (nonDia < 2) continue;
+
+                    if (!isDominantLikeCandidate(bj.notes || [], rootPc)) continue;
+
+                    const borrowedTargets: Array<{ roman: string; rootPc: number }> = [
+                        { roman: '♭III', rootPc: (((tonicPc + 3) % 12) + 12) % 12 },
+                        { roman: '♭VI', rootPc: (((tonicPc + 8) % 12) + 12) % 12 },
+                        { roman: '♭VII', rootPc: (((tonicPc + 10) % 12) + 12) % 12 },
+                    ];
+
+                    for (const tgt of borrowedTargets) {
+                        const expectedDomRootPc = (((tgt.rootPc + 7) % 12) + 12) % 12;
+                        if (rootPc !== expectedDomRootPc) continue;
+
+                        let k = -1;
+                        for (let t = j + 1; t < base.length; t++) {
+                            if ((base[t].absBeat - bj.absBeat) > maxLookaheadBeats + 1e-6) break;
+                            const bt = base[t];
+                            if (!bt) continue;
+                            const btRoot = Number(bt.rootPc);
+                            if (Number.isFinite(btRoot) && (((btRoot % 12) + 12) % 12) === tgt.rootPc) { k = t; break; }
+                            const pcsT = pcSet(bt.notes || []);
+                            if (pcsT && pcsT.size >= 3 && pcsT.has(tgt.rootPc)) { k = t; break; }
+                        }
+                        if (k < 0) continue;
+
+                        autoOverrideByAbsBeat.set(bjQ, {
+                            absBeat: bj.absBeat,
+                            roman: `V/${tgt.roman}`,
+                            note: `tonicization:${pcToName(tgt.rootPc)}`,
+                        });
+                        break;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        } catch {
+            // ignore
         }
     } catch {
         // ignore

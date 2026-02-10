@@ -417,8 +417,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   <div>
                     <div className="text-sm font-semibold text-slate-100">Inferisci contesti (modulazioni) automaticamente</div>
                     <div className="text-xs text-slate-400">
-                      Se attivo (e se non hai inserito contesti manuali), l’app può applicare cambi di tonalità inferiti per far tornare Romani come V7 dentro una modulazione (es. sezione in Eb/Cm).
-                      Può però alterare alcune etichette anche in presenza di tonicizzazioni brevi.
+                      Se attivo, l’app può applicare cambi di tonalità inferiti per far tornare Romani come V7 dentro una modulazione (es. sezione in Eb/Cm).
+                      Non sovrascrive i contesti manuali: se hai marker manuali, quelli restano prioritari.
                     </div>
                   </div>
                 </label>

@@ -22,6 +22,8 @@ const App: React.FC = () => {
         payload: MenuActionPayloadMap[MenuAction];
         nonce: number;
     } | null>(null);
+
+    const [menuErrorToast, setMenuErrorToast] = useState<{ code: string; message: string; ts: number } | null>(null);
     
     // --- AUDIO STATE ---
     const audioServiceRef = useRef(new AudioService());
@@ -58,7 +60,12 @@ const App: React.FC = () => {
         if (!isModeEnabled(flavor, 'grandStaff')) return;
 
         const removeErr = electronBridge.onMenuError((code: string, message: string) => {
-            try { window.alert(`${String(code || 'errore')}: ${String(message || '')}`); } catch { /* ignore */ }
+            const next = { code: String(code || 'errore'), message: String(message || ''), ts: Date.now() };
+            setMenuErrorToast(next);
+            // Auto-dismiss (non-invasive). Keep last error visible briefly.
+            window.setTimeout(() => {
+                setMenuErrorToast((cur) => (cur && cur.ts === next.ts) ? null : cur);
+            }, 6500);
         });
 
         const remove = electronBridge.onMenuAction((action, payload) => {
@@ -81,6 +88,14 @@ const App: React.FC = () => {
     
     return (
         <div className="h-screen overflow-hidden flex flex-col bg-gray-900 font-sans text-gray-100">
+            {menuErrorToast ? (
+                <div className="fixed top-3 right-3 z-50 max-w-[min(520px,calc(100vw-24px))] rounded-md border border-red-700/50 bg-red-950/80 px-3 py-2 text-sm shadow-lg backdrop-blur">
+                    <div className="font-semibold text-red-100">{menuErrorToast.code}</div>
+                    {menuErrorToast.message ? (
+                        <div className="mt-0.5 text-red-100/90 break-words">{menuErrorToast.message}</div>
+                    ) : null}
+                </div>
+            ) : null}
             <div className="w-full px-2 lg:px-4 flex flex-col flex-grow min-h-0 overflow-hidden">
 
                 <div className={mode === 'scales' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>

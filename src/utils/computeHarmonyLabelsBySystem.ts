@@ -1281,6 +1281,33 @@ export function computeHarmonyLabelsBySystem(opts: {
             figures = computeFiguredBassFromNotes(analysisNotes as any, FIGURED_BASS_UI_OPTIONS).figures;
         }
 
+        // If filtering out appoggiaturas collapses the verticality to a single '3',
+        // try re-including appoggiaturas (but still exclude passing/neighbor/anticipation/escape).
+        // This is a display-only rescue for cases like ii6 where the 6th was mis-flagged.
+        try {
+            const only3 = Array.isArray(figures) && figures.length === 1 && String(figures[0] || '').replace(/\s+/g, '') === '3';
+            if (only3) {
+                const chordWithAppoggiaturas = (notesForFiguresSrc || []).filter((n: any) => {
+                    if (!n || n.isRest) return false;
+                    const anyN = n as any;
+                    return !(
+                        anyN.isPassing ||
+                        anyN.isNeighbor ||
+                        anyN.isAnticipation ||
+                        anyN.isEscape
+                    );
+                });
+                const alt = computeFiguredBassFromNotes(chordWithAppoggiaturas as any, FIGURED_BASS_UI_OPTIONS).figures;
+                const altHasMore = Array.isArray(alt) && alt.length >= 1 && alt.some(f => {
+                    const s = String(f || '').replace(/\s+/g, '');
+                    return s.includes('6') || s.includes('4') || s.includes('2');
+                });
+                if (altHasMore) figures = alt;
+            }
+        } catch {
+            // ignore
+        }
+
         let roman = '';
         let symbol = '';
         let isAug6Roman = false;
@@ -1323,14 +1350,34 @@ export function computeHarmonyLabelsBySystem(opts: {
                 if (rr0.startsWith('vii') && ((pcsNaming > 0 && pcsNaming < 3 && (pcsAnalysis >= 3 || pcsFull >= 3)) || hasMoreInfoInFull)) {
                     const alt1 = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor, { minorScaleMode });
                     const alt2 = getRomanAnalysis((notesForSymbol || []) as any, contextTonic, contextIsMinor, { minorScaleMode });
+
+                    // Spelling-first sanity: if the diminished label disappears when considering the
+                    // fuller verticality (incl. suspensions; excluding surface ornaments), treat the
+                    // original vii° as spurious and prefer the fuller reading.
+                    let pickedFullVertical = false;
+                    try {
+                        const r2 = String(alt2?.roman || '').trim();
+                        const r2Low = r2.toLowerCase();
+                        const r2LooksDim = r2Low.startsWith('vii') && r2.includes('°');
+                        if (r2 && !r2LooksDim && pcsFull >= 3) {
+                            roman = r2;
+                            isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                            pickedFullVertical = true;
+                        }
+                    } catch {
+                        // ignore
+                    }
+
                     const isPlausible = (s: string) => {
                         const t = String(s || '').trim();
                         return t === 'V' || t === 'I' || t === 'v' || t === 'i' || t.startsWith('V/') || t.startsWith('I/') || t.startsWith('v/') || t.startsWith('i/');
                     };
-                    const pick = [alt1, alt2].find(x => x?.roman && isPlausible(String(x.roman)));
-                    if (pick?.roman) {
-                        roman = String(pick.roman);
-                        isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                    if (!pickedFullVertical) {
+                        const pick = [alt1, alt2].find(x => x?.roman && isPlausible(String(x.roman)));
+                        if (pick?.roman) {
+                            roman = String(pick.roman);
+                            isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                        }
                     }
                 }
             } catch {
@@ -1557,7 +1604,14 @@ export function computeHarmonyLabelsBySystem(opts: {
 
                     // If we already have a non-secondary roman (e.g. vii°) from the current verticality,
                     // do not let a lookahead/auto override replace it with a secondary label (e.g. V/vi).
-                    if (nextIsSecondary && !curIsSecondary) return false;
+                    if (nextIsSecondary && !curIsSecondary) {
+                        // Exception: if the current label is a flat-degree borrowed chord (e.g. ♭VII),
+                        // allow an auto-detected secondary dominant to surface as a tonicization marker.
+                        // This improves UX in passages where the chord is functionally dominant but
+                        // the current-key roman classifier yields a borrowed-scale-degree label.
+                        if (cur.startsWith('♭')) return true;
+                        return false;
+                    }
                     return true;
                 } catch {
                     return true;
@@ -1601,14 +1655,35 @@ export function computeHarmonyLabelsBySystem(opts: {
         // Display-only lookahead pivots
         try {
             const a = qAbs(event.absBeat);
-            if (!overrideByAbsBeat.has(a) && !romanDisplay) {
+            const ovHere = overrideByAbsBeat.get(a);
+            const blocksAutoDisplay = (() => {
+                try {
+                    if (!ovHere) return false;
+                    const hasFigures = Array.isArray((ovHere as any).figures) && (ovHere as any).figures.length > 0;
+                    // Block only if the override actually sets some visible content.
+                    return (
+                        (ovHere as any).roman != null
+                        || (ovHere as any).romanDisplay != null
+                        || (ovHere as any).symbol != null
+                        || (ovHere as any).note != null
+                        || hasFigures
+                    );
+                } catch {
+                    return true;
+                }
+            })();
+
+            if (!blocksAutoDisplay && !romanDisplay) {
                 const autoDisp = getNear(autoRomanDisplayByAbsBeat, a);
                 if (autoDisp) {
                     const s = String(autoDisp || '');
                     if (s.includes('/') && !s.includes('=')) {
                         const cur = String(roman ?? '').trim();
                         const curIsSecondary = cur.includes('/');
-                        if (!cur || curIsSecondary) {
+                        // Allow replacing a borrowed flat-degree label (e.g. ♭VII) with a clearer
+                        // tonicization marker (V/x). This matches the override-application rule.
+                        const curIsBorrowedFlatDegree = cur.startsWith('♭');
+                        if (!cur || curIsSecondary || curIsBorrowedFlatDegree) {
                             roman = s;
                             romanDisplay = undefined;
                         }
@@ -1624,6 +1699,31 @@ export function computeHarmonyLabelsBySystem(opts: {
         try {
             if (isAutoOverrideHere && roman && !romanDisplay) {
                 romanDisplay = String(roman);
+            }
+        } catch {
+            // ignore
+        }
+
+        // Final diminished sanity (UI): if we ended up with a leading-tone diminished label
+        // but the fuller verticality disagrees, treat the vii° as spurious.
+        // This catches common cases where a suspension/structural filter removes an essential
+        // tone and the residual dyad/triad is misread as diminished.
+        try {
+            const a = qAbs(event.absBeat);
+            const hasUserOverride = overrideByAbsBeat.has(a);
+            const rr = String(roman || '').trim();
+            const rrLow = rr.toLowerCase();
+            const looksDimLt = rrLow.startsWith('vii') && rr.includes('°');
+            if (!hasUserOverride && looksDimLt) {
+                const alt = getRomanAnalysis((notesForSymbol || []) as any, contextTonic, contextIsMinor, { minorScaleMode });
+                const altR = String(alt?.roman || '').trim();
+                const altLow = altR.toLowerCase();
+                const altLooksDimLt = altLow.startsWith('vii') && altR.includes('°');
+                if (altR && !altLooksDimLt) {
+                    roman = altR;
+                    if (romanDisplay && String(romanDisplay) === rr) romanDisplay = undefined;
+                    isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                }
             }
         } catch {
             // ignore

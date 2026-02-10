@@ -9,14 +9,34 @@ declare global {
       ) => (() => void) | void;
       onMenuError: (handler: (code: string, message: string) => void) => (() => void) | void;
 
-      saveFile: (content: string, targetPath?: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
-      saveFileDialog: (content: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+      saveFile: (content: string, targetPath?: string) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+      saveFileDialog: (content: string) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
 
       saveBinaryFile: (
         base64: string,
         targetPath?: string,
         filters?: Array<{ name: string; extensions: string[] }>
-      ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+      ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+
+      exportPdfFromHtml: (
+        html: string,
+        options?: {
+          pageSize?: 'A4' | 'Letter';
+          landscape?: boolean;
+          marginsType?: 0 | 1 | 2;
+          // Electron printToPDF scale factor as a percentage (default 100).
+          scaleFactor?: number;
+        }
+      ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+
+      exportPngFromHtml: (
+        html: string,
+        options?: {
+          // Browser zoom factor (1 = 100%).
+          scaleFactor?: number;
+          tileMaxHeightPx?: number;
+        }
+      ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean; files?: string[] }>;
       // Fire-and-forget: renderer notifies main to update the Recents menu.
       addRecentFile: (filePath: string) => void;
 

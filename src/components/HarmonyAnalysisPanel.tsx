@@ -116,20 +116,20 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
         return uniqueRuleIds.filter(rid => rid.toLowerCase().includes(q));
     }, [uniqueRuleIds, ruleSearch]);
 
-    const setShowError = useCallback((next: boolean) => {
-        setFilters(prev => ({ ...prev, showError: !!next }));
+    const toggleShowError = useCallback(() => {
+        setFilters((prev) => ({ ...prev, showError: !prev?.showError }));
     }, [setFilters]);
 
-    const setShowWarning = useCallback((next: boolean) => {
-        setFilters(prev => ({ ...prev, showWarning: !!next }));
+    const toggleShowWarning = useCallback(() => {
+        setFilters((prev) => ({ ...prev, showWarning: !prev?.showWarning }));
     }, [setFilters]);
 
-    const setShowException = useCallback((next: boolean) => {
-        setFilters(prev => ({ ...prev, showException: !!next }));
+    const toggleShowException = useCallback(() => {
+        setFilters((prev) => ({ ...prev, showException: !prev?.showException }));
     }, [setFilters]);
 
     const setDisabledRuleIds = useCallback((next: Record<string, boolean>) => {
-        setFilters(prev => ({ ...prev, disabledRuleIds: next || {} }));
+        setFilters((prev) => ({ ...prev, disabledRuleIds: next || {} }));
     }, [setFilters]);
 
     const counts = useMemo(() => {
@@ -157,6 +157,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
     }, [violations, showError, showWarning, showException, disabledRuleIds]);
 
     const sequences = (sequenceMatches || []).slice();
+    const hasAnyViolations = (violations || []).length > 0;
     return (
         <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto">
             <div className="mb-3 bg-gray-900/30 border border-gray-700/50 rounded-lg p-2">
@@ -167,21 +168,21 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
 
                 <div className="flex items-center gap-1 mt-2">
                     <button
-                        onClick={() => setShowError(v => !v)}
+                        onClick={toggleShowError}
                         className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showError ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                         title="Mostra/Nascondi errori"
                     >
                         Errori ({counts.error})
                     </button>
                     <button
-                        onClick={() => setShowWarning(v => !v)}
+                        onClick={toggleShowWarning}
                         className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showWarning ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                         title="Mostra/Nascondi warning"
                     >
                         Warning ({counts.warning})
                     </button>
                     <button
-                        onClick={() => setShowException(v => !v)}
+                        onClick={toggleShowException}
                         className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showException ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                         title="Mostra/Nascondi eccezioni"
                     >
@@ -231,7 +232,15 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                     return (
                                         <button
                                             key={rid}
-                                            onClick={() => setDisabledRuleIds(prev => ({ ...prev, [rid]: enabled }))}
+                                            onClick={() => {
+                                                setFilters((prev) => {
+                                                    const cur = (prev?.disabledRuleIds && typeof prev.disabledRuleIds === 'object')
+                                                        ? (prev.disabledRuleIds as Record<string, boolean>)
+                                                        : {};
+                                                    // enabled=true means currently visible, so click should disable it.
+                                                    return { ...prev, disabledRuleIds: { ...cur, [rid]: enabled } };
+                                                });
+                                            }}
                                             className={`text-left px-2 py-1 text-[11px] rounded-md border transition-colors ${enabled ? 'bg-gray-700/40 border-gray-600 text-gray-200 hover:bg-gray-700/70' : 'bg-gray-900/40 border-gray-800 text-gray-500 hover:bg-gray-800/50'}`}
                                             title={enabled ? 'Clicca per nascondere questa regola' : 'Clicca per mostrare questa regola'}
                                         >
@@ -302,11 +311,20 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
             {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
                     <CheckCircleIcon />
-                    <p className="mt-2 font-semibold">Nessun elemento da mostrare.</p>
-                    <p className="text-sm">Prova a modificare i filtri.</p>
+                    {hasAnyViolations ? (
+                        <>
+                            <p className="mt-2 font-semibold">Nessun elemento con questi filtri.</p>
+                            <p className="text-sm">Prova a modificare i filtri.</p>
+                        </>
+                    ) : (
+                        <>
+                            <p className="mt-2 font-semibold">Nessuna segnalazione.</p>
+                            <p className="text-sm">Nessun errore/warning rilevato.</p>
+                        </>
+                    )}
                 </div>
             ) : (
-                <ul className="space-y-3">
+                <ul className="space-y-1">
                     {filtered.map(({ v: violation, index }) => {
                         const isError = violation.severity === 'error';
                         const isException = violation.severity === 'exception';
@@ -317,7 +335,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         return (
                             <li
                                 key={`${violation.ruleId}-${index}`}
-                                className={`bg-gray-700/50 p-2 rounded-lg border border-gray-700/50 hover:bg-gray-600/50 transition-colors cursor-pointer ${isSelected ? 'ring-1 ring-cyan-400 border-cyan-400' : ''}`}
+                                className={`bg-gray-700/50 px-2 py-1.5 rounded-md border border-gray-700/50 hover:bg-gray-600/50 transition-colors cursor-pointer ${isSelected ? 'ring-1 ring-cyan-400 border-cyan-400' : ''}`}
                                 onMouseEnter={() => onHoverViolation(violation.noteIds)}
                                 onMouseLeave={() => onHoverViolation(null)}
                                 onClick={() => onSelectViolation && onSelectViolation(index)}
@@ -325,7 +343,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                 <div className="flex items-start gap-2">
                                     <Icon />
                                     <div className="flex-grow">
-                                        <p className={`font-bold ${textColor}`} style={{ fontSize: '0.8em' }}>
+                                        <p className={`font-bold ${textColor} text-xs leading-snug`}>
                                             {isCadenceMarker ? (
                                                 <>
                                                     <span className="text-white">{violation.description}</span>
@@ -336,9 +354,9 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                                 </>
                                             )}
                                         </p>
-                                        {violation.suggestion && (
-                                            <p className="text-xs text-gray-400 mt-1 italic">
-                                                <span className="font-semibold not-italic">Consiglio:</span> {violation.suggestion}
+                                        {isSelected && violation.suggestion && (
+                                            <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
+                                                <span className="font-semibold">Consiglio:</span> {violation.suggestion}
                                             </p>
                                         )}
                                     </div>

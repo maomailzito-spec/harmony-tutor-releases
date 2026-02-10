@@ -14,6 +14,7 @@ import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
 import { computeHarmonyLabelsBySystem } from '../utils/computeHarmonyLabelsBySystem';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
+import { importMusicXML } from '../importers/musicxml/importMusicXML';
 import { GroupIcon } from './icons/GroupIcon';
 import { UngroupIcon } from './icons/UngroupIcon';
 import { FlipStemIcon } from './icons/FlipStemIcon';
@@ -27,6 +28,10 @@ import { getMenuActionTarget } from '../contracts/menuActionTargets';
 import { electronBridge } from '../services/electronBridge';
 import { usePreference } from '../preferences/usePreference';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
+import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData } from '../storage/projectSchema';
+import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
+import { getString, setString } from '../storage/localStorage';
+import { HT_EDITOR_ZOOM_KEY } from '../storage/storageKeys';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -57,6 +62,10 @@ const TOP_STAFF_TOP = 30;
 const BOTTOM_STAFF_HEIGHT = 180;
 const BOTTOM_STAFF_TOP = 20;
 const CONNECTOR_HEIGHT = 40;
+
+// Forward-compat: unknown fields from loaded project files.
+// These are round-tripped on Save/Save As to avoid destroying future data.
+const EMPTY_EXTRAS: Record<string, unknown> = {};
 const TOTAL_SYSTEM_HEIGHT = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_HEIGHT;
 
 // VexFlow stave geometry (must match values in VexflowGrandStaff.tsx)
@@ -604,6 +613,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // (i.e., overwrite that rest). We bridge note-click -> staff-click via this ref.
     const staffClickForInsertRef = useRef<null | ((x: number, y: number, systemIndex: number, e?: MouseEvent) => void)>(null);
 
+    // Marquee selection is implemented via staff mouse down + global mouse up.
+    // Some browsers/components still emit a staff click after the drag completes.
+    // Suppress that synthetic click so it doesn't move playhead/paste target.
+    const suppressNextStaffClickRef = useRef(false);
+
     // Staff system mode:
     // - grandstaff: standard treble+bass system (chorale / piano style)
     // - treble_only: single treble staff (guitar-style; written pitches sound an octave lower)
@@ -765,6 +779,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
     const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
 
+    const latestPasteCaretRef = useRef<typeof pasteCaret>(pasteCaret);
+    useEffect(() => {
+        latestPasteCaretRef.current = pasteCaret;
+    }, [pasteCaret]);
+
+    const setPasteCaretImmediate = useCallback((next: typeof pasteCaret) => {
+        latestPasteCaretRef.current = next;
+        setPasteCaret(next);
+    }, []);
+
     const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const measureTextWidth = useCallback((text: string, font: string) => {
         try {
@@ -854,12 +878,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
     }, [setEngravingMode]);
 
+    const dispatchMenuActionRef = useRef<((action: MenuAction, payload: any) => void) | null>(null);
+
     useEffect(() => {
         if (!pendingMenuAction) return;
+        // When App routes a GrandStaff action while we were on another view,
+        // it queues it via `pendingMenuAction`. Execute it exactly once here.
         try {
-            onConsumePendingMenuAction?.(pendingMenuAction.nonce);
+            dispatchMenuActionRef.current?.(pendingMenuAction.action, pendingMenuAction.payload);
         } catch {
             // ignore
+        } finally {
+            try { onConsumePendingMenuAction?.(pendingMenuAction.nonce); } catch { /* ignore */ }
         }
     }, [pendingMenuAction, onConsumePendingMenuAction]);
 
@@ -1530,6 +1560,171 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = usePreference<boolean>('editor.selectOnlyCurrentVoice');
 
+    const [exportIncludeTitle] = usePreference<boolean>('export.includeTitle');
+
+    // Editor zoom (trackpad pinch-to-zoom is delivered as WheelEvent with ctrlKey=true in Chromium).
+    // Stored in localStorage for back-compat with older builds.
+    const [editorZoom, setEditorZoom] = useState<number>(() => {
+        try {
+            const raw = getString(HT_EDITOR_ZOOM_KEY, '1');
+            const n = Number(raw);
+            if (!Number.isFinite(n)) return 1;
+            return Math.max(0.4, Math.min(2.5, n));
+        } catch {
+            return 1;
+        }
+    });
+
+    const resetEditorZoom = useCallback(() => {
+        setEditorZoom(1);
+        try { setString(HT_EDITOR_ZOOM_KEY, '1'); } catch { /* ignore */ }
+    }, []);
+
+    const pendingZoomAnchorRef = useRef<null | {
+        // base (unscaled) coordinates under the pointer at the time of the gesture
+        baseX: number;
+        baseY: number;
+        pointerX: number;
+        pointerY: number;
+        targetZoom: number;
+    }>(null);
+
+    const handleScoreWheel = useCallback((e: React.WheelEvent) => {
+        // Pinch gesture (trackpad) => wheel with ctrlKey=true.
+        // Prevent page zoom and apply editor zoom.
+        if (!e.ctrlKey) return;
+
+        const scroller = scoreScrollRef.current;
+        const rect = scroller?.getBoundingClientRect?.();
+        const pointerX = rect ? (Number(e.clientX) - rect.left) : 0;
+        const pointerY = rect ? (Number(e.clientY) - rect.top) : 0;
+        const startScrollLeft = scroller ? Number(scroller.scrollLeft) : 0;
+        const startScrollTop = scroller ? Number(scroller.scrollTop) : 0;
+        try {
+            e.preventDefault();
+            e.stopPropagation();
+        } catch {
+            // ignore
+        }
+
+        const dy = Number(e.deltaY);
+        if (!Number.isFinite(dy) || Math.abs(dy) < 0.01) return;
+
+        // Smooth exponential zoom curve.
+        const factor = Math.pow(1.0015, -dy);
+        setEditorZoom((prev) => {
+            const next = Math.max(0.4, Math.min(2.5, prev * factor));
+            try { setString(HT_EDITOR_ZOOM_KEY, String(Math.round(next * 1000) / 1000)); } catch { /* ignore */ }
+
+            // Keep the content under the pointer stable while zooming.
+            // We apply the actual scroll correction in a layout effect after the zoom renders,
+            // to avoid one-frame lag/jitter (especially noticeable in page view).
+            try {
+                if (scroller && rect && Number.isFinite(pointerX) && Number.isFinite(pointerY)) {
+                    const baseX = (startScrollLeft + pointerX) / Math.max(1e-6, prev);
+                    const baseY = (startScrollTop + pointerY) / Math.max(1e-6, prev);
+                    pendingZoomAnchorRef.current = { baseX, baseY, pointerX, pointerY, targetZoom: next };
+                } else {
+                    pendingZoomAnchorRef.current = null;
+                }
+            } catch {
+                pendingZoomAnchorRef.current = null;
+            }
+            return next;
+        });
+    }, [scoreScrollRef]);
+
+    useLayoutEffect(() => {
+        const scroller = scoreScrollRef.current;
+        const p = pendingZoomAnchorRef.current;
+        if (!scroller || !p) return;
+        if (Math.abs(p.targetZoom - editorZoom) > 1e-3) return;
+        pendingZoomAnchorRef.current = null;
+        try {
+            const newLeft = p.baseX * editorZoom - p.pointerX;
+            const newTop = p.baseY * editorZoom - p.pointerY;
+            scroller.scrollLeft = Math.max(0, Math.round(newLeft));
+            scroller.scrollTop = Math.max(0, Math.round(newTop));
+        } catch {
+            // ignore
+        }
+    }, [editorZoom, scoreScrollRef]);
+
+    const zoomSpacerRef = useRef<HTMLDivElement | null>(null);
+
+    const handleScoreMouseDownCapture = useCallback((e: React.MouseEvent) => {
+        // Capture-phase so it still runs even when inner SVG handlers stopPropagation.
+        // Only reset when clicking outside the actual score content (so we don't interfere with insert clicks).
+        if (e.button !== 0) return;
+        if (Math.abs(editorZoom - 1) <= 1e-3) return;
+        try {
+            const target = (e.target as any) as HTMLElement | null;
+            if (!target) return;
+            // If click is inside a note/tie, never reset.
+            const inNoteOrTie = !!(target.closest?.('[data-note-id],[data-tie-from],[data-tie-to]'));
+            if (inNoteOrTie) return;
+            // Do not reset when interacting with UI controls.
+            const inControl = !!(target.closest?.('input,button,textarea,select,[role="button"],[contenteditable="true"]'));
+            if (inControl) return;
+
+            const inSvg = !!target.closest?.('svg');
+            const inScore = !!(staffContainerRef.current && staffContainerRef.current.contains(target));
+
+            const clickedSpacer = !!target.closest?.('[data-zoom-spacer="1"]');
+            const clickedOutsideScore = !!(staffContainerRef.current && !staffContainerRef.current.contains(target));
+            const clickedScrollBg = !!(scoreScrollRef.current && target === scoreScrollRef.current);
+
+            // When zoomed-in, the scaled content can cover the spacer and most of the scroll area;
+            // clicks on "empty" margins often land on the score container div, not on the spacer.
+            const clickedScoreNonSvgBg = inScore && !inSvg;
+
+            if (clickedSpacer || clickedOutsideScore || clickedScrollBg || clickedScoreNonSvgBg) {
+                resetEditorZoom();
+            }
+        } catch {
+            // ignore
+        }
+    }, [editorZoom, resetEditorZoom]);
+
+    // True zoom without affecting layout: measure the base (unscaled) size, then:
+    // - create a spacer sized (base * zoom) to get scrollbars
+    // - render the score absolutely with transform: scale(zoom)
+    const [zoomBaseSize, setZoomBaseSize] = useState<{ w: number; h: number }>({ w: 1, h: 1 });
+
+    useLayoutEffect(() => {
+        const el = staffContainerRef.current;
+        if (!el) return;
+
+        const measure = () => {
+            try {
+                const baseW = Math.max(1, Math.ceil(el.scrollWidth || el.offsetWidth || 1));
+                const baseH = Math.max(1, Math.ceil(el.scrollHeight || el.offsetHeight || 1));
+                setZoomBaseSize((prev) => (prev.w === baseW && prev.h === baseH ? prev : { w: baseW, h: baseH }));
+            } catch {
+                // ignore
+            }
+        };
+
+        measure();
+
+        // Prefer event-driven updates.
+        try {
+            if (typeof (globalThis as any).ResizeObserver === 'function') {
+                const ro = new (globalThis as any).ResizeObserver(() => measure());
+                ro.observe(el);
+                return () => {
+                    try { ro.disconnect(); } catch { /* ignore */ }
+                };
+            }
+        } catch {
+            // ignore
+        }
+
+        // Fallback: periodic re-measure.
+        const id = window.setInterval(measure, 500);
+        return () => window.clearInterval(id);
+    }, []);
+
     // Keep native Electron menu checkmarks in sync with renderer state.
     useMenuStateSync({
         selectOnlyCurrentVoiceEnabled: marqueeSelectOnlyCurrentVoice,
@@ -1549,25 +1744,86 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
 
     // Funzione robusta per gestire tutte le azioni del menu di Electron
+    const buildExportHtml = useCallback((): string | null => {
+        const container = staffContainerRef.current;
+        if (!container) return null;
+        try {
+            const head = document.head.innerHTML;
+            const baseHref = String(document.baseURI || window.location.href || '');
+
+            const content = (() => {
+                try {
+                    const clone = container.cloneNode(true) as HTMLElement;
+
+                    // Replace the editable title <input> with a print-friendly static title,
+                    // or remove it entirely if exportIncludeTitle is OFF.
+                    const titleInput = clone.querySelector('input[placeholder="Titolo"]') as HTMLInputElement | null;
+                    if (titleInput) {
+                        const wrapper = titleInput.closest('div');
+                        const titleText = String(projectTitle || titleInput.value || '').trim();
+
+                        if (!exportIncludeTitle || !titleText) {
+                            (wrapper ?? titleInput).remove();
+                        } else {
+                            const titleDiv = document.createElement('div');
+                            titleDiv.textContent = titleText;
+                            titleDiv.style.textAlign = 'center';
+                            titleDiv.style.fontWeight = '600';
+                            titleDiv.style.color = '#1f2937';
+                            titleDiv.style.marginBottom = '12px';
+                            titleDiv.style.fontSize = `${titleFontSize}px`;
+                            titleDiv.style.fontFamily = String(titleFontFamily || 'serif');
+                            if (wrapper) wrapper.replaceWith(titleDiv);
+                            else titleInput.replaceWith(titleDiv);
+                        }
+                    }
+
+                    return clone.innerHTML;
+                } catch {
+                    return container.innerHTML;
+                }
+            })();
+
+            return `<!doctype html><html><head><base href="${baseHref}">${head}<style>
+              body{background:white;margin:0;padding:20px}
+              svg{max-width:100%;height:auto}
+              /* Export/print mode: hide interactive overlays and analysis layers */
+              .export-exclude{display:none !important;}
+              input, textarea, select{display:none !important;}
+            </style></head><body>${content}</body></html>`;
+        } catch {
+            return null;
+        }
+    }, [exportIncludeTitle, projectTitle, titleFontFamily, titleFontSize]);
+
     // Print handler (moved above menu handler to avoid temporal dead zone): opens a print window for the staff container
     const handlePrint = useCallback(() => {
-        const container = staffContainerRef.current;
-        if (!container) {
-            // Removed debug log
-            return;
-        }
+        const html = buildExportHtml();
+        if (!html) return;
+
         const printWindow = window.open('', '_blank', 'width=1200,height=800');
-        if (!printWindow) {
-            // Removed debug log
-            return;
-        }
-        const head = document.head.innerHTML;
-        const content = container.innerHTML;
+        if (!printWindow) return;
         printWindow.document.open();
-        printWindow.document.write(`<!doctype html><html><head>${head}<style>body{background:white;margin:0;padding:20px}svg{max-width:100%;height:auto}</style></head><body>${content}</body></html>`);
+        printWindow.document.write(html);
         printWindow.document.close();
         printWindow.focus();
-    }, []);
+
+        // Trigger print once the content is loaded, then auto-close.
+        try {
+            const onAfterPrint = () => {
+                try { printWindow.close(); } catch { /* ignore */ }
+            };
+            printWindow.addEventListener('afterprint', onAfterPrint);
+            printWindow.addEventListener('load', () => {
+                try { printWindow.focus(); } catch { /* ignore */ }
+                try { printWindow.print(); } catch { /* ignore */ }
+            }, { once: true });
+        } catch {
+            // ignore
+        }
+    }, [buildExportHtml]);
+
+    const projectExtrasRef = useRef<Record<string, unknown>>(EMPTY_EXTRAS);
 
     const handleMenuActionLegacy = useCallback(async (action: MenuAction, payload: any) => {
         const api = window.electronAPI;
@@ -1715,7 +1971,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 // Prefer the explicit paste caret (set by click / note selection).
                 // Fall back to the playback cursor (absBeat) if available.
-                let caret = pasteCaret || null;
+                let caret = latestPasteCaretRef.current || pasteCaret || null;
 
                 if (!caret && layoutData && Number.isFinite(playbackCursorAbsBeatRef.current) && playbackCursorAbsBeatRef.current >= 0) {
                     try {
@@ -1757,7 +2013,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             }
                         }
                         caret = { x: 0, systemIndex, measureIndex, beat };
-                        setPasteCaret(caret);
+                        setPasteCaretImmediate(caret);
                     } catch {
                         // ignore
                     }
@@ -1783,12 +2039,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             measureIndex: sysParams.measureIndices[bestIdx] ?? 0,
                             beat: 1,
                         };
-                        setPasteCaret(caret);
+                        setPasteCaretImmediate(caret);
                     }
                 }
                 if (!caret) {
                     caret = { x: 0, systemIndex: 0, measureIndex: 0, beat: 1 };
-                    setPasteCaret(caret);
+                    setPasteCaretImmediate(caret);
                 }
                 // Removed debug log
                 if (caret && latestClipboardRef.current && latestClipboardRef.current.length > 0) {
@@ -1820,6 +2076,55 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             try { handlePrint(); } catch (e) { /* Removed debug log */ }
             return;
         }
+        if (action === 'export-pdf') {
+            try {
+                const html = buildExportHtml();
+                if (!html) return;
+                const res = await electronBridge.exportPdfFromHtml(html, { pageSize: 'A4', marginsType: 1, landscape: true, scaleFactor: 100 });
+                // On failure, main emits `menu-error` and the app shows a toast.
+                void res;
+            } catch (err: any) {
+                // On unexpected renderer-side failures, keep silent (avoid blocking modals).
+                // Main-layer failures are already surfaced via `menu-error`.
+                void err;
+            }
+            return;
+        }
+        if (action === 'export-png') {
+            try {
+                const html = buildExportHtml();
+                if (!html) return;
+                const res = await electronBridge.exportPngFromHtml(html, { scaleFactor: 1, tileMaxHeightPx: 8000 });
+                // On failure, main emits `menu-error` and the app shows a toast.
+                void res;
+            } catch (err: any) {
+                // On unexpected renderer-side failures, keep silent (avoid blocking modals).
+                // Main-layer failures are already surfaced via `menu-error`.
+                void err;
+            }
+            return;
+        }
+
+        if (action === MENU_ACTIONS.IMPORT_MIDI) {
+            try {
+                const filePath = String(payload?.filePath || '').trim();
+                const name = filePath ? filePath.split(/[/\\]/).pop() : '';
+                window.alert(`Import MIDI${name ? ` (${name})` : ''} non ancora supportato in questa build.`);
+            } catch {
+                // ignore
+            }
+            return;
+        }
+
+        if (action === MENU_ACTIONS.EXPORT_MIDI) {
+            try {
+                window.alert('Export MIDI non ancora supportato in questa build.');
+            } catch {
+                // ignore
+            }
+            return;
+        }
+
         if (action === 'close-project') {
             // Removed debug log
             const confirmed = window.confirm("Vuoi chiudere il progetto corrente? Le modifiche non salvate andranno perse.");
@@ -1851,7 +2156,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setHoveredViolationNotes(null);
                 setSelectedViolationIndex(null);
                 setViewMode('page');
-                setPasteCaret(null);
+                setPasteCaretImmediate(null);
                 setAnalysisContexts([]);
                 setHarmonyOverrides([]);
                 setContextMenu(null);
@@ -1862,12 +2167,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setMidiOutputs([]);
                 setSelectedMidiOutput(null);
                 setCurrentProjectFilePath(null);
+                projectExtrasRef.current = EMPTY_EXTRAS;
             }
         } else if (action === 'save' || action === 'save-as') {
             // Removed debug log
             if (latestRawNotes.current.length === 0 && !window.confirm("Il progetto è vuoto. Salvare comunque?")) return;
             const saveKeySig = getKeySignature(keySignatureRoot || 'C', isMinorMode ? 'Minor' : 'Major');
-            const projectData = JSON.stringify({
+            const baseProject: any = {
+                schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
                 notes: (latestRawNotes.current || []).map((n: any) => normalizeNotePitchFieldsWithKey(n as any, saveKeySig)),
                 staffSystemMode,
                 // Project-level settings
@@ -1889,7 +2196,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isMetronomeOn,
                 metronomeUnit,
                 toolbarGroupOrder,
-            }, null, 2);
+            };
+            const mergedProject = { ...(projectExtrasRef.current || EMPTY_EXTRAS), ...baseProject };
+            const projectData = JSON.stringify(mergedProject, null, 2);
             try {
                 if (!api?.saveFile) return;
                 const targetPath = (action === 'save' && currentProjectFilePath) ? currentProjectFilePath : undefined;
@@ -1923,7 +2232,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             try {
                 const data = payload?.data;
                 if (!data) throw new Error("Nessun dato fornito per l'apertura.");
-                const loadedProject = JSON.parse(data);
+                const parsed = JSON.parse(data);
+                projectExtrasRef.current = extractProjectExtras(parsed);
+                const loadedProject = migrateProjectData(parsed);
                 if (loadedProject && Array.isArray(loadedProject.notes)) {
                     const loadKeyRoot = (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot)
                         ? loadedProject.keySignatureRoot
@@ -2095,7 +2406,78 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     throw new Error("Formato dati non valido.");
                 }
             } catch (err) {
-                // Removed debug log
+                // Reset extras on failed open, otherwise a previous project's extras could leak into a new save.
+                projectExtrasRef.current = EMPTY_EXTRAS;
+                try {
+                    const msg = (err as any)?.message || String(err || 'Errore');
+                    window.alert(`Impossibile aprire il progetto: ${msg}`);
+                } catch {
+                    // ignore
+                }
+            }
+        } else if (action === MENU_ACTIONS.IMPORT_MUSICXML) {
+            // MusicXML import: renderer-safe (no fs/path); XML is provided by main via IPC.
+            try {
+                const xml = String(payload?.xml || '').trim();
+                if (!xml) return;
+
+                if (latestRawNotes.current.length > 0) {
+                    const confirmed = window.confirm('Importare MusicXML? Le modifiche non salvate andranno perse.');
+                    if (!confirmed) return;
+                }
+
+                // Parse first: if import fails, do not clear the current project.
+                const imported = importMusicXML(xml);
+                const importedNotes = Array.isArray(imported?.notes) ? imported.notes : [];
+
+                const nextKeyRoot = String(imported?.keySignatureRoot || 'C').trim() || 'C';
+                const nextIsMinor = Boolean(imported?.isMinorMode);
+                const nextTimeSignature = imported?.timeSignature || { numerator: 4, denominator: 4 };
+                const nextTimeSignatureChanges = Array.isArray(imported?.timeSignatureChanges) ? imported.timeSignatureChanges : [];
+                const nextStaffSystemMode = (
+                    imported?.staffSystemMode === 'grandstaff' ||
+                    imported?.staffSystemMode === 'treble_only' ||
+                    imported?.staffSystemMode === 'satb_ancient'
+                ) ? imported.staffSystemMode : 'grandstaff';
+
+                const filePath = String(payload?.filePath || '').trim();
+                const fallbackTitle = filePath ? filePath.split(/[/\\]/).pop() : '';
+                const nextTitle = String(imported?.projectTitle || fallbackTitle || '').trim();
+
+                // Now apply: reset to defaults so missing fields don't inherit previous project state.
+                setRawNotes(importedNotes as any);
+                setKeySignatureRoot(nextKeyRoot);
+                setProjectTitle(nextTitle);
+                setTimeSignature(nextTimeSignature);
+                setTimeSignatureChanges(nextTimeSignatureChanges);
+                setIsMinorMode(nextIsMinor);
+                setStaffSystemMode(nextStaffSystemMode);
+                setAutoLeadingToneInMinor(true);
+                setKeyChangeMode('none');
+                setModalTonicOverride('');
+                setAnalysisContexts([]);
+                setHarmonyOverrides([]);
+                setClipboard(null);
+                setSelectedNoteIds(new Set());
+                setPasteCaretImmediate(null);
+                setPasteMarker(null as any);
+                setCurrentProjectFilePath(null);
+                projectExtrasRef.current = EMPTY_EXTRAS;
+                setBpm(120);
+                setIsBpmActive(false);
+                setIsMetronomeOn(false);
+                setMetronomeUnit('quarter');
+
+                try {
+                    const maxIdx = importedNotes.reduce((mx, n: any) => Math.max(mx, Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : -1), -1);
+                    const measuresCount = Math.max(1, maxIdx + 1);
+                    setMinMeasureCount(measuresCount);
+                    setMinMeasureCountDraft(String(measuresCount));
+                } catch {
+                    // ignore
+                }
+            } catch (err: any) {
+                try { window.alert(`Import MusicXML fallito: ${String(err?.message || err || '')}`); } catch { /* ignore */ }
             }
         } else if (action === 'new') {
             // Removed debug log
@@ -2124,9 +2506,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setMetronomeUnit('quarter');
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
-                setPasteCaret(null);
+                setPasteCaretImmediate(null);
                 setActiveAccidental(null);
                 setSelectedVoice(1);
+                projectExtrasRef.current = EMPTY_EXTRAS;
             }
         } else if (action === 'set-show-measure-numbers') {
             setShowMeasureNumbers(!!payload?.enabled);
@@ -2159,6 +2542,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (getMenuActionTarget(action) !== 'grandStaff') return;
         void handleMenuActionLegacy(action, payload);
     }, [handleMenuActionLegacy]);
+
+    // Keep ref always current during render so earlier effects (like pendingMenuAction)
+    // can reliably dispatch without depending on effect ordering.
+    dispatchMenuActionRef.current = dispatchMenuAction;
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
@@ -2258,7 +2645,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [enableInferredContexts, setEnableInferredContexts] = usePreference<boolean>('analysis.enableInferredContexts');
     const [harmonyLabelMinSpanBeats, setHarmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
 
+    const isDevBuild = useMemo(() => {
+        try {
+            if (!!((import.meta as any)?.env?.DEV)) return true;
+        } catch {
+            // ignore
+        }
+        // Electron renderer sometimes doesn't expose import.meta.env as expected.
+        // Fallback: in dev we load from the Vite server (127.0.0.1/localhost).
+        try {
+            const href = String((window as any)?.location?.href || '');
+            return href.includes('127.0.0.1:') || href.includes('localhost:');
+        } catch {
+            return false;
+        }
+    }, []);
+
+    const inferredContextsForUi = useMemo(() => {
+        try {
+            const inferred = ((analysisResult as any)?.inferredAnalysisContexts || []) as any[];
+            return Array.isArray(inferred) ? inferred : [];
+        } catch {
+            return [] as any[];
+        }
+    }, [analysisResult]);
+
     const effectiveAnalysisContexts = useMemo(() => {
+        const baseBeatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+        const ctxAbsBeat = (ctx: any): number => {
+            try {
+                const a = Number(ctx?.absBeat);
+                if (Number.isFinite(a)) return a;
+                const mi = Number(ctx?.measureIndex ?? 0);
+                return (Number.isFinite(mi) ? mi : 0) * baseBeatsPerMeasure;
+            } catch {
+                return 0;
+            }
+        };
+
         // NOTE: inferred contexts can be helpful for experimentation, but they can also
         // mis-fire on short tonicizations (e.g. V/iii) and distort Roman labels.
         // For stability/pedagogy, only apply user-authored contexts here.
@@ -2277,14 +2701,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             let lastManualAbs = -Infinity;
             try {
                 for (const c of manual) {
-                    const a = analysisContextAbsBeat(c as any);
+                    const a = ctxAbsBeat(c as any);
                     if (Number.isFinite(a) && a > lastManualAbs) lastManualAbs = a;
                 }
             } catch { /* ignore */ }
 
             const after = inferredArr.filter((c: any) => {
                 try {
-                    const a = analysisContextAbsBeat(c);
+                    const a = ctxAbsBeat(c);
                     return Number.isFinite(a) && a > (lastManualAbs + 1e-6);
                 } catch {
                     return false;
@@ -2297,6 +2721,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [analysisResult, analysisContexts, enableInferredContexts]);
 
     const { analyzedNotes, connections: errorConnections, violations } = analysisResult;
+
+    // Overlay must respect the same filters as HarmonyAnalysisPanel (warning toggles, disabled rule ids, etc.).
+    const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
+    const visibleViolations = useMemo(() => {
+        const showError = !!analysisFilters?.showError;
+        const showWarning = !!analysisFilters?.showWarning;
+        const showException = !!analysisFilters?.showException;
+        const disabledRuleIds = (analysisFilters?.disabledRuleIds && typeof analysisFilters.disabledRuleIds === 'object')
+            ? analysisFilters.disabledRuleIds
+            : {};
+
+        const src = Array.isArray(violations) ? (violations as any[]) : [];
+        return src.filter((v) => {
+            if (!v) return false;
+            if (v.severity === 'error' && !showError) return false;
+            if (v.severity === 'warning' && !showWarning) return false;
+            if (v.severity === 'exception' && !showException) return false;
+            const rid = String(v.ruleId || '');
+            if (rid && disabledRuleIds[rid]) return false;
+            return true;
+        });
+    }, [analysisFilters, violations]);
 
     const getNoteY = (position: number, staffTop: number, clef: ClefType): number => {
         // Legacy (non-VexFlow) approximation used only as a fallback when we don't have
@@ -2383,6 +2829,43 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setContextMenu(null);
     };
 
+    const handleApplyTextMarker = (absBeat: number, label?: string) => {
+        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        const cleanLabel = String(label || '').trim();
+        if (!cleanLabel) {
+            setContextMenu(null);
+            return;
+        }
+
+        // Use the already-active context at this point so the text marker does not
+        // implicitly change the analysis key.
+        const activeCtx = (() => {
+            try {
+                return (effectiveAnalysisContexts || [])
+                    .filter(c => analysisContextAbsBeat(c) <= safeAbsBeat + 1e-6)
+                    .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
+            } catch {
+                return null;
+            }
+        })();
+        const tonicHere = activeCtx ? String(activeCtx.newTonic || '') : String(currentTonic || keySignatureRoot || 'C');
+        const isMinorHere = activeCtx ? !!activeCtx.newIsMinor : !!isMinorMode;
+
+        setAnalysisContexts(prev => {
+            const existing = (prev || []).find(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6) || null;
+            const next = (prev || []).filter(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) > 1e-6);
+            next.push({
+                absBeat: safeAbsBeat,
+                newTonic: existing ? existing.newTonic : tonicHere,
+                newIsMinor: existing ? existing.newIsMinor : isMinorHere,
+                label: cleanLabel,
+                markerMode: 'text',
+            });
+            return next.sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b));
+        });
+        setContextMenu(null);
+    };
+
     const handleApplyTimeSignatureChange = (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => {
         const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
         const n = Math.max(1, Math.round(Number(numerator)));
@@ -2432,17 +2915,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
 
     useEffect(() => {
-        const container = staffContainerRef.current;
-        if (!container) return;
-        const observer = new ResizeObserver(entries => {
-            if (entries[0]) {
-                const width = entries[0].contentRect.width;
-                if (width > 0) setContainerWidth(width);
+        // Layout width must track the *viewport* (scroll container), not the scaled/absolute content.
+        // Otherwise the score will only occupy a fraction of the screen and will clamp measures-per-line.
+        const el = scoreScrollRef.current;
+        if (!el) return;
+
+        const measure = () => {
+            try {
+                const w = el.getBoundingClientRect().width;
+                // staffContainer has `p-4` (16px per side).
+                const usable = Math.max(300, Math.floor(w - 32));
+                if (usable > 0) setContainerWidth(usable);
+            } catch {
+                // ignore
             }
-        });
-        observer.observe(container);
-        const initialWidth = container.getBoundingClientRect().width;
-        if (initialWidth > 0) setContainerWidth(initialWidth);
+        };
+
+        measure();
+        const observer = new ResizeObserver(() => measure());
+        observer.observe(el);
         return () => observer.disconnect();
     }, [isActive, viewMode]);
 
@@ -3248,7 +3739,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const localTonicRoman = tonicizedIsMinor ? 'i' : 'I';
                         // Only show when the global roman differs (otherwise it's noisy).
                         if (String(bk.roman || '') && String(bk.roman || '') !== localTonicRoman) {
-                            autoRomanDisplayByAbsBeat.set(bk.q, `${localTonicRoman}=${targetRoman}`);
+                            // Intentionally do not add a tonicization tag on the resolution chord.
+                            // It tends to clutter the editor and is redundant with nearby V/x labels.
                         }
                     }
                 } catch { /* ignore */ }
@@ -4944,6 +5436,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // exact roman equality (e.g. I…V/ii repeating as ii…V/bIII).
     const progressionMarkersBySystem = useMemo(() => {
         if (!layoutData) return [] as Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>>;
+        // Disabled: users prefer seeing only the voice-leading sequences (Seq ...).
+        // Progression brackets ("Prog.") are too easy to confuse with sequences.
+        return layoutData.systemsParams.map(() => []);
 
         const beatsPerMeasureBase = timeSignature.numerator * (4 / timeSignature.denominator);
         const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
@@ -5736,7 +6231,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             };
         }).filter(Boolean) as Array<{ absBeat: number; roman?: string; symbol?: string; figures?: string[] }>;
 
-        return detectVoiceLeadingSequences(notes, timeSignature, timeSignatureChanges, labelPoints);
+        return detectVoiceLeadingSequences((analyzedNotes || notes) as any, timeSignature, timeSignatureChanges, labelPoints);
     }, [analyzedNotes, currentTonic, effectiveAnalysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, notes, timeSignature, timeSignatureChanges]);
 
     const harmonyLabelsBySystemSequenced = useMemo(() => {
@@ -5848,6 +6343,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const mod7 = (n: number) => ((n % 7) + 7) % 7;
         const mod12Local = (n: number) => ((n % 12) + 12) % 12;
 
+        const preferFlatsForTonic = (tonicName: string, isMinor: boolean): boolean => {
+            try {
+                const ks = getKeySignature(String(tonicName || 'C'), isMinor ? 'Minor' : 'Major');
+                return ks?.type === 'flat' && Number(ks?.count) > 0;
+            } catch {
+                return true;
+            }
+        };
+
+        const pcToSpelledName = (pc: number, prefer: 'flat' | 'sharp' | 'auto' = 'auto', tonicName?: string, tonicIsMinor?: boolean): string => {
+            try {
+                const names = (ALL_NOTE_SPELLINGS as any[])[mod12Local(pc)] as string[] | undefined;
+                if (!names || names.length === 0) return 'C';
+                if (names.length === 1) return names[0];
+                if (prefer === 'flat') return names.find(n => n.includes('b')) || names[1] || names[0];
+                if (prefer === 'sharp') return names.find(n => n.includes('#')) || names[0];
+                const keyUsesFlats = (typeof tonicName === 'string')
+                    ? preferFlatsForTonic(tonicName, !!tonicIsMinor)
+                    : true;
+                return keyUsesFlats
+                    ? (names.find(n => n.includes('b')) || names[1] || names[0])
+                    : (names.find(n => !n.includes('b')) || names[0]);
+            } catch {
+                return 'C';
+            }
+        };
+
         // --- Sequence-only trigger: chromatic evidence inside the imitation ---
         // We only want to "freeze" the model's Roman pattern across repetitions when the sequence
         // actually behaves tonicizing/modulating (in the broad pedagogical sense).
@@ -5871,7 +6393,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const usable = (notesHere || [])
                     .filter((n: any) => n && !n.isRest)
                     // Prefer harmonic skeleton when available.
-                    .filter((n: any) => !n.isPassing && !n.isNeighbor && !n.isSuspension)
+                    .filter((n: any) => !n.isPassing && !n.isNeighbor && !n.isSuspension && !n.isAppoggiatura && !n.isAnticipation && !n.isEscape)
                     .filter((n: any) => Number.isFinite((n as any).noteIndex) || Number.isFinite((n as any).midi));
                 for (const n of usable) {
                     const ni = Number((n as any).noteIndex);
@@ -5881,6 +6403,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return false;
             } catch {
                 return false;
+            }
+        };
+
+        const chordRootPcAt = (absBeat: number, tonicName: string, tonicIsMinor: boolean): number | null => {
+            try {
+                const ks = getKeySignature(String(tonicName || 'C'), tonicIsMinor ? 'Minor' : 'Major');
+                const full = getNotesAtAbsBeat(absBeat);
+                const candidates = identifyChordCandidates((full || []) as any, ks as any, String(tonicName || 'C')) as any[];
+                if (!candidates || candidates.length === 0) return null;
+                // Prefer a candidate that matches the current roman (if any), otherwise just take the first.
+                const c0 = candidates[0];
+                const pc = Number(c0?.root?.noteIndex);
+                return Number.isFinite(pc) ? mod12Local(pc) : null;
+            } catch {
+                return null;
             }
         };
 
@@ -5971,8 +6508,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             };
 
             const degreeToUpper = (degreeIdx: number, qual: string, tail: string): string => {
+                // Back-compat shim: replaced by degreeToLocalKeyRoman below.
                 const base = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'][mod7(degreeIdx)] ?? '';
                 return `${base}${qual}${tail}`;
+            };
+
+            const degreeToLocalKeyRoman = (degreeIdx: number, qual: string, tail: string): string => {
+                const di = mod7(degreeIdx);
+                const major = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+                // Use harmonic-minor defaults for functional labeling.
+                const minor = ['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°'];
+                const base0 = (localTonicIsMinor ? minor : major)[di] ?? '';
+                if (!base0) return `${qual}${tail}`;
+
+                // Merge quality markers (avoid doubling °).
+                let base = base0;
+                if (qual) {
+                    if (qual === 'ø') {
+                        base = base.replace('°', '');
+                        if (!base.includes('ø')) base = `${base}ø`;
+                    } else if (qual === '°') {
+                        if (!base.includes('°') && !base.includes('ø')) base = `${base}°`;
+                    } else if (qual === '+') {
+                        if (!base.includes('+')) base = `${base}+`;
+                    }
+                }
+                return `${base}${tail}`;
             };
 
             // If it's a secondary (x/y), the head (x) is already the *function in the tonicized key*.
@@ -5982,7 +6543,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const d = degreeIndexFromRomanLoose(head);
                 if (d == null) return head;
                 const { qual, tail } = qualitySuffix(head);
-                return degreeToUpper(d, qual, tail);
+                // For V/x etc, the head is already the function in the tonicized key.
+                // Still normalize degree spelling and keep quality markers.
+                return degreeToLocalKeyRoman(d, qual, tail);
             }
 
             // Otherwise (diatonic/global roman), map it into the inferred local tonic context.
@@ -5991,7 +6554,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (d == null) return raw;
             const rel = mod7(d - localTonicDegreeIdx);
             const { qual, tail } = qualitySuffix(raw);
-            return degreeToUpper(rel, qual, tail);
+            return degreeToLocalKeyRoman(rel, qual, tail);
         };
 
         const inferLocalTonicFromTemplate = (templateRomans: string[]) => {
@@ -6060,7 +6623,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         for (const seq of sequenceMatches) {
-            if (Number.isFinite(seq.transpositionSemitones as number) && Number(seq.transpositionSemitones) === 0) continue;
+            const semis = Number((seq as any)?.transpositionSemitones);
+            const isTransposing = Number.isFinite(semis) && semis !== 0;
 
             // Only apply sequence-based Roman copying when the imitation shows chromatic/tonicizing evidence.
             // This prevents diatonic sequences from being mislabeled as modulant.
@@ -6091,6 +6655,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (src) tmplRomans.push(src);
                 templateByK.push({ lab, src, stripped: stripSecondary(src), functional: src });
             }
+
+            // Some real-world modulant sequences may not have a stable melodic transposition value.
+            // In that case, only proceed if the TEMPLATE itself contains explicit tonicization evidence
+            // (secondary roman or chromatic accidental prefix). This keeps non-modulant sequences stable.
+            const templateHasExplicitTonicization = tmplRomans.some(rr => {
+                const s = String(rr || '').trim();
+                if (!s) return false;
+                if (s.includes('/')) return true;
+                if (hasAccidentalPrefix(s)) return true;
+                return false;
+            });
+            if (!isTransposing && !templateHasExplicitTonicization) continue;
+
             const inferred0 = inferLocalTonicFromTemplate(tmplRomans);
             const inferred = (() => {
                 try {
@@ -6137,10 +6714,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return inferred0;
                 }
             })();
+
+            // Compute the actual spelled tonic name for the inferred local key.
+            // This is used to analyze the sequence slots in the tonicized key (spelling-first).
+            const tonicizedKey = (() => {
+                try {
+                    if (inferred.degreeIdx == null || inferred.isMinor == null) return null;
+                    const abs0 = Number(seq.startTick) / TICKS_PER_QUARTER;
+                    const ctx0 = ctxAtAbsBeat(abs0);
+                    const baseTonicName = ctx0 ? String(ctx0.newTonic || '') : String(currentTonic || 'C');
+                    const baseIsMinor = ctx0 ? !!ctx0.newIsMinor : !!isMinorMode;
+                    const tonicPc = noteNameToChromaticIndex(baseTonicName);
+                    if (!(tonicPc >= 0)) return null;
+                    const majorInts = [0, 2, 4, 5, 7, 9, 11];
+                    const minorInts = [0, 2, 3, 5, 7, 8, 11]; // harmonic minor
+                    const ints = baseIsMinor ? minorInts : majorInts;
+                    const targetPc = mod12Local(tonicPc + (ints[inferred.degreeIdx] ?? 0));
+                    const name = pcToSpelledName(targetPc, 'auto', baseTonicName, baseIsMinor);
+                    return { tonic: name, isMinor: !!inferred.isMinor };
+                } catch {
+                    return null;
+                }
+            })();
+
+            const functionalRomanAtTick = (tick: number, fallbackRoman: string): string => {
+                try {
+                    if (!Number.isFinite(tick)) return String(fallbackRoman || '').trim();
+                    const absBeat = tick / TICKS_PER_QUARTER;
+                    const ov = overrideByAbsBeat.get(qAbs(absBeat));
+                    if (ov && typeof ov.roman === 'string' && ov.roman.trim()) return String(ov.roman).trim();
+
+                    if (!tonicizedKey) return String(fallbackRoman || '').trim();
+                    const notesHere = getNotesAtAbsBeat(absBeat);
+                    const r = getRomanAnalysis((notesHere || []) as any, tonicizedKey.tonic, tonicizedKey.isMinor);
+                    const out = String(r?.roman || '').trim();
+                    return out || String(fallbackRoman || '').trim();
+                } catch {
+                    return String(fallbackRoman || '').trim();
+                }
+            };
             for (let kk = 0; kk < templateByK.length; kk += 1) {
                 const row = templateByK[kk];
-                const functional = (row.src && inferred.degreeIdx != null && inferred.isMinor != null)
-                    ? normalizeFunctionalRomanInSequence(row.src, inferred.degreeIdx, inferred.isMinor)
+                const slotTick = slots[seq.startSlotIdx + kk];
+                const functional = row.src
+                    ? functionalRomanAtTick(slotTick, row.src)
                     : '';
                 templateByK[kk] = { ...row, functional };
             }
@@ -6154,10 +6771,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (!lbl) continue;
                     if (row.src) {
                         (lbl as any).sequenceRoman = row.stripped;
-                        if (row.functional) {
-                            (lbl as any).sequenceRomanFunctional = row.functional;
-                            (lbl as any).sequenceRomanSource = row.src;
-                        }
+                        (lbl as any).sequenceRomanFunctional = String(row.functional || row.src);
+                        (lbl as any).sequenceRomanSource = String(row.src);
                     }
                 }
             } catch {
@@ -6176,10 +6791,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const target = labelsBySystem[labB.systemIndex]?.[labB.labelIndex];
                     if (!target) continue;
                     (target as any).sequenceRoman = row.stripped;
-                    if (row.functional) {
-                        (target as any).sequenceRomanFunctional = row.functional;
-                        (target as any).sequenceRomanSource = templateRoman;
-                    }
+                    (target as any).sequenceRomanFunctional = String(row.functional || templateRoman);
+                    (target as any).sequenceRomanSource = templateRoman;
                 }
             }
         }
@@ -6471,6 +7084,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const quality = ctx.newIsMinor ? 'min' : 'Maj';
             const tonicLabel = `[ ${ctx.newTonic} ${quality} ]`;
             const custom = ctx.label && String(ctx.label).trim() ? String(ctx.label).trim() : '';
+            if (ctx.markerMode === 'text') return custom || tonicLabel;
+            if (ctx.markerMode === 'tonic') return tonicLabel;
             return custom ? `${custom} ${tonicLabel}` : tonicLabel;
         };
 
@@ -6586,7 +7201,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 warning: 1,
             };
 
-            (violations as any[]).forEach(v => {
+            (visibleViolations as any[]).forEach(v => {
                 const level = getLevel(v);
                 getIds(v).forEach((id) => {
                     const prev = map.get(id);
@@ -6601,7 +7216,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
 
         return map;
-    }, [violations]);
+    }, [visibleViolations]);
 
     // =========================================================
     // LEGACY (keep ONLY ONE)
@@ -7407,6 +8022,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         const n = rawNotes.find(nn => nn.id === noteId);
 
+        // Always arm paste caret on note clicks (including rests).
+        // Otherwise, clicking a rest in insert mode returns early and paste keeps a stale caret (often at the end).
+        if (n && Number.isFinite(n.measureIndex) && layoutData) {
+            // Trova il systemIndex corretto per la misura
+            let caretSystemIndex = 0;
+            for (let i = 0; i < layoutData.systemsParams.length; i++) {
+                if (layoutData.systemsParams[i].measureIndices.includes(n.measureIndex)) {
+                    caretSystemIndex = i;
+                    break;
+                }
+            }
+            // Prefer tick-accurate caret when available (prevents paste drift).
+            const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+            const ticksPerMeasure = Math.round(beatsPerMeasureLocal * TICKS_PER_QUARTER);
+            const measureStartTick = (n.measureIndex ?? 0) * ticksPerMeasure;
+
+            let beat = Number.isFinite(n.beat) ? (n.beat as number) : 1;
+            const st = (n as any).startTick;
+            if (typeof st === 'number' && isFinite(st)) {
+                const localTicks = Math.max(0, Math.min(ticksPerMeasure, st - measureStartTick));
+                beat = (localTicks / TICKS_PER_QUARTER) + 1;
+            }
+
+            const quantizedBeat = Math.round(beat * 1e6) / 1e6;
+            setPasteCaretImmediate({
+                x: 0,
+                systemIndex: caretSystemIndex,
+                measureIndex: n.measureIndex,
+                beat: quantizedBeat,
+            });
+        }
+
         // INSERT UX FIX: clicking a rest should overwrite it (run insertion) rather than select it.
         // This avoids the "pause blocks insertion" annoyance.
         const isModifier = !!((e as any).shiftKey || (e as any).metaKey || (e as any).ctrlKey || (e as any).altKey);
@@ -7436,39 +8083,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         e.preventDefault?.();
         e.stopPropagation();
 
-        // Also set a paste caret at the clicked note's time (standard UX: click target, then Cmd+V).
         // Auto-switch voice to the clicked note (requested).
         if (n && typeof (n as any).voice === 'number') {
             setSelectedVoice((n as any).voice as Voice);
-        }
-        if (n && Number.isFinite(n.measureIndex) && layoutData) {
-            // Trova il systemIndex corretto per la misura
-            let systemIndex = 0;
-            for (let i = 0; i < layoutData.systemsParams.length; i++) {
-                if (layoutData.systemsParams[i].measureIndices.includes(n.measureIndex)) {
-                    systemIndex = i;
-                    break;
-                }
-            }
-            // Prefer tick-accurate caret when available (prevents paste drift).
-            const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
-            const ticksPerMeasure = Math.round(beatsPerMeasureLocal * TICKS_PER_QUARTER);
-            const measureStartTick = (n.measureIndex ?? 0) * ticksPerMeasure;
-
-            let beat = Number.isFinite(n.beat) ? (n.beat as number) : 1;
-            const st = (n as any).startTick;
-            if (typeof st === 'number' && isFinite(st)) {
-                const localTicks = Math.max(0, Math.min(ticksPerMeasure, st - measureStartTick));
-                beat = (localTicks / TICKS_PER_QUARTER) + 1;
-            }
-
-            const quantizedBeat = Math.round(beat * 1e6) / 1e6;
-            setPasteCaret({
-                x: 0,
-                systemIndex,
-                measureIndex: n.measureIndex,
-                beat: quantizedBeat,
-            });
         }
 
         // Compute next selection synchronously so we can decide whether to play the note.
@@ -7523,6 +8140,115 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             void playNote(n, 0.6);
         }
     }, [getPlayheadPosForAbsBeat, playNote, rawNotes, selectedNoteIds, timeSignature, tool, violations]);
+
+    const sanitizeNotesTimingFields = useCallback((notes: StaffNote[]): StaffNote[] => {
+        try {
+            const ld: any = layoutDataRef.current;
+            const starts = ld?.measureStartAbsBeat as number[] | undefined;
+            const beatsArr = ld?.measureBeatsPerMeasure as number[] | undefined;
+            const baseBeatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+            const fallbackBeats = Math.max(1, Number.isFinite(baseBeatsPerMeasure) && baseBeatsPerMeasure > 0 ? baseBeatsPerMeasure : 4);
+
+            const startTicks: number[] = (() => {
+                try {
+                    if (starts && starts.length > 0) return starts.map((x) => Math.max(0, Math.round(Number(x || 0) * TICKS_PER_QUARTER)));
+                } catch {
+                    // ignore
+                }
+                return [];
+            })();
+
+            const beatsPerMeasureAt = (m: number): number => {
+                const b = (beatsArr && typeof beatsArr[m] === 'number' && Number.isFinite(beatsArr[m]) && beatsArr[m] > 0)
+                    ? Number(beatsArr[m])
+                    : fallbackBeats;
+                return Math.max(1, b);
+            };
+
+            const ticksPerMeasureAt = (m: number): number => Math.max(1, Math.round(beatsPerMeasureAt(m) * TICKS_PER_QUARTER));
+
+            const findMeasureIndexForTickExtended = (tick: number): number => {
+                const t = Math.max(0, Math.round(tick));
+                if (startTicks.length === 0) {
+                    const tpm = ticksPerMeasureAt(0);
+                    return Math.floor(t / tpm);
+                }
+
+                // binary search: last index with startTicks[idx] <= t
+                let lo = 0;
+                let hi = startTicks.length - 1;
+                while (lo < hi) {
+                    const mid = Math.floor((lo + hi + 1) / 2);
+                    if ((startTicks[mid] ?? 0) <= t) lo = mid;
+                    else hi = mid - 1;
+                }
+
+                let m = lo;
+
+                // Extend beyond known measures if tick is after the last known start.
+                if (m === startTicks.length - 1) {
+                    const lastStart = startTicks[m] ?? 0;
+                    const tpm = ticksPerMeasureAt(m);
+                    if (tpm > 0 && t >= lastStart) {
+                        m += Math.floor((t - lastStart) / tpm);
+                    }
+                }
+
+                return Math.max(0, m);
+            };
+
+            const measureStartAbsBeatAt = (m: number): number => {
+                if (starts && typeof starts[m] === 'number' && Number.isFinite(starts[m])) return Number(starts[m]);
+                if (!starts || starts.length === 0) return m * beatsPerMeasureAt(m);
+
+                const lastIdx = starts.length - 1;
+                const lastStart = Number.isFinite(starts[lastIdx] as any) ? Number(starts[lastIdx]) : (lastIdx * beatsPerMeasureAt(lastIdx));
+                const lastBpm = beatsPerMeasureAt(lastIdx);
+                if (m <= lastIdx) return (Number.isFinite(starts[m] as any) ? Number(starts[m]) : (m * beatsPerMeasureAt(m)));
+                return lastStart + ((m - lastIdx) * lastBpm);
+            };
+
+            const measureStartTickAt = (m: number): number => {
+                if (startTicks[m] != null && Number.isFinite(startTicks[m] as any)) return Number(startTicks[m]);
+                return Math.max(0, Math.round(measureStartAbsBeatAt(m) * TICKS_PER_QUARTER));
+            };
+
+            const computeStartTickFromLegacyFields = (n: any): number => {
+                try {
+                    const st = n?.startTick;
+                    if (typeof st === 'number' && Number.isFinite(st)) return Math.max(0, Math.round(st));
+                    const m = Number.isFinite(n?.measureIndex) ? Math.max(0, Math.trunc(Number(n.measureIndex))) : 0;
+                    const b = Number.isFinite(n?.beat) ? Number(n.beat) : 1;
+                    const absBeat = measureStartAbsBeatAt(m) + (Math.max(1, b) - 1);
+                    return Math.max(0, Math.round(absBeat * TICKS_PER_QUARTER));
+                } catch {
+                    return 0;
+                }
+            };
+
+            const out = (notes || []).map((n) => {
+                try {
+                    const st = computeStartTickFromLegacyFields(n as any);
+                    const m = findMeasureIndexForTickExtended(st);
+                    const mStartTick = measureStartTickAt(m);
+                    const localTicks = Math.max(0, st - mStartTick);
+                    const beat = (localTicks / TICKS_PER_QUARTER) + 1;
+
+                    const next: any = { ...(n as any) };
+                    next.startTick = st;
+                    next.measureIndex = m;
+                    next.beat = Math.round(Number(beat) * 1e6) / 1e6;
+                    return next as StaffNote;
+                } catch {
+                    return n;
+                }
+            });
+
+            return out;
+        } catch {
+            return notes;
+        }
+    }, [timeSignature]);
 
     const pasteClipboardAt = useCallback((targetMeasureIndex: number, targetBeat: number) => {
         const dataToPaste = latestClipboardRef.current;
@@ -7590,34 +8316,79 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const measureStarts = (layoutDataRef.current as any)?.measureStartAbsBeat as number[] | undefined;
         const measureBeats = (layoutDataRef.current as any)?.measureBeatsPerMeasure as number[] | undefined;
 
-        const absBeatForNote = (n: any) => {
-            const m = Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : 0;
-            const b = Number.isFinite(n?.beat) ? Number(n.beat) : 1;
-            const start = (measureStarts && measureStarts[m] != null)
-                ? measureStarts[m]
-                : (m * beatsPerMeasure);
-            return start + (b - 1);
+        // Tick-based paste: avoids floating drift and measure-boundary ambiguity (especially with TS changes).
+        const getDurationTicksSafe = (n: any): number => {
+            try {
+                const dt = n?.durationTicks;
+                if (typeof dt === 'number' && Number.isFinite(dt) && dt > 0) return Math.round(dt);
+                const base = (DURATION_VALUES as any)[String(n?.duration || 'quarter')] || 1;
+                let durBeats = Number(base) || 1;
+                if (n?.isDotted) durBeats *= 1.5;
+                if (n?.isTriplet) durBeats *= 2 / 3;
+                if (n?.isDuplet) durBeats *= 3 / 2;
+                return Math.max(1, Math.round(durBeats * TICKS_PER_QUARTER));
+            } catch {
+                return TICKS_PER_QUARTER;
+            }
         };
 
-        const targetAbsBeat = (measureStarts && measureStarts[targetMeasureIndex] != null)
-            ? (measureStarts[targetMeasureIndex] + (targetBeat - 1))
-            : ((targetMeasureIndex * beatsPerMeasure) + (targetBeat - 1));
-
-        const srcAbsBeats = dataToPaste
-            .map(n => absBeatForNote(n))
-            .filter(Number.isFinite);
-        const baseAbsBeat = srcAbsBeats.length ? Math.min(...srcAbsBeats) : 0;
-        const delta = targetAbsBeat - baseAbsBeat;
-
-        const findMeasureIndexForAbsBeat = (abs: number): number => {
-            if (!measureStarts || measureStarts.length === 0) {
-                return Math.floor(abs / beatsPerMeasure);
+        const getStartTickSafe = (n: any): number => {
+            try {
+                const st = n?.startTick;
+                if (typeof st === 'number' && Number.isFinite(st)) return Math.round(st);
+                const m = Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : 0;
+                const b = Number.isFinite(n?.beat) ? Number(n.beat) : 1;
+                const startAbs = (measureStarts && measureStarts[m] != null)
+                    ? Number(measureStarts[m])
+                    : (m * beatsPerMeasure);
+                const absBeat = startAbs + (b - 1);
+                return Math.round(absBeat * TICKS_PER_QUARTER);
+            } catch {
+                return 0;
             }
-            for (let m = measureStarts.length - 1; m >= 0; m--) {
-                if (abs >= (measureStarts[m] ?? 0) - 1e-9) return m;
+        };
+
+        const measureStartTicks: number[] = (() => {
+            try {
+                if (measureStarts && measureStarts.length > 0) {
+                    return measureStarts.map(x => Math.max(0, Math.round(Number(x || 0) * TICKS_PER_QUARTER)));
+                }
+            } catch {
+                // ignore
+            }
+            return [];
+        })();
+
+        const ticksPerMeasureForIndex = (m: number): number => {
+            const bpm = (measureBeats && typeof measureBeats[m] === 'number' && Number.isFinite(measureBeats[m]) && measureBeats[m] > 0)
+                ? Number(measureBeats[m])
+                : beatsPerMeasure;
+            return Math.max(1, Math.round(bpm * TICKS_PER_QUARTER));
+        };
+
+        const findMeasureIndexForTick = (tick: number): number => {
+            const t = Math.max(0, Math.round(tick));
+            if (!measureStartTicks || measureStartTicks.length === 0) {
+                const tpm = Math.max(1, Math.round(beatsPerMeasure * TICKS_PER_QUARTER));
+                return Math.floor(t / tpm);
+            }
+            // last <= t
+            for (let m = measureStartTicks.length - 1; m >= 0; m--) {
+                if (t >= (measureStartTicks[m] ?? 0)) return m;
             }
             return 0;
         };
+
+        const targetStartTick = (measureStartTicks && measureStartTicks[targetMeasureIndex] != null)
+            ? measureStartTicks[targetMeasureIndex]
+            : Math.round(((measureStarts && measureStarts[targetMeasureIndex] != null) ? Number(measureStarts[targetMeasureIndex]) : (targetMeasureIndex * beatsPerMeasure)) * TICKS_PER_QUARTER);
+        const targetTick = targetStartTick + Math.round((Math.max(1, Number(targetBeat) || 1) - 1) * TICKS_PER_QUARTER);
+
+        const srcStartTicks = dataToPaste
+            .map(n => getStartTickSafe(n))
+            .filter(v => Number.isFinite(v));
+        const baseSrcTick = srcStartTicks.length ? Math.min(...srcStartTicks) : 0;
+        const deltaTicks = Math.round(targetTick - baseSrcTick);
 
         const chordIdMap = new Map<string, string>();
         const groupIdMap = new Map<string, string>();
@@ -7655,37 +8426,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const forceSelectedVoice = pasteToSelectedVoiceRef.current;
         const pasted: StaffNote[] = dataToPaste
             .map(n => {
-                const m = n.measureIndex ?? 0;
-                const b = n.beat ?? 1;
-                const abs = absBeatForNote(n) + delta;
-                if (!Number.isFinite(abs) || abs < 0) return null;
+                const srcTick = getStartTickSafe(n);
+                const newTick = srcTick + deltaTicks;
+                if (!Number.isFinite(newTick) || newTick < 0) return null;
 
-                const newMeasureIndex = findMeasureIndexForAbsBeat(abs);
-                const bpmLocal = (measureBeats && measureBeats[newMeasureIndex])
-                    ? measureBeats[newMeasureIndex]
-                    : beatsPerMeasure;
-                const startLocal = (measureStarts && measureStarts[newMeasureIndex] != null)
-                    ? measureStarts[newMeasureIndex]
-                    : (newMeasureIndex * bpmLocal);
-                const inMeasure = abs - startLocal;
-                const newBeat = Math.round((inMeasure + 1) * 1e6) / 1e6;
+                const newMeasureIndex = findMeasureIndexForTick(newTick);
+                const startTickLocal = (measureStartTicks && measureStartTicks[newMeasureIndex] != null)
+                    ? Number(measureStartTicks[newMeasureIndex])
+                    : Math.round((((measureStarts && measureStarts[newMeasureIndex] != null)
+                        ? Number(measureStarts[newMeasureIndex])
+                        : (newMeasureIndex * beatsPerMeasure)) * TICKS_PER_QUARTER));
+                const inMeasureTicks = Math.max(0, Math.round(newTick - startTickLocal));
+                const newBeat = Math.round(((inMeasureTicks / TICKS_PER_QUARTER) + 1) * 1e6) / 1e6;
 
                 const { xPosition, ...rest } = n as any;
 
                 try {
-                    const beatsPerMeasureLocal = (measureBeats && measureBeats[newMeasureIndex])
-                        ? measureBeats[newMeasureIndex]
-                        : (timeSignature.numerator * (4 / timeSignature.denominator));
-                    const absBeat = ((measureStarts && measureStarts[newMeasureIndex] != null)
-                        ? measureStarts[newMeasureIndex]
-                        : (newMeasureIndex * beatsPerMeasureLocal)) + (newBeat - 1);
-                    const startTick = Math.round(absBeat * TICKS_PER_QUARTER);
-                    const base = (DURATION_VALUES as any)[(n as any).duration || 'quarter'] || 1;
-                    let durBeats = base;
-                    if ((n as any).isDotted) durBeats *= 1.5;
-                    if ((n as any).isTriplet) durBeats *= 2 / 3;
-                    if ((n as any).isDuplet) durBeats *= 3 / 2;
-                    const durationTicks = Math.round(durBeats * TICKS_PER_QUARTER);
+                    const startTick = Math.round(newTick);
+                    const durationTicks = getDurationTicksSafe(n);
 
                     const targetVoice = forceSelectedVoice ? selectedVoice : ((n as any).voice ?? selectedVoice);
                     return {
@@ -7721,49 +8479,196 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (pasted.length > 0) {
             const targetVoices = Array.from(new Set(pasted.map(n => Number((n as any).voice ?? selectedVoice)))).filter(v => Number.isFinite(v));
 
+            // When pasting into a measure that already contains rests, we must split those rests
+            // around the pasted note intervals. Otherwise we end up with overlapping rests+notes
+            // and downstream timeline normalization can shift notes unpredictably.
+            type TickInterval = { startTick: number; endTick: number };
+            const intervalsByVM = new Map<string, TickInterval[]>();
+            const keyVM = (voice: number, measureIndex: number) => `${voice}::${measureIndex}`;
+            for (const pn of pasted) {
+                const v = Number((pn as any).voice ?? selectedVoice);
+                const m = Number(pn.measureIndex ?? 0);
+                const st = Number((pn as any).startTick);
+                const dt = Number((pn as any).durationTicks);
+                if (!Number.isFinite(v) || !Number.isFinite(m) || !Number.isFinite(st) || !Number.isFinite(dt) || dt <= 0) continue;
+                const k = keyVM(v, m);
+                const arr = intervalsByVM.get(k) || [];
+                arr.push({ startTick: st, endTick: st + dt });
+                intervalsByVM.set(k, arr);
+            }
+            // sort + merge per voice/measure
+            for (const [k, arr] of intervalsByVM.entries()) {
+                arr.sort((a, b) => a.startTick - b.startTick);
+                const merged: TickInterval[] = [];
+                for (const it of arr) {
+                    const last = merged[merged.length - 1];
+                    if (!last || it.startTick > last.endTick + 1e-6) merged.push({ ...it });
+                    else last.endTick = Math.max(last.endTick, it.endTick);
+                }
+                intervalsByVM.set(k, merged);
+            }
+
             setRawNotes(prev => {
                 const existingNotes = prev || [];
-                const missingRests: StaffNote[] = [];
 
-                const hasNoteInVoiceMeasure = (voice: number, measureIndex: number) =>
-                    existingNotes.some(n => Number((n as any).voice ?? -1) === voice && Number(n.measureIndex ?? -1) === measureIndex);
+                const getNoteStartTick = (n: any): number => {
+                    try {
+                        const st = n?.startTick;
+                        if (typeof st === 'number' && Number.isFinite(st)) return Math.round(st);
+                        const mi = Number(n?.measureIndex ?? 0);
+                        const b = Number(n?.beat ?? 1);
+                        const beatsLocal = (measureBeats && measureBeats[mi]) ? Number(measureBeats[mi]) : beatsPerMeasure;
+                        const startAbs = (measureStarts && measureStarts[mi] != null) ? Number(measureStarts[mi]) : (mi * beatsLocal);
+                        const absBeat = startAbs + (b - 1);
+                        return Math.round(absBeat * TICKS_PER_QUARTER);
+                    } catch {
+                        return 0;
+                    }
+                };
 
-                for (const v of targetVoices) {
-                    for (let m = 0; m < targetMeasureIndex; m++) {
-                        if (hasNoteInVoiceMeasure(v, m)) continue;
-                        const beatsLocal = (measureBeats && measureBeats[m]) ? measureBeats[m] : beatsPerMeasure;
-                        const startAbs = (measureStarts && measureStarts[m] != null) ? measureStarts[m] : (m * beatsLocal);
-                        const startTick = Math.round(startAbs * TICKS_PER_QUARTER);
-                        const segs = buildMeasureRestSegments(beatsLocal);
-                        let localTicks = 0;
-                        const clef = clefForVoice(v as any);
-                        for (const seg of segs) {
-                            const durationTicks = Math.max(1, Math.round(seg.beats * TICKS_PER_QUARTER));
-                            missingRests.push({
+                const getNoteDurationTicks = (n: any): number => {
+                    try {
+                        const dt = n?.durationTicks;
+                        if (typeof dt === 'number' && Number.isFinite(dt) && dt > 0) return Math.round(dt);
+                        const base = (DURATION_VALUES as any)[String(n?.duration || 'quarter')] || 1;
+                        let durBeats = Number(base) || 1;
+                        if (n?.isDotted) durBeats *= 1.5;
+                        if (n?.isTriplet) durBeats *= 2 / 3;
+                        if (n?.isDuplet) durBeats *= 3 / 2;
+                        return Math.max(1, Math.round(durBeats * TICKS_PER_QUARTER));
+                    } catch {
+                        return TICKS_PER_QUARTER;
+                    }
+                };
+
+                const splitRestAroundIntervals = (rest: any, cuts: TickInterval[]): StaffNote[] => {
+                    try {
+                        const restStart = getNoteStartTick(rest);
+                        const restDur = getNoteDurationTicks(rest);
+                        const restEnd = restStart + Math.max(1, restDur);
+                        const effectiveCuts = (cuts || [])
+                            .map(c => ({ startTick: Math.max(restStart, c.startTick), endTick: Math.min(restEnd, c.endTick) }))
+                            .filter(c => c.endTick > c.startTick + 1e-6)
+                            .sort((a, b) => a.startTick - b.startTick);
+
+                        const gaps: TickInterval[] = [];
+                        let cur = restStart;
+                        for (const c of effectiveCuts) {
+                            if (c.startTick > cur + 1e-6) gaps.push({ startTick: cur, endTick: c.startTick });
+                            cur = Math.max(cur, c.endTick);
+                        }
+                        if (cur < restEnd - 1e-6) gaps.push({ startTick: cur, endTick: restEnd });
+
+                        if (gaps.length === 0) return [];
+
+                        // IMPORTANT: preserve timing exactly in ticks.
+                        // Using beat-based segment builders can lose ticks (especially for tuplets),
+                        // which can pull later material earlier and make pasted notes "jump".
+                        const chooseRestVisual = (beats: number): { duration: NoteDuration; isDotted: boolean } => {
+                            const baseDurations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'thirty-second', 'sixty-fourth'] as any;
+                            let best: { duration: NoteDuration; isDotted: boolean; beats: number; diff: number } | null = null;
+                            for (const d of baseDurations) {
+                                const b = (DURATION_VALUES as any)[d] as number;
+                                if (!Number.isFinite(b) || b <= 0) continue;
+                                const c1 = { duration: d, isDotted: false, beats: b };
+                                const c2 = { duration: d, isDotted: true, beats: b * 1.5 };
+                                for (const c of [c1, c2]) {
+                                    const diff = Math.abs(Number(beats) - Number(c.beats));
+                                    if (!best || diff < best.diff) best = { ...c, diff };
+                                }
+                            }
+                            if (best) return { duration: best.duration, isDotted: best.isDotted };
+                            return { duration: 'quarter' as any, isDotted: false };
+                        };
+
+                        const out: StaffNote[] = [];
+                        for (const g of gaps) {
+                            const gapTicks = Math.max(0, Math.round(g.endTick - g.startTick));
+                            if (gapTicks <= 0) continue;
+
+                            const mi = Number(rest?.measureIndex ?? 0);
+                            const v = Number(rest?.voice ?? -1);
+                            const beatsPerMeasureLocal = (measureBeats && measureBeats[mi]) ? Number(measureBeats[mi]) : beatsPerMeasure;
+                            const startAbs = (measureStarts && measureStarts[mi] != null) ? Number(measureStarts[mi]) : (mi * beatsPerMeasureLocal);
+
+                            const st = Math.round(g.startTick);
+                            const absBeat = st / TICKS_PER_QUARTER;
+                            const beat = (absBeat - startAbs) + 1;
+                            const gapBeats = gapTicks / TICKS_PER_QUARTER;
+                            const visual = chooseRestVisual(gapBeats);
+
+                            out.push({
+                                ...(rest as StaffNote),
                                 id: crypto.randomUUID(),
-                                pitch: 'B',
-                                octave: clef === 'bass' ? 2 : 4,
-                                position: clef === 'bass' ? 4 : 8,
-                                midi: 0,
-                                noteIndex: 0,
-                                duration: seg.duration,
                                 isRest: true,
+                                duration: visual.duration,
+                                isDotted: visual.isDotted,
                                 isTriplet: false,
                                 isDuplet: false,
-                                isDotted: seg.isDotted,
-                                measureIndex: m,
-                                beat: (localTicks / TICKS_PER_QUARTER) + 1,
-                                startTick: startTick + localTicks,
-                                durationTicks,
-                                clef,
-                                voice: v as any,
+                                beat: Math.round(Number(beat) * 1e6) / 1e6,
+                                startTick: st,
+                                durationTicks: gapTicks,
+                                measureIndex: mi,
+                                voice: (Number.isFinite(v) ? (v as any) : (rest as any).voice),
                             });
-                            localTicks += durationTicks;
                         }
+                        return out;
+                    } catch {
+                        return [rest as StaffNote];
                     }
+                };
+
+                const getTickRangeAny = (n: any): { start: number; end: number } | null => {
+                    try {
+                        if (!n) return null;
+                        const st = getNoteStartTick(n);
+                        const dt = getNoteDurationTicks(n);
+                        if (!Number.isFinite(st) || !Number.isFinite(dt) || dt <= 0) return null;
+                        return { start: st, end: st + Math.max(1, dt) };
+                    } catch {
+                        return null;
+                    }
+                };
+
+                const overlapsIntervals = (r: { start: number; end: number }, cuts: TickInterval[]): boolean => {
+                    for (const c of cuts) {
+                        if (r.start < c.endTick - 1e-6 && c.startTick < r.end - 1e-6) return true;
+                    }
+                    return false;
+                };
+
+                const adjustedExisting: StaffNote[] = [];
+                for (const n of existingNotes) {
+                    const v = Number((n as any)?.voice ?? -1);
+                    const m = Number((n as any)?.measureIndex ?? -1);
+                    const k = keyVM(v, m);
+                    const cuts = intervalsByVM.get(k);
+                    if (!cuts || cuts.length === 0) {
+                        adjustedExisting.push(n as any);
+                        continue;
+                    }
+
+                    // In affected slots, paste is an overwrite in tick-space:
+                    // - rests are split to preserve non-overlapping gaps
+                    // - notes overlapping any pasted interval are removed
+                    if ((n as any)?.isRest) {
+                        adjustedExisting.push(...splitRestAroundIntervals(n as any, cuts));
+                        continue;
+                    }
+
+                    const r = getTickRangeAny(n as any);
+                    if (!r) {
+                        adjustedExisting.push(n as any);
+                        continue;
+                    }
+                    if (overlapsIntervals(r, cuts)) {
+                        // drop
+                        continue;
+                    }
+                    adjustedExisting.push(n as any);
                 }
 
-                return [...existingNotes, ...missingRests, ...pasted];
+                return sanitizeNotesTimingFields([...adjustedExisting, ...pasted]);
             });
             setSelectedNoteIds(new Set(pasted.map(n => n.id)));
 
@@ -7847,7 +8752,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }, 60);
         }
         pasteToSelectedVoiceRef.current = false;
-    }, [clefForVoice, selectedVoice, setRawNotes, setSelectedNoteIds, timeSignature]);
+    }, [clefForVoice, sanitizeNotesTimingFields, selectedVoice, setRawNotes, setSelectedNoteIds, timeSignature]);
 
     const getSystemMeasureAtX = useCallback((systemIndex: number, x: number) => {
         const sys = layoutData?.systemsParams?.[systemIndex];
@@ -8000,7 +8905,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const beat = Math.round((((absBeat as number) - (measureIndex * beatsPerMeasure)) + 1) * 1e6) / 1e6;
 
         if (!pasteCaret || pasteCaret.systemIndex !== basePos.systemIndex || Math.abs(pasteCaret.x - targetX) > 0.5) {
-            setPasteCaret({ x: targetX, systemIndex: basePos.systemIndex, measureIndex, beat });
+            setPasteCaretImmediate({ x: targetX, systemIndex: basePos.systemIndex, measureIndex, beat });
         }
     }, [estimateNoteheadOffsetPxForSystem, getPlayheadPosForAbsBeat, isPlaying, layoutData, pasteCaret, playheadPosition, refinePlayheadXToRenderedNoteheads, timeSignature]);
 
@@ -8542,7 +9447,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         setPlaybackCursorFromMeasureBeat(systemIndex, snappedX, hit.measureIndex, beat);
         // Aggiorna sempre pasteCaret con beat quantizzato
-        setPasteCaret({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat });
+        setPasteCaretImmediate({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat });
 
         if (wantsHarmonyOverride) {
             const absBeat = Math.max(0, Math.round((((layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex] ?? (hit.measureIndex * beatsPerMeasure)) + (beat - 1)) * 1e6) / 1e6);
@@ -8592,6 +9497,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
         if (!layoutData) return;
+
+        // If this click is the synthetic click that follows a marquee drag,
+        // do not move playhead/paste caret (user intent was selection, not cursor move).
+        if (suppressNextStaffClickRef.current) {
+            suppressNextStaffClickRef.current = false;
+            e?.stopPropagation?.();
+            return;
+        }
+        if (justDraggedRef.current) {
+            justDraggedRef.current = false;
+            e?.stopPropagation?.();
+            return;
+        }
 
         // Prevent the container click handler from immediately clearing selection after a staff click.
         e?.stopPropagation?.();
@@ -8705,7 +9623,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Set playback cursor + visible playhead at the quantized point.
         setPlaybackCursorFromMeasureBeat(systemIndex, snappedX, hit.measureIndex, beatInMeasure);
-        setPasteCaret({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat: beatInMeasure });
+        setPasteCaretImmediate({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat: beatInMeasure });
 
         // Per compatibilità con i costruttori StaffNote che usano la shorthand "beat"
         const beat = beatInMeasure;
@@ -9306,7 +10224,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setPlayheadPosition(pos);
                 const measureIndex = Math.floor(safeAbs / beatsPerMeasure);
                 const beat = Math.round((((safeAbs - (measureIndex * beatsPerMeasure)) + 1)) * 1e6) / 1e6;
-                setPasteCaret({ x: pos.x, systemIndex: pos.systemIndex, measureIndex, beat });
+                setPasteCaretImmediate({ x: pos.x, systemIndex: pos.systemIndex, measureIndex, beat });
             }
         } catch {
             // ignore
@@ -9385,6 +10303,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (!isActuallyDraggingRef.current) {
                     isActuallyDraggingRef.current = true;
                     justDraggedRef.current = true;
+                    suppressNextStaffClickRef.current = true;
                     // First time we cross threshold: show rect starting at drag origin.
                     setSelectionRect({
                         startX: drag.svgStartX,
@@ -9512,6 +10431,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!isActive) return;
 
         const onMouseUp = () => {
+            suppressNextStaffClickRef.current = false;
             const drag = dragStartPosRef.current;
             if (!drag) return;
 
@@ -9605,6 +10525,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             dragStartPosRef.current = null;
             isActuallyDraggingRef.current = false;
             justDraggedRef.current = false;
+            suppressNextStaffClickRef.current = false;
             setSelectionRect(prev => ({ ...prev, isVisible: false, systemIndex: null }));
         };
 
@@ -9613,6 +10534,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             dragStartPosRef.current = null;
             isActuallyDraggingRef.current = false;
             justDraggedRef.current = false;
+            suppressNextStaffClickRef.current = false;
             setSelectionRect(prev => ({ ...prev, isVisible: false, systemIndex: null }));
         };
 
@@ -10118,10 +11040,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return;
                 }
 
-                // Standard UX: paste at the current paste caret.
-                // Shift+Paste: force voice mapping and paste at playhead position.
-                if (pasteCaret && clipboard && clipboard.length > 0) {
-                    pasteClipboardAt(pasteCaret.measureIndex, pasteCaret.beat);
+                const clipNow = latestClipboardRef.current;
+                if (!clipNow || clipNow.length === 0) return;
+
+                // Default: paste at the explicit paste caret.
+                // Shift+Cmd/Ctrl+V: paste at playhead/cursor time.
+                if (e.shiftKey) {
+                    try {
+                        const absBeat = (Number.isFinite(playbackCursorAbsBeatRef.current) && (playbackCursorAbsBeatRef.current as number) >= 0)
+                            ? (playbackCursorAbsBeatRef.current as number)
+                            : Math.max(0, getCurrentAbsBeatForPlayhead());
+
+                        const safeAbs = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+                        const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(safeAbs);
+
+                        // Keep caret UI in sync with the paste location.
+                        let systemIndex = 0;
+                        const ld = layoutDataRef.current as any;
+                        if (ld?.systemsParams) {
+                            for (let si = 0; si < ld.systemsParams.length; si++) {
+                                if (ld.systemsParams[si].measureIndices.includes(measureIndex)) { systemIndex = si; break; }
+                            }
+                        }
+                        setPasteCaretImmediate({ x: 0, systemIndex, measureIndex, beat });
+                        pasteClipboardAt(measureIndex, beat);
+                    } catch {
+                        // ignore
+                    }
+                    return;
+                }
+
+                const caretNow = latestPasteCaretRef.current;
+                if (caretNow) {
+                    pasteClipboardAt(caretNow.measureIndex, caretNow.beat);
                 }
                 return;
             }
@@ -10319,7 +11270,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
 
-                setRawNotes(prev => prev.filter(n => {
+                setRawNotes(prev => sanitizeNotesTimingFields(prev.filter(n => {
                     if (!selectedNoteIds.has(n.id)) return true;
                     // Se è una pausa, la cancello (non la tengo)
                     if (n.isRest) return false;
@@ -10332,7 +11283,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         ...n,
                         isRest: true
                     };
-                }));
+                })));
                 setSelectedNoteIds(new Set());
                 return;
             }
@@ -11284,17 +12235,68 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* UX guard: if the engine detects inferred modulation contexts but the preference is OFF,
+                the user will see “no change”. Show a small banner + one-click enable. */}
+            {(isDevBuild || showHarmonyDebug) && (
+                <div className="fixed top-2 left-2 z-[9999] pointer-events-auto">
+                    <div className="inline-flex items-center gap-2 rounded-md bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] text-slate-200 shadow">
+                        <span className={`px-1.5 py-0.5 rounded ${isAnalysisEnabled ? 'bg-slate-700' : 'bg-slate-700/40'}`}>
+                            Analisi: {isAnalysisEnabled ? 'ON' : 'OFF'}
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded ${enableInferredContexts ? 'bg-emerald-700/60' : 'bg-amber-700/60'}`}>
+                            Ctx auto: {enableInferredContexts ? 'ON' : 'OFF'}
+                        </span>
+                        <span className="text-slate-300">inferred: {inferredContextsForUi.length}</span>
+                        {isAnalysisEnabled && !enableInferredContexts && inferredContextsForUi.length > 0 && (
+                            <button
+                                type="button"
+                                className="px-2 py-0.5 rounded bg-slate-700/70 hover:bg-slate-700 border border-slate-600 text-slate-100 font-semibold"
+                                onClick={() => setEnableInferredContexts(true)}
+                                title="Applica i contesti inferiti (modulazioni)"
+                            >
+                                Attiva
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
             
             <div className="flex flex-row gap-4 flex-grow min-h-0">
                 <div
                     ref={scoreScrollRef}
-                    className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${viewMode === 'linear' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
+                    className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
+                    onMouseDownCapture={handleScoreMouseDownCapture}
                     onClick={handleDeselectOnClickOutside}
+                    onWheel={handleScoreWheel}
                 >
-                    <div
-                        ref={staffContainerRef}
-                        className={`${canvasFormat === 'page' ? 'max-w-screen-lg mx-auto' : 'w-full'} p-4`}
-                    >
+                    <div style={{ position: 'relative' }}>
+                        {/* Spacer: defines scrollable area (scaled size) */}
+                        <div
+                            ref={zoomSpacerRef}
+                            data-zoom-spacer="1"
+                            aria-hidden="true"
+                            style={{
+                                width: Math.max(1, Math.ceil(zoomBaseSize.w * editorZoom)),
+                                height: Math.max(1, Math.ceil(zoomBaseSize.h * editorZoom)),
+                            }}
+                        />
+
+                        {/* Content: base layout, scaled via transform (does not affect layout measurements) */}
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: 0,
+                                top: 0,
+                                transform: `scale(${editorZoom})`,
+                                transformOrigin: '0 0',
+                            }}
+                        >
+                            <div
+                                ref={staffContainerRef}
+                                className={`p-4`}
+                                style={{ width: containerWidth }}
+                            >
                         <div className="w-full flex justify-center mb-3">
                             <input
                                 value={projectTitle}
@@ -11499,7 +12501,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                                                         {/* Overlay: playhead */}
                                                         {playheadPosition && playheadPosition.systemIndex === systemIndex && (
-                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                                            <svg className="absolute inset-0 pointer-events-none export-exclude" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {
                                                                     (() => {
                                                                         const staffEndX = (actualSystemWidth ?? 0) - STAFF_MARGIN;
@@ -11522,7 +12524,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                                                         {/* Overlay: selection rect */}
                                                         {ENABLE_MARQUEE_SELECTION && rectForRender && selectionRect.systemIndex === systemIndex && (
-                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                                            <svg className="absolute inset-0 pointer-events-none export-exclude" width={actualSystemWidth} height={systemHeightPx}>
                                 <rect
                                   x={rectForRender.x}
                                   y={rectForRender.y}
@@ -11632,7 +12634,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                             {/* Overlay: analysis labels + violation highlights (adapter output) */}
                                                         {((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0))) && (
-                              <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                              <svg className="absolute inset-0 pointer-events-none export-exclude" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers */}
                                                                 {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
                                                                     <text
@@ -11836,32 +12838,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             {showRoman ? (
                                                                                 <g>
                                                                                     {(() => {
-                                                                                        // Display-only suffix: show vii°7 for diminished seventh chords
-                                                                                        // without changing the underlying roman used for stability heuristics.
-                                                                                        const needsDim7Suffix = (() => {
-                                                                                            try {
-                                                                                                const base = String(
-                                                                                                    (lbl as any).isOverride
-                                                                                                        ? ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
-                                                                                                        : ((lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
-                                                                                                );
-                                                                                                if (!(base.includes('°') || base.includes('ø'))) return false;
-                                                                                                const figTexts = (lbl.figures || []) as string[];
-                                                                                                const has7th = figTexts.some(t => String(t).includes('7'));
-                                                                                                if (has7th) return true;
-                                                                                                const sym = String((lbl as any).symbol || '');
-                                                                                                return /dim7/i.test(sym) || (sym.includes('°') && /7/.test(sym));
-                                                                                            } catch {
-                                                                                                return false;
-                                                                                            }
-                                                                                        })();
-
                                                                                         const romanBaseText = String(
                                                                                             (lbl as any).isOverride
-                                                                                                ? ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
-                                                                                                : ((lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? (lbl as any).romanDisplay ?? lbl.roman ?? '')
+                                                                                                // Manual override must win over sequence relabeling.
+                                                                                                ? ((lbl as any).romanDisplay ?? lbl.roman ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? '')
+                                                                                                // For non-overrides, prefer lookahead romanDisplay (spelling-first) over sequence heuristics.
+                                                                                                : ((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')
                                                                                         );
-                                                                                        const romanText = romanBaseText + (needsDim7Suffix ? '7' : '');
+                                                                                        const romanText = romanBaseText;
                                                                                         const romanW = measureTextWidth(romanText, romanFont);
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanW + 6;
@@ -11907,7 +12891,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                 // because the suspension renderer already draws its own line + resolution number.
                                                                                                 try {
                                                                                                     if (analyzedNotes && typeof absBeat === 'number') {
-                                                                                                        const suspHere = (analyzedNotes as any[]).some(n => n && n.isSuspension && Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - absBeat) < 1e-6);
+                                                                                                        const suspHere = (analyzedNotes as any[]).some(n => n && (n.voice ?? 1) !== 4 && n.isSuspension && Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - absBeat) < 1e-6);
                                                                                                         if (suspHere) return null;
                                                                                                     }
                                                                                                 } catch { /* ignore */ }
@@ -12023,6 +13007,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                         const suspNotes = (analyzedNotes as any[]).filter(
                                                                                                             n =>
                                                                                                                 n &&
+                                                                                                                (n.voice ?? 1) !== 4 &&
                                                                                                                 n.isSuspension &&
                                                                                                                 Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - ((lbl as any).absBeat ?? -999)) < 1e-6,
                                                                                                         );
@@ -12281,7 +13266,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         // hold-line next to the Roman/figures instead — rendering the
                                                                         // S- connection here produced unwanted green dashed lines.
                                                                         if (c.ruleId && typeof c.ruleId === 'string' && c.ruleId.startsWith('S-')) return false;
-                                                                        const match = (violations || []).find(v => {
+                                                                        const match = (visibleViolations || []).find(v => {
                                                                             if (!v || !v.ruleId || v.ruleId !== c.ruleId) return false;
                                                                             const ids = Array.isArray(v.noteIds) ? v.noteIds : [];
                                                                             return ids.includes(c.noteId1) && ids.includes(c.noteId2);
@@ -12304,7 +13289,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         if (c.severity) return c.severity;
                                                                         // Prefer a violation that explicitly contains both endpoints.
                                                                         let level: 'error' | 'warning' | 'exception' | undefined;
-                                                                        for (const v of (violations as any[])) {
+                                                                        for (const v of (visibleViolations as any[])) {
                                                                             const ids: string[] = Array.isArray((v as any)?.noteIds) ? (v as any).noteIds : [];
                                                                             if (ids.includes(c.noteId1) && ids.includes(c.noteId2)) {
                                                                                 level = bestOf(level, (v as any).severity as any);
@@ -12659,6 +13644,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                           </div>
                         );
                         })}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -12674,6 +13661,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     onHoverViolation={setHoveredViolationNotes}
                                     selectedViolationIndex={selectedViolationIndex}
                                     onSelectViolation={index => {
+                                        // Toggle: clicking the same item again closes its details.
+                                        if (index === selectedViolationIndex) {
+                                            setSelectedViolationIndex(null);
+                                            setSelectedNoteIds(new Set());
+                                            return;
+                                        }
+
                                         setSelectedViolationIndex(index);
                                         if (index != null && violations[index]) {
                                             setSelectedNoteIds(new Set(violations[index].noteIds));
@@ -12699,6 +13693,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     menuData={contextMenu}
                     onClose={() => setContextMenu(null)}
                     onApply={handleApplyContext}
+                    onApplyTextMarker={handleApplyTextMarker}
                     onRemove={handleRemoveContext}
                     onDeleteMeasure={(measureIndex) => {
                         deleteMeasureAtIndex(measureIndex);
@@ -12761,6 +13756,7 @@ const ModulationContextMenu: React.FC<{
     menuData: { x: number; y: number; absBeat: number; measureIndex: number; beat: number };
     onClose: () => void;
     onApply: (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => void;
+    onApplyTextMarker: (absBeat: number, label?: string) => void;
     onRemove: (absBeat: number) => void;
     onDeleteMeasure: (measureIndex: number) => void;
     onApplyTimeSignature: (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => void;
@@ -12772,7 +13768,7 @@ const ModulationContextMenu: React.FC<{
     initialIsMinor: boolean;
     initialLabel?: string;
     initialTimeSignature: TimeSignature;
-}> = ({ menuData, onClose, onApply, onRemove, onDeleteMeasure, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
+}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
     const [tempLabel, setTempLabel] = useState(initialLabel || '');
@@ -12919,6 +13915,10 @@ const ModulationContextMenu: React.FC<{
         onApply(menuData.absBeat, tonicToApply, tempIsMinor, tempLabel);
     };
 
+    const handleInsertTextOnly = () => {
+        onApplyTextMarker(menuData.absBeat, tempLabel);
+    };
+
     const parseFigures = (raw: string): string[] => {
         const s = String(raw || '').trim();
         if (!s) return [];
@@ -12968,6 +13968,14 @@ const ModulationContextMenu: React.FC<{
             </div>
             <div className="flex gap-2">
                 <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Applica contesto</button>
+                <button
+                    onClick={handleInsertTextOnly}
+                    className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors"
+                    title="Inserisce solo il testo come marker (senza mostrare la tonalità)"
+                    disabled={!String(tempLabel || '').trim()}
+                >
+                    Inserisci testo
+                </button>
                 <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
             </div>
             <div className="flex flex-col gap-1">

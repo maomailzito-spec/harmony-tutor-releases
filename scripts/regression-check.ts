@@ -3,12 +3,15 @@ import path from 'node:path';
 
 import {
   applyHarmonyRules,
+  calculateNoteBeats,
   formatFiguredBass,
   getActiveNotesTimeline,
   getChordSymbol,
   getKeySignature,
   getRomanAnalysis,
 } from '../src/utils/musicTheory';
+
+import { TICKS_PER_QUARTER } from '../src/constants';
 
 type Fixture = {
   name: string;
@@ -82,7 +85,372 @@ const fail = (msg: string) => {
 
 const approxEq = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
 
+const runCalculateNoteBeatsRegression = () => {
+  // Regression for a real editor bug:
+  // when a measure in the middle becomes empty (notes deleted -> rests -> transiently missing),
+  // notes in later measures must NOT be repacked/compacted into earlier measures.
+  // `calculateNoteBeats` must treat `startTick` as canonical timeline.
+  const name = 'calculateNoteBeats preserves empty measures (startTick-canonical)';
+  const ts = { numerator: 4, denominator: 4 };
+  const q = TICKS_PER_QUARTER;
+
+  // Four bars of quarter notes, but intentionally scrambled array order:
+  // m0 (0..3), m2 (8..11), m3 (12..15), m1 (4..7)
+  const mk = (id: string, startTick: number): any => ({
+    id,
+    pitch: 'C',
+    octave: 4,
+    position: 0,
+    midi: 60,
+    noteIndex: 0,
+    clef: 'treble',
+    duration: 'quarter',
+    isRest: false,
+    isTriplet: false,
+    isDuplet: false,
+    isDotted: false,
+    // Legacy/possibly-wrong fields: the function must override based on startTick.
+    measureIndex: 0,
+    beat: 1,
+    startTick,
+    durationTicks: q,
+    voice: 1,
+  });
+
+  const notes: any[] = [
+    mk('m0b1', 0),
+    mk('m0b2', 1 * q),
+    mk('m0b3', 2 * q),
+    mk('m0b4', 3 * q),
+
+    mk('m2b1', 8 * q),
+    mk('m2b2', 9 * q),
+    mk('m2b3', 10 * q),
+    mk('m2b4', 11 * q),
+
+    mk('m3b1', 12 * q),
+    mk('m3b2', 13 * q),
+    mk('m3b3', 14 * q),
+    mk('m3b4', 15 * q),
+
+    mk('m1b1', 4 * q),
+    mk('m1b2', 5 * q),
+    mk('m1b3', 6 * q),
+    mk('m1b4', 7 * q),
+  ];
+
+  const out = calculateNoteBeats(notes as any, ts as any, []);
+  const byId = new Map(out.map((n: any) => [String(n.id), n]));
+
+  const assert = (id: string, wantMeasureIndex: number, wantBeat: number) => {
+    const n = byId.get(id);
+    if (!n) {
+      fail(`[${name}] missing output note id='${id}'`);
+      return false;
+    }
+    const mi = Number(n.measureIndex);
+    const bt = Number(n.beat);
+    if (!(mi === wantMeasureIndex && approxEq(bt, wantBeat))) {
+      fail(`[${name}] id='${id}' expected m=${wantMeasureIndex} beat=${wantBeat} got m=${String(mi)} beat=${String(bt)}`);
+      return false;
+    }
+    return true;
+  };
+
+  let ok = true;
+  ok = assert('m1b1', 1, 1) && ok;
+  ok = assert('m2b1', 2, 1) && ok;
+  ok = assert('m3b4', 3, 4) && ok;
+
+  console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+  if (!ok) process.exitCode = 1;
+};
+
+const runInferredContextRegression = () => {
+  // Regression for a real-world issue: modulation was not detected and the UI showed
+  // bVII/bIII/etc. in the home key even when the piece clearly moved to a far flat key.
+  const name = 'inferred contexts detect Bb→Gb modulation (Dubois n3 p12)';
+  const file = './tests/Dubois n3 p12.htp';
+  if (!fs.existsSync(file)) {
+    console.log(`SKIP  ${name} (missing ${file})`);
+    return;
+  }
+
+  try {
+    const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const beatsPerMeasure = fx.timeSignature.numerator * (4 / fx.timeSignature.denominator);
+    const ks = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
+    const res: any = applyHarmonyRules(
+      fx.notes,
+      ks as any,
+      fx.keySignatureRoot,
+      fx.isMinorMode,
+      fx.analysisContexts || [],
+      fx.timeSignature,
+    );
+
+    const inferred = (res.inferredAnalysisContexts || []) as any[];
+    const hasGb = inferred.some((c) => String(c?.newTonic) === 'Gb' && !c?.newIsMinor && approxEq(Number(c?.absBeat), 76, 1e-3));
+    // Return-to-global is now snapped to the measure downbeat when inferred mid-measure.
+    const hasReturnBb = inferred.some((c) => String(c?.newTonic) === 'Bb' && !c?.newIsMinor && approxEq(Number(c?.absBeat), 108, 1e-3));
+    const hasBad = inferred.some((c) => {
+      const t = String(c?.newTonic || '');
+      // Guard against known false positives.
+      // NOTE: Eb can be a legitimate local tonicization in this excerpt; do not forbid it.
+      return t === 'B' || t === 'Db';
+    });
+
+    if (!hasGb) fail(`[${name}] missing inferred context Gb@absBeat≈76`);
+    if (!hasReturnBb) fail(`[${name}] missing inferred return context Bb@absBeat≈108`);
+    if (hasBad) fail(`[${name}] has unexpected inferred context (B/Db) => ${JSON.stringify(inferred.map(c => ({ absBeat: c.absBeat, tonic: c.newTonic })))}`);
+
+    const ok = hasGb && hasReturnBb && !hasBad;
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+};
+
+const runDuboisN2P7ContextRegression = () => {
+  const name = 'Dubois N2 p7: no spurious Bm inferred context';
+  const file = './tests/Dubois N2 p.7.json';
+  if (!fs.existsSync(file)) {
+    console.log(`SKIP  ${name} (missing ${file})`);
+    return;
+  }
+
+  try {
+    const fx = JSON.parse(fs.readFileSync(file, 'utf8')) as any;
+    const ks = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
+    const res: any = applyHarmonyRules(
+      fx.notes,
+      ks as any,
+      fx.keySignatureRoot,
+      fx.isMinorMode,
+      fx.analysisContexts || [],
+      fx.timeSignature,
+    );
+
+    const inferred = (res.inferredAnalysisContexts || []) as any[];
+    const hasBm = inferred.some((c) => String(c?.newTonic || '') === 'B' && !!c?.newIsMinor);
+    const ok = !hasBm;
+    if (!ok) {
+      fail(`[${name}] unexpected inferred Bm => ${JSON.stringify(inferred.map((c) => ({ absBeat: c.absBeat, tonic: c.newTonic, minor: !!c?.newIsMinor, score: (c as any).score ?? null })))}`);
+    }
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+};
+
+const runDuboisN2P7DiminishedConfusionRegressions = () => {
+  const file = './tests/Dubois N2 p.7.json';
+  const name = 'Dubois N2 p7: avoid spurious dominant readings (m7b3, m11b1)';
+  if (!fs.existsSync(file)) {
+    console.log(`SKIP  ${name} (missing ${file})`);
+    return;
+  }
+
+  try {
+    const fx = JSON.parse(fs.readFileSync(file, 'utf8')) as any;
+    const ks = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
+    const res: any = applyHarmonyRules(
+      fx.notes,
+      ks as any,
+      fx.keySignatureRoot,
+      fx.isMinorMode,
+      fx.analysisContexts || [],
+      fx.timeSignature,
+    );
+
+    const analyzed = (res.analyzedNotes || fx.notes) as any[];
+    const timeline = getActiveNotesTimeline(analyzed as any, fx.timeSignature, fx.timeSignatureChanges || []);
+    const evAt = (ab: number) => timeline.find((e: any) => approxEq(Number(e?.absBeat), ab, 1e-6));
+
+    // m7 b3 => absBeat 26 (4/4)
+    const ev7b3 = evAt(26);
+    if (!ev7b3) {
+      fail(`[${name}] missing chordEvent at absBeat=26 (m7b3)`);
+      console.log(`FAIL  ${name}`);
+      process.exitCode = 1;
+      return;
+    }
+    const rEb = String(getRomanAnalysis(ev7b3.notes || [], 'Eb', false)?.roman || '').replace(/\s+/g, '');
+    if (rEb !== 'iii') {
+      fail(`[${name}] m7b3 expected EbMaj roman='iii' got '${rEb || '(empty)'}'`);
+    }
+
+    // m11 b1 => absBeat 40 (4/4)
+    const ev11b1 = evAt(40);
+    if (!ev11b1) {
+      fail(`[${name}] missing chordEvent at absBeat=40 (m11b1)`);
+      console.log(`FAIL  ${name}`);
+      process.exitCode = 1;
+      return;
+    }
+    const rG = String(getRomanAnalysis(ev11b1.notes || [], 'G', false)?.roman || '').replace(/\s+/g, '');
+    if (rG !== 'iii') {
+      fail(`[${name}] m11b1 expected GMaj roman='iii' got '${rG || '(empty)'}'`);
+    }
+
+    const ok = rEb === 'iii' && rG === 'iii';
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+};
+
+const runDuboisN3WarningRegressions = () => {
+  const file = './tests/Dubois n3 p12.htp';
+  if (!fs.existsSync(file)) {
+    console.log(`SKIP  Dubois n3 p12 warning regressions (missing ${file})`);
+    return;
+  }
+
+  const fx = JSON.parse(fs.readFileSync(file, 'utf8')) as any;
+  const beatsPerMeasure = fx.timeSignature.numerator * (4 / fx.timeSignature.denominator);
+  const keySig = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
+  const res: any = applyHarmonyRules(
+    fx.notes,
+    keySig as any,
+    fx.keySignatureRoot,
+    fx.isMinorMode,
+    fx.analysisContexts || [],
+    fx.timeSignature,
+  );
+
+  const timeline = getActiveNotesTimeline(res.analyzedNotes as any, fx.timeSignature as any);
+  const violations = (res.violations || []) as any[];
+
+  const eventAt = (absBeat: number) => timeline.find((ev) => approxEq(ev.absBeat, absBeat, 1e-3));
+  const idsAt = (absBeat: number): Set<string> => {
+    const ev = eventAt(absBeat);
+    const ids = new Set<string>();
+    for (const n of (ev?.notes || []) as any[]) {
+      if (!n || n.isRest) continue;
+      if (n.id) ids.add(String(n.id));
+    }
+    return ids;
+  };
+
+  // UI measure 12 beat 3
+  try {
+    const name = 'Dubois n3 p12: no false R-CHORD-COMPLETE at m12 b3';
+    const absBeat = (12 - 1) * beatsPerMeasure + (3 - 1);
+    const ids = idsAt(absBeat);
+    const hits = violations.filter((v) => String(v?.ruleId) === 'R-CHORD-COMPLETE'
+      && Array.isArray(v?.noteIds)
+      && (v.noteIds as any[]).some((id) => ids.has(String(id))));
+    const ok = hits.length === 0;
+    if (!ok) fail(`[${name}] unexpected hits: ${JSON.stringify(hits.map(h => ({ ruleId: h.ruleId, desc: h.description })))}`);
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    const name = 'Dubois n3 p12: no false R-CHORD-COMPLETE at m12 b3';
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+
+  // UI measure 23 beat 1
+  try {
+    const name = 'Dubois n3 p12: no false R-N-RES at m23 b1';
+    const absBeat = (23 - 1) * beatsPerMeasure + (1 - 1);
+    const ids = idsAt(absBeat);
+    const hits = violations.filter((v) => String(v?.ruleId) === 'R-N-RES'
+      && Array.isArray(v?.noteIds)
+      && (v.noteIds as any[]).some((id) => ids.has(String(id))));
+    const ok = hits.length === 0;
+    if (!ok) fail(`[${name}] unexpected hits: ${JSON.stringify(hits.map(h => ({ ruleId: h.ruleId, desc: h.description })))}`);
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    const name = 'Dubois n3 p12: no false R-N-RES at m23 b1';
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+
+  // R-13 (all voices same direction) must not fire on pure revoicing at UI measure 17.
+  try {
+    const name = 'Dubois n3 p12: no false R-13 at m17 (revoicing)';
+    const bad = (violations || []).filter((v) => String(v?.ruleId) === 'R-13');
+    const hits = bad.filter((v) => {
+      const ids = Array.isArray(v?.noteIds) ? (v.noteIds as any[]).map(String) : [];
+      let minAbs = Number.POSITIVE_INFINITY;
+      for (const id of ids) {
+        const n = (res.analyzedNotes as any[]).find((x: any) => x && String(x.id) === id);
+        if (!n) continue;
+        const ab = Number(n.measureIndex) * beatsPerMeasure + (Number(n.beat) - 1);
+        if (Number.isFinite(ab)) minAbs = Math.min(minAbs, ab);
+      }
+      if (!Number.isFinite(minAbs)) return false;
+      const uiM = Math.floor(minAbs / beatsPerMeasure) + 1;
+      return uiM === 17;
+    });
+    const ok = hits.length === 0;
+    if (!ok) fail(`[${name}] unexpected hits: ${JSON.stringify(hits.map((h) => ({ desc: h.description, noteIds: (h.noteIds || []).length })))}`);
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    const name = 'Dubois n3 p12: no false R-13 at m17 (revoicing)';
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+
+  // R-10 (doubled leading tone) inside sequences is downgraded to exception (green).
+  try {
+    const name = 'Dubois n3 p12: R-10 in sequence is exception at m6/m7';
+    const r10 = (violations || []).filter((v) => String(v?.ruleId) === 'R-10');
+    const targets = new Set([6, 7]);
+
+    const uiMeasureOfViolation = (v: any): number | null => {
+      try {
+        const ids = Array.isArray(v?.noteIds) ? (v.noteIds as any[]).map(String) : [];
+        let minAbs = Number.POSITIVE_INFINITY;
+        for (const id of ids) {
+          const n = (res.analyzedNotes as any[]).find((x: any) => x && String(x.id) === id);
+          if (!n) continue;
+          const ab = Number(n.measureIndex) * beatsPerMeasure + (Number(n.beat) - 1);
+          if (Number.isFinite(ab)) minAbs = Math.min(minAbs, ab);
+        }
+        if (!Number.isFinite(minAbs)) return null;
+        return Math.floor(minAbs / beatsPerMeasure) + 1;
+      } catch {
+        return null;
+      }
+    };
+
+    const hits = r10.filter((v) => targets.has(uiMeasureOfViolation(v) ?? -1));
+    const ok = hits.length >= 2 && hits.every((v) => v?.severity === 'exception');
+    if (!ok) fail(`[${name}] expected exception R-10 at m6 and m7; got: ${JSON.stringify(hits.map(h => ({ m: uiMeasureOfViolation(h), severity: h.severity, desc: h.description })))}`);
+    console.log(`${ok ? 'OK' : 'FAIL'}  ${name}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e: any) {
+    const name = 'Dubois n3 p12: R-10 in sequence is exception at m6/m7';
+    fail(`[${name}] threw: ${String(e?.message || e)}`);
+    console.log(`FAIL  ${name}`);
+    process.exitCode = 1;
+  }
+};
+
 const main = () => {
+  runCalculateNoteBeatsRegression();
+  runInferredContextRegression();
+  runDuboisN2P7ContextRegression();
+  runDuboisN2P7DiminishedConfusionRegressions();
+  runDuboisN3WarningRegressions();
+
   const fixtures = loadFixtures();
   if (!fixtures.length) {
     console.log('No fixtures found.');

@@ -14,6 +14,9 @@ const IPC_CHANNELS = Object.freeze({
   SAVE_FILE_DIALOG: 'save-file-dialog',
   SAVE_BINARY_FILE: 'save-binary-file',
 
+  EXPORT_PDF_FROM_HTML: 'export-pdf-from-html',
+  EXPORT_PNG_FROM_HTML: 'export-png-from-html',
+
   GUITAR_LIBRARY_LOAD: 'guitar-library-load',
   GUITAR_LIBRARY_SAVE: 'guitar-library-save',
 });

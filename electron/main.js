@@ -2,6 +2,63 @@ const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// -----------------------------------------------------------------------------
+// Stdio hardening (macOS / dev): when Electron is launched without an attached
+// terminal (or the parent process closes pipes), writes to stdout/stderr can
+// fail with EIO/EPIPE and crash the main process.
+// -----------------------------------------------------------------------------
+function isIgnorableStdioError(err) {
+  try {
+    const code = err && err.code;
+    return code === 'EPIPE' || code === 'EIO';
+  } catch {
+    return false;
+  }
+}
+
+function attachIgnoreStdioErrors(stream) {
+  try {
+    if (!stream || typeof stream.on !== 'function') return;
+    stream.on('error', (err) => {
+      if (isIgnorableStdioError(err)) return;
+      // Avoid recursion if stderr is also broken.
+      try { process.stderr && process.stderr.write && process.stderr.write(`[stdio:error] ${String(err && err.message ? err.message : err)}\n`); } catch {}
+    });
+  } catch {
+    // ignore
+  }
+}
+
+attachIgnoreStdioErrors(process.stdout);
+attachIgnoreStdioErrors(process.stderr);
+
+function safeStdioWrite(stream, line) {
+  try {
+    if (!stream || typeof stream.write !== 'function') return;
+    stream.write(String(line) + '\n');
+  } catch (err) {
+    if (isIgnorableStdioError(err)) return;
+  }
+}
+
+// In some environments (especially on certain macOS setups), Chromium GPU process
+// can crash and leave the renderer as a white screen. Disable hardware acceleration
+// to make the app robust.
+try {
+  app.disableHardwareAcceleration();
+} catch {
+  // ignore
+}
+
+// Extra hardening: force-disable Chromium GPU features.
+// (Safe even when hardware acceleration is already disabled.)
+try {
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-gpu-compositing');
+} catch {
+  // ignore
+}
+
 const {
   MENU_ACTIONS,
   sendMenuAction,
@@ -18,6 +75,93 @@ let showHarmonyDebugEnabled = false;
 let showVoiceColorsEnabled = false;
 let showQuickInsertBarEnabled = true;
 let engravingMode = 'enhanced';
+
+const EXPORT_PDF_FILTERS = [{ name: 'PDF', extensions: ['pdf'] }];
+const EXPORT_PNG_FILTERS = [{ name: 'PNG', extensions: ['png'] }];
+
+function isFiniteNumber(n) {
+  return typeof n === 'number' && Number.isFinite(n);
+}
+
+function sanitizePdfScaleFactorPercent(raw, fallbackPercent) {
+  // Electron printToPDF expects a percentage (default 100).
+  try {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallbackPercent;
+    return Math.max(10, Math.min(200, Math.round(n)));
+  } catch {
+    return fallbackPercent;
+  }
+}
+
+function sanitizeZoomFactor(raw, fallback) {
+  // Browser zoom factor (1 = 100%).
+  try {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0.1, Math.min(4, n));
+  } catch {
+    return fallback;
+  }
+}
+
+async function createHiddenExportWindow() {
+  const win = new BrowserWindow({
+    show: false,
+    width: 1280,
+    height: 900,
+    backgroundColor: '#ffffff',
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  // Ensure the window is cleaned up even if the export fails.
+  win.on('closed', () => { /* noop */ });
+  return win;
+}
+
+function onceDidFinishLoad(webContents) {
+  return new Promise((resolve, reject) => {
+    try {
+      const onDone = () => {
+        cleanup();
+        resolve();
+      };
+      const onFail = (_e, code, desc) => {
+        cleanup();
+        reject(new Error(`load failed (${code}): ${desc}`));
+      };
+      const cleanup = () => {
+        try { webContents.removeListener('did-finish-load', onDone); } catch { /* ignore */ }
+        try { webContents.removeListener('did-fail-load', onFail); } catch { /* ignore */ }
+      };
+      webContents.once('did-finish-load', onDone);
+      webContents.once('did-fail-load', onFail);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+async function loadHtmlInWindow(win, html) {
+  const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(String(html || ''))}`;
+  const p = onceDidFinishLoad(win.webContents);
+  await win.loadURL(dataUrl);
+  await p;
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function numberedPath(basePath, index1) {
+  const ext = path.extname(basePath);
+  const base = basePath.slice(0, basePath.length - ext.length);
+  return `${base}_${index1}${ext || '.png'}`;
+}
 
 function sendAction(action, payload) {
   if (!mainWindow) return false;
@@ -205,6 +349,18 @@ function touchRecentFile(filePath) {
   }
 }
 
+function removeRecentFile(filePath) {
+  try {
+    if (!filePath || typeof filePath !== 'string') return;
+    const beforeLen = recentFiles.length;
+    recentFiles = recentFiles.filter((p) => p !== filePath);
+    if (recentFiles.length !== beforeLen) saveRecentFiles();
+    try { createMenu(); } catch { /* ignore */ }
+  } catch {
+    // ignore
+  }
+}
+
 function setWindowTitleForPath(filePath) {
   try {
     if (!mainWindow) return;
@@ -232,6 +388,8 @@ function createMenu() {
         '• Cmd/Ctrl+O  Apri…',
         '• Cmd/Ctrl+I  Importa MIDI…',
         '• Cmd/Ctrl+Shift+E  Esporta MIDI…',
+        '• Cmd/Ctrl+Shift+P  Esporta PDF…',
+        '• Cmd/Ctrl+Shift+G  Esporta PNG…',
         '• Cmd/Ctrl+P  Stampa',
         '• Cmd/Ctrl+S  Salva',
         '• Cmd/Ctrl+Shift+S  Salva con nome…',
@@ -304,16 +462,32 @@ function createMenu() {
         {
           label: 'Recent',
           submenu: (recentFiles.length === 0) ? [ { label: 'Nessun file recente', enabled: false } ] : recentFiles.map(fp => ({
-            label: fp,
+            label: (() => {
+              try {
+                const exists = Boolean(fp && fs.existsSync(fp));
+                return exists ? fp : `[MANCANTE] ${fp}`;
+              } catch {
+                return String(fp);
+              }
+            })(),
             click: () => {
               if (!mainWindow) return;
               try {
+                if (!fp || typeof fp !== 'string') return;
+                if (!fs.existsSync(fp)) {
+                  removeRecentFile(fp);
+                  sendError('recent-missing', `File recente non trovato: ${fp}`);
+                  return;
+                }
+
                 const data = fs.readFileSync(fp, 'utf-8');
                 touchRecentFile(fp);
                 sendAction(MENU_ACTIONS.OPEN, { data, filePath: fp });
                 setWindowTitleForPath(fp);
               } catch (err) {
                 console.error('Errore apertura file recente:', err);
+                try { removeRecentFile(fp); } catch { /* ignore */ }
+                try { sendError('open-recent-failed', String(err && err.message ? err.message : err)); } catch { /* ignore */ }
               }
             }
           }))
@@ -372,9 +546,38 @@ function createMenu() {
           }
         },
         {
+          label: 'Importa MusicXML...',
+          click: async () => {
+            if (!mainWindow) return;
+            const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+              properties: ['openFile'],
+              filters: [{ name: 'MusicXML', extensions: ['xml', 'musicxml'] }]
+            });
+            if (canceled || filePaths.length === 0) return;
+            const filePath = filePaths[0];
+            try {
+              const xml = fs.readFileSync(filePath, 'utf-8');
+              sendAction(MENU_ACTIONS.IMPORT_MUSICXML, { xml, filePath });
+            } catch (err) {
+              console.error('Errore import MusicXML:', err);
+              sendError('import-musicxml-failed', err.message);
+            }
+          }
+        },
+        {
           label: 'Esporta MIDI...',
           accelerator: 'CmdOrCtrl+Shift+E',
           click: () => { sendAction(MENU_ACTIONS.EXPORT_MIDI); }
+        },
+        {
+          label: 'Esporta PDF…',
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: () => { sendAction(MENU_ACTIONS.EXPORT_PDF); }
+        },
+        {
+          label: 'Esporta PNG…',
+          accelerator: 'CmdOrCtrl+Shift+G',
+          click: () => { sendAction(MENU_ACTIONS.EXPORT_PNG); }
         },
         { type: 'separator' },
         {
@@ -683,6 +886,41 @@ function createWindow() {
   // Ensure the title is set even when no project is open.
   setWindowTitleForPath(null);
 
+  // Dev diagnostics: forward renderer console/errors to the terminal.
+  if (isDev) {
+    try {
+      mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+        try {
+          const lvl = Number(level);
+          const tag = lvl >= 3 ? 'error' : (lvl === 2 ? 'warn' : 'log');
+          const out = `[renderer:${tag}] ${message} (${sourceId || 'unknown'}:${line || 0})`;
+          if (tag === 'error') safeStdioWrite(process.stderr, out);
+          else safeStdioWrite(process.stdout, out);
+        } catch {
+          // ignore
+        }
+      });
+    } catch {
+      // ignore
+    }
+
+    try {
+      mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+        console.error('[renderer] did-fail-load', { errorCode, errorDescription, validatedURL });
+      });
+    } catch {
+      // ignore
+    }
+
+    try {
+      mainWindow.webContents.on('render-process-gone', (_event, details) => {
+        console.error('[renderer] render-process-gone', details);
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   // Diagnostics: show an unmistakable startup proof when requested.
   // Enable with: ELECTRON_SHOW_BUILD_TAG_DIALOG=1 npm run electron:dev
   if (isDev && SHOW_BUILD_TAG_DIALOG) {
@@ -777,7 +1015,7 @@ ipcMain.handle(IPC_CHANNELS.SAVE_FILE_DIALOG, async (event, content) => {
     defaultPath: `project.${PROJECT_EXT}`,
   });
 
-  if (canceled || !filePath) return { success: false, error: 'Salvataggio annullato' };
+  if (canceled || !filePath) return { success: false, canceled: true, error: 'Salvataggio annullato' };
 
   try {
     const outPath = ensureProjectExtension(filePath);
@@ -786,6 +1024,7 @@ ipcMain.handle(IPC_CHANNELS.SAVE_FILE_DIALOG, async (event, content) => {
     return { success: true, filePath: outPath };
   } catch (err) {
     console.error("Errore scrittura file:", err);
+    try { sendError('save-failed', String(err && err.message ? err.message : err)); } catch { /* ignore */ }
     return { success: false, error: err.message };
   }
 });
@@ -804,7 +1043,7 @@ ipcMain.handle(IPC_CHANNELS.SAVE_FILE, async (event, content, targetPath) => {
       filters: PROJECT_FILTERS,
       defaultPath: `project.${PROJECT_EXT}`,
     });
-    if (canceled || !filePath) return { success: false, error: 'Salvataggio annullato' };
+    if (canceled || !filePath) return { success: false, canceled: true, error: 'Salvataggio annullato' };
 
     const outPath = ensureProjectExtension(filePath);
     fs.writeFileSync(outPath, content);
@@ -812,6 +1051,7 @@ ipcMain.handle(IPC_CHANNELS.SAVE_FILE, async (event, content, targetPath) => {
     return { success: true, filePath: outPath };
   } catch (err) {
     console.error('Errore salvataggio file:', err);
+    try { sendError('save-failed', String(err && err.message ? err.message : err)); } catch { /* ignore */ }
     return { success: false, error: err.message };
   }
 });
@@ -826,7 +1066,7 @@ ipcMain.handle(IPC_CHANNELS.SAVE_BINARY_FILE, async (event, base64, targetPath, 
           ? filters
           : [{ name: 'MIDI', extensions: ['mid'] }]
       });
-      if (canceled || !filePath) return { success: false, error: 'Salvataggio annullato' };
+      if (canceled || !filePath) return { success: false, canceled: true, error: 'Salvataggio annullato' };
       outPath = filePath;
     }
 
@@ -835,7 +1075,114 @@ ipcMain.handle(IPC_CHANNELS.SAVE_BINARY_FILE, async (event, base64, targetPath, 
     return { success: true, filePath: outPath };
   } catch (err) {
     console.error('Errore salvataggio binario:', err);
+    try { sendError('save-binary-failed', String(err && err.message ? err.message : err)); } catch { /* ignore */ }
     return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle(IPC_CHANNELS.EXPORT_PDF_FROM_HTML, async (_event, html, options) => {
+  if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
+  let win = null;
+  try {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      filters: EXPORT_PDF_FILTERS,
+      defaultPath: 'export.pdf',
+    });
+    if (canceled || !filePath) return { success: false, canceled: true, error: 'Salvataggio annullato' };
+
+    win = await createHiddenExportWindow();
+    await loadHtmlInWindow(win, html);
+
+    const pageSize = (options && (options.pageSize === 'A4' || options.pageSize === 'Letter')) ? options.pageSize : 'A4';
+    const landscape = !!(options && options.landscape);
+    const marginsType = (options && (options.marginsType === 0 || options.marginsType === 1 || options.marginsType === 2)) ? options.marginsType : 1;
+    const scaleFactor = sanitizePdfScaleFactorPercent(options && options.scaleFactor, 100);
+
+    const pdf = await win.webContents.printToPDF({
+      pageSize,
+      landscape,
+      marginsType,
+      printBackground: true,
+      scaleFactor,
+    });
+
+    fs.writeFileSync(filePath, pdf);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('[MAIN] export pdf failed:', err);
+    try { sendError('export-pdf-failed', String(err && err.message ? err.message : err)); } catch { /* ignore */ }
+    return { success: false, error: String(err && err.message ? err.message : err) };
+  } finally {
+    try { if (win && !win.isDestroyed()) win.close(); } catch { /* ignore */ }
+  }
+});
+
+ipcMain.handle(IPC_CHANNELS.EXPORT_PNG_FROM_HTML, async (_event, html, options) => {
+  if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
+  let win = null;
+  try {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      filters: EXPORT_PNG_FILTERS,
+      defaultPath: 'export.png',
+    });
+    if (canceled || !filePath) return { success: false, canceled: true, error: 'Salvataggio annullato' };
+
+    win = await createHiddenExportWindow();
+    await loadHtmlInWindow(win, html);
+
+    const scaleFactor = sanitizeZoomFactor(options && options.scaleFactor, 1);
+    try {
+      await win.webContents.setZoomFactor(scaleFactor);
+    } catch { /* ignore */ }
+
+    const tileMaxHeightPx = (() => {
+      const raw = options && options.tileMaxHeightPx;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return 8000;
+      return Math.max(800, Math.min(12000, Math.round(n)));
+    })();
+
+    // Measure scroll size.
+    const size = await win.webContents.executeJavaScript(
+      '({ w: Math.ceil(Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, 0)), h: Math.ceil(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, 0)) })'
+    );
+
+    const contentW = Math.max(1, Math.round(size && size.w ? size.w : 1280));
+    const contentH = Math.max(1, Math.round(size && size.h ? size.h : 900));
+
+    // Resize viewport for better captures.
+    try {
+      await win.setContentSize(Math.min(2200, contentW), Math.min(tileMaxHeightPx, Math.max(900, Math.min(2000, contentH))));
+    } catch { /* ignore */ }
+
+    const tiles = Math.max(1, Math.ceil(contentH / tileMaxHeightPx));
+    const outFiles = [];
+
+    for (let i = 0; i < tiles; i++) {
+      const y = i * tileMaxHeightPx;
+      const h = Math.min(tileMaxHeightPx, contentH - y);
+
+      // Scroll so the requested segment is in the viewport.
+      try {
+        await win.webContents.executeJavaScript(`window.scrollTo(0, ${y});`);
+      } catch { /* ignore */ }
+      await sleep(80);
+
+      const image = await win.webContents.capturePage({ x: 0, y: 0, width: contentW, height: h });
+      const png = image.toPNG();
+
+      const outPath = (tiles === 1) ? filePath : numberedPath(filePath, i + 1);
+      fs.writeFileSync(outPath, png);
+      outFiles.push(outPath);
+    }
+
+    return { success: true, filePath, files: outFiles };
+  } catch (err) {
+    console.error('[MAIN] export png failed:', err);
+    try { sendError('export-png-failed', String(err && err.message ? err.message : err)); } catch { /* ignore */ }
+    return { success: false, error: String(err && err.message ? err.message : err) };
+  } finally {
+    try { if (win && !win.isDestroyed()) win.close(); } catch { /* ignore */ }
   }
 });
 

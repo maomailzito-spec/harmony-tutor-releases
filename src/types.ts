@@ -144,6 +144,7 @@ export type StaffNote = {
   octave: number;
   accidental?: AccidentalType;
   explicitAccidental?: AccidentalType | null;
+  userAccidental?: AccidentalType | null;
   position: number; // 0=C4, 1=D4, etc. relative to C4
   midi: number;
   color?: string;
@@ -232,6 +233,11 @@ export type AnalysisContext = {
     newIsMinor: boolean;
     // Optional custom label shown above the staff for this context.
     label?: string;
+    // Optional: controls how the marker is rendered above the staff.
+    // - 'both' (default/legacy): show label + [Tonic Quality]
+    // - 'tonic': show only [Tonic Quality]
+    // - 'text': show only label (no tonic appended)
+    markerMode?: 'both' | 'tonic' | 'text';
     // Optional: inference confidence score (used only for engine-inferred contexts).
     score?: number;
     // Optional: source tag for UI/debug.
@@ -278,4 +284,7 @@ export type HarmonyLabelOverride = {
   figures?: string[];
   symbol?: string;
   note?: string;
+  // If true, this override is used only to force a label at this absBeat
+  // (i.e. prevent suppression), without overriding roman/figures/symbol.
+  force?: boolean;
 };

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "tsc && vite build",
+    "audit:contracts": "tsx scripts/audit-contracts.ts",
+    "build": "npm run audit:contracts && tsc && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
     "preview": "vite preview",
     "dev:united": "cross-env APP_FLAVOR=united VITE_APP_FLAVOR=united VITE_PORT=5175 npm run electron:dev",
@@ -15,12 +16,18 @@
     "dev:grandstaff:split": "npm --prefix \"./_split/harmony-tutor-grandstaff\" run electron:dev",
     "dev:guitar:split": "npm --prefix \"./_split/harmony-tutor-guitar\" run electron:dev",
     "electron": "node scripts/run-electron-dev.js",
-    "electron:dev": "concurrently -k \"cross-env NODE_ENV=development npm run dev\" \"cross-env NODE_ENV=development npm run electron\"",
+    "electron:dev": "node scripts/electron-dev-orchestrator.js",
     "electron:dev:enh": "cross-env VITE_ENHARMONIC_WARNINGS=1 npm run electron:dev",
     "electron:prod": "npm run build && cross-env NODE_ENV=production electron .",
     "regress": "tsx scripts/regression-check.ts",
+    "smoke:legacy-project-migration": "tsx scripts/smoke-legacy-project-migration.ts",
     "debug:m5": "tsx scripts/debug-m5-bb7ab.ts",
-    "debug:measure": "tsx scripts/debug-measure-events.ts"
+    "debug:measure": "tsx scripts/debug-measure-events.ts",
+    "debug:case": "tsx scripts/debug-new-case.ts"
+    ,
+    "debug:parallels": "tsx scripts/audit-parallels.ts"
+    ,
+    "debug:suspects": "tsx scripts/audit-analysis-suspects.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.1.3",

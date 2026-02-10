@@ -2,7 +2,10 @@ export const MENU_ACTIONS: Readonly<{
   NEW: 'new';
   OPEN: 'open';
   IMPORT_MIDI: 'import-midi';
+  IMPORT_MUSICXML: 'import-musicxml';
   EXPORT_MIDI: 'export-midi';
+  EXPORT_PDF: 'export-pdf';
+  EXPORT_PNG: 'export-png';
   PRINT: 'print';
   SAVE: 'save';
   SAVE_AS: 'save-as';
@@ -36,7 +39,10 @@ export type MenuActionPayloadMap = {
   'new': undefined;
   'open': { data: string; filePath?: string };
   'import-midi': { base64: string; filePath: string };
+  'import-musicxml': { xml: string; filePath: string };
   'export-midi': undefined;
+  'export-pdf': undefined;
+  'export-png': undefined;
   'print': undefined;
   'save': undefined;
   'save-as': undefined;
