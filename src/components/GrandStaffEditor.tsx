@@ -32,6 +32,7 @@ import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectDat
 import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 import { getString, setString } from '../storage/localStorage';
 import { HT_EDITOR_ZOOM_KEY } from '../storage/storageKeys';
+import { handleGrandStaffProjectIOMenuAction } from '../controllers/grandStaffProjectIOAdapter';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -2125,296 +2126,96 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
-        if (action === 'close-project') {
-            // Removed debug log
-            const confirmed = window.confirm("Vuoi chiudere il progetto corrente? Le modifiche non salvate andranno perse.");
-            if (confirmed) {
-                // Reset rawNotes to initial state
-                setRawNotes([]);
-                setKeySignatureRoot('C');
-                setProjectTitle('');
-                setTimeSignature({ numerator: 4, denominator: 4 });
-                setTimeSignatureChanges([]);
-                setClipboard(null);
-                setSelectedNoteIds(new Set());
-                setActiveTab('editor');
-                setDoubleBarlineMeasures([]);
-                setMinMeasureCount(4);
-                setMeasuresPerLine(4);
-                setIsMinorMode(false);
-                setKeyChangeMode('none');
-                setModalTonicOverride('');
-                setSelectedInsertion({ type: 'note', duration: 'quarter', isDotted: false });
-                setIsTriplet(false);
-                setIsDuplet(false);
-                setIsSwing(false);
-                setTupletNoteCount(0);
-                setTripletBaseDuration(null);
-                setActiveAccidental(null);
-                setSelectedVoice(1);
-                setAutoLeadingToneInMinor(true);
-                setHoveredViolationNotes(null);
-                setSelectedViolationIndex(null);
-                setViewMode('page');
-                setPasteCaretImmediate(null);
-                setAnalysisContexts([]);
-                setHarmonyOverrides([]);
-                setContextMenu(null);
-                setShowRomanAnalysis(true);
-                setShowSymbolAnalysis(false);
-                setShowMeasureNumbers(true);
-                setIsToolbarCustomizeOpen(false);
-                setMidiOutputs([]);
-                setSelectedMidiOutput(null);
-                setCurrentProjectFilePath(null);
-                projectExtrasRef.current = EMPTY_EXTRAS;
-            }
-        } else if (action === 'save' || action === 'save-as') {
-            // Removed debug log
-            if (latestRawNotes.current.length === 0 && !window.confirm("Il progetto è vuoto. Salvare comunque?")) return;
-            const saveKeySig = getKeySignature(keySignatureRoot || 'C', isMinorMode ? 'Minor' : 'Major');
-            const baseProject: any = {
-                schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
-                notes: (latestRawNotes.current || []).map((n: any) => normalizeNotePitchFieldsWithKey(n as any, saveKeySig)),
-                staffSystemMode,
-                // Project-level settings
-                keySignatureRoot,
-                projectTitle,
-                titleFontSize,
-                titleFontFamily,
-                timeSignature,
-                timeSignatureChanges,
-                isMinorMode,
-                autoLeadingToneInMinor,
-                keyChangeMode,
-                modalTonicOverride,
-                analysisContexts,
-                doubleBarlineMeasures,
-                harmonyOverrides: latestHarmonyOverrides.current,
-                bpm,
-                isBpmActive,
-                isMetronomeOn,
-                metronomeUnit,
-                toolbarGroupOrder,
-            };
-            const mergedProject = { ...(projectExtrasRef.current || EMPTY_EXTRAS), ...baseProject };
-            const projectData = JSON.stringify(mergedProject, null, 2);
-            try {
-                if (!api?.saveFile) return;
-                const targetPath = (action === 'save' && currentProjectFilePath) ? currentProjectFilePath : undefined;
-                const result = await api.saveFile(projectData, targetPath);
-                if (result && result.success && result.filePath) {
-                    if (api?.addRecentFile) api.addRecentFile(result.filePath);
-                    setCurrentProjectFilePath(result.filePath);
-                }
-            } catch (err) {
-                // Removed debug log
-            }
-        } else if (action === 'open') {
-            // Removed debug log
-            setRawNotes([]);
-            // Reset to defaults first so older projects (missing fields) don't
-            // inherit settings from the previously opened project.
-            setKeySignatureRoot('C');
-            setProjectTitle('');
-            setTimeSignature({ numerator: 4, denominator: 4 });
-            setTimeSignatureChanges([]);
-            setIsMinorMode(false);
-            setAutoLeadingToneInMinor(true);
-            setKeyChangeMode('none');
-            setModalTonicOverride('');
-            setAnalysisContexts([]);
-            setHarmonyOverrides([]);
-            setBpm(120);
-            setIsBpmActive(false);
-            setIsMetronomeOn(false);
-            setMetronomeUnit('quarter');
-            try {
-                const data = payload?.data;
-                if (!data) throw new Error("Nessun dato fornito per l'apertura.");
-                const parsed = JSON.parse(data);
-                projectExtrasRef.current = extractProjectExtras(parsed);
-                const loadedProject = migrateProjectData(parsed);
-                if (loadedProject && Array.isArray(loadedProject.notes)) {
-                    const loadKeyRoot = (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot)
-                        ? loadedProject.keySignatureRoot
-                        : 'C';
-                    const loadMinor = typeof loadedProject.isMinorMode === 'boolean' ? loadedProject.isMinorMode : false;
-                    const loadKeySig = getKeySignature(loadKeyRoot, loadMinor ? 'Minor' : 'Major');
-
-                    // Self-heal older/saved projects: keep spelling fields as-is, but
-                    // ensure numeric fields follow the written spelling.
-                    const normalizedNotes = (loadedProject.notes as any[]).map((n: any) => normalizeNotePitchFieldsWithKey(n, loadKeySig));
-
-                    // Convert legacy beat/measure floats to high-resolution ticks for stability.
-                    try {
-                        const ts = (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') ? loadedProject.timeSignature : { numerator: 4, denominator: 4 };
-                        const baseBeats = ts.numerator * (4 / ts.denominator);
-                        const ticksPerBeat = TICKS_PER_QUARTER; // quarter = 1 beat
-
-                        const changesRaw = Array.isArray(loadedProject.timeSignatureChanges) ? loadedProject.timeSignatureChanges : [];
-                        const changes = changesRaw
-                            .map((c: any) => {
-                                const absBeat = Number(c?.absBeat);
-                                const m = Number.isFinite(c?.measureIndex)
-                                    ? Number(c.measureIndex)
-                                    : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
-                                return {
-                                    measureIndex: m,
-                                    numerator: Math.max(1, Math.round(Number(c?.numerator) || 4)),
-                                    denominator: Math.max(1, Math.round(Number(c?.denominator) || 4)),
-                                };
-                            })
-                            .filter((c: any) => Number.isFinite(c.measureIndex))
-                            .sort((a: any, b: any) => a.measureIndex - b.measureIndex);
-
-                        const maxIdx = (normalizedNotes as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), 0);
-                        const measureStartAbsBeat: number[] = [];
-                        let acc = 0;
-                        for (let m = 0; m <= maxIdx + 1; m++) {
-                            measureStartAbsBeat[m] = acc;
-                            let active = ts as any;
-                            for (const c of changes) {
-                                if (c.measureIndex <= m) active = c;
-                                else break;
-                            }
-                            const bpm = active.numerator * (4 / active.denominator);
-                            acc += Math.max(1, Number.isFinite(bpm) ? bpm : baseBeats || 4);
-                        }
-
-                        const withTicks = (normalizedNotes as any[]).map(n => {
-                            try {
-                                const m = Number.isFinite(n.measureIndex) ? n.measureIndex : 0;
-                                const b = Number.isFinite(n.beat) ? n.beat : 1;
-                                const absBeat = (measureStartAbsBeat[m] ?? (m * baseBeats)) + (b - 1);
-                                const startTick = Math.round(absBeat * ticksPerBeat);
-
-                                // duration -> beats
-                                const base = (DURATION_VALUES as any)[n.duration || 'quarter'] || 1;
-                                let durBeats = base;
-                                if (n.isDotted) durBeats *= 1.5;
-                                if (n.isTriplet) durBeats *= 2 / 3;
-                                if (n.isDuplet) durBeats *= 3 / 2;
-                                const durationTicks = Math.round(durBeats * ticksPerBeat);
-
-                                return { ...n, startTick, durationTicks };
-                            } catch (e) { return n; }
-                        });
-                        setRawNotes(withTicks as any);
-                        try {
-                            const maxIdx = (withTicks as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), -1);
-                            const measuresCount = Math.max(1, maxIdx + 1);
-                            setMinMeasureCount(measuresCount);
-                            setMinMeasureCountDraft(String(measuresCount));
-                        } catch (_) {}
-                    } catch (e) {
-                        setRawNotes(normalizedNotes as any);
-                    }
-                    if (loadedProject.staffSystemMode === 'grandstaff' || loadedProject.staffSystemMode === 'treble_only' || loadedProject.staffSystemMode === 'satb_ancient') {
-                        setStaffSystemMode(loadedProject.staffSystemMode);
-                    }
-
-                    // Restore project-level settings when present.
-                                        if (Array.isArray(loadedProject.toolbarGroupOrder)) {
-                                            const all = new Set(DEFAULT_TOOLBAR_ORDER);
-                                            const cleanedOrder = loadedProject.toolbarGroupOrder.filter((id: any): id is ToolbarGroupId => all.has(id));
-                                            const fullOrder: ToolbarGroupId[] = Array.from(new Set([...cleanedOrder, ...DEFAULT_TOOLBAR_ORDER]));
-                                            setToolbarGroupOrder(fullOrder);
-                                        }
-                    if (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot) {
-                        setKeySignatureRoot(loadedProject.keySignatureRoot);
-                    }
-                    if (typeof loadedProject.projectTitle === 'string') {
-                        setProjectTitle(loadedProject.projectTitle);
-                    }
-                    if (typeof loadedProject.titleFontSize === 'number' && Number.isFinite(loadedProject.titleFontSize)) {
-                        setTitleFontSize(Math.max(12, Math.min(72, loadedProject.titleFontSize)));
-                    }
-                    if (typeof loadedProject.titleFontFamily === 'string' && loadedProject.titleFontFamily) {
-                        setTitleFontFamily(loadedProject.titleFontFamily);
-                    }
-                    if (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') {
-                        const n = Number((loadedProject.timeSignature as any).numerator);
-                        const d = Number((loadedProject.timeSignature as any).denominator);
-                        if (Number.isFinite(n) && Number.isFinite(d) && n > 0 && d > 0) {
-                            setTimeSignature({ numerator: n, denominator: d });
-                        }
-                    }
-                    if (Array.isArray(loadedProject.timeSignatureChanges)) {
-                        const baseBeats = (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object')
-                            ? ((Number((loadedProject.timeSignature as any).numerator) || 4) * (4 / (Number((loadedProject.timeSignature as any).denominator) || 4)))
-                            : (timeSignature.numerator * (4 / timeSignature.denominator));
-                        const normalized = loadedProject.timeSignatureChanges.map((c: any) => {
-                            const absBeat = Number(c?.absBeat);
-                            const m = Number.isFinite(c?.measureIndex)
-                                ? Number(c.measureIndex)
-                                : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
-                            return {
-                                absBeat: Number.isFinite(absBeat) ? absBeat : undefined,
-                                measureIndex: m,
-                                numerator: Math.max(1, Math.round(Number(c?.numerator) || 4)),
-                                denominator: Math.max(1, Math.round(Number(c?.denominator) || 4)),
-                            } as TimeSignatureChange;
-                        });
-                        setTimeSignatureChanges(normalized);
-                    }
-                    if (typeof loadedProject.isMinorMode === 'boolean') {
-                        setIsMinorMode(loadedProject.isMinorMode);
-                    }
-                    if (typeof loadedProject.autoLeadingToneInMinor === 'boolean') {
-                        setAutoLeadingToneInMinor(loadedProject.autoLeadingToneInMinor);
-                    }
-                    if (loadedProject.keyChangeMode === 'none' || loadedProject.keyChangeMode === 'transpose' || loadedProject.keyChangeMode === 'modal') {
-                        setKeyChangeMode(loadedProject.keyChangeMode);
-                    }
-                    if (typeof loadedProject.modalTonicOverride === 'string') {
-                        setModalTonicOverride(loadedProject.modalTonicOverride);
-                    }
-                    if (Array.isArray(loadedProject.analysisContexts)) {
-                        setAnalysisContexts(loadedProject.analysisContexts);
-                    }
-                    if (Array.isArray(loadedProject.doubleBarlineMeasures)) {
-                        const cleaned = loadedProject.doubleBarlineMeasures
-                            .map((m: any) => Number(m))
-                            .filter((m: any) => Number.isFinite(m) && m >= 0)
-                            .sort((a: number, b: number) => a - b);
-                        setDoubleBarlineMeasures(cleaned);
-                    }
-                    if (Array.isArray(loadedProject.harmonyOverrides)) {
-                        setHarmonyOverrides(loadedProject.harmonyOverrides);
-                    }
-                    if (typeof loadedProject.bpm === 'number' && Number.isFinite(loadedProject.bpm) && loadedProject.bpm > 0) {
-                        setBpm(loadedProject.bpm);
-                    }
-                    if (typeof loadedProject.isBpmActive === 'boolean') {
-                        setIsBpmActive(loadedProject.isBpmActive);
-                    }
-                    if (typeof loadedProject.isMetronomeOn === 'boolean') {
-                        setIsMetronomeOn(loadedProject.isMetronomeOn);
-                    }
-                    if (loadedProject.metronomeUnit === 'quarter' || loadedProject.metronomeUnit === 'eighth' || loadedProject.metronomeUnit === 'dotted-quarter') {
-                        setMetronomeUnit(loadedProject.metronomeUnit);
-                    }
-
-                    if (payload && payload.filePath) {
-                        if (api?.addRecentFile) api.addRecentFile(payload.filePath);
-                        setCurrentProjectFilePath(payload.filePath);
-                    } else {
-                        setCurrentProjectFilePath(null);
-                    }
-                } else {
-                    throw new Error("Formato dati non valido.");
-                }
-            } catch (err) {
-                // Reset extras on failed open, otherwise a previous project's extras could leak into a new save.
-                projectExtrasRef.current = EMPTY_EXTRAS;
-                try {
-                    const msg = (err as any)?.message || String(err || 'Errore');
-                    window.alert(`Impossibile aprire il progetto: ${msg}`);
-                } catch {
-                    // ignore
-                }
-            }
+        if (
+            action === 'close-project' ||
+            action === 'save' ||
+            action === 'save-as' ||
+            action === 'open' ||
+            action === 'new'
+        ) {
+            await handleGrandStaffProjectIOMenuAction({
+                action: action as any,
+                payload,
+                api,
+                currentProjectFilePath,
+                setCurrentProjectFilePath,
+                snapshot: {
+                    latestRawNotes,
+                    latestHarmonyOverrides,
+                    projectExtrasRef,
+                    staffSystemMode,
+                    keySignatureRoot,
+                    projectTitle,
+                    titleFontSize,
+                    titleFontFamily,
+                    timeSignature,
+                    timeSignatureChanges,
+                    isMinorMode,
+                    autoLeadingToneInMinor,
+                    keyChangeMode,
+                    modalTonicOverride,
+                    analysisContexts,
+                    doubleBarlineMeasures,
+                    toolbarGroupOrder,
+                    bpm,
+                    isBpmActive,
+                    isMetronomeOn,
+                    metronomeUnit,
+                },
+                apply: {
+                    projectExtrasRef,
+                    defaultToolbarGroupOrder: DEFAULT_TOOLBAR_ORDER,
+                    setRawNotes,
+                    setProjectTitle,
+                    setCurrentProjectFilePath,
+                    setKeySignatureRoot,
+                    setIsMinorMode,
+                    setTimeSignature,
+                    setHarmonyOverrides,
+                    setAnalysisContexts,
+                    setTimeSignatureChanges,
+                    setDoubleBarlineMeasures,
+                    setKeyChangeMode,
+                    setModalTonicOverride,
+                    setAutoLeadingToneInMinor,
+                    setMeasuresPerLine,
+                    setMeasuresPerLineDraft,
+                    setMinMeasureCount,
+                    setMinMeasureCountDraft,
+                    setBpm,
+                    setIsBpmActive,
+                    setIsMetronomeOn,
+                    setMetronomeUnit,
+                    setClipboard,
+                    setSelectedNoteIds,
+                    setPasteCaretImmediate,
+                    setActiveAccidental,
+                    setSelectedVoice,
+                    setStaffSystemMode,
+                    setToolbarGroupOrder,
+                    setTitleFontSize,
+                    setTitleFontFamily,
+                    setActiveTab,
+                    setSelectedInsertion,
+                    setIsTriplet,
+                    setIsDuplet,
+                    setIsSwing,
+                    setTupletNoteCount,
+                    setTripletBaseDuration,
+                    setHoveredViolationNotes,
+                    setSelectedViolationIndex,
+                    setViewMode,
+                    setContextMenu,
+                    setShowRomanAnalysis,
+                    setShowSymbolAnalysis,
+                    setShowMeasureNumbers,
+                    setIsToolbarCustomizeOpen,
+                    setMidiOutputs,
+                    setSelectedMidiOutput,
+                    timeSignature,
+                },
+            });
+            return;
         } else if (action === MENU_ACTIONS.IMPORT_MUSICXML) {
             // MusicXML import: renderer-safe (no fs/path); XML is provided by main via IPC.
             try {
@@ -2478,38 +2279,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             } catch (err: any) {
                 try { window.alert(`Import MusicXML fallito: ${String(err?.message || err || '')}`); } catch { /* ignore */ }
-            }
-        } else if (action === 'new') {
-            // Removed debug log
-            const confirmed = window.confirm("Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.");
-            if (confirmed) {
-                setRawNotes([]);
-                setProjectTitle('');
-                setCurrentProjectFilePath(null);
-                setKeySignatureRoot('C');
-                setIsMinorMode(false);
-                setTimeSignature({ numerator: 4, denominator: 4 });
-                setHarmonyOverrides([]);
-                setAnalysisContexts([]);
-                setTimeSignatureChanges([]);
-                setDoubleBarlineMeasures([]);
-                setKeyChangeMode('none');
-                setModalTonicOverride('');
-                setAutoLeadingToneInMinor(true);
-                setMeasuresPerLine(4);
-                setMeasuresPerLineDraft('4');
-                setMinMeasureCount(4);
-                setMinMeasureCountDraft('4');
-                setBpm(120);
-                setIsBpmActive(false);
-                setIsMetronomeOn(false);
-                setMetronomeUnit('quarter');
-                setClipboard(null);
-                setSelectedNoteIds(new Set());
-                setPasteCaretImmediate(null);
-                setActiveAccidental(null);
-                setSelectedVoice(1);
-                projectExtrasRef.current = EMPTY_EXTRAS;
             }
         } else if (action === 'set-show-measure-numbers') {
             setShowMeasureNumbers(!!payload?.enabled);
@@ -6410,7 +6179,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             try {
                 const ks = getKeySignature(String(tonicName || 'C'), tonicIsMinor ? 'Minor' : 'Major');
                 const full = getNotesAtAbsBeat(absBeat);
-                const candidates = identifyChordCandidates((full || []) as any, ks as any, String(tonicName || 'C')) as any[];
+                const candidates = identifyChordCandidates((full || []) as any) as any[];
                 if (!candidates || candidates.length === 0) return null;
                 // Prefer a candidate that matches the current roman (if any), otherwise just take the first.
                 const c0 = candidates[0];
