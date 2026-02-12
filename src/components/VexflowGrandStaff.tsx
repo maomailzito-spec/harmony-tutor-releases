@@ -165,38 +165,6 @@ const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down', 
     duration,
   });
 
-  // Rest vertical alignment (avoid ambiguity between Tenor rests and Bass notes).
-  // VexFlow uses stave "line" coordinates (0 = bottom line, 4 = top line; fractions are spaces).
-  if (n.isRest) {
-    const v = Number((n as any).voice ?? 1);
-    let restLine: number | null = null;
-
-    // Upper staff (treble):
-    // - Soprano: above the 3rd line (B) => space above line 2.
-    // - Alto: just below the staff => space below line 0.
-    if (clef === 'treble') {
-      if (v === 1) restLine = 2.5;
-      else if (v === 2) restLine = 0.0;
-    }
-
-    // Lower staff (bass):
-    // - Tenor: just above the top line of the lower staff.
-    if (clef === 'bass') {
-      if (v === 3) restLine = 6.5;
-    }
-
-    if (typeof restLine === 'number' && Number.isFinite(restLine)) {
-      try {
-        // Preferred API: set the staff line for the (single) key.
-        (note as any).setKeyLine?.(0, restLine);
-      } catch { /* ignore */ }
-      try {
-        // Fallback (older VF builds).
-        (note as any).setLine?.(restLine);
-      } catch { /* ignore */ }
-    }
-  }
-
   // Stem direction:
   // - manualStemDirection overrides everything (set by the Flip Stem button)
   // - stemOverride is an automatic layout hint (used to avoid collisions in close spacing)
@@ -404,14 +372,6 @@ const getNoteTimeKey = (n: StaffNote): string => {
   return `${n.measureIndex ?? -1}|${n.beat ?? -1}|${n.duration ?? 'q'}|${n.isDotted ? 'd' : 'n'}`;
 };
 
-// Like getNoteTimeKey, but ignores duration so we can detect same-onset collisions
-// (e.g. half note vs quarter note starting together).
-const getNoteOnsetKey = (n: StaffNote): string => {
-  const st = (n as any).startTick;
-  if (typeof st === 'number') return `${st}`;
-  return `${n.measureIndex ?? -1}|${n.beat ?? -1}`;
-};
-
 function keySignatureToVexflowString(keySignature: KeySignature): string {
   const sharpKeys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
   const flatKeys = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
@@ -494,6 +454,191 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // Respect our "single-stem" fallback: never recolor a stem we intentionally hid.
     try {
       if ((vfNote as any).__hideStem) return;
+    } catch {
+      // ignore
+    }
+
+    // -----------------------------
+    // Metric validation: highlight measures with incorrect rhythmic total.
+    // -----------------------------
+    try {
+      const beatsPerMeasureForMeasureIndex = (mi: number): number => {
+        try {
+          const base = timeSignature;
+          let n = Number(base?.numerator ?? 4);
+          let d = Number(base?.denominator ?? 4);
+          const changes = (timeSignatureChanges || [])
+            .filter(c => Number.isFinite(Number(c?.measureIndex)))
+            .map(c => ({ mi: Number(c.measureIndex), n: Number(c.numerator), d: Number(c.denominator) }))
+            .filter(c => Number.isFinite(c.mi) && Number.isFinite(c.n) && Number.isFinite(c.d));
+          let bestMi = -Infinity;
+          for (const c of changes) {
+            if (c.mi <= mi && c.mi >= bestMi) {
+              bestMi = c.mi;
+              n = c.n;
+              d = c.d;
+            }
+          }
+          if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 4;
+          return n * (4 / d);
+        } catch {
+          return 4;
+        }
+      };
+
+      const notesForCheck = (ghostNote ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes)
+        .filter(n => n && n.id !== '__ghost__');
+      const measureIndices = Array.from(new Set(
+        (notesForCheck || [])
+          .map(n => Number((n as any)?.measureIndex))
+          .filter(mi => Number.isFinite(mi))
+      )).sort((a, b) => a - b);
+
+      const invalidMeasures = new Set<number>();
+      const EPS = 1e-4;
+
+      // Group notes by voice+measure, then validate each voice line fills the measure exactly.
+      const byVoiceMeasure = new Map<string, StaffNote[]>();
+      for (const n of (notesForCheck || [])) {
+        const mi = Number((n as any)?.measureIndex);
+        const v = Number((n as any)?.voice ?? 1);
+        if (!Number.isFinite(mi) || !Number.isFinite(v)) continue;
+        const k = `${mi}|${v}`;
+        if (!byVoiceMeasure.has(k)) byVoiceMeasure.set(k, []);
+        byVoiceMeasure.get(k)!.push(n);
+      }
+
+      const validateVoiceMeasure = (mi: number, v: number, line: StaffNote[]): boolean => {
+        const beatsPerMeas = beatsPerMeasureForMeasureIndex(mi);
+        const endBeat = 1 + beatsPerMeas;
+        const onsetGroups = new Map<number, StaffNote[]>();
+        for (const n of (line || [])) {
+          const b = Number((n as any)?.beat);
+          if (!Number.isFinite(b)) continue;
+          const key = Math.round(b * 1e6) / 1e6;
+          if (!onsetGroups.has(key)) onsetGroups.set(key, []);
+          onsetGroups.get(key)!.push(n);
+        }
+        const onsets = Array.from(onsetGroups.entries())
+          .map(([b, ns]) => {
+            const d = Math.max(...ns.map(x => durationToBeats(x)));
+            return { beat: b, dur: d };
+          })
+          .filter(x => Number.isFinite(x.beat) && Number.isFinite(x.dur) && x.dur > 0)
+          .sort((a, b) => a.beat - b.beat);
+
+        if (onsets.length === 0) return true;
+        let cur = 1;
+        for (const o of onsets) {
+          if (o.beat > cur + EPS) return false; // gap
+          if (o.beat < cur - EPS) return false; // overlap
+          cur = o.beat + o.dur;
+          if (cur > endBeat + EPS) return false; // overflow
+        }
+        return Math.abs(cur - endBeat) <= 0.01;
+      };
+
+      for (const mi of measureIndices) {
+        for (const v of [1, 2, 3, 4]) {
+          const k = `${mi}|${v}`;
+          const line = byVoiceMeasure.get(k) || [];
+          // If this voice has no notes in this measure, don't treat it as invalid.
+          if (!line.length) continue;
+          if (!validateVoiceMeasure(mi, v, line)) {
+            invalidMeasures.add(mi);
+            break;
+          }
+        }
+      }
+
+      // Draw subtle background for invalid measures (behind barlines/notes).
+      if (invalidMeasures.size > 0 && barlines.length > 0) {
+        const topStave = (staffMode === 'satb_ancient' && satbSoprano)
+          ? satbSoprano
+          : (treble as Stave);
+        const bottomStave = (staffMode === 'satb_ancient' && satbBass)
+          ? satbBass
+          : (bass ? bass : (treble as Stave));
+
+        const yTop = topStave.getYForLine(0);
+        const yBottom = bottomStave.getYForLine(4);
+        const h = yBottom - yTop;
+
+        const barsSorted = (barlines || []).slice().sort((a, b) => (a.xPosition ?? 0) - (b.xPosition ?? 0));
+        const startX = (treble || satbSoprano || topStave).getNoteStartX();
+
+        const rects: Array<{ x: number; w: number; mi: number }> = [];
+        for (let i = 0; i < barsSorted.length; i++) {
+          const bar = barsSorted[i];
+          const mi = (() => {
+            try {
+              const m = /^bar-(\d+)$/.exec(String((bar as any)?.id ?? ''));
+              return m ? Number(m[1]) : null;
+            } catch {
+              return null;
+            }
+          })();
+          if (mi == null || !invalidMeasures.has(mi)) continue;
+
+          const x1 = Number(bar.xPosition);
+          const x0 = (i === 0) ? startX : Number(barsSorted[i - 1].xPosition);
+          if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) continue;
+          const pad = 2;
+          rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi });
+        }
+
+        if (rects.length > 0) {
+          const red = voiceColor(4)?.fill ?? '#ef4444';
+          const fill = hexToRgba(red, 0.12);
+
+          // Prefer SVG DOM insertion (reliable in Electron+Vite SVG renderer).
+          const svgEl = containerRef.current?.querySelector('svg') ?? null;
+          if (svgEl) {
+            try {
+              const prev = svgEl.querySelector('#ht-invalid-measures');
+              if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+            } catch {
+              // ignore
+            }
+            try {
+              const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+              g.setAttribute('id', 'ht-invalid-measures');
+              g.setAttribute('pointer-events', 'none');
+              for (const r of rects) {
+                const re = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                re.setAttribute('x', String(r.x));
+                re.setAttribute('y', String(yTop));
+                re.setAttribute('width', String(r.w));
+                re.setAttribute('height', String(h));
+                re.setAttribute('fill', fill);
+                g.appendChild(re);
+              }
+              svgEl.insertBefore(g, svgEl.firstChild);
+            } catch {
+              // ignore
+            }
+          } else {
+            // Fallback: draw via VexFlow context if available.
+            const ctxAny = context as any;
+            ctxAny.save?.();
+            if (typeof ctxAny.setFillStyle === 'function') ctxAny.setFillStyle(fill);
+            else ctxAny.fillStyle = fill;
+            for (const r of rects) {
+              try {
+                if (typeof ctxAny.fillRect === 'function') ctxAny.fillRect(r.x, yTop, r.w, h);
+                else {
+                  ctxAny.beginPath?.();
+                  ctxAny.rect?.(r.x, yTop, r.w, h);
+                  ctxAny.fill?.();
+                }
+              } catch {
+                // ignore
+              }
+            }
+            ctxAny.restore?.();
+          }
+        }
+      }
     } catch {
       // ignore
     }
@@ -713,191 +858,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // ignore
     }
 
-    // -----------------------------
-    // Metric validation: highlight measures with incorrect rhythmic total.
-    // -----------------------------
-    try {
-      const beatsPerMeasureForMeasureIndex = (mi: number): number => {
-        try {
-          const base = timeSignature;
-          let n = Number(base?.numerator ?? 4);
-          let d = Number(base?.denominator ?? 4);
-          const changes = (timeSignatureChanges || [])
-            .filter(c => Number.isFinite(Number(c?.measureIndex)))
-            .map(c => ({ mi: Number(c.measureIndex), n: Number(c.numerator), d: Number(c.denominator) }))
-            .filter(c => Number.isFinite(c.mi) && Number.isFinite(c.n) && Number.isFinite(c.d));
-          let bestMi = -Infinity;
-          for (const c of changes) {
-            if (c.mi <= mi && c.mi >= bestMi) {
-              bestMi = c.mi;
-              n = c.n;
-              d = c.d;
-            }
-          }
-          if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 4;
-          return n * (4 / d);
-        } catch {
-          return 4;
-        }
-      };
-
-      const notesForCheck = (ghostNote ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes)
-        .filter(n => n && n.id !== '__ghost__');
-      const measureIndices = Array.from(new Set(
-        (notesForCheck || [])
-          .map(n => Number((n as any)?.measureIndex))
-          .filter(mi => Number.isFinite(mi))
-      )).sort((a, b) => a - b);
-
-      const invalidMeasures = new Set<number>();
-      const EPS = 1e-4;
-
-      // Group notes by voice+measure, then validate each voice line fills the measure exactly.
-      const byVoiceMeasure = new Map<string, StaffNote[]>();
-      for (const n of (notesForCheck || [])) {
-        const mi = Number((n as any)?.measureIndex);
-        const v = Number((n as any)?.voice ?? 1);
-        if (!Number.isFinite(mi) || !Number.isFinite(v)) continue;
-        const k = `${mi}|${v}`;
-        if (!byVoiceMeasure.has(k)) byVoiceMeasure.set(k, []);
-        byVoiceMeasure.get(k)!.push(n);
-      }
-
-      const validateVoiceMeasure = (mi: number, v: number, line: StaffNote[]): boolean => {
-        const beatsPerMeas = beatsPerMeasureForMeasureIndex(mi);
-        const endBeat = 1 + beatsPerMeas;
-        const onsetGroups = new Map<number, StaffNote[]>();
-        for (const n of (line || [])) {
-          const b = Number((n as any)?.beat);
-          if (!Number.isFinite(b)) continue;
-          const key = Math.round(b * 1e6) / 1e6;
-          if (!onsetGroups.has(key)) onsetGroups.set(key, []);
-          onsetGroups.get(key)!.push(n);
-        }
-        const onsets = Array.from(onsetGroups.entries())
-          .map(([b, ns]) => {
-            const d = Math.max(...ns.map(x => durationToBeats(x)));
-            return { beat: b, dur: d };
-          })
-          .filter(x => Number.isFinite(x.beat) && Number.isFinite(x.dur) && x.dur > 0)
-          .sort((a, b) => a.beat - b.beat);
-
-        if (onsets.length === 0) return true;
-        let cur = 1;
-        for (const o of onsets) {
-          if (o.beat > cur + EPS) return false; // gap
-          if (o.beat < cur - EPS) return false; // overlap
-          cur = o.beat + o.dur;
-          if (cur > endBeat + EPS) return false; // overflow
-        }
-        return Math.abs(cur - endBeat) <= 0.01;
-      };
-
-      for (const mi of measureIndices) {
-        for (const v of [1, 2, 3, 4]) {
-          const k = `${mi}|${v}`;
-          const line = byVoiceMeasure.get(k) || [];
-          // If this voice has no notes in this measure, don't treat it as invalid.
-          if (!line.length) continue;
-          if (!validateVoiceMeasure(mi, v, line)) {
-            invalidMeasures.add(mi);
-            break;
-          }
-        }
-      }
-
-      // Draw subtle background for invalid measures (behind barlines/notes).
-      if (invalidMeasures.size > 0 && barlines.length > 0) {
-        const topStave = (staffMode === 'satb_ancient' && satbSoprano)
-          ? satbSoprano
-          : (treble as Stave);
-        const bottomStave = (staffMode === 'satb_ancient' && satbBass)
-          ? satbBass
-          : (bass ? bass : (treble as Stave));
-
-        const yTop = topStave.getYForLine(0);
-        const yBottom = bottomStave.getYForLine(4);
-        const h = yBottom - yTop;
-
-        const barsSorted = (barlines || []).slice().sort((a, b) => (a.xPosition ?? 0) - (b.xPosition ?? 0));
-        const startX = (treble || satbSoprano || topStave).getNoteStartX();
-
-        const rects: Array<{ x: number; w: number; mi: number }> = [];
-        for (let i = 0; i < barsSorted.length; i++) {
-          const bar = barsSorted[i];
-          const mi = (() => {
-            try {
-              const m = /^bar-(\d+)$/.exec(String((bar as any)?.id ?? ''));
-              return m ? Number(m[1]) : null;
-            } catch {
-              return null;
-            }
-          })();
-          if (mi == null || !invalidMeasures.has(mi)) continue;
-
-          const x1 = Number(bar.xPosition);
-          const x0 = (i === 0) ? startX : Number(barsSorted[i - 1].xPosition);
-          if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) continue;
-          const pad = 2;
-          rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi });
-        }
-
-        if (rects.length > 0) {
-          const red = voiceColor(4)?.fill ?? '#ef4444';
-          const fill = hexToRgba(red, 0.12);
-
-          // Prefer SVG DOM insertion (reliable in Electron+Vite SVG renderer).
-          const svgEl = containerRef.current?.querySelector('svg') ?? null;
-          if (svgEl) {
-            try {
-              const prev = svgEl.querySelector('#ht-invalid-measures');
-              if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
-            } catch {
-              // ignore
-            }
-            try {
-              const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-              g.setAttribute('id', 'ht-invalid-measures');
-              g.setAttribute('pointer-events', 'none');
-              for (const r of rects) {
-                const re = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                re.setAttribute('x', String(r.x));
-                re.setAttribute('y', String(yTop));
-                re.setAttribute('width', String(r.w));
-                re.setAttribute('height', String(h));
-                re.setAttribute('fill', fill);
-                g.appendChild(re);
-              }
-              svgEl.insertBefore(g, svgEl.firstChild);
-            } catch {
-              // ignore
-            }
-          } else {
-            // Fallback: draw via VexFlow context if available.
-            const ctxAny = context as any;
-            ctxAny.save?.();
-            if (typeof ctxAny.setFillStyle === 'function') ctxAny.setFillStyle(fill);
-            else ctxAny.fillStyle = fill;
-            for (const r of rects) {
-              try {
-                if (typeof ctxAny.fillRect === 'function') ctxAny.fillRect(r.x, yTop, r.w, h);
-                else {
-                  ctxAny.beginPath?.();
-                  ctxAny.rect?.(r.x, yTop, r.w, h);
-                  ctxAny.fill?.();
-                }
-              } catch {
-                // ignore
-              }
-            }
-            ctxAny.restore?.();
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-
     // Draw barlines using the actual stave metrics so the line starts/ends
     // exactly on the top/bottom staff lines.
     // IMPORTANT: barlines are drawn as a single connecting line for the whole system
@@ -989,15 +949,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           const tk = getNoteTimeKey(n);
           if (!byTimeKeyAll.has(tk)) byTimeKeyAll.set(tk, []);
           byTimeKeyAll.get(tk)!.push(n);
-        }
-
-        // Group by onset only (ignores duration) so we can fix collisions between
-        // voices with different rhythmic values at the same start time.
-        const byOnsetKeyAll = new Map<string, StaffNote[]>();
-        for (const n of staffNotes) {
-          const ok = getNoteOnsetKey(n);
-          if (!byOnsetKeyAll.has(ok)) byOnsetKeyAll.set(ok, []);
-          byOnsetKeyAll.get(ok)!.push(n);
         }
 
         // --- NEW: Merge aligned SAT notes into a single chord (parti strette) ---
@@ -1201,13 +1152,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const isTrebleStaff = clef === 'treble';
         const enableClosePositionHeuristics = isTrebleStaff && enableEngravingEnhancements;
 
-        const stemDirForNote = (n: StaffNote): 'up' | 'down' => {
-          const manual = (n as any)?.manualStemDirection;
-          if (manual === 'up' || manual === 'down') return manual;
-          if (n.voice === 1 || n.voice === 3) return 'up';
-          return 'down';
-        };
-
         const getSecondClusterOffsetsById = (
           chord: StaffNote[],
           isStemUp: boolean,
@@ -1359,136 +1303,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
         // --- end close-position helpers ---
-
-        // --- Generic seconds collision avoidance (ALL modes) ---
-        // Even in legacy mode (or outside tight-treble heuristics), seconds across
-        // separately-rendered notes can overlap because they don't share a single chord glyph.
-        // We apply the same head-stagger rule by shifting selected noteheads by ~one head width.
-        try {
-          for (const onset of byOnsetKeyAll.values()) {
-            const gAll = (onset || [])
-              .filter(n => n && n.id !== '__ghost__')
-              .filter(n => !n.isRest);
-            if (gAll.length < 2) continue;
-
-            // If notes are merged into a VF chord, do not apply per-note xShift.
-            const g = gAll.filter(n => !chordKeyByNoteId.has(n.id));
-            if (g.length < 2) continue;
-
-            const sorted = g.slice().sort((a, b) => Number(a.position) - Number(b.position));
-
-            const preferRightAtBarline = (() => {
-              try {
-                const isMeasureStart = sorted.some(n => {
-                  const b = Number((n as any).beat);
-                  if (!Number.isFinite(b)) return false;
-                  return Math.abs(b - 1) <= 1e-6;
-                });
-                if (!isMeasureStart) return false;
-                const hasAcc = sorted.some((n: any) => {
-                  const acc = normalizeAccidentalType(n?.userAccidental)
-                    ?? normalizeAccidentalType(n?.explicitAccidental)
-                    ?? normalizeAccidentalType(n?.accidental);
-                  return !!acc;
-                });
-                return hasAcc;
-              } catch {
-                return false;
-              }
-            })();
-
-            const setOffsetMax = (id: string, dx: number) => {
-              const prev = offsetMap.get(id) ?? 0;
-              if (Math.abs(dx) > Math.abs(prev)) offsetMap.set(id, dx);
-            };
-
-            // Unisons (same staff position) need explicit side-by-side heads.
-            // Group by a stable "notehead slot" key.
-            const byUnisonSlot = new Map<string, StaffNote[]>();
-            for (const n of sorted) {
-              const slot = `${Number((n as any).position)}`;
-              if (!byUnisonSlot.has(slot)) byUnisonSlot.set(slot, []);
-              byUnisonSlot.get(slot)!.push(n);
-            }
-
-            const INTERNAL_STEM_LEFT_INSET_PX = 10;
-            const LEFT_SHIFT = -Math.max(0, NOTEHEAD_TOUCH_SHIFT - INTERNAL_STEM_LEFT_INSET_PX);
-
-            for (const groupSamePos of byUnisonSlot.values()) {
-              if (!groupSamePos || groupSamePos.length < 2) continue;
-
-              const dirsHere = groupSamePos.map(n => stemDirForNote(n));
-              const hasUpHere = dirsHere.includes('up');
-              const hasDownHere = dirsHere.includes('down');
-
-              if (hasUpHere && hasDownHere) {
-                // Internal stems for unison:
-                // stem up head LEFT, stem down head RIGHT.
-                for (const n of groupSamePos) {
-                  if ((n as any).manualStemDirection) continue;
-                  const dir = stemDirForNote(n);
-                  if (dir === 'up') setOffsetMax(n.id, LEFT_SHIFT);
-                  else setOffsetMax(n.id, +NOTEHEAD_TOUCH_SHIFT);
-                }
-              } else {
-                // Same stem direction: alternate heads left/right to make both visible.
-                const ordered = groupSamePos
-                  .slice()
-                  .sort((a, b) => (a.voice ?? 0) - (b.voice ?? 0) || String(a.id).localeCompare(String(b.id)));
-                for (let i = 0; i < ordered.length; i++) {
-                  const n = ordered[i];
-                  if ((n as any).manualStemDirection) continue;
-                  const dx = (i % 2 === 0) ? 0 : (+NOTEHEAD_TOUCH_SHIFT);
-                  setOffsetMax(n.id, dx);
-                }
-              }
-            }
-
-            // Seconds: keep the existing rule, but don't require identical duration.
-            const anySeconds = sorted.some((n, i) => i > 0 && (Number(n.position) - Number(sorted[i - 1].position)) === 1);
-            if (!anySeconds) continue;
-
-            // If we have both stem directions present, prefer "internal stems":
-            // - stem down (left stem) shifts RIGHT
-            // - stem up (right stem) shifts LEFT
-            // so stems sit between the two heads (standard two-voice engraving).
-            const dirs = sorted.map(n => stemDirForNote(n));
-            const hasUp = dirs.includes('up');
-            const hasDown = dirs.includes('down');
-            if (hasUp && hasDown) {
-              for (let i = 1; i < sorted.length; i++) {
-                const low = sorted[i - 1];
-                const high = sorted[i];
-                if ((Number(high.position) - Number(low.position)) !== 1) continue;
-
-                const lowDir = stemDirForNote(low);
-                const highDir = stemDirForNote(high);
-
-                if (!(low as any).manualStemDirection) {
-                  if (lowDir === 'down' && highDir === 'up') setOffsetMax(low.id, +NOTEHEAD_TOUCH_SHIFT);
-                  else if (lowDir === 'up' && highDir === 'down') setOffsetMax(low.id, LEFT_SHIFT);
-                }
-                if (!(high as any).manualStemDirection) {
-                  if (lowDir === 'down' && highDir === 'up') setOffsetMax(high.id, LEFT_SHIFT);
-                  else if (lowDir === 'up' && highDir === 'down') setOffsetMax(high.id, +NOTEHEAD_TOUCH_SHIFT);
-                }
-              }
-              continue;
-            }
-
-            // Otherwise, fall back to the single-stem-direction staggering.
-            const upCount = sorted.reduce((acc, n) => acc + (stemDirForNote(n) === 'up' ? 1 : 0), 0);
-            const isStemUp = preferRightAtBarline ? true : (upCount >= (sorted.length - upCount));
-            const xShifts = getSecondClusterOffsetsById(sorted, isStemUp, preferRightAtBarline);
-            for (const [id, dx] of xShifts.entries()) {
-              const nn = sorted.find(n => n.id === id);
-              if (nn && !(nn as any).manualStemDirection) setOffsetMax(id, dx);
-            }
-          }
-        } catch {
-          // ignore
-        }
-        // --- end generic seconds helpers ---
         const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
 
         // In open position ("parti late"), the default accidental layout can leave too much
@@ -1546,130 +1360,28 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
 
-        // When multiple voices share the same onset, VexFlow can place accidentals on top of
-        // each other because each voice may be formatted independently. Pre-compute a per-note
-        // stagger (extra x-shift) so accidentals fan out into columns.
-        //
-        // NOTE: this is sequence/engraving-only and does not affect harmony analysis.
+        // When multiple voices share the same onset in close position, VexFlow can end up
+        // placing accidentals on top of each other (especially in the "separate but single stem"
+        // fallback path). Pre-compute an extra stagger per note id so accidentals fan out.
         const accidentalStaggerById = new Map<string, number>();
-        const accidentalBaseShiftById = new Map<string, number>();
-        const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-        const accidentalDesiredShiftById = new Map<string, number>();
-        const maxAccidentalShift = (vfGlyph: string, n: StaffNote): number => {
+        if (isTightTreble && enableEngravingEnhancements) {
           try {
-            const mi = Number((n as any).measureIndex);
-            const b = Number((n as any).beat);
-            const isSystemStartMeasure = Number.isFinite(mi)
-              && systemStartMeasureIndex != null
-              && mi === systemStartMeasureIndex;
-            const isBeat1 = Number.isFinite(b) && Math.abs(b - 1) <= 1e-6;
-            const isSystemStartBeat1 = isSystemStartMeasure && isBeat1;
+            const STAGGER_PX = 8;
+            for (const g of byTimeKeyAll.values()) {
+                const withAcc = g
+                  .filter(n => n && n.id !== '__ghost__')
+                  .filter(n => !n.isRest)
+                  .filter(n => {
+                    const glyph = accidentalGlyphById.get(n.id) ?? null;
+                    return !!accidentalTypeToVexflow(glyph);
+                  });
+                if (withAcc.length < 2) continue;
 
-            // Caps are in px of xShift (bigger => further left). We keep them conservative
-            // at the start of a system so accidentals never drift onto key/time signatures.
-            if (vfGlyph === 'bb' || vfGlyph === '##') return isSystemStartBeat1 ? 14 : 24;
-            if (vfGlyph === 'b') return isSystemStartBeat1 ? 12 : 22;
-            if (vfGlyph === '#') return isSystemStartBeat1 ? 10 : 20;
-            if (vfGlyph === 'n') return isSystemStartBeat1 ? 10 : 18;
-            return isSystemStartBeat1 ? 10 : 20;
-          } catch {
-            return 18;
-          }
-        };
-        const desiredAccidentalXShift = (vfGlyph: string, n: StaffNote, base: number, extra: number, inset: number): number => {
-          // Prefer group-computed shift if present (already scaled to avoid key/time overlap).
-          const groupShift = accidentalDesiredShiftById.get(n.id);
-          const rawNoInset = (typeof groupShift === 'number') ? groupShift : (base + extra);
-          const raw = rawNoInset - inset;
-          const lo = 0;
-          const hi = maxAccidentalShift(vfGlyph, n);
-          return clamp(raw, lo, hi);
-        };
-        if (enableEngravingEnhancements) {
-          try {
-            const midLinePosForClef = (clef === 'bass') ? -6 : MIDDLE_LINE_POS_TREBLE;
-
-            const applyAccidentalColumns = (group: StaffNote[]) => {
-              const withAcc = (group || [])
-                .filter(n => n && n.id !== '__ghost__')
-                .filter(n => !n.isRest)
-                .map(n => {
-                  const glyph = accidentalGlyphById.get(n.id) ?? null;
-                  const vfGlyph = accidentalTypeToVexflow(glyph);
-                  if (!vfGlyph) return null;
-                  const pos = Number((n as any).position);
-                  const outerness = Number.isFinite(pos) ? Math.abs(pos - midLinePosForClef) : 0;
-                  return { n, outerness, pos, vfGlyph };
-                })
-                .filter((x): x is { n: StaffNote; outerness: number; pos: number; vfGlyph: string } => !!x);
-
-              if (withAcc.length < 2) return;
-
-              // Strong spacing: sharps/flats can collide in thirds even without seconds.
-              const hasFlatLike = withAcc.some(x => x.vfGlyph === 'b' || x.vfGlyph === 'bb');
-              const hasDouble = withAcc.some(x => x.vfGlyph === 'bb' || x.vfGlyph === '##');
-              const stepPx = hasFlatLike
-                ? (hasDouble ? 28 : 24)
-                : (hasDouble ? 20 : 16);
-
-              // Give every accidental in the group a small baseline left shift.
-              // Without this, the "column 0" accidental can stay at VF default and collide
-              // with its own notehead when voices are offset.
-              for (const x of withAcc) {
-                const id = x.n.id;
-                const isFlat = (x.vfGlyph === 'b' || x.vfGlyph === 'bb');
-                const isDouble = (x.vfGlyph === 'bb' || x.vfGlyph === '##');
-                // Baseline shift: must be strong enough that a column-0 accidental never
-                // sits on top of its own notehead in multi-voice onsets.
-                const base = isFlat ? (isDouble ? 20 : 16) : (isDouble ? 16 : 10);
-                const prevBase = accidentalBaseShiftById.get(id);
-                if (prevBase == null || base > prevBase) accidentalBaseShiftById.set(id, base);
-              }
-
-              // Outer notes get the smallest shift (closest to noteheads), inner notes go further left.
-              withAcc.sort((a, b) => {
-                if (b.outerness !== a.outerness) return b.outerness - a.outerness;
-                return a.pos - b.pos;
-              });
-
-              // Compute raw shifts and, if needed, scale the entire group down so it doesn't
-              // invade the key/time signature area (especially at system start beat 1).
-              let maxRaw = 0;
-              let cap = Infinity;
-              const rawById = new Map<string, number>();
-              for (let i = 0; i < withAcc.length; i++) {
-                const id = withAcc[i].n.id;
-                const base = accidentalBaseShiftById.get(id) ?? 0;
-                const raw = base + (i * stepPx);
-                rawById.set(id, raw);
-                if (raw > maxRaw) maxRaw = raw;
-                cap = Math.min(cap, maxAccidentalShift(withAcc[i].vfGlyph, withAcc[i].n));
-              }
-              if (!Number.isFinite(cap)) cap = 18;
-              const scale = (maxRaw > 0 && maxRaw > cap) ? (cap / maxRaw) : 1;
-
-              for (let i = 0; i < withAcc.length; i++) {
-                const id = withAcc[i].n.id;
-                const raw = rawById.get(id) ?? 0;
-                const scaled = raw * scale;
-
-                const prev = accidentalStaggerById.get(id);
-                const staggerOnly = i * stepPx;
-                if (prev == null || staggerOnly > prev) accidentalStaggerById.set(id, staggerOnly);
-
-                const prevDesired = accidentalDesiredShiftById.get(id);
-                // Prefer the larger desired shift if a note belongs to multiple heuristic groups.
-                if (prevDesired == null || scaled > prevDesired) accidentalDesiredShiftById.set(id, scaled);
-              }
-            };
-
-            // 1) Ideal: group by musical onset.
-            for (const g of byTimeKeyAll.values()) applyAccidentalColumns(g);
-
-            // 2) Fallback: group by visual X alignment.
-            // This fixes cases where notes align in x but have different timeKeys
-            // (e.g. different durationTicks / prolongations).
-            for (const g of byX.values()) applyAccidentalColumns(g);
+                const sorted = withAcc.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                for (let i = 0; i < sorted.length; i++) {
+                  accidentalStaggerById.set(sorted[i].id, i * STAGGER_PX);
+                }
+            }
           } catch {
             // ignore
           }
@@ -1679,44 +1391,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const staffNoteById = new Map<string, StaffNote>();
         for (const sn of staffNotes) {
           if (sn && typeof sn.id === 'string') staffNoteById.set(sn.id, sn);
-        }
-
-        // Dynamic rest placement (Soprano): if the Alto is very high at the same onset,
-        // lift the Soprano rest to avoid ambiguity/collisions.
-        const altoMaxPosByOnsetKey = new Map<string, number>();
-        if (clef === 'treble') {
-          try {
-            for (const an of staffNotes) {
-              if (!an || an.isRest) continue;
-              if ((an.voice ?? 0) !== 2) continue;
-              const ok = getNoteOnsetKey(an);
-              const pos = Number((an as any).position);
-              if (!Number.isFinite(pos)) continue;
-              const prev = altoMaxPosByOnsetKey.get(ok);
-              if (prev == null || pos > prev) altoMaxPosByOnsetKey.set(ok, pos);
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        // Dynamic rest placement (Tenor): if the Bass is very high at the same onset,
-        // lift the Tenor rest further to avoid ambiguity/collisions.
-        const bassMaxPosByOnsetKey = new Map<string, number>();
-        if (clef === 'bass') {
-          try {
-            for (const bn of staffNotes) {
-              if (!bn || bn.isRest) continue;
-              if ((bn.voice ?? 0) !== 4) continue;
-              const ok = getNoteOnsetKey(bn);
-              const pos = Number((bn as any).position);
-              if (!Number.isFinite(pos)) continue;
-              const prev = bassMaxPosByOnsetKey.get(ok);
-              if (prev == null || pos > prev) bassMaxPosByOnsetKey.set(ok, pos);
-            }
-          } catch {
-            // ignore
-          }
         }
 
         for (const n of staffNotes) {
@@ -1738,55 +1412,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               isPrimaryRender = true;
             }
 
-            // Auto-position Soprano rests when Alto voice climbs.
-            try {
-              if (vfNote && n.isRest && n.voice === 1 && clef === 'treble') {
-                const ok = getNoteOnsetKey(n);
-                const altoPos = altoMaxPosByOnsetKey.get(ok);
-
-                // Base above the 3rd line (B-ish), then lift as Alto approaches.
-                let restLine = 2.5;
-                if (typeof altoPos === 'number' && Number.isFinite(altoPos)) {
-                  // Proportional lift in staff-position space (C4=0): quarter rests are tall
-                  // and can collide even when Alto is around A (2nd space, pos≈5).
-                  // Empirically, ~1 VexFlow line ≈ 10px, so we allow ~2.5 lines (≈25px)
-                  // when Alto is at/above pos≈5.
-                  const lift = Math.max(0, (altoPos - 3)) * 1.25;
-                  restLine = Math.min(6.5, restLine + lift);
-                }
-
-                const setKeyLine = (vfNote as any).setKeyLine;
-                const setLine = (vfNote as any).setLine;
-                if (typeof setKeyLine === 'function') setKeyLine.call(vfNote, 0, restLine);
-                else if (typeof setLine === 'function') setLine.call(vfNote, restLine);
-              }
-            } catch {
-              // ignore
-            }
-
-            // Auto-position Tenor rests when Bass voice climbs.
-            try {
-              if (vfNote && n.isRest && n.voice === 3 && clef === 'bass') {
-                const ok = getNoteOnsetKey(n);
-                const bassPos = bassMaxPosByOnsetKey.get(ok);
-
-                // Base just above the bass staff, then lift progressively as Bass rises.
-                let restLine = 6.5;
-                if (typeof bassPos === 'number' && Number.isFinite(bassPos)) {
-                  const step = (thr: number) => (bassPos >= thr ? 1 : 0);
-                  const steps = step(-2) + step(-1) + step(0) + step(1);
-                  restLine = Math.min(8.0, restLine + (steps * 0.5));
-                }
-
-                const setKeyLine = (vfNote as any).setKeyLine;
-                const setLine = (vfNote as any).setLine;
-                if (typeof setKeyLine === 'function') setKeyLine.call(vfNote, 0, restLine);
-                else if (typeof setLine === 'function') setLine.call(vfNote, restLine);
-              }
-            } catch {
-              // ignore
-            }
-
             // Add accidentals following standard measure rules (skip ghost; ghost is handled separately).
             try {
               if (!n.isRest && n.id !== '__ghost__') {
@@ -1802,23 +1427,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     if (idx >= 0) {
                       const acc = new Accidental(vfGlyph);
                       (vfNote as any).addModifier(acc, idx);
-
-                      // Always apply precomputed column staggering in enhanced mode.
-                      // This fixes cases where VexFlow would keep one accidental at the default
-                      // position (overlapping its own notehead) because our old heuristic didn't
-                      // classify the chord as "needsNudge".
-                      if (enableEngravingEnhancements) {
-                        try {
-                          const base = accidentalBaseShiftById.get(n.id) ?? 0;
-                          const extra = accidentalStaggerById.get(n.id) ?? 0;
-                          const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
-                          if ((base || extra || inset) && typeof (acc as any).setXShift === 'function') {
-                            (acc as any).setXShift(desiredAccidentalXShift(vfGlyph, n, base, extra, inset));
-                          }
-                        } catch {
-                          // ignore
-                        }
-                      }
 
                       // Only nudge accidentals when necessary (tight seconds / multiple accidentals).
                       // Empirically (SVG renderer), increasing x-shift moves the accidental left.
@@ -1904,10 +1512,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                           const delta = hasSecond
                             ? Math.max(0, desiredDelta - beat1Inset)
                             : (inset ? Math.max(-inset, desiredDelta) : desiredDelta);
-                          if (typeof (acc as any).setXShift === 'function') {
-                            const target = clamp((cur + delta), 0, maxAccidentalShift(vfGlyph, n));
-                            (acc as any).setXShift(target);
-                          }
+                          if (typeof (acc as any).setXShift === 'function') (acc as any).setXShift(cur + delta);
                         }
                       } catch {
                         // ignore
@@ -1920,11 +1525,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     // accidentals may overlap; apply a small per-note stagger when needed.
                     if (enableEngravingEnhancements) {
                       try {
-                        const base = accidentalBaseShiftById.get(n.id) ?? 0;
                         const extra = accidentalStaggerById.get(n.id) ?? 0;
                         const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
-                        if ((base || extra || inset) && typeof (acc as any).setXShift === 'function') {
-                          (acc as any).setXShift(desiredAccidentalXShift(vfGlyph, n, base, extra, inset));
+                        if ((extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
+                          const cur = (acc as any).getXShift() ?? 0;
+                          // extra pushes left; inset pulls back right.
+                          (acc as any).setXShift(cur + extra - inset);
                         }
                       } catch {
                         // ignore
@@ -2087,6 +1693,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               // ignore clamp failures
             }
 
+            try {
+              if (typeof n.xPosition !== 'number') {
+                // eslint-disable-next-line no-console
+                console.log('[Vexflow] fallbackX', { id: n.id, startTick: (n as any).startTick, absBeat: (typeof (n as any).startTick === 'number' ? ((n as any).startTick / TICKS_PER_QUARTER) : undefined), absoluteX });
+              }
+            } catch (e) {
+              // ignore
+            }
             const xRaw = absoluteX - stave.getNoteStartX();
             const x = n.id === '__ghost__' ? Math.max(0, xRaw) : xRaw;
 
@@ -2118,15 +1732,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   // Stem up => displace the upper notehead; stem down => displace the lower.
                   try {
                     const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
-                    const setDisplaced = (idx: number, v: boolean) => {
-                      try {
-                        if (typeof (vfNote as any).setKeyDisplaced === 'function') (vfNote as any).setKeyDisplaced(idx, v);
-                        else if (typeof (vfNote as any).setNoteDisplaced === 'function') (vfNote as any).setNoteDisplaced(idx, v);
-                      } catch {
-                        // ignore
-                      }
-                    };
-                    if (Array.isArray(mergedIds) && mergedIds.length >= 2) {
+                    if (Array.isArray(mergedIds) && mergedIds.length >= 2 && typeof (vfNote as any).setNoteDisplaced === 'function') {
                       const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
                       const chordNotes = mergedIds
                         .map(id => staffNoteById.get(String(id)))
@@ -2142,7 +1748,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                         const keyStr = sn ? `${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}` : '';
                         const keyIdx = keyStr && keysArr.length ? keysArr.indexOf(keyStr) : -1;
                         const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(displaceId);
-                        if (idx >= 0) setDisplaced(idx, true);
+                        if (idx >= 0) (vfNote as any).setNoteDisplaced(idx, true);
                       }
                     }
                   } catch { /* ignore */ }
@@ -2943,24 +2549,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // on the wrong staff line under the cursor.
       const rect = svg.getBoundingClientRect();
       const vb = svg.viewBox?.baseVal;
-      const attrW = (() => {
-        try {
-          const v = parseFloat(String(svg.getAttribute('width') || ''));
-          return Number.isFinite(v) && v > 0 ? v : null;
-        } catch {
-          return null;
-        }
-      })();
-      const attrH = (() => {
-        try {
-          const v = parseFloat(String(svg.getAttribute('height') || ''));
-          return Number.isFinite(v) && v > 0 ? v : null;
-        } catch {
-          return null;
-        }
-      })();
-      const svgW = vb?.width && vb.width > 0 ? vb.width : (attrW ?? rect.width);
-      const svgH = vb?.height && vb.height > 0 ? vb.height : (attrH ?? rect.height);
+      const svgW = vb?.width && vb.width > 0 ? vb.width : rect.width;
+      const svgH = vb?.height && vb.height > 0 ? vb.height : rect.height;
       const scaleX = rect.width ? (svgW / rect.width) : 1;
       const scaleY = rect.height ? (svgH / rect.height) : 1;
       return {
@@ -3072,14 +2662,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
       if (chosenNoteId) {
         onNoteClickRef.current?.(chosenNoteId, e);
-        return;
-      }
-
-      // Cmd/Ctrl+Click is used by the editor to place the paste caret without clearing selection.
-      // In this mode, do NOT steal the click via proximity-pick (which can accidentally select a
-      // nearby note in the next measure when the target measure is empty).
-      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
-        onStaffClickRef.current?.(x, y, e);
         return;
       }
 
