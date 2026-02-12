@@ -164,6 +164,31 @@ const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down', 
     keys: [key],
     duration,
   });
+  
+  // --- Rest placement (SATB) ---
+  // Keep rests for different voices in distinct vertical zones.
+  // This both reads better and prevents note-vs-rest collisions in the common
+  // case where one voice rests while another has notes on the same staff.
+  if (n.isRest) {
+    const voice = (n.voice ?? 1);
+    let restLine: number | null = null;
+  
+    if (clef === 'treble') {
+      if (voice === 2) restLine = -1; // Alto: under upper staff (between staves)
+      else if (voice === 1) restLine = 3; // Soprano: inside upper staff
+    } else if (clef === 'bass') {
+      if (voice === 3) restLine = 5; // Tenor: above lower staff (between staves)
+      else if (voice === 4) restLine = 1; // Bass: inside lower staff
+    }
+  
+    if (restLine != null) {
+      try {
+        (note as any).setKeyLine?.(0, restLine);
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   // Stem direction:
   // - manualStemDirection overrides everything (set by the Flip Stem button)

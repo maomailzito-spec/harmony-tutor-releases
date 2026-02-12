@@ -8682,10 +8682,14 @@ export function applyHarmonyRules(
                 const dB = dir(bA as number, bB as number);
                 const sopranoMelodicInterval = Math.abs((sB as number) - (sA as number));
 
+                  const intA = mod12(Math.abs((sA as number) - (bA as number)));
                 const intB = mod12(Math.abs((sB as number) - (bB as number)));
                 const approachesPerfect = isPerfectOctaveOrUnison(intB) || isPerfectFifth(intB);
+                  const departurePerfect = isPerfectOctaveOrUnison(intA) || isPerfectFifth(intA);
 
-                if (approachesPerfect && dS !== 0 && dS === dB) {
+                  // Hidden/direct only: if departure is already perfect, this is a true parallel
+                  // handled by R-01/R-02 and MUST NOT be downgraded here.
+                  if (approachesPerfect && !departurePerfect && dS !== 0 && dS === dB) {
                     const ruleId = sopranoMelodicInterval <= 2 ? 'EXC-Hidden-Stepwise' : 'R-14';
                     const severity = sopranoMelodicInterval <= 2 ? 'exception' : 'warning';
 
@@ -8957,10 +8961,16 @@ export function applyHarmonyRules(
                 const b2 = bV[vB];
                 if (!a1 || !a2 || !b1 || !b2) continue;
 
-                const intA = mod12(Math.abs(a1.midi - a2.midi));
-                const intB = mod12(Math.abs(b1.midi - b2.midi));
-                const d1 = dir(a1.midi, b1.midi);
-                const d2 = dir(a2.midi, b2.midi);
+                const a1m = effectiveMidi(a1 as any);
+                const a2m = effectiveMidi(a2 as any);
+                const b1m = effectiveMidi(b1 as any);
+                const b2m = effectiveMidi(b2 as any);
+                if (!Number.isFinite(a1m as any) || !Number.isFinite(a2m as any) || !Number.isFinite(b1m as any) || !Number.isFinite(b2m as any)) continue;
+
+                const intA = mod12(Math.abs((a1m as number) - (a2m as number)));
+                const intB = mod12(Math.abs((b1m as number) - (b2m as number)));
+                const d1 = dir(a1m as number, b1m as number);
+                const d2 = dir(a2m as number, b2m as number);
                 const similar = d1 !== 0 && d1 === d2;
                 if (!similar) continue;
 
@@ -8980,105 +8990,37 @@ export function applyHarmonyRules(
 
                 // Perfect fifths
                 if (isPerfectFifth(intA) && isPerfectFifth(intB)) {
-                    // Exceptions that downgrade
-                    let exception: RuleViolation | null = null;
-
-                    // EXC-M04: vi -> V in minor
-                    const aRoman = (() => {
-                        const c = getContextAtAbsBeat(a.absBeat);
-                        return getRomanAnalysis(a.notes, c.tonic, c.isMinor)?.roman ?? '';
-                    })();
-                    const bRoman = (() => {
-                        const c = getContextAtAbsBeat(b.absBeat);
-                        return getRomanAnalysis(b.notes, c.tonic, c.isMinor)?.roman ?? '';
-                    })();
-                    const normRoman = (r: string) => r.replace(/\s+/g, '').toLowerCase();
-                    const aR = normRoman(aRoman);
-                    const bR = normRoman(bRoman);
-                    const isMinorCtx = getContextAtAbsBeat(a.absBeat).isMinor;
-
-                    const matchesViToVByRoman = isMinorCtx && aR.startsWith('vi') && bR.startsWith('v');
-
-                    // Fallback when roman analysis is empty/ambiguous: detect by chord roots vs tonic.
-                    // In minor, VI has root at tonic+8 semitones; V has root at tonic+7 semitones.
-                    const matchesViToVByRoot = (() => {
-                        if (!isMinorCtx) return false;
-                        const ctx = getContextAtAbsBeat(a.absBeat);
-                        const tonicIdx = noteNameToIndex[ctx.tonic];
-                        if (!Number.isFinite(tonicIdx)) return false;
-                        const infoA = identifyChord(a.notes);
-                        const infoB = identifyChord(b.notes);
-                        if (!infoA?.root || !infoB?.root) return false;
-                        const aPc = mod12(infoA.root.midi);
-                        const bPc = mod12(infoB.root.midi);
-                        const tonicPc = mod12(tonicIdx);
-                        const intA = mod12(aPc - tonicPc);
-                        const intB = mod12(bPc - tonicPc);
-                        return intA === 8 && intB === 7;
-                    })();
-
-                    if (matchesViToVByRoman || matchesViToVByRoot) {
-                        exception = {
-                            ruleId: 'EXC-M04',
-                            severity: 'exception',
-                            description: 'Quinte parallele tollerate in minore (vi → V)',
-                            suggestion: 'Eccezione riconosciuta; verifica comunque la resa sonora.',
-                            noteIds: [a1.id, a2.id, b1.id, b2.id],
-                        };
-                    }
-
-                    // EXC-M03: "finta" quinta parallela con settima (dominant 7 chord)
-                    if (!exception) {
-                        const chordInfoB = identifyChord(b.notes);
-                        const isDom7 = !!chordInfoB && chordInfoB.type.toLowerCase().includes('dominant');
-                        if (isDom7 && chordInfoB?.root) {
-                            const rootMidi = chordInfoB.root.midi;
-                            const isSeventh = (n: StaffNote) => {
-                                const rel = mod12(n.midi - rootMidi);
-                                return rel === 10 || rel === 11;
-                            };
-                            if (isSeventh(b1) || isSeventh(b2)) {
-                                exception = {
-                                    ruleId: 'EXC-M03',
-                                    severity: 'exception',
-                                    description: '"Finta" quinta parallela con una settima',
-                                    suggestion: 'Eccezione: la seconda intervallazione è una settima dissonante (es. V7).',
-                                    noteIds: [a1.id, a2.id, b1.id, b2.id],
-                                };
-                            }
-                        }
-                    }
-
-                    if (exception) {
-                        addViolation(exception);
-                    } else {
-                        addViolation({
-                            ruleId: 'R-02',
-                            severity: 'error',
-                            description: 'Quinte parallele',
-                            suggestion: 'Evita il moto parallelo verso quinte perfette; usa moto contrario/obliquo.',
-                            noteIds: [a1.id, a2.id, b1.id, b2.id],
-                        });
-                    }
-
-                    const sev = exception ? exception.severity : 'error';
-                    const rid = exception ? exception.ruleId : 'R-02';
-                    connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: sev, ruleId: rid });
-                    connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: sev, ruleId: rid });
+                    addViolation({
+                        ruleId: 'R-02',
+                        severity: 'error',
+                        description: 'Quinte parallele',
+                        suggestion: 'Evita il moto parallelo verso quinte perfette; usa moto contrario/obliquo.',
+                        noteIds: [a1.id, a2.id, b1.id, b2.id],
+                    });
+                    connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-02' });
+                    connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-02' });
                 }
             }
         }
 
         // R-05: hidden/direct fifths & octaves (outer voices)
         if (sopA && sopB && basA && basB) {
-            const intA = mod12(Math.abs(sopA.midi - basA.midi));
-            const intB = mod12(Math.abs(sopB.midi - basB.midi));
-            const dS = dir(sopA.midi, sopB.midi);
-            const dB = dir(basA.midi, basB.midi);
+            const sA = effectiveMidi(sopA as any);
+            const sB = effectiveMidi(sopB as any);
+            const bA = effectiveMidi(basA as any);
+            const bB = effectiveMidi(basB as any);
+            if (!Number.isFinite(sA as any) || !Number.isFinite(sB as any) || !Number.isFinite(bA as any) || !Number.isFinite(bB as any)) {
+                // skip
+            } else {
+
+            const intA = mod12(Math.abs((sA as number) - (bA as number)));
+            const intB = mod12(Math.abs((sB as number) - (bB as number)));
+            const dS = dir(sA as number, sB as number);
+            const dB = dir(bA as number, bB as number);
             const similar = dS !== 0 && dS === dB;
 
-            const sopMotion = Math.abs(sopB.midi - sopA.midi);
-            const bassMotion = Math.abs(basB.midi - basA.midi);
+            const sopMotion = Math.abs((sB as number) - (sA as number));
+            const bassMotion = Math.abs((bB as number) - (bA as number));
 
             const sopranoLeap = sopMotion > 2;
             const sopranoSmallLeap = sopMotion <= 4; // 3rd (M/m) is often treated as milder than larger leaps
@@ -9183,6 +9125,8 @@ export function applyHarmonyRules(
                 }
                 connections.push({ type: 'vertical', noteId1: sopB.id, noteId2: basB.id, severity: 'exception', ruleId: 'EXC-OBL-PERF' });
             }
+
+            }
         }
 
         // R-05 (extended): hidden/direct fifths & octaves involving the soprano and Alto.
@@ -9191,13 +9135,21 @@ export function applyHarmonyRules(
         const altoA = aV[2];
         const altoB = bV[2];
         if (sopA && sopB && altoA && altoB) {
-            const intA = mod12(Math.abs(sopA.midi - altoA.midi));
-            const intB = mod12(Math.abs(sopB.midi - altoB.midi));
-            const dS = dir(sopA.midi, sopB.midi);
-            const dA = dir(altoA.midi, altoB.midi);
+            const sA = effectiveMidi(sopA as any);
+            const sB = effectiveMidi(sopB as any);
+            const aA = effectiveMidi(altoA as any);
+            const aB = effectiveMidi(altoB as any);
+            if (!Number.isFinite(sA as any) || !Number.isFinite(sB as any) || !Number.isFinite(aA as any) || !Number.isFinite(aB as any)) {
+                // skip
+                // (don't early-return; other rules still apply)
+            } else {
+            const intA = mod12(Math.abs((sA as number) - (aA as number)));
+            const intB = mod12(Math.abs((sB as number) - (aB as number)));
+            const dS = dir(sA as number, sB as number);
+            const dA = dir(aA as number, aB as number);
             const similar = dS !== 0 && dS === dA;
 
-            const sopMotion = Math.abs(sopB.midi - sopA.midi);
+            const sopMotion = Math.abs((sB as number) - (sA as number));
             const sopranoLeap = sopMotion > 2;
 
             const arrivalPerfect = isPerfectFifth(intB) || isPerfectOctaveOrUnison(intB);
@@ -9259,6 +9211,7 @@ export function applyHarmonyRules(
                     connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: sev, ruleId: 'R-05' });
                     connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: sev, ruleId: 'R-05' });
                 }
+            }
             }
         }
 

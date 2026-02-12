@@ -29,6 +29,7 @@ import { usePreference } from '../preferences/usePreference';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData } from '../storage/projectSchema';
 import { handleGrandStaffProjectIOMenuAction } from '../controllers/grandStaffProjectIOAdapter';
+import { useGrandStaffMidi } from '../hooks/useGrandStaffMidi';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
@@ -600,6 +601,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [isLooping, setIsLooping] = useState(false);
     const [loopRange, setLoopRange] = useState<{ startBeat: number, endBeat: number } | null>(null);
     const [ghostNote, setGhostNote] = useState<(StaffNote & { systemIndex: number }) | null>(null);
+
+    const project = useMemo(() => ({
+        notes: rawNotes,
+        timeSignature,
+        timeSignatureChanges,
+        keySignatureRoot,
+        isMinorMode,
+        bpm,
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm]);
+
+    const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
+        setRawNotes(next.notes || []);
+        if (next.timeSignature) setTimeSignature(next.timeSignature);
+        if (next.timeSignatureChanges) setTimeSignatureChanges(next.timeSignatureChanges);
+        if (typeof next.bpm === 'number' && Number.isFinite(next.bpm)) setBpm(Math.max(20, Math.min(300, Math.round(next.bpm))));
+
+        try {
+            const maxIdx = (next.notes || []).reduce((mx, n) => Math.max(mx, Number.isFinite(n?.measureIndex as any) ? Number(n?.measureIndex) : -1), -1);
+            const measuresCount = Math.max(1, maxIdx + 1);
+            setMinMeasureCount(measuresCount);
+            setMinMeasureCountDraft(String(measuresCount));
+        } catch {
+            // ignore
+        }
+    }, [setRawNotes, setTimeSignature, setTimeSignatureChanges, setBpm, setMinMeasureCount, setMinMeasureCountDraft]);
+
+    const { exportMidi, importMidi } = useGrandStaffMidi({
+        project,
+        setProject,
+    });
 
     // Render-time note hit points from VexFlow, per system.
     // Used to make marquee selection deterministic and independent from clef/position approximations.
@@ -2190,9 +2221,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (action === MENU_ACTIONS.IMPORT_MIDI) {
             try {
-                const filePath = String(payload?.filePath || '').trim();
-                const name = filePath ? filePath.split(/[/\\]/).pop() : '';
-                window.alert(`Import MIDI${name ? ` (${name})` : ''} non ancora supportato in questa build.`);
+                const fromMenuBase64 = typeof payload?.base64 === 'string' ? payload.base64 : '';
+                if (fromMenuBase64) {
+                    await importMidi(fromMenuBase64);
+                } else {
+                    await importMidi();
+                }
             } catch {
                 // ignore
             }
@@ -2201,7 +2235,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (action === MENU_ACTIONS.EXPORT_MIDI) {
             try {
-                window.alert('Export MIDI non ancora supportato in questa build.');
+                await exportMidi();
             } catch {
                 // ignore
             }
@@ -2386,7 +2420,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } else if (action === 'set-select-only-voice') {
             setMarqueeSelectOnlyCurrentVoice(!!payload?.enabled);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi]);
 
     // Routing: single source of truth for where actions are handled.
     const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {
@@ -10376,7 +10410,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     if (typeof maxMeasureWithNotes === 'number' && mi >= maxMeasureWithNotes) continue;
                                     for (const v of [1, 2, 3, 4]) {
                                         const line = notesInMeasure.filter(n => (n.voice ?? 1) === v);
-                                        if (!line.length) continue;
+                                        // Strict rule: every voice must fully cover the measure.
+                                        // Missing/empty voice => incomplete measure.
+                                        if (!line.length) {
+                                            invalidMeasures.add(mi);
+                                            break;
+                                        }
                                         if (!validateVoiceMeasure(mi, line)) {
                                             invalidMeasures.add(mi);
                                             break;
