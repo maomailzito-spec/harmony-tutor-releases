@@ -33,7 +33,6 @@ interface GrandStaffEditorProps {
 }
 
 type InsertionElement = { type: 'note' | 'rest', duration: NoteDuration, isDotted?: boolean };
-
 // Must match value in VexflowGrandStaff.tsx
 const STAFF_MARGIN = 50;
 type Tool = 'insert';
@@ -10205,6 +10204,148 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                         const systemHarmonyLabels = (harmonyLabelsBySystemSequenced?.[systemIndex] || []);
 
+                        const invalidMeasureRects = (() => {
+                            try {
+                                const durationToBeatsForWarning = (n: StaffNote): number => {
+                                    const base = (() => {
+                                        switch (n.duration) {
+                                            case 'whole': return 4;
+                                            case 'half': return 2;
+                                            case 'quarter': return 1;
+                                            case 'eighth': return 0.5;
+                                            case 'sixteenth': return 0.25;
+                                            case 'thirty-second': return 0.125;
+                                            case 'sixty-fourth': return 0.0625;
+                                            default: return 1;
+                                        }
+                                    })();
+                                    let beats = base;
+                                    if ((n as any).isDotted) beats *= 1.5;
+                                    if ((n as any).isTriplet) beats *= (2 / 3);
+                                    if ((n as any).isDuplet) beats *= (3 / 2);
+                                    return beats;
+                                };
+
+                                const beatsPerMeasureForIndex = (mi: number): number => {
+                                    try {
+                                        let n = Number(timeSignature?.numerator ?? 4);
+                                        let d = Number(timeSignature?.denominator ?? 4);
+                                        const changes = (timeSignatureChanges || [])
+                                            .filter(c => Number.isFinite(Number(c?.measureIndex)))
+                                            .map(c => ({ mi: Number(c.measureIndex), n: Number(c.numerator), d: Number(c.denominator) }))
+                                            .filter(c => Number.isFinite(c.mi) && Number.isFinite(c.n) && Number.isFinite(c.d));
+                                        let bestMi = -Infinity;
+                                        for (const c of changes) {
+                                            if (c.mi <= mi && c.mi >= bestMi) {
+                                                bestMi = c.mi;
+                                                n = c.n;
+                                                d = c.d;
+                                            }
+                                        }
+                                        if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 4;
+                                        return n * (4 / d);
+                                    } catch {
+                                        return 4;
+                                    }
+                                };
+
+                                const measuresInSystem = system.measureIndices || [];
+                                const notesByMeasure = new Map<number, StaffNote[]>();
+                                (systemNotesForRender || []).forEach(n => {
+                                    const mi = n.measureIndex ?? 0;
+                                    if (!notesByMeasure.has(mi)) notesByMeasure.set(mi, []);
+                                    notesByMeasure.get(mi)!.push(n);
+                                });
+
+                                const maxMeasureWithNotes = (() => {
+                                    try {
+                                        const keys = Array.from(notesByMeasure.keys());
+                                        return keys.length ? Math.max(...keys) : null;
+                                    } catch {
+                                        return null;
+                                    }
+                                })();
+
+                                const invalidMeasures = new Set<number>();
+                                const EPS = 1e-4;
+
+                                const validateVoiceMeasure = (mi: number, line: StaffNote[]): boolean => {
+                                    const beatsPerMeas = beatsPerMeasureForIndex(mi);
+                                    const endBeat = 1 + beatsPerMeas;
+                                    const onsetGroups = new Map<number, StaffNote[]>();
+                                    for (const n of (line || [])) {
+                                        const b = Number((n as any)?.beat);
+                                        if (!Number.isFinite(b)) continue;
+                                        const key = Math.round(b * 1e6) / 1e6;
+                                        if (!onsetGroups.has(key)) onsetGroups.set(key, []);
+                                        onsetGroups.get(key)!.push(n);
+                                    }
+                                    const onsets = Array.from(onsetGroups.entries())
+                                        .map(([b, ns]) => {
+                                            const d = Math.max(...ns.map(x => durationToBeatsForWarning(x)));
+                                            return { beat: b, dur: d };
+                                        })
+                                        .filter(x => Number.isFinite(x.beat) && Number.isFinite(x.dur) && x.dur > 0)
+                                        .sort((a, b) => a.beat - b.beat);
+
+                                    if (onsets.length === 0) return true;
+                                    let cur = 1;
+                                    for (const o of onsets) {
+                                        if (o.beat > cur + EPS) return false;
+                                        if (o.beat < cur - EPS) return false;
+                                        cur = o.beat + o.dur;
+                                        if (cur > endBeat + EPS) return false;
+                                    }
+                                    return Math.abs(cur - endBeat) <= 0.01;
+                                };
+
+                                for (const mi of measuresInSystem) {
+                                    const notesInMeasure = notesByMeasure.get(mi) || [];
+                                    if (!notesInMeasure.length) continue;
+                                    if (typeof maxMeasureWithNotes === 'number' && mi >= maxMeasureWithNotes) continue;
+                                    for (const v of [1, 2, 3, 4]) {
+                                        const line = notesInMeasure.filter(n => (n.voice ?? 1) === v);
+                                        if (!line.length) continue;
+                                        if (!validateVoiceMeasure(mi, line)) {
+                                            invalidMeasures.add(mi);
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if (!invalidMeasures.size) return [] as Array<{ x: number; w: number }>;
+
+                                const barByMeasure = new Map<number, number>();
+                                (systemBarlines || []).forEach(b => {
+                                    try {
+                                        const m = /^bar-(\d+)$/.exec(String((b as any)?.id ?? ''));
+                                        if (!m) return;
+                                        const mi = Number(m[1]);
+                                        if (!Number.isFinite(mi)) return;
+                                        barByMeasure.set(mi, Number(b.xPosition));
+                                    } catch {
+                                        // ignore
+                                    }
+                                });
+
+                                const rects: Array<{ x: number; w: number }> = [];
+                                measuresInSystem.forEach((mi, idx) => {
+                                    if (!invalidMeasures.has(mi)) return;
+                                    const x1 = barByMeasure.get(mi);
+                                    const x0 = (system.startMeasuresX && Number.isFinite(system.startMeasuresX[idx]))
+                                        ? Number(system.startMeasuresX[idx])
+                                        : (idx > 0 ? (barByMeasure.get(measuresInSystem[idx - 1]) ?? NaN) : START_X);
+                                    if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) return;
+                                    const pad = 2;
+                                    rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad) });
+                                });
+
+                                return rects;
+                            } catch {
+                                return [] as Array<{ x: number; w: number }>;
+                            }
+                        })();
+
                         // Clamp the *final* harmony hold-line to the end of the last measure
                         // that actually contains notes in this system (so it won't extend into
                         // a following empty measure).
@@ -10360,6 +10501,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                                                 );
                                                                                                                         })()}
                             </RenderErrorBoundary> {/* FIX: this closing tag was missing */}
+
+                                                        {invalidMeasureRects.length > 0 && (
+                                                            <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                                                {(() => {
+                                                                    const yTop = PLAYHEAD_Y_TOP;
+                                                                    const yBottom = PLAYHEAD_Y_BOTTOM;
+                                                                    const h = yBottom - yTop;
+                                                                    return invalidMeasureRects.map((r, i) => (
+                                                                        <rect
+                                                                            key={`invalid-${systemIndex}-${i}`}
+                                                                            x={r.x}
+                                                                            y={yTop}
+                                                                            width={r.w}
+                                                                            height={h}
+                                                                            fill="rgba(239,68,68,0.12)"
+                                                                        />
+                                                                    ));
+                                                                })()}
+                                                            </svg>
+                                                        )}
 
                                                         {/* Overlay: playhead */}
                                                         {playheadPosition && playheadPosition.systemIndex === systemIndex && (

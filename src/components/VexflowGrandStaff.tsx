@@ -488,11 +488,28 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
       const notesForCheck = (ghostNote ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes)
         .filter(n => n && n.id !== '__ghost__');
-      const measureIndices = Array.from(new Set(
-        (notesForCheck || [])
-          .map(n => Number((n as any)?.measureIndex))
-          .filter(mi => Number.isFinite(mi))
-      )).sort((a, b) => a - b);
+
+      const notesByMeasure = new Map<number, number>();
+      for (const n of (notesForCheck || [])) {
+        const mi = Number((n as any)?.measureIndex);
+        if (!Number.isFinite(mi)) continue;
+        notesByMeasure.set(mi, (notesByMeasure.get(mi) || 0) + 1);
+      }
+
+      const barMeasureIndices = (barlines || [])
+        .map(b => {
+          try {
+            const m = /^bar-(\d+)$/.exec(String((b as any)?.id ?? ''));
+            return m ? Number(m[1]) : null;
+          } catch {
+            return null;
+          }
+        })
+        .filter((mi): mi is number => mi != null && Number.isFinite(mi));
+
+      const measureIndices = (barMeasureIndices.length > 0 ? barMeasureIndices : Array.from(notesByMeasure.keys()))
+        .filter((mi, idx, arr) => arr.indexOf(mi) === idx)
+        .sort((a, b) => a - b);
 
       const invalidMeasures = new Set<number>();
       const EPS = 1e-4;
@@ -539,6 +556,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       };
 
       for (const mi of measureIndices) {
+        if (!notesByMeasure.has(mi)) continue;
         for (const v of [1, 2, 3, 4]) {
           const k = `${mi}|${v}`;
           const line = byVoiceMeasure.get(k) || [];
@@ -613,7 +631,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 re.setAttribute('fill', fill);
                 g.appendChild(re);
               }
-              svgEl.insertBefore(g, svgEl.firstChild);
+              svgEl.appendChild(g);
             } catch {
               // ignore
             }
