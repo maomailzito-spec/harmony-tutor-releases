@@ -18,8 +18,17 @@ import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysi
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
+import { importMusicXML } from '../importers/musicxml/importMusicXML';
 import { getString, setString } from '../storage/localStorage';
 import { HT_EDITOR_ZOOM_KEY } from '../storage/storageKeys';
+import type { MenuAction, MenuActionPayloadMap } from '../../shared/menuActionRegistry';
+import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
+import { getMenuActionTarget } from '../contracts/menuActionTargets';
+import { electronBridge } from '../services/electronBridge';
+import { usePreference } from '../preferences/usePreference';
+import { useMenuStateSync } from '../controllers/useMenuStateSync';
+import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData } from '../storage/projectSchema';
+import { handleGrandStaffProjectIOMenuAction } from '../controllers/grandStaffProjectIOAdapter';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
@@ -28,7 +37,7 @@ interface GrandStaffEditorProps {
     isActive: boolean;
     audioService: AudioService;
     isAudioReady: boolean;
-    pendingMenuAction?: { action: string; payload: any; nonce: number } | null;
+    pendingMenuAction?: { action: MenuAction; payload: MenuActionPayloadMap[MenuAction]; nonce: number } | null;
     onConsumePendingMenuAction?: (nonce: number) => void;
 }
 
@@ -52,6 +61,9 @@ const TOP_STAFF_TOP = 30;
 const BOTTOM_STAFF_HEIGHT = 180;
 const BOTTOM_STAFF_TOP = 20;
 const CONNECTOR_HEIGHT = 40;
+// Forward-compat: unknown fields from loaded project files.
+// These are round-tripped on Save/Save As to avoid destroying future data.
+const EMPTY_EXTRAS: Record<string, unknown> = {};
 const TOTAL_SYSTEM_HEIGHT = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_HEIGHT;
 
 // VexFlow stave geometry (must match values in VexflowGrandStaff.tsx)
@@ -486,9 +498,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     pendingMenuAction,
     onConsumePendingMenuAction,
 }) => {
-        const measureGridStepRef = useRef<Map<number, number>>(new Map());
+    const measureGridStepRef = useRef<Map<number, number>>(new Map());
     const [rawNotes, setRawNotes, undoNotes, redoNotes] = useUndoableState<StaffNote[]>([]);
-    // Ref per avere sempre il valore aggiornato di rawNotes
     const latestRawNotes = useRef(rawNotes);
 
     // Mantieni latestRawNotes aggiornato
@@ -777,6 +788,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
     const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
 
+    const latestPasteCaretRef = useRef<typeof pasteCaret>(pasteCaret);
+    useEffect(() => {
+        latestPasteCaretRef.current = pasteCaret;
+    }, [pasteCaret]);
+
+    const setPasteCaretImmediate = useCallback((next: typeof pasteCaret) => {
+        latestPasteCaretRef.current = next;
+        setPasteCaret(next);
+    }, []);
+
     const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const measureTextWidth = useCallback((text: string, font: string) => {
         try {
@@ -866,12 +887,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
     }, [setEngravingMode]);
 
+    const dispatchMenuActionRef = useRef<((action: MenuAction, payload: any) => void) | null>(null);
+
     useEffect(() => {
         if (!pendingMenuAction) return;
+        // When App routes a GrandStaff action while we were on another view,
+        // it queues it via `pendingMenuAction`. Execute it exactly once here.
         try {
-            onConsumePendingMenuAction?.(pendingMenuAction.nonce);
+            dispatchMenuActionRef.current?.(pendingMenuAction.action, pendingMenuAction.payload);
         } catch {
             // ignore
+        } finally {
+            try { onConsumePendingMenuAction?.(pendingMenuAction.nonce); } catch { /* ignore */ }
         }
     }, [pendingMenuAction, onConsumePendingMenuAction]);
 
@@ -1711,7 +1738,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return () => window.clearInterval(id);
     }, []);
 
-    const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = useState(false);
+    const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = usePreference<boolean>('editor.selectOnlyCurrentVoice');
+
+    const [exportIncludeTitle] = usePreference<boolean>('export.includeTitle');
+
+    // Keep native Electron menu checkmarks in sync with renderer state.
+    useMenuStateSync({
+        selectOnlyCurrentVoiceEnabled: marqueeSelectOnlyCurrentVoice,
+        showMeasureNumbersEnabled: showMeasureNumbers,
+        showHarmonyDebugEnabled: showHarmonyDebug,
+        showVoiceColorsEnabled: showVoiceColors,
+        showQuickInsertBarEnabled: showQuickInsertBar,
+        engravingMode,
+    });
 
 
     // Mantieni latestRawNotes aggiornato
@@ -1722,28 +1761,126 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
 
     // Funzione robusta per gestire tutte le azioni del menu di Electron
+    const buildExportHtml = useCallback((): string | null => {
+        const container = staffContainerRef.current;
+        if (!container) return null;
+        try {
+            const head = document.head.innerHTML;
+            const baseHref = String(document.baseURI || window.location.href || '');
+
+            const content = (() => {
+                try {
+                    const clone = container.cloneNode(true) as HTMLElement;
+
+                    // Replace the editable title <input> with a print-friendly static title,
+                    // or remove it entirely if exportIncludeTitle is OFF.
+                    const titleInput = clone.querySelector('input[placeholder="Titolo"]') as HTMLInputElement | null;
+                    if (titleInput) {
+                        const wrapper = titleInput.closest('div');
+                        const titleText = String(projectTitle || titleInput.value || '').trim();
+
+                        if (!exportIncludeTitle || !titleText) {
+                            (wrapper ?? titleInput).remove();
+                        } else {
+                            const titleDiv = document.createElement('div');
+                            titleDiv.textContent = titleText;
+                            titleDiv.style.textAlign = 'center';
+                            titleDiv.style.fontWeight = '600';
+                            titleDiv.style.color = '#1f2937';
+                            titleDiv.style.marginBottom = '12px';
+                            titleDiv.style.fontSize = `${titleFontSize}px`;
+                            titleDiv.style.fontFamily = String(titleFontFamily || 'serif');
+                            if (wrapper) wrapper.replaceWith(titleDiv);
+                            else titleInput.replaceWith(titleDiv);
+                        }
+                    }
+
+                    // Export layout: make each rendered system fluid (no fixed pixel width).
+                    try {
+                        const systemEls = Array.from(clone.querySelectorAll('[data-system-index]')) as HTMLElement[];
+                        for (const el of systemEls) {
+                            el.style.width = '100%';
+                            el.style.maxWidth = '100%';
+                            el.style.overflow = 'visible';
+                        }
+                    } catch {
+                        // ignore
+                    }
+
+                    // Critical for PDF: without viewBox, shrinking width clips SVG content.
+                    // Add a viewBox from the original width/height and make width fluid.
+                    try {
+                        const svgs = Array.from(clone.querySelectorAll('svg')) as SVGSVGElement[];
+                        for (const svg of svgs) {
+                            const w = Number(svg.getAttribute('width') || svg.clientWidth || 0);
+                            const h = Number(svg.getAttribute('height') || svg.clientHeight || 0);
+                            if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+                                if (!svg.getAttribute('viewBox')) {
+                                    svg.setAttribute('viewBox', `0 0 ${Math.round(w)} ${Math.round(h)}`);
+                                }
+                                svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+                            }
+                            svg.setAttribute('width', '100%');
+                            svg.style.width = '100%';
+                            svg.style.maxWidth = '100%';
+                            svg.style.height = 'auto';
+                        }
+                    } catch {
+                        // ignore
+                    }
+
+                    return clone.innerHTML;
+                } catch {
+                    return container.innerHTML;
+                }
+            })();
+
+                        return `<!doctype html><html><head><base href="${baseHref}">${head}<style>
+                              @page { size: A4 landscape; margin: 8mm; }
+                              body{background:white;margin:0;padding:8px}
+                              .ht-staff-container{width:100% !important;max-width:100% !important;overflow:visible !important;}
+                              [data-system-index]{width:100% !important;max-width:100% !important;overflow:visible !important;}
+                              svg{max-width:100%;width:100%;height:auto}
+              /* Export/print mode: hide interactive overlays and analysis layers */
+              .export-exclude{display:none !important;}
+              input, textarea, select{display:none !important;}
+            </style></head><body>${content}</body></html>`;
+        } catch {
+            return null;
+        }
+    }, [exportIncludeTitle, projectTitle, titleFontFamily, titleFontSize]);
+
     // Print handler (moved above menu handler to avoid temporal dead zone): opens a print window for the staff container
     const handlePrint = useCallback(() => {
-        const container = staffContainerRef.current;
-        if (!container) {
-            // Removed debug log
-            return;
-        }
+        const html = buildExportHtml();
+        if (!html) return;
+
         const printWindow = window.open('', '_blank', 'width=1200,height=800');
-        if (!printWindow) {
-            // Removed debug log
-            return;
-        }
-        const head = document.head.innerHTML;
-        const content = container.innerHTML;
+        if (!printWindow) return;
         printWindow.document.open();
-        printWindow.document.write(`<!doctype html><html><head>${head}<style>body{background:white;margin:0;padding:20px}svg{max-width:100%;height:auto}</style></head><body>${content}</body></html>`);
+        printWindow.document.write(html);
         printWindow.document.close();
         printWindow.focus();
-    }, []);
 
-    const handleMenuAction = useCallback(async (action: string, payload: any) => {
-        const api = (window as any).electronAPI;
+        // Trigger print once the content is loaded, then auto-close.
+        try {
+            const onAfterPrint = () => {
+                try { printWindow.close(); } catch { /* ignore */ }
+            };
+            printWindow.addEventListener('afterprint', onAfterPrint);
+            printWindow.addEventListener('load', () => {
+                try { printWindow.focus(); } catch { /* ignore */ }
+                try { printWindow.print(); } catch { /* ignore */ }
+            }, { once: true });
+        } catch {
+            // ignore
+        }
+    }, [buildExportHtml]);
+
+    const projectExtrasRef = useRef<Record<string, unknown>>(EMPTY_EXTRAS);
+
+    const handleMenuActionLegacy = useCallback(async (action: MenuAction, payload: any) => {
+        const api = window.electronAPI;
 
         if (action === 'increase-title-font') {
             setTitleFontSize(s => Math.min(72, s + 1));
@@ -1888,7 +2025,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 // Prefer the explicit paste caret (set by click / note selection).
                 // Fall back to the playback cursor (absBeat) if available.
-                let caret = pasteCaret || null;
+                let caret = latestPasteCaretRef.current || pasteCaret || null;
 
                 if (!caret && layoutData && Number.isFinite(playbackCursorAbsBeatRef.current) && playbackCursorAbsBeatRef.current >= 0) {
                     try {
@@ -1930,7 +2067,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             }
                         }
                         caret = { x: 0, systemIndex, measureIndex, beat };
-                        setPasteCaret(caret);
+                        setPasteCaretImmediate(caret);
                     } catch {
                         // ignore
                     }
@@ -1956,12 +2093,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             measureIndex: sysParams.measureIndices[bestIdx] ?? 0,
                             beat: 1,
                         };
-                        setPasteCaret(caret);
+                        setPasteCaretImmediate(caret);
                     }
                 }
                 if (!caret) {
                     caret = { x: 0, systemIndex: 0, measureIndex: 0, beat: 1 };
-                    setPasteCaret(caret);
+                    setPasteCaretImmediate(caret);
                 }
                 // Removed debug log
                 if (caret && latestClipboardRef.current && latestClipboardRef.current.length > 0) {
@@ -1993,313 +2130,237 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             try { handlePrint(); } catch (e) { /* Removed debug log */ }
             return;
         }
-        if (action === 'close-project') {
-            // Removed debug log
-            const confirmed = window.confirm("Vuoi chiudere il progetto corrente? Le modifiche non salvate andranno perse.");
-            if (confirmed) {
-                // Reset rawNotes to initial state
-                setRawNotes([]);
-                setKeySignatureRoot('C');
-                setProjectTitle('');
-                setTimeSignature({ numerator: 4, denominator: 4 });
-                setTimeSignatureChanges([]);
+        if (action === 'export-pdf') {
+            try {
+                const html = buildExportHtml();
+                if (!html) return;
+                const computeScale = () => {
+                    try {
+                        const container = staffContainerRef.current;
+                        if (!container) return 100;
+                        const maxSystemWidth = Array.isArray((layoutData as any)?.systemsParams)
+                            ? (layoutData as any).systemsParams.reduce((mx: number, s: any) => {
+                                const w = Number(s?.width || 0);
+                                return Number.isFinite(w) ? Math.max(mx, w) : mx;
+                            }, 0)
+                            : 0;
+
+                        let contentW = maxSystemWidth > 0 ? maxSystemWidth : container.getBoundingClientRect().width;
+                        if (!Number.isFinite(contentW) || contentW <= 0) return 100;
+
+                        // A4 landscape width at 96 DPI ~ 1122px. Keep margin/padding headroom.
+                        const usableW = 1060;
+                        const ratio = usableW / contentW;
+                        const pct = Math.floor(Math.max(0.45, Math.min(1, ratio)) * 100);
+                        return Math.max(45, Math.min(100, pct));
+                    } catch {
+                        return 100;
+                    }
+                };
+
+                const res = await electronBridge.exportPdfFromHtml(html, {
+                    pageSize: 'A4',
+                    marginsType: 0,
+                    landscape: true,
+                    scaleFactor: computeScale(),
+                });
+                // On failure, main emits `menu-error` and the app shows a toast.
+                void res;
+            } catch (err: any) {
+                // On unexpected renderer-side failures, keep silent (avoid blocking modals).
+                // Main-layer failures are already surfaced via `menu-error`.
+                void err;
+            }
+            return;
+        }
+        if (action === 'export-png') {
+            try {
+                const html = buildExportHtml();
+                if (!html) return;
+                const res = await electronBridge.exportPngFromHtml(html, { scaleFactor: 1, tileMaxHeightPx: 8000 });
+                // On failure, main emits `menu-error` and the app shows a toast.
+                void res;
+            } catch (err: any) {
+                // On unexpected renderer-side failures, keep silent (avoid blocking modals).
+                // Main-layer failures are already surfaced via `menu-error`.
+                void err;
+            }
+            return;
+        }
+
+        if (action === MENU_ACTIONS.IMPORT_MIDI) {
+            try {
+                const filePath = String(payload?.filePath || '').trim();
+                const name = filePath ? filePath.split(/[/\\]/).pop() : '';
+                window.alert(`Import MIDI${name ? ` (${name})` : ''} non ancora supportato in questa build.`);
+            } catch {
+                // ignore
+            }
+            return;
+        }
+
+        if (action === MENU_ACTIONS.EXPORT_MIDI) {
+            try {
+                window.alert('Export MIDI non ancora supportato in questa build.');
+            } catch {
+                // ignore
+            }
+            return;
+        }
+
+        if (
+            action === 'close-project' ||
+            action === 'save' ||
+            action === 'save-as' ||
+            action === 'open' ||
+            action === 'new'
+        ) {
+            await handleGrandStaffProjectIOMenuAction({
+                action: action as any,
+                payload,
+                api,
+                currentProjectFilePath,
+                setCurrentProjectFilePath,
+                snapshot: {
+                    latestRawNotes,
+                    latestHarmonyOverrides,
+                    projectExtrasRef,
+                    staffSystemMode,
+                    keySignatureRoot,
+                    projectTitle,
+                    titleFontSize,
+                    titleFontFamily,
+                    timeSignature,
+                    timeSignatureChanges,
+                    isMinorMode,
+                    autoLeadingToneInMinor,
+                    keyChangeMode,
+                    modalTonicOverride,
+                    analysisContexts,
+                    doubleBarlineMeasures,
+                    toolbarGroupOrder,
+                    bpm,
+                    isBpmActive,
+                    isMetronomeOn,
+                    metronomeUnit,
+                },
+                apply: {
+                    projectExtrasRef,
+                    defaultToolbarGroupOrder: DEFAULT_TOOLBAR_ORDER,
+                    setRawNotes,
+                    setProjectTitle,
+                    setCurrentProjectFilePath,
+                    setKeySignatureRoot,
+                    setIsMinorMode,
+                    setTimeSignature,
+                    setHarmonyOverrides,
+                    setAnalysisContexts,
+                    setTimeSignatureChanges,
+                    setDoubleBarlineMeasures,
+                    setKeyChangeMode,
+                    setModalTonicOverride,
+                    setAutoLeadingToneInMinor,
+                    setMeasuresPerLine,
+                    setMeasuresPerLineDraft,
+                    setMinMeasureCount,
+                    setMinMeasureCountDraft,
+                    setBpm,
+                    setIsBpmActive,
+                    setIsMetronomeOn,
+                    setMetronomeUnit,
+                    setClipboard,
+                    setSelectedNoteIds,
+                    setPasteCaretImmediate,
+                    setActiveAccidental,
+                    setSelectedVoice,
+                    setStaffSystemMode,
+                    setToolbarGroupOrder,
+                    setTitleFontSize,
+                    setTitleFontFamily,
+                    setActiveTab,
+                    setSelectedInsertion,
+                    setIsTriplet,
+                    setIsDuplet,
+                    setIsSwing,
+                    setTupletNoteCount,
+                    setTripletBaseDuration,
+                    setHoveredViolationNotes,
+                    setSelectedViolationIndex,
+                    setViewMode,
+                    setContextMenu,
+                    setShowRomanAnalysis,
+                    setShowSymbolAnalysis,
+                    setShowMeasureNumbers,
+                    setIsToolbarCustomizeOpen,
+                    setMidiOutputs,
+                    setSelectedMidiOutput,
+                    timeSignature,
+                },
+            });
+            return;
+        } else if (action === MENU_ACTIONS.IMPORT_MUSICXML) {
+            // MusicXML import: renderer-safe (no fs/path); XML is provided by main via IPC.
+            try {
+                const xml = String(payload?.xml || '').trim();
+                if (!xml) return;
+
+                if (latestRawNotes.current.length > 0) {
+                    const confirmed = window.confirm('Importare MusicXML? Le modifiche non salvate andranno perse.');
+                    if (!confirmed) return;
+                }
+
+                // Parse first: if import fails, do not clear the current project.
+                const imported = importMusicXML(xml);
+                const importedNotes = Array.isArray(imported?.notes) ? imported.notes : [];
+
+                const nextKeyRoot = String(imported?.keySignatureRoot || 'C').trim() || 'C';
+                const nextIsMinor = Boolean(imported?.isMinorMode);
+                const nextTimeSignature = imported?.timeSignature || { numerator: 4, denominator: 4 };
+                const nextTimeSignatureChanges = Array.isArray(imported?.timeSignatureChanges) ? imported.timeSignatureChanges : [];
+                const nextStaffSystemMode = (
+                    imported?.staffSystemMode === 'grandstaff' ||
+                    imported?.staffSystemMode === 'treble_only' ||
+                    imported?.staffSystemMode === 'satb_ancient'
+                ) ? imported.staffSystemMode : 'grandstaff';
+
+                const filePath = String(payload?.filePath || '').trim();
+                const fallbackTitle = filePath ? filePath.split(/[/\\]/).pop() : '';
+                const nextTitle = String(imported?.projectTitle || fallbackTitle || '').trim();
+
+                // Now apply: reset to defaults so missing fields don't inherit previous project state.
+                setRawNotes(importedNotes as any);
+                setKeySignatureRoot(nextKeyRoot);
+                setProjectTitle(nextTitle);
+                setTimeSignature(nextTimeSignature);
+                setTimeSignatureChanges(nextTimeSignatureChanges);
+                setIsMinorMode(nextIsMinor);
+                setStaffSystemMode(nextStaffSystemMode);
+                setAutoLeadingToneInMinor(true);
+                setKeyChangeMode('none');
+                setModalTonicOverride('');
+                setAnalysisContexts([]);
+                setHarmonyOverrides([]);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
-                setActiveTab('editor');
-                setDoubleBarlineMeasures([]);
-                setMinMeasureCount(4);
-                setMeasuresPerLine(4);
-                setIsMinorMode(false);
-                setKeyChangeMode('none');
-                setModalTonicOverride('');
-                setSelectedInsertion({ type: 'note', duration: 'quarter', isDotted: false });
-                setIsTriplet(false);
-                setIsDuplet(false);
-                setIsSwing(false);
-                setTupletNoteCount(0);
-                setTripletBaseDuration(null);
-                setActiveAccidental(null);
-                setSelectedVoice(1);
-                setAutoLeadingToneInMinor(true);
-                setHoveredViolationNotes(null);
-                setSelectedViolationIndex(null);
-                setViewMode('page');
-                setPasteCaret(null);
-                setAnalysisContexts([]);
-                setHarmonyOverrides([]);
-                setContextMenu(null);
-                setShowRomanAnalysis(true);
-                setShowSymbolAnalysis(false);
-                setShowMeasureNumbers(true);
-                setIsToolbarCustomizeOpen(false);
-                setMidiOutputs([]);
-                setSelectedMidiOutput(null);
+                setPasteCaretImmediate(null);
+                setPasteMarker(null as any);
                 setCurrentProjectFilePath(null);
-            }
-        } else if (action === 'save' || action === 'save-as') {
-            // Removed debug log
-            if (latestRawNotes.current.length === 0 && !window.confirm("Il progetto è vuoto. Salvare comunque?")) return;
-            const saveKeySig = getKeySignature(keySignatureRoot || 'C', isMinorMode ? 'Minor' : 'Major');
-            const projectData = JSON.stringify({
-                notes: (latestRawNotes.current || []).map((n: any) => normalizeNotePitchFieldsWithKey(n as any, saveKeySig)),
-                staffSystemMode,
-                // Project-level settings
-                keySignatureRoot,
-                projectTitle,
-                titleFontSize,
-                titleFontFamily,
-                timeSignature,
-                timeSignatureChanges,
-                isMinorMode,
-                autoLeadingToneInMinor,
-                keyChangeMode,
-                modalTonicOverride,
-                analysisContexts,
-                doubleBarlineMeasures,
-                harmonyOverrides: latestHarmonyOverrides.current,
-                bpm,
-                isBpmActive,
-                isMetronomeOn,
-                metronomeUnit,
-                toolbarGroupOrder,
-            }, null, 2);
-            try {
-                if (!api?.saveFile) return;
-                const targetPath = (action === 'save' && currentProjectFilePath) ? currentProjectFilePath : undefined;
-                const result = await api.saveFile(projectData, targetPath);
-                if (result && result.success && result.filePath) {
-                    if (api?.addRecentFile) api.addRecentFile(result.filePath);
-                    setCurrentProjectFilePath(result.filePath);
-                }
-            } catch (err) {
-                // Removed debug log
-            }
-        } else if (action === 'open') {
-            // Removed debug log
-            setRawNotes([]);
-            // Reset to defaults first so older projects (missing fields) don't
-            // inherit settings from the previously opened project.
-            setKeySignatureRoot('C');
-            setProjectTitle('');
-            setTimeSignature({ numerator: 4, denominator: 4 });
-            setTimeSignatureChanges([]);
-            setIsMinorMode(false);
-            setAutoLeadingToneInMinor(true);
-            setKeyChangeMode('none');
-            setModalTonicOverride('');
-            setAnalysisContexts([]);
-            setHarmonyOverrides([]);
-            setBpm(120);
-            setIsBpmActive(false);
-            setIsMetronomeOn(false);
-            setMetronomeUnit('quarter');
-            try {
-                const data = payload?.data;
-                if (!data) throw new Error("Nessun dato fornito per l'apertura.");
-                const loadedProject = JSON.parse(data);
-                if (loadedProject && Array.isArray(loadedProject.notes)) {
-                    const loadKeyRoot = (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot)
-                        ? loadedProject.keySignatureRoot
-                        : 'C';
-                    const loadMinor = typeof loadedProject.isMinorMode === 'boolean' ? loadedProject.isMinorMode : false;
-                    const loadKeySig = getKeySignature(loadKeyRoot, loadMinor ? 'Minor' : 'Major');
-
-                    // Self-heal older/saved projects: keep spelling fields as-is, but
-                    // ensure numeric fields follow the written spelling.
-                    const normalizedNotes = (loadedProject.notes as any[]).map((n: any) => normalizeNotePitchFieldsWithKey(n, loadKeySig));
-
-                    // Convert legacy beat/measure floats to high-resolution ticks for stability.
-                    try {
-                        const ts = (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') ? loadedProject.timeSignature : { numerator: 4, denominator: 4 };
-                        const baseBeats = ts.numerator * (4 / ts.denominator);
-                        const ticksPerBeat = TICKS_PER_QUARTER; // quarter = 1 beat
-
-                        const changesRaw = Array.isArray(loadedProject.timeSignatureChanges) ? loadedProject.timeSignatureChanges : [];
-                        const changes = changesRaw
-                            .map((c: any) => {
-                                const absBeat = Number(c?.absBeat);
-                                const m = Number.isFinite(c?.measureIndex)
-                                    ? Number(c.measureIndex)
-                                    : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
-                                return {
-                                    measureIndex: m,
-                                    numerator: Math.max(1, Math.round(Number(c?.numerator) || 4)),
-                                    denominator: Math.max(1, Math.round(Number(c?.denominator) || 4)),
-                                };
-                            })
-                            .filter((c: any) => Number.isFinite(c.measureIndex))
-                            .sort((a: any, b: any) => a.measureIndex - b.measureIndex);
-
-                        const maxIdx = (normalizedNotes as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), 0);
-                        const measureStartAbsBeat: number[] = [];
-                        let acc = 0;
-                        for (let m = 0; m <= maxIdx + 1; m++) {
-                            measureStartAbsBeat[m] = acc;
-                            let active = ts as any;
-                            for (const c of changes) {
-                                if (c.measureIndex <= m) active = c;
-                                else break;
-                            }
-                            const bpm = active.numerator * (4 / active.denominator);
-                            acc += Math.max(1, Number.isFinite(bpm) ? bpm : baseBeats || 4);
-                        }
-
-                        const withTicks = (normalizedNotes as any[]).map(n => {
-                            try {
-                                const m = Number.isFinite(n.measureIndex) ? n.measureIndex : 0;
-                                const b = Number.isFinite(n.beat) ? n.beat : 1;
-                                const absBeat = (measureStartAbsBeat[m] ?? (m * baseBeats)) + (b - 1);
-                                const startTick = Math.round(absBeat * ticksPerBeat);
-
-                                // duration -> beats
-                                const base = (DURATION_VALUES as any)[n.duration || 'quarter'] || 1;
-                                let durBeats = base;
-                                if (n.isDotted) durBeats *= 1.5;
-                                if (n.isTriplet) durBeats *= 2 / 3;
-                                if (n.isDuplet) durBeats *= 3 / 2;
-                                const durationTicks = Math.round(durBeats * ticksPerBeat);
-
-                                return { ...n, startTick, durationTicks };
-                            } catch (e) { return n; }
-                        });
-                        setRawNotes(withTicks as any);
-                        try {
-                            const maxIdx = (withTicks as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), -1);
-                            const measuresCount = Math.max(1, maxIdx + 1);
-                            setMinMeasureCount(measuresCount);
-                            setMinMeasureCountDraft(String(measuresCount));
-                        } catch (_) {}
-                    } catch (e) {
-                        setRawNotes(normalizedNotes as any);
-                    }
-                    if (loadedProject.staffSystemMode === 'grandstaff' || loadedProject.staffSystemMode === 'treble_only' || loadedProject.staffSystemMode === 'satb_ancient') {
-                        setStaffSystemMode(loadedProject.staffSystemMode);
-                    }
-
-                    // Restore project-level settings when present.
-                                        if (Array.isArray(loadedProject.toolbarGroupOrder)) {
-                                            const all = new Set(DEFAULT_TOOLBAR_ORDER);
-                                            const cleanedOrder = loadedProject.toolbarGroupOrder.filter((id: any): id is ToolbarGroupId => all.has(id));
-                                            const fullOrder: ToolbarGroupId[] = Array.from(new Set([...cleanedOrder, ...DEFAULT_TOOLBAR_ORDER]));
-                                            setToolbarGroupOrder(fullOrder);
-                                        }
-                    if (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot) {
-                        setKeySignatureRoot(loadedProject.keySignatureRoot);
-                    }
-                    if (typeof loadedProject.projectTitle === 'string') {
-                        setProjectTitle(loadedProject.projectTitle);
-                    }
-                    if (typeof loadedProject.titleFontSize === 'number' && Number.isFinite(loadedProject.titleFontSize)) {
-                        setTitleFontSize(Math.max(12, Math.min(72, loadedProject.titleFontSize)));
-                    }
-                    if (typeof loadedProject.titleFontFamily === 'string' && loadedProject.titleFontFamily) {
-                        setTitleFontFamily(loadedProject.titleFontFamily);
-                    }
-                    if (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object') {
-                        const n = Number((loadedProject.timeSignature as any).numerator);
-                        const d = Number((loadedProject.timeSignature as any).denominator);
-                        if (Number.isFinite(n) && Number.isFinite(d) && n > 0 && d > 0) {
-                            setTimeSignature({ numerator: n, denominator: d });
-                        }
-                    }
-                    if (Array.isArray(loadedProject.timeSignatureChanges)) {
-                        const baseBeats = (loadedProject.timeSignature && typeof loadedProject.timeSignature === 'object')
-                            ? ((Number((loadedProject.timeSignature as any).numerator) || 4) * (4 / (Number((loadedProject.timeSignature as any).denominator) || 4)))
-                            : (timeSignature.numerator * (4 / timeSignature.denominator));
-                        const normalized = loadedProject.timeSignatureChanges.map((c: any) => {
-                            const absBeat = Number(c?.absBeat);
-                            const m = Number.isFinite(c?.measureIndex)
-                                ? Number(c.measureIndex)
-                                : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
-                            return {
-                                absBeat: Number.isFinite(absBeat) ? absBeat : undefined,
-                                measureIndex: m,
-                                numerator: Math.max(1, Math.round(Number(c?.numerator) || 4)),
-                                denominator: Math.max(1, Math.round(Number(c?.denominator) || 4)),
-                            } as TimeSignatureChange;
-                        });
-                        setTimeSignatureChanges(normalized);
-                    }
-                    if (typeof loadedProject.isMinorMode === 'boolean') {
-                        setIsMinorMode(loadedProject.isMinorMode);
-                    }
-                    if (typeof loadedProject.autoLeadingToneInMinor === 'boolean') {
-                        setAutoLeadingToneInMinor(loadedProject.autoLeadingToneInMinor);
-                    }
-                    if (loadedProject.keyChangeMode === 'none' || loadedProject.keyChangeMode === 'transpose' || loadedProject.keyChangeMode === 'modal') {
-                        setKeyChangeMode(loadedProject.keyChangeMode);
-                    }
-                    if (typeof loadedProject.modalTonicOverride === 'string') {
-                        setModalTonicOverride(loadedProject.modalTonicOverride);
-                    }
-                    if (Array.isArray(loadedProject.analysisContexts)) {
-                        setAnalysisContexts(loadedProject.analysisContexts);
-                    }
-                    if (Array.isArray(loadedProject.doubleBarlineMeasures)) {
-                        const cleaned = loadedProject.doubleBarlineMeasures
-                            .map((m: any) => Number(m))
-                            .filter((m: any) => Number.isFinite(m) && m >= 0)
-                            .sort((a: number, b: number) => a - b);
-                        setDoubleBarlineMeasures(cleaned);
-                    }
-                    if (Array.isArray(loadedProject.harmonyOverrides)) {
-                        setHarmonyOverrides(loadedProject.harmonyOverrides);
-                    }
-                    if (typeof loadedProject.bpm === 'number' && Number.isFinite(loadedProject.bpm) && loadedProject.bpm > 0) {
-                        setBpm(loadedProject.bpm);
-                    }
-                    if (typeof loadedProject.isBpmActive === 'boolean') {
-                        setIsBpmActive(loadedProject.isBpmActive);
-                    }
-                    if (typeof loadedProject.isMetronomeOn === 'boolean') {
-                        setIsMetronomeOn(loadedProject.isMetronomeOn);
-                    }
-                    if (loadedProject.metronomeUnit === 'quarter' || loadedProject.metronomeUnit === 'eighth' || loadedProject.metronomeUnit === 'dotted-quarter') {
-                        setMetronomeUnit(loadedProject.metronomeUnit);
-                    }
-
-                    if (payload && payload.filePath) {
-                        if (api?.addRecentFile) api.addRecentFile(payload.filePath);
-                        setCurrentProjectFilePath(payload.filePath);
-                    } else {
-                        setCurrentProjectFilePath(null);
-                    }
-                } else {
-                    throw new Error("Formato dati non valido.");
-                }
-            } catch (err) {
-                // Removed debug log
-            }
-        } else if (action === 'new') {
-            // Removed debug log
-            const confirmed = window.confirm("Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.");
-            if (confirmed) {
-                setRawNotes([]);
-                setProjectTitle('');
-                setCurrentProjectFilePath(null);
-                setKeySignatureRoot('C');
-                setIsMinorMode(false);
-                setTimeSignature({ numerator: 4, denominator: 4 });
-                setHarmonyOverrides([]);
-                setAnalysisContexts([]);
-                setTimeSignatureChanges([]);
-                setDoubleBarlineMeasures([]);
-                setKeyChangeMode('none');
-                setModalTonicOverride('');
-                setAutoLeadingToneInMinor(true);
-                setMeasuresPerLine(4);
-                setMeasuresPerLineDraft('4');
-                setMinMeasureCount(4);
-                setMinMeasureCountDraft('4');
+                projectExtrasRef.current = EMPTY_EXTRAS;
                 setBpm(120);
                 setIsBpmActive(false);
                 setIsMetronomeOn(false);
                 setMetronomeUnit('quarter');
-                setClipboard(null);
-                setSelectedNoteIds(new Set());
-                setPasteCaret(null);
-                setActiveAccidental(null);
-                setSelectedVoice(1);
+
+                try {
+                    const maxIdx = importedNotes.reduce((mx, n: any) => Math.max(mx, Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : -1), -1);
+                    const measuresCount = Math.max(1, maxIdx + 1);
+                    setMinMeasureCount(measuresCount);
+                    setMinMeasureCountDraft(String(measuresCount));
+                } catch {
+                    // ignore
+                }
+            } catch (err: any) {
+                try { window.alert(`Import MusicXML fallito: ${String(err?.message || err || '')}`); } catch { /* ignore */ }
             }
         } else if (action === 'set-show-measure-numbers') {
             setShowMeasureNumbers(!!payload?.enabled);
@@ -2319,25 +2380,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setShowQuickInsertBar(!!payload?.enabled);
         } else if (action === 'set-show-harmony-debug') {
             setShowHarmonyDebug(!!payload?.enabled);
+        } else if (action === 'set-title-font-family') {
+            const family = String(payload?.family || '').trim();
+            if (family === 'serif' || family === 'sans-serif' || family === 'monospace') setTitleFontFamily(family);
+        } else if (action === 'set-select-only-voice') {
+            setMarqueeSelectOnlyCurrentVoice(!!payload?.enabled);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice]);
+
+    // Routing: single source of truth for where actions are handled.
+    const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {
+        if (getMenuActionTarget(action) !== 'grandStaff') return;
+        void handleMenuActionLegacy(action, payload);
+    }, [handleMenuActionLegacy]);
+
+    // Keep ref always current during render so earlier effects (like pendingMenuAction)
+    // can reliably dispatch without depending on effect ordering.
+    dispatchMenuActionRef.current = dispatchMenuAction;
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
-        const api = (window).electronAPI;
-        //
-        if (!api) {
-            // Removed debug log
-            return;
-        }
-        //
-        const removeListener = api.onMenuAction((action, payload) => {
-            handleMenuAction(action, payload);
+        const removeListener = electronBridge.onMenuAction((action, payload) => {
+            try {
+                dispatchMenuAction(action, payload);
+            } catch {
+                // ignore
+            }
         });
-        return () => {
-            if (removeListener) removeListener();
-        };
-    }, [handleMenuAction]);
+        return () => removeListener();
+    }, [dispatchMenuAction]);
 
     // Listen for native copy events (keyboard) to set the paste marker as well
     useEffect(() => {
@@ -10155,7 +10226,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         >
                             <div
                                 ref={staffContainerRef}
-                                className="p-4"
+                                className="p-4 ht-staff-container"
                                 style={{ width: containerWidth }}
                             >
                         <div className="w-full flex justify-center mb-3">

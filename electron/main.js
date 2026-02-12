@@ -1095,15 +1095,58 @@ ipcMain.handle(IPC_CHANNELS.EXPORT_PDF_FROM_HTML, async (_event, html, options) 
 
     const pageSize = (options && (options.pageSize === 'A4' || options.pageSize === 'Letter')) ? options.pageSize : 'A4';
     const landscape = !!(options && options.landscape);
-    const marginsType = (options && (options.marginsType === 0 || options.marginsType === 1 || options.marginsType === 2)) ? options.marginsType : 1;
-    const scaleFactor = sanitizePdfScaleFactorPercent(options && options.scaleFactor, 100);
+    const marginsType = (options && (options.marginsType === 0 || options.marginsType === 1 || options.marginsType === 2)) ? options.marginsType : 0;
+
+    // Robust path: snapshot full content to PNG tiles, then print those images to PDF.
+    // This avoids SVG/layout clipping in Chromium print pipeline.
+    const size = await win.webContents.executeJavaScript(
+      '({ w: Math.ceil(Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, 0)), h: Math.ceil(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, 0)) })'
+    );
+
+    const contentW = Math.max(1, Math.round(size && size.w ? size.w : 1280));
+    const contentH = Math.max(1, Math.round(size && size.h ? size.h : 900));
+    const tileMaxHeightPx = 8000;
+
+    try {
+      await win.setContentSize(Math.min(2200, contentW), Math.min(tileMaxHeightPx, Math.max(900, Math.min(2000, contentH))));
+    } catch { /* ignore */ }
+
+    const tiles = Math.max(1, Math.ceil(contentH / tileMaxHeightPx));
+    const imageDataUrls = [];
+
+    for (let i = 0; i < tiles; i++) {
+      const y = i * tileMaxHeightPx;
+      const h = Math.min(tileMaxHeightPx, contentH - y);
+
+      try {
+        await win.webContents.executeJavaScript(`window.scrollTo(0, ${y});`);
+      } catch { /* ignore */ }
+      await sleep(80);
+
+      const image = await win.webContents.capturePage({ x: 0, y: 0, width: contentW, height: h });
+      const png = image.toPNG();
+      imageDataUrls.push(`data:image/png;base64,${png.toString('base64')}`);
+    }
+
+    const printableHtml = `<!doctype html><html><head><style>
+      @page { size: ${pageSize} ${landscape ? 'landscape' : 'portrait'}; margin: 8mm; }
+      html, body { margin: 0; padding: 0; background: #fff; }
+      .page { width: 100%; break-after: page; page-break-after: always; }
+      .page:last-child { break-after: auto; page-break-after: auto; }
+      img { width: 100%; height: auto; display: block; }
+    </style></head><body>
+      ${imageDataUrls.map((src) => `<div class="page"><img src="${src}" /></div>`).join('')}
+    </body></html>`;
+
+    await loadHtmlInWindow(win, printableHtml);
 
     const pdf = await win.webContents.printToPDF({
       pageSize,
       landscape,
       marginsType,
       printBackground: true,
-      scaleFactor,
+      scaleFactor: 100,
+      preferCSSPageSize: true,
     });
 
     fs.writeFileSync(filePath, pdf);
