@@ -154,6 +154,7 @@ const normalizeAccidentalType = (accidental: AccidentalType | string | null | un
 
 const defaultRestLineForVoice = (voice: number, clef: ClefType): number | null => {
   if (clef === 'treble') {
+    if (voice === 3) return -3; // Tenor (parti strette): below Alto, avoid overlap with Soprano
     if (voice === 2) return -1; // Alto: under upper staff (between staves)
     if (voice === 1) return 3; // Soprano: inside upper staff
   } else if (clef === 'bass') {
@@ -493,208 +494,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // ignore
     }
 
-    // -----------------------------
-    // Metric validation: highlight measures with incorrect rhythmic total.
-    // -----------------------------
-    try {
-      const beatsPerMeasureForMeasureIndex = (mi: number): number => {
-        try {
-          const base = timeSignature;
-          let n = Number(base?.numerator ?? 4);
-          let d = Number(base?.denominator ?? 4);
-          const changes = (timeSignatureChanges || [])
-            .filter(c => Number.isFinite(Number(c?.measureIndex)))
-            .map(c => ({ mi: Number(c.measureIndex), n: Number(c.numerator), d: Number(c.denominator) }))
-            .filter(c => Number.isFinite(c.mi) && Number.isFinite(c.n) && Number.isFinite(c.d));
-          let bestMi = -Infinity;
-          for (const c of changes) {
-            if (c.mi <= mi && c.mi >= bestMi) {
-              bestMi = c.mi;
-              n = c.n;
-              d = c.d;
-            }
-          }
-          if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 4;
-          return n * (4 / d);
-        } catch {
-          return 4;
-        }
-      };
-
-      const notesForCheck = (ghostNote ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes)
-        .filter(n => n && n.id !== '__ghost__');
-
-      const notesByMeasure = new Map<number, number>();
-      for (const n of (notesForCheck || [])) {
-        const mi = Number((n as any)?.measureIndex);
-        if (!Number.isFinite(mi)) continue;
-        notesByMeasure.set(mi, (notesByMeasure.get(mi) || 0) + 1);
-      }
-
-      const barMeasureIndices = (barlines || [])
-        .map(b => {
-          try {
-            const m = /^bar-(\d+)$/.exec(String((b as any)?.id ?? ''));
-            return m ? Number(m[1]) : null;
-          } catch {
-            return null;
-          }
-        })
-        .filter((mi): mi is number => mi != null && Number.isFinite(mi));
-
-      const measureIndices = (barMeasureIndices.length > 0 ? barMeasureIndices : Array.from(notesByMeasure.keys()))
-        .filter((mi, idx, arr) => arr.indexOf(mi) === idx)
-        .sort((a, b) => a - b);
-
-      const invalidMeasures = new Set<number>();
-      const EPS = 1e-4;
-
-      // Group notes by voice+measure, then validate each voice line fills the measure exactly.
-      const byVoiceMeasure = new Map<string, StaffNote[]>();
-      for (const n of (notesForCheck || [])) {
-        const mi = Number((n as any)?.measureIndex);
-        const v = Number((n as any)?.voice ?? 1);
-        if (!Number.isFinite(mi) || !Number.isFinite(v)) continue;
-        const k = `${mi}|${v}`;
-        if (!byVoiceMeasure.has(k)) byVoiceMeasure.set(k, []);
-        byVoiceMeasure.get(k)!.push(n);
-      }
-
-      const validateVoiceMeasure = (mi: number, v: number, line: StaffNote[]): boolean => {
-        const beatsPerMeas = beatsPerMeasureForMeasureIndex(mi);
-        const endBeat = 1 + beatsPerMeas;
-        const onsetGroups = new Map<number, StaffNote[]>();
-        for (const n of (line || [])) {
-          const b = Number((n as any)?.beat);
-          if (!Number.isFinite(b)) continue;
-          const key = Math.round(b * 1e6) / 1e6;
-          if (!onsetGroups.has(key)) onsetGroups.set(key, []);
-          onsetGroups.get(key)!.push(n);
-        }
-        const onsets = Array.from(onsetGroups.entries())
-          .map(([b, ns]) => {
-            const d = Math.max(...ns.map(x => durationToBeats(x)));
-            return { beat: b, dur: d };
-          })
-          .filter(x => Number.isFinite(x.beat) && Number.isFinite(x.dur) && x.dur > 0)
-          .sort((a, b) => a.beat - b.beat);
-
-        if (onsets.length === 0) return true;
-        let cur = 1;
-        for (const o of onsets) {
-          if (o.beat > cur + EPS) return false; // gap
-          if (o.beat < cur - EPS) return false; // overlap
-          cur = o.beat + o.dur;
-          if (cur > endBeat + EPS) return false; // overflow
-        }
-        return Math.abs(cur - endBeat) <= 0.01;
-      };
-
-      for (const mi of measureIndices) {
-        if (!notesByMeasure.has(mi)) continue;
-        for (const v of [1, 2, 3, 4]) {
-          const k = `${mi}|${v}`;
-          const line = byVoiceMeasure.get(k) || [];
-          // If this voice has no notes in this measure, don't treat it as invalid.
-          if (!line.length) continue;
-          if (!validateVoiceMeasure(mi, v, line)) {
-            invalidMeasures.add(mi);
-            break;
-          }
-        }
-      }
-
-      // Draw subtle background for invalid measures (behind barlines/notes).
-      if (invalidMeasures.size > 0 && barlines.length > 0) {
-        const topStave = (staffMode === 'satb_ancient' && satbSoprano)
-          ? satbSoprano
-          : (treble as Stave);
-        const bottomStave = (staffMode === 'satb_ancient' && satbBass)
-          ? satbBass
-          : (bass ? bass : (treble as Stave));
-
-        const yTop = topStave.getYForLine(0);
-        const yBottom = bottomStave.getYForLine(4);
-        const h = yBottom - yTop;
-
-        const barsSorted = (barlines || []).slice().sort((a, b) => (a.xPosition ?? 0) - (b.xPosition ?? 0));
-        const startX = (treble || satbSoprano || topStave).getNoteStartX();
-
-        const rects: Array<{ x: number; w: number; mi: number }> = [];
-        for (let i = 0; i < barsSorted.length; i++) {
-          const bar = barsSorted[i];
-          const mi = (() => {
-            try {
-              const m = /^bar-(\d+)$/.exec(String((bar as any)?.id ?? ''));
-              return m ? Number(m[1]) : null;
-            } catch {
-              return null;
-            }
-          })();
-          if (mi == null || !invalidMeasures.has(mi)) continue;
-
-          const x1 = Number(bar.xPosition);
-          const x0 = (i === 0) ? startX : Number(barsSorted[i - 1].xPosition);
-          if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) continue;
-          const pad = 2;
-          rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi });
-        }
-
-        if (rects.length > 0) {
-          const red = voiceColor(4)?.fill ?? '#ef4444';
-          const fill = hexToRgba(red, 0.3);
-
-          // Prefer SVG DOM insertion (reliable in Electron+Vite SVG renderer).
-          const svgEl = containerRef.current?.querySelector('svg') ?? null;
-          if (svgEl) {
-            try {
-              const prev = svgEl.querySelector('#ht-invalid-measures');
-              if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
-            } catch {
-              // ignore
-            }
-            try {
-              const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-              g.setAttribute('id', 'ht-invalid-measures');
-              g.setAttribute('pointer-events', 'none');
-              for (const r of rects) {
-                const re = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                re.setAttribute('x', String(r.x));
-                re.setAttribute('y', String(yTop));
-                re.setAttribute('width', String(r.w));
-                re.setAttribute('height', String(h));
-                re.setAttribute('fill', fill);
-                g.appendChild(re);
-              }
-              svgEl.appendChild(g);
-            } catch {
-              // ignore
-            }
-          } else {
-            // Fallback: draw via VexFlow context if available.
-            const ctxAny = context as any;
-            ctxAny.save?.();
-            if (typeof ctxAny.setFillStyle === 'function') ctxAny.setFillStyle(fill);
-            else ctxAny.fillStyle = fill;
-            for (const r of rects) {
-              try {
-                if (typeof ctxAny.fillRect === 'function') ctxAny.fillRect(r.x, yTop, r.w, h);
-                else {
-                  ctxAny.beginPath?.();
-                  ctxAny.rect?.(r.x, yTop, r.w, h);
-                  ctxAny.fill?.();
-                }
-              } catch {
-                // ignore
-              }
-            }
-            ctxAny.restore?.();
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
     if (staffNote.isRest) return;
     if (!showVoiceColors) return;
     if (selectedNoteIds.includes(staffNote.id)) return;
@@ -1445,89 +1244,62 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Auto-position rests per onset so they avoid note collisions while preserving
         // SATB vertical logic between adjacent voices (S/A and T/B).
         const restLineOverrideById = new Map<string, number>();
-        const probeLineByKey = new Map<string, number>();
-        const resolveClefForNote = (sn: StaffNote): string => {
-          if (staffMode === 'satb_ancient') return String(sn.clef || 'soprano');
-          const explicit = String(sn.clef || '');
-          if (explicit === 'bass' || explicit === 'treble') return explicit;
-          const voice = Number(sn.voice ?? 1);
-          return (voice >= 3) ? 'bass' : 'treble';
-        };
-        const getProbeLine = (sn: StaffNote, probeClef?: string): number | null => {
-          if (!sn || sn.isRest) return null;
-          const clefForProbe = String(probeClef || resolveClefForNote(sn));
-          const cacheKey = `${sn.id}|${clefForProbe}`;
-          const cached = probeLineByKey.get(cacheKey);
-          if (typeof cached === 'number' && Number.isFinite(cached)) return cached;
-          try {
-            const probe = new StaveNote({
-              clef: clefForProbe as any,
-              keys: [`${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}`],
-              duration: 'q',
-            });
-            const keyProps = (probe as any).getKeyProps?.();
-            const line = Number((keyProps && keyProps[0] && keyProps[0].line));
-            if (Number.isFinite(line)) {
-              probeLineByKey.set(cacheKey, line);
-              return line;
-            }
-          } catch {
-            // ignore
-          }
-          return null;
-        };
-
-        const resolveStaveForNote = (sn: StaffNote): Stave | null => {
-          if (!sn) return null;
-          if (staffMode === 'satb_ancient') {
-            if (sn.clef === 'soprano') return satbSoprano ?? null;
-            if (sn.clef === 'alto') return satbAlto ?? null;
-            if (sn.clef === 'tenor') return satbTenor ?? null;
-            return satbBass ?? null;
-          }
-          const noteClef = (sn.clef || (Number(sn.voice ?? 1) >= 3 ? 'bass' : 'treble')) as ClefType;
-          if (noteClef === 'bass') return bass ?? null;
-          return treble ?? null;
-        };
-
-        const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
-        const startTickOfNote = (sn: StaffNote): number => {
-          const st = Number((sn as any)?.startTick);
-          if (Number.isFinite(st)) return st;
-          const m = Number((sn as any)?.measureIndex);
-          const b = Number((sn as any)?.beat);
-          if (Number.isFinite(m) && Number.isFinite(b)) {
-            const absBeat = (m * beatsPerMeasureLocal) + (b - 1);
-            return Math.round(absBeat * TICKS_PER_QUARTER);
-          }
-          return 0;
-        };
-        const durationTicksOfNote = (sn: StaffNote): number => {
-          const dt = Number((sn as any)?.durationTicks);
-          if (Number.isFinite(dt) && dt > 0) return dt;
-          const beats = durationToBeats(sn);
-          return Math.max(1, Math.round(beats * TICKS_PER_QUARTER));
-        };
-        const endTickOfNoteExclusive = (sn: StaffNote): number => {
-          return startTickOfNote(sn) + durationTicksOfNote(sn);
-        };
-
-        const lineStepDownIncreasesY = (() => {
+        const isClosePositionTreble = staffMode === 'grandstaff' && clef === 'treble' && staffNotes.some(sn => Number(sn?.voice ?? 0) === 3);
+        const linePx = (() => {
           try {
             const y0 = stave.getYForLine(0);
             const y1 = stave.getYForLine(1);
-            return y1 > y0;
+            const d = Math.abs(y1 - y0);
+            return Number.isFinite(d) && d > 0 ? d : 10;
           } catch {
-            return true;
+            return 10;
           }
         })();
-        const moveLineUp = (line: number): number => lineStepDownIncreasesY ? (line - 1) : (line + 1);
-        const moveLineDown = (line: number): number => lineStepDownIncreasesY ? (line + 1) : (line - 1);
-        const restProbeYByKey = new Map<string, number>();
-        const getRestProbeY = (line: number, duration: StaffNote['duration']): number => {
-          const key = `${String(duration || 'quarter')}|${Number(line)}`;
-          const cached = restProbeYByKey.get(key);
-          if (typeof cached === 'number' && Number.isFinite(cached)) return cached;
+        // --- Rest vs note collision avoidance (grandstaff, parti late) ---
+        // Each rest avoids notes from its adjacent voice on the same staff.
+        // Upper voice rests (1, 3) push UP; lower voice rests (2, 4) push DOWN.
+        // When the adjacent note moves away, the rest returns to its baseline.
+        const isPartiLate = staffMode === 'grandstaff' && !isClosePositionTreble;
+
+        // Adjacent voice map: which voice's notes does this rest avoid?
+        // Same-staff pairs: treble 1↔2, bass 3↔4.
+        // Cross-staff: alto (2) also avoids tenor (3), tenor (3) also avoids alto (2).
+        const getAdjacentVoices = (voice: number, staveClef: string): number[] => {
+          if (staveClef === 'treble') {
+            if (voice === 1) return [2];
+            if (voice === 2) return [1, 3]; // alto avoids soprano AND tenor (cross-staff)
+          } else if (staveClef === 'bass') {
+            if (voice === 3) return [4, 2]; // tenor avoids bass AND alto (cross-staff)
+            if (voice === 4) return [3];
+          }
+          return [];
+        };
+
+        // Is this the upper voice on its staff? Upper voices push UP, lower push DOWN.
+        const isUpperVoice = (voice: number): boolean => voice === 1 || voice === 3;
+
+        // Get the pixel-Y of a note, using the correct stave for cross-staff notes.
+        const getNoteYOnStave = (sn: StaffNote): number | null => {
+          if (!sn || sn.isRest) return null;
+          try {
+            const noteClef = String(sn.clef || clef);
+            // Pick the correct stave: if note is on a different staff, use that staff's stave.
+            const noteStave = (noteClef === 'bass' && bass) ? bass
+              : (noteClef === 'treble' && treble) ? treble
+              : stave;
+            const key = `${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}`;
+            const baseDur = durationToVexflow(sn.duration);
+            const probe = new StaveNote({ clef: noteClef as any, keys: [key], duration: baseDur });
+            probe.setStave(noteStave);
+            const ys = (probe as any).getYs?.();
+            const y = Number(Array.isArray(ys) ? ys[0] : undefined);
+            if (Number.isFinite(y)) return y;
+          } catch { /* ignore */ }
+          return null;
+        };
+
+        // Get the pixel-Y of a rest at a given setKeyLine value.
+        const getRestYAtLine = (line: number, duration: StaffNote['duration']): number | null => {
           try {
             const baseDur = durationToVexflow(duration);
             const probe = new StaveNote({ clef: clef as any, keys: ['b/4'], duration: `${baseDur}r` });
@@ -1535,185 +1307,112 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             probe.setStave(stave);
             const ys = (probe as any).getYs?.();
             const y = Number(Array.isArray(ys) ? ys[0] : undefined);
-            if (Number.isFinite(y)) {
-              restProbeYByKey.set(key, y);
-              return y;
-            }
-          } catch {
-            // ignore
+            if (Number.isFinite(y)) return y;
+          } catch { /* ignore */ }
+          return null;
+        };
+
+        // Determine which direction in setKeyLine units moves the rest UP (smaller pixel Y).
+        // setKeyLine convention may differ from stave.getYForLine convention.
+        const restLineUpStep = (() => {
+          const y5 = getRestYAtLine(5, 'quarter');
+          const y6 = getRestYAtLine(6, 'quarter');
+          if (y5 != null && y6 != null) {
+            // If line 6 has smaller Y than line 5, then +1 = up.
+            // If line 6 has larger Y than line 5, then -1 = up.
+            return y6 < y5 ? 1 : -1;
           }
-          return stave.getYForLine(line);
-        };
-        const nudgeLineVisual = (line: number, duration: StaffNote['duration'], dir: 'up' | 'down'): number => {
-          const upLine = moveLineUp(line);
-          const downLine = moveLineDown(line);
-          const yUp = getRestProbeY(upLine, duration);
-          const yDown = getRestProbeY(downLine, duration);
-          if (dir === 'up') return yUp <= yDown ? upLine : downLine;
-          return yDown >= yUp ? downLine : upLine;
-        };
-        const upDecreasesY = (() => {
-          const baseLine = 0;
-          const y0 = getRestProbeY(baseLine, 'quarter');
-          const yUp = getRestProbeY(nudgeLineVisual(baseLine, 'quarter', 'up'), 'quarter');
-          return yUp < y0;
+          return 1; // default: assume +1 moves up (matches defaultRestLineForVoice pattern)
         })();
-        const signedY = (y: number): number => upDecreasesY ? -y : y;
+
+        // Tick helpers.
+        const TICKS_Q = 960;
+        const restStartTickOf = (sn: StaffNote): number => {
+          if (typeof sn.startTick === 'number' && Number.isFinite(sn.startTick)) return sn.startTick;
+          const mi = Number(sn.measureIndex ?? 0);
+          const b = Number(sn.beat ?? 1);
+          return mi * 4 * TICKS_Q + (b - 1) * TICKS_Q;
+        };
+        const durationTicksOf = (sn: StaffNote): number => {
+          if (typeof sn.durationTicks === 'number' && sn.durationTicks > 0) return sn.durationTicks;
+          const map: Record<string, number> = { whole: 4, half: 2, quarter: 1, eighth: 0.5, sixteenth: 0.25 };
+          return (map[sn.duration || 'quarter'] ?? 1) * TICKS_Q;
+        };
+
+        // Collision clearance in pixels.
+        const REST_BASS_CLEARANCE_PX = 20;
 
         for (const [, onset] of byTimeKeyAll.entries()) {
-          const sounding = onset
-            .filter(sn => sn && sn.id !== '__ghost__' && !sn.isRest)
-            .map(sn => ({ sn, line: getProbeLine(sn, clef) }))
-            .filter((x): x is { sn: StaffNote; line: number } => Number.isFinite(x.line));
           const rests = onset.filter(sn => sn && sn.id !== '__ghost__' && !!sn.isRest);
           if (!rests.length) continue;
-
-          const noteLines = sounding.map(x => x.line);
-          const voiceToLines = new Map<number, number[]>();
-          for (const s of sounding) {
-            const voice = Number(s.sn.voice ?? 1);
-            if (!voiceToLines.has(voice)) voiceToLines.set(voice, []);
-            voiceToLines.get(voice)!.push(s.line);
-          }
-
-          const GAP = 1;
-          const COLLISION_EPS = 0.85;
-          const COLLISION_Y_EPS = 10;
-          const CROSS_VOICE_Y_GAP = 8;
           for (const r of rests) {
             const voice = Number(r.voice ?? 1);
             const fallback = defaultRestLineForVoice(voice, clef);
             if (!Number.isFinite(fallback as number)) continue;
             let line = Number(fallback);
 
-              const restStartTick = startTickOfNote(r);
-              const activeAll = (allNotes || [])
-                .filter(sn => sn && sn.id !== '__ghost__' && !sn.isRest)
-                .filter(sn => {
-                  const s = startTickOfNote(sn);
-                  const e = endTickOfNoteExclusive(sn);
-                  return s <= restStartTick && restStartTick < e;
-                })
-                .map(sn => {
-                  const lineProbe = getProbeLine(sn, resolveClefForNote(sn));
-                  const noteStave = resolveStaveForNote(sn);
-                  if (!Number.isFinite(lineProbe) || !noteStave) return null;
-                  const y = noteStave.getYForLine(Number(lineProbe));
-                  if (!Number.isFinite(y)) return null;
-                  return { sn, y };
-                })
-                .filter((x): x is { sn: StaffNote; y: number } => !!x);
-
-              const noteYs = activeAll.map(x => x.y);
-              const lowerBandYs = activeAll
-                .filter(s => {
-                  const v = Number(s.sn.voice ?? 1);
-                  const c = resolveClefForNote(s.sn);
-                  return c === 'bass' || v >= 3;
-                })
-                .map(s => s.y);
-              const upperBandYs = activeAll
-                .filter(s => {
-                  const v = Number(s.sn.voice ?? 1);
-                  const c = resolveClefForNote(s.sn);
-                  return c === 'treble' || v <= 2;
-                })
-                .map(s => s.y);
-            const restCollisionY = COLLISION_Y_EPS;
-            const crossVoiceGap = CROSS_VOICE_Y_GAP;
-
-            const lowerVoiceConstraint = (() => {
-              if (voice === 1) {
-                const alto = voiceToLines.get(2) ?? [];
-                return alto.length ? (Math.max(...alto) + GAP) : null;
+            // Close-position treble adjustment (existing logic, unchanged).
+            if (isClosePositionTreble && clef === 'treble') {
+              const raisePx = voice === 1 ? 13 : (voice === 2 ? 25 : (voice === 3 ? 20 : 0));
+              if (raisePx > 0) {
+                line += (raisePx / linePx);
               }
-              if (voice === 3) {
-                const bass = voiceToLines.get(4) ?? [];
-                return bass.length ? (Math.max(...bass) + GAP) : null;
-              }
-              return null;
-            })();
-            const upperVoiceConstraint = (() => {
-              if (voice === 2) {
-                const soprano = voiceToLines.get(1) ?? [];
-                return soprano.length ? (Math.min(...soprano) - GAP) : null;
-              }
-              if (voice === 4) {
-                const tenor = voiceToLines.get(3) ?? [];
-                return tenor.length ? (Math.min(...tenor) - GAP) : null;
-              }
-              return null;
-            })();
-
-            if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
-            if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
-
-              const range = voice === 2
-                ? 24
-                : (voice === 3 ? 20 : 12);
-              const minBound = line - range;
-              const maxBound = line + range;
-
-            let candidateY = getRestProbeY(line, r.duration);
-              const candidateSignedY = () => signedY(candidateY);
-              const lowerBandThresholdSigned = (voice === 2 && lowerBandYs.length)
-                ? (Math.max(...lowerBandYs.map(y => signedY(y))) + crossVoiceGap)
-                : null;
-              const upperBandThresholdSigned = (voice === 3 && upperBandYs.length)
-                ? (Math.min(...upperBandYs.map(y => signedY(y))) - crossVoiceGap)
-                : null;
-
-              let guard = 0;
-              while (
-                guard < 32
-                && lowerBandThresholdSigned != null
-                && candidateSignedY() < lowerBandThresholdSigned
-              ) {
-              line = nudgeLineVisual(line, r.duration, 'up');
-              if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
-              if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
-              line = Math.max(minBound, Math.min(maxBound, line));
-              candidateY = getRestProbeY(line, r.duration);
-              guard++;
-            }
-            guard = 0;
-              while (
-                guard < 32
-                && upperBandThresholdSigned != null
-                && candidateSignedY() > upperBandThresholdSigned
-              ) {
-              line = nudgeLineVisual(line, r.duration, 'down');
-              if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
-              if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
-              line = Math.max(minBound, Math.min(maxBound, line));
-              candidateY = getRestProbeY(line, r.duration);
-              guard++;
             }
 
-            let tries = 0;
-            while (
-                tries < 40
-              && (
-                noteLines.some(nl => Math.abs(nl - line) < COLLISION_EPS)
-                || noteYs.some(ny => Math.abs(ny - candidateY) < restCollisionY)
-              )
-            ) {
-              line = (voice === 4)
-                ? nudgeLineVisual(line, r.duration, 'down')
-                : nudgeLineVisual(line, r.duration, 'up');
-              if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
-              if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
-              line = Math.max(minBound, Math.min(maxBound, line));
-              candidateY = getRestProbeY(line, r.duration);
-              tries++;
-            }
+            // --- Rest collision avoidance for all adjacent voice pairs (parti late) ---
+            if (isPartiLate) {
+              const adjVoices = getAdjacentVoices(voice, clef);
+              if (adjVoices.length > 0) {
+                // Find all non-rest notes from adjacent voices that overlap in time.
+                const rStart = restStartTickOf(r);
+                const rEnd = rStart + durationTicksOf(r);
+                const overlapping = (allNotes || staffNotes || [])
+                  .filter(sn => sn && !sn.isRest && sn.id !== '__ghost__'
+                    && adjVoices.includes(Number(sn.voice ?? 1)))
+                  .filter(sn => {
+                    const nStart = restStartTickOf(sn);
+                    const nEnd = nStart + durationTicksOf(sn);
+                    return nStart < rEnd && rStart < nEnd;
+                  });
 
-              // Temporary fallback: keep Alto rests visibly higher to avoid persistent
-              // overlap reports in the cross-staff zone.
-              if (voice === 2) {
-                line = nudgeLineVisual(line, r.duration, 'up');
-                line = nudgeLineVisual(line, r.duration, 'up');
+                // Find the closest note (by pixel distance) among all overlapping adjacent-voice notes.
+                let closestNoteY: number | null = null;
+                const baseRestY = getRestYAtLine(line, r.duration);
+                for (const sn of overlapping) {
+                  const ny = getNoteYOnStave(sn);
+                  if (ny == null) continue;
+                  if (closestNoteY == null
+                    || (baseRestY != null && Math.abs(ny - baseRestY) < Math.abs(closestNoteY - baseRestY))) {
+                    closestNoteY = ny;
+                  }
+                }
+
+                if (closestNoteY != null && baseRestY != null) {
+                  // Determine push direction from actual positions:
+                  // If rest is above note (restY < noteY), push rest UP (smaller Y).
+                  // If rest is below note (restY > noteY), push rest DOWN (larger Y).
+                  const restAboveNote = baseRestY <= closestNoteY;
+                  const step = restAboveNote ? restLineUpStep : -restLineUpStep;
+                  let restY: number | null = baseRestY;
+                  let guard = 0;
+                  if (restAboveNote) {
+                    // Push rest UP until gap is big enough (restY should be at least clearance ABOVE noteY).
+                    while (guard < 50 && restY != null && (closestNoteY - restY) < REST_BASS_CLEARANCE_PX) {
+                      line += step;
+                      restY = getRestYAtLine(line, r.duration);
+                      guard++;
+                    }
+                  } else {
+                    // Push rest DOWN until gap is big enough (restY should be at least clearance BELOW noteY).
+                    while (guard < 50 && restY != null && (restY - closestNoteY) < REST_BASS_CLEARANCE_PX) {
+                      line += step;
+                      restY = getRestYAtLine(line, r.duration);
+                      guard++;
+                    }
+                  }
+                }
               }
+            }
 
             restLineOverrideById.set(r.id, line);
           }
@@ -1883,8 +1582,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
             // Base style: optional per-voice color (BTAS/SATB).
             // Keep this before ghost/selection so those can override.
-            const vc = showVoiceColors ? voiceColor(n.voice) : null;
-            if (vc && n.id !== '__ghost__' && !n.isRest && !selectedNoteIds.includes(n.id) && !(n as any).errorType) {
+            const voiceForColor = (() => {
+              const v = Number(n.voice);
+              if (Number.isFinite(v) && v >= 1 && v <= 4) return v;
+              const c = String(n.clef || '').toLowerCase();
+              if (c === 'soprano') return 1;
+              if (c === 'alto') return 2;
+              if (c === 'tenor') return 3;
+              if (c === 'bass') return 4;
+              return 1;
+            })();
+            const vc = showVoiceColors ? voiceColor(voiceForColor) : null;
+            if (vc && n.id !== '__ghost__' && !selectedNoteIds.includes(n.id) && !(n as any).errorType) {
               try {
                 const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
                 if (Array.isArray(mergedIds) && mergedIds.length > 0 && typeof (vfNote as any)?.setKeyStyle === 'function') {
@@ -1899,6 +1608,23 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   }
                 } else {
                   vfNote.setStyle({ fillStyle: vc.fill, strokeStyle: vc.stroke });
+                  if (n.isRest && typeof (vfNote as any)?.setKeyStyle === 'function') {
+                    try {
+                      (vfNote as any).setKeyStyle(0, { fillStyle: vc.fill, strokeStyle: vc.stroke });
+                    } catch {
+                      // ignore
+                    }
+                  }
+                  if (n.isRest) {
+                    try {
+                      const glyph = (vfNote as any)?.glyph;
+                      if (glyph && typeof glyph.setStyle === 'function') {
+                        glyph.setStyle({ fillStyle: vc.fill, strokeStyle: vc.stroke });
+                      }
+                    } catch {
+                      // ignore
+                    }
+                  }
                 }
               } catch {
                 // ignore

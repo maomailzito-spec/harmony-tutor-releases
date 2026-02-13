@@ -10290,10 +10290,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // accidentals are explicitly shown (naturals to cancel key signature, etc.).
                         // We keep the stored MIDI pitch intact and only adjust rendering-related fields.
                         const systemNotesForRender = systemNotes.map((n) => {
-                            if (n.isRest) return n;
-
                             // Render-only staff mapping by voice (allows toggling layouts without mutating stored notes).
                             const mappedClef: ClefType = clefForVoice(n.voice);
+
+                            if (n.isRest) return { ...n, clef: mappedClef };
 
                             const tieFromPrev = tiedFromPrevNoteIds.has(n.id);
 
