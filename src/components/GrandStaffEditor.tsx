@@ -554,6 +554,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
     const [tool, setTool] = useState<Tool>('insert');
     const [selectedInsertion, setSelectedInsertion] = useState<InsertionElement>({ type: 'note', duration: 'quarter', isDotted: false });
+    const selectedInsertionRef = useRef(selectedInsertion);
+    useEffect(() => { selectedInsertionRef.current = selectedInsertion; }, [selectedInsertion]);
+
     const isDotted = !!selectedInsertion.isDotted;
 
     // One-shot behavior knobs:
@@ -2524,8 +2527,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!isAnalysisEnabled) {
             return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
-        return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature);
-    }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature]);
+        return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures);
+    }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // NOTE: inferred contexts can be helpful for experimentation, but they can also
@@ -7213,7 +7216,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const applyDottedToSelectedNotes = useCallback((nextIsDotted: boolean) => {
         if (!selectedNoteIds || selectedNoteIds.size === 0) return;
         applyEditToSelectedNotes((n) => {
-            if (n.isRest) return n;
+            // Fix: allow dotted application on rests too
             const updated = { ...(n as any), isDotted: nextIsDotted } as StaffNote;
             return { ...(updated as any), durationTicks: computeDurationTicks(updated) } as StaffNote;
         }, { rebuildTimeline: true });
@@ -7583,7 +7586,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                 return [...existingNotes, ...missingRests, ...pasted];
             });
-            setSelectedNoteIds(new Set(pasted.map(n => n.id)));
+            const lastPasted = pasted[pasted.length - 1];
+            setSelectedNoteIds(lastPasted ? new Set([lastPasted.id]) : new Set());
 
             // After a tick, log positions to compare pre/post paste
             setTimeout(() => {
@@ -8520,6 +8524,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 } catch (e) { /* ignore */ }
                 return next;
             });
+            setSelectedNoteIds(new Set([rest.id]));
             // Auto-disarm dotted only when armed via hotkey.
             try {
                 if (selectedInsertion.isDotted && dottedOneShotRef.current) {
@@ -8803,6 +8808,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             return finalNotes;
         });
+        setSelectedNoteIds(new Set([newNote.id]));
         void playNote(newNote);
         // Auto-disarm accidental only when armed via hotkey.
         if (activeAccidental && accidentalOneShotRef.current) {
@@ -9883,7 +9889,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (!isMod && (key === '.' || key === '>')) {
                 e.preventDefault();
                 e.stopPropagation();
-                const next = !selectedInsertion.isDotted;
+                const next = !selectedInsertionRef.current.isDotted;
                 setDottedFromSource(!!next, 'hotkey');
                 return;
             }
@@ -10625,8 +10631,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             y={yTop}
                                                                             width={r.w}
                                                                             height={h}
-                                                                            fill="rgba(239,68,68,0.12)"
-                                                                        />
+                                                                            fill="rgba(239,68,68,0.3)"
+                                                                        >
+                                                                        </rect>
                                                                     ));
                                                                 })()}
                                                             </svg>

@@ -3530,7 +3530,8 @@ export function applyHarmonyRules(
     keyTonic: string,
     isMinor: boolean,
     analysisContexts: AnalysisContext[],
-    timeSignature?: TimeSignature
+    timeSignature?: TimeSignature,
+    doubleBarlineMeasures?: number[]
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = (() => {
         try {
@@ -5171,6 +5172,21 @@ export function applyHarmonyRules(
             const a = chordEvents[i];
             const b = chordEvents[i + 1];
 
+            // ROTTURA DIDATTICA: Se c'è una doppia barline tra l'accordo A e l'accordo B,
+            // interrompi qualsiasi validazione orizzontale (regole di moto) tra i due.
+            if (doubleBarlineMeasures && doubleBarlineMeasures.length > 0) {
+                // b.measureIndex è la misura in cui inizia il secondo evento.
+                // Se la misura di b è X, e c'è una doppia barline ALLA FINE della misura X-1,
+                // allora la transizione è "rotta".
+                // In VexFlow UI, doubleBarline @ N significa "alla fine della misura N (1-based nel UI, ma 0-based logica)".
+                // Controlliamo quindi se b.measureIndex (0-based) è stato "chiuso" da una barline nell'evento precedente.
+                // O più semplicemente: se a.measureIndex != b.measureIndex, verifichiamo se a.measureIndex è nell'elenco.
+                if (a.measureIndex !== b.measureIndex) {
+                    const barlineAtEnd = doubleBarlineMeasures.includes(a.measureIndex);
+                    if (barlineAtEnd) continue;
+                }
+            }
+
             // context tonic/leading for this downbeat
             const ctx = getContextAtAbsBeat(b.absBeat);
             const ctxTonicPc = noteNameToIndex[ctx.tonic] ?? tonicPc;
@@ -6152,6 +6168,12 @@ export function applyHarmonyRules(
         for (let i = 0; i < chordEvents.length - 1; i++) {
             const a = chordEvents[i];
             const b = chordEvents[i + 1];
+
+            // ROTTURA DIDATTICA
+            if (doubleBarlineMeasures && doubleBarlineMeasures.length > 0) {
+                if (a.measureIndex !== b.measureIndex && doubleBarlineMeasures.includes(a.measureIndex)) continue;
+            }
+
             const aRoman = romanAt(a);
             const bRoman = romanAt(b);
 
@@ -6266,6 +6288,12 @@ export function applyHarmonyRules(
         for (let i = 0; i < chordEvents.length - 1; i++) {
             const a = chordEvents[i];
             const b = chordEvents[i + 1];
+
+            // ROTTURA DIDATTICA
+            if (doubleBarlineMeasures && doubleBarlineMeasures.length > 0) {
+                if (a.measureIndex !== b.measureIndex && doubleBarlineMeasures.includes(a.measureIndex)) continue;
+            }
+
             if (!isCadenceBoundary(a, b)) continue;
 
             const aRoman = romanAt(a);
@@ -6828,6 +6856,12 @@ export function applyHarmonyRules(
             for (let i = 0; i < chordEvents.length - 1; i++) {
                 const a = chordEvents[i];
                 const b = chordEvents[i + 1];
+
+                // ROTTURA DIDATTICA
+                if (doubleBarlineMeasures && doubleBarlineMeasures.length > 0) {
+                    if (a.measureIndex !== b.measureIndex && doubleBarlineMeasures.includes(a.measureIndex)) continue; 
+                }
+
                 // Default: barline-only inference. Special case: allow a strong mid-measure
                 // cadence back to the global key to avoid getting stuck in a tonicized context.
                 const isStrictCadenceBoundary = isCadenceBoundary(a, b);
@@ -7636,6 +7670,15 @@ export function applyHarmonyRules(
                 const maxLookaheadBeats = 2.01;
                 for (let i = 0; i < chordEvents.length - 1; i++) {
                     const a = chordEvents[i];
+
+                    // ROTTURA DIDATTICA
+                    // La risoluzione della napoletana può richiedere misure successive.
+                    // Se c'è una barline, non possiamo validare la risoluzione.
+                    if (doubleBarlineMeasures && doubleBarlineMeasures.length > 0) {
+                        const b = chordEvents[i + 1];
+                        if (a.measureIndex !== b.measureIndex && doubleBarlineMeasures.includes(a.measureIndex)) continue;
+                    }
+
                     const aRoman = String(romanAtWithInferredCtx(a) || '');
                     if (!aRoman.toUpperCase().startsWith('N')) continue;
 
@@ -8561,6 +8604,11 @@ export function applyHarmonyRules(
     for (let i = 0; i < chordEvents.length - 1; i++) {
         const a = chordEvents[i];
         const b = chordEvents[i + 1];
+
+        // ROTTURA DIDATTICA
+        if (doubleBarlineMeasures && doubleBarlineMeasures.length > 0) {
+            if (a.measureIndex !== b.measureIndex && doubleBarlineMeasures.includes(a.measureIndex)) continue;
+        }
 
         // Use structural notes (ignore ornaments) and spelling-first MIDI for motion rules.
         // This avoids false positives on passing/neighbor notes and on stale MIDI fields.

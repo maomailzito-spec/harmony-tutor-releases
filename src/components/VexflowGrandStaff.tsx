@@ -152,7 +152,24 @@ const normalizeAccidentalType = (accidental: AccidentalType | string | null | un
   }
 };
 
-const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down', hideStem?: boolean) => {
+const defaultRestLineForVoice = (voice: number, clef: ClefType): number | null => {
+  if (clef === 'treble') {
+    if (voice === 2) return -1; // Alto: under upper staff (between staves)
+    if (voice === 1) return 3; // Soprano: inside upper staff
+  } else if (clef === 'bass') {
+    if (voice === 3) return 5; // Tenor: above lower staff (between staves)
+    if (voice === 4) return 1; // Bass: inside lower staff
+  }
+  return null;
+};
+
+const makeVfNote = (
+  n: StaffNote,
+  clef: ClefType,
+  stemOverride?: 'up' | 'down',
+  hideStem?: boolean,
+  restLineOverride?: number,
+) => {
   const key = `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`;
   const baseDur = durationToVexflow(n.duration);
   // Keep the duration string free of dots.
@@ -171,15 +188,9 @@ const makeVfNote = (n: StaffNote, clef: ClefType, stemOverride?: 'up' | 'down', 
   // case where one voice rests while another has notes on the same staff.
   if (n.isRest) {
     const voice = (n.voice ?? 1);
-    let restLine: number | null = null;
-  
-    if (clef === 'treble') {
-      if (voice === 2) restLine = -1; // Alto: under upper staff (between staves)
-      else if (voice === 1) restLine = 3; // Soprano: inside upper staff
-    } else if (clef === 'bass') {
-      if (voice === 3) restLine = 5; // Tenor: above lower staff (between staves)
-      else if (voice === 4) restLine = 1; // Bass: inside lower staff
-    }
+    const restLine = Number.isFinite(restLineOverride)
+      ? Number(restLineOverride)
+      : defaultRestLineForVoice(voice, clef);
   
     if (restLine != null) {
       try {
@@ -474,8 +485,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   };
 
   const applyStemStyle = (vfNote: any, staffNote: StaffNote) => {
-    if (!showVoiceColors) return;
-    if (!vfNote || staffNote.id === '__ghost__' || staffNote.isRest) return;
+    if (!vfNote || staffNote.id === '__ghost__') return;
     // Respect our "single-stem" fallback: never recolor a stem we intentionally hid.
     try {
       if ((vfNote as any).__hideStem) return;
@@ -632,7 +642,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         if (rects.length > 0) {
           const red = voiceColor(4)?.fill ?? '#ef4444';
-          const fill = hexToRgba(red, 0.12);
+          const fill = hexToRgba(red, 0.3);
 
           // Prefer SVG DOM insertion (reliable in Electron+Vite SVG renderer).
           const svgEl = containerRef.current?.querySelector('svg') ?? null;
@@ -685,6 +695,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     } catch {
       // ignore
     }
+    if (staffNote.isRest) return;
+    if (!showVoiceColors) return;
     if (selectedNoteIds.includes(staffNote.id)) return;
     if ((staffNote as any).errorType) return;
     // If this is a merged chord note, avoid coloring the shared stem.
@@ -1430,6 +1442,283 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
 
+        // Auto-position rests per onset so they avoid note collisions while preserving
+        // SATB vertical logic between adjacent voices (S/A and T/B).
+        const restLineOverrideById = new Map<string, number>();
+        const probeLineByKey = new Map<string, number>();
+        const resolveClefForNote = (sn: StaffNote): string => {
+          if (staffMode === 'satb_ancient') return String(sn.clef || 'soprano');
+          const explicit = String(sn.clef || '');
+          if (explicit === 'bass' || explicit === 'treble') return explicit;
+          const voice = Number(sn.voice ?? 1);
+          return (voice >= 3) ? 'bass' : 'treble';
+        };
+        const getProbeLine = (sn: StaffNote, probeClef?: string): number | null => {
+          if (!sn || sn.isRest) return null;
+          const clefForProbe = String(probeClef || resolveClefForNote(sn));
+          const cacheKey = `${sn.id}|${clefForProbe}`;
+          const cached = probeLineByKey.get(cacheKey);
+          if (typeof cached === 'number' && Number.isFinite(cached)) return cached;
+          try {
+            const probe = new StaveNote({
+              clef: clefForProbe as any,
+              keys: [`${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}`],
+              duration: 'q',
+            });
+            const keyProps = (probe as any).getKeyProps?.();
+            const line = Number((keyProps && keyProps[0] && keyProps[0].line));
+            if (Number.isFinite(line)) {
+              probeLineByKey.set(cacheKey, line);
+              return line;
+            }
+          } catch {
+            // ignore
+          }
+          return null;
+        };
+
+        const resolveStaveForNote = (sn: StaffNote): Stave | null => {
+          if (!sn) return null;
+          if (staffMode === 'satb_ancient') {
+            if (sn.clef === 'soprano') return satbSoprano ?? null;
+            if (sn.clef === 'alto') return satbAlto ?? null;
+            if (sn.clef === 'tenor') return satbTenor ?? null;
+            return satbBass ?? null;
+          }
+          const noteClef = (sn.clef || (Number(sn.voice ?? 1) >= 3 ? 'bass' : 'treble')) as ClefType;
+          if (noteClef === 'bass') return bass ?? null;
+          return treble ?? null;
+        };
+
+        const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
+        const startTickOfNote = (sn: StaffNote): number => {
+          const st = Number((sn as any)?.startTick);
+          if (Number.isFinite(st)) return st;
+          const m = Number((sn as any)?.measureIndex);
+          const b = Number((sn as any)?.beat);
+          if (Number.isFinite(m) && Number.isFinite(b)) {
+            const absBeat = (m * beatsPerMeasureLocal) + (b - 1);
+            return Math.round(absBeat * TICKS_PER_QUARTER);
+          }
+          return 0;
+        };
+        const durationTicksOfNote = (sn: StaffNote): number => {
+          const dt = Number((sn as any)?.durationTicks);
+          if (Number.isFinite(dt) && dt > 0) return dt;
+          const beats = durationToBeats(sn);
+          return Math.max(1, Math.round(beats * TICKS_PER_QUARTER));
+        };
+        const endTickOfNoteExclusive = (sn: StaffNote): number => {
+          return startTickOfNote(sn) + durationTicksOfNote(sn);
+        };
+
+        const lineStepDownIncreasesY = (() => {
+          try {
+            const y0 = stave.getYForLine(0);
+            const y1 = stave.getYForLine(1);
+            return y1 > y0;
+          } catch {
+            return true;
+          }
+        })();
+        const moveLineUp = (line: number): number => lineStepDownIncreasesY ? (line - 1) : (line + 1);
+        const moveLineDown = (line: number): number => lineStepDownIncreasesY ? (line + 1) : (line - 1);
+        const restProbeYByKey = new Map<string, number>();
+        const getRestProbeY = (line: number, duration: StaffNote['duration']): number => {
+          const key = `${String(duration || 'quarter')}|${Number(line)}`;
+          const cached = restProbeYByKey.get(key);
+          if (typeof cached === 'number' && Number.isFinite(cached)) return cached;
+          try {
+            const baseDur = durationToVexflow(duration);
+            const probe = new StaveNote({ clef: clef as any, keys: ['b/4'], duration: `${baseDur}r` });
+            (probe as any).setKeyLine?.(0, line);
+            probe.setStave(stave);
+            const ys = (probe as any).getYs?.();
+            const y = Number(Array.isArray(ys) ? ys[0] : undefined);
+            if (Number.isFinite(y)) {
+              restProbeYByKey.set(key, y);
+              return y;
+            }
+          } catch {
+            // ignore
+          }
+          return stave.getYForLine(line);
+        };
+        const nudgeLineVisual = (line: number, duration: StaffNote['duration'], dir: 'up' | 'down'): number => {
+          const upLine = moveLineUp(line);
+          const downLine = moveLineDown(line);
+          const yUp = getRestProbeY(upLine, duration);
+          const yDown = getRestProbeY(downLine, duration);
+          if (dir === 'up') return yUp <= yDown ? upLine : downLine;
+          return yDown >= yUp ? downLine : upLine;
+        };
+        const upDecreasesY = (() => {
+          const baseLine = 0;
+          const y0 = getRestProbeY(baseLine, 'quarter');
+          const yUp = getRestProbeY(nudgeLineVisual(baseLine, 'quarter', 'up'), 'quarter');
+          return yUp < y0;
+        })();
+        const signedY = (y: number): number => upDecreasesY ? -y : y;
+
+        for (const [, onset] of byTimeKeyAll.entries()) {
+          const sounding = onset
+            .filter(sn => sn && sn.id !== '__ghost__' && !sn.isRest)
+            .map(sn => ({ sn, line: getProbeLine(sn, clef) }))
+            .filter((x): x is { sn: StaffNote; line: number } => Number.isFinite(x.line));
+          const rests = onset.filter(sn => sn && sn.id !== '__ghost__' && !!sn.isRest);
+          if (!rests.length) continue;
+
+          const noteLines = sounding.map(x => x.line);
+          const voiceToLines = new Map<number, number[]>();
+          for (const s of sounding) {
+            const voice = Number(s.sn.voice ?? 1);
+            if (!voiceToLines.has(voice)) voiceToLines.set(voice, []);
+            voiceToLines.get(voice)!.push(s.line);
+          }
+
+          const GAP = 1;
+          const COLLISION_EPS = 0.85;
+          const COLLISION_Y_EPS = 10;
+          const CROSS_VOICE_Y_GAP = 8;
+          for (const r of rests) {
+            const voice = Number(r.voice ?? 1);
+            const fallback = defaultRestLineForVoice(voice, clef);
+            if (!Number.isFinite(fallback as number)) continue;
+            let line = Number(fallback);
+
+              const restStartTick = startTickOfNote(r);
+              const activeAll = (allNotes || [])
+                .filter(sn => sn && sn.id !== '__ghost__' && !sn.isRest)
+                .filter(sn => {
+                  const s = startTickOfNote(sn);
+                  const e = endTickOfNoteExclusive(sn);
+                  return s <= restStartTick && restStartTick < e;
+                })
+                .map(sn => {
+                  const lineProbe = getProbeLine(sn, resolveClefForNote(sn));
+                  const noteStave = resolveStaveForNote(sn);
+                  if (!Number.isFinite(lineProbe) || !noteStave) return null;
+                  const y = noteStave.getYForLine(Number(lineProbe));
+                  if (!Number.isFinite(y)) return null;
+                  return { sn, y };
+                })
+                .filter((x): x is { sn: StaffNote; y: number } => !!x);
+
+              const noteYs = activeAll.map(x => x.y);
+              const lowerBandYs = activeAll
+                .filter(s => {
+                  const v = Number(s.sn.voice ?? 1);
+                  const c = resolveClefForNote(s.sn);
+                  return c === 'bass' || v >= 3;
+                })
+                .map(s => s.y);
+              const upperBandYs = activeAll
+                .filter(s => {
+                  const v = Number(s.sn.voice ?? 1);
+                  const c = resolveClefForNote(s.sn);
+                  return c === 'treble' || v <= 2;
+                })
+                .map(s => s.y);
+            const restCollisionY = COLLISION_Y_EPS;
+            const crossVoiceGap = CROSS_VOICE_Y_GAP;
+
+            const lowerVoiceConstraint = (() => {
+              if (voice === 1) {
+                const alto = voiceToLines.get(2) ?? [];
+                return alto.length ? (Math.max(...alto) + GAP) : null;
+              }
+              if (voice === 3) {
+                const bass = voiceToLines.get(4) ?? [];
+                return bass.length ? (Math.max(...bass) + GAP) : null;
+              }
+              return null;
+            })();
+            const upperVoiceConstraint = (() => {
+              if (voice === 2) {
+                const soprano = voiceToLines.get(1) ?? [];
+                return soprano.length ? (Math.min(...soprano) - GAP) : null;
+              }
+              if (voice === 4) {
+                const tenor = voiceToLines.get(3) ?? [];
+                return tenor.length ? (Math.min(...tenor) - GAP) : null;
+              }
+              return null;
+            })();
+
+            if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
+            if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
+
+              const range = voice === 2
+                ? 24
+                : (voice === 3 ? 20 : 12);
+              const minBound = line - range;
+              const maxBound = line + range;
+
+            let candidateY = getRestProbeY(line, r.duration);
+              const candidateSignedY = () => signedY(candidateY);
+              const lowerBandThresholdSigned = (voice === 2 && lowerBandYs.length)
+                ? (Math.max(...lowerBandYs.map(y => signedY(y))) + crossVoiceGap)
+                : null;
+              const upperBandThresholdSigned = (voice === 3 && upperBandYs.length)
+                ? (Math.min(...upperBandYs.map(y => signedY(y))) - crossVoiceGap)
+                : null;
+
+              let guard = 0;
+              while (
+                guard < 32
+                && lowerBandThresholdSigned != null
+                && candidateSignedY() < lowerBandThresholdSigned
+              ) {
+              line = nudgeLineVisual(line, r.duration, 'up');
+              if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
+              if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
+              line = Math.max(minBound, Math.min(maxBound, line));
+              candidateY = getRestProbeY(line, r.duration);
+              guard++;
+            }
+            guard = 0;
+              while (
+                guard < 32
+                && upperBandThresholdSigned != null
+                && candidateSignedY() > upperBandThresholdSigned
+              ) {
+              line = nudgeLineVisual(line, r.duration, 'down');
+              if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
+              if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
+              line = Math.max(minBound, Math.min(maxBound, line));
+              candidateY = getRestProbeY(line, r.duration);
+              guard++;
+            }
+
+            let tries = 0;
+            while (
+                tries < 40
+              && (
+                noteLines.some(nl => Math.abs(nl - line) < COLLISION_EPS)
+                || noteYs.some(ny => Math.abs(ny - candidateY) < restCollisionY)
+              )
+            ) {
+              line = (voice === 4)
+                ? nudgeLineVisual(line, r.duration, 'down')
+                : nudgeLineVisual(line, r.duration, 'up');
+              if (lowerVoiceConstraint != null) line = Math.max(line, lowerVoiceConstraint);
+              if (upperVoiceConstraint != null) line = Math.min(line, upperVoiceConstraint);
+              line = Math.max(minBound, Math.min(maxBound, line));
+              candidateY = getRestProbeY(line, r.duration);
+              tries++;
+            }
+
+              // Temporary fallback: keep Alto rests visibly higher to avoid persistent
+              // overlap reports in the cross-staff zone.
+              if (voice === 2) {
+                line = nudgeLineVisual(line, r.duration, 'up');
+                line = nudgeLineVisual(line, r.duration, 'up');
+              }
+
+            restLineOverrideById.set(r.id, line);
+          }
+        }
+
         // Quick lookup for per-chord collision heuristics (seconds + multiple accidentals).
         const staffNoteById = new Map<string, StaffNote>();
         for (const sn of staffNotes) {
@@ -1451,7 +1740,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               vfNote = chord.vf;
               isPrimaryRender = chord.primaryId === n.id;
             } else {
-              vfNote = makeVfNote(n, clef, stemOverrideById.get(n.id), hideStemById.get(n.id));
+              vfNote = makeVfNote(
+                n,
+                clef,
+                stemOverrideById.get(n.id),
+                hideStemById.get(n.id),
+                restLineOverrideById.get(n.id),
+              );
               isPrimaryRender = true;
             }
 
@@ -1816,7 +2111,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               try {
                 // Keep accidentals in the ghost fallback too; the whole point of the
                 // ghost is to preview the exact insertion (pitch + accidental).
-                const fallbackNote = makeVfNote({ ...n } as StaffNote, clef, stemOverrideById.get(n.id), hideStemById.get(n.id));
+                const fallbackNote = makeVfNote(
+                  { ...n } as StaffNote,
+                  clef,
+                  stemOverrideById.get(n.id),
+                  hideStemById.get(n.id),
+                  restLineOverrideById.get(n.id),
+                );
                 fallbackNote.setStave(stave);
                 fallbackNote.setContext(context);
                 fallbackNote.setStyle({ fillStyle: 'rgba(56,189,248,0.4)', strokeStyle: 'rgba(14,165,233,0.7)' });

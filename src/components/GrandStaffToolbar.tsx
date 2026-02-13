@@ -586,7 +586,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             setSelectedInsertion(prev => ({ ...prev, duration }));
                             if (selectedNoteIds.size > 0) {
                                 applyEditToSelectedNotes(n => {
-                                    if (n.isRest) return n;
                                     const updated = { ...(n as any), duration } as StaffNote;
                                     return { ...(updated as any), durationTicks: computeDurationTicks(updated) } as StaffNote;
                                 }, { rebuildTimeline: true });
