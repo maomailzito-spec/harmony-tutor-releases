@@ -1332,7 +1332,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, [rawNotes, keySignature]);
 
-    const notes = useMemo(() => calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges), [normalizedRawNotes, timeSignature, timeSignatureChanges]);
+    const notes = useMemo(() => {
+        try {
+            return calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges);
+        } catch (e) {
+            console.error('[GrandStaffEditor] calculateNoteBeats crashed:', e);
+            return normalizedRawNotes || [];
+        }
+    }, [normalizedRawNotes, timeSignature, timeSignatureChanges]);
 
     // Editor zoom (extracted to useEditorZoom hook)
     const { editorZoom, resetEditorZoom, handleScoreMouseDownCapture, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
@@ -2092,7 +2099,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!isAnalysisEnabled) {
             return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
-        return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures);
+        try {
+            return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures);
+        } catch (e) {
+            console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
+            return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
+        }
     }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures]);
 
     const effectiveAnalysisContexts = useMemo(() => {
@@ -6168,18 +6180,46 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const selected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
                     if (selected.length === 0) return;
 
-                    setRawNotes(prev => prev.map(n => {
-                        if (!selectedNoteIds.has(n.id)) return n;
+                    // Collect IDs of notes that should get isTiedToNext toggled.
+                    // Strategy: for each selected note, first try the "forward" path
+                    // (selected note IS the source → tie to next same-pitch note).
+                    // If that fails, try the "backward" path (selected note IS the
+                    // destination → find previous same-pitch note and toggle its tie).
+                    const toggleForwardIds = new Set<string>();
+                    const toggleBackwardIds = new Set<string>();
 
-                        const idx = notesWithBeats.findIndex(x => x.id === n.id);
-                        if (idx < 0) return n;
+                    for (const sel of selected) {
+                        const idx = notesWithBeats.findIndex(x => x.id === sel.id);
+                        if (idx < 0) continue;
 
                         const voice = (notesWithBeats[idx] as any).voice;
+                        const midi = (notesWithBeats[idx] as any).midi;
+
+                        // Forward: look for next same-voice same-pitch note.
                         let next: StaffNote | undefined;
                         for (let i = idx + 1; i < notesWithBeats.length; i++) {
                             if ((notesWithBeats[i] as any).voice === voice) { next = notesWithBeats[i]; break; }
                         }
-                        if (!next || next.isRest || next.midi !== (notesWithBeats[idx] as any).midi) return n;
+                        if (next && !next.isRest && next.midi === midi) {
+                            toggleForwardIds.add(sel.id);
+                            continue;
+                        }
+
+                        // Backward: look for previous same-voice same-pitch note.
+                        let prev: StaffNote | undefined;
+                        for (let i = idx - 1; i >= 0; i--) {
+                            if ((notesWithBeats[i] as any).voice === voice) { prev = notesWithBeats[i]; break; }
+                        }
+                        if (prev && !prev.isRest && prev.midi === midi) {
+                            toggleBackwardIds.add(prev.id);
+                        }
+                    }
+
+                    if (toggleForwardIds.size === 0 && toggleBackwardIds.size === 0) return;
+
+                    setRawNotes(prev => prev.map(n => {
+                        const id = (n as any).id;
+                        if (!toggleForwardIds.has(id) && !toggleBackwardIds.has(id)) return n;
 
                         if ((n as any).isTiedToNext) {
                             const { isTiedToNext, manualTieDirection, ...rest } = n as any;
@@ -6695,9 +6735,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                             // Otherwise, recompute the accidental needed for the *existing pitch* under the
                             // current key signature, without changing the staff position/spelling.
-                            const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
-                            const nextExplicit = calculateAccidental(noteName, keyAccidentals);
-                            return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
+                            try {
+                                const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
+                                const nextExplicit = calculateAccidental(noteName, keyAccidentals);
+                                return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
+                            } catch {
+                                return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
+                            }
                         });
 
                         const actualSystemWidth = system.width;

@@ -1157,6 +1157,111 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
         // --- end close-position helpers ---
+
+        // --- Bass staff: seconds + unisons collision avoidance (voices 3+4) ---
+        // The close-position heuristics above only run for treble staff.
+        // On the bass staff (parti late), voices 3 (tenor) and 4 (bass) can form
+        // seconds or unisons that need the same X-shift treatment.
+        const isBassStaff = clef === 'bass';
+        if (isBassStaff && enableEngravingEnhancements) {
+          for (const group of byX.values()) {
+            const byTime = new Map<string, StaffNote[]>();
+            for (const n of group) {
+              const tk = getNoteTimeKey(n);
+              if (!byTime.has(tk)) byTime.set(tk, []);
+              byTime.get(tk)!.push(n);
+            }
+
+            for (const gRaw of byTime.values()) {
+              const g = gRaw
+                .filter(n => n.id !== '__ghost__')
+                .filter(n => !n.isRest)
+                .filter(n => n.voice === 3 || n.voice === 4);
+
+              if (g.length < 2) continue;
+
+              const sorted = g.slice().sort((a, b) => Number(a.position) - Number(b.position));
+
+              // Detect seconds (adjacent staff positions).
+              const anySeconds = sorted.some((n, i) => i > 0 && (Number(n.position) - Number(sorted[i - 1].position)) === 1);
+
+              // Detect unisons (same staff position, different voices).
+              const anyUnisons = sorted.some((n, i) => i > 0 && Number(n.position) === Number(sorted[i - 1].position));
+
+              if (!anySeconds && !anyUnisons) continue;
+
+              // For seconds between tenor (voice 3, stem UP) and bass (voice 4, stem DOWN):
+              // Shift the LOWER note (bass) to the RIGHT so that the stems end up
+              // on the INNER side (facing each other) — standard engraving convention
+              // for two voices sharing a staff.
+              if (anySeconds) {
+                for (let i = 1; i < sorted.length; i++) {
+                  if ((Number(sorted[i].position) - Number(sorted[i - 1].position)) === 1) {
+                    // sorted is bottom-to-top: sorted[i-1] is the lower note (bass).
+                    const lowerNote = sorted[i - 1];
+                    if (!lowerNote.manualStemDirection && !offsetMap.has(lowerNote.id)) {
+                      offsetMap.set(lowerNote.id, NOTEHEAD_TOUCH_SHIFT);
+                    }
+                  }
+                }
+              }
+
+              // For unisons: shift the lower voice (voice 4, stem down) to the right.
+              if (anyUnisons) {
+                for (let i = 1; i < sorted.length; i++) {
+                  if (Number(sorted[i].position) === Number(sorted[i - 1].position)) {
+                    // The note with stem DOWN (voice 4) gets shifted right.
+                    const downVoice = sorted[i].voice === 4 ? sorted[i] : (sorted[i - 1].voice === 4 ? sorted[i - 1] : sorted[i]);
+                    if (!downVoice.manualStemDirection && !offsetMap.has(downVoice.id)) {
+                      offsetMap.set(downVoice.id, NOTEHEAD_TOUCH_SHIFT);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // --- Treble staff: unisons collision avoidance (voices 1+2 or 1+2+3) ---
+        // When two voices on the same staff have the same pitch (unison),
+        // the noteheads overlap. Apply X-shift to separate them visually.
+        if (isTrebleStaff && enableEngravingEnhancements) {
+          for (const group of byX.values()) {
+            const byTime = new Map<string, StaffNote[]>();
+            for (const n of group) {
+              const tk = getNoteTimeKey(n);
+              if (!byTime.has(tk)) byTime.set(tk, []);
+              byTime.get(tk)!.push(n);
+            }
+
+            for (const gRaw of byTime.values()) {
+              const g = gRaw
+                .filter(n => n.id !== '__ghost__')
+                .filter(n => !n.isRest);
+
+              if (g.length < 2) continue;
+
+              const sorted = g.slice().sort((a, b) => Number(a.position) - Number(b.position));
+
+              // Only handle unisons here; seconds are already handled above.
+              for (let i = 1; i < sorted.length; i++) {
+                if (Number(sorted[i].position) === Number(sorted[i - 1].position)) {
+                  // Already merged into a chord? Skip.
+                  if (chordKeyByNoteId.has(sorted[i].id) && chordKeyByNoteId.has(sorted[i - 1].id)
+                      && chordKeyByNoteId.get(sorted[i].id) === chordKeyByNoteId.get(sorted[i - 1].id)) continue;
+                  // Already has an offset? Skip.
+                  if (offsetMap.has(sorted[i].id) || offsetMap.has(sorted[i - 1].id)) continue;
+                  // Shift the lower-numbered voice (stem down, typically voice 2) to the right.
+                  const downNote = (sorted[i].voice ?? 1) > (sorted[i - 1].voice ?? 1) ? sorted[i] : sorted[i - 1];
+                  if (!downNote.manualStemDirection) {
+                    offsetMap.set(downNote.id, NOTEHEAD_TOUCH_SHIFT);
+                  }
+                }
+              }
+            }
+          }
+        }
+
         const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
 
         // In open position ("parti late"), the default accidental layout can leave too much
@@ -1388,8 +1493,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     return nStart < rEnd && rStart < nEnd;
                   });
 
-                // Find the closest note (by pixel distance) among all overlapping adjacent-voice notes.
+                // Find the closest note (by pixel distance) among all overlapping adjacent-voice notes,
+                // and track WHICH adjacent voice it belongs to so we push in the right direction.
                 let closestNoteY: number | null = null;
+                let closestNoteVoice: number | null = null;
                 const baseRestY = getRestYAtLine(line, r.duration);
                 for (const sn of overlapping) {
                   const ny = getNoteYOnStave(sn);
@@ -1397,28 +1504,33 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   if (closestNoteY == null
                     || (baseRestY != null && Math.abs(ny - baseRestY) < Math.abs(closestNoteY - baseRestY))) {
                     closestNoteY = ny;
+                    closestNoteVoice = Number(sn.voice ?? 1);
                   }
                 }
 
                 if (closestNoteY != null && baseRestY != null) {
-                  // Determine push direction from actual positions:
-                  // If rest is above note (restY < noteY), push rest UP (smaller Y).
-                  // If rest is below note (restY > noteY), push rest DOWN (larger Y).
-                  const restAboveNote = baseRestY <= closestNoteY;
-                  const step = restAboveNote ? restLineUpStep : -restLineUpStep;
+                  // Push direction is based on the RELATIVE voice number:
+                  //   - If the colliding note's voice < rest's voice → note is from a
+                  //     higher-pitched voice → push rest DOWN (away from it).
+                  //   - If the colliding note's voice > rest's voice → note is from a
+                  //     lower-pitched voice → push rest UP (away from it).
+                  // This correctly handles voice 2 (alto) which can collide with
+                  // voice 1 (soprano, above) or voice 3 (tenor, below).
+                  const shouldPushUp = closestNoteVoice != null && closestNoteVoice > voice;
+                  const halfStep = (shouldPushUp ? restLineUpStep : -restLineUpStep) * 0.5;
                   let restY: number | null = baseRestY;
                   let guard = 0;
-                  if (restAboveNote) {
-                    // Push rest UP until gap is big enough (restY should be at least clearance ABOVE noteY).
-                    while (guard < 50 && restY != null && (closestNoteY - restY) < REST_BASS_CLEARANCE_PX) {
-                      line += step;
+                  if (shouldPushUp) {
+                    // Push rest UP until gap is big enough (restY at least clearance ABOVE noteY).
+                    while (guard < 100 && restY != null && (closestNoteY - restY) < REST_BASS_CLEARANCE_PX) {
+                      line += halfStep;
                       restY = getRestYAtLine(line, r.duration);
                       guard++;
                     }
                   } else {
-                    // Push rest DOWN until gap is big enough (restY should be at least clearance BELOW noteY).
-                    while (guard < 50 && restY != null && (restY - closestNoteY) < REST_BASS_CLEARANCE_PX) {
-                      line += step;
+                    // Push rest DOWN until gap is big enough (restY at least clearance BELOW noteY).
+                    while (guard < 100 && restY != null && (restY - closestNoteY) < REST_BASS_CLEARANCE_PX) {
+                      line += halfStep;
                       restY = getRestYAtLine(line, r.duration);
                       guard++;
                     }

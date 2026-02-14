@@ -16,6 +16,7 @@ const START_X = 50;
 const MEASURE_PADDING_X = 20;
 const TOP_STAFF_TOP = 30;
 const VF_SATB_SOPRANO_Y = 40;
+const STAFF_MARGIN = 50;
 
 export interface UseHarmonyLabelsParams {
     layoutData: any;
