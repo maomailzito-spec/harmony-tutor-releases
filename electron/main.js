@@ -814,6 +814,17 @@ function createMenu() {
     }
     ,
     {
+      label: 'Strumenti',
+      submenu: [
+        {
+          label: 'Genera corale da Roman Numerals…',
+          accelerator: 'CmdOrCtrl+Shift+G',
+          click: () => { sendAction(MENU_ACTIONS.GENERATE_FROM_ROMAN); }
+        },
+      ]
+    }
+    ,
+    {
       role: 'help',
       label: 'Aiuto',
       submenu: [

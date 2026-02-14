@@ -7,9 +7,20 @@
  */
 import { useMemo } from 'react';
 import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
-import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
+import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol } from '../utils/musicTheory';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
-import { TICKS_PER_QUARTER } from '../constants';
+import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS } from '../constants';
+
+// ─── Utility: note name → chromatic index (0-11) ──────────────────────────
+function noteNameToChromaticIndex(name: string): number {
+    const idxSharp = NOTE_NAMES.indexOf(name);
+    if (idxSharp >= 0) return idxSharp;
+    const normalized = name.replace('♯', '#').replace('♭', 'b');
+    for (let i = 0; i < ALL_NOTE_SPELLINGS.length; i++) {
+        if (ALL_NOTE_SPELLINGS[i].includes(normalized)) return i;
+    }
+    return -1;
+}
 
 // Layout constants (must match GrandStaffEditor.tsx)
 const START_X = 50;
@@ -504,6 +515,49 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             }
                         } else {
                             return false;
+                        }
+                    }
+                } catch { /* ignore */ }
+
+                // Duration-based guard: if this note has the same duration as all others
+                // at this event AND it belongs to a confident chord of the current
+                // verticality, do NOT treat it as a resolving dissonance. This prevents
+                // real chord members (e.g. the 3rd of V7 in V4/2) from being excluded
+                // when they happen to be dissonant vs the bass and step-resolve to the
+                // next chord. We use identifyChordCandidates directly because the local
+                // isChordToneOfConfidentCandidate helper can fail in edge cases.
+                try {
+                    const notesHere2 = (curEv?.notes || []) as any[];
+                    const nonRestHere = notesHere2.filter((nn: any) => nn && !nn.isRest);
+                    if (nonRestHere.length >= 3) {
+                        const durations = nonRestHere.map((nn: any) => nn.duration || 'quarter');
+                        const allSameDur = durations.every((d: string) => d === durations[0]);
+                        if (allSameDur) {
+                            const cands = identifyChordCandidates(nonRestHere as any);
+                            const best: any = (cands && cands.length) ? cands[0] : null;
+                            const mt = String(best?.matchType || '');
+                            const confident = mt === 'exact' || mt === 'no_fifth' || mt === 'no_third';
+                            if (confident && best?.root && best?.type) {
+                                const chordType = String(best.type || '');
+                                const isSusLike = /sus|add/i.test(chordType);
+                                if (!isSusLike) {
+                                    const rootPc = Number.isFinite((best.root as any).noteIndex)
+                                        ? (((best.root as any).noteIndex % 12) + 12) % 12
+                                        : Number.isFinite((best.root as any).midi)
+                                            ? (((best.root as any).midi % 12) + 12) % 12 : null;
+                                    const notePc = Number.isFinite(n?.midi)
+                                        ? (((n.midi % 12) + 12) % 12) : null;
+                                    if (rootPc != null && notePc != null) {
+                                        const formula = (CHORD_FORMULAS as any)?.[chordType] as number[] | undefined;
+                                        if (Array.isArray(formula) && formula.length) {
+                                            const interval = (((notePc - rootPc) % 12) + 12) % 12;
+                                            if (interval === 0 || formula.includes(interval)) {
+                                                return false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 } catch { /* ignore */ }
@@ -2578,7 +2632,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 systemIndex,
                 labelIndex,
                 label: lbl,
-                tick: Number.isFinite(lbl?.absBeat as number) ? beatsToTicks(Number(lbl.absBeat)) : Number.NaN,
+                tick: Number.isFinite(lbl?.absBeat as number) ? Math.round(Number(lbl.absBeat) * TICKS_PER_QUARTER) : Number.NaN,
             }))
         ).filter(x => Number.isFinite(x.tick));
 
@@ -3133,6 +3187,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const quality = ctx.newIsMinor ? 'min' : 'Maj';
             const tonicLabel = `[ ${ctx.newTonic} ${quality} ]`;
             const custom = ctx.label && String(ctx.label).trim() ? String(ctx.label).trim() : '';
+            // markerMode='text' → show only the custom label, no tonic bracket
+            if (ctx.markerMode === 'text' && custom) return custom;
             return custom ? `${custom} ${tonicLabel}` : tonicLabel;
         };
 

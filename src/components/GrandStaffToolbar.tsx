@@ -122,6 +122,9 @@ type GrandStaffToolbarProps = {
     selectedNoteIds: Set<string>;
     applyEditToSelectedNotes: (fn: (note: StaffNote) => StaffNote, options?: { rebuildTimeline?: boolean }) => void;
     computeDurationTicks: (note: StaffNote) => number;
+    /** Ref tracking whether the current selection is an auto-selected just-inserted note. */
+    justInsertedNoteRef: React.MutableRefObject<string | null>;
+    setSelectedNoteIds: React.Dispatch<React.SetStateAction<Set<string>>>;
 
     isTriplet: boolean;
     setIsTriplet: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -263,6 +266,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         selectedNoteIds,
         applyEditToSelectedNotes,
         computeDurationTicks,
+        justInsertedNoteRef,
+        setSelectedNoteIds,
         isTriplet,
         setIsTriplet,
         isDuplet,
@@ -584,6 +589,13 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         key={duration}
                         onClick={() => {
                             setSelectedInsertion(prev => ({ ...prev, duration }));
+                            // If current selection is a just-inserted note, don't
+                            // retroactively change its duration — just deselect and update insertion state.
+                            if (justInsertedNoteRef.current && selectedNoteIds.size === 1 && selectedNoteIds.has(justInsertedNoteRef.current)) {
+                                justInsertedNoteRef.current = null;
+                                setSelectedNoteIds(new Set());
+                                return;
+                            }
                             if (selectedNoteIds.size > 0) {
                                 applyEditToSelectedNotes(n => {
                                     const updated = { ...(n as any), duration } as StaffNote;

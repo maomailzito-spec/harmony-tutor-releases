@@ -31,6 +31,7 @@ export const MENU_ACTIONS: Readonly<{
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice';
   SET_APP_MODE: 'set-app-mode';
+  GENERATE_FROM_ROMAN: 'generate-from-roman';
 }>;
 
 export type MenuAction = (typeof MENU_ACTIONS)[keyof typeof MENU_ACTIONS];
@@ -68,6 +69,7 @@ export type MenuActionPayloadMap = {
 
   'set-select-only-voice': { enabled: boolean };
   'set-app-mode': { mode: 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff' };
+  'generate-from-roman': undefined;
 };
 
 export type MenuActionPayload<A extends MenuAction> = MenuActionPayloadMap[A];

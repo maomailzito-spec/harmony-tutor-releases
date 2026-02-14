@@ -32,6 +32,7 @@ import { useGrandStaffMidi } from '../hooks/useGrandStaffMidi';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
+import RomanProgressionEditor from './RomanProgressionEditor';
 import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
@@ -289,6 +290,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // - If armed from TOOLBAR: persist until manually toggled off.
     const dottedOneShotRef = useRef<boolean>(false);
     const accidentalOneShotRef = useRef<boolean>(false);
+    /** Tracks whether a note was just auto-selected after insertion.
+     *  When true, changing duration from toolbar/hotkey will NOT retroactively
+     *  modify the selected note — it only updates the insertion state. */
+    const justInsertedNoteRef = useRef<string | null>(null);
     const [isTriplet, setIsTriplet] = useState(false);
     const [isDuplet, setIsDuplet] = useState(false);
     const [isSwing, setIsSwing] = useState(false);
@@ -485,11 +490,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         try { localStorage.setItem('harmony.analysis.sequencesEnabled.v1', isSequencesEnabled ? '1' : '0'); } catch { /* ignore */ }
     }, [isSequencesEnabled]);
-    const [showRomanAnalysis, setShowRomanAnalysis] = useState(true);
-    const [showSymbolAnalysis, setShowSymbolAnalysis] = useState(false);
+    const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
+    const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
 
     const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+
+    const [isRomanEditorOpen, setIsRomanEditorOpen] = useState(false);
 
     const [engravingMode, setEngravingMode] = useState<EngravingMode>(() => {
         try {
@@ -1994,6 +2001,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (family === 'serif' || family === 'sans-serif' || family === 'monospace') setTitleFontFamily(family);
         } else if (action === 'set-select-only-voice') {
             setMarqueeSelectOnlyCurrentVoice(!!payload?.enabled);
+        } else if (action === 'generate-from-roman') {
+            setIsRomanEditorOpen(prev => !prev);
         }
     }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi]);
 
@@ -2219,7 +2228,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const baseTonic = baseCtx?.newTonic ?? currentTonic;
             const baseIsMinor = baseCtx?.newIsMinor ?? isMinorMode;
             const next = (prev || []).slice();
-            next.push({ absBeat: safeAbsBeat, newTonic: baseTonic, newIsMinor: baseIsMinor, label: cleanLabel });
+            next.push({ absBeat: safeAbsBeat, newTonic: baseTonic, newIsMinor: baseIsMinor, label: cleanLabel, markerMode: 'text' as const });
             return next.sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b));
         });
         setContextMenu(null);
@@ -3621,6 +3630,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const applyDottedToSelectedNotes = useCallback((nextIsDotted: boolean) => {
         if (!selectedNoteIds || selectedNoteIds.size === 0) return;
+        // If current selection is a just-inserted note, skip retroactive edit
+        if (justInsertedNoteRef.current && selectedNoteIds.size === 1 && selectedNoteIds.has(justInsertedNoteRef.current)) {
+            justInsertedNoteRef.current = null;
+            setSelectedNoteIds(new Set());
+            return;
+        }
         applyEditToSelectedNotes((n) => {
             // Fix: allow dotted application on rests too
             const updated = { ...(n as any), isDotted: nextIsDotted } as StaffNote;
@@ -3733,6 +3748,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
 
         setSelectedNoteIds(next);
+        // Clear justInserted flag — user is explicitly selecting/deselecting
+        justInsertedNoteRef.current = null;
 
         // Aggiorna la violation selezionata se la nota è coinvolta in una violation
         if (!shiftKey) {
@@ -4931,6 +4948,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return next;
             });
             setSelectedNoteIds(new Set([rest.id]));
+            justInsertedNoteRef.current = rest.id;
             // Auto-disarm dotted only when armed via hotkey.
             try {
                 if (selectedInsertion.isDotted && dottedOneShotRef.current) {
@@ -5215,6 +5233,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return finalNotes;
         });
         setSelectedNoteIds(new Set([newNote.id]));
+        justInsertedNoteRef.current = newNote.id;
         void playNote(newNote);
         // Auto-disarm accidental only when armed via hotkey.
         if (activeAccidental && accidentalOneShotRef.current) {
@@ -6272,6 +6291,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (duration) {
                     setSelectedInsertion(prev => ({ ...prev, duration }));
 
+                    // If the selected note was just inserted (auto-selected),
+                    // don't retroactively change it — just deselect and set insertion state.
+                    if (justInsertedNoteRef.current && selectedNoteIds.size === 1 && selectedNoteIds.has(justInsertedNoteRef.current)) {
+                        justInsertedNoteRef.current = null;
+                        setSelectedNoteIds(new Set());
+                        return;
+                    }
+
                     if (selectedNoteIds.size > 0) {
                         setRawNotes(prev => {
                             try {
@@ -6609,6 +6636,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 selectedNoteIds={selectedNoteIds}
                 applyEditToSelectedNotes={applyEditToSelectedNotes}
                 computeDurationTicks={computeDurationTicks}
+                justInsertedNoteRef={justInsertedNoteRef}
+                setSelectedNoteIds={setSelectedNoteIds}
                 isTriplet={isTriplet}
                 setIsTriplet={setIsTriplet}
                 isDuplet={isDuplet}
@@ -6665,6 +6694,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             <PreferencesModal
                 isOpen={isPreferencesOpen}
                 onClose={() => setIsPreferencesOpen(false)}
+            />
+
+            <RomanProgressionEditor
+                isOpen={isRomanEditorOpen}
+                onClose={() => setIsRomanEditorOpen(false)}
+                onApplyNotes={(notes) => {
+                    if (latestRawNotes.current.length > 0) {
+                        const confirmed = window.confirm('Applicare il corale generato? Le note attuali verranno sostituite.');
+                        if (!confirmed) return;
+                    }
+                    setRawNotes(notes as any);
+                    setAnalysisContexts([]);
+                    setHarmonyOverrides([]);
+                }}
+                keySignatureRoot={keySignatureRoot}
+                isMinorMode={isMinorMode}
+                timeSignature={timeSignature}
+                existingNotes={rawNotes}
             />
 
             

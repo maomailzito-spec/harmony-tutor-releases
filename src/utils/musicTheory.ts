@@ -4818,11 +4818,20 @@ export function applyHarmonyRules(
 
                 if (passesDissonanceTest && strongBeat) {
                     // Guardrail: if the note is a chord tone of a confident harmonic candidate at this event
-                    // (e.g. inverted chords where the bass is not the root), do NOT treat it as appoggiatura.
-                    // Otherwise we can filter out real chord roots and distort Roman/figured bass.
-                    const chordToneAny = isRootOfAnyConfidentCandidate(cur, curEv);
-                    if (chordToneAny) {
-                        // Not an appoggiatura; keep evaluating other ornament types below.
+                    // AND it has a duration at least as long as the other chord members,
+                    // do NOT treat it as appoggiatura. Otherwise we can filter
+                    // out real chord tones and distort Roman/figured bass labels.
+                    // However, if the chord tone is significantly shorter than the others,
+                    // it may still be ornamental (e.g. passing through a chord tone).
+                    const chordToneAny = isChordToneOfConfidentCandidate(cur, curEv);
+                    const curDurBeats = DURATION_VALUES[cur.duration as keyof typeof DURATION_VALUES] ?? 1;
+                    const otherDurs = (curEv?.notes || [])
+                        .filter((n: any) => n && !n.isRest && n.id !== cur.id && Number.isFinite(n.midi))
+                        .map((n: any) => DURATION_VALUES[n.duration as keyof typeof DURATION_VALUES] ?? 1);
+                    const minOtherDur = otherDurs.length ? Math.min(...otherDurs) : curDurBeats;
+                    const isSameDuration = curDurBeats >= minOtherDur - 1e-6;
+                    if (chordToneAny && isSameDuration) {
+                        // Chord tone with same duration as peers → definitely structural, not appoggiatura.
                     } else {
                     const inSemis = prev ? semis(prev, cur) : Infinity;
                     const leapIn = prev ? (inSemis > 2) : false;

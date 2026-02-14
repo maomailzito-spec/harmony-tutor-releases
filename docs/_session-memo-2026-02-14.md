@@ -75,6 +75,37 @@ Questi blocchi sono troppo intrecciati con lo stato di editing per essere estrat
 
 ---
 
+## Bug Fix Session — 14 febbraio 2026 (pomeriggio)
+
+### Build & File Stats dopo fix
+- **Build:** `npm run build` → PASSA ✓ (530 moduli, 0 errori)
+- `GrandStaffEditor.tsx`: 8.315 righe
+- `VexflowGrandStaff.tsx`: 3.030 righe
+- `useHarmonyLabels.ts`: 3.234 righe
+
+### 7 bug risolti
+
+| # | Bug | File | Linea | Fix |
+|---|-----|------|-------|-----|
+| 1 | Collisione basso-tenore sulle seconde | VexflowGrandStaff.tsx | ~L1161 | Nuovo blocco collision avoidance per bass staff (voci 3+4). Nota inferiore (basso, voice 4) spostata a destra con `NOTEHEAD_TOUCH_SHIFT` → gambi interni. |
+| 2 | Anti-collisione nota-pausa: salto brusco | VexflowGrandStaff.tsx | ~L1503 | Direzione push basata su `closestNoteVoice > voice` (non più su posizione pixel che causava flip). Incrementi di mezza linea (0.5 staff lines) per spostamento graduale. |
+| 3 | Unisoni sovrapposti (noteheads overlap) | VexflowGrandStaff.tsx | ~L1195 + ~L1227 | Due blocchi: (a) bass staff voci 3+4 stessa posizione → offset voice 4; (b) treble staff qualsiasi voce stessa posizione → offset voce con numero più alto. Skip se già merged in chord o già con offset. |
+| 4 | Legature: selezione solo 2ª nota | GrandStaffEditor.tsx | ~L6167 | Toggle tie (tasto L) ora fa ricerca forward + backward. Se la nota selezionata è la 2ª di una potenziale legatura, trova la nota precedente stessa-altezza stessa-voce e attiva `isTiedToNext` su di essa. |
+| 5 | Crash paste (schermo bianco) | GrandStaffEditor.tsx | L1335, L2091, L6738 | Try-catch su 3 punti critici: (a) `calculateNoteBeats` in `notes` useMemo; (b) `applyHarmonyRules` in `analysisResult` useMemo; (c) `makeNoteNameFromPitchAndMidi` in render `systemNotesForRender.map()`. Tutti loggano in console.error e restituiscono fallback sicuri. |
+| 6 | `STAFF_MARGIN` non definito | useHarmonyLabels.ts | L19 | Costante `STAFF_MARGIN = 50` mancante dopo estrazione Phase 2. Aggiunta nella sezione layout constants del hook. |
+
+### Dettagli tecnici chiave
+
+**Bug 1 — Seconde bass-tenor:** Inserito dopo `// --- end close-position helpers ---`. Il blocco treble (sopra) usa già `getSecondClusterOffsetsById` per soprano-alto. Per il bass staff, si usa un approccio più semplice: loop sulle note ordinate per position, se `position[i] - position[i-1] === 1` → offset la nota inferiore a destra. Questo mette i gambi nella parte interna (convenzione di notazione per 2 voci su uno staff).
+
+**Bug 2 — Pause:** Vecchio codice usava `baseRestY <= closestNoteY` per decidere la direzione → quando una nota attraversava la posizione di default della pausa, la direzione si invertiva bruscamente. Nuovo codice traccia `closestNoteVoice` e usa il confronto numeri di voce: `closestNoteVoice > voice` → push UP (la nota collidende è da una voce più grave), else → push DOWN.
+
+**Bug 4 — Legature backward:** Il codice ora raccoglie due set: `toggleForwardIds` (nota selezionata è la sorgente) e `toggleBackwardIds` (nota selezionata è la destinazione → si togla `isTiedToNext` sulla nota precedente). Entrambi i set vengono applicati nel singolo `setRawNotes()`.
+
+**Bug 5 — Paste crash prevention:** I guard proteggono dai dati malformati che il paste potrebbe generare. L'errore esatto sarà visibile nella DevTools console (Cmd+Opt+I → Console) per debug futuro.
+
+---
+
 ## Progetto Futuro — Chorale Harmonization Engine
 
 ### Concept
@@ -127,7 +158,9 @@ Creare parti corali a 4 voci (SATB) scrivendo solo i Roman numerals. L'engine ge
 ---
 
 ## Git Status
-Le modifiche Phase 2 sono **non committate**. Consiglio di fare commit con messaggio tipo:
+Le modifiche Phase 2 + bug fix pomeridiani sono **non committate**. Consiglio di fare 2 commit separati:
+
+### Commit 1 — Phase 2 Split (se non già committato)
 ```
 feat: Phase 2 — extract useEditorZoom + useHarmonyLabels from GrandStaffEditor
 
@@ -140,6 +173,43 @@ feat: Phase 2 — extract useEditorZoom + useHarmonyLabels from GrandStaffEditor
 - Remove 6 unused imports from GrandStaffEditor
 - GrandStaffEditor reduced from ~11,600 to 8,271 lines (-28.7%)
 ```
+
+### Commit 2 — Bug fix session 14/02/2026
+```
+fix: 7 rendering/editing bugs — collisions, ties, paste crash, STAFF_MARGIN
+
+- fix(VexflowGrandStaff): bass-tenor seconds collision — shift lower note right,
+  internal stems (voices 3+4)
+- fix(VexflowGrandStaff): rest anti-collision uses voice role for push direction
+  instead of pixel comparison; half-step increments for smoother displacement
+- fix(VexflowGrandStaff): unison overlap detection on both treble and bass staves
+  — x-shift for same-position notes in different voices
+- fix(GrandStaffEditor): tie toggle (L key) supports selecting 2nd note —
+  backward lookup finds previous same-pitch same-voice note
+- fix(GrandStaffEditor): paste crash protection — try-catch on calculateNoteBeats,
+  applyHarmonyRules, makeNoteNameFromPitchAndMidi with safe fallbacks
+- fix(useHarmonyLabels): add missing STAFF_MARGIN constant (was causing
+  ReferenceError crash after Phase 2 extraction)
+```
+
+---
+
+## Prossima Sessione — Chorale Harmonization Engine
+
+**Decisione: Opzione A** — Componente separato (`RomanProgressionEditor`) che genera `StaffNote[]` e le inietta nel `GrandStaffEditor` esistente. L'utente scrive la progressione in un pannello dedicato, preme "Genera", e il risultato appare nel grandstaff dove può essere suonato, editato, e analizzato. In futuro si potrà aggiungere l'inserimento inline (Opzione B) come evoluzione.
+
+**Obiettivo:** Implementare l'engine per creare corali a 4 voci (SATB) inserendo Roman numerals / cifre del basso figurato.
+
+**Ordine di sviluppo:**
+1. `src/engine/choralRealization.ts` — engine puro, zero dipendenze React/UI, testabile con unit test
+2. Menu action `GENERATE_FROM_ROMAN` + bridge IPC (contratto Electron)
+3. `src/components/RomanProgressionEditor.tsx` — UI minimale per input progressione
+4. Integrazione: output → GrandStaffEditor notes via `onImportNotes(notes: StaffNote[])`
+5. Feedback loop: analisi armonica evidenzia violazioni sulla partitura generata (gratis)
+
+**Primo passo concreto:** Creare `src/engine/choralRealization.ts` con le funzioni base di voice leading.
+
+**Leggere:** La sezione "Progetto Futuro — Chorale Harmonization Engine" sopra per architettura a 3 livelli.
 
 ---
 

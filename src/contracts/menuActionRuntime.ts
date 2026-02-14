@@ -38,6 +38,7 @@ export const MENU_ACTIONS = {
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice',
   SET_APP_MODE: 'set-app-mode',
+  GENERATE_FROM_ROMAN: 'generate-from-roman',
 } as const satisfies typeof import('../../shared/menuActionRegistry').MENU_ACTIONS;
 
 const MENU_ACTION_SET: ReadonlySet<string> = new Set(Object.values(MENU_ACTIONS));
@@ -116,6 +117,10 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
       if (mode !== 'scales' && mode !== 'chords' && mode !== 'intervals' && mode !== 'editor' && mode !== 'grandStaff') return null;
       return { mode } as MenuActionPayloadMap[A];
     }
+
+    // Chorale generation — no payload (UI handles config)
+    case MENU_ACTIONS.GENERATE_FROM_ROMAN:
+      return undefined as MenuActionPayloadMap[A];
 
     default:
       return undefined as MenuActionPayloadMap[A];

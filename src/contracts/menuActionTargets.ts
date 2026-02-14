@@ -36,6 +36,9 @@ export const MENU_ACTION_TARGET: Record<MenuAction, MenuActionTarget> = {
 
   [MENU_ACTIONS.SET_SELECT_ONLY_VOICE]: 'grandStaff',
 
+  // Chorale generation panel
+  [MENU_ACTIONS.GENERATE_FROM_ROMAN]: 'grandStaff',
+
   // App-level routing (view switching)
   [MENU_ACTIONS.SET_APP_MODE]: 'app',
 };

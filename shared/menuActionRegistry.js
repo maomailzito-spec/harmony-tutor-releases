@@ -44,6 +44,7 @@ const MENU_ACTIONS = Object.freeze({
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice',
   SET_APP_MODE: 'set-app-mode',
+  GENERATE_FROM_ROMAN: 'generate-from-roman',
 });
 
 const MENU_ACTION_SET = new Set(Object.values(MENU_ACTIONS));
@@ -118,6 +119,10 @@ function normalizeMenuActionPayload(action, payload) {
       if (mode !== 'scales' && mode !== 'chords' && mode !== 'intervals' && mode !== 'editor' && mode !== 'grandStaff') return null;
       return { mode };
     }
+
+    // Chorale generation — no payload (UI handles config)
+    case MENU_ACTIONS.GENERATE_FROM_ROMAN:
+      return undefined;
 
     // Actions with no payload
     default:
