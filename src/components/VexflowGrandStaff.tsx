@@ -1260,11 +1260,24 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Upper voice rests (1, 3) push UP; lower voice rests (2, 4) push DOWN.
         // When the adjacent note moves away, the rest returns to its baseline.
         const isPartiLate = staffMode === 'grandstaff' && !isClosePositionTreble;
+        const isPartiStrette = staffMode === 'grandstaff' && isClosePositionTreble;
 
         // Adjacent voice map: which voice's notes does this rest avoid?
-        // Same-staff pairs: treble 1↔2, bass 3↔4.
-        // Cross-staff: alto (2) also avoids tenor (3), tenor (3) also avoids alto (2).
+        // Parti late  — treble 1↔2, bass 3↔4, cross-staff 2↔3.
+        // Parti strette — treble 1↔2↔3, bass 4; cross-staff 3↔4.
         const getAdjacentVoices = (voice: number, staveClef: string): number[] => {
+          if (isPartiStrette) {
+            // Close position: voices 1,2,3 on treble, voice 4 on bass
+            if (staveClef === 'treble') {
+              if (voice === 1) return [2];
+              if (voice === 2) return [1, 3];
+              if (voice === 3) return [2, 4]; // tenor avoids alto + bass (cross-staff)
+            } else if (staveClef === 'bass') {
+              if (voice === 4) return [3]; // bass avoids tenor (cross-staff on treble)
+            }
+            return [];
+          }
+          // Parti late: voices 1,2 on treble, voices 3,4 on bass
           if (staveClef === 'treble') {
             if (voice === 1) return [2];
             if (voice === 2) return [1, 3]; // alto avoids soprano AND tenor (cross-staff)
@@ -1359,8 +1372,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               }
             }
 
-            // --- Rest collision avoidance for all adjacent voice pairs (parti late) ---
-            if (isPartiLate) {
+            // --- Rest collision avoidance for all adjacent voice pairs (parti late & strette) ---
+            if (isPartiLate || isPartiStrette) {
               const adjVoices = getAdjacentVoices(voice, clef);
               if (adjVoices.length > 0) {
                 // Find all non-rest notes from adjacent voices that overlap in time.
