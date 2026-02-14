@@ -5,7 +5,7 @@
  * scroll-anchor correction, auto-reset on background click, and base-size
  * measurement for the zoom spacer.
  */
-import { useState, useCallback, useRef, useLayoutEffect, type RefObject } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, type RefObject } from 'react';
 import { getString, setString } from '../storage/localStorage';
 import { HT_EDITOR_ZOOM_KEY } from '../storage/storageKeys';
 
@@ -15,7 +15,6 @@ const ZOOM_MAX = 2.5;
 export interface UseEditorZoomResult {
     editorZoom: number;
     resetEditorZoom: () => void;
-    handleScoreWheel: (e: React.WheelEvent) => void;
     handleScoreMouseDownCapture: (e: React.MouseEvent) => void;
     zoomSpacerRef: RefObject<HTMLDivElement | null>;
     zoomBaseSize: { w: number; h: number };
@@ -52,49 +51,51 @@ export function useEditorZoom(
         targetZoom: number;
     }>(null);
 
-    const handleScoreWheel = useCallback((e: React.WheelEvent) => {
-        // Pinch gesture (trackpad) => wheel with ctrlKey=true.
-        // Prevent page zoom and apply editor zoom.
-        if (!e.ctrlKey) return;
+    // Pinch gesture (trackpad) => wheel with ctrlKey=true.
+    // Attached as native listener with { passive: false } so preventDefault() works.
+    useEffect(() => {
+        const el = scoreScrollRef.current;
+        if (!el) return;
+        const handler = (e: WheelEvent) => {
+            if (!e.ctrlKey) return;
 
-        const scroller = scoreScrollRef.current;
-        const rect = scroller?.getBoundingClientRect?.();
-        const pointerX = rect ? (Number(e.clientX) - rect.left) : 0;
-        const pointerY = rect ? (Number(e.clientY) - rect.top) : 0;
-        const startScrollLeft = scroller ? Number(scroller.scrollLeft) : 0;
-        const startScrollTop = scroller ? Number(scroller.scrollTop) : 0;
-        try {
+            const scroller = scoreScrollRef.current;
+            const rect = scroller?.getBoundingClientRect?.();
+            const pointerX = rect ? (Number(e.clientX) - rect.left) : 0;
+            const pointerY = rect ? (Number(e.clientY) - rect.top) : 0;
+            const startScrollLeft = scroller ? Number(scroller.scrollLeft) : 0;
+            const startScrollTop = scroller ? Number(scroller.scrollTop) : 0;
             e.preventDefault();
             e.stopPropagation();
-        } catch {
-            // ignore
-        }
 
-        const dy = Number(e.deltaY);
-        if (!Number.isFinite(dy) || Math.abs(dy) < 0.01) return;
+            const dy = Number(e.deltaY);
+            if (!Number.isFinite(dy) || Math.abs(dy) < 0.01) return;
 
-        // Smooth exponential zoom curve.
-        const factor = Math.pow(1.0015, -dy);
-        setEditorZoom((prev) => {
-            const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prev * factor));
-            try { setString(HT_EDITOR_ZOOM_KEY, String(Math.round(next * 1000) / 1000)); } catch { /* ignore */ }
+            // Smooth exponential zoom curve.
+            const factor = Math.pow(1.0015, -dy);
+            setEditorZoom((prev) => {
+                const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prev * factor));
+                try { setString(HT_EDITOR_ZOOM_KEY, String(Math.round(next * 1000) / 1000)); } catch { /* ignore */ }
 
-            // Keep the content under the pointer stable while zooming.
-            // We apply the actual scroll correction in a layout effect after the zoom renders,
-            // to avoid one-frame lag/jitter (especially noticeable in page view).
-            try {
-                if (scroller && rect && Number.isFinite(pointerX) && Number.isFinite(pointerY)) {
-                    const baseX = (startScrollLeft + pointerX) / Math.max(1e-6, prev);
-                    const baseY = (startScrollTop + pointerY) / Math.max(1e-6, prev);
-                    pendingZoomAnchorRef.current = { baseX, baseY, pointerX, pointerY, targetZoom: next };
-                } else {
+                // Keep the content under the pointer stable while zooming.
+                // We apply the actual scroll correction in a layout effect after the zoom renders,
+                // to avoid one-frame lag/jitter (especially noticeable in page view).
+                try {
+                    if (scroller && rect && Number.isFinite(pointerX) && Number.isFinite(pointerY)) {
+                        const baseX = (startScrollLeft + pointerX) / Math.max(1e-6, prev);
+                        const baseY = (startScrollTop + pointerY) / Math.max(1e-6, prev);
+                        pendingZoomAnchorRef.current = { baseX, baseY, pointerX, pointerY, targetZoom: next };
+                    } else {
+                        pendingZoomAnchorRef.current = null;
+                    }
+                } catch {
                     pendingZoomAnchorRef.current = null;
                 }
-            } catch {
-                pendingZoomAnchorRef.current = null;
-            }
-            return next;
-        });
+                return next;
+            });
+        };
+        el.addEventListener('wheel', handler, { passive: false });
+        return () => el.removeEventListener('wheel', handler);
     }, [scoreScrollRef]);
 
     useLayoutEffect(() => {
@@ -191,7 +192,6 @@ export function useEditorZoom(
     return {
         editorZoom,
         resetEditorZoom,
-        handleScoreWheel,
         handleScoreMouseDownCapture,
         zoomSpacerRef,
         zoomBaseSize,

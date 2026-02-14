@@ -1335,7 +1335,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const notes = useMemo(() => calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges), [normalizedRawNotes, timeSignature, timeSignatureChanges]);
 
     // Editor zoom (extracted to useEditorZoom hook)
-    const { editorZoom, resetEditorZoom, handleScoreWheel, handleScoreMouseDownCapture, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
+    const { editorZoom, resetEditorZoom, handleScoreMouseDownCapture, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
 
     const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = usePreference<boolean>('editor.selectOnlyCurrentVoice');
 
@@ -6634,7 +6634,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
                     onMouseDownCapture={handleScoreMouseDownCapture}
                     onClick={handleDeselectOnClickOutside}
-                    onWheel={handleScoreWheel}
                 >
                     <div style={{ position: 'relative' }}>
                         {/* Spacer: defines scrollable area (scaled size) */}
