@@ -69,6 +69,9 @@ export type ChoralConfig = {
    * Note: if sopranoMelody is also provided, voice 1 is already handled by that.
    */
   lockedVoices?: Record<number, SopranoConstraint[]>;
+  /** When false, the engine will never add automatic sevenths (only explicit V7/viio7 etc.).
+   *  Defaults to true. */
+  autoSevenths?: boolean;
 };
 
 /** A single soprano constraint point (one note of the given melody). */

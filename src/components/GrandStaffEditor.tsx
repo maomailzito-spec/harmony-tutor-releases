@@ -2559,6 +2559,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
     }, [analyzedNotes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures]);
 
+    // Compute current playhead measure for choral panel insertion.
+    const playheadMeasureForChoral = useMemo(() => {
+        if (pasteCaret) return pasteCaret.measureIndex;
+        if (!playheadPosition || !layoutData?.systemsParams) return 0;
+        const sys = layoutData.systemsParams[playheadPosition.systemIndex];
+        if (!sys) return 0;
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < (sys.startMeasuresX || []).length; i++) {
+            const dist = Math.abs((sys.startMeasuresX[i] ?? 0) - playheadPosition.x);
+            if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+        }
+        return sys.measureIndices[bestIdx] ?? 0;
+    }, [pasteCaret, playheadPosition, layoutData]);
+
     // Keep a ref to the latest layoutData so async callbacks can read current layout
     const layoutDataRef = useRef(layoutData);
     useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
@@ -6700,18 +6715,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isOpen={isRomanEditorOpen}
                 onClose={() => setIsRomanEditorOpen(false)}
                 onApplyNotes={(notes) => {
-                    if (latestRawNotes.current.length > 0) {
-                        const confirmed = window.confirm('Applicare il corale generato? Le note attuali verranno sostituite.');
-                        if (!confirmed) return;
+                    const minMI = notes.length > 0 ? Math.min(...notes.map(n => (n as any).measureIndex ?? 0)) : 0;
+                    if (minMI > 0 && latestRawNotes.current.length > 0) {
+                        // Merge: keep existing notes before insertion point
+                        const existing = latestRawNotes.current.filter(n => (n.measureIndex ?? 0) < minMI);
+                        setRawNotes([...existing, ...notes] as any);
+                    } else {
+                        if (latestRawNotes.current.length > 0) {
+                            const confirmed = window.confirm('Applicare il corale generato? Le note attuali verranno sostituite.');
+                            if (!confirmed) return;
+                        }
+                        setRawNotes(notes as any);
+                        setAnalysisContexts([]);
+                        setHarmonyOverrides([]);
                     }
-                    setRawNotes(notes as any);
-                    setAnalysisContexts([]);
-                    setHarmonyOverrides([]);
                 }}
                 keySignatureRoot={keySignatureRoot}
                 isMinorMode={isMinorMode}
                 timeSignature={timeSignature}
                 existingNotes={rawNotes}
+                playheadMeasure={playheadMeasureForChoral}
             />
 
             

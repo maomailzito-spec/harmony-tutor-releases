@@ -8,6 +8,7 @@
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { StaffNote, TimeSignature } from '../types';
+import { TICKS_PER_QUARTER } from '../constants';
 import {
   realizeChorale,
   parseRoman,
@@ -31,6 +32,8 @@ export interface RomanProgressionEditorProps {
   timeSignature: TimeSignature;
   /** Existing notes on the staff — used to extract soprano melody for constrained harmonization. */
   existingNotes?: StaffNote[];
+  /** Measure offset: generated notes will start from this measure index (playhead position). */
+  playheadMeasure?: number;
 }
 
 // ─── Preset progressions ──────────────────────────────────────────────────
@@ -44,6 +47,10 @@ const PRESETS: { label: string; chords: string; minor?: boolean }[] = [
   { label: 'I–IV–V7–I', chords: 'I - IV - V7 - I' },
   { label: 'ii–V–I', chords: 'ii - V7 - I' },
   { label: 'I–vi–IV–V', chords: 'I - vi - IV - V' },
+  { label: 'I–V–vi–IV', chords: 'I - V - vi - IV' },
+  { label: 'ii–I–vi–V', chords: 'ii - I - vi - V' },
+  { label: 'IV–I–vi–V', chords: 'IV - I - vi - V' },
+  { label: 'vi–IV–I–V', chords: 'vi - IV - I - V' },
   { label: 'i–iv–V–i (minore)', chords: 'i - iv - V - i', minor: true },
 ];
 
@@ -230,6 +237,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   isMinorMode,
   timeSignature,
   existingNotes,
+  playheadMeasure,
 }) => {
   const [progressionText, setProgressionText] = useState('I - IV - V7 - I');
   const [localTonic, setLocalTonic] = useState(keySignatureRoot);
@@ -242,6 +250,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const [allowParallel8ves, setAllowParallel8ves] = useState(false);
   const [allowCrossing, setAllowCrossing] = useState(false);
   const [doubleRoot, setDoubleRoot] = useState(true);
+  const [autoSevenths, setAutoSevenths] = useState(true);
 
   // Melody constraint mode
   const [useMelody, setUseMelody] = useState(false);
@@ -261,9 +270,16 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   }, [existingNotes]);
 
   // Voice locking: set of voice numbers (1=S, 2=A, 3=T, 4=B) to keep fixed on re-generate
-  const [lockedVoices, setLockedVoices] = useState<Set<number>>(new Set());
-  const toggleLock = useCallback((v: number) => {
-    setLockedVoices(prev => {
+  const [enabledVoices, setEnabledVoices] = useState<Set<number>>(new Set([1, 2, 3, 4]));
+  const [insertMeasure, setInsertMeasure] = useState(0);
+  // Sync insertMeasure from prop only when panel first opens
+  const prevOpenRef = useRef(false);
+  useEffect(() => {
+    if (isOpen && !prevOpenRef.current) setInsertMeasure(playheadMeasure ?? 0);
+    prevOpenRef.current = isOpen;
+  }, [isOpen, playheadMeasure]);
+  const toggleEnable = useCallback((v: number) => {
+    setEnabledVoices(prev => {
       const next = new Set(prev);
       if (next.has(v)) next.delete(v); else next.add(v);
       return next;
@@ -274,6 +290,31 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const [generatedNotes, setGeneratedNotes] = useState<StaffNote[] | null>(null);
   const [violations, setViolations] = useState<ChoralViolation[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Custom user-saved progressions (persisted in localStorage)
+  const CUSTOM_PROGS_KEY = 'harmony-tutor:custom-progressions';
+  const [customPresets, setCustomPresets] = useState<{ label: string; chords: string; minor?: boolean }[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CUSTOM_PROGS_KEY);
+      if (raw) setCustomPresets(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+  const saveCustomPreset = useCallback(() => {
+    const chords = progressionText.trim();
+    if (!chords) return;
+    const label = chords.replace(/\s*-\s*/g, '–');
+    const exists = customPresets.some(p => p.chords === chords);
+    if (exists) return;
+    const next = [...customPresets, { label, chords, minor: localMinor ? true : undefined }];
+    setCustomPresets(next);
+    try { localStorage.setItem(CUSTOM_PROGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }, [progressionText, localMinor, customPresets]);
+  const deleteCustomPreset = useCallback((idx: number) => {
+    const next = customPresets.filter((_, i) => i !== idx);
+    setCustomPresets(next);
+    try { localStorage.setItem(CUSTOM_PROGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }, [customPresets]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -313,7 +354,18 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const handleGenerate = useCallback(() => {
     try {
       setError(null);
-      const progression = parseProgressionString(progressionText, localTs, selectedDuration);
+      let progression = parseProgressionString(progressionText, localTs, selectedDuration);
+      // Auto-harmonize when melody mode is active and no progression text
+      if (progression.length === 0 && useMelody && sopranoFromScore.length > 0) {
+        const constraints: SopranoConstraint[] = sopranoFromScore.map(n => ({
+          midi: n.midi,
+          measure: n.measureIndex ?? 0,
+          beat: n.beat ?? 1,
+        }));
+        const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
+        progression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+        setProgressionText(progression.map(c => c.roman).join(' - '));
+      }
       if (progression.length === 0) {
         setError('Inserisci almeno un accordo.');
         return;
@@ -330,6 +382,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           allowOverlap: false,
           doubleRoot,
         },
+        autoSevenths,
       };
 
       // Melody constraint: fix soprano from existing voice 1 notes
@@ -345,37 +398,41 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       resetNoteIdCounter();
       const result = realizeChorale(progression, config);
 
-      // If there are locked voices and a previous generation, overlay locked voice notes
-      let finalNotes = result.notes;
-      if (lockedVoices.size > 0 && generatedNotes && generatedNotes.length > 0) {
-        const unlocked = result.notes.filter(n => !lockedVoices.has(n.voice ?? 1));
-        const locked = generatedNotes.filter(n => lockedVoices.has(n.voice ?? 1));
-        finalNotes = [...locked, ...unlocked];
-      }
-
-      setGeneratedNotes(finalNotes);
+      setGeneratedNotes(result.notes);
       setViolations(result.violations);
     } catch (err: any) {
       setError(err?.message || 'Errore durante la generazione.');
       setGeneratedNotes(null);
       setViolations([]);
     }
-  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, useMelody, sopranoFromScore, lockedVoices, generatedNotes]);
+  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, useMelody, sopranoFromScore, harmonicRhythmBeats]);
 
   // Apply to editor
   const handleApply = useCallback(() => {
     if (!generatedNotes || generatedNotes.length === 0) return;
+    const offset = insertMeasure;
+    // Filter by enabled voices
+    const voiceFiltered = enabledVoices.size < 4
+      ? generatedNotes.filter(n => enabledVoices.has(n.voice ?? 1))
+      : generatedNotes;
+    // Offset both measureIndex AND startTick so calculateNoteBeats doesn't reset them
+    const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
+    const ticksPerMeasure = beatsPerMeasure * TICKS_PER_QUARTER;
+    const applyOffset = (notes: StaffNote[]) =>
+      offset > 0 ? notes.map(n => ({
+        ...n,
+        measureIndex: (n.measureIndex ?? 0) + offset,
+        startTick: ((n as any).startTick ?? 0) + offset * ticksPerMeasure,
+      })) : notes;
     if (useMelody && sopranoFromScore.length > 0) {
-      // In melody mode: only replace inner voices (A/T/B = voices 2,3,4),
-      // keep the original soprano (voice 1) from existingNotes.
       const sopranoOriginals = (existingNotes || []).filter(n => n && (n.voice === 1 || n.voice === undefined));
-      const generatedInner = generatedNotes.filter(n => n.voice !== 1);
-      onApplyNotes([...sopranoOriginals, ...generatedInner]);
+      const generatedInner = voiceFiltered.filter(n => n.voice !== 1);
+      onApplyNotes([...sopranoOriginals, ...applyOffset(generatedInner)]);
     } else {
-      onApplyNotes(generatedNotes);
+      onApplyNotes(applyOffset(voiceFiltered));
     }
     onClose();
-  }, [generatedNotes, onApplyNotes, onClose, useMelody, sopranoFromScore, existingNotes]);
+  }, [generatedNotes, onApplyNotes, onClose, useMelody, sopranoFromScore, existingNotes, insertMeasure, enabledVoices, localTs]);
 
   // Load preset
   const handlePreset = useCallback((preset: typeof PRESETS[number]) => {
@@ -430,6 +487,85 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
               onKeyDown={e => { if (e.key === 'Enter') handleGenerate(); }}
             />
+
+            {/* ── Degree quick-insert buttons ── */}
+            {(() => {
+              const DEGREES_MAJ = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'viio'];
+              const DEGREES_MIN = ['i', 'iio', 'III', 'iv', 'V', 'VI', 'VII'];
+              const degrees = localMinor ? DEGREES_MIN : DEGREES_MAJ;
+              const INVERSIONS_TRIAD = ['6', '6/4'];
+              const INVERSIONS_7TH = ['6/5', '4/3', '4/2'];
+
+              // Flip quality: IV→iv, ii→II, etc.
+              const flipCase = (deg: string): string => {
+                const core = deg.replace(/[o+]$/g, ''); // strip trailing ° or +
+                const suffix = deg.slice(core.length);
+                const isUpper = core === core.toUpperCase();
+                return (isUpper ? core.toLowerCase() : core.toUpperCase()) + suffix;
+              };
+
+              const appendChord = (deg: string) => {
+                setProgressionText(prev => {
+                  const t = prev.trim();
+                  return t ? t + ' - ' + deg : deg;
+                });
+                setGeneratedNotes(null); setViolations([]); setError(null);
+              };
+
+              const appendSuffix = (suffix: string) => {
+                setProgressionText(prev => {
+                  const t = prev.trim();
+                  if (!t) return t;
+                  // Remove trailing separator if any, then append suffix to last token
+                  const parts = t.split(/\s*[-,]\s*/);
+                  const last = parts[parts.length - 1];
+                  parts[parts.length - 1] = last + suffix;
+                  return parts.join(' - ');
+                });
+                setGeneratedNotes(null); setViolations([]); setError(null);
+              };
+
+              const removeLast = () => {
+                setProgressionText(prev => {
+                  const parts = prev.trim().split(/\s*[-,]\s*/).filter(Boolean);
+                  parts.pop();
+                  return parts.join(' - ');
+                });
+                setGeneratedNotes(null); setViolations([]); setError(null);
+              };
+
+              const btnCls = 'px-1.5 py-0.5 text-[11px] rounded font-bold transition-colors bg-slate-700 text-gray-300 hover:bg-slate-600 hover:text-white';
+              const sepCls = 'w-px h-5 bg-gray-600 mx-0.5';
+
+              return (
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {degrees.map((deg, i) => (
+                    <button key={i}
+                      onClick={(e) => appendChord(e.altKey || e.shiftKey ? flipCase(deg) : deg)}
+                      className={btnCls}
+                      title={`${deg} (Shift/Alt+click → ${flipCase(deg)})`}>{deg}</button>
+                  ))}
+                  <div className={sepCls} />
+                  <button onClick={() => appendSuffix('7')} className={btnCls} title="Aggiungi 7ª">7</button>
+                  <button onClick={() => appendSuffix('o')} className={btnCls} title="Diminuito (°)">°</button>
+                  <button onClick={() => appendSuffix('+')} className={btnCls} title="Aumentato (+)">+</button>
+                  <div className={sepCls} />
+                  {INVERSIONS_TRIAD.map(inv => (
+                    <button key={inv} onClick={() => appendSuffix(inv)} className={btnCls}
+                      title={`Rivolto ${inv}`}>{inv}</button>
+                  ))}
+                  <div className={sepCls} />
+                  {INVERSIONS_7TH.map(inv => (
+                    <button key={inv} onClick={() => appendSuffix(inv)} className={btnCls}
+                      title={`Rivolto 7ª: ${inv}`}>{inv}</button>
+                  ))}
+                  <div className={sepCls} />
+                  <button onClick={removeLast} className={btnCls + ' text-red-400 hover:text-red-300'}
+                    title="Rimuovi ultimo accordo">⌫</button>
+                </div>
+              );
+            })()}
+
             <details className="mt-1">
               <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 select-none">Guida sintassi</summary>
               <div className="mt-1 p-2 bg-slate-800 rounded border border-slate-700 text-[10px] text-gray-400 leading-relaxed grid grid-cols-2 gap-x-4 gap-y-0.5">
@@ -453,19 +589,57 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             </details>
           </div>
 
-          {/* Presets */}
+          {/* Presets (dropdown) */}
           <div className="mb-4">
-            <label className="block text-xs text-gray-300 mb-1">Preset</label>
-            <div className="flex flex-wrap gap-1">
-              {PRESETS.map((p, i) => (
+            <label className="block text-xs text-gray-300 mb-1">Progressioni</label>
+            <div className="flex items-center gap-2">
+              <select
+                value=""
+                onChange={e => {
+                  const val = e.target.value;
+                  if (!val) return;
+                  // Format: "builtin:INDEX" or "custom:INDEX"
+                  const [type, idxStr] = val.split(':');
+                  const idx = Number(idxStr);
+                  const list = type === 'custom' ? customPresets : PRESETS;
+                  const preset = list[idx];
+                  if (preset) handlePreset(preset);
+                }}
+                className="flex-1 bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
+              >
+                <option value="">Seleziona progressione…</option>
+                <optgroup label="Cadenze e progressioni">
+                  {PRESETS.map((p, i) => (
+                    <option key={`b-${i}`} value={`builtin:${i}`}>{p.label}</option>
+                  ))}
+                </optgroup>
+                {customPresets.length > 0 && (
+                  <optgroup label="Le mie progressioni">
+                    {customPresets.map((p, i) => (
+                      <option key={`c-${i}`} value={`custom:${i}`}>{p.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <button
+                onClick={saveCustomPreset}
+                disabled={!progressionText.trim()}
+                className="px-2 py-2 text-xs rounded bg-emerald-700 hover:bg-emerald-600 text-white
+                  disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Salva la progressione corrente nei preferiti"
+              >💾</button>
+              {customPresets.length > 0 && (
                 <button
-                  key={i}
-                  onClick={() => handlePreset(p)}
-                  className="px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600"
-                >
-                  {p.label}
-                </button>
-              ))}
+                  onClick={() => {
+                    const idx = customPresets.findIndex(p => p.chords === progressionText.trim());
+                    if (idx >= 0) deleteCustomPreset(idx);
+                  }}
+                  disabled={!customPresets.some(p => p.chords === progressionText.trim())}
+                  className="px-2 py-2 text-xs rounded bg-red-800 hover:bg-red-700 text-white
+                    disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Elimina questa progressione dai preferiti"
+                >🗑</button>
+              )}
             </div>
           </div>
 
@@ -544,6 +718,10 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 <input type="checkbox" checked={allowCrossing} onChange={() => setAllowCrossing(v => !v)} className="accent-cyan-500" />
                 Permetti voice crossing
               </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" checked={autoSevenths} onChange={() => setAutoSevenths(v => !v)} className="accent-cyan-500" />
+                Auto 7ª
+              </label>
             </div>
           </div>
 
@@ -566,7 +744,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <span className="text-amber-300 font-semibold">{sopranoFromScore.length}</span> note soprano trovate
-                    {' \u2014 '}il motore generer\u00e0 solo Alto, Tenore e Basso.
+                    {' — '}il motore genererà solo Alto, Tenore e Basso.
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <label className="text-[10px] text-gray-400 whitespace-nowrap">Ritmo arm.:</label>
@@ -641,37 +819,57 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             </div>
           )}
 
-          {/* Voice lock toggles — shown after first generation */}
+          {/* Voice enable toggles — shown after first generation */}
           {generatedNotes && generatedNotes.length > 0 && (
             <div className="flex items-center gap-3 p-2 bg-slate-800 rounded border border-slate-700">
-              <span className="text-[10px] text-gray-400 mr-1">🔒 Blocca voci:</span>
+              <span className="text-[10px] text-gray-400 mr-1">🎵 Genera voci:</span>
               {([
-                { v: 1, label: 'S', lockedCls: 'bg-cyan-600 text-white ring-1 ring-cyan-400' },
-                { v: 2, label: 'A', lockedCls: 'bg-green-600 text-white ring-1 ring-green-400' },
-                { v: 3, label: 'T', lockedCls: 'bg-amber-600 text-white ring-1 ring-amber-400' },
-                { v: 4, label: 'B', lockedCls: 'bg-red-600 text-white ring-1 ring-red-400' },
-              ] as const).map(({ v, label, lockedCls }) => (
+                { v: 1, label: 'S', enabledCls: 'bg-cyan-600 text-white ring-1 ring-cyan-400' },
+                { v: 2, label: 'A', enabledCls: 'bg-green-600 text-white ring-1 ring-green-400' },
+                { v: 3, label: 'T', enabledCls: 'bg-amber-600 text-white ring-1 ring-amber-400' },
+                { v: 4, label: 'B', enabledCls: 'bg-red-600 text-white ring-1 ring-red-400' },
+              ] as const).map(({ v, label, enabledCls }) => (
                 <button
                   key={v}
-                  onClick={() => toggleLock(v)}
+                  onClick={() => toggleEnable(v)}
+                  disabled={v === 1 && useMelody}
                   className={`px-2 py-0.5 text-[11px] rounded font-bold transition-colors
-                    ${lockedVoices.has(v)
-                      ? lockedCls
-                      : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}
-                  title={lockedVoices.has(v)
-                    ? `${label} bloccato — verrà mantenuto alla rigenerazione`
-                    : `Blocca ${label} — mantieni questa voce e rigenera le altre`}
+                    ${v === 1 && useMelody
+                      ? 'bg-slate-800 text-gray-600 cursor-not-allowed'
+                      : enabledVoices.has(v)
+                        ? enabledCls
+                        : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}
+                  title={v === 1 && useMelody
+                    ? 'Soprano vincolato dalla melodia'
+                    : enabledVoices.has(v)
+                      ? `${label} abilitato — verrà rigenerato`
+                      : `${label} disabilitato — mantenuto dalla generazione precedente`}
                 >
-                  {lockedVoices.has(v) ? '🔒' : '🔓'} {label}
+                  {enabledVoices.has(v) ? '✓' : '✗'} {label}
                 </button>
               ))}
-              {lockedVoices.size > 0 && (
+              {enabledVoices.size < 4 && (
                 <span className="text-[9px] text-amber-300 ml-1">
-                  Rigenera: solo le voci sbloccate cambieranno
+                  Rigenera: solo le voci abilitate cambieranno
                 </span>
               )}
             </div>
           )}
+
+          {/* Inserisci dalla misura (1-indexed for UI, 0-indexed internally) */}
+          <div className="flex items-center gap-2 mb-3">
+            <label className="text-xs text-gray-300">Inserisci dalla misura:</label>
+            <input
+              type="number"
+              min={1}
+              value={insertMeasure + 1}
+              onChange={e => setInsertMeasure(Math.max(0, (Number(e.target.value) || 1) - 1))}
+              className="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white text-center"
+            />
+            {insertMeasure > 0 && (
+              <span className="text-[9px] text-cyan-300">Le note precedenti (mis. 1–{insertMeasure}) verranno mantenute</span>
+            )}
+          </div>
 
           {/* Action buttons */}
           <div className="flex gap-2 justify-end">
@@ -679,7 +877,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               onClick={handleGenerate}
               className="px-4 py-2 text-sm rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-semibold
                 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={progressionText.trim().length === 0}
+              disabled={progressionText.trim().length === 0 && !(useMelody && sopranoFromScore.length > 0)}
             >
               Genera
             </button>
