@@ -18,6 +18,8 @@ import {
   TOOLBAR_PREFS_KEY,
   EXPORT_INCLUDE_TITLE_KEY,
   ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY,
+  AUTO_SAVE_INTERVAL_KEY,
+  ANALYSIS_STATISTICAL_CORRECTION_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
@@ -30,6 +32,7 @@ export type PreferenceId =
   | 'editor.showVoiceColors'
   | 'editor.showQuickInsertBar'
   | 'editor.selectOnlyCurrentVoice'
+  | 'editor.autoSaveInterval'
   | 'render.engravingMode'
   | 'analysis.showRomanAnalysis'
   | 'analysis.showSymbolAnalysis'
@@ -39,6 +42,7 @@ export type PreferenceId =
   | 'analysis.enableInferredContexts'
   | 'analysis.harmonyLabelMinSpanBeats'
   | 'analysis.filters'
+  | 'analysis.useStatisticalCorrection'
   | 'export.includeTitle'
   | 'debug.showHarmonyDebug';
 
@@ -195,6 +199,27 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
+  'editor.autoSaveInterval': {
+    id: 'editor.autoSaveInterval',
+    section: 'Editor',
+    label: 'Salvataggio automatico',
+    storageKey: AUTO_SAVE_INTERVAL_KEY,
+    defaultValue: 0 as number,
+    kind: 'enum',
+    options: [
+      { value: 0, label: 'Off' },
+      { value: 30, label: '30 secondi' },
+      { value: 60, label: '1 minuto' },
+      { value: 120, label: '2 minuti' },
+      { value: 300, label: '5 minuti' },
+    ],
+    parse: (raw) => {
+      const v = Number(raw);
+      return [0, 30, 60, 120, 300].includes(v) ? v : 0;
+    },
+    serialize: (value: number) => String(value),
+  },
+
   'render.engravingMode': {
     id: 'render.engravingMode',
     section: 'Render',
@@ -343,6 +368,17 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
         return JSON.stringify({ showError: true, showWarning: true, showException: true, disabledRuleIds: {} });
       }
     },
+  },
+
+  'analysis.useStatisticalCorrection': {
+    id: 'analysis.useStatisticalCorrection',
+    section: 'Analysis',
+    label: 'Correzione statistica progressioni',
+    storageKey: ANALYSIS_STATISTICAL_CORRECTION_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
   'export.includeTitle': {

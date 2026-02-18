@@ -18,6 +18,7 @@ import {
     computeStructuralSnapshotForHarmonyLabelEvent,
     filterTimelineForHarmonyLabels,
     getNearAbsBeat,
+    structuralNotes,
     isCompoundMeter,
     isStrongPulseInMeasure,
     qAbsBeat,
@@ -56,6 +57,8 @@ export function computeHarmonyLabelsBySystem(opts: {
     startX: number;
     measurePaddingX: number;
     harmonyLabelMinSpanBeats?: number;
+    useStatisticalCorrection?: boolean;
+    ornamentOverrideMap?: Map<string, string>;
 }): HarmonyLabelPoint[][] {
     const {
         isAnalysisEnabled,
@@ -132,10 +135,15 @@ export function computeHarmonyLabelsBySystem(opts: {
         minorScaleMode,
         ctxAtAbsBeat,
         noteNameToChromaticIndex,
-        getRomanAnalysis: (notes: any[], tonic: string, isMinor: boolean) => getRomanAnalysis(notes as any, tonic, isMinor, { minorScaleMode }),
+        getRomanAnalysis: (notes: any[], tonic: string, isMinor: boolean) => {
+            const ornOvRec: Record<string, string> = {};
+            if (opts.ornamentOverrideMap) { for (const [k, v] of opts.ornamentOverrideMap.entries()) ornOvRec[k] = v; }
+            return getRomanAnalysis(structuralNotes(notes, opts.ornamentOverrideMap) as any, tonic, isMinor, { minorScaleMode, ornamentOverrides: ornOvRec });
+        },
         identifyChordCandidates,
         pcSetFromNotes,
         overrideByAbsBeat,
+        useStatisticalCorrection,
     });
 
     const labelsBySystem: HarmonyLabelPoint[][] = (layoutData.systemsParams || []).map(() => []);

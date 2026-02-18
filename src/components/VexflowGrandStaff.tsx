@@ -409,6 +409,13 @@ const getNoteTimeKey = (n: StaffNote): string => {
   return `${n.measureIndex ?? -1}|${n.beat ?? -1}|${n.duration ?? 'q'}|${n.isDotted ? 'd' : 'n'}`;
 };
 
+/** Onset-only key (ignoring duration) — for cross-duration collision avoidance */
+const getNoteOnsetKey = (n: StaffNote): string => {
+  const st = (n as any).startTick;
+  if (typeof st === 'number') return `${st}`;
+  return `${n.measureIndex ?? -1}|${n.beat ?? -1}`;
+};
+
 function keySignatureToVexflowString(keySignature: KeySignature): string {
   const sharpKeys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
   const flatKeys = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
@@ -737,6 +744,31 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         ctxAny.stroke?.();
       };
 
+      // Helper: draw repeat dots between staff lines 1-2 and 2-3 on each stave
+      const drawDots = (dotX: number) => {
+        ctxAny.setLineWidth?.(1);
+        // Treble (or top) stave dots
+        const td1 = topStave.getYForLine(1.5);
+        const td2 = topStave.getYForLine(2.5);
+        ctxAny.beginPath?.();
+        ctxAny.arc?.(dotX, td1, 1.8, 0, Math.PI * 2);
+        ctxAny.fill?.();
+        ctxAny.beginPath?.();
+        ctxAny.arc?.(dotX, td2, 1.8, 0, Math.PI * 2);
+        ctxAny.fill?.();
+        // Bass (or bottom) stave dots — only if different from top
+        if (bottomStave !== topStave) {
+          const bd1 = bottomStave.getYForLine(1.5);
+          const bd2 = bottomStave.getYForLine(2.5);
+          ctxAny.beginPath?.();
+          ctxAny.arc?.(dotX, bd1, 1.8, 0, Math.PI * 2);
+          ctxAny.fill?.();
+          ctxAny.beginPath?.();
+          ctxAny.arc?.(dotX, bd2, 1.8, 0, Math.PI * 2);
+          ctxAny.fill?.();
+        }
+      };
+
       barlines.forEach((bar) => {
         const x = bar.xPosition;
         if (bar.style === 'final') {
@@ -747,6 +779,24 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           // Simple double barline (section): thin + thin.
           drawSingle(x + 1, 1);
           drawSingle(x + 5, 1);
+        } else if (bar.style === 'repeat-end') {
+          // :|  thin + dots + thick
+          drawSingle(x - 12, 1);
+          drawDots(x - 6);
+          drawSingle(x - 1, 3);
+        } else if (bar.style === 'repeat-begin') {
+          // |:  thick + dots + thin
+          drawSingle(x + 1, 3);
+          drawDots(x + 7);
+          drawSingle(x + 12, 1);
+        } else if (bar.style === 'repeat-both') {
+          // :|:  thin + dots + thick | thick + dots + thin
+          drawSingle(x - 12, 1);
+          drawDots(x - 6);
+          drawSingle(x - 1, 3);
+          drawSingle(x + 1, 3);
+          drawDots(x + 7);
+          drawSingle(x + 12, 1);
         } else {
           drawSingle(x, 1);
         }
@@ -839,13 +889,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 .filter(n => n.voice === 1 || n.voice === 2 || n.voice === 3)
                 .filter(n => !n.manualStemDirection);
 
-              // Only merge small clusters (2 or 3 notes). This covers the common
-              // close-position case (e.g. G-A-C) without stepping into more complex
-              // edge-cases that previously caused VF glitches.
-              if (eligible.length < 2 || eligible.length > 3) continue;
+              // Merge small clusters (2–4 notes). This covers close-position
+              // voicings including SATB chords where all 4 voices share the treble staff.
+              if (eligible.length < 2 || eligible.length > 4) continue;
 
-              // Only merge if the cluster contains at least one second on the staff.
-              // (That's where separate-note rendering becomes visually confusing.)
+              // Only merge if the cluster contains at least one second on the staff
+              // (where separate-note rendering becomes visually confusing).
+              // Do NOT merge just because of accidentals — stagger handles that.
               try {
                 const byPos = eligible.slice().sort((a, b) => Number(a.position) - Number(b.position));
                 const hasSecond = byPos.some((n, i) => i > 0 && (Number(n.position) - Number(byPos[i - 1].position)) === 1);
@@ -1052,7 +1102,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           for (const group of byX.values()) {
             const byTime = new Map<string, StaffNote[]>();
             for (const n of group) {
-              const tk = getNoteTimeKey(n);
+              const tk = getNoteOnsetKey(n);
               if (!byTime.has(tk)) byTime.set(tk, []);
               byTime.get(tk)!.push(n);
             }
@@ -1111,9 +1161,21 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               const tightCluster = (maxPos - minPos) <= 3 || anySeconds;
 
               if (tightCluster) {
-                for (const n of sorted) {
-                  if (isManual(n)) continue;
-                  stemOverrideById.set(n.id, clusterDir);
+                // Even in tight clusters, respect voice-based stem directions
+                // when multiple voices are present (S↑ A↓ T=cluster).
+                const s = sorted.find(n => n.voice === 1);
+                const a = sorted.find(n => n.voice === 2);
+                const t = sorted.find(n => n.voice === 3);
+                const multiVoice = (s ? 1 : 0) + (a ? 1 : 0) + (t ? 1 : 0) >= 2;
+                if (multiVoice) {
+                  if (s && !isManual(s)) stemOverrideById.set(s.id, 'up');
+                  if (a && !isManual(a)) stemOverrideById.set(a.id, 'down');
+                  if (t && !isManual(t)) stemOverrideById.set(t.id, clusterDir);
+                } else {
+                  for (const n of sorted) {
+                    if (isManual(n)) continue;
+                    stemOverrideById.set(n.id, clusterDir);
+                  }
                 }
               } else {
                 // Keep a stable visual separation when it isn't a tight cluster.
@@ -1147,7 +1209,28 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   return false;
                 }
               })();
-              const xShifts = getSecondClusterOffsetsById(sorted, dir === 'up', preferRightAtBarline);
+              const xShifts = (() => {
+                // Mixed stems (e.g. soprano ↑ + alto ↓): stem-down note always
+                // goes to the RIGHT — standard SATB engraving rule.
+                const hasStemUp  = sorted.some(n => stemOverrideById.get(n.id) === 'up');
+                const hasStemDown = sorted.some(n => stemOverrideById.get(n.id) === 'down');
+                if (hasStemUp && hasStemDown) {
+                  const m = new Map<string, number>();
+                  for (let i = 1; i < sorted.length; i++) {
+                    const gap = Number(sorted[i].position) - Number(sorted[i - 1].position);
+                    if (gap !== 1) continue;           // not a second
+                    const upper = sorted[i];           // higher pitch
+                    const lower = sorted[i - 1];       // lower pitch
+                    const upperDown = stemOverrideById.get(upper.id) === 'down';
+                    const lowerDown = stemOverrideById.get(lower.id) === 'down';
+                    if (upperDown && !lowerDown) m.set(upper.id, NOTEHEAD_TOUCH_SHIFT);
+                    else if (lowerDown && !upperDown) m.set(lower.id, NOTEHEAD_TOUCH_SHIFT);
+                    else m.set(upper.id, NOTEHEAD_TOUCH_SHIFT); // fallback: upper right
+                  }
+                  return m;
+                }
+                return getSecondClusterOffsetsById(sorted, dir === 'up', preferRightAtBarline);
+              })();
               for (const [id, dx] of xShifts.entries()) {
                 // Don't override manual tweaks; user might have fixed a specific case.
                 const nn = sorted.find(n => n.id === id);
@@ -1167,7 +1250,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           for (const group of byX.values()) {
             const byTime = new Map<string, StaffNote[]>();
             for (const n of group) {
-              const tk = getNoteTimeKey(n);
+              const tk = getNoteOnsetKey(n);
               if (!byTime.has(tk)) byTime.set(tk, []);
               byTime.get(tk)!.push(n);
             }
@@ -1229,7 +1312,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           for (const group of byX.values()) {
             const byTime = new Map<string, StaffNote[]>();
             for (const n of group) {
-              const tk = getNoteTimeKey(n);
+              const tk = getNoteOnsetKey(n);
               if (!byTime.has(tk)) byTime.set(tk, []);
               byTime.get(tk)!.push(n);
             }
@@ -1325,7 +1408,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const accidentalStaggerById = new Map<string, number>();
         if (isTightTreble && enableEngravingEnhancements) {
           try {
-            const STAGGER_PX = 8;
+            const BASE_STAGGER_PX = 8;
             for (const g of byTimeKeyAll.values()) {
                 const withAcc = g
                   .filter(n => n && n.id !== '__ghost__')
@@ -1336,9 +1419,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   });
                 if (withAcc.length < 2) continue;
 
+                // Scale stagger when 3+ accidentals share the same onset
+                const staggerPx = withAcc.length >= 3 ? BASE_STAGGER_PX + 4 : BASE_STAGGER_PX;
                 const sorted = withAcc.slice().sort((a, b) => Number(a.position) - Number(b.position));
                 for (let i = 0; i < sorted.length; i++) {
-                  accidentalStaggerById.set(sorted[i].id, i * STAGGER_PX);
+                  accidentalStaggerById.set(sorted[i].id, i * staggerPx);
                 }
             }
           } catch {
@@ -1348,6 +1433,38 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         // Auto-position rests per onset so they avoid note collisions while preserving
         // SATB vertical logic between adjacent voices (S/A and T/B).
+        // ── Dense-accidental cleanup ──────────────────────────────────────
+        // When 3+ notes at the same onset all carry accidentals, our custom
+        // offset / stagger / inset / stem / merge logic interferes with VexFlow's
+        // built-in layout and causes overlaps. Revert ALL engraving overrides
+        // for those notes so they render exactly like legacy mode.
+        if (enableEngravingEnhancements) {
+          for (const onset of byTimeKeyAll.values()) {
+            const nonRest = onset.filter(n => n && n.id !== '__ghost__' && !n.isRest);
+            const withAcc = nonRest.filter(n => {
+              const g = accidentalGlyphById.get(n.id) ?? null;
+              return !!accidentalTypeToVexflow(g);
+            });
+            if (withAcc.length < 2) continue;
+            // Remove ALL custom overrides for every note at this onset
+            for (const n of nonRest) {
+              offsetMap.delete(n.id);
+              accidentalStaggerById.delete(n.id);
+              openPositionAccidentalInsetById.delete(n.id);
+              stemOverrideById.delete(n.id);
+              hideStemById.delete(n.id);
+              forceSeparateButSingleStemIds.delete(n.id);
+              // Un-merge: remove from chord maps so notes render individually
+              const ck = chordKeyByNoteId.get(n.id);
+              if (ck) {
+                chordKeyByNoteId.delete(n.id);
+                chordNotesByKey.delete(ck);
+                chordVfByKey.delete(ck);
+              }
+            }
+          }
+        }
+
         const restLineOverrideById = new Map<string, number>();
         const isClosePositionTreble = staffMode === 'grandstaff' && clef === 'treble' && staffNotes.some(sn => Number(sn?.voice ?? 0) === 3);
         const linePx = (() => {
@@ -1610,11 +1727,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                         const hasMultipleAccidentals = accidentalKeyIdxs.length >= 2;
 
                         const needsNudge = hasSecond || hasMultipleAccidentals;
-                        if (needsNudge && enableEngravingEnhancements) {
+                        // When 3+ accidentals exist in a merged chord, VexFlow's
+                        // built-in column layout handles placement correctly.
+                        // Our custom shift only helps for 2-accidental cases;
+                        // for denser chords it causes overlaps.
+                        const skipCustomShift = accidentalKeyIdxs.length >= 3;
+                        if (needsNudge && enableEngravingEnhancements && !skipCustomShift) {
                           const isFlat = (vfGlyph === 'b' || vfGlyph === 'bb');
                           const base = isFlat ? 12 : 6;
                           // Use the same step used for close-position fixes.
-                          const STAGGER_PX = 8;
+                          // Scale up when 3+ accidentals to avoid collisions.
+                          const accCount = accidentalKeyIdxs.length;
+                          const STAGGER_PX = accCount >= 3 ? 10 : 8;
+                          // Extra base push when many accidentals crowd together
+                          const densityBonus = accCount >= 4 ? 6 : accCount >= 3 ? 3 : 0;
 
                           // For seconds clusters (parti strette), order by chord key index is OK.
                           // For open position (no seconds), prefer "outer" notes to stay closer
@@ -1656,7 +1782,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                             && systemStartMeasureIndex != null
                             && chordMeasureIndex === systemStartMeasureIndex;
                           const inset = (hasSecond || isSystemStartMeasure) ? 0 : (openPositionAccidentalInsetById.get(n.id) ?? 0);
-                          const desiredDelta = base + stagger + extra - inset;
+                          const desiredDelta = base + densityBonus + stagger + extra - inset;
                           // Special case: beat-1 onsets with a 2-note second + multiple accidentals
                           // can end up with accidentals too far from the noteheads due to our base shift.
                           // Pull them back by ~14px (but never to the right of VF default).
@@ -1685,11 +1811,22 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     (vfNote as any).addModifier(acc, 0);
                     // Default spacing is usually correct, but in close-position multi-voice onsets
                     // accidentals may overlap; apply a small per-note stagger when needed.
+                    // Skip custom stagger when 3+ accidentals share the same onset —
+                    // VexFlow's default placement handles wide intervals well, and our
+                    // stagger can push accidentals into neighboring noteheads.
                     if (enableEngravingEnhancements) {
                       try {
                         const extra = accidentalStaggerById.get(n.id) ?? 0;
                         const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
-                        if ((extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
+                        // Count how many accidentals exist at this onset
+                        const tk = getNoteTimeKey(n);
+                        const onsetNotes = byTimeKeyAll.get(tk) ?? [];
+                        const onsetAccCount = onsetNotes.filter(nn => {
+                          const g = accidentalGlyphById.get(nn.id) ?? null;
+                          return !!accidentalTypeToVexflow(g);
+                        }).length;
+                        // Only apply custom stagger for ≤2 accidentals; for 3+, VF default is better
+                        if (onsetAccCount <= 2 && (extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
                           const cur = (acc as any).getXShift() ?? 0;
                           // extra pushes left; inset pulls back right.
                           (acc as any).setXShift(cur + extra - inset);
@@ -1896,9 +2033,33 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             if (isPrimaryRender) {
               // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
               const isMergedChord = Array.isArray((vfNote as any)?.__mergedIds) && ((vfNote as any).__mergedIds.length > 0);
-              const xShift = isMergedChord ? 0 : (offsetMap.get(n.id) ?? 0);
+              let xShift = isMergedChord ? 0 : (offsetMap.get(n.id) ?? 0);
+
+              // When this note has an accidental AND there are 3+ accidentals at the
+              // same onset, suppress the note-level X shift entirely. The offset
+              // moves the accidental with the notehead, causing it to collide with
+              // neighbouring notes. In legacy mode (no engraving enhancements)
+              // offsetMap is empty so this never happens — mimic that behavior here.
+              if (xShift !== 0 && enableEngravingEnhancements) {
+                try {
+                  const glyph = accidentalGlyphById.get(n.id) ?? null;
+                  if (accidentalTypeToVexflow(glyph)) {
+                    const tk = getNoteTimeKey(n);
+                    const onsetNotes = byTimeKeyAll.get(tk) ?? [];
+                    const onsetAccCount = onsetNotes.filter(nn => {
+                      const g = accidentalGlyphById.get(nn.id) ?? null;
+                      return !!accidentalTypeToVexflow(g);
+                    }).length;
+                    if (onsetAccCount >= 2) xShift = 0;
+                  }
+                } catch {
+                  // ignore
+                }
+              }
+
               const prevXShift = (vfNote as any).x_shift ?? 0;
               vfNote.setXShift(prevXShift + xShift);
+
               vfNote.setStave(stave);
               vfNote.setContext(context);
               const tc = new TickContext();
@@ -2098,7 +2259,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const b = new Beam(group.map(g => g.vfNote));
             applyTightTrebleBeamHeuristics(b, group);
             applyBeamStyle(b as any, group);
-            const isSelected = group.some(g => selectedNoteIds.includes(String(g.staffNote.id)));
+            const isSelected = group.every(g => selectedNoteIds.includes(String(g.staffNote.id)));
             beamInstances.push({ beam: b, isSelected });
           } catch {
             // Skip invalid beam groups.
@@ -2149,7 +2310,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               const b = new Beam(current.map(c => c.vfNote));
               applyTightTrebleBeamHeuristics(b, current);
               applyBeamStyle(b as any, current);
-              const isSelected = current.some(c => selectedNoteIds.includes(String(c.staffNote.id)));
+              const isSelected = current.every(c => selectedNoteIds.includes(String(c.staffNote.id)));
               beamInstances.push({ beam: b, isSelected });
             } catch {
               // ignore

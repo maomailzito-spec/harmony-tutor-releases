@@ -2719,16 +2719,15 @@
       "voice": 2
     },
     {
-      "id": "c8ac751e-3d63-4103-ad04-497fbd34f247",
-      "pitch": "G",
-      "octave": 3,
-      "position": -3,
-      "midi": 54,
-      "noteIndex": 6,
+      "id": "5f46ae7b-ecc0-467c-ac6b-eb50f535c024",
+      "pitch": "F",
+      "octave": 2,
+      "position": -11,
+      "midi": 41,
+      "noteIndex": 5,
       "clef": "bass",
-      "explicitAccidental": "flat",
-      "accidental": "flat",
-      "userAccidental": "flat",
+      "explicitAccidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -4441,8 +4440,6 @@
       "midi": 74,
       "noteIndex": 2,
       "clef": "treble",
-      "explicitAccidental": null,
-      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -5034,11 +5031,11 @@
       "pitch": "E",
       "octave": 5,
       "position": 9,
-      "midi": 75,
-      "noteIndex": 3,
+      "midi": 76,
+      "noteIndex": 4,
       "clef": "treble",
-      "explicitAccidental": null,
-      "accidental": "flat",
+      "explicitAccidental": "natural",
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -5048,7 +5045,8 @@
       "beat": 1,
       "startTick": 130560,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "userAccidental": "natural"
     },
     {
       "id": "202281cd-18dc-4bf1-a8c2-43f7a446e06e",
@@ -5221,15 +5219,16 @@
       "voice": 3
     },
     {
-      "id": "49fefca8-1178-4b75-a6d5-0cadb155f840",
+      "id": "ab61c7e9-b8ab-4a89-a87d-c87ef38581da",
       "pitch": "F",
       "octave": 3,
       "position": -4,
       "midi": 53,
       "noteIndex": 5,
       "clef": "bass",
-      "explicitAccidental": null,
+      "explicitAccidental": "natural",
       "accidental": "natural",
+      "userAccidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -5263,7 +5262,7 @@
       "voice": 1
     },
     {
-      "id": "b4e5cb8c-44d9-46b0-af52-f260348215b3",
+      "id": "42c13bff-836f-4d06-9b6d-92095592a43c",
       "pitch": "A",
       "octave": 2,
       "position": -9,
@@ -5410,12 +5409,12 @@
       "voice": 4
     },
     {
-      "id": "f420b3bf-f3d4-4f14-a074-3a5272bf2243",
-      "pitch": "A",
+      "id": "8b5b4e41-2762-4267-b2a9-922ddd117bd2",
+      "pitch": "G",
       "octave": 4,
-      "position": 5,
-      "midi": 69,
-      "noteIndex": 9,
+      "position": 4,
+      "midi": 67,
+      "noteIndex": 7,
       "clef": "treble",
       "explicitAccidental": null,
       "accidental": "natural",
@@ -5811,13 +5810,38 @@
       "newIsMinor": false,
       "label": "non segna 6",
       "markerMode": "text"
+    },
+    {
+      "absBeat": 76,
+      "newTonic": "Gb",
+      "newIsMinor": false
     }
   ],
   "doubleBarlineMeasures": [],
+  "repeatBarlines": {},
+  "voltaBrackets": [],
   "harmonyOverrides": [
     {
       "absBeat": 6,
       "roman": "",
+      "symbol": "",
+      "figures": []
+    },
+    {
+      "absBeat": 80,
+      "roman": "IV",
+      "symbol": "",
+      "figures": []
+    },
+    {
+      "absBeat": 82,
+      "roman": "V",
+      "symbol": "",
+      "figures": []
+    },
+    {
+      "absBeat": 84,
+      "roman": "I",
       "symbol": "",
       "figures": []
     },
@@ -5828,6 +5852,40 @@
       "figures": [
         "6"
       ]
+    },
+    {
+      "absBeat": 120,
+      "roman": "I",
+      "symbol": "",
+      "figures": []
+    },
+    {
+      "absBeat": 134,
+      "roman": "V",
+      "symbol": "",
+      "figures": []
+    },
+    {
+      "absBeat": 144,
+      "roman": "I",
+      "symbol": "",
+      "figures": []
+    },
+    {
+      "absBeat": 158,
+      "roman": "V",
+      "symbol": "",
+      "figures": []
+    }
+  ],
+  "ornamentOverrides": [
+    {
+      "noteId": "51f40d76-b247-4543-a93c-29835856c56f",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "38f4ca74-17a2-4a85-b8f0-5309bce1df7b",
+      "type": "appoggiatura"
     }
   ],
   "bpm": 120,

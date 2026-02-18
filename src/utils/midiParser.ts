@@ -4,12 +4,14 @@ export type ParsedMidiNote = {
   midi: number;
   velocity: number;
   channel: number;
+  track: number;
 };
 
 export type ParsedMidi = {
   tpq: number;
   tempoBpm: number;
   timeSignature: { numerator: number; denominator: number };
+  keySignature?: { sharps: number; isMinor: boolean };
   notes: ParsedMidiNote[];
 };
 
@@ -61,8 +63,10 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   let tempoBpm = 120;
   let tsNum = 4;
   let tsDen = 4;
+  let keySharps: number | null = null;
+  let keyIsMinor = false;
 
-  const active = new Map<string, Array<{ tick: number; velocity: number }>>();
+  const active = new Map<string, Array<{ tick: number; velocity: number; track: number }>>();
   const notes: ParsedMidiNote[] = [];
 
   const pushNoteOff = (channel: number, note: number, tick: number) => {
@@ -72,7 +76,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     const on = stack.pop();
     if (!on) return;
     const durationTicks = Math.max(1, tick - on.tick);
-    notes.push({ tick: on.tick, durationTicks, midi: note, velocity: on.velocity, channel });
+    notes.push({ tick: on.tick, durationTicks, midi: note, velocity: on.velocity, channel, track: on.track });
   };
 
   for (let t = 0; t < tracksCount; t++) {
@@ -111,6 +115,10 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
           tsNum = Math.max(1, view.getUint8(pos));
           const dd = view.getUint8(pos + 1);
           tsDen = Math.max(1, Math.pow(2, dd));
+        } else if (metaType === 0x59 && len.value >= 2) {
+          // Key signature: sf = signed byte (-7..+7, neg=flats, pos=sharps), mi = 0 major / 1 minor
+          keySharps = view.getInt8(pos);
+          keyIsMinor = view.getUint8(pos + 1) === 1;
         }
 
         pos += len.value;
@@ -132,7 +140,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
         if (hi === 0x90 && vel > 0) {
           const key = `${ch}:${note}`;
           const stack = active.get(key) || [];
-          stack.push({ tick: absTick, velocity: vel });
+          stack.push({ tick: absTick, velocity: vel, track: t });
           active.set(key, stack);
         } else {
           pushNoteOff(ch, note, absTick);
@@ -169,6 +177,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
         midi,
         velocity: on.velocity,
         channel,
+        track: on.track,
       });
     }
   }
@@ -179,6 +188,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     tpq,
     tempoBpm,
     timeSignature: { numerator: tsNum, denominator: tsDen },
+    ...(keySharps !== null ? { keySignature: { sharps: keySharps, isMinor: keyIsMinor } } : {}),
     notes,
   };
 }

@@ -89,7 +89,7 @@ export function getActiveNotesTimeline(
         return { absBeat, measureIndex, beat, notes: activeNotes };
     });
 }
-import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange } from '../types';
+import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange, OrnamentOverride } from '../types';
 import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 import { HARMONY_DEV_LOG_R06_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
@@ -1034,9 +1034,25 @@ export function getNotePropertiesFromMidi(
       noteName = possibleNames.find(n => n.includes('#')) || possibleNames[0];
     } else if (preferredAccidental === 'flat') {
       noteName = possibleNames.find(n => n.includes('b')) || possibleNames[0];
-    } else { 
-      const keyUsesFlats = keySignature.type === 'flat' && keySignature.count > 0;
-      noteName = keyUsesFlats ? (possibleNames.find(n => n.includes('b')) || possibleNames[1]) : (possibleNames.find(n => !n.includes('b')) || possibleNames[0]);
+    } else {
+      // Smart enharmonic: pick the spelling that matches a key-signature accidental
+      // when available; otherwise prefer sharps for raised notes in flat keys
+      // (e.g. F# not Gb in Dm) and flats for lowered notes in sharp keys.
+      const keySharps = ['F','C','G','D','A','E','B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
+      const keyFlats  = ['B','E','A','D','G','C','F'].slice(0, keySignature.type === 'flat'  ? keySignature.count : 0);
+      const flatSpelling  = possibleNames.find(n => n.includes('b'));
+      const sharpSpelling = possibleNames.find(n => n.includes('#'));
+      // Does either spelling match a key-signature note? (e.g. Bb in Dm)
+      const flatInKey  = flatSpelling  && keyFlats.includes(flatSpelling.charAt(0));
+      const sharpInKey = sharpSpelling && keySharps.includes(sharpSpelling.charAt(0));
+      if (flatInKey)       noteName = flatSpelling!;
+      else if (sharpInKey) noteName = sharpSpelling!;
+      else if (keySignature.type === 'flat' && keySignature.count > 0)
+        // Flat key but this note isn't in the key sig → prefer sharp (chromatic raising)
+        noteName = sharpSpelling || possibleNames[0];
+      else
+        // Sharp key or C major → prefer non-flat spelling
+        noteName = possibleNames.find(n => !n.includes('b')) || possibleNames[0];
     }
   }
 
@@ -1708,9 +1724,25 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
 }
 
 // Return detailed candidate list for debugging/inspection.
-export function identifyChordCandidates(notes: StaffNote[]) {
+export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: Record<string, string>) {
     if (!notes || notes.length < 2) return [];
-    const validNotes = notes.filter(n => !n.isRest);
+    // ── Filter out manually overridden ornamental notes ──
+    const effectiveNotes = ornamentOverrides
+        ? notes.filter(n => {
+            if (!n) return true;
+            const a = n as any;
+            const t1 = ornamentOverrides[a.id];
+            if (t1 && t1 !== 'structural') return false;
+            const midi = Number(a.midi);
+            if (Number.isFinite(midi)) {
+                const t2 = ornamentOverrides[`${midi}-${a.measureIndex ?? -1}-${a.beat ?? -1}`];
+                if (t2 && t2 !== 'structural') return false;
+            }
+            return true;
+        })
+        : notes;
+    if (effectiveNotes.length < 2) return [];
+    const validNotes = effectiveNotes.filter(n => !n.isRest);
     if (validNotes.length < 2) return [];
 
     const pcToNote = new Map<number, StaffNote>();
@@ -2439,11 +2471,31 @@ export function getRomanAnalysis(
     chord: StaffNote[],
     keySignatureRoot: string,
     isMinorMode: boolean,
-    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic' }
+    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string> }
 ): { roman: string; figures: string[] } | null {
     if (!chord || chord.length < 2) return null;
 
-    const baseChord = (chord || []).filter(n => n && !n.isRest);
+    // ── Filter out manually overridden ornamental notes ──
+    const ornOv = opts?.ornamentOverrides;
+    const chordInput = ornOv
+        ? (chord || []).filter(n => {
+            if (!n) return true;
+            const a = n as any;
+            // Check by direct note ID
+            const t1 = ornOv[a.id];
+            if (t1 && t1 !== 'structural') return false;
+            // Check by composite key (midi-measureIndex-beat) for cross-graph matching
+            const midi = Number(a.midi);
+            if (Number.isFinite(midi)) {
+                const t2 = ornOv[`${midi}-${a.measureIndex ?? -1}-${a.beat ?? -1}`];
+                if (t2 && t2 !== 'structural') return false;
+            }
+            return true;
+        })
+        : chord;
+    if (!chordInput || chordInput.length < 2) return null;
+
+    const baseChord = (chordInput || []).filter(n => n && !n.isRest);
     if (baseChord.length < 2) return null;
 
     const uniquePcCount = (notes: StaffNote[]): number => {
@@ -3531,7 +3583,8 @@ export function applyHarmonyRules(
     isMinor: boolean,
     analysisContexts: AnalysisContext[],
     timeSignature?: TimeSignature,
-    doubleBarlineMeasures?: number[]
+    doubleBarlineMeasures?: number[],
+    ornamentOverrides?: OrnamentOverride[]
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = (() => {
         try {
@@ -3639,6 +3692,43 @@ export function applyHarmonyRules(
         return n;
     });
     debugLog('[ANALYSIS] applyHarmonyRules called - notes:', analyzedNotes.length, 'key:', keyTonic, 'isMinor:', isMinor);
+
+    // ── Tag manual ornament overrides early (marker only, no detection flags). ──
+    // We only set `ornamentOverride` so that `notesForRomanAt` can exclude these notes
+    // from Roman / figured-bass labelling.  The actual detection flags (isPassing,
+    // isNeighbor …) are applied at the END of the pipeline to avoid interfering
+    // with auto-detection of passing / neighbor / appoggiatura notes.
+    try {
+        if (ornamentOverrides?.length) {
+            // Direct ID match
+            const ovByIdEarly = new Map<string, string>();
+            for (const o of ornamentOverrides) {
+                if (o?.noteId && o?.type) ovByIdEarly.set(o.noteId, o.type);
+            }
+            // Composite key match for orphaned IDs (midi-measureIndex-beat)
+            const ovByCkEarly = new Map<string, string>();
+            const noteIdSet = new Set(analyzedNotes.map(n => n.id));
+            for (const o of ornamentOverrides) {
+                if (!o?.type) continue;
+                if (o.noteId && noteIdSet.has(o.noteId)) continue; // will be matched by ID
+                if (o.midi != null && o.measureIndex != null && o.beat != null) {
+                    ovByCkEarly.set(`${o.midi}-${o.measureIndex}-${o.beat}`, o.type);
+                }
+            }
+            for (const n of analyzedNotes) {
+                let ov = ovByIdEarly.get(n.id);
+                if (!ov && ovByCkEarly.size > 0) {
+                    const midi = Number((n as any).midi);
+                    if (Number.isFinite(midi)) {
+                        ov = ovByCkEarly.get(`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`);
+                    }
+                }
+                if (!ov) continue;
+                (n as any).ornamentOverride = ov;
+            }
+        }
+    } catch { /* ignore */ }
+
     let violations: RuleViolation[] = [];
     const connections: ErrorConnection[] = [];
     const inferredAnalysisContexts: AnalysisContext[] = [];
@@ -4246,6 +4336,7 @@ export function applyHarmonyRules(
                 // This avoids false positives like I–V7–I with soprano C–D–E: D is a chord tone of V7.
                 if (prevConsonant && nextConsonant && (((!curConsonant) && !curInPrevOrNext) || isShortNonHarmonic)) {
                     cur.isPassing = true;
+                    (cur as any).ornamentMark = 'P';
                     // Passing-note classification should dominate over ornament heuristics.
                     // Clear any ornament flags and remove ORN-* panel entries that reference this note.
                     try {
@@ -4764,7 +4855,7 @@ export function applyHarmonyRules(
                     if (repeats && short && isWeakBeat(cur, curEv) && curInNext && !curInNow) {
                         (cur as any).isAnticipation = true;
                         // Compact marker for anticipations (reserve 'v' for note di volta).
-                        (cur as any).ornamentMark = 'a';
+                        (cur as any).ornamentMark = 'ant';
                         if (short) {
                             addOrnament(
                                 'ORN-ANT',
@@ -5053,6 +5144,7 @@ export function applyHarmonyRules(
                     // Same-direction stepwise motion under a held upper chord -> passing (bass)
                     if (!isChordToneAgainstAnchor) {
                         (cur as any).isPassing = true;
+                        (cur as any).ornamentMark = 'P';
                     }
                     // No analysis-panel entry; this is a label-stability aid.
                     continue;
@@ -6136,10 +6228,15 @@ export function applyHarmonyRules(
             const absBeat = Number(ev?.absBeat);
             const notes = (ev?.notes || []) as any[];
             if (!Number.isFinite(absBeat) || notes.length === 0) return notes;
-            // If a note is explicitly marked as a suspension *starting at this scanpoint*,
-            // treat it as a non-chord tone for the purpose of naming the underlying harmony.
-            return notes.filter((n) => {
+            const filtered = notes.filter((n) => {
                 try {
+                    // Exclude notes with manual ornament override (non-structural)
+                    // so they don't distort Roman numeral / figured bass labels.
+                    if (n?.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                    // Exclude auto-detected ornamental notes (passing, neighbor, etc.)
+                    if (n?.isPassing || n?.isNeighbor || n?.isAppoggiatura || n?.isAnticipation || n?.isEscape) return false;
+                    // If a note is explicitly marked as a suspension *starting at this scanpoint*,
+                    // treat it as a non-chord tone for the purpose of naming the underlying harmony.
                     const s = n?.isSuspension;
                     if (!s || typeof s.fromAbsBeat !== 'number') return true;
                     return Math.abs((s.fromAbsBeat as number) - absBeat) > 1e-6;
@@ -6147,6 +6244,9 @@ export function applyHarmonyRules(
                     return true;
                 }
             });
+            // When all notes at a beat are ornamental, let the chord shrink below 2
+            // so getRomanAnalysis returns null and no spurious Roman label appears.
+            return filtered;
         };
 
         // Helper: roman at an event under the active context.
@@ -8438,6 +8538,15 @@ export function applyHarmonyRules(
                                             suggestion: generic + '\n\n' + 'Dettaglio caso: In un accordo in primo rivolto, se il basso (3ª dell’accordo) è un grado forte (I/IV/V; talvolta II), è spesso preferibile raddoppiare il basso (oppure la fondamentale) invece della 5ª.',
                                             noteIds: [bass.id, ...harmonicPresent.filter(n => n.noteIndex === doubledPc).map(n => n.id)],
                                         });
+                                        // Make it visible on the staff overlay.
+                                        const doubledArr = harmonicPresent.filter(n => n.noteIndex === doubledPc);
+                                        const allRelevant = [bass, ...doubledArr].filter(n => Number.isFinite(n.midi as any)).sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0));
+                                        if (allRelevant.length >= 2) {
+                                            const lo = allRelevant[0], hi = allRelevant[allRelevant.length - 1];
+                                            if (lo.id !== hi.id && !connections.some(c => c.ruleId === 'R-10-6' && c.type === 'vertical' && ((c.noteId1 === lo.id && c.noteId2 === hi.id) || (c.noteId1 === hi.id && c.noteId2 === lo.id)))) {
+                                                connections.push({ type: 'vertical', noteId1: lo.id, noteId2: hi.id, severity: isInsideSequence ? 'exception' : 'warning', ruleId: 'R-10-6' });
+                                            }
+                                        }
                                     }
 
                                     // Case B: bass is weak degree -> avoid doubling bass; prefer doubling a strong degree present.
@@ -8498,6 +8607,7 @@ export function applyHarmonyRules(
                 suggestion: 'Di norma evita l’incrocio; può essere accettabile per esigenze melodiche.',
                 noteIds: [v3.id, v2.id],
             });
+            connections.push({ type: 'vertical', noteId1: v3.id, noteId2: v2.id, severity: 'warning', ruleId: 'EXC-S02' });
         }
         if (v2 && v1 && Number.isFinite(effectiveMidi(v2 as any) as any) && Number.isFinite(effectiveMidi(v1 as any) as any)
             && (effectiveMidi(v2 as any) as number) > (effectiveMidi(v1 as any) as number)) {
@@ -8522,6 +8632,7 @@ export function applyHarmonyRules(
                 suggestion: 'Avvicina Alto e Soprano entro l’ottava.',
                 noteIds: [v1.id, v2.id],
             });
+            connections.push({ type: 'vertical', noteId1: v1.id, noteId2: v2.id, severity: 'warning', ruleId: 'R-08' });
             }
         }
         if (v2 && v3) {
@@ -8535,6 +8646,7 @@ export function applyHarmonyRules(
                 suggestion: 'Avvicina Tenore e Alto entro l’ottava.',
                 noteIds: [v2.id, v3.id],
             });
+            connections.push({ type: 'vertical', noteId1: v2.id, noteId2: v3.id, severity: 'warning', ruleId: 'R-08' });
             }
         }
 
@@ -8574,6 +8686,8 @@ export function applyHarmonyRules(
     // =========================================================
     // Horizontal checks (between consecutive chords)
     // =========================================================
+    // Pre-compute last measure index for cadence exception detection
+    const lastMI = analyzedNotes.reduce((mx, n) => Math.max(mx, n.measureIndex ?? 0), 0);
     const isOrnamental = (n: StaffNote | undefined | null): boolean => {
         if (!n) return false;
         try {
@@ -9029,33 +9143,88 @@ export function applyHarmonyRules(
                 const d1 = dir(a1m as number, b1m as number);
                 const d2 = dir(a2m as number, b2m as number);
                 const similar = d1 !== 0 && d1 === d2;
-                if (!similar) continue;
+                const contrary = d1 !== 0 && d2 !== 0 && d1 !== d2;
 
-                // Perfect octaves/unisons
-                if (isPerfectOctaveOrUnison(intA) && isPerfectOctaveOrUnison(intB)) {
-                    addViolation({
-                        ruleId: 'R-01',
-                        severity: 'error',
-                        description: 'Ottave parallele',
-                        suggestion: 'Introduci moto contrario o cambia disposizione delle voci.',
-                        noteIds: [a1.id, a2.id, b1.id, b2.id],
-                    });
+                // R-01: Parallel octaves (similar motion)
+                if (similar && isPerfectOctaveOrUnison(intA) && isPerfectOctaveOrUnison(intB)) {
+                    addViolation({ ruleId: 'R-01', severity: 'error', description: 'Ottave parallele', suggestion: 'Introduci moto contrario o cambia disposizione delle voci.', noteIds: [a1.id, a2.id, b1.id, b2.id] });
                     connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-01' });
                     connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-01' });
                     continue;
                 }
-
-                // Perfect fifths
-                if (isPerfectFifth(intA) && isPerfectFifth(intB)) {
-                    addViolation({
-                        ruleId: 'R-02',
-                        severity: 'error',
-                        description: 'Quinte parallele',
-                        suggestion: 'Evita il moto parallelo verso quinte perfette; usa moto contrario/obliquo.',
-                        noteIds: [a1.id, a2.id, b1.id, b2.id],
-                    });
+                // R-02: Parallel fifths (similar motion)
+                if (similar && isPerfectFifth(intA) && isPerfectFifth(intB)) {
+                    addViolation({ ruleId: 'R-02', severity: 'error', description: 'Quinte parallele', suggestion: 'Evita il moto parallelo verso quinte perfette; usa moto contrario/obliquo.', noteIds: [a1.id, a2.id, b1.id, b2.id] });
                     connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-02' });
                     connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-02' });
+                    continue;
+                }
+                // R-01c: Consecutive octaves by contrary motion
+                if (contrary && isPerfectOctaveOrUnison(intA) && isPerfectOctaveOrUnison(intB)) {
+                    const bMeasure = (b2 as any)?.measureIndex ?? -1;
+                    const isFinalCadence = bMeasure === lastMI;
+                    const rid = isFinalCadence ? 'EXC-ContrOct' : 'R-01c';
+                    const sev: 'error' | 'exception' = isFinalCadence ? 'exception' : 'error';
+                    addViolation({ ruleId: rid, severity: sev,
+                        description: 'Ottave consecutive per moto contrario\n'
+                            + (isFinalCadence
+                                ? '• ℹ️ Info: Licenza in Conclusione (Cadenza)\n'
+                                  + 'Il movimento è permesso esclusivamente se avviene nella conclusione di una frase o di un periodo '
+                                  + '(es. cadenza perfetta V-I) tra le parti estreme. In questo caso, la forza della risoluzione tonale '
+                                  + 'prevale sulla regola dell\'indipendenza delle parti.\n'
+                                : '• ⚠️ Errore: Ottave Consecutive (Moto Contrario)\n'
+                                  + 'Se il passaggio avviene all\'interno della frase (non in chiusura), è considerato un errore di stile. '
+                                  + 'Anche se il moto è contrario, l\'orecchio percepisce la perdita di individualità delle voci, '
+                                  + 'che sembrano fondersi in una sola linea raddoppiata.\n'
+                                  + '• 💡 Consiglio Tecnico\n'
+                                  + 'Poiché entrambe le voci saltano, l\'effetto è molto marcato. '
+                                  + 'Se non sei in una cadenza finale, per rendere il tessuto armonico più elegante '
+                                  + 'dovresti muovere almeno una delle due voci per grado congiunto '
+                                  + 'o cercare un moto obliquo mantenendo una nota comune.\n'),
+                        suggestion: isFinalCadence
+                            ? 'Licenza accettata: ottave per moto contrario in cadenza finale.'
+                            : 'Evita ottave consecutive anche per moto contrario; muovi almeno una voce per grado congiunto o usa moto obliquo.',
+                        noteIds: [a1.id, a2.id, b1.id, b2.id] });
+                    connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: sev, ruleId: rid });
+                    connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: sev, ruleId: rid });
+                    continue;
+                }
+                // R-02c: Consecutive fifths by contrary motion
+                if (contrary && isPerfectFifth(intA) && isPerfectFifth(intB)) {
+                    addViolation({ ruleId: 'R-02c', severity: 'error', description: 'Quinte consecutive per moto contrario', suggestion: 'Due quinte perfette consecutive sono vietate anche per moto contrario.', noteIds: [a1.id, a2.id, b1.id, b2.id] });
+                    connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-02c' });
+                    connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-02c' });
+                }
+            }
+        }
+
+        // R-04 (overlap): Voice overlap — voice crosses where adjacent voice was in previous chord
+        {
+            const adjacentPairsOv: [number, number][] = [[1, 2], [2, 3], [3, 4]];
+            for (const [hi, lo] of adjacentPairsOv) {
+                const aHi = aV[hi as Voice], aLo = aV[lo as Voice], bHi = bV[hi as Voice], bLo = bV[lo as Voice];
+                if (!aHi || !aLo || !bHi || !bLo) continue;
+                const aHiM = effectiveMidi(aHi as any) as number;
+                const aLoM = effectiveMidi(aLo as any) as number;
+                const bHiM = effectiveMidi(bHi as any) as number;
+                const bLoM = effectiveMidi(bLo as any) as number;
+                if (!Number.isFinite(aHiM) || !Number.isFinite(aLoM) || !Number.isFinite(bHiM) || !Number.isFinite(bLoM)) continue;
+                const vNames: Record<number, string> = { 1: 'Soprano', 2: 'Alto', 3: 'Tenore', 4: 'Basso' };
+                // Lower voice goes above where higher voice was
+                if (bLoM > aHiM) {
+                    addViolation({ ruleId: 'R-04', severity: 'error',
+                        description: `Sovrapposizione di voci: ${vNames[lo]} supera la posizione precedente del ${vNames[hi]}`,
+                        suggestion: 'Una voce non deve superare la posizione che la voce adiacente occupava nel beat precedente.',
+                        noteIds: [aHi.id, bLo.id] });
+                    connections.push({ type: 'horizontal', noteId1: aHi.id, noteId2: bLo.id, severity: 'error', ruleId: 'R-04' });
+                }
+                // Higher voice goes below where lower voice was
+                if (bHiM < aLoM) {
+                    addViolation({ ruleId: 'R-04', severity: 'error',
+                        description: `Sovrapposizione di voci: ${vNames[hi]} scende sotto la posizione precedente del ${vNames[lo]}`,
+                        suggestion: 'Una voce non deve scendere sotto la posizione che la voce adiacente occupava nel beat precedente.',
+                        noteIds: [aLo.id, bHi.id] });
+                    connections.push({ type: 'horizontal', noteId1: aLo.id, noteId2: bHi.id, severity: 'error', ruleId: 'R-04' });
                 }
             }
         }
@@ -9981,6 +10150,52 @@ export function applyHarmonyRules(
         if (sd !== 0) return sd;
         return a.ruleId.localeCompare(b.ruleId);
     });
+
+    // ── Apply manual ornament overrides (always win over auto-detection) ──
+    try {
+        if (ornamentOverrides?.length) {
+            // Direct ID match
+            const ovByIdLate = new Map<string, string>();
+            for (const o of ornamentOverrides) {
+                if (o?.noteId && o?.type) ovByIdLate.set(o.noteId, o.type);
+            }
+            // Composite key match for orphaned IDs
+            const ovByCkLate = new Map<string, string>();
+            const noteIdSetLate = new Set(analyzedNotes.map(n => n.id));
+            for (const o of ornamentOverrides) {
+                if (!o?.type) continue;
+                if (o.noteId && noteIdSetLate.has(o.noteId)) continue;
+                if (o.midi != null && o.measureIndex != null && o.beat != null) {
+                    ovByCkLate.set(`${o.midi}-${o.measureIndex}-${o.beat}`, o.type);
+                }
+            }
+            for (const n of analyzedNotes) {
+                let ov = ovByIdLate.get(n.id);
+                if (!ov && ovByCkLate.size > 0) {
+                    const midi = Number((n as any).midi);
+                    if (Number.isFinite(midi)) {
+                        ov = ovByCkLate.get(`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`);
+                    }
+                }
+                if (!ov) continue;
+                const anyN = n as any;
+                anyN.isPassing = false;
+                anyN.isNeighbor = false;
+                anyN.isAppoggiatura = false;
+                anyN.isAnticipation = false;
+                anyN.isEscape = false;
+                anyN.isSuspension = undefined;
+                anyN.ornamentMark = undefined;
+                if (ov === 'passing') { anyN.isPassing = true; anyN.ornamentMark = 'P'; }
+                else if (ov === 'neighbor') { anyN.isNeighbor = true; anyN.ornamentMark = 'v'; }
+                else if (ov === 'appoggiatura') { anyN.isAppoggiatura = true; anyN.ornamentMark = 'a'; }
+                else if (ov === 'anticipation') { anyN.isAnticipation = true; anyN.ornamentMark = 'ant'; }
+                else if (ov === 'escape') { anyN.isEscape = true; anyN.ornamentMark = 's'; }
+                else if (ov === 'suspension') { anyN.isSuspension = { type: 'susp', manual: true }; anyN.ornamentMark = 'r'; }
+                anyN.ornamentOverride = ov;
+            }
+        }
+    } catch { /* ignore */ }
 
     return { analyzedNotes, violations, connections, inferredAnalysisContexts, autoHarmonyLabelOverrides };
 }

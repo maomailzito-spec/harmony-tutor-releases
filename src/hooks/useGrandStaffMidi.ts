@@ -147,7 +147,81 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     const parsed = parseMidi(arrayBuffer);
     const tpq = Math.max(1, parsed.tpq);
     const beatsPerMeasure = parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
-    const keySig = getKeySignature(project.keySignatureRoot || 'C', project.isMinorMode ? 'Minor' : 'Major');
+
+    // Use key signature from MIDI file if available, otherwise use project key.
+    let midiRoot = project.keySignatureRoot || 'C';
+    let midiIsMinor = project.isMinorMode;
+    if (parsed.keySignature) {
+      const { sharps, isMinor } = parsed.keySignature;
+      const majorRoots = ['C','G','D','A','E','B','F#','C#'];
+      const flatMajorRoots = ['C','F','Bb','Eb','Ab','Db','Gb','Cb'];
+      const majorRoot = sharps >= 0 ? (majorRoots[sharps] ?? 'C') : (flatMajorRoots[-sharps] ?? 'C');
+      if (isMinor) {
+        const minorRoots: Record<string, string> = {'C':'A','G':'E','D':'B','A':'F#','E':'C#','B':'G#','F#':'D#','C#':'A#','F':'D','Bb':'G','Eb':'C','Ab':'F','Db':'Bb','Gb':'Eb','Cb':'Ab'};
+        midiRoot = minorRoots[majorRoot] ?? majorRoot;
+        midiIsMinor = true;
+      } else {
+        midiRoot = majorRoot;
+        midiIsMinor = false;
+      }
+    }
+    const keySig = getKeySignature(midiRoot, midiIsMinor ? 'Minor' : 'Major');
+
+    // ---------- Smart voice assignment strategy ----------
+    // 1) If multiple tracks contain notes → map track → voice (SATB order)
+    // 2) Else if single track but multiple channels → map channel → voice
+    // 3) Fallback: pitch-based SATB distribution
+    const trackSet = new Set(parsed.notes.map(n => n.track));
+    const channelSet = new Set(parsed.notes.map(n => n.channel));
+    const tracksWithNotes = [...trackSet].sort((a, b) => a - b);
+    const channelsWithNotes = [...channelSet].sort((a, b) => a - b);
+
+    type VoiceStrategy = 'track' | 'channel' | 'pitch';
+    let strategy: VoiceStrategy;
+    let voiceMap: Map<number, Voice> | null = null;
+
+    if (tracksWithNotes.length > 1) {
+      strategy = 'track';
+      voiceMap = new Map<number, Voice>();
+      // Map each track with notes to voices 1-4 in order; extras clamp to 4.
+      tracksWithNotes.forEach((trk, idx) => {
+        voiceMap!.set(trk, Math.min(idx + 1, 4) as Voice);
+      });
+    } else if (channelsWithNotes.length > 1) {
+      strategy = 'channel';
+      voiceMap = new Map<number, Voice>();
+      channelsWithNotes.forEach((ch, idx) => {
+        voiceMap!.set(ch, Math.min(idx + 1, 4) as Voice);
+      });
+    } else {
+      strategy = 'pitch';
+    }
+
+    // For pitch-based strategy: collect all MIDI note numbers, then split into
+    // 4 groups by quartiles (S=highest, B=lowest).
+    let pitchThresholds: number[] = [];
+    if (strategy === 'pitch') {
+      const midiValues = parsed.notes.map(n => n.midi).sort((a, b) => a - b);
+      if (midiValues.length >= 4) {
+        const q1 = midiValues[Math.floor(midiValues.length * 0.25)];
+        const q2 = midiValues[Math.floor(midiValues.length * 0.50)];
+        const q3 = midiValues[Math.floor(midiValues.length * 0.75)];
+        pitchThresholds = [q1, q2, q3]; // bass < q1, tenor < q2, alto < q3, soprano >= q3
+      }
+    }
+
+    const getVoice = (n: { track: number; channel: number; midi: number }): Voice => {
+      if (strategy === 'track' && voiceMap) return voiceMap.get(n.track) ?? 1 as Voice;
+      if (strategy === 'channel' && voiceMap) return voiceMap.get(n.channel) ?? 1 as Voice;
+      // Pitch-based
+      if (pitchThresholds.length === 3) {
+        if (n.midi < pitchThresholds[0]) return 4 as Voice; // Bass
+        if (n.midi < pitchThresholds[1]) return 3 as Voice; // Tenor
+        if (n.midi < pitchThresholds[2]) return 2 as Voice; // Alto
+        return 1 as Voice; // Soprano
+      }
+      return 1 as Voice;
+    };
 
     const notes: StaffNote[] = parsed.notes.map((n, idx) => {
       const absBeats = n.tick / tpq;
@@ -161,7 +235,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
 
       const appStartTick = Math.max(0, Math.round(absBeats * TICKS_PER_QUARTER));
       const appDurationTicks = Math.max(1, Math.round(durBeats * TICKS_PER_QUARTER));
-      const voice = ((n.channel % 4) + 1) as Voice;
+      const voice = getVoice(n);
 
       return {
         id: `midi-${idx}-${appStartTick}-${n.midi}`,
@@ -184,6 +258,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       timeSignature: parsed.timeSignature,
       timeSignatureChanges: [],
       bpm: parsed.tempoBpm,
+      ...(parsed.keySignature ? { keySignatureRoot: midiRoot, isMinorMode: midiIsMinor } : {}),
     });
   }, [pickMidiFile, project.isMinorMode, project.keySignatureRoot, setProject]);
 

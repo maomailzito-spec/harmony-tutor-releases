@@ -10,7 +10,7 @@ declare global {
     }
 }
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
+import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType } from '../types';
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
@@ -25,6 +25,7 @@ import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
 import { getMenuActionTarget } from '../contracts/menuActionTargets';
 import { electronBridge } from '../services/electronBridge';
 import { usePreference } from '../preferences/usePreference';
+import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData } from '../storage/projectSchema';
 import { handleGrandStaffProjectIOMenuAction } from '../controllers/grandStaffProjectIOAdapter';
@@ -278,6 +279,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
     const [measuresPerLineDraft, setMeasuresPerLineDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
+    const [ornamentOverrides, setOrnamentOverrides] = useState<OrnamentOverride[]>([]);
+    const [repeatBarlines, setRepeatBarlines] = useState<Record<number, 'repeat-begin' | 'repeat-end' | 'repeat-both'>>({});
+    const [voltaBrackets, setVoltaBrackets] = useState<VoltaBracket[]>([]);
     const [tool, setTool] = useState<Tool>('insert');
     const [selectedInsertion, setSelectedInsertion] = useState<InsertionElement>({ type: 'note', duration: 'quarter', isDotted: false });
     const selectedInsertionRef = useRef(selectedInsertion);
@@ -476,6 +480,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [harmonyOverrides, setHarmonyOverrides] = useState<HarmonyLabelOverride[]>([]);
     const latestHarmonyOverrides = useRef<HarmonyLabelOverride[]>([]);
     useEffect(() => { latestHarmonyOverrides.current = harmonyOverrides || []; }, [harmonyOverrides]);
+    const latestOrnamentOverrides = useRef<OrnamentOverride[]>([]);
+    useEffect(() => { latestOrnamentOverrides.current = ornamentOverrides || []; }, [ornamentOverrides]);
     const [harmonyOverrideMenu, setHarmonyOverrideMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
@@ -492,6 +498,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [isSequencesEnabled]);
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
     const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
+    const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
+    const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
+    const [harmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
+    const [useStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
 
     const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
@@ -533,6 +543,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [isToolbarCustomizeOpen, setIsToolbarCustomizeOpen] = useState(false);
 
     const [currentProjectFilePath, setCurrentProjectFilePath] = useState<string | null>(null);
+    const currentProjectFilePathRef = useRef(currentProjectFilePath);
+    currentProjectFilePathRef.current = currentProjectFilePath;
     const currentProjectFileName = useMemo(() => {
         if (!currentProjectFilePath) return null;
         const parts = currentProjectFilePath.split(/[/\\]/);
@@ -1450,10 +1462,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                         return `<!doctype html><html><head><base href="${baseHref}">${head}<style>
                               @page { size: A4 landscape; margin: 8mm; }
-                              body{background:white;margin:0;padding:8px}
+                              html{overflow:visible !important;}
+                              body{background:white;margin:0;padding:8px;overflow:visible !important;width:100% !important;box-sizing:border-box;}
                               .ht-staff-container{width:100% !important;max-width:100% !important;overflow:visible !important;}
                               [data-system-index]{width:100% !important;max-width:100% !important;overflow:visible !important;}
-                              svg{max-width:100%;width:100%;height:auto}
+                              svg{max-width:100%;width:100%;height:auto;overflow:visible !important;}
               /* Export/print mode: hide interactive overlays and analysis layers */
               .export-exclude{display:none !important;}
               input, textarea, select{display:none !important;}
@@ -1835,11 +1848,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 action: action as any,
                 payload,
                 api,
-                currentProjectFilePath,
+                currentProjectFilePath: currentProjectFilePathRef.current,
                 setCurrentProjectFilePath,
                 snapshot: {
                     latestRawNotes,
                     latestHarmonyOverrides,
+                    latestOrnamentOverrides,
                     projectExtrasRef,
                     staffSystemMode,
                     keySignatureRoot,
@@ -1854,6 +1868,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     modalTonicOverride,
                     analysisContexts,
                     doubleBarlineMeasures,
+                    repeatBarlines,
+                    voltaBrackets,
                     toolbarGroupOrder,
                     bpm,
                     isBpmActive,
@@ -1870,9 +1886,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setIsMinorMode,
                     setTimeSignature,
                     setHarmonyOverrides,
+                    setOrnamentOverrides,
                     setAnalysisContexts,
                     setTimeSignatureChanges,
                     setDoubleBarlineMeasures,
+                    setRepeatBarlines,
+                    setVoltaBrackets,
                     setKeyChangeMode,
                     setModalTonicOverride,
                     setAutoLeadingToneInMinor,
@@ -1956,6 +1975,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setModalTonicOverride('');
                 setAnalysisContexts([]);
                 setHarmonyOverrides([]);
+                setOrnamentOverrides([]);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setPasteCaretImmediate(null);
@@ -2015,6 +2035,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Keep ref always current during render so earlier effects (like pendingMenuAction)
     // can reliably dispatch without depending on effect ordering.
     dispatchMenuActionRef.current = dispatchMenuAction;
+
+    // Auto-save: periodically trigger 'save' if a file path is already set.
+    useEffect(() => {
+        const intervalSec = Number(autoSaveInterval) || 0;
+        if (intervalSec <= 0 || !currentProjectFilePath) return;
+        const timer = setInterval(() => {
+            try {
+                dispatchMenuActionRef.current?.('save' as any, {});
+            } catch {
+                // ignore auto-save errors silently
+            }
+        }, intervalSec * 1000);
+        return () => clearInterval(timer);
+    }, [autoSaveInterval, currentProjectFilePath]);
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
@@ -2109,12 +2143,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
         try {
-            return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures);
+            return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides);
         } catch (e) {
             console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
             return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
-    }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures]);
+    }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // NOTE: inferred contexts can be helpful for experimentation, but they can also
@@ -2495,7 +2529,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                 const isLastInSystem = idx === sys.measureIndices.length - 1;
                 const svgStaffEnd = containerWidth - STAFF_MARGIN;
-                const barStyle = m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single');
+                const barStyle = m === finalMeasureIndex ? 'final' : (repeatBarlines[m] || (doubleSet.has(m) ? 'double' : 'single'));
                 let barXLocal = (curX - curXStart + START_X) + measureWidth;
                 if (isLastInSystem) {
                     // IMPORTANT:
@@ -2557,7 +2591,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ignore logging errors
         }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
-    }, [analyzedNotes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures]);
+    }, [analyzedNotes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines]);
 
     // Compute current playhead measure for choral panel insertion.
     const playheadMeasureForChoral = useMemo(() => {
@@ -2687,6 +2721,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 .filter((x, i, a) => a.indexOf(x) === i)
                 .sort((a, b) => a - b)
             );
+
+            // Shift repeat barlines.
+            setRepeatBarlines(prev => {
+                const next: typeof prev = {};
+                for (const [k, v] of Object.entries(prev)) {
+                    const mi = Number(k);
+                    if (mi === m) continue;
+                    next[mi > m ? mi - 1 : mi] = v;
+                }
+                return next;
+            });
 
             setMinMeasureCount(prev => Math.max(1, (Number.isFinite(prev) ? prev : 1) - 1));
             setMinMeasureCountDraft(prev => {
@@ -2826,6 +2871,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         layoutData, timeSignature, timeSignatureChanges, analysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled,
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
+        harmonyLabelMinSpanBeats: Number(harmonyLabelMinSpanBeats) || 0,
+        useStatisticalCorrection: !!useStatisticalCorrection,
+        ornamentOverrides,
     });
     // Violations -> noteId -> level (defensive extraction)
     const violationLevelByNoteId = useMemo(() => {
@@ -3616,6 +3664,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const applyAccidentalToSelectedNotes = useCallback((acc: AccidentalType | null) => {
         if (!selectedNoteIds || selectedNoteIds.size === 0) return;
+        // If current selection is a just-inserted note, skip retroactive edit —
+        // only update the pending accidental for the next insertion.
+        if (justInsertedNoteRef.current && selectedNoteIds.size === 1 && selectedNoteIds.has(justInsertedNoteRef.current)) {
+            justInsertedNoteRef.current = null;
+            setSelectedNoteIds(new Set());
+            return;
+        }
         applyEditToSelectedNotes((n) => {
             if (n.isRest) return n;
             if (!acc) {
@@ -4532,6 +4587,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             .sort((a, b) => a - b)
         );
 
+        // Shift repeat barlines.
+        setRepeatBarlines(prev => {
+            const next: typeof prev = {};
+            for (const [k, v] of Object.entries(prev)) {
+                const mi = Number(k);
+                next[mi >= insertAtMeasureIndex ? mi + 1 : mi] = v;
+            }
+            return next;
+        });
+
         // Ensure the score length grows by one measure.
         setMinMeasureCount(prev => {
             const next = Math.max(1, (prev || 1) + 1);
@@ -4665,6 +4730,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const a = qAbsForOverrides(absBeat);
         setHarmonyOverrides(prev => (prev || []).filter(o => qAbsForOverrides(o.absBeat) !== a));
     }, [qAbsForOverrides]);
+
+    const handleApplyOrnamentOverride = useCallback((type: string) => {
+        if (selectedNoteIds.size === 0) return;
+        setOrnamentOverrides(prev => {
+            const updated = (prev || []).filter(o => !selectedNoteIds.has(o.noteId));
+            for (const noteId of selectedNoteIds) {
+                // Store composite key fields for cross-session matching
+                const src = (notes || []).find(n => n.id === noteId) as any;
+                updated.push({
+                    noteId,
+                    type: type as OrnamentType,
+                    midi: src?.midi != null ? Number(src.midi) : undefined,
+                    measureIndex: src?.measureIndex != null ? Number(src.measureIndex) : undefined,
+                    beat: src?.beat != null ? Number(src.beat) : undefined,
+                });
+            }
+            return updated;
+        });
+        setContextMenu(null);
+    }, [selectedNoteIds, notes]);
+
+    const handleRemoveOrnamentOverride = useCallback(() => {
+        if (selectedNoteIds.size === 0) return;
+        setOrnamentOverrides(prev => (prev || []).filter(o => !selectedNoteIds.has(o.noteId)));
+        setContextMenu(null);
+    }, [selectedNoteIds]);
+
+    const hasExistingOrnamentOverride = useMemo(() => {
+        if (selectedNoteIds.size === 0) return false;
+        return ornamentOverrides.some(o => selectedNoteIds.has(o.noteId));
+    }, [selectedNoteIds, ornamentOverrides]);
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
         if (!layoutData) return;
@@ -6066,6 +6162,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
             };
 
+            // ── Ornament override shortcuts (⌥ + key) ──
+            if (!isMod && e.altKey && selectedNoteIds.size > 0) {
+                const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyN: 'anticipation' };
+                const ornType = ornMap[e.code];
+                if (ornType) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setOrnamentOverrides(prev => {
+                        const updated = (prev || []).filter(o => !selectedNoteIds.has(o.noteId));
+                        for (const noteId of selectedNoteIds) updated.push({ noteId, type: ornType as OrnamentType });
+                        return updated;
+                    });
+                    return;
+                }
+            }
+
             // Alt/Option+L: cycle staff layout/view (view-only)
             if (!isMod && e.altKey && e.code === 'KeyL') {
                 e.preventDefault();
@@ -6229,23 +6341,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const voice = (notesWithBeats[idx] as any).voice;
                         const midi = (notesWithBeats[idx] as any).midi;
 
-                        // Forward: look for next same-voice same-pitch note.
-                        let next: StaffNote | undefined;
-                        for (let i = idx + 1; i < notesWithBeats.length; i++) {
-                            if ((notesWithBeats[i] as any).voice === voice) { next = notesWithBeats[i]; break; }
-                        }
-                        if (next && !next.isRest && next.midi === midi) {
-                            toggleForwardIds.add(sel.id);
-                            continue;
-                        }
-
-                        // Backward: look for previous same-voice same-pitch note.
+                        // Backward first: look for previous same-voice same-pitch note.
+                        // Musical convention: selecting a note and pressing L ties it
+                        // to the preceding note (the tie "arrives" at the selected note).
                         let prev: StaffNote | undefined;
                         for (let i = idx - 1; i >= 0; i--) {
                             if ((notesWithBeats[i] as any).voice === voice) { prev = notesWithBeats[i]; break; }
                         }
                         if (prev && !prev.isRest && prev.midi === midi) {
                             toggleBackwardIds.add(prev.id);
+                            continue;
+                        }
+
+                        // Forward fallback: if no backward match, tie forward to next same-voice same-pitch.
+                        let next: StaffNote | undefined;
+                        for (let i = idx + 1; i < notesWithBeats.length; i++) {
+                            if ((notesWithBeats[i] as any).voice === voice) { next = notesWithBeats[i]; break; }
+                        }
+                        if (next && !next.isRest && next.midi === midi) {
+                            toggleForwardIds.add(sel.id);
                         }
                     }
 
@@ -6728,6 +6842,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         setRawNotes(notes as any);
                         setAnalysisContexts([]);
                         setHarmonyOverrides([]);
+                        setOrnamentOverrides([]);
+                    }
+                }}
+                onApplyContexts={(contexts) => {
+                    if (contexts.length > 0) {
+                        setAnalysisContexts(prev => {
+                            // Merge: remove existing contexts at same absBeat, then add new ones
+                            const newAbsBeats = new Set(contexts.map(c => c.absBeat));
+                            const filtered = (prev || []).filter(c => !newAbsBeats.has((c as any).absBeat ?? -1));
+                            return [...filtered, ...contexts.map(c => ({
+                                absBeat: c.absBeat,
+                                measureIndex: c.measureIndex,
+                                newTonic: c.newTonic,
+                                newIsMinor: c.newIsMinor,
+                                label: c.label,
+                                source: 'manual' as const,
+                                markerMode: 'both' as const,
+                            }))];
+                        });
                     }
                 }}
                 keySignatureRoot={keySignatureRoot}
@@ -7320,6 +7453,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             >
                                                                                 {p.label}
                                                                             </text>
+                                                                            {(p as any).modelX1 != null && (p as any).modelX2 != null && (p as any).modelY != null && (
+                                                                                <line x1={(p as any).modelX1} y1={(p as any).modelY} x2={(p as any).modelX2} y2={(p as any).modelY}
+                                                                                    stroke="#0ea5e9" strokeWidth={4} strokeLinecap="round" opacity={0.35} />
+                                                                            )}
                                                                         </g>
                                                                     );
                                                                 })}
@@ -7915,6 +8052,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             try { console.log('[RENDER] skipping-connection-no-violation', { noteId1: c.noteId1, noteId2: c.noteId2, ruleId: c.ruleId }); } catch(_) {}
                                                                             return false;
                                                                         }
+                                                                        // Respect analysis panel filters: hide connections whose
+                                                                        // severity category is toggled off or whose ruleId is disabled.
+                                                                        if (analysisFilters) {
+                                                                            const sev = (match as any).severity as string | undefined;
+                                                                            const sevLower = (sev || 'error').toLowerCase();
+                                                                            if (sevLower.includes('warning') && !analysisFilters.showWarning) return false;
+                                                                            if ((sevLower.includes('exception') || sevLower.includes('green')) && !analysisFilters.showException) return false;
+                                                                            if (sevLower.includes('error') && !analysisFilters.showError) return false;
+                                                                            // Also check per-rule disable.
+                                                                            const rid = String(c.ruleId || '');
+                                                                            if (rid && analysisFilters.disabledRuleIds && analysisFilters.disabledRuleIds[rid]) return false;
+                                                                        }
                                                                         return true;
                                                                     });
 
@@ -8302,11 +8451,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 onHoverViolation={setHoveredViolationNotes}
                                 selectedViolationIndex={selectedViolationIndex}
                                 onSelectViolation={index => {
-                                    setSelectedViolationIndex(index);
-                                    if (index != null && violations[index]) {
-                                        setSelectedNoteIds(new Set(violations[index].noteIds));
-                                    }
-                                    if (typeof index === 'number') scrollScoreToViolationIndex(index);
+                                    setSelectedViolationIndex(prev => {
+                                        if (prev === index) {
+                                            // Second click on same violation → collapse / deselect
+                                            setSelectedNoteIds(new Set());
+                                            return null;
+                                        }
+                                        if (index != null && violations[index]) {
+                                            setSelectedNoteIds(new Set(violations[index].noteIds));
+                                        }
+                                        if (typeof index === 'number') scrollScoreToViolationIndex(index);
+                                        return index;
+                                    });
                                 }}
                             />
                         ) : (
@@ -8329,6 +8485,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onApplyTextMarker={handleApplyContextLabelOnly}
                     onRemove={handleRemoveContext}
                     onDeleteMeasure={deleteMeasureAtIndex}
+                    onToggleRepeatBarline={(measureIndex, type) => {
+                        setRepeatBarlines(prev => {
+                            const next = { ...prev };
+                            if (next[measureIndex] === type) delete next[measureIndex];
+                            else next[measureIndex] = type;
+                            return next;
+                        });
+                    }}
                     onApplyTimeSignature={handleApplyTimeSignatureChange}
                     onRemoveTimeSignature={handleRemoveTimeSignatureChange}
                     existingHarmonyOverride={existingHarmonyOverrideForMenu}
@@ -8347,6 +8511,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     initialIsMinor={existingContextForMenu ? existingContextForMenu.newIsMinor : isMinorMode}
                     initialLabel={existingContextForMenu?.label || ''}
                     initialTimeSignature={existingTimeSignatureChangeForMenu ? { numerator: existingTimeSignatureChangeForMenu.numerator, denominator: existingTimeSignatureChangeForMenu.denominator } : timeSignature}
+                    selectedNoteCount={selectedNoteIds.size}
+                    onApplyOrnamentOverride={handleApplyOrnamentOverride}
+                    onRemoveOrnamentOverride={handleRemoveOrnamentOverride}
+                    hasExistingOrnamentOverride={hasExistingOrnamentOverride}
                 />
             )}
 

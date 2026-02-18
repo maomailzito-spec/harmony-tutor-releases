@@ -1,0 +1,46 @@
+{
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "01e345c5-473a-4f9c-87d4-1d542afcc9f3",
+      "type": "suspension"
+    }
+  ],
+  "schemaVersion": 1,
+  "notes": [],
+  "staffSystemMode": "grandstaff",
+  "keySignatureRoot": "C",
+  "projectTitle": "",
+  "titleFontSize": 18,
+  "titleFontFamily": "serif",
+  "timeSignature": {
+    "numerator": 4,
+    "denominator": 4
+  },
+  "timeSignatureChanges": [],
+  "isMinorMode": false,
+  "autoLeadingToneInMinor": true,
+  "keyChangeMode": "none",
+  "modalTonicOverride": "",
+  "analysisContexts": [],
+  "doubleBarlineMeasures": [],
+  "harmonyOverrides": [],
+  "bpm": 120,
+  "isBpmActive": false,
+  "isMetronomeOn": false,
+  "metronomeUnit": "quarter",
+  "toolbarGroupOrder": [
+    "key",
+    "voices",
+    "playback",
+    "bpm",
+    "measures",
+    "insert",
+    "accidentals",
+    "notations",
+    "time",
+    "analysis",
+    "more"
+  ]
+}

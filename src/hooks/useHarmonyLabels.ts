@@ -8,8 +8,10 @@
 import { useMemo } from 'react';
 import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol } from '../utils/musicTheory';
+import { structuralNotes } from '../utils/harmonyLabelPipeline';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
 import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS } from '../constants';
+import { suggestNextChord } from '../engine/progressionSuggester';
 
 // ─── Utility: note name → chromatic index (0-11) ──────────────────────────
 function noteNameToChromaticIndex(name: string): number {
@@ -44,6 +46,9 @@ export interface UseHarmonyLabelsParams {
     analyzedNotes: StaffNote[];
     analysisContextAbsBeat: (ctx: AnalysisContext) => number;
     timeSignatureChangeAbsBeat: (tc: TimeSignatureChange) => number;
+    harmonyLabelMinSpanBeats?: number;
+    useStatisticalCorrection?: boolean;
+    ornamentOverrides?: Array<{ noteId: string; type: string }>;
 }
 
 export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
@@ -53,10 +58,89 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled,
         staffSystemMode, notes, analyzedNotes,
         analysisContextAbsBeat, timeSignatureChangeAbsBeat,
+        harmonyLabelMinSpanBeats,
+        useStatisticalCorrection,
+        ornamentOverrides,
     } = params;
+
+    const minSpanBeats = Number(harmonyLabelMinSpanBeats) || 0;
+
+    // Build a Map<key, ornamentType> for direct lookup in structuralNotes().
+    // Keys include BOTH noteId AND composite midi-measure-beat for cross-graph matching.
+    const ornOverrideMap = useMemo(() => {
+        const m = new Map<string, string>();
+        const noteById = new Map<string, any>();
+        for (const n of (analyzedNotes || []) as any[]) {
+            if (n?.id) noteById.set(n.id, n);
+        }
+        for (const o of ornamentOverrides || []) {
+            if (!o?.noteId || !o?.type) continue;
+            m.set(o.noteId, o.type);
+            // Add composite key from the source note (if still in analyzedNotes)
+            const src = noteById.get(o.noteId);
+            if (src) {
+                const midi = Number(src.midi);
+                if (Number.isFinite(midi)) {
+                    m.set(`${midi}-${src.measureIndex ?? -1}-${src.beat ?? -1}`, o.type);
+                }
+            }
+            // Add composite key from stored fields (for orphaned IDs)
+            if (o.midi != null && o.measureIndex != null && o.beat != null) {
+                m.set(`${o.midi}-${o.measureIndex}-${o.beat}`, o.type);
+            }
+        }
+        // Also include IDs from analyzedNotes that carry ornamentOverride
+        // (set by applyHarmonyRules early/late tag, which uses its own matching).
+        // This ensures the map works even when stored composite keys are stale.
+        for (const n of (analyzedNotes || []) as any[]) {
+            if (!n?.id || !n?.ornamentOverride) continue;
+            if (n.ornamentOverride === 'structural') continue;
+            if (m.has(n.id)) continue;
+            m.set(n.id, n.ornamentOverride);
+            const midi = Number(n.midi);
+            if (Number.isFinite(midi)) {
+                m.set(`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`, n.ornamentOverride);
+            }
+        }
+        return m;
+    }, [ornamentOverrides, analyzedNotes]);
+
+    // Convert to Record keyed by BOTH noteId AND composite midi-measure-beat
+    // (timeline notes have different IDs from the source notes in ornamentOverrides)
+    const ornOverrideRecord = useMemo((): Record<string, string> => {
+        const rec: Record<string, string> = {};
+        for (const [k, v] of ornOverrideMap.entries()) rec[k] = v;
+        return rec;
+    }, [ornOverrideMap]);
 
     const harmonyLabelsBySystem = useMemo(() => {
         if (!isAnalysisEnabled || !layoutData) return [];
+
+        // ── Propagate ornament flags from analyzedNotes → positionedNotes ──
+        // layoutData.positionedNotes come from layout computation and may NOT carry
+        // ornament flags (isPassing, ornamentOverride, etc.) that reside on analyzedNotes.
+        // Copy them by matching note IDs so structuralNotes() can filter correctly.
+        try {
+            if (analyzedNotes?.length && layoutData.positionedNotes?.length) {
+                const flagMap = new Map<string, any>();
+                for (const n of analyzedNotes as any[]) {
+                    if (!n?.id) continue;
+                    flagMap.set(n.id, n);
+                }
+                for (const pn of layoutData.positionedNotes as any[]) {
+                    const src = flagMap.get(pn?.id);
+                    if (!src) continue;
+                    if (src.isPassing) pn.isPassing = true;
+                    if (src.isNeighbor) pn.isNeighbor = true;
+                    if (src.isAppoggiatura) pn.isAppoggiatura = true;
+                    if (src.isAnticipation) pn.isAnticipation = true;
+                    if (src.isEscape) pn.isEscape = true;
+                    if (src.ornamentOverride) pn.ornamentOverride = src.ornamentOverride;
+                    if (src.ornamentMark) pn.ornamentMark = src.ornamentMark;
+                    if (src.isSuspension) pn.isSuspension = src.isSuspension;
+                }
+            }
+        } catch { /* ignore */ }
 
         // Use the timeline of all active notes at each event (start/end of any note)
         const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges);
@@ -117,6 +201,25 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 return false;
             }
         });
+
+        // Anti-noise filter (greedy forward): keep first event, then keep the
+        // next only when its distance from the last *kept* event ≥ minSpan.
+        // This preserves structural beats and absorbs ornamental short events.
+        const timelineFiltered = (() => {
+            if (minSpanBeats <= 1e-6) return timelineForLabels;
+            const result: any[] = [];
+            let lastKeptBeat = -Infinity;
+            for (const ev of timelineForLabels) {
+                const a = Number(ev?.absBeat);
+                if (!Number.isFinite(a)) { result.push(ev); continue; }
+                if (a - lastKeptBeat + 1e-6 >= minSpanBeats) {
+                    result.push(ev);
+                    lastKeptBeat = a;
+                }
+            }
+            return result;
+        })();
+
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const ctxAtAbsBeat = (absBeat: number) => (analysisContexts || [])
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
@@ -213,12 +316,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             );
 
             // Precompute base Roman labels for the label timeline under the *current* active context.
-            const base = (timelineForLabels || []).map((ev: any) => {
+            const base = (timelineFiltered || []).map((ev: any) => {
                 const absBeat = Number(ev?.absBeat);
                 const ctx = ctxAtAbsBeat(absBeat);
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
-                const r = getRomanAnalysis((ev?.notes || []) as any, ctxTonic, ctxIsMinor);
+                const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, { ornamentOverrides: ornOverrideRecord });
                 return {
                     ev,
                     absBeat,
@@ -292,7 +395,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (autoOverrideByAbsBeat.has(bi.q)) continue;
                     if (protectedAbsBeats.has(bi.q)) continue;
 
-                    const rr = getRomanAnalysis((bi.ev?.notes || []) as any, tonicizedTonic, tonicizedIsMinor);
+                    const rr = getRomanAnalysis(structuralNotes(bi.ev?.notes || [], ornOverrideMap), tonicizedTonic, tonicizedIsMinor, { ornamentOverrides: ornOverrideRecord });
                     const localRoman = String(rr?.roman || '');
 
                     // Also support the common pre-dominant pattern in tonicized minor:
@@ -581,6 +684,20 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             try {
                 if (!n) return true;
                 if (n.isRest) return true;
+                // User manual ornament overrides are absolute — bypass all rescue heuristics.
+                // Check both the flag on the note AND the ornOverrideMap (for orphaned IDs
+                // where the flag couldn't be set because override noteId ≠ analyzedNote id).
+                if (n.ornamentOverride && n.ornamentOverride !== 'structural') return true;
+                if (ornOverrideMap.size > 0) {
+                    const ovById = ornOverrideMap.get(n.id);
+                    if (ovById && ovById !== 'structural') return true;
+                    const midi = Number(n.midi);
+                    if (Number.isFinite(midi)) {
+                        const ck = `${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`;
+                        const ovByCk = ornOverrideMap.get(ck);
+                        if (ovByCk && ovByCk !== 'structural') return true;
+                    }
+                }
                 const v = (n?.voice ?? 1) as number;
                 if (v === 4) {
                     // By default keep the bass in the structural snapshot (it stabilizes labels).
@@ -885,7 +1002,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             return true;
         };
 
-        timelineForLabels.forEach((event, eventIndex) => {
+        timelineFiltered.forEach((event, eventIndex) => {
             // Find which system this event belongs to
             const measureIndex = event.measureIndex;
             let systemIndex = -1;
@@ -958,18 +1075,85 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             lastStructural.delete(v);
                         }
                     } catch { /* ignore */ }
+                    // For USER-overridden ornaments: remove voice from structural snapshot entirely.
+                    // Auto-detected ornaments keep the previous structural note (voice continuity),
+                    // but manual overrides mean the user explicitly wants this pitch excluded
+                    // from the chord analysis — not replaced by the previous note in that voice.
+                    if (n.ornamentOverride && n.ornamentOverride !== 'structural') {
+                        lastStructural.delete(v);
+                    } else if (ornOverrideMap.size > 0) {
+                        const _ov1 = ornOverrideMap.get(n.id);
+                        if (_ov1 && _ov1 !== 'structural') {
+                            lastStructural.delete(v);
+                        } else {
+                            const _midi = Number(n.midi);
+                            if (Number.isFinite(_midi)) {
+                                const _ck = `${_midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`;
+                                const _ov2 = ornOverrideMap.get(_ck);
+                                if (_ov2 && _ov2 !== 'structural') {
+                                    lastStructural.delete(v);
+                                }
+                            }
+                        }
+                    }
                     continue;
                 }
                 lastStructural.set(v, n);
             }
 
-            const harmonicNotes = Array.from(lastStructural.values()).filter(Boolean);
+            // Filter out user-overridden ornamental notes from the structural snapshot.
+            // Notes in lastStructural may have been stored at a PREVIOUS event, before
+            // the user marked them as ornaments. Their objects won't carry the
+            // ornamentOverride flag, so we must also check ornOverrideMap.
+            const harmonicNotes = Array.from(lastStructural.values()).filter((n: any) => {
+                if (!n) return false;
+                if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                if (ornOverrideMap.size > 0) {
+                    const ov1 = ornOverrideMap.get(n.id);
+                    if (ov1 && ov1 !== 'structural') return false;
+                    const midi = Number(n.midi);
+                    if (Number.isFinite(midi)) {
+                        const ck = `${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`;
+                        const ov2 = ornOverrideMap.get(ck);
+                        if (ov2 && ov2 !== 'structural') return false;
+                    }
+                }
+                return true;
+            });
             const fallbackHarmonicNotes = (harmonicNotes.length >= 2)
                 ? harmonicNotes
-                : (fullNotes || []).filter((n: any) => n && !n.isRest);
+                : (fullNotes || []).filter((n: any) => {
+                    if (!n || n.isRest) return false;
+                    if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                    if (ornOverrideMap.size > 0) {
+                        const ovById = ornOverrideMap.get(n.id);
+                        if (ovById && ovById !== 'structural') return false;
+                        const midi = Number(n.midi);
+                        if (Number.isFinite(midi)) {
+                            const ck = `${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`;
+                            const ovByCk = ornOverrideMap.get(ck);
+                            if (ovByCk && ovByCk !== 'structural') return false;
+                        }
+                    }
+                    return true;
+                });
             const baseHarmonicNotes = (fallbackHarmonicNotes.length >= 2)
                 ? fallbackHarmonicNotes
-                : (fullNotes || []).filter((n: any) => n && !n.isRest);
+                : (fullNotes || []).filter((n: any) => {
+                    if (!n || n.isRest) return false;
+                    if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                    if (ornOverrideMap.size > 0) {
+                        const ovById = ornOverrideMap.get(n.id);
+                        if (ovById && ovById !== 'structural') return false;
+                        const midi = Number(n.midi);
+                        if (Number.isFinite(midi)) {
+                            const ck = `${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`;
+                            const ovByCk = ornOverrideMap.get(ck);
+                            if (ovByCk && ovByCk !== 'structural') return false;
+                        }
+                    }
+                    return true;
+                });
 
             // If a suspension originates at this event, the held tone is a non-chord tone
             // against the new harmony. Exclude it from the chord-analysis snapshot so we
@@ -1123,9 +1307,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             const previewRoman = (() => {
                 try {
-                    const r = getRomanAnalysis((analysisNotesForNaming || []) as any, contextTonic, contextIsMinor);
+                    const r = getRomanAnalysis((analysisNotesForNaming || []) as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
                     if (r?.roman) return String(r.roman);
-                    const rFull = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor);
+                    const rFull = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
                     return rFull?.roman ? String(rFull.roman) : '';
                 } catch {
                     return '';
@@ -1204,7 +1388,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const prevType = lastChordTypeBySystem.get(systemIndex);
 
             try {
-                const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor);
+                const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
                 if (r) {
                     roman = r.roman;
                     isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
@@ -1235,8 +1419,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const pcsFull = pcCount((fullNotes || []) as any);
 
                     if (rr0.startsWith('vii') && pcsNaming > 0 && pcsNaming < 3 && (pcsAnalysis >= 3 || pcsFull >= 3)) {
-                        const alt1 = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor);
-                        const alt2 = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor);
+                        const alt1 = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
+                        const alt2 = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
                         const isPlausible = (s: string) => s === 'V' || s === 'I' || s.startsWith('V/') || s.startsWith('I/');
                         const pick = [alt1, alt2].find(x => x?.roman && isPlausible(String(x.roman)));
                         if (pick?.roman) {
@@ -1475,7 +1659,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 const ctxRes = ctxAtAbsBeat(resEv.absBeat);
                                 const tonicRes = ctxRes ? ctxRes.newTonic : contextTonic;
                                 const isMinorRes = ctxRes ? ctxRes.newIsMinor : contextIsMinor;
-                                const rRes = getRomanAnalysis(resEv.notes || [], tonicRes, isMinorRes);
+                                const rRes = getRomanAnalysis(resEv.notes || [], tonicRes, isMinorRes, { ornamentOverrides: ornOverrideRecord });
                                 if (rRes?.roman) resolvedRoman = rRes.roman;
                             }
                         }
@@ -1498,7 +1682,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         }
                         if (!roman) {
                             // Fallback: underlying harmony at suspension onset.
-                            const rHere = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor);
+                            const rHere = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
                             if (rHere) roman = rHere.roman || roman;
                         }
                     }
@@ -1810,7 +1994,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const localRoman = String(roman || '');
                 const localIsTonic = localRoman === 'I' || localRoman === 'i';
                 if (inNonGlobalContext && localIsTonic) {
-                    const global = getRomanAnalysis((analysisNotesForNaming || []) as any, currentTonic, isMinorMode);
+                    const global = getRomanAnalysis((analysisNotesForNaming || []) as any, currentTonic, isMinorMode, { ornamentOverrides: ornOverrideRecord });
                     const globalRoman = String(global?.roman || '');
                     if (globalRoman && globalRoman !== localRoman) {
                         // Common/pedagogical: show I=V on dominant-key pivot.
@@ -1823,6 +2007,52 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             if (!roman && !symbol && !(figures && figures.length)) return;
 
+            // ── User-ornament beat suppression ──
+            // If the ONLY new onset notes at this beat are user-overridden ornaments,
+            // suppress the visible label.  Emit a hiddenMarker instead so the
+            // hold-line renderer can still show continuity from the previous label.
+            try {
+                if (ornOverrideMap.size > 0) {
+                    // Onset notes = notes whose attack beat matches this event
+                    const onsetNotes = (fullNotes || []).filter((n: any) => {
+                        if (!n || n.isRest) return false;
+                        // A note is an "onset" here if its own beat matches this event's beat
+                        const nb = Number(n.beat);
+                        const eb = Number(event.beat ?? event.absBeat);
+                        return Number.isFinite(nb) && Number.isFinite(eb) && Math.abs(nb - eb) < 0.01;
+                    });
+                    if (onsetNotes.length > 0) {
+                        const allUserOrn = onsetNotes.every((n: any) => {
+                            if (n.ornamentOverride && n.ornamentOverride !== 'structural') return true;
+                            const ov1 = ornOverrideMap.get(n.id);
+                            if (ov1 && ov1 !== 'structural') return true;
+                            const midi = Number(n.midi);
+                            if (Number.isFinite(midi)) {
+                                const ck = `${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`;
+                                const ov2 = ornOverrideMap.get(ck);
+                                if (ov2 && ov2 !== 'structural') return true;
+                            }
+                            return false;
+                        });
+                        if (allUserOrn) {
+                            const prevR = lastRomanBySystem.get(systemIndex) || '';
+                            if (prevR) {
+                                const xh = getXForAbsBeat(event.absBeat, system);
+                                labelsBySystem[systemIndex].push({
+                                    id: `hlabel-hidden-ornoverride-${systemIndex}-${event.absBeat}`,
+                                    x: xh,
+                                    roman: prevR,
+                                    figures: lastFiguresBySystem.get(systemIndex) || [],
+                                    symbol: '',
+                                    absBeat: event.absBeat,
+                                    hiddenMarker: true,
+                                });
+                            }
+                            return;
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
 
             // Anchor label to the current timeline event's beat (not just the note's attack)
             const x = getXForAbsBeat(event.absBeat, system);
@@ -1843,13 +2073,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // Sort labels in each system by x
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, timeSignature]);
+    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
     // exact roman equality (e.g. I…V/ii repeating as ii…V/bIII).
     const progressionMarkersBySystem = useMemo(() => {
         if (!layoutData) return [] as Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>>;
+        if (!isSequencesEnabled) return [] as Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>>;
 
         const beatsPerMeasureBase = timeSignature.numerator * (4 / timeSignature.denominator);
         const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
@@ -1980,7 +2211,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const ctx = ctxAtAbsBeatLocal(a);
                         const tonic = (ctx?.newTonic || currentTonic) as any;
                         const isMinor = typeof ctx?.newIsMinor === 'boolean' ? ctx.newIsMinor : isMinorMode;
-                        const r = getRomanAnalysis(notesHere as any, tonic, isMinor);
+                        const r = getRomanAnalysis(notesHere as any, tonic, isMinor, { ornamentOverrides: ornOverrideRecord });
                         const roman = String(r?.roman || '').trim();
                         if (!roman) continue;
                         events.push({ absBeat: a, measureIndex: m, roman, figuresKey: Array.isArray(r?.figures) ? r!.figures.join('') : '' });
@@ -2392,10 +2623,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const sigB = blockSignature(m0 + 2);
                 if (!sigA || !sigB) continue;
 
-                if (sigA && sigA === sigB) {
-                    spans.push({ startMeasure: m0, endMeasure: m0 + 3, repeats: 2, source: 'auto' });
-                    m0 += 3;
-                }
+                // Skip identical label repetitions — a true harmonic sequence
+                // requires transposed interval patterns (e.g. I-V → vi-iii),
+                // not the same chords repeated verbatim.  The note-motion
+                // detector (above) handles genuine sequences via interval matching.
+                // if (sigA && sigA === sigB) { spans.push(...); m0 += 3; }
             }
         }
 
@@ -2449,7 +2681,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
         if (!spansFinal.length) return layoutData.systemsParams.map(() => []);
 
-        const markersBySystem: Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string }>> = layoutData.systemsParams.map(() => []);
+        const markersBySystem: Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string; modelX1?: number; modelX2?: number; modelY?: number }>> = layoutData.systemsParams.map(() => []);
 
         const staffTopY = staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 18) : (TOP_STAFF_TOP + 18);
         const textY = staffTopY - 6;
@@ -2486,6 +2718,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const xx1 = x1 + pad;
                 const xx2 = x2 - pad;
                 const midX = (xx1 + xx2) / 2;
+
+                // Model line: first half of the span (the "modello")
+                const totalMeasures = sp.endMeasure - sp.startMeasure + 1;
+                const modelLen = Math.floor(totalMeasures / (sp.repeats ?? 2));
+                const modelEndMeasure = sp.startMeasure + modelLen - 1;
+                // Only draw model line if model end is within this system
+                let modelX2val: number | undefined;
+                if (modelEndMeasure >= sysMin && modelEndMeasure <= sysMax) {
+                    const mx2 = measureEndXInSystem(system, modelEndMeasure);
+                    if (mx2 != null) modelX2val = mx2 - pad;
+                }
+                const modelLineY = staffTopY + 3;
+
                 markersBySystem[si].push({
                     id: `prog-${sp.startMeasure}-${sp.endMeasure}-${k}-${si}`,
                     x1: xx1,
@@ -2496,12 +2741,15 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     label: sp.source === 'auto'
                         ? `Prog. (${sp.repeats ?? 2}×2 mis.)`
                         : (sp.source === 'note' ? 'Prog. (note)' : 'Prog. (annotata)'),
+                    modelX1: xx1,
+                    modelX2: modelX2val,
+                    modelY: modelLineY,
                 });
             }
         });
 
         return markersBySystem;
-    }, [analysisContexts, harmonyLabelsBySystem, isAnalysisEnabled, layoutData, staffSystemMode, timeSignature]);
+    }, [analysisContexts, harmonyLabelsBySystem, isAnalysisEnabled, isSequencesEnabled, layoutData, staffSystemMode, timeSignature]);
 
     const sequenceMatches = useMemo(() => {
         if (!isAnalysisEnabled || !isSequencesEnabled) return [];
@@ -2555,6 +2803,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             }
         });
 
+        // Anti-noise filter (greedy forward): same logic as the main label useMemo.
+        const timelineFiltered2 = (() => {
+            if (minSpanBeats <= 1e-6) return timelineForLabels;
+            const result: any[] = [];
+            let lastKeptBeat = -Infinity;
+            for (const ev of timelineForLabels) {
+                const a = Number(ev?.absBeat);
+                if (!Number.isFinite(a)) { result.push(ev); continue; }
+                if (a - lastKeptBeat + 1e-6 >= minSpanBeats) {
+                    result.push(ev);
+                    lastKeptBeat = a;
+                }
+            }
+            return result;
+        })();
+
         const ctxAtAbsBeat = (absBeat: number) => (analysisContexts || [])
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
             .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
@@ -2583,7 +2847,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             });
         } catch { /* ignore */ }
 
-        const labelPoints = (timelineForLabels || []).map((ev: any) => {
+        const labelPoints = (timelineFiltered2 || []).map((ev: any) => {
             const absBeat = Number(ev?.absBeat);
             if (!Number.isFinite(absBeat)) return null;
             const a = qAbs(absBeat);
@@ -2597,7 +2861,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             let symbol: string | undefined = undefined;
             let figures: string[] | undefined = undefined;
             try {
-                const r = getRomanAnalysis((ev?.notes || []) as any, tonic, isMinor);
+                const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), tonic, isMinor, { ornamentOverrides: ornOverrideRecord });
                 roman = String(r?.roman || '');
                 figures = Array.isArray(r?.figures) ? r!.figures.map((x: any) => String(x)) : undefined;
             } catch { /* ignore */ }
@@ -2621,7 +2885,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         }).filter(Boolean) as Array<{ absBeat: number; roman?: string; symbol?: string; figures?: string[] }>;
 
         return detectVoiceLeadingSequences(notes, timeSignature, timeSignatureChanges, labelPoints);
-    }, [analyzedNotes, currentTonic, analysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, isSequencesEnabled, notes, timeSignature, timeSignatureChanges]);
+    }, [analyzedNotes, currentTonic, analysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, isSequencesEnabled, minSpanBeats, notes, timeSignature, timeSignatureChanges]);
 
     const harmonyLabelsBySystemSequenced = useMemo(() => {
         if (!harmonyLabelsBySystem?.length || !sequenceMatches.length) return harmonyLabelsBySystem || [];
@@ -3141,7 +3405,17 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const slots = seq.slotTicks || [];
             const L = seq.lengthSteps;
             const modelStartTick = Number(seq.startTick);
-            const repeatStartTick = Number(slots[seq.startSlotIdx + L]);
+            // repeatStartTick = tick where the repeat begins = end of model
+            let repeatStartTick = Number(slots[seq.startSlotIdx + L]);
+            // Fallback: if slotTicks lookup fails, compute from modelEndMeasure
+            if (!Number.isFinite(repeatStartTick) && seq.modelEndMeasure != null) {
+                const mEnd = seq.modelEndMeasure;
+                repeatStartTick = (startAbsForMeasure(mEnd) + beatsInMeasure(mEnd)) * TICKS_PER_QUARTER;
+            }
+            // Second fallback: use repeatStartMeasure
+            if (!Number.isFinite(repeatStartTick) && seq.repeatStartMeasure != null) {
+                repeatStartTick = startAbsForMeasure(seq.repeatStartMeasure) * TICKS_PER_QUARTER;
+            }
             if (!Number.isFinite(modelStartTick) || !Number.isFinite(repeatStartTick)) return;
 
             const absStart = modelStartTick / TICKS_PER_QUARTER;

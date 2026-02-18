@@ -332,6 +332,12 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         const Icon = isError ? ErrorIcon : isException ? ExceptionIcon : WarningIcon;
                         const textColor = isError ? 'text-red-400' : isException ? 'text-green-400' : 'text-orange-400';
                         const isSelected = selectedViolationIndex === index;
+
+                        // Split description: first line = summary, rest = detail
+                        const descLines = (violation.description || '').split('\n');
+                        const summaryLine = descLines[0];
+                        const detailLines = descLines.slice(1).join('\n').trim();
+
                         return (
                             <li
                                 key={`${violation.ruleId}-${index}`}
@@ -346,14 +352,22 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                         <p className={`font-bold ${textColor} text-xs leading-snug`}>
                                             {isCadenceMarker ? (
                                                 <>
-                                                    <span className="text-white">{violation.description}</span>
+                                                    <span className="text-white">{summaryLine}</span>
                                                 </>
                                             ) : (
                                                 <>
-                                                    {isException ? 'Eccezione' : violation.ruleId}: <span className="text-white">{violation.description}</span>
+                                                    {isException ? 'Eccezione' : violation.ruleId}: <span className="text-white">{summaryLine}</span>
                                                 </>
                                             )}
+                                            {(detailLines || violation.suggestion) && (
+                                                <span className="ml-1 text-gray-500 text-[10px] font-normal">{isSelected ? '▲' : '▼'}</span>
+                                            )}
                                         </p>
+                                        {isSelected && detailLines && (
+                                            <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
+                                                {detailLines}
+                                            </p>
+                                        )}
                                         {isSelected && violation.suggestion && (
                                             <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
                                                 <span className="font-semibold">Consiglio:</span> {violation.suggestion}

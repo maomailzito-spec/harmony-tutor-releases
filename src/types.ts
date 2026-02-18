@@ -176,14 +176,42 @@ export type StaffNote = {
   manualBeamDisabled?: boolean;
   manualStemDirection?: 'up' | 'down';
   manualTieDirection?: 'up' | 'down';
+  // Ornament flags (set by analysis engine and/or manual override)
+  isNeighbor?: boolean;
+  isAppoggiatura?: boolean;
+  isAnticipation?: boolean;
+  isEscape?: boolean;
+  isSuspension?: any;
+  ornamentMark?: string;
+  ornamentOverride?: OrnamentType;
 };
+
+/** Manual ornament classification for a note. */
+export type OrnamentType = 'passing' | 'neighbor' | 'appoggiatura' | 'anticipation' | 'escape' | 'suspension' | 'structural';
+
+/** User override that forces a specific ornament classification on a note. */
+export interface OrnamentOverride {
+  noteId: string;
+  type: OrnamentType;
+  /** Stored at creation time for cross-session matching when note IDs change. */
+  midi?: number;
+  measureIndex?: number;
+  beat?: number;
+}
 
 // FIX: Added Barline type for use in Staff.tsx
 export type Barline = {
   id: string;
   xPosition: number;
-  style?: 'single' | 'double' | 'final';
+  style?: 'single' | 'double' | 'final' | 'repeat-begin' | 'repeat-end' | 'repeat-both';
 };
+
+export interface VoltaBracket {
+  startMeasure: number;
+  endMeasure: number;
+  number: number;
+  text: string;
+}
 
 export type KeySignature = {
   type: 'sharp' | 'flat';

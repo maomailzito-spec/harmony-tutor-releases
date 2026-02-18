@@ -10,6 +10,7 @@ export type GrandStaffProjectIOCommand =
 export type BuildGrandStaffProjectSnapshotArgs = {
 	latestRawNotes: { current: any[] };
 	latestHarmonyOverrides: { current: any[] };
+	latestOrnamentOverrides?: { current: any[] };
 	projectExtrasRef: { current: Record<string, unknown> };
 
 	staffSystemMode: any;
@@ -29,8 +30,8 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 
 	analysisContexts: any[];
 	doubleBarlineMeasures: any[];
-	toolbarGroupOrder: any[];
-
+        repeatBarlines: Record<number, string>;
+        voltaBrackets: any[];
 	bpm: number;
 	isBpmActive: boolean;
 	isMetronomeOn: boolean;
@@ -56,7 +57,10 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		modalTonicOverride: args.modalTonicOverride,
 		analysisContexts: args.analysisContexts,
 		doubleBarlineMeasures: args.doubleBarlineMeasures,
+		repeatBarlines: args.repeatBarlines,
+		voltaBrackets: args.voltaBrackets,
 		harmonyOverrides: args.latestHarmonyOverrides.current,
+		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
 		bpm: args.bpm,
 		isBpmActive: args.isBpmActive,
 		isMetronomeOn: args.isMetronomeOn,
@@ -79,9 +83,12 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setIsMinorMode: (next: any) => void;
 	setTimeSignature: (next: any) => void;
 	setHarmonyOverrides: (next: any) => void;
+	setOrnamentOverrides: (next: any) => void;
 	setAnalysisContexts: (next: any) => void;
 	setTimeSignatureChanges: (next: any) => void;
 	setDoubleBarlineMeasures: (next: any) => void;
+	setRepeatBarlines: (next: any) => void;
+	setVoltaBrackets: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
 	setAutoLeadingToneInMinor: (next: any) => void;
@@ -137,9 +144,12 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setIsMinorMode(false);
 		args.setTimeSignature({ numerator: 4, denominator: 4 });
 		args.setHarmonyOverrides([]);
+		args.setOrnamentOverrides([]);
 		args.setAnalysisContexts([]);
 		args.setTimeSignatureChanges([]);
 		args.setDoubleBarlineMeasures([]);
+		args.setRepeatBarlines({});
+		args.setVoltaBrackets([]);
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
 		args.setAutoLeadingToneInMinor(true);
@@ -175,6 +185,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setModalTonicOverride('');
 	args.setAnalysisContexts([]);
 	args.setHarmonyOverrides([]);
+	args.setOrnamentOverrides([]);
 	args.setBpm(120);
 	args.setIsBpmActive(false);
 	args.setIsMetronomeOn(false);
@@ -334,8 +345,17 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 					.sort((a: number, b: number) => a - b);
 				args.setDoubleBarlineMeasures(cleaned);
 			}
+			if (loadedProject.repeatBarlines && typeof loadedProject.repeatBarlines === 'object' && !Array.isArray(loadedProject.repeatBarlines)) {
+				args.setRepeatBarlines(loadedProject.repeatBarlines);
+			}
+			if (Array.isArray(loadedProject.voltaBrackets)) {
+				args.setVoltaBrackets(loadedProject.voltaBrackets);
+			}
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
+			}
+			if (Array.isArray(loadedProject.ornamentOverrides)) {
+				args.setOrnamentOverrides(loadedProject.ornamentOverrides);
 			}
 			if (typeof loadedProject.bpm === 'number' && Number.isFinite(loadedProject.bpm) && loadedProject.bpm > 0) {
 				args.setBpm(loadedProject.bpm);
@@ -394,6 +414,8 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setSelectedNoteIds(new Set());
 		args.apply.setActiveTab('editor');
 		args.apply.setDoubleBarlineMeasures([]);
+		args.apply.setRepeatBarlines({});
+		args.apply.setVoltaBrackets([]);
 		args.apply.setMinMeasureCount(4);
 		args.apply.setMeasuresPerLine(4);
 		args.apply.setIsMinorMode(false);
@@ -414,6 +436,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setPasteCaretImmediate(null);
 		args.apply.setAnalysisContexts([]);
 		args.apply.setHarmonyOverrides([]);
+		args.apply.setOrnamentOverrides([]);
 		args.apply.setContextMenu(null);
 		args.apply.setShowRomanAnalysis(true);
 		args.apply.setShowSymbolAnalysis(false);

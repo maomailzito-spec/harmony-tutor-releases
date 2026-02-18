@@ -38,6 +38,7 @@ const ModulationContextMenu: React.FC<{
     onApplyTextMarker: (absBeat: number, label?: string) => void;
     onRemove: (absBeat: number) => void;
     onDeleteMeasure: (measureIndex: number) => void;
+    onToggleRepeatBarline?: (measureIndex: number, type: 'repeat-begin' | 'repeat-end' | 'repeat-both') => void;
     onApplyTimeSignature: (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => void;
     onRemoveTimeSignature: (absBeat: number) => void;
     existingHarmonyOverride: HarmonyLabelOverride | null;
@@ -47,7 +48,11 @@ const ModulationContextMenu: React.FC<{
     initialIsMinor: boolean;
     initialLabel?: string;
     initialTimeSignature: TimeSignature;
-}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature }) => {
+    selectedNoteCount?: number;
+    onApplyOrnamentOverride?: (type: string) => void;
+    onRemoveOrnamentOverride?: () => void;
+    hasExistingOrnamentOverride?: boolean;
+}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onToggleRepeatBarline, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride }) => {
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
     const [tempLabel, setTempLabel] = useState(initialLabel || '');
@@ -267,6 +272,19 @@ const ModulationContextMenu: React.FC<{
                 </button>
                 <div className="text-[10px] text-gray-400">Elimina la misura e sposta indietro tutto ciò che segue.</div>
             </div>
+            {onToggleRepeatBarline && (
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-300">Ripetizione</label>
+                    <div className="flex gap-1">
+                        <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-begin'); onClose(); }}
+                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title="Inizio ripetizione">|:</button>
+                        <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-end'); onClose(); }}
+                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title="Fine ripetizione">:|</button>
+                        <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-both'); onClose(); }}
+                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title="Doppia ripetizione">:|:</button>
+                    </div>
+                </div>
+            )}
             <div className="flex flex-col gap-2">
                 <label className="text-xs text-gray-300">Cambio di tempo (opzionale)</label>
                 <div className="flex items-center gap-2">
@@ -347,6 +365,33 @@ const ModulationContextMenu: React.FC<{
                     </button>
                 </div>
             </div>
+
+            {/* ── Ornament override section ── */}
+            {selectedNoteCount != null && selectedNoteCount > 0 && onApplyOrnamentOverride && (
+                <div className="border-t border-gray-600 pt-2 mt-2">
+                    <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">Marcatura ornamentale</div>
+                    {([
+                        { label: 'Nota strutturale (armonica)', type: 'structural' },
+                        { label: 'Nota di passaggio  ⌥P', type: 'passing' },
+                        { label: 'Nota di volta  ⌥V', type: 'neighbor' },
+                        { label: 'Appoggiatura  ⌥A', type: 'appoggiatura' },
+                        { label: 'Anticipazione  ⌥N', type: 'anticipation' },
+                        { label: 'Nota di sfuggita  ⌥S', type: 'escape' },
+                        { label: 'Ritardo  ⌥R', type: 'suspension' },
+                    ] as const).map(item => (
+                        <button key={item.type} onClick={() => onApplyOrnamentOverride(item.type)}
+                            className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">
+                            {item.label}
+                        </button>
+                    ))}
+                    {hasExistingOrnamentOverride && onRemoveOrnamentOverride && (
+                        <button onClick={onRemoveOrnamentOverride}
+                            className="block w-full text-left px-2 py-0.5 text-[11px] text-red-400 hover:bg-gray-600 rounded mt-1 transition-colors">
+                            Rimuovi marcatura
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

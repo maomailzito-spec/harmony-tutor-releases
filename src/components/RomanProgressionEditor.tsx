@@ -14,12 +14,15 @@ import {
   parseRoman,
   resetNoteIdCounter,
   autoHarmonize,
+  autoHarmonizeFromBass,
   type RomanChord,
   type ChoralConfig,
   type ChoralRules,
   type ChoralViolation,
   type SopranoConstraint,
+  type ModulationContext,
 } from '../engine/choralRealization';
+import { suggestNextChord, type ChordSuggestion } from '../engine/progressionSuggester';
 
 // ─── Props ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +30,16 @@ export interface RomanProgressionEditorProps {
   isOpen: boolean;
   onClose: () => void;
   onApplyNotes: (notes: StaffNote[]) => void;
+  /** Callback to apply modulation contexts (tonicizations) to the analysis engine. */
+  onApplyContexts?: (contexts: Array<{
+    absBeat: number;
+    measureIndex: number;
+    beat: number;
+    newTonic: string;
+    newIsMinor: boolean;
+    label?: string;
+    source: 'composer';
+  }>) => void;
   keySignatureRoot: string;
   isMinorMode: boolean;
   timeSignature: TimeSignature;
@@ -53,6 +66,41 @@ const PRESETS: { label: string; chords: string; minor?: boolean }[] = [
   { label: 'vi–IV–I–V', chords: 'vi - IV - I - V' },
   { label: 'i–iv–V–i (minore)', chords: 'i - iv - V - i', minor: true },
 ];
+
+// ─── Note-value SVG icons (viewBox 0 0 20 36) ─────────────────────────────
+
+const NOTE_ICON_PATHS: Record<string, React.ReactNode> = {
+  whole: (
+    <ellipse cx="10" cy="20" rx="7" ry="4.5" fill="none" stroke="currentColor" strokeWidth="1.8"
+      transform="rotate(-15 10 20)" />
+  ),
+  half: (<>
+    <ellipse cx="9" cy="23" rx="6" ry="4" fill="none" stroke="currentColor" strokeWidth="1.8"
+      transform="rotate(-20 9 23)" />
+    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
+  </>),
+  quarter: (<>
+    <ellipse cx="9" cy="23" rx="6" ry="4" fill="currentColor"
+      transform="rotate(-20 9 23)" />
+    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
+  </>),
+  eighth: (<>
+    <ellipse cx="9" cy="23" rx="6" ry="4" fill="currentColor"
+      transform="rotate(-20 9 23)" />
+    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M15 4 Q19 8 17 14" stroke="currentColor" strokeWidth="1.5" fill="none" />
+  </>),
+  sixteenth: (<>
+    <ellipse cx="9" cy="23" rx="6" ry="4" fill="currentColor"
+      transform="rotate(-20 9 23)" />
+    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M15 4 Q19 8 17 14" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    <path d="M15 9 Q19 13 17 19" stroke="currentColor" strokeWidth="1.5" fill="none" />
+  </>),
+  auto: (
+    <text x="10" y="24" textAnchor="middle" fill="currentColor" fontSize="16" fontWeight="bold">A</text>
+  ),
+};
 
 // ─── Duration mapping ──────────────────────────────────────────────────────
 
@@ -106,12 +154,22 @@ function parseProgressionString(
   const result: RomanChord[] = [];
   let measure = 0;
   let currentBeat = 1;
+  let pendingModulation: string | null = null;
 
   for (const raw of rawTokens) {
     // Barline
     if (raw === '|') {
       measure++;
       currentBeat = 1;
+      continue;
+    }
+
+    // ── Modulation token: →G: or >G: or →g: etc. ──
+    // Formats: →Bb: , >f#: , →G , >g  (colon optional)
+    const modMatch = raw.match(/^[→>]([A-Ga-g][b#]{0,2}):?$/);
+    if (modMatch) {
+      // Store modulation target — will be applied to the NEXT chord
+      pendingModulation = modMatch[1];
       continue;
     }
 
@@ -140,7 +198,11 @@ function parseProgressionString(
       beat: currentBeat,
       measure,
       ...(chordDuration ? { duration: chordDuration } : {}),
+      ...(pendingModulation ? { modulateTo: pendingModulation } : {}),
     });
+
+    // Clear pending modulation after applying to this chord
+    if (pendingModulation) pendingModulation = null;
 
     currentBeat += durationBeats;
 
@@ -233,6 +295,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   isOpen,
   onClose,
   onApplyNotes,
+  onApplyContexts,
   keySignatureRoot,
   isMinorMode,
   timeSignature,
@@ -244,6 +307,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const [localMinor, setLocalMinor] = useState(isMinorMode);
   const [localTs, setLocalTs] = useState<TimeSignature>(timeSignature);
   const [selectedDuration, setSelectedDuration] = useState('quarter');
+  const [initialDisposition, setInitialDisposition] = useState<string>('auto');
 
   // Rules
   const [allowParallel5ths, setAllowParallel5ths] = useState(false);
@@ -262,6 +326,20 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     if (!existingNotes?.length) return [];
     return existingNotes
       .filter(n => n && !n.isRest && (n.voice === 1 || n.voice === undefined))
+      .sort((a, b) => {
+        const ma = a.measureIndex ?? 0, mb = b.measureIndex ?? 0;
+        if (ma !== mb) return ma - mb;
+        return (a.beat ?? 1) - (b.beat ?? 1);
+      });
+  }, [existingNotes]);
+
+  // Bass constraint mode ("basso dato")
+  const [useBass, setUseBass] = useState(false);
+  // Extract bass notes (voice 4) from existing notes
+  const bassFromScore = useMemo(() => {
+    if (!existingNotes?.length) return [];
+    return existingNotes
+      .filter(n => n && !n.isRest && (n as any).voice === 4)
       .sort((a, b) => {
         const ma = a.measureIndex ?? 0, mb = b.measureIndex ?? 0;
         if (ma !== mb) return ma - mb;
@@ -288,6 +366,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
 
   // Generation result
   const [generatedNotes, setGeneratedNotes] = useState<StaffNote[] | null>(null);
+  const [modulationContexts, setModulationContexts] = useState<ModulationContext[]>([]);
   const [violations, setViolations] = useState<ChoralViolation[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -356,14 +435,25 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setError(null);
       let progression = parseProgressionString(progressionText, localTs, selectedDuration);
       // Auto-harmonize when melody mode is active and no progression text
-      if (progression.length === 0 && useMelody && sopranoFromScore.length > 0) {
-        const constraints: SopranoConstraint[] = sopranoFromScore.map(n => ({
-          midi: n.midi,
-          measure: n.measureIndex ?? 0,
-          beat: n.beat ?? 1,
-        }));
+      if (progression.length === 0 && ((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))) {
         const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
-        progression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+        if (useBass && bassFromScore.length > 0 && !(useMelody && sopranoFromScore.length > 0)) {
+          // Bass-only: use bass-specific auto-harmonize
+          const constraints: SopranoConstraint[] = bassFromScore.map(n => ({
+            midi: n.midi,
+            measure: n.measureIndex ?? 0,
+            beat: n.beat ?? 1,
+          }));
+          progression = autoHarmonizeFromBass(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+        } else {
+          // Soprano (or both): use soprano auto-harmonize
+          const constraints: SopranoConstraint[] = sopranoFromScore.map(n => ({
+            midi: n.midi,
+            measure: n.measureIndex ?? 0,
+            beat: n.beat ?? 1,
+          }));
+          progression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+        }
         setProgressionText(progression.map(c => c.roman).join(' - '));
       }
       if (progression.length === 0) {
@@ -383,6 +473,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           doubleRoot,
         },
         autoSevenths,
+        initialDisposition: initialDisposition as any,
       };
 
       // Melody constraint: fix soprano from existing voice 1 notes
@@ -395,17 +486,27 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
         config.sopranoMelody = sopranoMelody;
       }
 
+      // Bass constraint ("basso dato")
+      if (useBass && bassFromScore.length > 0) {
+        config.bassMelody = bassFromScore.map(n => ({
+          midi: n.midi,
+          measure: n.measureIndex ?? 0,
+          beat: n.beat ?? 1,
+        }));
+      }
+
       resetNoteIdCounter();
       const result = realizeChorale(progression, config);
 
       setGeneratedNotes(result.notes);
       setViolations(result.violations);
+      setModulationContexts(result.modulationContexts ?? []);
     } catch (err: any) {
       setError(err?.message || 'Errore durante la generazione.');
       setGeneratedNotes(null);
       setViolations([]);
     }
-  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, useMelody, sopranoFromScore, harmonicRhythmBeats]);
+  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition]);
 
   // Apply to editor
   const handleApply = useCallback(() => {
@@ -424,15 +525,28 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
         measureIndex: (n.measureIndex ?? 0) + offset,
         startTick: ((n as any).startTick ?? 0) + offset * ticksPerMeasure,
       })) : notes;
-    if (useMelody && sopranoFromScore.length > 0) {
-      const sopranoOriginals = (existingNotes || []).filter(n => n && (n.voice === 1 || n.voice === undefined));
-      const generatedInner = voiceFiltered.filter(n => n.voice !== 1);
-      onApplyNotes([...sopranoOriginals, ...applyOffset(generatedInner)]);
+    const lockedVoices: number[] = [];
+    if (useMelody && sopranoFromScore.length > 0) lockedVoices.push(1);
+    if (useBass && bassFromScore.length > 0) lockedVoices.push(4);
+    if (lockedVoices.length > 0) {
+      const originals = (existingNotes || []).filter(n => n && lockedVoices.includes((n as any).voice ?? 1));
+      const generatedInner = voiceFiltered.filter(n => !lockedVoices.includes(n.voice ?? 1));
+      onApplyNotes([...originals, ...applyOffset(generatedInner)]);
     } else {
       onApplyNotes(applyOffset(voiceFiltered));
     }
+    // Apply modulation contexts (offset absBeat if needed)
+    if (onApplyContexts && modulationContexts.length > 0) {
+      const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
+      const offsetBeats = offset * beatsPerMeasure;
+      onApplyContexts(modulationContexts.map(c => ({
+        ...c,
+        absBeat: c.absBeat + offsetBeats,
+        measureIndex: c.measureIndex + offset,
+      })));
+    }
     onClose();
-  }, [generatedNotes, onApplyNotes, onClose, useMelody, sopranoFromScore, existingNotes, insertMeasure, enabledVoices, localTs]);
+  }, [generatedNotes, onApplyNotes, onApplyContexts, onClose, useMelody, sopranoFromScore, useBass, bassFromScore, existingNotes, insertMeasure, enabledVoices, localTs, modulationContexts]);
 
   // Load preset
   const handlePreset = useCallback((preset: typeof PRESETS[number]) => {
@@ -507,6 +621,12 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               const appendChord = (deg: string) => {
                 setProgressionText(prev => {
                   const t = prev.trim();
+                  // If last token ends with '/', append as secondary target (V/V, viio/ii)
+                  if (t && t.endsWith('/')) {
+                    const parts = t.split(/\s*[-,]\s*/);
+                    parts[parts.length - 1] = parts[parts.length - 1] + deg;
+                    return parts.join(' - ');
+                  }
                   return t ? t + ' - ' + deg : deg;
                 });
                 setGeneratedNotes(null); setViolations([]); setError(null);
@@ -549,6 +669,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                   <button onClick={() => appendSuffix('7')} className={btnCls} title="Aggiungi 7ª">7</button>
                   <button onClick={() => appendSuffix('o')} className={btnCls} title="Diminuito (°)">°</button>
                   <button onClick={() => appendSuffix('+')} className={btnCls} title="Aumentato (+)">+</button>
+                  <button onClick={() => appendSuffix('/')} className={btnCls + ' text-yellow-400'} title="Dominante secondaria (/ poi click grado)">/ →</button>
                   <div className={sepCls} />
                   {INVERSIONS_TRIAD.map(inv => (
                     <button key={inv} onClick={() => appendSuffix(inv)} className={btnCls}
@@ -560,8 +681,48 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                       title={`Rivolto 7ª: ${inv}`}>{inv}</button>
                   ))}
                   <div className={sepCls} />
+                  <button onClick={() => {
+                    setProgressionText(prev => {
+                      const t = prev.trim();
+                      return t ? t + ' - →' : '→';
+                    });
+                    setGeneratedNotes(null); setViolations([]); setError(null);
+                  }} className={btnCls + ' text-cyan-400 hover:text-cyan-300'}
+                    title="Modulazione — inserisce →, poi digita la tonalità (es. G: Bb: f#:)">→ mod</button>
+                  <div className={sepCls} />
                   <button onClick={removeLast} className={btnCls + ' text-red-400 hover:text-red-300'}
                     title="Rimuovi ultimo accordo">⌫</button>
+                </div>
+              );
+            })()}
+
+            {/* ── Chord suggestions based on corpus statistics ── */}
+            {(() => {
+              const tokens = progressionText.trim().split(/\s*[-,]\s*/).filter(Boolean);
+              if (tokens.length === 0) return null;
+              const recent = tokens.slice(-2);
+              const suggestions: ChordSuggestion[] = suggestNextChord(recent, 6);
+              if (suggestions.length === 0) return null;
+              return (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] text-gray-500 mr-1" title="Suggerimenti basati sul corpus di composizioni analizzate">💡</span>
+                  {suggestions.map((s, i) => (
+                    <button key={i}
+                      onClick={() => {
+                        setProgressionText(prev => {
+                          const t = prev.trim();
+                          return t ? t + ' - ' + s.chord : s.chord;
+                        });
+                        setGeneratedNotes(null); setViolations([]); setError(null);
+                      }}
+                      className="px-1.5 py-0.5 text-[10px] rounded font-mono transition-colors
+                        bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 hover:text-cyan-100
+                        border border-cyan-700/30"
+                      title={`${s.chord} (${Math.round(s.probability * 100)}%)`}
+                    >
+                      {s.chord} <span className="text-[8px] text-cyan-500 ml-0.5">{Math.round(s.probability * 100)}%</span>
+                    </button>
+                  ))}
                 </div>
               );
             })()}
@@ -576,6 +737,11 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 <div><span className="text-white font-mono">viio vii°</span> — diminuito</div>
                 <div><span className="text-white font-mono">III+</span> — aumentato</div>
                 <div><span className="text-white font-mono">iiø7</span> — semidiminuito</div>
+                <div><span className="text-white font-mono">V/V V7/IV viio/ii</span> — dominanti secondarie</div>
+                <div><span className="text-white font-mono">bII bVII #IV</span> — gradi cromatici (♭/♯ sulla fondamentale)</div>
+                <div><span className="text-white font-mono">It6 Fr6 Ger6</span> — seste eccedenti (It., Fr., Ted.)</div>
+                <div><span className="text-white font-mono">Vdom7 IVmaj7</span> — 7ᵃ dom. / 7ᵃ magg. esplicita</div>
+                <div><span className="text-white font-mono">→G: →Bb: →f#:</span> — modulazione (maiusc=Magg, minusc=min)</div>
                 <div><span className="text-white font-mono">|</span> — stanghetta (forza nuova misura)</div>
                 <div className="col-span-2 mt-1 border-t border-slate-700 pt-1">
                   <span className="text-gray-300">Valori inline:</span>{' '}
@@ -688,12 +854,39 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             </div>
             <div>
               <label className="block text-xs text-gray-300 mb-1">Valore nota</label>
+              <div className="flex gap-1">
+                {DURATION_OPTIONS.map(d => (
+                  <button
+                    key={d.value}
+                    title={d.label}
+                    onClick={() => { setSelectedDuration(d.value); setGeneratedNotes(null); }}
+                    className={`flex-1 flex items-center justify-center p-1.5 rounded border transition-colors ${
+                      selectedDuration === d.value
+                        ? 'bg-blue-600 border-blue-400 text-white'
+                        : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <svg width="16" height="28" viewBox="0 0 20 36" className="shrink-0">
+                      {NOTE_ICON_PATHS[d.value]}
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-300 mb-1">Disposiz. 1° acc.</label>
               <select
-                value={selectedDuration}
-                onChange={e => { setSelectedDuration(e.target.value); setGeneratedNotes(null); }}
+                value={initialDisposition}
+                onChange={e => { setInitialDisposition(e.target.value); setGeneratedNotes(null); }}
                 className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
               >
-                {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                <option value="auto">Auto</option>
+                <option value="R358">R-3-5-8</option>
+                <option value="R538">R-5-3-8</option>
+                <option value="R835">R-8-3-5</option>
+                <option value="R385">R-3-8-5</option>
+                <option value="R583">R-5-8-3</option>
+                <option value="R853">R-8-5-3</option>
               </select>
             </div>
           </div>
@@ -776,6 +969,38 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             {sopranoFromScore.length === 0 && (
               <div className="mt-1 text-[10px] text-gray-500">
                 Nessuna nota voice 1 trovata sullo staff. Inserisci prima la melodia.
+              </div>
+            )}
+          </div>
+
+          {/* Bass constraint toggle ("basso dato") */}
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-200">
+              <input
+                type="checkbox"
+                checked={useBass}
+                onChange={() => { setUseBass(v => !v); setGeneratedNotes(null); }}
+                className="accent-amber-500"
+                disabled={bassFromScore.length === 0}
+              />
+              <span className={bassFromScore.length === 0 ? 'text-gray-500' : ''}>
+                Armonizza basso dato (bass)
+              </span>
+            </label>
+            {useBass && bassFromScore.length > 0 && (
+              <div className="mt-1 p-2 bg-slate-800 rounded border border-slate-700 text-[10px] text-gray-400">
+                <div>
+                  <span className="text-amber-300 font-semibold">{bassFromScore.length}</span> note basso trovate
+                  {' — '}il motore genererà solo Soprano, Alto e Tenore.
+                </div>
+                <div className="mt-0.5 text-gray-500">
+                  Basso: {bassFromScore.slice(0, 12).map(n => `${n.pitch ?? '?'}${n.octave ?? ''}`).join(' ')}{bassFromScore.length > 12 ? ' …' : ''}
+                </div>
+              </div>
+            )}
+            {bassFromScore.length === 0 && (
+              <div className="mt-1 text-[10px] text-gray-500">
+                Nessuna nota voice 4 trovata sullo staff.
               </div>
             )}
           </div>
@@ -877,7 +1102,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               onClick={handleGenerate}
               className="px-4 py-2 text-sm rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-semibold
                 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={progressionText.trim().length === 0 && !(useMelody && sopranoFromScore.length > 0)}
+              disabled={progressionText.trim().length === 0 && !((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))}
             >
               Genera
             </button>

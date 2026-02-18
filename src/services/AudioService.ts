@@ -1,7 +1,10 @@
 
 import { CHROMATIC_SCALE } from '../constants';
 
-const SOUND_BASE_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_grand_piano-mp3/';
+// Local bundled piano samples (FluidR3_GM acoustic_grand_piano).
+// Falls back to the remote CDN only if the local file fails to load.
+const SOUND_BASE_URL_LOCAL = './sounds/piano/';
+const SOUND_BASE_URL_REMOTE = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_grand_piano-mp3/';
 
 export class AudioService {
   public audioContext: AudioContext | null = null;
@@ -39,14 +42,21 @@ export class AudioService {
     if (!this.audioContext) throw new Error('AudioContext not initialized.');
     if (this.audioBuffers.has(audioFile)) return;
 
-    try {
-      const response = await fetch(`${SOUND_BASE_URL}${audioFile}.mp3`);
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      this.audioBuffers.set(audioFile, audioBuffer);
-    } catch (error) {
-      // errore silenziato
+    // Try local bundled file first, then fall back to remote CDN.
+    for (const base of [SOUND_BASE_URL_LOCAL, SOUND_BASE_URL_REMOTE]) {
+      try {
+        const response = await fetch(`${base}${audioFile}.mp3`);
+        if (!response.ok) continue;
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength < 100) continue; // empty / error page
+        const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+        this.audioBuffers.set(audioFile, audioBuffer);
+        return;
+      } catch {
+        // try next source
+      }
     }
+    // Both sources failed — silently skip this note.
   }
 
   private async loadInitialSounds(): Promise<void> {

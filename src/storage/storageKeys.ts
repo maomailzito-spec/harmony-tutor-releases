@@ -23,6 +23,8 @@ export const SELECT_ONLY_CURRENT_VOICE_KEY = 'harmony-tutor.selectOnlyCurrentVoi
 export const SHOW_ROMAN_ANALYSIS_KEY = 'harmony-tutor.showRomanAnalysis.v1' as const;
 export const SHOW_SYMBOL_ANALYSIS_KEY = 'harmony-tutor.showSymbolAnalysis.v1' as const;
 export const TOOLBAR_HIDDEN_KEY = 'harmony-tutor.toolbarHidden.v1' as const;
+export const AUTO_SAVE_INTERVAL_KEY = 'harmony-tutor.editor.autoSaveInterval.v1' as const;
+export const ANALYSIS_STATISTICAL_CORRECTION_KEY = 'harmony-tutor.analysis.statisticalCorrection.v1' as const;
 
 // Export / print
 export const EXPORT_INCLUDE_TITLE_KEY = 'harmony-tutor.export.includeTitle.v1' as const;

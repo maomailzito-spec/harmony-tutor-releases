@@ -1,4 +1,39 @@
 import type { HarmonyLabelOverride, TimeSignature } from '../types';
+import { suggestNextChord } from '../engine/progressionSuggester';
+
+/** Filter out notes flagged as ornamental (auto-detected or manual override).
+ *  When filtering would leave fewer than 2 notes, fall back to the full set
+ *  so chord analysis still has enough data.
+ *  @param overrideMap  Optional Map<noteId, ornamentType> for direct ID lookup
+ *                      (survives object copies / different object graphs). */
+export function structuralNotes(notes: any[], overrideMap?: Map<string, string>): any[] {
+    if (!notes || notes.length === 0) return notes;
+    const filtered = notes.filter((n: any) => {
+        if (!n) return true;
+        // Direct ID check against override map
+        if (overrideMap && n.id) {
+            const ov = overrideMap.get(n.id);
+            if (ov && ov !== 'structural') return false;
+        }
+        // Composite key check (midi-measureIndex-beat) for cross-graph matching
+        if (overrideMap) {
+            const midi = Number(n.midi);
+            if (Number.isFinite(midi)) {
+                const ov2 = overrideMap.get(`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`);
+                if (ov2 && ov2 !== 'structural') return false;
+            }
+        }
+        if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+        if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape) return false;
+        return true;
+    });
+    // If user manual overrides were responsible for the filtering, respect
+    // the override even when fewer than 2 notes remain (avoid re-including
+    // the ornamental note via the safety fallback).
+    if (filtered.length >= 2) return filtered;
+    const hasUserOverride = notes.some((n: any) => n?.ornamentOverride && n.ornamentOverride !== 'structural');
+    return hasUserOverride ? filtered : notes;
+}
 
 export type TimelineEventLike = {
     absBeat?: number;
@@ -375,6 +410,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
     identifyChordCandidates: (notes: any[]) => any[];
     pcSetFromNotes: (notes: any[]) => Set<number> | null;
     overrideByAbsBeat: Map<number, HarmonyLabelOverride>;
+    useStatisticalCorrection?: boolean;
 }): {
     autoOverrideByAbsBeat: Map<number, HarmonyLabelOverride>;
     autoRomanDisplayByAbsBeat: Map<number, string>;
@@ -397,6 +433,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
             identifyChordCandidates,
             pcSetFromNotes,
             overrideByAbsBeat,
+            useStatisticalCorrection,
         } = opts;
 
         const preferFlats = (() => {
@@ -444,10 +481,10 @@ export function computeLookaheadTonicizationOverrides(opts: {
             const ctx = ctxAtAbsBeat(absBeat);
             const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
             const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
-            const r = getRomanAnalysis((ev?.notes || []) as any, ctxTonic, ctxIsMinor);
+            const r = getRomanAnalysis(structuralNotes(ev?.notes || []), ctxTonic, ctxIsMinor);
             const rootPc = (() => {
                 try {
-                    const pcs = pcSetFromNotes((ev?.notes || []) as any);
+                    const pcs = pcSetFromNotes(structuralNotes(ev?.notes || []));
                     if (pcs && pcs.size === 3) {
                         const arr = Array.from(pcs.values());
                         for (const pc of arr) {
@@ -512,7 +549,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
                     if (!rp) continue;
                     if (rp.includes('/')) continue;
 
-                    const local = String(getRomanAnalysis((bp.notes || []) as any, cur.ctxTonic, !!cur.ctxIsMinor)?.roman || '').trim();
+                    const local = String(getRomanAnalysis(structuralNotes(bp.notes || []), cur.ctxTonic, !!cur.ctxIsMinor)?.roman || '').trim();
                     if (!local) continue;
 
                     // Only apply if the new-key reading is clearly functional.
@@ -598,7 +635,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
                     if (!rp) continue;
                     if (rp.includes('/')) continue; // already secondary; don't relabel
 
-                    const tonicizedRoman = String(getRomanAnalysis((bp.notes || []) as any, tonicizedTonic, tonicizedIsMinor)?.roman || '').trim();
+                    const tonicizedRoman = String(getRomanAnalysis(structuralNotes(bp.notes || []), tonicizedTonic, tonicizedIsMinor)?.roman || '').trim();
                     if (!tonicizedRoman) continue;
                     const isPredLike = /^iv/i.test(tonicizedRoman) || /^ii/i.test(tonicizedRoman) || /^VI/i.test(tonicizedRoman) || /^iio/i.test(tonicizedRoman) || /°/.test(tonicizedRoman);
                     if (!isPredLike) continue;
@@ -768,7 +805,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
                             if (autoRomanDisplayByAbsBeat.has(pq)) continue;
                             const rp = String(bp.roman || '').trim();
                             if (!rp || rp.includes('/')) continue;
-                            const tonicizedRoman = String(getRomanAnalysis((bp.notes || []) as any, tonicizedTonic, tonicizedIsMinor)?.roman || '').trim();
+                            const tonicizedRoman = String(getRomanAnalysis(structuralNotes(bp.notes || []), tonicizedTonic, tonicizedIsMinor)?.roman || '').trim();
                             if (!tonicizedRoman) continue;
                             const isPredLike = /^iv/i.test(tonicizedRoman) || /^ii/i.test(tonicizedRoman) || /^VI/i.test(tonicizedRoman) || /^iio/i.test(tonicizedRoman) || /°/.test(tonicizedRoman);
                             if (!isPredLike) continue;
@@ -846,6 +883,69 @@ export function computeLookaheadTonicizationOverrides(opts: {
         }
     } catch {
         // ignore
+    }
+
+    // ── Statistical refinement: correct improbable romans using corpus probabilities ──
+    // Rules: (1) only intervene on extreme improbability (<2%), (2) never invent
+    // chords — only pick from identifyChordCandidates alternatives, (3) the
+    // alternative must have >5% probability AND >5× the current probability.
+    if (useStatisticalCorrection) {
+        try {
+            const stripFig = (s: string) => s.replace(/[0-9♭♯]+$/g, '');
+            for (let i = 1; i < base.length; i++) {
+                const bi = base[i];
+                if (!bi?.roman) continue;
+                // Never override user or existing auto overrides
+                if (overrideByAbsBeat.has(bi.q) || autoOverrideByAbsBeat.has(bi.q)) continue;
+                const prev = base[i - 1];
+                if (!prev?.roman) continue;
+                const prevBase = stripFig(prev.roman);
+                const curBase = stripFig(bi.roman);
+                if (!prevBase || !curBase) continue;
+                // Build context (trigram if available, else bigram)
+                const context = i >= 2 && base[i - 2]?.roman
+                    ? [stripFig(base[i - 2].roman), prevBase] : [prevBase];
+                const suggestions = suggestNextChord(context, 20);
+                if (suggestions.length === 0) continue;
+                const curProb = suggestions.find(s => s.chord === curBase)?.probability ?? 0;
+                // Only intervene on extreme improbability
+                if (curProb >= 0.02) continue;
+                // Get alternative chord interpretations from the SAME notes
+                const cands = identifyChordCandidates(bi.notes || []);
+                if (!Array.isArray(cands) || cands.length < 2) continue;
+                let bestAlt: { roman: string; prob: number } | null = null;
+                for (const c of cands) {
+                    if (!c?.root) continue;
+                    // Reorder notes so this candidate's root is lowest → different inversion reading
+                    const reordered = [...(bi.notes || [])].sort((a: any, b: any) => {
+                        const aR = (((a.noteIndex ?? -1) % 12) + 12) % 12 === (((c.root.noteIndex ?? -1) % 12) + 12) % 12;
+                        const bR = (((b.noteIndex ?? -1) % 12) + 12) % 12 === (((c.root.noteIndex ?? -1) % 12) + 12) % 12;
+                        if (aR && !bR) return -1;
+                        if (!aR && bR) return 1;
+                        return 0;
+                    });
+                    const alt = getRomanAnalysis(structuralNotes(reordered), bi.ctxTonic, bi.ctxIsMinor);
+                    if (!alt?.roman) continue;
+                    const altBase = stripFig(String(alt.roman));
+                    if (altBase === curBase) continue;
+                    const altProb = suggestions.find(s => s.chord === altBase)?.probability ?? 0;
+                    if (altProb > 0.05 && altProb > curProb * 5) {
+                        if (!bestAlt || altProb > bestAlt.prob) {
+                            bestAlt = { roman: String(alt.roman), prob: altProb };
+                        }
+                    }
+                }
+                if (bestAlt) {
+                    autoOverrideByAbsBeat.set(bi.q, {
+                        absBeat: bi.absBeat,
+                        roman: bestAlt.roman,
+                        note: 'stat-correction',
+                    });
+                }
+            }
+        } catch {
+            // ignore
+        }
     }
 
     return {
