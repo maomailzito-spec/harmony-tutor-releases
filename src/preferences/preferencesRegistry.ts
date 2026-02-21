@@ -20,6 +20,7 @@ import {
   ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY,
   AUTO_SAVE_INTERVAL_KEY,
   ANALYSIS_STATISTICAL_CORRECTION_KEY,
+  ENABLE_LEARNED_ORNAMENTS_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
@@ -43,6 +44,7 @@ export type PreferenceId =
   | 'analysis.harmonyLabelMinSpanBeats'
   | 'analysis.filters'
   | 'analysis.useStatisticalCorrection'
+  | 'analysis.enableLearnedOrnaments'
   | 'export.includeTitle'
   | 'debug.showHarmonyDebug';
 
@@ -378,6 +380,17 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     defaultValue: false,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'analysis.enableLearnedOrnaments': {
+    id: 'analysis.enableLearnedOrnaments',
+    section: 'Analysis',
+    label: 'Ornamenti appresi',
+    storageKey: ENABLE_LEARNED_ORNAMENTS_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 

@@ -25,6 +25,7 @@ export const SHOW_SYMBOL_ANALYSIS_KEY = 'harmony-tutor.showSymbolAnalysis.v1' as
 export const TOOLBAR_HIDDEN_KEY = 'harmony-tutor.toolbarHidden.v1' as const;
 export const AUTO_SAVE_INTERVAL_KEY = 'harmony-tutor.editor.autoSaveInterval.v1' as const;
 export const ANALYSIS_STATISTICAL_CORRECTION_KEY = 'harmony-tutor.analysis.statisticalCorrection.v1' as const;
+export const ENABLE_LEARNED_ORNAMENTS_KEY = 'harmony-tutor.analysis.learnedOrnaments.v1' as const;
 
 // Export / print
 export const EXPORT_INCLUDE_TITLE_KEY = 'harmony-tutor.export.includeTitle.v1' as const;
@@ -64,6 +65,5 @@ export const STORAGE_KEYS = {
 	GUITAR_CUSTOM_CHORDS_KEY,
 	GUITAR_CUSTOM_SCALE_SHAPES_KEY,
 	GUITAR_CUSTOM_VOICINGS_KEY,
+        ENABLE_LEARNED_ORNAMENTS_KEY,
 } as const;
-
-export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

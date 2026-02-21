@@ -9,7 +9,7 @@ declare global {
         };
     }
 }
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, startTransition } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType } from '../types';
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
@@ -1822,8 +1822,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 } else {
                     await importMidi();
                 }
-            } catch {
-                // ignore
+            } catch (err: any) {
+                console.error('MIDI import failed:', err);
+                try { window.alert(`Errore import MIDI: ${String(err?.message || err || 'errore sconosciuto')}`); } catch { /* ignore */ }
             }
             return;
         }
@@ -2138,12 +2139,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return { fromNoteId: from.id, toNoteId: to.id, voice: v1 as Voice };
     }, [notes, selectedNoteIds]);
     
+    // Synchronous analysis — correctness over performance.
     const analysisResult = useMemo(() => {
         if (!isAnalysisEnabled) {
             return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
         try {
-            return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides);
+            return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides);
         } catch (e) {
             console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
             return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
@@ -3330,6 +3332,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         eventsToPlay.forEach((ev) => {
             const delayMs = (ev.absBeat - startAbsBeat) * beatDurationSec * 1000;
             const when = audioStartTime + (delayMs / 1000);
+
+            // Pre-schedule audio immediately — Web Audio handles precise timing
+            // via the `when` parameter (sample-accurate, no setTimeout jitter).
+            if (!selectedMidiOutput && audioService.audioContext) {
+                ev.items.forEach((it) => {
+                    const n = it.note;
+                    if (n.isRest) return;
+                    const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
+                    const midi = n.midi;
+                    const midiT = (midi ?? 0) + playbackTransposeSemitones;
+                    if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
+                    void audioService.playNote(midiToName(midiT), { when, duration: durSec });
+                });
+            }
+
+            // Visual cursor highlighting + MIDI output via setTimeout
+            // (visual timing is less critical than audio timing).
             const t = window.setTimeout(async () => {
                 const playable = ev.items
                     .map(x => x.note)
@@ -3344,16 +3363,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (n.isRest) return;
                         const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
                         sendMidiNote(n, selectedMidiOutput, durSec, midiWhenMs);
-                    });
-                } else if (audioService.audioContext) {
-                    ev.items.forEach((it) => {
-                        const n = it.note;
-                        if (n.isRest) return;
-                        const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
-                        const midi = n.midi;
-                        const midiT = (midi ?? 0) + playbackTransposeSemitones;
-                        if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
-                        void audioService.playNote(midiToName(midiT), { when, duration: durSec });
                     });
                 }
             }, Math.max(0, (startMs - performance.now()) + delayMs));
@@ -7018,7 +7027,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 })();
 
                                 const invalidMeasures = new Set<number>();
-                                const EPS = 1e-4;
+                                // Tolerance for MIDI-quantized beat positions (triplet rounding ≈0.083 beats)
+                                const EPS = 0.15;
 
                                 const validateVoiceMeasure = (mi: number, line: StaffNote[]): boolean => {
                                     const beatsPerMeas = beatsPerMeasureForIndex(mi);
@@ -7047,7 +7057,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         cur = o.beat + o.dur;
                                         if (cur > endBeat + EPS) return false;
                                     }
-                                    return Math.abs(cur - endBeat) <= 0.01;
+                                    // Tolerance: accommodates MIDI triplet quantization (deficit ≤0.34 beats)
+                                    return Math.abs(cur - endBeat) <= 0.4;
                                 };
 
                                 for (const mi of measuresInSystem) {
@@ -7056,12 +7067,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     if (typeof maxMeasureWithNotes === 'number' && mi >= maxMeasureWithNotes) continue;
                                     for (const v of [1, 2, 3, 4]) {
                                         const line = notesInMeasure.filter(n => (n.voice ?? 1) === v);
-                                        // Strict rule: every voice must fully cover the measure.
-                                        // Missing/empty voice => incomplete measure.
-                                        if (!line.length) {
-                                            invalidMeasures.add(mi);
-                                            break;
-                                        }
+                                        // Skip voices with no notes in this measure (common in MIDI imports).
+                                        if (!line.length) continue;
                                         if (!validateVoiceMeasure(mi, line)) {
                                             invalidMeasures.add(mi);
                                             break;
@@ -7735,7 +7742,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                         x2={x2}
                                                                                                         y2={y}
                                                                                                         stroke="black"
-                                                                                                        strokeWidth={2}
+                                                                                                        strokeWidth={1}
                                                                                                         strokeLinecap="butt"
                                                                                                     />
                                                                                                 );
@@ -7870,7 +7877,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                                     y1={lineY}
                                                                                                                     y2={lineY}
                                                                                                                     stroke="black"
-                                                                                                                    strokeWidth={2}
+                                                                                                                    strokeWidth={1}
                                                                                                                     strokeLinecap="butt"
                                                                                                                 />
 
@@ -8049,7 +8056,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             return ids.includes(c.noteId1) && ids.includes(c.noteId2);
                                                                         });
                                                                         if (!match) {
-                                                                            try { console.log('[RENDER] skipping-connection-no-violation', { noteId1: c.noteId1, noteId2: c.noteId2, ruleId: c.ruleId }); } catch(_) {}
+                                                                            // debug removed: skipping-connection-no-violation
                                                                             return false;
                                                                         }
                                                                         // Respect analysis panel filters: hide connections whose
@@ -8251,10 +8258,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                     y={y}
                                                                                     textAnchor="middle"
                                                                                     dominantBaseline="middle"
-                                                                                    fontSize={12}
-                                                                                    fontWeight={700}
+                                                                                    fontSize={10}
+                                                                                    fontWeight={500}
                                                                                     fill="black"
-                                                                                    opacity={0.9}
+                                                                                    opacity={0.7}
                                                                                 >
                                                                                     {text}
                                                                                 </text>
@@ -8407,7 +8414,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                 x2={q.x - 7}
                                                                                                 y2={lineY}
                                                                                                 stroke="#111827"
-                                                                                                strokeWidth={2}
+                                                                                                strokeWidth={1}
                                                                                                 strokeLinecap="butt"
                                                                                             />
                                                                                             <text
@@ -8415,9 +8422,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                 y={lineY}
                                                                                                 textAnchor="middle"
                                                                                                 dominantBaseline="middle"
-                                                                                                fontSize={12}
-                                                                                                fontWeight={700}
+                                                                                                fontSize={10}
+                                                                                                fontWeight={500}
                                                                                                 fill="black"
+                                                                                                opacity={0.7}
                                                                                             >
                                                                                                 p
                                                                                             </text>

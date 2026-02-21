@@ -145,6 +145,16 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     if (!arrayBuffer) return;
 
     const parsed = parseMidi(arrayBuffer);
+
+    // ── Safeguard: warn & truncate if file has too many notes ──
+    const MAX_IMPORT_NOTES = 5000;
+    if (parsed.notes.length > MAX_IMPORT_NOTES) {
+      const msg = `Il file MIDI contiene ${parsed.notes.length.toLocaleString()} note (il massimo gestibile è ~${MAX_IMPORT_NOTES.toLocaleString()}).\nVerranno importate solo le prime ${MAX_IMPORT_NOTES.toLocaleString()} note.`;
+      console.warn('[MIDI import]', msg);
+      try { window.alert(msg); } catch { /* ignore */ }
+      parsed.notes.length = MAX_IMPORT_NOTES;
+    }
+
     const tpq = Math.max(1, parsed.tpq);
     const beatsPerMeasure = parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
 
@@ -252,6 +262,10 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
         voice,
       };
     });
+
+    // Note: rest generation removed — auto-generated rests from MIDI import
+    // caused malformed entries (drawn but rhythmically inactive).
+    // Users can add rests manually where needed.
 
     setProject({
       notes,

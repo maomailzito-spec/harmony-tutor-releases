@@ -8,6 +8,7 @@
     "start": "vite",
     "audit:contracts": "tsx scripts/audit-contracts.ts",
     "extract-stats": "tsx scripts/extract-progression-stats.ts",
+    "extract-ornament-stats": "tsx scripts/extract-ornament-stats.ts",
     "build": "npm run audit:contracts && tsc && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
     "preview": "vite preview",

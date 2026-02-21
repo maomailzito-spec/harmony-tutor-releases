@@ -45,6 +45,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [harmonyLabelMinSpanBeats, setHarmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
   const [, setAnalysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
   const [useStatisticalCorrection, setUseStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
+  const [enableLearnedOrnaments, setEnableLearnedOrnaments] = usePreference<boolean>('analysis.enableLearnedOrnaments');
 
   const analysisProfileSelectionValue = useMemo(() => {
     return profileCustomized ? 'custom' : profileBaseId;
@@ -435,6 +436,21 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     <div className="text-sm font-semibold text-slate-100">Correzione statistica progressioni</div>
                     <div className="text-xs text-slate-400">
                       Usa le statistiche estratte dagli esercizi per correggere etichette romane improbabili. Richiede un corpus ampio di esercizi.
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!enableLearnedOrnaments}
+                    onChange={(e) => setEnableLearnedOrnaments(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Ornamenti appresi</div>
+                    <div className="text-xs text-slate-400">
+                      Rileva automaticamente gli ornamenti basandosi sui pattern appresi dalle correzioni manuali.
                     </div>
                   </div>
                 </label>

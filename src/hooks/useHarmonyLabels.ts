@@ -205,8 +205,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // Anti-noise filter (greedy forward): keep first event, then keep the
         // next only when its distance from the last *kept* event ≥ minSpan.
         // This preserves structural beats and absorbs ornamental short events.
-        const timelineFiltered = (() => {
-            if (minSpanBeats <= 1e-6) return timelineForLabels;
+        const timelineFiltered: any[] = (() => {
+            if (minSpanBeats <= 1e-6) return [...timelineForLabels];
             const result: any[] = [];
             let lastKeptBeat = -Infinity;
             for (const ev of timelineForLabels) {
@@ -266,6 +266,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 });
             });
         } catch { /* ignore */ }
+
+        // Ensure beats with user-placed harmony overrides are always present
+        // in the filtered timeline so the override is actually applied.
+        if (overrideByAbsBeat.size > 0) {
+            const filteredBeats = new Set(timelineFiltered.map((ev: any) => qAbs(Number(ev?.absBeat))));
+            for (const [ovrBeat] of overrideByAbsBeat) {
+                if (filteredBeats.has(ovrBeat)) continue;
+                const match = (timeline || []).find((ev: any) =>
+                    ev && Math.abs(qAbs(Number(ev?.absBeat)) - ovrBeat) < 1e-6);
+                if (match) timelineFiltered.push(match);
+            }
+            timelineFiltered.sort((a: any, b: any) => Number(a?.absBeat) - Number(b?.absBeat));
+        }
 
         // ---------------------------------------------------------
         // 2-measure lookahead tonicization (label-only)
@@ -331,6 +344,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     roman: String(r?.roman || ''),
                 };
             }).filter(x => Number.isFinite(x.absBeat));
+
+            // Inject user harmony overrides into base so the lookahead
+            // tonicization sees the user's intended roman labels and can
+            // propagate context to neighboring beats.
+            if (overrideByAbsBeat.size > 0) {
+                for (const b of base) {
+                    const ov = overrideByAbsBeat.get(b.q);
+                    if (ov?.roman) b.roman = ov.roman;
+                }
+            }
 
             const maxLookaheadBeats = beatsPerMeasure * 2;
             for (let j = 0; j < base.length; j++) {
@@ -1916,14 +1939,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             } catch { /* ignore */ }
 
             // Auto (analysis) overrides: label-only tonicization. Never beats a user override.
+            // Guard: never let auto tonicization replace a tonic chord (I/i) — the tonic
+            // label is too important to be overwritten by a lookahead heuristic.
             try {
                 const a = qAbs(event.absBeat);
                 if (!overrideByAbsBeat.has(a)) {
                     const auto = getNear(autoOverrideByAbsBeat, a);
                     if (auto) {
-                        if (auto.roman !== undefined) roman = auto.roman;
-                        if (auto.symbol !== undefined) symbol = auto.symbol;
-                        if (auto.figures !== undefined) figures = auto.figures;
+                        const isCurrentlyTonic = roman === 'I' || roman === 'i';
+                        if (!isCurrentlyTonic) {
+                            if (auto.roman !== undefined) roman = auto.roman;
+                            if (auto.symbol !== undefined) symbol = auto.symbol;
+                            if (auto.figures !== undefined) figures = auto.figures;
+                        }
                     }
                 }
             } catch { /* ignore */ }
@@ -1971,9 +1999,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             let romanDisplay: string | undefined = undefined;
 
             // Display-only (label-only tonicization): show resolution pivot as i=ii, I=V, etc.
+            // Guard: never replace a tonic label (I/i) with an auto display override.
             try {
                 const a = qAbs(event.absBeat);
-                if (!overrideByAbsBeat.has(a)) {
+                const isCurrentlyTonicForDisp = roman === 'I' || roman === 'i';
+                if (!overrideByAbsBeat.has(a) && !isCurrentlyTonicForDisp) {
                     const autoDisp = getNear(autoRomanDisplayByAbsBeat, a);
                     if (autoDisp) {
                         // If the override is a pure slash-function label (e.g. ii°/iii),
@@ -2035,6 +2065,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             return false;
                         });
                         if (allUserOrn) {
+                            // Don't suppress if user has a harmony override at this beat
+                            const ov = overrideByAbsBeat.get(qAbs(event.absBeat));
+                            if (!ov) {
                             const prevR = lastRomanBySystem.get(systemIndex) || '';
                             if (prevR) {
                                 const xh = getXForAbsBeat(event.absBeat, system);
@@ -2049,6 +2082,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 });
                             }
                             return;
+                            }
                         }
                     }
                 }
@@ -3119,9 +3153,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     return inferred0;
                 }
             })();
+            // When no valid functional transformation was determined (degreeIdx is null
+            // or the inferred local tonic IS the global tonic), propagating the template's
+            // literal roman to copies would override each copy's native Roman
+            // (e.g. "vi" → "V" for a diatonic non-modulating sequence).
+            // Skip sequence annotation entirely in that case.
+            const skipFunctional = (inferred.degreeIdx == null || (inferred.degreeIdx === 0 && !inferred.isMinor));
+
             for (let kk = 0; kk < templateByK.length; kk += 1) {
                 const row = templateByK[kk];
-                const functional = (row.src && inferred.degreeIdx != null && inferred.isMinor != null)
+                const functional = (!skipFunctional && row.src && inferred.degreeIdx != null && inferred.isMinor != null)
                     ? normalizeFunctionalRomanInSequence(row.src, inferred.degreeIdx, inferred.isMinor)
                     : '';
                 templateByK[kk] = { ...row, functional };
@@ -3134,7 +3175,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (!row?.lab) continue;
                     const lbl = labelsBySystem[row.lab.systemIndex]?.[row.lab.labelIndex];
                     if (!lbl) continue;
-                    if (row.src) {
+                    if (row.src && !skipFunctional) {
                         (lbl as any).sequenceRoman = row.stripped;
                         if (row.functional) {
                             (lbl as any).sequenceRomanFunctional = row.functional;
@@ -3157,6 +3198,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (!templateRoman) continue;
                     const target = labelsBySystem[labB.systemIndex]?.[labB.labelIndex];
                     if (!target) continue;
+                    if (skipFunctional || !row.functional) continue;
                     (target as any).sequenceRoman = row.stripped;
                     if (row.functional) {
                         (target as any).sequenceRomanFunctional = row.functional;

@@ -91,9 +91,40 @@ export function getActiveNotesTimeline(
 }
 import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange, OrnamentOverride } from '../types';
 import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
-import { HARMONY_DEV_LOG_R06_KEY } from '../storage/storageKeys';
+import { HARMONY_DEV_LOG_R06_KEY, ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
+import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
+
+/** Ornament learning — duration bucket */
+function ornDurationCategory(dur: string): string {
+    switch (dur) {
+        case 'sixty-fourth': case 'thirty-second': case 'sixteenth': return 'very-short';
+        case 'eighth': return 'short';
+        case 'quarter': return 'medium';
+        case 'half': case 'whole': return 'long';
+        default: return 'medium';
+    }
+}
+/** Ornament learning — beat strength */
+function ornBeatStrength(beat: number, ts: { numerator: number; denominator: number }): string {
+    if (beat !== Math.floor(beat)) return 'weak';
+    if (beat === 1) return 'strong';
+    if (ts.numerator === 4 && ts.denominator === 4 && beat === 3) return 'strong';
+    if (ts.numerator === 4 && ts.denominator === 4) return 'moderate';
+    if (ts.numerator === 3 && ts.denominator === 4) return 'weak';
+    if (ts.numerator === 6 && ts.denominator === 8 && (beat === 1 || beat === 4)) return 'strong';
+    return 'weak';
+}
+/** Ornament learning — interval bucket */
+function ornIntervalBucket(semitones: number): string {
+    if (semitones === 0) return 'unison';
+    const abs = Math.abs(semitones);
+    const dir = semitones > 0 ? 'up' : 'down';
+    if (abs <= 2) return `step-${dir}`;
+    if (abs <= 4) return `skip-${dir}`;
+    return `leap-${dir}`;
+}
 
 const STRING_BASE_MIDI = [64, 59, 55, 50, 45, 40];
 const GUITAR_TUNING_INDICES = GUITAR_TUNING;
@@ -3584,7 +3615,8 @@ export function applyHarmonyRules(
     analysisContexts: AnalysisContext[],
     timeSignature?: TimeSignature,
     doubleBarlineMeasures?: number[],
-    ornamentOverrides?: OrnamentOverride[]
+    ornamentOverrides?: OrnamentOverride[],
+    harmonyOverrides?: HarmonyLabelOverride[]
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = (() => {
         try {
@@ -3611,6 +3643,59 @@ export function applyHarmonyRules(
     const debugLog = (...args: any[]) => {
         if (!DEBUG_ANALYSIS) return;
         try { console.log(...args); } catch (_) {}
+    };
+
+    // ── Profiling helper (zero-cost when inactive) ──
+    const _profiling = typeof globalThis !== 'undefined' && (globalThis as any).__HARMONY_PROFILE;
+    const _pTimings: Record<string, number> = {};
+    let _pLast = _profiling ? performance.now() : 0;
+    const _pmark = _profiling
+        ? (label: string) => { const now = performance.now(); _pTimings[label] = now - _pLast; _pLast = now; }
+        : (_label: string) => {};
+
+    // ── User harmony-override beat set ──
+    // At beats with explicit user chord overrides, skip automatic ornament
+    // marking so every note at that beat is treated as structural.
+    const _harmonyOverrideBeats = new Set<number>();
+    try {
+        if (harmonyOverrides?.length) {
+            const q = 192;
+            for (const ov of harmonyOverrides) {
+                const a = Number(ov?.absBeat);
+                if (Number.isFinite(a)) _harmonyOverrideBeats.add(Math.round(a * q) / q);
+            }
+        }
+    } catch { /* ignore */ }
+    const _bpmForHO = (timeSignature?.numerator ?? 4) * (4 / (timeSignature?.denominator ?? 4));
+    const _isHarmOverrideBeat = (n: any): boolean => {
+        if (!_harmonyOverrideBeats.size || !n) return false;
+        try {
+            const ab = ((n.measureIndex ?? 0) * _bpmForHO) + ((n.beat ?? 1) - 1);
+            return _harmonyOverrideBeats.has(Math.round(ab * 192) / 192);
+        } catch { return false; }
+    };
+
+    // ── Cached getRomanAnalysis for modulation-detection hot path ──
+    // Avoids redundant chord-recognition in O(n²×k) nested loops.
+    const _romanCache = new Map<string, { roman: string; figures: string[] } | null>();
+    const _gRA = (chord: StaffNote[], keyRoot: string, minor: boolean): { roman: string; figures: string[] } | null => {
+        if (!chord || chord.length < 2) return null;
+        const k = chord.map(n => `${n.midi ?? 0}:${n.pitch ?? ''}${n.explicitAccidental || ''}`).sort().join(',') + '|' + keyRoot + (minor ? 'm' : 'M');
+        if (_romanCache.has(k)) return _romanCache.get(k)!;
+        const r = getRomanAnalysis(chord, keyRoot, minor);
+        _romanCache.set(k, r);
+        return r;
+    };
+
+    // Cached identifyChord for suspension / modulation hot paths
+    const _chordCache = new Map<string, ReturnType<typeof identifyChord>>();
+    const _iC = (notes: StaffNote[]): ReturnType<typeof identifyChord> => {
+        if (!notes || notes.length < 2) return identifyChord(notes);
+        const k = notes.map(n => n.midi ?? 0).sort((a, b) => a - b).join(',');
+        if (_chordCache.has(k)) return _chordCache.get(k)!;
+        const r = identifyChord(notes);
+        _chordCache.set(k, r);
+        return r;
     };
 
     // Sequence matches (imitated progressions) for rule attenuation.
@@ -3908,6 +3993,7 @@ export function applyHarmonyRules(
         };
     });
 
+    _pmark('01-setup+chordTimeline');
     // =========================================================
     // Two-Track Analysis: Enharmonic sanity check (verify-only)
     // =========================================================
@@ -3978,6 +4064,7 @@ export function applyHarmonyRules(
         }
     } catch { /* ignore sanity-check errors */ }
 
+    _pmark('02-enharmonicSanity');
     // =========================================================
     // Auto cadence label overrides: IV–V–I and ii–V–I (label-only)
     // =========================================================
@@ -4107,6 +4194,7 @@ export function applyHarmonyRules(
         autoHarmonyLabelOverrides.sort((a, b) => qAbs(a.absBeat) - qAbs(b.absBeat));
     } catch { /* ignore */ }
 
+    _pmark('03-autoCadenceLabels');
     // ---- Sounding harmony per beat (duration-aware) ----
     // Needed for rules that depend on harmonic rhythm (e.g., harmonic syncopation).
     const durationToBeats = (d?: StaffNote['duration']) => {
@@ -4156,6 +4244,7 @@ export function applyHarmonyRules(
         return voice === 1 ? sorted[sorted.length - 1] : voice === 4 ? sorted[0] : undefined;
     };
 
+    _pmark('04-soundingHarmony');
     // ---- Per-voice melodic lines (sorted by time) ----
     const notesByVoice: Record<Voice, StaffNote[]> = { 1: [], 2: [], 3: [], 4: [] };
     analyzedNotes
@@ -4173,6 +4262,7 @@ export function applyHarmonyRules(
         });
     });
 
+    _pmark('05-perVoiceMelodicLines');
     // -----------------------
     // Passing-note detector
     // -----------------------
@@ -4248,6 +4338,8 @@ export function applyHarmonyRules(
                 const cur = line[j];
                 const next = line[j + 1];
                 if (!prev || !cur || !next) continue;
+                // Skip ornament detection if user has a harmony override at this beat
+                if (_isHarmOverrideBeat(cur)) continue;
                 // If already classified as another ornament (neighbor/appoggiatura/etc.),
                 // do not override with a generic passing-note label.
                 if ((cur as any).isNeighbor || (cur as any).isAnticipation || (cur as any).isAppoggiatura || (cur as any).isEscape) continue;
@@ -4363,6 +4455,7 @@ export function applyHarmonyRules(
         });
     }
 
+    _pmark('06-passingNoteDetector');
     // -----------------------
     // Other non-harmonic tones (classical ornaments)
     // -----------------------
@@ -5161,6 +5254,7 @@ export function applyHarmonyRules(
         }
     }
 
+    _pmark('07-ornaments');
     // -----------------------
     // Suspension (ritardo) detector
     // -----------------------
@@ -5522,9 +5616,8 @@ export function applyHarmonyRules(
                     try {
                         const heldIntoB = (getNoteStart(S) < b.absBeat - 1e-6) || (getNoteEnd(prep) > b.absBeat - 1e-6);
                         if (heldIntoB) {
-                            const chordInfoWithS = identifyChord(notesAtBAll);
-                            const chordInfoWithoutS = identifyChord(notesAtBAll.filter(n => n && n.id !== S.id));
-
+                                const chordInfoWithS = _iC(notesAtBAll);
+                                const chordInfoWithoutS = _iC(notesAtBAll.filter(n => n && n.id !== S.id));
                             if (
                                 chordInfoWithS && chordInfoWithS.root && chordInfoWithS.type &&
                                 chordInfoWithoutS && chordInfoWithoutS.root && chordInfoWithoutS.type &&
@@ -5560,7 +5653,7 @@ export function applyHarmonyRules(
                     // inferred sonority so it cannot "explain itself" as a chord member.
                     const heldIntoB = (getNoteStart(S) < b.absBeat - 1e-6) || (getNoteEnd(prep) > b.absBeat - 1e-6);
                     const fullForGuard = heldIntoB ? notesAtBAll.filter(n => n && n.id !== S.id) : notesAtBAll;
-                    const chordInfoFull = identifyChord(fullForGuard);
+                    const chordInfoFull = _iC(fullForGuard);
                     if (chordInfoFull && chordInfoFull.root && chordInfoFull.type && !String(chordInfoFull.type).includes('Sus')) {
                         const t = String(chordInfoFull.type);
                         const looksSeventh = looksSeventhType(t);
@@ -5585,7 +5678,7 @@ export function applyHarmonyRules(
                         : (attackedAtB.length ? attackedAtB : notesAtBAll.filter(n => n.id !== S.id))
                     );
 
-                    const chordInfoB = identifyChord(chordSourceNotes);
+                    const chordInfoB = _iC(chordSourceNotes);
                     const formula = chordInfoB ? (CHORD_FORMULAS as any)[chordInfoB.type] as number[] | undefined : undefined;
                     const rootPc = chordInfoB ? mod12((chordInfoB.root as any).noteIndex ?? mod12((chordInfoB.root as any).midi ?? 0)) : -1;
                     const intervalFromRoot = mod12(sPc - rootPc);
@@ -5771,7 +5864,7 @@ export function applyHarmonyRules(
                         // Root at resolution
                         let rootPcRes: number | null = null;
                         try {
-                            const chordInfoRes = identifyChord(evRes.notes as any);
+                            const chordInfoRes = _iC(evRes.notes as any);
                             if (chordInfoRes && chordInfoRes.root) {
                                 rootPcRes = mod12((chordInfoRes.root as any).noteIndex ?? mod12((chordInfoRes.root as any).midi ?? 0));
                             } else {
@@ -5788,7 +5881,7 @@ export function applyHarmonyRules(
                         let rootPcB: number | null = seventhRootPcAtB;
                         if (rootPcB == null) {
                             try {
-                                const chordInfoBFull2 = identifyChord((b.notes || []) as any);
+                                const chordInfoBFull2 = _iC((b.notes || []) as any);
                                 if (chordInfoBFull2 && chordInfoBFull2.root) {
                                     rootPcB = mod12((chordInfoBFull2.root as any).noteIndex ?? mod12((chordInfoBFull2.root as any).midi ?? 0));
                                 } else {
@@ -5860,7 +5953,7 @@ export function applyHarmonyRules(
                             const best = (cands && cands.length) ? cands[0] : null;
                             const chordInfoB = (best && best.root && best.type)
                                 ? { root: best.root as any, type: best.type as any }
-                                : identifyChord(otherVoicesAtB as any);
+                                : _iC(otherVoicesAtB as any);
                             if (!chordInfoB || !chordInfoB.root || !chordInfoB.type) return false;
                             if (String(chordInfoB.type).includes('Sus')) return false;
 
@@ -6103,6 +6196,7 @@ export function applyHarmonyRules(
                                 const stepOut = Math.abs((nextN.midi ?? 0) - (n.midi ?? 0)) <= 2;
                                 const weak = isWeakBeatNumber((n.beat ?? 1) as number);
                                 if (stepIn && stepOut && weak) {
+                                    if (_isHarmOverrideBeat(n)) continue;
                                     (n as any).isNeighbor = true;
                                     (n as any).ornamentMark = 'v';
                                     if ((n as any).isPassing) (n as any).isPassing = false;
@@ -6131,6 +6225,7 @@ export function applyHarmonyRules(
                                 if (isChordToneAtAbsBeat(n as any, ns)) {
                                     continue;
                                 }
+                                if (_isHarmOverrideBeat(n)) continue;
                                 (n as any).isNeighbor = true;
                                 (n as any).ornamentMark = 'v';
                                 if ((n as any).isPassing) (n as any).isPassing = false;
@@ -6167,6 +6262,7 @@ export function applyHarmonyRules(
         console.warn('[ANALYSIS] detectPassingNotes failed', err);
     }
 
+    _pmark('08-suspensionDetector');
     // =========================================================
     // Chord-function rules for classical chorale context
     // =========================================================
@@ -6343,6 +6439,7 @@ export function applyHarmonyRules(
             }
         }
 
+    _pmark('09a-chordFuncRules');
         // ---------------------------------------------------------
         // Cadence markers (informative)
         // ---------------------------------------------------------
@@ -6481,9 +6578,11 @@ export function applyHarmonyRules(
             }
         }
 
+    _pmark('09b-cadenceMarkers');
         // ---------------------------------------------------------
         // Auto key-context inference (tonicization/modulation)
         // ---------------------------------------------------------
+    _pmark('09c-start-keyContextInference');
         // Goal: infer a local tonic at a barline when we see a strong dominant→tonic root motion,
         // and the following measure is more diatonic under that candidate than under the current context.
         if (ENABLE_INFERRED_ANALYSIS_CONTEXTS) try {
@@ -6749,7 +6848,7 @@ export function applyHarmonyRules(
                                             }
 
                                             if (bestEarlier && Number.isFinite(bestEarlier.absBeat)) {
-                                                const r = String(getRomanAnalysis(bestEarlier.notes || [], x.newTonic, x.newIsMinor)?.roman || '').replace(/\s+/g, '');
+                                                const r = String(_gRA(bestEarlier.notes || [], x.newTonic, x.newIsMinor)?.roman || '').replace(/\s+/g, '');
                                                 const want = x.newIsMinor ? 'i' : 'I';
                                                 if (r === want) absBeat = bestEarlier.absBeat;
                                             }
@@ -6848,10 +6947,10 @@ export function applyHarmonyRules(
                     if ((b.absBeat - a.absBeat) > 2.01) return false;
 
                     // Check functional pattern under the global key.
-                    const bRomanGlobal = String(getRomanAnalysis(b.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
+                    const bRomanGlobal = String(_gRA(b.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
                     if (!(bRomanGlobal === (isMinor ? 'i' : 'I'))) return false;
 
-                    const aRomanGlobal = String(getRomanAnalysis(a.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
+                    const aRomanGlobal = String(_gRA(a.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
                     const aLow = aRomanGlobal.toLowerCase();
                     if (!(aLow.startsWith('v') || aLow.startsWith('vii'))) return false;
 
@@ -6919,12 +7018,12 @@ export function applyHarmonyRules(
 
                     for (const tonicPc of pcs) {
                         const tonic = pcToKeyName(tonicPc);
-                        const bRom = String(getRomanAnalysis(b.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
+                        const bRom = String(_gRA(b.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
                         if (bRom !== 'i') continue;
 
                         const a = getPrevInWindow(j, Number(b.absBeat), 2.01);
                         if (!a) continue;
-                        const aRes = getRomanAnalysis(a.notes || [], tonic, true);
+                        const aRes = _gRA(a.notes || [], tonic, true);
                         const aRom = String(aRes?.roman || '').replace(/\s+/g, '');
                         const aLow = aRom.toLowerCase();
                         const aLooksIio6 = aLow.startsWith('ii') && aRom.includes('°') && Array.isArray(aRes?.figures) && (aRes as any).figures.some((f: any) => extractFigureValue(String(f)) === 6);
@@ -6932,7 +7031,7 @@ export function applyHarmonyRules(
 
                         const c = getNextInWindow(j, Number(b.absBeat), 2.01);
                         if (!c) continue;
-                        const cRom = String(getRomanAnalysis(c.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
+                        const cRom = String(_gRA(c.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
                         const cLow = cRom.toLowerCase();
                         const cLooksV = cLow.startsWith('v');
                         if (!cLooksV) continue;
@@ -7075,10 +7174,10 @@ export function applyHarmonyRules(
                     const tonic = pcToKeyName(tonicPc);
 
                     // Determine minor/major by whether we see I/i at the boundary OR very soon after.
-                    const bRomanMaj = String(getRomanAnalysis(b.notes || [], tonic, false)?.roman || '').replace(/\s+/g, '');
-                    const bRomanMin = String(getRomanAnalysis(b.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
-                    const hasTonicSoonMaj = lookaheadEvents.some(ev => String(getRomanAnalysis(ev.notes || [], tonic, false)?.roman || '').replace(/\s+/g, '') === 'I');
-                    const hasTonicSoonMin = lookaheadEvents.some(ev => String(getRomanAnalysis(ev.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '') === 'i');
+                    const bRomanMaj = String(_gRA(b.notes || [], tonic, false)?.roman || '').replace(/\s+/g, '');
+                    const bRomanMin = String(_gRA(b.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
+                    const hasTonicSoonMaj = lookaheadEvents.some(ev => String(_gRA(ev.notes || [], tonic, false)?.roman || '').replace(/\s+/g, '') === 'I');
+                    const hasTonicSoonMin = lookaheadEvents.some(ev => String(_gRA(ev.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '') === 'i');
 
                     const pickMinor = (bRomanMin === 'i') || hasTonicSoonMin;
                     const pickMajor = (bRomanMaj === 'I') || hasTonicSoonMaj;
@@ -7124,7 +7223,7 @@ export function applyHarmonyRules(
                     const hasTonicAfterB = (() => {
                         try {
                             return lookaheadEvents.some(ev => Number(ev?.absBeat) > Number(b.absBeat) + 1e-6
-                                && String(getRomanAnalysis(ev.notes || [], tonic, isMinorCand)?.roman || '').replace(/\s+/g, '') === tonicTarget);
+                                && String(_gRA(ev.notes || [], tonic, isMinorCand)?.roman || '').replace(/\s+/g, '') === tonicTarget);
                         } catch {
                             return false;
                         }
@@ -7147,7 +7246,7 @@ export function applyHarmonyRules(
                                 if (dt > MAX_WIN + 1e-6) break;
                                 const info = chordRootPcAndBassPc(ev);
                                 if (info.rootPc == null) continue;
-                                const roman = String(getRomanAnalysis(ev.notes || [], tonic, isMinorCand)?.roman || '');
+                                const roman = String(_gRA(ev.notes || [], tonic, isMinorCand)?.roman || '');
                                 const r0 = String(roman || '').replace(/\s+/g, '').toLowerCase();
                                 const functional = r0.startsWith('v') || r0.startsWith('vii');
                                 const domToTonic = mod12(Number(info.rootPc) - tonicPc) === 7;
@@ -7160,7 +7259,7 @@ export function applyHarmonyRules(
                         }
                     })();
 
-                    const aRoman = String((pickPrevForCand?.roman ?? getRomanAnalysis(a.notes || [], tonic, isMinorCand)?.roman) || '');
+                    const aRoman = String((pickPrevForCand?.roman ?? _gRA(a.notes || [], tonic, isMinorCand)?.roman) || '');
                     const aLooksFunctionalToTonic = (() => {
                         const r = String(aRoman || '').replace(/\s+/g, '').toLowerCase();
                         // For inferring an actual context change, require a strong dominant pull.
@@ -7480,7 +7579,7 @@ export function applyHarmonyRules(
                     if (backPropOk && Math.abs(startAbsBeat - a.absBeat) < 1e-6) {
                         const p = (i - 1) >= 0 ? chordEvents[i - 1] : null;
                         if (p && Number.isFinite(p.absBeat) && (a.absBeat - p.absBeat) <= 1.01) {
-                            const pr = String(getRomanAnalysis(p.notes || [], inferredTonic, inferredIsMinor)?.roman || '').replace(/\s+/g, '');
+                            const pr = String(_gRA(p.notes || [], inferredTonic, inferredIsMinor)?.roman || '').replace(/\s+/g, '');
                             const prLow = pr.toLowerCase();
                             const ok = prLow.startsWith('v') || prLow.startsWith('vii');
                             if (ok) startAbsBeat = p.absBeat;
@@ -7528,7 +7627,7 @@ export function applyHarmonyRules(
                     const hasManualCtxHere = (analysisContexts || []).some(c => Math.abs(ctxAbsBeat(c) - Number(b.absBeat)) < 1e-6);
                     if (hasManualCtxHere) continue;
 
-                    const rB = String(getRomanAnalysis(b.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
+                    const rB = String(_gRA(b.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
                     const rBLow = rB.toLowerCase();
                     const bLooksFunctional = rBLow.startsWith('v') || rBLow.startsWith('vii');
                     if (!bLooksFunctional) continue;
@@ -7540,7 +7639,7 @@ export function applyHarmonyRules(
                         const dt = Number(ev.absBeat) - Number(b.absBeat);
                         if (dt > MAX_LOOKAHEAD + 1e-6) break;
                         if (!isStrongBeatForInference(Number(ev.beat))) continue;
-                        const r = String(getRomanAnalysis(ev.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
+                        const r = String(_gRA(ev.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
                         if (r === (isMinor ? 'i' : 'I')) { foundTonic = true; break; }
                     }
                     if (!foundTonic) continue;
@@ -7624,7 +7723,7 @@ export function applyHarmonyRules(
                                 try {
                                     let hits = 0;
                                     for (const ev of window as any[]) {
-                                        const r = String(getRomanAnalysis(ev?.notes || [], tonic, isMinorCand)?.roman || '').replace(/\s+/g, '');
+                                        const r = String(_gRA(ev?.notes || [], tonic, isMinorCand)?.roman || '').replace(/\s+/g, '');
                                         if (r === tonicTarget) hits++;
                                     }
                                     return hits;
@@ -7637,7 +7736,7 @@ export function applyHarmonyRules(
                                 try {
                                     let hits = 0;
                                     for (const ev of window as any[]) {
-                                        const r = String(getRomanAnalysis(ev?.notes || [], tonic, isMinorCand)?.roman || '').replace(/\s+/g, '');
+                                        const r = String(_gRA(ev?.notes || [], tonic, isMinorCand)?.roman || '').replace(/\s+/g, '');
                                         const low = r.toLowerCase();
                                         if (low.startsWith('v') || low.startsWith('vii')) hits++;
                                     }
@@ -7773,7 +7872,7 @@ export function applyHarmonyRules(
 
                 const romanAtWithInferredCtx = (ev: ChordEvent) => {
                     const c = getContextAtAbsBeatForWarnings(ev.absBeat);
-                    return getRomanAnalysis(notesForRomanAt(ev), c.tonic, c.isMinor)?.roman ?? '';
+                    return _gRA(notesForRomanAt(ev), c.tonic, c.isMinor)?.roman ?? '';
                 };
 
                 const maxLookaheadBeats = 2.01;
@@ -7885,6 +7984,7 @@ export function applyHarmonyRules(
         }
     } catch { /* ignore */ }
 
+    _pmark('09-chordFuncRules+cadence+keyContext+modulation+neapolitan');
     // =========================================================
     // Vertical checks (within a chord)
     // =========================================================
@@ -8683,6 +8783,8 @@ export function applyHarmonyRules(
         }
     });
 
+    _pmark('09d-end-modulation+neapolitan');
+    _pmark('10-verticalChecks');
     // =========================================================
     // Horizontal checks (between consecutive chords)
     // =========================================================
@@ -9806,6 +9908,7 @@ export function applyHarmonyRules(
         }
     }
 
+    _pmark('11-horizontalChecks');
     // =========================================================
     // Harmonic rhythm checks
     // =========================================================
@@ -9907,6 +10010,7 @@ export function applyHarmonyRules(
         if (basPrev && basNext) connections.push({ type: 'horizontal', noteId1: basPrev.id, noteId2: basNext.id, severity: 'warning', ruleId: 'R-16' });
     }
 
+    _pmark('12-harmonicRhythm');
     // =========================================================
     // Connection synthesis (editor overlay)
     // =========================================================
@@ -9945,6 +10049,7 @@ export function applyHarmonyRules(
         });
     }
 
+    _pmark('13-connectionSynthesis');
     // =========================================================
     // Melodic checks (per voice)
     // =========================================================
@@ -10076,25 +10181,28 @@ export function applyHarmonyRules(
                     const nextDiff = (n3.midi ?? 0) - (n2.midi ?? 0);
                     const nextAbs = Math.abs(nextDiff);
                     const resolvesByStep = nextAbs > 0 && nextAbs <= 2;
+                    // Classical rule: after an augmented/diminished leap, resolve by step
+                    // ("inward" = contract the interval). Direction depends on which note
+                    // is the altered one, so we accept step resolution in either direction.
+                    // E.g. A→D# (dim 5th down) resolving D#→E (up by semitone) is valid
+                    // because D# is the leading-tone resolving to the tonic of V.
                     if (quality === 'Augmented') {
-                        const shouldGoUp = nextDiff > 0;
-                        if (!(resolvesByStep && shouldGoUp)) {
+                        if (!resolvesByStep) {
                             addViolation({
                                 ruleId: 'R-06',
                                 severity: 'error',
                                 description: 'Risoluzione errata di salto melodico aumentato',
-                                suggestion: 'Dopo un intervallo aumentato, risolvi salendo di grado (moto congiunto).',
+                                suggestion: 'Dopo un intervallo aumentato, risolvi per grado congiunto (moto congiunto).',
                                 noteIds: [n1.id, n2.id, n3.id],
                             });
                         }
                     } else {
-                        const shouldGoDown = nextDiff < 0;
-                        if (!(resolvesByStep && shouldGoDown)) {
+                        if (!resolvesByStep) {
                             addViolation({
                                 ruleId: 'R-06',
                                 severity: 'error',
                                 description: 'Risoluzione errata di salto melodico diminuito',
-                                suggestion: 'Dopo un intervallo diminuito, risolvi scendendo di grado (moto congiunto).',
+                                suggestion: 'Dopo un intervallo diminuito, risolvi per grado congiunto (moto congiunto).',
                                 noteIds: [n1.id, n2.id, n3.id],
                             });
                         }
@@ -10104,6 +10212,7 @@ export function applyHarmonyRules(
         }
     });
 
+    _pmark('14-melodicChecks');
     // =========================================================
     // Post-processing: de-duplicate LT errors vs LT exceptions
     // =========================================================
@@ -10151,6 +10260,66 @@ export function applyHarmonyRules(
         return a.ruleId.localeCompare(b.ruleId);
     });
 
+    // ── Learned ornament patterns (supplement auto-detection) ──
+    try {
+        const _lrnEnabled = getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0';
+        if (_lrnEnabled && ORNAMENT_LEARNED_PATTERNS && typeof ORNAMENT_LEARNED_PATTERNS === 'object') {
+            const _LRN_MIN_PROB = 0.9;
+            const _LRN_MIN_SAMPLES = 3;
+            const _lrnVoiceChains = new Map<number, any[]>();
+            for (const n of analyzedNotes) {
+                if (!n || (n as any).isRest) continue;
+                const v = (n as any).voice ?? 1;
+                if (!_lrnVoiceChains.has(v)) _lrnVoiceChains.set(v, []);
+                _lrnVoiceChains.get(v)!.push(n);
+            }
+            for (const ch of _lrnVoiceChains.values()) ch.sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0));
+            const _lrnTs = timeSignature || { numerator: 4, denominator: 4 };
+            for (const n of analyzedNotes) {
+                if (!n || (n as any).isRest) continue;
+                const an = n as any;
+                if (an.isPassing || an.isNeighbor || an.isAppoggiatura || an.isAnticipation || an.isEscape || an.isSuspension || an.ornamentOverride) continue;
+                const v = an.voice ?? 1;
+                const ch = _lrnVoiceChains.get(v) || [];
+                const idx = ch.indexOf(n);
+                const prev = idx > 0 ? ch[idx - 1] : null;
+                const next = idx >= 0 && idx < ch.length - 1 ? ch[idx + 1] : null;
+                const ei = prev ? (an.midi - (prev as any).midi) : null;
+                const xi = next ? ((next as any).midi - an.midi) : null;
+                const pk = `${ornDurationCategory(an.duration || 'quarter')}_${ornBeatStrength(Number(an.beat) || 1, _lrnTs)}_${ei != null ? ornIntervalBucket(ei) : 'none'}_${xi != null ? ornIntervalBucket(xi) : 'none'}`;
+                const pat = ORNAMENT_LEARNED_PATTERNS[pk];
+                if (!pat) continue;
+                if ((pat._total ?? 0) < _LRN_MIN_SAMPLES || (pat._probability ?? 0) < _LRN_MIN_PROB) continue;
+                const dom = pat._dominant;
+                if (dom === 'suspension') continue; // suspensions need richer context
+                // ── Guardrail: skip chord tones on beat ──
+                // A note on an integer beat with ≥2 other structural notes is
+                // very likely a chord tone, not an ornament (e.g. E in C-G-C-E).
+                {
+                    const _beat = Number(an.beat) || 1;
+                    const _isOnBeat = Math.abs(_beat - Math.round(_beat)) < 0.01;
+                    if (_isOnBeat) {
+                        const _sameSpot = analyzedNotes.filter((bn: any) =>
+                            bn && !bn.isRest && bn.id !== an.id &&
+                            bn.measureIndex === an.measureIndex &&
+                            Math.abs((Number(bn.beat) || 1) - _beat) < 0.01 &&
+                            !bn.isPassing && !bn.isNeighbor && !bn.isAppoggiatura &&
+                            !bn.isAnticipation && !bn.isEscape && !bn.isSuspension
+                        );
+                        if (_sameSpot.length >= 2) continue;
+                    }
+                }
+                if (dom === 'passing') { an.isPassing = true; an.ornamentMark = 'P'; }
+                else if (dom === 'neighbor') { an.isNeighbor = true; an.ornamentMark = 'v'; }
+                else if (dom === 'appoggiatura') { an.isAppoggiatura = true; an.ornamentMark = 'a'; }
+                else if (dom === 'anticipation') { an.isAnticipation = true; an.ornamentMark = 'ant'; }
+                else if (dom === 'escape') { an.isEscape = true; an.ornamentMark = 's'; }
+                else continue;
+                an.learnedOrnament = true;
+            }
+        }
+    } catch { /* ignore learned ornament errors */ }
+
     // ── Apply manual ornament overrides (always win over auto-detection) ──
     try {
         if (ornamentOverrides?.length) {
@@ -10197,5 +10366,7 @@ export function applyHarmonyRules(
         }
     } catch { /* ignore */ }
 
+    _pmark('15-postProcessing');
+    if (_profiling) { (globalThis as any).__HARMONY_TIMINGS = _pTimings; }
     return { analyzedNotes, violations, connections, inferredAnalysisContexts, autoHarmonyLabelOverrides };
 }
