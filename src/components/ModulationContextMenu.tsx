@@ -52,7 +52,10 @@ const ModulationContextMenu: React.FC<{
     onApplyOrnamentOverride?: (type: string) => void;
     onRemoveOrnamentOverride?: () => void;
     hasExistingOrnamentOverride?: boolean;
-}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onToggleRepeatBarline, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride }) => {
+    onMoveToTreble?: () => void;
+    onMoveToBass?: () => void;
+    onResetStaff?: () => void;
+}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onToggleRepeatBarline, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff }) => {
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
     const [tempLabel, setTempLabel] = useState(initialLabel || '');
@@ -371,7 +374,7 @@ const ModulationContextMenu: React.FC<{
                 <div className="border-t border-gray-600 pt-2 mt-2">
                     <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">Marcatura ornamentale</div>
                     {([
-                        { label: 'Nota strutturale (armonica)', type: 'structural' },
+                        { label: 'Nota strutturale (armonica)  ⌥H', type: 'structural' },
                         { label: 'Nota di passaggio  ⌥P', type: 'passing' },
                         { label: 'Nota di volta  ⌥V', type: 'neighbor' },
                         { label: 'Appoggiatura  ⌥A', type: 'appoggiatura' },
@@ -388,6 +391,31 @@ const ModulationContextMenu: React.FC<{
                         <button onClick={onRemoveOrnamentOverride}
                             className="block w-full text-left px-2 py-0.5 text-[11px] text-red-400 hover:bg-gray-600 rounded mt-1 transition-colors">
                             Rimuovi marcatura
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* ── Staff override section ── */}
+            {(onMoveToTreble || onMoveToBass) && (
+                <div className="border-t border-gray-600 pt-2 mt-2">
+                    <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">Sposta su rigo</div>
+                    {onMoveToTreble && (
+                        <button onClick={onMoveToTreble}
+                            className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">
+                            Rigo di violino (𝄞)  <span className="text-gray-400 ml-1">⌥↑</span>
+                        </button>
+                    )}
+                    {onMoveToBass && (
+                        <button onClick={onMoveToBass}
+                            className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">
+                            Rigo di basso (𝄢)  <span className="text-gray-400 ml-1">⌥↓</span>
+                        </button>
+                    )}
+                    {onResetStaff && (
+                        <button onClick={onResetStaff}
+                            className="block w-full text-left px-2 py-0.5 text-[11px] text-yellow-400 hover:bg-gray-600 rounded mt-1 transition-colors">
+                            Ripristina rigo predefinito
                         </button>
                     )}
                 </div>

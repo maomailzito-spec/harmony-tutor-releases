@@ -221,24 +221,20 @@ const makeVfNote = (
 
   // In close-position (parti strette) fallback rendering, we sometimes draw separate notes
   // but want a *single* visible stem (to avoid stacked stems/flags reading as shorter rhythm).
+  // Override the actual draw methods so VexFlow never paints the stem/flag at all — this is
+  // far more reliable than transparent styling which VexFlow can silently override.
   if (!n.isRest && hideStem) {
     try {
       (note as any).__hideStem = true;
     } catch { /* ignore */ }
     try {
-      if (typeof (note as any).setStemStyle === 'function') {
-        (note as any).setStemStyle({ strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,0)' });
-      }
+      // Completely suppress stem rendering
+      (note as any).drawStem = function () { /* no-op: unison secondary stem */ };
     } catch { /* ignore */ }
     try {
-      if (typeof (note as any).setFlagStyle === 'function') {
-        (note as any).setFlagStyle({ strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,0)' });
-      }
-    } catch { /* ignore */ }
-    try {
-      const stem = (note as any).getStem?.();
-      if (stem && typeof stem.setStyle === 'function') {
-        stem.setStyle({ strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,0)' });
+      // Completely suppress flag rendering (for 8ths, 16ths, etc.)
+      if (typeof (note as any).drawFlag === 'function') {
+        (note as any).drawFlag = function () { /* no-op: unison secondary flag */ };
       }
     } catch { /* ignore */ }
   }
@@ -962,6 +958,30 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
 
+        // ── Same-direction unisons: skip secondary note entirely ──────
+        // When two voices at the same onset share the same MIDI, duration, and
+        // stem direction (e.g. Alto↓ + Tenor↓), the standard notation shows a
+        // single notehead with one stem.  We mark the higher-numbered voice for
+        // skipping so only the primary voice's StaveNote is rendered.
+        const sameDirectionUnisonSkipIds = new Set<string>();
+        if (clef === 'treble' && enableEngravingEnhancements) {
+          for (const onset of byTimeKeyAll.values()) {
+            const notes = onset.filter(n => n.id !== '__ghost__' && !n.isRest && !chordKeyByNoteId.has(n.id));
+            for (let i = 0; i < notes.length; i++) {
+              for (let j = i + 1; j < notes.length; j++) {
+                const a = notes[i], b = notes[j];
+                if (Number((a as any).midi) !== Number((b as any).midi)) continue;
+                if (a.duration !== b.duration || !!a.isDotted !== !!b.isDotted) continue;
+                const dirA = (a.voice ?? 1) === 1 ? 1 : -1;
+                const dirB = (b.voice ?? 1) === 1 ? 1 : -1;
+                if (dirA !== dirB) continue; // different directions → keep both
+                const secondary = (b.voice ?? 1) > (a.voice ?? 1) ? b : a;
+                sameDirectionUnisonSkipIds.add(secondary.id);
+              }
+            }
+          }
+        }
+
         const makeVfChordNote = (notesInChord: StaffNote[]): { vf: StaveNote; primaryId: string; ids: string[] } => {
           const ids = notesInChord.map(n => n.id);
           const keys = notesInChord.map(n => `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`);
@@ -1170,7 +1190,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 if (multiVoice) {
                   if (s && !isManual(s)) stemOverrideById.set(s.id, 'up');
                   if (a && !isManual(a)) stemOverrideById.set(a.id, 'down');
-                  if (t && !isManual(t)) stemOverrideById.set(t.id, clusterDir);
+                  if (t && !isManual(t)) stemOverrideById.set(t.id, 'down');
                 } else {
                   for (const n of sorted) {
                     if (isManual(n)) continue;
@@ -1185,7 +1205,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 const t = sorted.find(n => n.voice === 3);
                 if (s && !isManual(s)) stemOverrideById.set(s.id, 'up');
                 if (a && !isManual(a)) stemOverrideById.set(a.id, 'down');
-                if (t && !isManual(t)) stemOverrideById.set(t.id, clusterDir);
+                if (t && !isManual(t)) stemOverrideById.set(t.id, 'down');
               }
 
               // Apply notehead displacements for seconds clusters.
@@ -1332,12 +1352,27 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   // Already merged into a chord? Skip.
                   if (chordKeyByNoteId.has(sorted[i].id) && chordKeyByNoteId.has(sorted[i - 1].id)
                       && chordKeyByNoteId.get(sorted[i].id) === chordKeyByNoteId.get(sorted[i - 1].id)) continue;
-                  // Already has an offset? Skip.
-                  if (offsetMap.has(sorted[i].id) || offsetMap.has(sorted[i - 1].id)) continue;
-                  // Shift the lower-numbered voice (stem down, typically voice 2) to the right.
+
+                  // Determine up/down note (lower-numbered voice gets offset)
                   const downNote = (sorted[i].voice ?? 1) > (sorted[i - 1].voice ?? 1) ? sorted[i] : sorted[i - 1];
-                  if (!downNote.manualStemDirection) {
-                    offsetMap.set(downNote.id, NOTEHEAD_TOUCH_SHIFT);
+                  const upNote = downNote === sorted[i] ? sorted[i - 1] : sorted[i];
+
+                  // For same-duration unisons, always hide the secondary stem
+                  // so only one stem/flag/beam is visible — regardless of whether
+                  // an offset was already applied by earlier collision avoidance.
+                  if (downNote.duration === upNote.duration && !!downNote.isDotted === !!upNote.isDotted) {
+                    hideStemById.set(downNote.id, true);
+                  }
+
+                  // Apply X-shift if not already offset
+                  if (!offsetMap.has(sorted[i].id) && !offsetMap.has(sorted[i - 1].id)) {
+                    if (!downNote.manualStemDirection) {
+                      // Same-direction unisons (e.g. A↓ + T↓): push secondary
+                      // LEFT so the shared stem sits between the two noteheads.
+                      // Different-direction unisons (S↑ + A↓): standard RIGHT shift.
+                      const sameDir = (downNote.voice ?? 1) !== 1 && (upNote.voice ?? 1) !== 1;
+                      offsetMap.set(downNote.id, sameDir ? -NOTEHEAD_TOUCH_SHIFT : NOTEHEAD_TOUCH_SHIFT);
+                    }
                   }
                 }
               }
@@ -1448,11 +1483,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             if (withAcc.length < 2) continue;
             // Remove ALL custom overrides for every note at this onset
             for (const n of nonRest) {
-              offsetMap.delete(n.id);
+              // Preserve offset for unison notes whose stem is hidden —
+              // the offset places the secondary notehead on the other side of the stem.
+              if (!hideStemById.has(n.id)) offsetMap.delete(n.id);
               accidentalStaggerById.delete(n.id);
               openPositionAccidentalInsetById.delete(n.id);
-              stemOverrideById.delete(n.id);
-              hideStemById.delete(n.id);
+              // Keep stemOverrideById and hideStemById — voice-based stem rules
+              // (S↑/A↓/T↓ and unison stems) must survive accidental cleanup.
               forceSeparateButSingleStemIds.delete(n.id);
               // Un-merge: remove from chord maps so notes render individually
               const ck = chordKeyByNoteId.get(n.id);
@@ -1483,6 +1520,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // When the adjacent note moves away, the rest returns to its baseline.
         const isPartiLate = staffMode === 'grandstaff' && !isClosePositionTreble;
         const isPartiStrette = staffMode === 'grandstaff' && isClosePositionTreble;
+
+        // Ensure ALL Tenor notes get stem DOWN in parti strette,
+        // even single-voice beats not covered by the multi-voice stemOverrideById logic.
+        if (isClosePositionTreble) {
+          for (const n of staffNotes) {
+            if ((n.voice ?? 1) === 3 && !n.isRest && !n.manualStemDirection && !stemOverrideById.has(n.id)) {
+              stemOverrideById.set(n.id, 'down');
+            }
+          }
+        }
 
         // Adjacent voice map: which voice's notes does this rest avoid?
         // Parti late  — treble 1↔2, bass 3↔4, cross-staff 2↔3.
@@ -2168,17 +2215,36 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           return dur === '8' || dur === '16' || dur === '32' || dur === '64';
         };
 
-        const isTightTrebleForBeams = clef === 'treble' && staffNotes.some(n => n.voice === 2) && staffNotes.some(n => n.voice === 3);
+        const isTightTrebleForBeams = staffMode === 'grandstaff' && clef === 'treble' && staffNotes.filter(n => !n.isRest).some(n => (n.voice ?? 1) >= 2);
+
+        // Standard 3+1 (parti strette) stem directions:
+        //   Layer 1 (Soprano v1): stems ALWAYS UP
+        //   Layer 2 (Alto v2 + Tenor v3): stems ALWAYS DOWN (treated as single chord layer)
+        const getTightStemDir = (sn: StaffNote): number => {
+          const v = (sn as any).__beamVoiceOverride ?? (sn.voice ?? 1);
+          return (v === 1) ? 1 : -1;  // S↑, A↓, T↓
+        };
+
         const prepareTightTrebleBeamedNotes = (group: Array<{ staffNote: StaffNote; vfNote: StaveNote }>) => {
           if (!isTightTrebleForBeams) return;
 
-          // Prefer a single clear beaming direction (opposite the bass): stems up.
+          // Standard parti strette: S always UP, A+T always DOWN.
+          // S always UP, T always DOWN, A dynamic (UP near S, DOWN near T).
           for (const g of group) {
             if (g.staffNote.manualStemDirection) continue;
+            const dir = getTightStemDir(g.staffNote);
             try {
-              g.vfNote.setStemDirection(1);
+              g.vfNote.setStemDirection(dir);
             } catch {
               // ignore
+            }
+
+            // Re-apply drawStem/drawFlag no-op for hidden-stem unison notes.
+            // setStemDirection() above can recreate the stem object, losing
+            // the override set during note creation.
+            if ((g.vfNote as any).__hideStem) {
+              try { (g.vfNote as any).drawStem = function () { /* no-op */ }; } catch { /* ignore */ }
+              try { if (typeof (g.vfNote as any).drawFlag === 'function') { (g.vfNote as any).drawFlag = function () { /* no-op */ }; } } catch { /* ignore */ }
             }
 
             // Keep stems colored even after forcing stem direction.
@@ -2193,13 +2259,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const applyTightTrebleBeamHeuristics = (beam: Beam, group: Array<{ staffNote: StaffNote; vfNote: StaveNote }>) => {
           if (!isTightTrebleForBeams) return;
 
+          // Determine the dominant stem direction of this beam group
+          const stemDir = (group[0]?.vfNote as any)?.getStemDirection?.() ?? 1;
+
           // Force beam slope to follow the melodic contour (using notehead Y).
           const yRef = (vf: any): number | null => {
             try {
               const ys: number[] | undefined = vf?.getYs?.();
               if (ys && ys.length > 0) {
-                // Stems up => beam is above => follow the highest notehead.
-                return Math.min(...ys);
+                // Stems up => beam above => follow highest notehead (min Y).
+                // Stems down => beam below => follow lowest notehead (max Y).
+                return stemDir === 1 ? Math.min(...ys) : Math.max(...ys);
               }
               const topY = vf?.getStemExtents?.()?.topY;
               return (typeof topY === 'number' && Number.isFinite(topY)) ? topY : null;
@@ -2278,6 +2348,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           .filter(p => p.isPrimaryRender)
           .filter(p => p.staffNote.id !== '__ghost__')
           .filter(p => !manualOrDisabledIds.has(p.staffNote.id))
+          .filter(p => !hideStemById.get(p.staffNote.id))
           .filter(p => isBeamable(p.staffNote))
           .filter(p => (p.staffNote.measureIndex ?? null) !== null && (p.staffNote.beat ?? null) !== null)
           .map(p => ({ staffNote: p.staffNote, vfNote: p.vfNote }));
@@ -2286,9 +2357,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           const ma = a.staffNote.measureIndex ?? 0;
           const mb = b.staffNote.measureIndex ?? 0;
           if (ma !== mb) return ma - mb;
-          const va = (a.staffNote as any).__beamVoiceOverride ?? (a.staffNote.voice ?? 1);
-          const vb = (b.staffNote as any).__beamVoiceOverride ?? (b.staffNote.voice ?? 1);
-          if (va !== vb) return va - vb;
+
+          // In tight-treble mode, sort by stem direction then beat (not voice)
+          // so that same-direction voices are adjacent for beam grouping.
+          if (isTightTrebleForBeams) {
+            const da = getTightStemDir(a.staffNote);
+            const db = getTightStemDir(b.staffNote);
+            if (da !== db) return da - db;            // up-stem group first
+          } else {
+            const va = (a.staffNote as any).__beamVoiceOverride ?? (a.staffNote.voice ?? 1);
+            const vb = (b.staffNote as any).__beamVoiceOverride ?? (b.staffNote.voice ?? 1);
+            if (va !== vb) return va - vb;
+          }
+
           const ba = a.staffNote.beat ?? 1;
           const bb = b.staffNote.beat ?? 1;
           if (ba !== bb) return ba - bb;
@@ -2305,7 +2386,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const flush = () => {
           if (current.length >= 2) {
             try {
-              // Same rule as above: setStemDirection BEFORE attaching a Beam.
+              // setStemDirection BEFORE attaching a Beam.
               prepareTightTrebleBeamedNotes(current);
               const b = new Beam(current.map(c => c.vfNote));
               applyTightTrebleBeamHeuristics(b, current);
@@ -2324,7 +2405,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           const m = c.staffNote.measureIndex ?? 0;
           const v = (c.staffNote as any).__beamVoiceOverride ?? (c.staffNote.voice ?? 1);
           const b = c.staffNote.beat ?? 1;
-          const key = `${m}|${v}|${bucket(b)}`;
+
+          // In tight-treble mode, group by stem direction instead of voice so
+          // voices sharing the same direction produce a SINGLE beam rather than
+          // stacked duplicates that make 8ths look like 16ths.
+          let groupVoice: number | string = v;
+          if (isTightTrebleForBeams) {
+            const dir = getTightStemDir(c.staffNote);
+            groupVoice = `d${dir}`;
+          }
+
+          const key = `${m}|${groupVoice}|${bucket(b)}`;
           if (currentKey === null || key === currentKey) {
             currentKey = key;
             current.push(c);

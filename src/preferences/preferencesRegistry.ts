@@ -21,6 +21,7 @@ import {
   AUTO_SAVE_INTERVAL_KEY,
   ANALYSIS_STATISTICAL_CORRECTION_KEY,
   ENABLE_LEARNED_ORNAMENTS_KEY,
+  TONICIZATION_COMPACT_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
@@ -46,7 +47,8 @@ export type PreferenceId =
   | 'analysis.useStatisticalCorrection'
   | 'analysis.enableLearnedOrnaments'
   | 'export.includeTitle'
-  | 'debug.showHarmonyDebug';
+  | 'debug.showHarmonyDebug'
+  | 'analysis.tonicizationCompact';
 
 export type PreferenceDef<T> = {
   id: PreferenceId;
@@ -410,6 +412,17 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     section: 'Debug',
     label: 'Debug harmony labels (pcs)',
     storageKey: SHOW_HARMONY_DEBUG_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'analysis.tonicizationCompact': {
+    id: 'analysis.tonicizationCompact',
+    section: 'Analysis',
+    label: 'Tonicizzazioni compatte',
+    storageKey: TONICIZATION_COMPACT_KEY,
     defaultValue: false,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, false),

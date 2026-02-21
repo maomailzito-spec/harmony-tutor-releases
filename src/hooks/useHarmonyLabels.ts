@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol } from '../utils/musicTheory';
 import { structuralNotes } from '../utils/harmonyLabelPipeline';
+import { usePreference } from '../preferences/usePreference';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
 import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS } from '../constants';
 import { suggestNextChord } from '../engine/progressionSuggester';
@@ -62,6 +63,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         useStatisticalCorrection,
         ornamentOverrides,
     } = params;
+
+    const [compactTonicization] = usePreference<boolean>('analysis.tonicizationCompact');
 
     const minSpanBeats = Number(harmonyLabelMinSpanBeats) || 0;
 
@@ -352,6 +355,100 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 for (const b of base) {
                     const ov = overrideByAbsBeat.get(b.q);
                     if (ov?.roman) b.roman = ov.roman;
+                }
+            }
+
+            // ── Cadential tonicization detector ──
+            // Detect V→I cadential patterns in secondary keys that the engine missed.
+            // E.g., in C major: Bb/D → C/E → F ≡ IV→V→I in F (tonicization to IV).
+            {
+                const _allKeys = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+                const _globalPc = noteNameToChromaticIndex(currentTonic);
+                const _scaleIntervals = isMinorMode ? [0,2,3,5,7,8,10] : [0,2,4,5,7,9,11];
+                const _scale = new Set(_scaleIntervals.map(i => (i + _globalPc) % 12));
+                const _degreeNames = isMinorMode
+                    ? ['i','\u266DII','ii\u00B0','\u266DIII','iv','v','\u266DVI','\u266DVII','VI','vi\u00B0','VII','vii\u00B0']
+                    : ['I','\u266DII','ii','\u266DIII','iii','IV','\u266EIV\u00B0','V','\u266DVI','vi','\u266DVII','vii\u00B0'];
+
+                const _keyDeg = (targetKey: string): string | null => {
+                    const tPc = noteNameToChromaticIndex(targetKey);
+                    if (tPc < 0 || _globalPc < 0) return null;
+                    const interval = ((tPc - _globalPc) % 12 + 12) % 12;
+                    return _degreeNames[interval] || null;
+                };
+
+                const _funcRe = /^(ii|III|IV|vi|I|iii|V|i|iv|v|\u266DVII|\u266DVI|\u266DIII)/;
+
+                for (let j = 1; j < base.length; j++) {
+                    if (autoOverrideByAbsBeat.has(base[j].q) || autoRomanDisplayByAbsBeat.has(base[j].q)
+                        || overrideByAbsBeat.has(base[j].q)) continue;
+                    const evJ = base[j].ev;
+                    const evPrev = base[j - 1].ev;
+                    if (!evJ?.notes?.length || !evPrev?.notes?.length) continue;
+                    const stJ = structuralNotes(evJ.notes, ornOverrideMap);
+                    const stPrev = structuralNotes(evPrev.notes, ornOverrideMap);
+                    if (stJ.length < 2 || stPrev.length < 2) continue;
+
+                    for (const K of _allKeys) {
+                        if (K === currentTonic) continue;
+                        const rJ = getRomanAnalysis(stJ, K, false);
+                        if (!rJ || rJ.roman !== 'I') continue;
+                        const rPrev = getRomanAnalysis(stPrev, K, false);
+                        if (!rPrev || !/^V/.test(rPrev.roman)) continue;
+
+                        const degLabel = _keyDeg(K);
+                        if (!degLabel) continue;
+
+                        // Look back for pre-dominants in K (up to 2 measures)
+                        let firstIdx = j - 1;
+                        for (let i = j - 2; i >= 0 && (base[j].absBeat - base[i].absBeat) <= beatsPerMeasure * 2; i--) {
+                            if (!base[i].ev?.notes?.length) break;
+                            const stI = structuralNotes(base[i].ev.notes, ornOverrideMap);
+                            if (stI.length < 2) break;
+                            const rI = getRomanAnalysis(stI, K, false);
+                            if (rI && _funcRe.test(rI.roman)) firstIdx = i;
+                            else break;
+                        }
+                        // Look forward for continuation in K (up to 2 measures)
+                        let lastIdx = j;
+                        for (let i = j + 1; i < base.length && (base[i].absBeat - base[j].absBeat) <= beatsPerMeasure * 2; i++) {
+                            if (!base[i].ev?.notes?.length) break;
+                            const stI = structuralNotes(base[i].ev.notes, ornOverrideMap);
+                            if (stI.length < 2) break;
+                            const rI = getRomanAnalysis(stI, K, false);
+                            if (rI && _funcRe.test(rI.roman)) lastIdx = i;
+                            else break;
+                        }
+
+                        // Require chromatic evidence across the entire span [firstIdx..lastIdx]
+                        let _hasChromatic = false;
+                        for (let s = firstIdx; s <= lastIdx && !_hasChromatic; s++) {
+                            const _ns = base[s].ev?.notes || [];
+                            for (const _n of _ns) {
+                                const _pc = (((_n as any).midi ?? 0) % 12 + 12) % 12;
+                                if (!_scale.has(_pc)) { _hasChromatic = true; break; }
+                            }
+                        }
+                        if (!_hasChromatic) continue;
+
+                        if ((lastIdx - firstIdx + 1) >= 2) {
+                            for (let s = firstIdx; s <= lastIdx; s++) {
+                                if (autoRomanDisplayByAbsBeat.has(base[s].q) || overrideByAbsBeat.has(base[s].q)) continue;
+                                if (!base[s].ev?.notes?.length) continue;
+                                const stS = structuralNotes(base[s].ev.notes, ornOverrideMap);
+                                const rS = getRomanAnalysis(stS, K, false);
+                                if (rS) {
+                                    if (compactTonicization) {
+                                        autoRomanDisplayByAbsBeat.set(base[s].q, s === firstIdx ? `[${degLabel}] ${rS.roman}` : rS.roman);
+                                    } else {
+                                        const display = (s === j) ? `${rS.roman}=${degLabel}` : `${rS.roman}/${degLabel}`;
+                                        autoRomanDisplayByAbsBeat.set(base[s].q, display);
+                                    }
+                                }
+                            }
+                            break; // don't try more keys for this arrival beat
+                        }
+                    }
                 }
             }
 
@@ -2003,18 +2100,21 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             try {
                 const a = qAbs(event.absBeat);
                 const isCurrentlyTonicForDisp = roman === 'I' || roman === 'i';
-                if (!overrideByAbsBeat.has(a) && !isCurrentlyTonicForDisp) {
+                if (!overrideByAbsBeat.has(a)) {
                     const autoDisp = getNear(autoRomanDisplayByAbsBeat, a);
                     if (autoDisp) {
-                        // If the override is a pure slash-function label (e.g. ii°/iii),
-                        // apply it directly so the user doesn't still see the base label.
-                        // Keep '=' pivots as display-only.
                         const s = String(autoDisp || '');
-                        if (s.includes('/') && !s.includes('=')) {
-                            roman = s;
-                            romanDisplay = undefined;
-                        } else {
-                            romanDisplay = s;
+                        // Allow secondary function labels (V/IV, I=IV, ii/vi, etc.)
+                        // to replace even tonic I/i labels, since these indicate
+                        // a tonicization where I is re-interpreted as V of the new key.
+                        const isSecondaryFn = s.includes('/') || s.includes('=');
+                        if (!isCurrentlyTonicForDisp || isSecondaryFn) {
+                            if (s.includes('/') && !s.includes('=')) {
+                                roman = s;
+                                romanDisplay = undefined;
+                            } else {
+                                romanDisplay = s;
+                            }
                         }
                     }
                 }
@@ -2107,7 +2207,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // Sort labels in each system by x
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
+    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than

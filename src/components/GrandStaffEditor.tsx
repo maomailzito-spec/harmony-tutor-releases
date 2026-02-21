@@ -20,6 +20,8 @@ import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
 import { useEditorZoom } from '../hooks/useEditorZoom';
 import { useHarmonyLabels } from '../hooks/useHarmonyLabels';
+import { useHarmonyExplain } from '../hooks/useHarmonyExplain';
+import HarmonyLabelExplainModal from './HarmonyLabelExplainModal';
 import type { MenuAction, MenuActionPayloadMap } from '../../shared/menuActionRegistry';
 import { MENU_ACTIONS } from '../contracts/menuActionRuntime';
 import { getMenuActionTarget } from '../contracts/menuActionTargets';
@@ -396,7 +398,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // - parti_strette: S/A/T on treble, B on bass
     const [staffLayoutMode, setStaffLayoutMode] = useState<StaffLayoutMode>('parti_late');
 
-    const clefForVoice = useCallback((voice: number | undefined | null): ClefType => {
+    const clefForVoice = useCallback((voice: number | undefined | null, clefOverride?: 'treble' | 'bass'): ClefType => {
+        if (clefOverride) return clefOverride;
         if (staffSystemMode === 'treble_only') return 'treble';
         const v = voice ?? 1;
         if (staffSystemMode === 'satb_ancient') {
@@ -2877,6 +2880,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         useStatisticalCorrection: !!useStatisticalCorrection,
         ornamentOverrides,
     });
+
+    // Chord identity card (explain modal)
+    const { isExplainOpen, explainData, openExplain, closeExplain } = useHarmonyExplain({ analyzedNotes, analysisContexts, currentTonic, isMinorMode, analysisContextAbsBeat, timeSignature });
+
     // Violations -> noteId -> level (defensive extraction)
     const violationLevelByNoteId = useMemo(() => {
         const map = new Map<string, 'error' | 'warning' | 'exception'>();
@@ -4694,9 +4701,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Aggiorna sempre pasteCaret con beat quantizzato
         setPasteCaret({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat });
 
+        const absBeat = Math.max(0, Math.round((((layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex] ?? (hit.measureIndex * beatsPerMeasure)) + (beat - 1)) * 1e6) / 1e6);
         if (wantsHarmonyOverride) {
-            const absBeat = Math.max(0, Math.round((((layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex] ?? (hit.measureIndex * beatsPerMeasure)) + (beat - 1)) * 1e6) / 1e6);
             setHarmonyOverrideMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex: hit.measureIndex, beat });
+        } else {
+            setContextMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex: hit.measureIndex, beat });
         }
     }, [getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion, selectedVoice, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
 
@@ -4770,6 +4779,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (selectedNoteIds.size === 0) return false;
         return ornamentOverrides.some(o => selectedNoteIds.has(o.noteId));
     }, [selectedNoteIds, ornamentOverrides]);
+
+    const handleMoveToStaff = useCallback((targetClef: 'treble' | 'bass' | null) => {
+        setRawNotes(prev => prev.map(n => {
+            if (!selectedNoteIds.has(n.id)) return n;
+            if (targetClef === null) {
+                const { clefOverride, ...rest } = n as any;
+                return rest;
+            }
+            return { ...n, clefOverride: targetClef };
+        }));
+        setContextMenu(null);
+    }, [selectedNoteIds]);
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
         if (!layoutData) return;
@@ -5189,7 +5210,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         .filter((n: any) => n && !n.isRest)
                         .filter((n: any) => Number(n.measureIndex) === measureIndex)
                         .filter((n: any) => {
-                            const c = (n.clef || ((n.voice === 3 || n.voice === 4) ? 'bass' : 'treble')) as ClefType;
+                            const c = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
                             return c === targetClef;
                         })
                         .filter((n: any) => startTickOf(n) < beforeTick - 1e-6)
@@ -5627,22 +5648,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
 
         if (selectedInsertion.type === 'rest') {
-            setGhostNote({
-                id: 'ghost',
-                pitch: 'B',
-                octave: targetClef === 'bass' ? 2 : 4,
-                position: targetClef === 'bass' ? 4 : 8,
-                midi: 0,
-                noteIndex: 0,
-                duration: selectedInsertion.duration,
-                isRest: true,
-                isTriplet,
-                isDuplet,
-                isDotted,
-                xPosition: x, // Coincide esattamente con il mouse
-                clef: targetClef,
-                voice: selectedVoice,
-                systemIndex,
+            setGhostNote(prev => {
+                const next = {
+                    id: 'ghost' as const,
+                    pitch: 'B',
+                    octave: targetClef === 'bass' ? 2 : 4,
+                    position: targetClef === 'bass' ? 4 : 8,
+                    midi: 0,
+                    noteIndex: 0,
+                    duration: selectedInsertion.duration,
+                    isRest: true as const,
+                    isTriplet,
+                    isDuplet,
+                    isDotted,
+                    xPosition: x,
+                    clef: targetClef,
+                    voice: selectedVoice,
+                    systemIndex,
+                };
+                if (prev && prev.isRest && prev.xPosition === x && prev.clef === targetClef && prev.voice === selectedVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+                return next;
             });
             return;
         }
@@ -5676,18 +5701,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         props = applyAutoLeadingToneInMinor(props);
         props = applyActiveAccidental(props);
 
-        setGhostNote({
-            id: 'ghost',
-            ...props,
-            duration: selectedInsertion.duration,
-            isRest: false,
-            isTriplet,
-            isDuplet,
-            isDotted,
-            xPosition: x, // Coincide esattamente con il mouse
-            clef: targetClef,
-            voice: selectedVoice,
-            systemIndex,
+        setGhostNote(prev => {
+            const next = {
+                id: 'ghost' as const,
+                ...props,
+                duration: selectedInsertion.duration,
+                isRest: false as const,
+                isTriplet,
+                isDuplet,
+                isDotted,
+                xPosition: x,
+                clef: targetClef,
+                voice: selectedVoice,
+                systemIndex,
+            };
+            if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === selectedVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+            return next;
         });
     }, [applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor]);
 
@@ -5742,7 +5771,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const xAbs = n.xPosition;
                         if (!Number.isFinite(xAbs as any)) return;
 
-                        const renderClef = clefForVoice(n.voice);
+                        const renderClef = clefForVoice(n.voice, (n as any).clefOverride);
                         const halfStep = VF_LINE_SPACING / 2;
                         const clefTopY = renderClef === 'bass' ? VF_BASS_Y : VF_TREBLE_Y;
                         px = xAbs as number;
@@ -6125,7 +6154,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (!Number.isFinite(n.midi)) return n;
 
                         const nextMidi = n.midi + delta;
-                        const clef: ClefType = (n.clef || ((n.voice === 3 || n.voice === 4) ? 'bass' : 'treble')) as ClefType;
+                        const clef: ClefType = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
                         const preferred = preferFromAccidental(n);
                         const props = getNotePropertiesFromMidi(nextMidi, keySignature, clef, preferred);
 
@@ -6173,13 +6202,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // ── Ornament override shortcuts (⌥ + key) ──
             if (!isMod && e.altKey && selectedNoteIds.size > 0) {
-                const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyN: 'anticipation' };
+                const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyN: 'anticipation', KeyH: 'structural' };
                 const ornType = ornMap[e.code];
                 if (ornType) {
                     e.preventDefault();
                     e.stopPropagation();
                     setOrnamentOverrides(prev => {
-                        const updated = (prev || []).filter(o => !selectedNoteIds.has(o.noteId));
+                        const arr = prev || [];
+                        // Toggle: if ALL selected notes already have this exact type, remove them
+                        const allHaveType = [...selectedNoteIds].every(id => arr.some(o => o.noteId === id && o.type === ornType));
+                        if (allHaveType) return arr.filter(o => !selectedNoteIds.has(o.noteId));
+                        const updated = arr.filter(o => !selectedNoteIds.has(o.noteId));
                         for (const noteId of selectedNoteIds) updated.push({ noteId, type: ornType as OrnamentType });
                         return updated;
                     });
@@ -6512,6 +6545,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setActiveAccidentalAndApplyFromSource(next, 'hotkey');
                 }
 
+                return;
+            }
+
+            // ⌥↑ / ⌥↓: move selected notes to treble/bass staff (clef override)
+            if (!isMod && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                if (selectedNoteIds.size === 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleMoveToStaff(e.key === 'ArrowUp' ? 'treble' : 'bass');
                 return;
             }
 
@@ -6936,7 +6978,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // We keep the stored MIDI pitch intact and only adjust rendering-related fields.
                         const systemNotesForRender = systemNotes.map((n) => {
                             // Render-only staff mapping by voice (allows toggling layouts without mutating stored notes).
-                            const mappedClef: ClefType = clefForVoice(n.voice);
+                            const mappedClef: ClefType = clefForVoice(n.voice, (n as any).clefOverride);
 
                             if (n.isRest) return { ...n, clef: mappedClef };
 
@@ -7610,6 +7652,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                     fontSize={14}
                                                                                     fontWeight={700}
                                                                                     fill="black"
+                                                                                    style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                                                                                    onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
                                                                                 >
                                                                                     {(lbl as any).symbol}
                                                                                 </text>
@@ -7760,13 +7804,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     fontSize={14}
                                                                                                     fontWeight={700}
                                                                                                     fill="black"
-                                                                                                >
-                                                                                                    {String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')}
-                                                                                                </text>
+                    style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                    onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
+                >
+                    {String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')}
+                </text>
 
-                                                                                                {lbl.figures?.length ? (
-                                                                                                    <g>
-                                                                                                        {lbl.figures.map((f, i) => (
+                {/* Figured bass numbers */}
+                {(lbl as any).figures?.length ? (
+                    <g>
+                        {((lbl as any).figures as string[]).map((f: string, i: number) => (
                                                                                                             <text
                                                                                                                 key={`${lbl.id}-fig-${i}`}
                                                                                                                 x={figuresX}
@@ -8485,6 +8532,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 )}
             </div>
 
+            <HarmonyLabelExplainModal isOpen={isExplainOpen} onClose={closeExplain} data={explainData} />
+
             {contextMenu && (
                 <ModulationContextMenu
                     menuData={contextMenu}
@@ -8523,6 +8572,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onApplyOrnamentOverride={handleApplyOrnamentOverride}
                     onRemoveOrnamentOverride={handleRemoveOrnamentOverride}
                     hasExistingOrnamentOverride={hasExistingOrnamentOverride}
+                    onMoveToTreble={() => handleMoveToStaff('treble')}
+                    onMoveToBass={() => handleMoveToStaff('bass')}
+                    onResetStaff={() => handleMoveToStaff(null)}
                 />
             )}
 

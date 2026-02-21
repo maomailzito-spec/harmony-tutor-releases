@@ -170,6 +170,9 @@ export type StaffNote = {
   startTick?: number;
   durationTicks?: number;
   clef?: ClefType;
+  /** Per-note staff override – lets the user move individual notes to the
+   *  other staff regardless of the current parti-strette / parti-late mode. */
+  clefOverride?: 'treble' | 'bass';
   errorType?: 'error' | 'warning' | 'exception' | null;
   voice?: Voice;
   manualBeamGroupId?: string;
