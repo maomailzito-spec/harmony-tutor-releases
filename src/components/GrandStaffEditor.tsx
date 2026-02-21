@@ -158,6 +158,7 @@ type ToolbarGroupId =
     | 'time'
     | 'measures'
     | 'voices'
+    | 'voiceInstrument'
     | 'insert'
     | 'accidentals'
     | 'notations'
@@ -174,6 +175,7 @@ const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'time',
     'measures',
     'voices',
+    'voiceInstrument',
     'insert',
     'accidentals',
     'notations',
@@ -311,6 +313,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const activeAccidentalRef = useRef<AccidentalType | null>(null);
     useEffect(() => { activeAccidentalRef.current = activeAccidental; }, [activeAccidental]);
     const [selectedVoice, setSelectedVoice] = useState<Voice>(1);
+    const [soloVoices, setSoloVoices] = useState<Set<number>>(new Set());
+    const [voiceInstruments, setVoiceInstruments] = useState<Record<number, string>>({
+        1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano',
+        3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano',
+    });
     const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
     const [hoveredViolationNotes, setHoveredViolationNotes] = useState<string[] | null>(null);
     const [selectedViolationIndex, setSelectedViolationIndex] = useState<number | null>(null);
@@ -729,6 +736,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const metronomeLinkedToPlaybackRef = useRef(false);
     const isMetronomeOnRef = useRef(isMetronomeOn);
     const isPlayingRef = useRef(isPlaying);
+    const soloVoicesRef = useRef(soloVoices);
+    const voiceInstrumentsRef = useRef(voiceInstruments);
 
     useEffect(() => { isLoopingRef.current = isLooping; }, [isLooping]);
     useEffect(() => { loopRangeRef.current = loopRange; }, [loopRange]);
@@ -776,6 +785,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, [timeSignatureChanges, timeSignature, setRawNotes]);
     useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+    useEffect(() => { soloVoicesRef.current = soloVoices; }, [soloVoices]);
+    useEffect(() => { voiceInstrumentsRef.current = voiceInstruments; }, [voiceInstruments]);
 
     const canUseDuplet = useMemo(() => {
         // Duina nei tempi composti: 2 ottavi nel tempo di 3 (cioè 2:3 su un beat composto).
@@ -2945,15 +2956,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return `${n}${octave}`;
     }, []);
 
-    const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number, whenMs?: number) => {
+    const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number, whenMs?: number, channel = 0) => {
         if (!output || note.isRest) return;
         const midi = (note.midi ?? 0) + playbackTransposeSemitones;
         if (!Number.isFinite(midi) || midi <= 0) return;
         const vel = 100;
+        const ch = Math.max(0, Math.min(15, channel)); // MIDI channel 0-15
         const t0 = (typeof whenMs === 'number' && Number.isFinite(whenMs)) ? whenMs : window.performance.now();
         // Use WebMIDI scheduling to avoid chord notes being slightly staggered.
-        output.send([0x90, midi, vel], t0);
-        output.send([0x80, midi, 0], t0 + durationSec * 1000);
+        output.send([0x90 + ch, midi, vel], t0);
+        output.send([0x80 + ch, midi, 0], t0 + durationSec * 1000);
     }, [playbackTransposeSemitones]);
 
     const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8) => {
@@ -3320,19 +3332,41 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // and start late, causing "rolled" chords. Preloading keeps chord attacks aligned.
         if (!selectedMidiOutput && audioService.audioContext) {
             try {
-                const needed = new Set<string>();
+                const neededByInstrument = new Map<string, Set<string>>();
                 for (const ev of eventsToPlay) {
                     for (const it of ev.items) {
                         const n = it.note;
                         if (!n || n.isRest) continue;
+                        if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) continue;
                         const midi = (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midi) || midi < 21 || midi > 108) continue;
-                        needed.add(midiToName(midi));
+                        const instr = voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano';
+                        if (!neededByInstrument.has(instr)) neededByInstrument.set(instr, new Set());
+                        neededByInstrument.get(instr)!.add(midiToName(midi));
                     }
                 }
-                await audioService.preloadNotes(Array.from(needed));
+                for (const [instr, notes] of neededByInstrument) {
+                    await audioService.preloadNotesForInstrument(instr, Array.from(notes));
+                }
             } catch {
                 // ignore preload failures; playback will still attempt on-demand load
+            }
+        }
+
+        // Send MIDI Program Change for each voice channel so external synths
+        // (e.g. Logic Pro) know which instrument to use per channel.
+        if (selectedMidiOutput) {
+            const INSTR_TO_GM: Record<string, number> = {
+                acoustic_grand_piano: 0, harpsichord: 6, church_organ: 19,
+                violin: 40, cello: 42, string_ensemble_1: 48,
+                choir_aahs: 52, trumpet: 56, french_horn: 60,
+                oboe: 68, clarinet: 71, flute: 73,
+            };
+            for (let v = 1; v <= 4; v++) {
+                const ch = v - 1;
+                const instr = voiceInstrumentsRef.current[v] || 'acoustic_grand_piano';
+                const pc = INSTR_TO_GM[instr] ?? 0;
+                selectedMidiOutput.send([0xC0 + ch, pc]);
             }
         }
 
@@ -3346,11 +3380,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 ev.items.forEach((it) => {
                     const n = it.note;
                     if (n.isRest) return;
+                    if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
                     const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
                     const midi = n.midi;
                     const midiT = (midi ?? 0) + playbackTransposeSemitones;
                     if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
-                    void audioService.playNote(midiToName(midiT), { when, duration: durSec });
+                    const instr = voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano';
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec });
                 });
             }
 
@@ -3359,7 +3395,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const t = window.setTimeout(async () => {
                 const playable = ev.items
                     .map(x => x.note)
-                    .filter(n => !n.isRest && (n.midi ?? 0) > 0);
+                    .filter(n => !n.isRest && (n.midi ?? 0) > 0 && (soloVoicesRef.current.size === 0 || soloVoicesRef.current.has((n.voice ?? 1) as number)));
 
                 setPlayingNoteIds(playable.map(n => n.id));
 
@@ -3368,8 +3404,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     ev.items.forEach((it) => {
                         const n = it.note;
                         if (n.isRest) return;
+                        if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
                         const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
-                        sendMidiNote(n, selectedMidiOutput, durSec, midiWhenMs);
+                        sendMidiNote(n, selectedMidiOutput, durSec, midiWhenMs, ((n.voice ?? 1) as number) - 1);
                     });
                 }
             }, Math.max(0, (startMs - performance.now()) + delayMs));
@@ -6811,6 +6848,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 bumpMeasuresPerLine={bumpMeasuresPerLine}
                 selectedVoice={selectedVoice}
                 setSelectedVoice={setSelectedVoice}
+                soloVoices={soloVoices}
+                onToggleSolo={(v: number) => setSoloVoices(prev => { const next = new Set(prev); if (next.has(v)) next.delete(v); else next.add(v); return next; })}
+                voiceInstruments={voiceInstruments}
+                onChangeVoiceInstrument={(voice: number, instrument: string) => setVoiceInstruments(prev => ({ ...prev, [voice]: instrument }))}
                 selectedInsertion={selectedInsertion}
                 setSelectedInsertion={setSelectedInsertion}
                 selectedNoteIds={selectedNoteIds}

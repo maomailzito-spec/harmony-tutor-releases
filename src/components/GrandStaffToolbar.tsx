@@ -1,6 +1,21 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import type { AccidentalType, NoteDuration, StaffNote, Voice } from '../types';
+
+const VOICE_INSTRUMENT_OPTIONS = [
+    { value: 'acoustic_grand_piano', label: '🎹 Pianoforte' },
+    { value: 'church_organ', label: '⛪ Organo' },
+    { value: 'harpsichord', label: '🎵 Clavicembalo' },
+    { value: 'string_ensemble_1', label: '🎻 Archi' },
+    { value: 'choir_aahs', label: '🎤 Coro' },
+    { value: 'flute', label: '🪈 Flauto' },
+    { value: 'oboe', label: '🎼 Oboe' },
+    { value: 'clarinet', label: '🎼 Clarinetto' },
+    { value: 'trumpet', label: '🎺 Tromba' },
+    { value: 'french_horn', label: '📯 Corno' },
+    { value: 'violin', label: '🎻 Violino' },
+    { value: 'cello', label: '🎻 Violoncello' },
+];
 import {
     WholeNoteIcon,
     HalfNoteIcon,
@@ -116,6 +131,10 @@ type GrandStaffToolbarProps = {
 
     selectedVoice: Voice;
     setSelectedVoice: (value: Voice) => void;
+    soloVoices?: Set<number>;
+    onToggleSolo?: (voice: number) => void;
+    voiceInstruments?: Record<number, string>;
+    onChangeVoiceInstrument?: (voice: number, instrument: string) => void;
 
     selectedInsertion: InsertionElement;
     setSelectedInsertion: React.Dispatch<React.SetStateAction<InsertionElement>>;
@@ -261,6 +280,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         bumpMeasuresPerLine,
         selectedVoice,
         setSelectedVoice,
+        soloVoices,
+        onToggleSolo,
+        voiceInstruments,
+        onChangeVoiceInstrument,
         selectedInsertion,
         setSelectedInsertion,
         selectedNoteIds,
@@ -564,14 +587,28 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     <button
                         key={v}
                         onClick={() => setSelectedVoice(v as Voice)}
-                        className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
-                        title={v === 1 ? 'Soprano' : v === 2 ? 'Alto' : v === 3 ? 'Tenore' : 'Basso'}
+                        onDoubleClick={(e) => { e.preventDefault(); onToggleSolo?.(v); }}
+                        className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${soloVoices?.has(v) ? 'ring-2 ring-yellow-400 ' : ''}${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
+                        title={`${v === 1 ? 'Soprano' : v === 2 ? 'Alto' : v === 3 ? 'Tenore' : 'Basso'}${soloVoices?.has(v) ? ' (SOLO)' : ''} — doppio-click per solo`}
                     >
                         {v === 1 ? 'S' : v === 2 ? 'A' : v === 3 ? 'T' : 'B'}
                     </button>
                 ))}
             </div>
         ),
+        voiceInstrument: onChangeVoiceInstrument ? (
+            <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={`Strumento per ${selectedVoice === 1 ? 'Soprano' : selectedVoice === 2 ? 'Alto' : selectedVoice === 3 ? 'Tenore' : 'Basso'}`}>
+                <select
+                    className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
+                    value={voiceInstruments?.[selectedVoice] || 'acoustic_grand_piano'}
+                    onChange={(e) => onChangeVoiceInstrument(selectedVoice, e.target.value)}
+                >
+                    {VOICE_INSTRUMENT_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+            </div>
+        ) : null,
         insert: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
                 <button

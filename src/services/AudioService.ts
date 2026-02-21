@@ -164,6 +164,66 @@ export class AudioService {
     }
   }
 
+  // ── Per-voice instrument support ──────────────────────────────
+
+  private async _loadInstrumentFile(instrument: string, audioFile: string): Promise<void> {
+    if (!this.audioContext) return;
+    const key = `${instrument}::${audioFile}`;
+    if (this.audioBuffers.has(key)) return;
+    const url = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/${audioFile}.mp3`;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) return;
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength < 100) return;
+      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      this.audioBuffers.set(key, audioBuffer);
+    } catch { /* silent */ }
+  }
+
+  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number }) {
+    if (!this.audioContext) return;
+    // For piano use existing (possibly local) buffer; for others use instrument::key
+    const key = instrument === 'acoustic_grand_piano' ? audioFile : `${instrument}::${audioFile}`;
+    if (!this.audioBuffers.has(key)) {
+      if (instrument === 'acoustic_grand_piano') {
+        await this.loadAudioFile(audioFile);
+      } else {
+        await this._loadInstrumentFile(instrument, audioFile);
+      }
+    }
+    const audioBuffer = this.audioBuffers.get(key);
+    if (!audioBuffer) return;
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    const gainNode = this.audioContext.createGain();
+    gainNode.connect(this.audioContext.destination);
+    source.connect(gainNode);
+    const startTime = options?.when ?? this.audioContext.currentTime;
+    const noteDurationInSeconds = options?.duration ?? audioBuffer.duration;
+    const releaseDurationInSeconds = 0.5;
+    const noteEndTime = startTime + noteDurationInSeconds;
+    gainNode.gain.setValueAtTime(1, startTime);
+    gainNode.gain.linearRampToValueAtTime(0.0001, noteEndTime + releaseDurationInSeconds);
+    source.start(startTime);
+    source.stop(noteEndTime + releaseDurationInSeconds);
+    this.activeSources.add(source);
+    source.onended = () => {
+      this.activeSources.delete(source);
+      try { gainNode.disconnect(); source.disconnect(); } catch (e) {}
+    };
+  }
+
+  public async preloadNotesForInstrument(instrument: string, audioFiles: string[]): Promise<void> {
+    if (!this.audioContext) return;
+    if (instrument === 'acoustic_grand_piano') return this.preloadNotes(audioFiles);
+    const unique = [...new Set(audioFiles.filter(f => !this.audioBuffers.has(`${instrument}::${f}`)))];
+    if (unique.length > 0) {
+      await Promise.all(unique.map(f => this._loadInstrumentFile(instrument, f)));
+    }
+  }
+
   public async playGuitarVoicing(audioFiles: string[]): Promise<void> {
     if (!this.audioContext) return;
     
