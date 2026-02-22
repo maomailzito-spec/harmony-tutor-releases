@@ -553,7 +553,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
                     if (!local) continue;
 
                     // Only apply if the new-key reading is clearly functional.
-                    const functional = local.includes('/') || /^V(?!I)/.test(local) || /^ii/i.test(local) || /^iv/i.test(local);
+                    const functional = local.includes('/') || (/^V(?!I)/.test(local) && !/°|dim/.test(local)) || /^ii/i.test(local) || /^iv/i.test(local);
                     if (!functional) continue;
 
                     // For a longer lookback window, require an explicit secondary-dominant style label.

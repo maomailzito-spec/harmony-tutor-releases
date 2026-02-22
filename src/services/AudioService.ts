@@ -170,15 +170,25 @@ export class AudioService {
     if (!this.audioContext) return;
     const key = `${instrument}::${audioFile}`;
     if (this.audioBuffers.has(key)) return;
-    const url = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/${audioFile}.mp3`;
-    try {
-      const response = await fetch(url);
-      if (!response.ok) return;
-      const arrayBuffer = await response.arrayBuffer();
-      if (arrayBuffer.byteLength < 100) return;
-      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      this.audioBuffers.set(key, audioBuffer);
-    } catch { /* silent */ }
+
+    // Try local bundled file first, then fall back to remote CDN.
+    const localUrl = `./sounds/${instrument}/${audioFile}.mp3`;
+    const remoteUrl = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/${audioFile}.mp3`;
+
+    for (const url of [localUrl, remoteUrl]) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength < 100) continue; // empty / error page
+        const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+        this.audioBuffers.set(key, audioBuffer);
+        return;
+      } catch {
+        // try next source
+      }
+    }
+    // Both sources failed — silently skip this note.
   }
 
   public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number }) {

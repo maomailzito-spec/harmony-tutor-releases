@@ -209,7 +209,7 @@ const makeVfNote = (
   if (!n.isRest) {
     const desiredStem = n.manualStemDirection
       ?? stemOverride
-      ?? (n.voice ? ((n.voice === 1 || n.voice === 3) ? 'up' : 'down') : undefined);
+      ?? (n.voice ? ((Number(n.voice) === 1 || Number(n.voice) === 3) ? 'up' : 'down') : undefined);
     if (desiredStem) {
       try {
         note.setStemDirection(desiredStem === 'up' ? 1 : -1);
@@ -1525,8 +1525,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // even single-voice beats not covered by the multi-voice stemOverrideById logic.
         if (isClosePositionTreble) {
           for (const n of staffNotes) {
-            if ((n.voice ?? 1) === 3 && !n.isRest && !n.manualStemDirection && !stemOverrideById.has(n.id)) {
+            if (Number(n.voice ?? 1) === 3 && !n.isRest && !n.manualStemDirection && !stemOverrideById.has(n.id)) {
               stemOverrideById.set(n.id, 'down');
+            }
+          }
+        }
+
+        // Ensure ALL Tenor notes get stem UP on the bass staff in parti late,
+        // so they don't visually merge with Bass (voice 4, stem DOWN).
+        // This is the mirror of the close-position rule above.
+        if (isPartiLate && clef === 'bass') {
+          for (const n of staffNotes) {
+            if (Number(n.voice ?? 1) === 3 && !n.isRest && !n.manualStemDirection && !stemOverrideById.has(n.id)) {
+              stemOverrideById.set(n.id, 'up');
             }
           }
         }
@@ -2161,6 +2172,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               vfNote.setTickContext(tc);
               (vfNote as any).preFormat?.();
               (vfNote as any).postFormat?.();
+
+              // Re-enforce stem direction after preFormat/postFormat which may
+              // recalculate it (VexFlow internals can flip stems on certain layouts).
+              try {
+                const stemDir = stemOverrideById.get(n.id) ?? n.manualStemDirection;
+                if (stemDir && !n.isRest) {
+                  vfNote.setStemDirection(stemDir === 'up' ? 1 : -1);
+                }
+              } catch { /* ignore */ }
             }
 
             prepared.push({ staffNote: n, vfNote, dotFill, x, isPrimaryRender });

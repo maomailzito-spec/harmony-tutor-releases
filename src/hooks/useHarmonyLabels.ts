@@ -395,6 +395,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (!rJ || rJ.roman !== 'I') continue;
                         const rPrev = getRomanAnalysis(stPrev, K, false);
                         if (!rPrev || !/^V/.test(rPrev.roman)) continue;
+                        // V° (diminished) is not a real dominant — skip auto-tonicization
+                        if (/°|dim/.test(rPrev.roman)) continue;
 
                         const degLabel = _keyDeg(K);
                         if (!degLabel) continue;
@@ -2663,6 +2665,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             };
 
             const noteMatch = (a: NoteSig, b: NoteSig): boolean => {
+                // All-zero deltas match trivially but indicate static harmony, not a sequence
+                if (a.bassD.every(d => d === 0) && a.sopD.every(d => d === 0)) return false;
                 // Compare bass deltas (strong signal)
                 const nBass = Math.min(a.bassD.length, b.bassD.length);
                 let bassOK = 0;
@@ -2701,6 +2705,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const bassD = deltas(bass.mids);
                     const sopD = deltas(sop.mids);
                     if (bassD.length < 2) return null;
+                    // Static voice leading (all zero deltas) → not a genuine sequence
+                    if (bassD.every(d => d === 0) && sopD.every(d => d === 0)) return null;
                     return { bassD, sopD, bassTimes: bass.timesQ, sopTimes: sop.timesQ };
                 } catch {
                     return null;
@@ -2708,6 +2714,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             };
 
             const onsetMatch = (a: OnsetSig, b: OnsetSig): boolean => {
+                // All-zero deltas = static voice leading, not a genuine sequence
+                if (a.bassD.every(d => d === 0) && b.bassD.every(d => d === 0)) return false;
                 const nBass = Math.min(a.bassD.length, b.bassD.length);
                 if (nBass < 2) return false;
                 for (let i = 0; i < nBass; i++) {

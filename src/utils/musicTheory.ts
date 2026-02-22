@@ -8959,10 +8959,10 @@ export function applyHarmonyRules(
                 const intB = mod12(Math.abs((sB as number) - (bB as number)));
                 const approachesPerfect = isPerfectOctaveOrUnison(intB) || isPerfectFifth(intB);
                   const departurePerfect = isPerfectOctaveOrUnison(intA) || isPerfectFifth(intA);
-
-                  // Hidden/direct only: if departure is already perfect, this is a true parallel
-                  // handled by R-01/R-02 and MUST NOT be downgraded here.
-                  if (approachesPerfect && !departurePerfect && dS !== 0 && dS === dB) {
+                  // Skip only true parallels (same interval type: P5→P5 or P8→P8), handled by R-01/R-02.
+                  // Cross-type (P8→P5, P5→P8) must still be detected as hidden/direct.
+                  const sameTypePerfect14 = departurePerfect && (isPerfectFifth(intA) === isPerfectFifth(intB));
+                  if (approachesPerfect && !sameTypePerfect14 && dS !== 0 && dS === dB) {
                     const ruleId = sopranoMelodicInterval <= 2 ? 'EXC-Hidden-Stepwise' : 'R-14';
                     const severity = sopranoMelodicInterval <= 2 ? 'exception' : 'warning';
 
@@ -9357,9 +9357,11 @@ export function applyHarmonyRules(
             const arrivalPerfect = isPerfectFifth(intB) || isPerfectOctaveOrUnison(intB);
             const departurePerfect = isPerfectFifth(intA) || isPerfectOctaveOrUnison(intA);
 
-            // Hidden/direct perfect intervals: similar motion into a perfect 5th/8ve,
-            // but the departure interval is NOT already perfect (otherwise it's a true parallel handled by R-01/R-02).
-            if (similar && arrivalPerfect && !departurePerfect) {
+            // Hidden/direct perfect intervals: similar motion into a perfect 5th/8ve.
+            // Skip only true parallels (same interval type: P5→P5, P8→P8) — handled by R-01/R-02.
+            // Cross-type transitions (P8→P5, P5→P8) must still be caught as hidden/direct.
+            const sameTypePerfect = departurePerfect && (isPerfectFifth(intA) === isPerfectFifth(intB));
+            if (similar && arrivalPerfect && !sameTypePerfect) {
                 const isOct = isPerfectOctaveOrUnison(intB);
                 const isFifth = !isOct;
                 const sameSonority = (() => {
@@ -9375,15 +9377,72 @@ export function applyHarmonyRules(
                 const inSequence = (isTickInsideImitatedSequence(tickA) || isTickInsideImitatedSequence(tickB));
 
                 if (!sopranoLeap) {
+                    // Dubois degree-aware rules for hidden perfect intervals (outer voices)
+                    const sopDir = Number(sopB.midi) - Number(sopA.midi);
+                    const sopSemi = Math.abs(sopDir);
+                    const bassPc = ((Number(basB.midi) % 12) + 12) % 12;
+                    const _tonicPcMap: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+                    // Use local tonic (respects tonicizations) instead of global keyTonic
+                    const _localCtx = getContextAtAbsBeat(b.absBeat);
+                    const _tonicPc = _tonicPcMap[_localCtx.tonic] ?? _tonicPcMap[keyTonic] ?? 0;
+                    const _degreeFromTonic = ((bassPc - _tonicPc) % 12 + 12) % 12;
+                    const _isTonicOrDom = _degreeFromTonic === 0 || _degreeFromTonic === 7; // I or V
+                    const _isTonalDeg = _degreeFromTonic === 0 || _degreeFromTonic === 5 || _degreeFromTonic === 7; // I, IV, V
+
+                    let _dubSev: 'exception' | 'warning' = 'exception';
+                    let _dubDesc = '';
+                    let _dubSugg = '';
+
+                    if (isFifth) {
+                        // Quinta nascosta S+B — Dubois:
+                        // Ammessa verso I/V con Soprano per grado congiunto
+                        // Sugli altri gradi: solo con Soprano per 2ª min. discendente
+                        if (_isTonicOrDom) {
+                            _dubSev = 'exception';
+                            _dubDesc = 'Quinta nascosta verso I/V con Soprano per grado congiunto (ammessa — Dubois)';
+                            _dubSugg = 'Eccezione classica (Dubois): quinta nascosta ammessa sul I e V grado quando il Soprano procede per grado congiunto.';
+                        } else if (sopDir < 0 && sopSemi === 1) {
+                            _dubSev = 'exception';
+                            _dubDesc = 'Quinta nascosta con Soprano per 2ª min. discendente (ammessa — Dubois)';
+                            _dubSugg = 'Dubois: sugli altri gradi, la quinta nascosta tra parti estreme è ammessa se il Soprano scende di seconda minore.';
+                        } else {
+                            _dubSev = 'warning';
+                            _dubDesc = 'Quinta nascosta tra voci estreme — Soprano per grado ma non verso I/V grado';
+                            _dubSugg = 'Dubois: la quinta nascosta tra parti estreme con Soprano per grado congiunto è ammessa solo verso il I e il V grado; sugli altri gradi solo con Soprano per 2ª min. discendente.';
+                        }
+                    } else {
+                        // Ottava nascosta S+B — Dubois:
+                        // Ammessa con Soprano per 2ª min. (asc/disc) verso gradi tonali
+                        // Tollerata con riserva con Soprano per 2ª magg. disc. verso gradi tonali
+                        if (sopSemi === 1 && _isTonalDeg) {
+                            _dubSev = 'exception';
+                            _dubDesc = 'Ottava nascosta con Soprano per 2ª min. verso grado tonale (ammessa — Dubois)';
+                            _dubSugg = 'Dubois: l\'ottava nascosta tra parti estreme è ammessa quando il Soprano procede per seconda minore verso un grado tonale (I, IV, V).';
+                        } else if (sopDir < 0 && sopSemi === 2 && _isTonalDeg) {
+                            _dubSev = 'warning';
+                            _dubDesc = 'Ottava nascosta con Soprano per 2ª magg. disc. verso grado tonale (tollerata con riserva — Dubois)';
+                            _dubSugg = 'Dubois: l\'ottava nascosta con Soprano per 2ª maggiore discendente è tollerata con riserva sui gradi tonali, particolarmente in conclusione di frase.';
+                        } else if (sopSemi <= 2 && _isTonalDeg) {
+                            _dubSev = 'exception';
+                            _dubDesc = 'Ottava nascosta con Soprano per grado congiunto verso grado tonale (ammessa)';
+                            _dubSugg = 'Eccezione classica: il Soprano si muove per grado congiunto verso un grado tonale.';
+                        } else {
+                            _dubSev = 'warning';
+                            _dubDesc = 'Ottava nascosta tra voci estreme — non verso grado tonale';
+                            _dubSugg = 'Dubois: l\'ottava nascosta tra parti estreme è ammessa solo verso i gradi tonali (I, IV, V) con il Soprano per seconda minore.';
+                        }
+                    }
+
+                    const _dubRuleId = _dubSev === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05';
                     addViolation({
-                        ruleId: 'EXC-Hidden-Stepwise',
-                        severity: 'exception',
-                        description: 'Moto retto/nascosto ammesso (Soprano per grado congiunto)',
-                        suggestion: 'Eccezione classica: il Soprano si muove per grado congiunto.',
+                        ruleId: _dubRuleId,
+                        severity: _dubSev,
+                        description: _dubDesc,
+                        suggestion: _dubSugg,
                         noteIds: [sopA.id, sopB.id, basA.id, basB.id],
                     });
-                    connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
-                    connections.push({ type: 'horizontal', noteId1: basA.id, noteId2: basB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
+                    connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _dubSev, ruleId: _dubRuleId });
+                    connections.push({ type: 'horizontal', noteId1: basA.id, noteId2: basB.id, severity: _dubSev, ruleId: _dubRuleId });
                 } else if (bassStepwise && sopranoSmallLeap) {
                     addViolation({
                         ruleId: 'EXC-Hidden-BassStep',
@@ -9483,7 +9542,9 @@ export function applyHarmonyRules(
             const arrivalPerfect = isPerfectFifth(intB) || isPerfectOctaveOrUnison(intB);
             const departurePerfect = isPerfectFifth(intA) || isPerfectOctaveOrUnison(intA);
 
-            if (similar && arrivalPerfect && !departurePerfect) {
+            // Skip only true parallels (P5→P5, P8→P8) — cross-type (P8→P5, P5→P8) detected here.
+            const sameTypePerfectSA = departurePerfect && (isPerfectFifth(intA) === isPerfectFifth(intB));
+            if (similar && arrivalPerfect && !sameTypePerfectSA) {
                 const isOct = isPerfectOctaveOrUnison(intB);
                 const isFifth = !isOct;
                 const sameSonority = (() => {
@@ -9498,48 +9559,226 @@ export function applyHarmonyRules(
                 const tickB = Number((sopB as any).startTick);
                 const inSequence = (isTickInsideImitatedSequence(tickA) || isTickInsideImitatedSequence(tickB));
 
-                if (!sopranoLeap) {
+                // Dubois inner-voice rules for S+A hidden perfect intervals
+                const _altoMotion = Math.abs((aB as number) - (aA as number));
+                const _altoStep = _altoMotion <= 2;
+                const _altoDir = dir(aA as number, aB as number);
+                const _bassPcSA = ((Number((bV[4] ?? basB ?? sopB as any).midi ?? 0) % 12) + 12) % 12;
+                const _tpcMapSA: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+                // Use local tonic (respects tonicizations)
+                const _localCtxSA = getContextAtAbsBeat(b.absBeat);
+                const _tpcSA = _tpcMapSA[_localCtxSA.tonic] ?? _tpcMapSA[keyTonic] ?? 0;
+                const _degSA = ((_bassPcSA - _tpcSA) % 12 + 12) % 12;
+                const _isTonalSA = _degSA === 0 || _degSA === 5 || _degSA === 7;
+
+                // Common note (pitch class): one of the two notes forming the arriving 5th was in the previous chord
+                const _commonNoteSA = (() => {
+                    try {
+                        const prev = (getStructuralNotes(a) || []).map(n => ((Number(n.midi) % 12) + 12) % 12);
+                        return prev.includes(((Number(sopB.midi) % 12) + 12) % 12) || prev.includes(((Number(altoB.midi) % 12) + 12) % 12);
+                    } catch { return false; }
+                })();
+
+                // Dubois rule 3: common note overrides all conditions for 5ths (inner voices)
+                if (isFifth && _commonNoteSA) {
                     addViolation({
                         ruleId: 'EXC-Hidden-Stepwise',
                         severity: 'exception',
-                        description: 'Moto retto/nascosto ammesso (Soprano per grado congiunto)',
-                        suggestion: 'Eccezione classica: il Soprano si muove per grado congiunto.',
+                        description: 'Quinta nascosta S\u2013A con nota comune ai due accordi (ammessa \u2014 Dubois)',
+                        suggestion: 'Dubois: la quinta nascosta tra parti interne \u00E8 ammessa su tutti i gradi, anche per salto, se una delle due note che formano la 5\u00AA \u00E8 comune ai due accordi.',
                         noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                     });
                     connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
                     connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
-                } else {
-                    const isException = (inSequence || sameSonority);
-                    const sev = isException ? 'exception' : 'warning';
+                } else if (!sopranoLeap) {
+                    // Dubois: voce più acuta (Soprano) per grado → ammessa su tutti i gradi
                     addViolation({
-                        ruleId: 'R-05',
-                        severity: sev,
+                        ruleId: 'EXC-Hidden-Stepwise',
+                        severity: 'exception',
                         description: isOct
-                            ? (inSequence
-                                ? 'Ottave nascoste (dirette) in progressione imitata (tollerate)'
-                                : (sameSonority
-                                    ? 'Ottave nascoste (dirette) in cambio di posizione (stessa sonorità)'
-                                    : 'Ottave nascoste (dirette) tra Soprano e Alto'))
-                            : (inSequence
-                                ? 'Quinte nascoste (dirette) in progressione imitata (tollerate)'
-                                : (sameSonority
-                                    ? 'Quinte nascoste (dirette) in cambio di posizione (stessa sonorità)'
-                                    : 'Quinte nascoste (dirette) tra Soprano e Alto')),
-                        suggestion: isOct
-                            ? (isException
-                                ? HIDDEN_OCTAVE_LICENSE_IN_SEQUENCE_HELP
-                                : (HIDDEN_OCTAVE_LICENSE_IN_SEQUENCE_HELP + '\n\n(Nota: qui l\'analisi non ha riconosciuto una sequenza/cambio di posizione sufficientemente chiaro; tratta quindi il caso come warning.)'))
-                            : (isFifth
-                                ? (isException
-                                    ? HIDDEN_FIFTH_LICENSE_IN_SEQUENCE_HELP
-                                    : (HIDDEN_FIFTH_LICENSE_IN_SEQUENCE_HELP + '\n\n(Nota: qui l\'analisi non ha riconosciuto una sequenza/cambio di posizione sufficientemente chiaro; tratta quindi il caso come warning.)'))
-                                : 'Preferisci moto contrario, oppure evita il salto nel Soprano.'),
+                            ? 'Ottava nascosta S–A con Soprano per grado congiunto (ammessa — Dubois)'
+                            : 'Quinta nascosta S–A con Soprano per grado congiunto (ammessa — Dubois)',
+                        suggestion: 'Dubois: tra parti interne, la quinta/ottava nascosta è ammessa su tutti i gradi se la voce più acuta procede per grado congiunto.',
                         noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                     });
-                    connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: sev, ruleId: 'R-05' });
-                    connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: sev, ruleId: 'R-05' });
+                    connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
+                    connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
+                } else if (_altoStep) {
+                    // Dubois: voce inferiore (Alto) per grado
+                    if (isFifth) {
+                        // 5ths: ammessa solo su gradi tonali
+                        const _sevSA = _isTonalSA ? 'exception' as const : 'warning' as const;
+                        addViolation({
+                            ruleId: _sevSA === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05',
+                            severity: _sevSA,
+                            description: _isTonalSA
+                                ? 'Quinta nascosta S–A con Alto per grado, su grado tonale (ammessa — Dubois)'
+                                : 'Quinta nascosta S–A con Alto per grado ma non su grado tonale',
+                            suggestion: 'Dubois: la quinta nascosta con la voce inferiore per grado è ammessa solo sui gradi tonali (I, IV, V).',
+                            noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
+                        });
+                        connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: _sevSA === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05' });
+                        connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: _sevSA, ruleId: _sevSA === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05' });
+                    } else {
+                        // 8ves: tollerata con riserva solo salendo
+                        const _sevSA = _altoDir > 0 ? 'warning' as const : 'error' as const;
+                        addViolation({
+                            ruleId: 'R-05',
+                            severity: _sevSA,
+                            description: _altoDir > 0
+                                ? 'Ottava nascosta S–A con Alto per grado ascendente (tollerata con riserva — Dubois)'
+                                : 'Ottava nascosta S–A con Alto per grado discendente (non ammessa — Dubois)',
+                            suggestion: 'Dubois: l\'ottava nascosta con la voce inferiore per grado è tollerata con riserva solo salendo.',
+                            noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
+                        });
+                        connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: 'R-05' });
+                        connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: _sevSA, ruleId: 'R-05' });
+                    }
+                } else {
+                    // Both leap
+                    {
+                        const _seqSon = (inSequence || sameSonority);
+                        const _sevSA = isOct ? 'error' as const : (_seqSon ? 'exception' as const : 'warning' as const);
+                        addViolation({
+                            ruleId: 'R-05',
+                            severity: _sevSA,
+                            description: isOct
+                                ? (inSequence ? 'Ottave nascoste S–A in progressione imitata' : 'Ottava nascosta S–A per salto in entrambe le voci (proibita — Dubois)')
+                                : (inSequence ? 'Quinte nascoste S–A in progressione imitata' : 'Quinta nascosta S–A per salto senza nota comune'),
+                            suggestion: isOct
+                                ? 'Dubois: l\'ottava nascosta è proibita quando entrambe le voci procedono per salto.'
+                                : 'Dubois: la quinta nascosta per salto è ammessa solo se una delle note è comune ai due accordi.',
+                            noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
+                        });
+                        connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: 'R-05' });
+                        connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: _sevSA, ruleId: 'R-05' });
+                    }
                 }
             }
+            }
+        }
+
+        // R-05 (inner-voice pairs): hidden/direct 5ths & 8ves between any pair involving at least one inner voice.
+        // Dubois rules for inner voices differ from outer voices:
+        //   - Allowed on all degrees if the HIGHER voice moves by step
+        //   - Only tonal degrees (5ths) / ascending only (8ves) if LOWER voice moves by step
+        //   - 5ths allowed even by leap if one note of the 5th is common to both chords
+        //   - 8ves forbidden if both voices leap
+        {
+            const _tpcMapInner: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+            // Use local tonic (respects tonicizations) — computed per pair below
+            const _localCtxInner = getContextAtAbsBeat(b.absBeat);
+            const _tpcInner = _tpcMapInner[_localCtxInner.tonic] ?? _tpcMapInner[keyTonic] ?? 0;
+
+            const _innerPairs: Array<{ nameHi: string; nameLo: string; hi: [any, any]; lo: [any, any] }> = [];
+            const _sopN = sopA && sopB ? [sopA, sopB] : null;
+            const _altN = (aV[2] && bV[2]) ? [aV[2], bV[2]] : null;
+            const _tenN = (aV[3] && bV[3]) ? [aV[3], bV[3]] : null;
+            const _basN = (aV[4] && bV[4]) ? [aV[4], bV[4]] : null;
+
+            // Pairs involving at least one inner voice (S+A already handled above):
+            if (_sopN && _tenN) _innerPairs.push({ nameHi: 'S', nameLo: 'T', hi: _sopN as any, lo: _tenN as any });
+            if (_altN && _tenN) _innerPairs.push({ nameHi: 'A', nameLo: 'T', hi: _altN as any, lo: _tenN as any });
+            if (_altN && _basN) _innerPairs.push({ nameHi: 'A', nameLo: 'B', hi: _altN as any, lo: _basN as any });
+            if (_tenN && _basN) _innerPairs.push({ nameHi: 'T', nameLo: 'B', hi: _tenN as any, lo: _basN as any });
+
+            for (const pair of _innerPairs) {
+                const hiA = pair.hi[0]; const hiB = pair.hi[1];
+                const loA = pair.lo[0]; const loB = pair.lo[1];
+                const hA = effectiveMidi(hiA as any); const hB = effectiveMidi(hiB as any);
+                const lA = effectiveMidi(loA as any); const lB = effectiveMidi(loB as any);
+                if (!Number.isFinite(hA as any) || !Number.isFinite(hB as any) || !Number.isFinite(lA as any) || !Number.isFinite(lB as any)) continue;
+                const _intA = mod12(Math.abs((hA as number) - (lA as number)));
+                const _intB = mod12(Math.abs((hB as number) - (lB as number)));
+                const _dH = dir(hA as number, hB as number);
+                const _dL = dir(lA as number, lB as number);
+                const _sim = _dH !== 0 && _dH === _dL;
+                const _arrPerf = isPerfectFifth(_intB) || isPerfectOctaveOrUnison(_intB);
+                const _depPerf = isPerfectFifth(_intA) || isPerfectOctaveOrUnison(_intA);
+                // Skip only true parallels (same type: P5→P5, P8→P8). Cross-type (P8→P5, P5→P8) still detected.
+                const _sameTypePerf = _depPerf && (isPerfectFifth(_intA) === isPerfectFifth(_intB));
+                if (!_sim || !_arrPerf || _sameTypePerf) continue;
+                const _is8 = isPerfectOctaveOrUnison(_intB);
+                const _is5 = !_is8;
+                const _hiMotion = Math.abs((hB as number) - (hA as number));
+                const _loMotion = Math.abs((lB as number) - (lA as number));
+                const _hiStep = _hiMotion <= 2;
+                const _loStep = _loMotion <= 2;
+                const _loDir = _dL;
+                const _bPc = ((Number(loB.midi ?? 0) % 12) + 12) % 12;
+                const _deg = ((_bPc - _tpcInner) % 12 + 12) % 12;
+                const _isTonal = _deg === 0 || _deg === 5 || _deg === 7;
+                const _pairLabel = `${pair.nameHi}–${pair.nameLo}`;
+
+                // Common note (pitch class): one of the two notes forming the arriving 5th was in the previous chord
+                const _commonNote = (() => {
+                    try {
+                        const prev = (getStructuralNotes(a) || []).map(n => ((Number(n.midi) % 12) + 12) % 12);
+                        return prev.includes(((Number(hiB.midi) % 12) + 12) % 12) || prev.includes(((Number(loB.midi) % 12) + 12) % 12);
+                    } catch { return false; }
+                })();
+
+                const _tickA = Number((hiA as any).startTick);
+                const _tickB = Number((hiB as any).startTick);
+                const _inSeq = isTickInsideImitatedSequence(_tickA) || isTickInsideImitatedSequence(_tickB);
+
+                let _sev: 'exception' | 'warning' | 'error' = 'warning';
+                let _desc = '';
+                let _sugg = '';
+
+                if (_is5 && _commonNote) {
+                    // Dubois rule 3: common note overrides all conditions for 5ths (inner voices)
+                    _sev = 'exception';
+                    _desc = `Quinta nascosta ${_pairLabel} con nota comune ai due accordi (ammessa \u2014 Dubois)`;
+                    _sugg = 'Dubois: la quinta nascosta tra parti interne \u00E8 ammessa su tutti i gradi, anche per salto, se una delle note che formano la 5\u00AA \u00E8 comune ai due accordi.';
+                } else if (_hiStep) {
+                    // Dubois: voce più acuta per grado → ammessa su tutti i gradi
+                    _sev = 'exception';
+                    _desc = _is8
+                        ? `Ottava nascosta ${_pairLabel} con ${pair.nameHi} per grado congiunto (ammessa — Dubois)`
+                        : `Quinta nascosta ${_pairLabel} con ${pair.nameHi} per grado congiunto (ammessa — Dubois)`;
+                    _sugg = 'Dubois: tra parti interne, ammessa su tutti i gradi se la voce più acuta procede per grado congiunto.';
+                } else if (_loStep) {
+                    if (_is5) {
+                        _sev = _isTonal ? 'exception' : 'warning';
+                        _desc = _isTonal
+                            ? `Quinta nascosta ${_pairLabel} con ${pair.nameLo} per grado, su grado tonale (ammessa — Dubois)`
+                            : `Quinta nascosta ${_pairLabel} con ${pair.nameLo} per grado ma non su grado tonale`;
+                        _sugg = 'Dubois: con la voce inferiore per grado, la quinta nascosta è ammessa solo sui gradi tonali (I, IV, V).';
+                    } else {
+                        _sev = _loDir > 0 ? 'warning' : 'error';
+                        _desc = _loDir > 0
+                            ? `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado ascendente (tollerata con riserva — Dubois)`
+                            : `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado discendente (non ammessa — Dubois)`;
+                        _sugg = 'Dubois: l\'ottava nascosta con la voce inferiore per grado è tollerata solo salendo.';
+                    }
+                } else {
+                    // Both leap
+                    if (_is8) {
+                        _sev = _inSeq ? 'exception' : 'error';
+                        _desc = _inSeq
+                            ? `Ottava nascosta ${_pairLabel} per salto in progressione imitata (tollerata)`
+                            : `Ottava nascosta ${_pairLabel} per salto in entrambe le voci (proibita — Dubois)`;
+                        _sugg = 'Dubois: l\'ottava nascosta è proibita quando entrambe le voci procedono per salto.';
+                    } else {
+                        _sev = _inSeq ? 'exception' : 'warning';
+                        _desc = _inSeq
+                            ? `Quinta nascosta ${_pairLabel} in progressione imitata (tollerata)`
+                            : `Quinta nascosta ${_pairLabel} per salto senza nota comune`;
+                        _sugg = 'Dubois: la quinta nascosta per salto è ammessa solo se una delle note è comune ai due accordi.';
+                    }
+                }
+
+                const _rId = _sev === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05';
+                addViolation({
+                    ruleId: _rId,
+                    severity: _sev,
+                    description: _desc,
+                    suggestion: _sugg,
+                    noteIds: [hiA.id, hiB.id, loA.id, loB.id],
+                });
+                connections.push({ type: 'horizontal', noteId1: hiA.id, noteId2: hiB.id, severity: _sev, ruleId: _rId });
+                connections.push({ type: 'horizontal', noteId1: loA.id, noteId2: loB.id, severity: _sev, ruleId: _rId });
             }
         }
 
