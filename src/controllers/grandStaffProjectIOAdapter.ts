@@ -32,6 +32,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	doubleBarlineMeasures: any[];
         repeatBarlines: Record<number, string>;
         voltaBrackets: any[];
+        toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
 	isMetronomeOn: boolean;
@@ -39,7 +40,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 };
 
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
-	const saveKeySig = getKeySignature(args.keySignatureRoot || 'C', args.isMinorMode ? 'Minor' : 'Major');
+	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
 	const baseProject: any = {
 		schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
 		notes: (args.latestRawNotes.current || []).map((n: any) => normalizeNotePitchFieldsWithKey(n as any, saveKeySig)),

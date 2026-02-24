@@ -60,18 +60,7 @@ type StaffLayoutMode = 'parti_late' | 'parti_strette';
 type CanvasFormat = 'page' | 'landscape';
 type MetronomeUnit = 'quarter' | 'eighth' | 'dotted-quarter';
 type SelectedNotesBeamState = 'unbeamable' | 'beamed' | 'mixed' | 'unbeamed';
-type ToolbarGroupId =
-    | 'playback'
-    | 'bpm'
-    | 'key'
-    | 'time'
-    | 'measures'
-    | 'voices'
-    | 'insert'
-    | 'accidentals'
-    | 'notations'
-    | 'analysis'
-    | 'more';
+import type { ToolbarGroupId } from './GrandStaffEditor';
 
 type InsertionElement = { type: 'note' | 'rest'; duration: NoteDuration; isDotted?: boolean };
 

@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "extractedAt": "2026-02-21",
-  "totalFiles": 48,
-  "totalSamples": 237,
+  "extractedAt": "2026-02-24",
+  "totalFiles": 49,
+  "totalSamples": 244,
   "typeCounts": {
-    "passing": 126,
-    "appoggiatura": 42,
+    "passing": 132,
+    "appoggiatura": 43,
     "neighbor": 16,
     "anticipation": 7,
     "suspension": 42,
@@ -58,6 +58,12 @@
       "_total": 7,
       "_dominant": "appoggiatura",
       "_probability": 0.857
+    },
+    "medium_moderate_step-down_step-down": {
+      "passing": 7,
+      "_total": 7,
+      "_dominant": "passing",
+      "_probability": 1
     },
     "medium_weak_step-down_step-down": {
       "passing": 6,
@@ -146,11 +152,12 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "medium_moderate_step-down_step-down": {
-      "passing": 2,
+    "medium_strong_step-up_step-up": {
+      "appoggiatura": 1,
+      "passing": 1,
       "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
+      "_dominant": "appoggiatura",
+      "_probability": 0.5
     },
     "short_weak_step-up_skip-down": {
       "escape": 2,
@@ -189,6 +196,12 @@
       "_probability": 1
     },
     "very-short_weak_step-down_leap-up": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "medium_moderate_skip-up_skip-up": {
       "passing": 1,
       "_total": 1,
       "_dominant": "passing",
@@ -258,12 +271,6 @@
       "escape": 1,
       "_total": 1,
       "_dominant": "escape",
-      "_probability": 1
-    },
-    "medium_strong_step-up_step-up": {
-      "passing": 1,
-      "_total": 1,
-      "_dominant": "passing",
       "_probability": 1
     },
     "short_strong_step-down_step-down": {
@@ -405,6 +412,12 @@
       "_dominant": "neighbor",
       "_probability": 0.667
     },
+    "medium_moderate_step-down_step-down_v4_unk_same": {
+      "passing": 3,
+      "_total": 3,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "short_moderate_step-down_step-down_v1_unk_shorter": {
       "appoggiatura": 3,
       "_total": 3,
@@ -500,6 +513,12 @@
       "neighbor": 2,
       "_total": 2,
       "_dominant": "neighbor",
+      "_probability": 1
+    },
+    "medium_moderate_step-down_step-down_v1_unk_same": {
+      "passing": 2,
+      "_total": 2,
+      "_dominant": "passing",
       "_probability": 1
     },
     "short_strong_unison_step-down_v1_cons_same": {
@@ -724,7 +743,25 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "medium_moderate_step-down_step-down_v4_unk_same": {
+    "medium_strong_step-up_step-up_v2_cons_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_moderate_step-down_step-down_v3_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "medium_moderate_skip-up_skip-up_v3_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "medium_moderate_step-down_step-down_v2_unk_same": {
       "passing": 1,
       "_total": 1,
       "_dominant": "passing",
@@ -794,12 +831,6 @@
       "appoggiatura": 1,
       "_total": 1,
       "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_moderate_step-down_step-down_v1_unk_same": {
-      "passing": 1,
-      "_total": 1,
-      "_dominant": "passing",
       "_probability": 1
     },
     "very-short_weak_step-down_step-down_v1_unk_same": {
@@ -4213,6 +4244,160 @@
       "durationRatio": 0.5,
       "durationRatioCategory": "shorter",
       "isDissonantVsBass": true
+    },
+    {
+      "file": "Corale 2b Bach.htp",
+      "noteId": "f51c38b8-69b1-4727-bc5d-92e9e1c33837",
+      "type": "appoggiatura",
+      "patternKey": "medium_strong_step-up_step-up",
+      "detailedKey": "medium_strong_step-up_step-up_v2_cons_shorter",
+      "pitch": "E4",
+      "midi": 64,
+      "voice": 2,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 16,
+      "beatStrength": "strong",
+      "entryInterval": 2,
+      "exitInterval": 1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 0.5,
+      "durationRatioCategory": "shorter",
+      "isDissonantVsBass": false
+    },
+    {
+      "file": "Corale 2b Bach.htp",
+      "noteId": "557b847b-81a3-4c92-a96e-d31fccbb99f0",
+      "type": "passing",
+      "patternKey": "medium_moderate_step-down_step-down",
+      "detailedKey": "medium_moderate_step-down_step-down_v4_unk_same",
+      "pitch": "B2",
+      "midi": 47,
+      "voice": 4,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 2,
+      "measureIndex": 5,
+      "beatStrength": "moderate",
+      "entryInterval": -1,
+      "exitInterval": -2,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Corale 2b Bach.htp",
+      "noteId": "1a0fbfeb-d80b-492c-bd4e-f46ac57309b0",
+      "type": "passing",
+      "patternKey": "medium_moderate_step-down_step-down",
+      "detailedKey": "medium_moderate_step-down_step-down_v3_unk_same",
+      "pitch": "F3",
+      "midi": 53,
+      "voice": 3,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 2,
+      "measureIndex": 3,
+      "beatStrength": "moderate",
+      "entryInterval": -2,
+      "exitInterval": -1,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Corale 2b Bach.htp",
+      "noteId": "1dbbefb9-1e6c-4724-b590-07bd14a7b8d8",
+      "type": "passing",
+      "patternKey": "medium_moderate_step-down_step-down",
+      "detailedKey": "medium_moderate_step-down_step-down_v1_unk_same",
+      "pitch": "D4",
+      "midi": 62,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 2,
+      "measureIndex": 3,
+      "beatStrength": "moderate",
+      "entryInterval": -2,
+      "exitInterval": -2,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Corale 2b Bach.htp",
+      "noteId": "eb4de1d6-8632-4e7f-9a7b-f39611c60c1e",
+      "type": "passing",
+      "patternKey": "medium_moderate_skip-up_skip-up",
+      "detailedKey": "medium_moderate_skip-up_skip-up_v3_unk_same",
+      "pitch": "B3",
+      "midi": 59,
+      "voice": 3,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 2,
+      "measureIndex": 8,
+      "beatStrength": "moderate",
+      "entryInterval": 4,
+      "exitInterval": 3,
+      "entryBucket": "skip-up",
+      "exitBucket": "skip-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Corale 2b Bach.htp",
+      "noteId": "29c23762-31f8-4f62-ae7f-fbe9f5103f91",
+      "type": "passing",
+      "patternKey": "medium_moderate_step-down_step-down",
+      "detailedKey": "medium_moderate_step-down_step-down_v2_unk_same",
+      "pitch": "F4",
+      "midi": 65,
+      "voice": 2,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 2,
+      "measureIndex": 15,
+      "beatStrength": "moderate",
+      "entryInterval": -2,
+      "exitInterval": -1,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Corale 2b Bach.htp",
+      "noteId": "610f2986-3ab4-477c-98f2-2ae74656bc0d",
+      "type": "passing",
+      "patternKey": "medium_moderate_step-down_step-down",
+      "detailedKey": "medium_moderate_step-down_step-down_v4_unk_same",
+      "pitch": "F3",
+      "midi": 53,
+      "voice": 4,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 4,
+      "measureIndex": 9,
+      "beatStrength": "moderate",
+      "entryInterval": -2,
+      "exitInterval": -1,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
     },
     {
       "file": "Dubois 2 p 55.htp",

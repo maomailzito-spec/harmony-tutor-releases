@@ -8421,6 +8421,24 @@ export function applyHarmonyRules(
                         }
                     }
 
+                    // R-10-DIM5: doubled diminished 5th (avoid — dissonant interval that must resolve).
+                    // Applies to diminished triads (vii°) and half-diminished/diminished 7ths.
+                    if (fifthPc !== null) {
+                        const isDimFamily = [BuiltInChords.Diminished, BuiltInChords.Minor7b5, BuiltInChords.Diminished7].includes(chordInfo.type as any);
+                        if (isDimFamily) {
+                            const dim5Notes = harmonicPresent.filter(n => n.noteIndex === fifthPc);
+                            if (dim5Notes.length >= 2) {
+                                addDoublingViolation(
+                                    'R-10-DIM5',
+                                    'error',
+                                    'Raddoppio della 5ª diminuita',
+                                    'La quinta diminuita è un intervallo dissonante che tende a risolvere: evita di raddoppiarla.',
+                                    dim5Notes
+                                );
+                            }
+                        }
+                    }
+
                     // R-10-64: in 6/4 (2nd inversion triads), prefer doubling the 5th (bass).
                     const isTriadQuality = [BuiltInChords.Major, BuiltInChords.Minor, BuiltInChords.Diminished, BuiltInChords.Augmented].includes(chordInfo.type as any);
                     if (isTriadQuality && thirdPc !== null && fifthPc !== null) {
@@ -8963,17 +8981,27 @@ export function applyHarmonyRules(
                   // Cross-type (P8→P5, P5→P8) must still be detected as hidden/direct.
                   const sameTypePerfect14 = departurePerfect && (isPerfectFifth(intA) === isPerfectFifth(intB));
                   if (approachesPerfect && !sameTypePerfect14 && dS !== 0 && dS === dB) {
-                    const ruleId = sopranoMelodicInterval <= 2 ? 'EXC-Hidden-Stepwise' : 'R-14';
-                    const severity = sopranoMelodicInterval <= 2 ? 'exception' : 'warning';
+                    // Hidden 8ves: only tolerate if soprano moves by semitone (m2 = 1 semitone)
+                    // Hidden 5ths: tolerate if soprano moves by step (m2 or M2 ≤ 2 semitones)
+                    const isHiddenOctave = isPerfectOctaveOrUnison(intB);
+                    const tolerateStep = isHiddenOctave
+                      ? sopranoMelodicInterval === 1   // only semitone excuses hidden 8ve
+                      : sopranoMelodicInterval <= 2;   // m2 or M2 excuses hidden 5th
+                    const ruleId = tolerateStep ? 'EXC-Hidden-Stepwise' : 'R-14';
+                    const severity = tolerateStep ? 'exception' : 'warning';
 
                     addViolation({
                         ruleId,
                         severity,
                         description: severity === 'exception'
                             ? 'Moto retto/nascosto ammesso (Soprano per grado congiunto)'
+                            : isHiddenOctave && sopranoMelodicInterval <= 2
+                            ? 'Ottave nascoste tra voci estreme: il Soprano procede per 2ª maggiore (non per semitono)'
                             : 'Quinte/ottave nascoste tra voci estreme (moto simile)',
                         suggestion: severity === 'exception'
                             ? 'Eccezione classica: il Soprano si muove per grado congiunto.'
+                            : isHiddenOctave && sopranoMelodicInterval <= 2
+                            ? 'Le ottave nascoste sono tollerate solo se il Soprano procede per semitono (2ª minore). Con 2ª maggiore, preferisci moto contrario.'
                             : 'Evita il moto simile verso 5a/8va tra Soprano e Basso; preferisci moto contrario o riduci il salto del Soprano.',
                         noteIds: [sopA.id, sopB.id, basA.id, basB.id],
                     });
@@ -9140,6 +9168,8 @@ export function applyHarmonyRules(
                 const bStructural = getStructuralNotes(evB as any) || [];
                 const pcsB = new Set(bStructural.filter(n => n && !n.isRest).map(n => mod12(n.noteIndex)));
                 if (!pcsB.has(ctxTonicPc)) {
+                    // The arrival chord does not contain the tonic — the LT cannot resolve
+                    // to it regardless of voice. Skip R-07 entirely.
                     return;
                 }
             } catch { /* ignore */ }
@@ -9297,6 +9327,99 @@ export function applyHarmonyRules(
                     connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-02c' });
                     connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-02c' });
                 }
+
+                // R-03: Arrival at unison (two voices converge to the same pitch)
+                // Flag when the arrival is a TRUE unison (same MIDI pitch, not octave)
+                // but departure was NOT unison/octave (otherwise R-01/R-01c handles it).
+                // Skip if both voices are stationary (oblique with no movement = tied notes).
+                if ((b1m as number) === (b2m as number) && !isPerfectOctaveOrUnison(intA) && (d1 !== 0 || d2 !== 0)) {
+                    const oblique = d1 === 0 || d2 === 0;
+                    const isContraryOrOblique = contrary || oblique;
+
+                    const b1Midi = b1m as number;
+                    const b2Midi = b2m as number;
+                    const a1Midi = a1m as number;
+                    const a2Midi = a2m as number;
+                    const motion1 = Math.abs(b1Midi - a1Midi);  // voice vA motion in semitones
+                    const motion2 = Math.abs(b2Midi - a2Midi);  // voice vB motion in semitones
+                    const stepInAtLeastOne = motion1 <= 2 || motion2 <= 2;
+
+                    const isLowerPair = (vA === 3 && vB === 4) || (vA === 4 && vB === 3); // Tenore+Basso
+                    const isSopAlto = (vA === 1 && vB === 2) || (vA === 2 && vB === 1);   // Soprano+Alto
+
+                    // Exception 1: lower voices (T+B) by contrary/oblique → tolerated
+                    if (isLowerPair && isContraryOrOblique) {
+                        addViolation({
+                            ruleId: 'EXC-Unison-Lower',
+                            severity: 'exception',
+                            description: 'Unisono raggiunto per moto contrario/obliquo nelle voci basse (tollerato)',
+                            suggestion: 'Eccezione: l\'unisono raggiunto per moto contrario o obliquo tra Tenore e Basso è ammesso.',
+                            noteIds: [a1.id, a2.id, b1.id, b2.id],
+                        });
+                    }
+                    // Exception 2: other parts by contrary/oblique with step in at least one voice
+                    else if (!isLowerPair && isContraryOrOblique && stepInAtLeastOne) {
+                        addViolation({
+                            ruleId: 'EXC-Unison-Step',
+                            severity: 'exception',
+                            description: 'Unisono raggiunto per moto contrario/obliquo con grado congiunto (tollerato)',
+                            suggestion: 'Eccezione: l\'unisono per moto contrario o obliquo è ammesso se almeno una voce procede per grado congiunto.',
+                            noteIds: [a1.id, a2.id, b1.id, b2.id],
+                        });
+                    }
+                    // Exception 3: S+A on tonic in cadence from leading tone + 2nd degree
+                    else if (isSopAlto) {
+                        let isCadentialLT = false;
+                        try {
+                            const _ctxU = getContextAtAbsBeat(b.absBeat);
+                            const _tPcMapU: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+                            const _tPcU = _tPcMapU[_ctxU.tonic] ?? _tPcMapU[keyTonic] ?? 0;
+                            const arrPc = mod12(b1Midi);
+                            const ltPc = (_tPcU + 11) % 12;   // leading tone = tonic - 1 semitone
+                            const deg2 = (_tPcU + 2) % 12;    // 2nd degree = tonic + 2 semitones
+                            // Both arrive at tonic, one was LT, other was 2nd degree
+                            if (arrPc === _tPcU) {
+                                const pc_a1 = mod12(a1Midi);
+                                const pc_a2 = mod12(a2Midi);
+                                if ((pc_a1 === ltPc && pc_a2 === deg2) || (pc_a1 === deg2 && pc_a2 === ltPc)) {
+                                    isCadentialLT = true;
+                                }
+                            }
+                        } catch { /* ignore */ }
+
+                        if (isCadentialLT) {
+                            addViolation({
+                                ruleId: 'EXC-Unison-Cadence',
+                                severity: 'exception',
+                                description: 'Unisono S+A sulla tonica in cadenza (sensibile + 2° grado → tonica)',
+                                suggestion: 'Eccezione classica: Soprano e Contralto convergono sulla tonica dalla sensibile e dal 2° grado in cadenza.',
+                                noteIds: [a1.id, a2.id, b1.id, b2.id],
+                            });
+                        } else {
+                            addViolation({
+                                ruleId: 'R-03',
+                                severity: 'warning',
+                                description: 'Arrivo all\'unisono — le voci perdono indipendenza',
+                                suggestion: 'Evita l\'arrivo all\'unisono; mantieni le voci su pitch diversi per garantire l\'indipendenza delle parti.',
+                                noteIds: [a1.id, a2.id, b1.id, b2.id],
+                            });
+                            connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'warning', ruleId: 'R-03' });
+                            connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'warning', ruleId: 'R-03' });
+                        }
+                    }
+                    // Default: flag as warning
+                    else {
+                        addViolation({
+                            ruleId: 'R-03',
+                            severity: 'warning',
+                            description: 'Arrivo all\'unisono — le voci perdono indipendenza',
+                            suggestion: 'Evita l\'arrivo all\'unisono; mantieni le voci su pitch diversi per garantire l\'indipendenza delle parti.',
+                            noteIds: [a1.id, a2.id, b1.id, b2.id],
+                        });
+                        connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'warning', ruleId: 'R-03' });
+                        connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'warning', ruleId: 'R-03' });
+                    }
+                }
             }
         }
 
@@ -9422,10 +9545,10 @@ export function applyHarmonyRules(
                             _dubSev = 'warning';
                             _dubDesc = 'Ottava nascosta con Soprano per 2ª magg. disc. verso grado tonale (tollerata con riserva — Dubois)';
                             _dubSugg = 'Dubois: l\'ottava nascosta con Soprano per 2ª maggiore discendente è tollerata con riserva sui gradi tonali, particolarmente in conclusione di frase.';
-                        } else if (sopSemi <= 2 && _isTonalDeg) {
-                            _dubSev = 'exception';
-                            _dubDesc = 'Ottava nascosta con Soprano per grado congiunto verso grado tonale (ammessa)';
-                            _dubSugg = 'Eccezione classica: il Soprano si muove per grado congiunto verso un grado tonale.';
+                        } else if (sopSemi === 2 && _isTonalDeg) {
+                            _dubSev = 'warning';
+                            _dubDesc = 'Ottava nascosta con Soprano per 2ª magg. verso grado tonale (non ammessa)';
+                            _dubSugg = 'L\'ottava nascosta è ammessa solo con Soprano per semitono (2ª minore). Con 2ª maggiore, preferisci moto contrario.';
                         } else {
                             _dubSev = 'warning';
                             _dubDesc = 'Ottava nascosta tra voci estreme — non verso grado tonale';
@@ -10297,6 +10420,13 @@ export function applyHarmonyRules(
         for (let i = 0; i < line.length - 1; i++) {
             const n1 = line[i];
             const n2 = line[i + 1];
+
+            // ROTTURA DIDATTICA – skip pairs crossing a double barline boundary
+            if (doubleBarlineMeasures && doubleBarlineMeasures.length > 0) {
+                if ((n1.measureIndex ?? 0) !== (n2.measureIndex ?? 0)
+                    && doubleBarlineMeasures.includes(n1.measureIndex ?? 0)) continue;
+            }
+
             const midiDiff = (n2.midi ?? 0) - (n1.midi ?? 0);
             const absSemi = Math.abs(midiDiff);
 
@@ -10309,6 +10439,225 @@ export function applyHarmonyRules(
                     suggestion: 'Preferisci moto congiunto o spezza il salto con note di passaggio.',
                     noteIds: [n1.id, n2.id],
                 });
+            }
+
+            // ── R-16: Forbidden melodic intervals ──────────────────────────
+            // Skip ornamental notes (passing, neighbor, appoggiatura, etc.)
+            const n1Orn = !!(n1 as any).ornamentType;
+            const n2Orn = !!(n2 as any).ornamentType;
+            if (!n1Orn && !n2Orn) {
+                // 7th (m7=10, M7=11 semitones)
+                if (absSemi === 10 || absSemi === 11) {
+                    addViolation({
+                        ruleId: 'R-16',
+                        severity: 'error',
+                        description: `Salto melodico di 7ª (${absSemi === 10 ? 'minore' : 'maggiore'}) — proibito`,
+                        suggestion: 'Evita il salto di settima; preferisci moto congiunto o spezza il salto.',
+                        noteIds: [n1.id, n2.id],
+                    });
+                    connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'error', ruleId: 'R-16' });
+                }
+                // 9th+ (≥ 13 semitones, i.e. > octave)
+                if (absSemi >= 13) {
+                    addViolation({
+                        ruleId: 'R-16',
+                        severity: 'error',
+                        description: `Salto melodico di 9ª o superiore (${absSemi} semitoni) — proibito`,
+                        suggestion: 'Evita salti superiori all\'ottava; preferisci moto congiunto.',
+                        noteIds: [n1.id, n2.id],
+                    });
+                    connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'error', ruleId: 'R-16' });
+                }
+                // Tritone (6 semitones = 4ª eccedente / 5ª diminuita)
+                if (absSemi === 6) {
+                    addViolation({
+                        ruleId: 'R-16',
+                        severity: 'warning',
+                        description: 'Salto melodico di tritono (4ª eccedente / 5ª diminuita)',
+                        suggestion: 'Il tritono melodico è permesso solo in formulae cadenzali; altrimenti evita o risolvi per grado congiunto.',
+                        noteIds: [n1.id, n2.id],
+                    });
+                    connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-16' });
+                }
+                // Augmented 2nd (3 semitones between ♭6 ↔ ♮7 in minor)
+                if (absSemi === 3) {
+                    try {
+                        const _localCtx16 = getContextAtAbsBeat(n1.beat + (n1.measureIndex ?? 0) * beatsPerMeasure);
+                        const _tPcMap16: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+                        const _tPc16 = _tPcMap16[_localCtx16.tonic] ?? _tPcMap16[keyTonic] ?? 0;
+                        const pc1 = mod12(n1.midi);
+                        const pc2 = mod12(n2.midi);
+                        const deg6b = (_tPc16 + 8) % 12;  // ♭6
+                        const deg7n = (_tPc16 + 11) % 12;  // ♮7
+                        if ((pc1 === deg6b && pc2 === deg7n) || (pc1 === deg7n && pc2 === deg6b)) {
+                            // Exception: if the aug 2nd arrives on the leading tone (♮7) and
+                            // the next note resolves to the tonic, tolerate it.
+                            const tonicPc16 = _tPc16;
+                            const landsOnLT = pc2 === deg7n;
+                            let ltResolvesToTonic = false;
+                            if (landsOnLT && i + 2 < line.length) {
+                                const nNext = line[i + 2];
+                                const nNextPc = mod12(nNext.midi);
+                                if (nNextPc === tonicPc16 && Math.abs((nNext.midi ?? 0) - (n2.midi ?? 0)) <= 2) {
+                                    ltResolvesToTonic = true;
+                                }
+                            }
+                            const aug2Sev = ltResolvesToTonic ? 'exception' as const : 'error' as const;
+                            addViolation({
+                                ruleId: ltResolvesToTonic ? 'EXC-Aug2-LT' : 'R-16',
+                                severity: aug2Sev,
+                                description: ltResolvesToTonic
+                                    ? 'Seconda eccedente verso la sensibile che risolve alla tonica (tollerata)'
+                                    : 'Seconda eccedente (♭6 ↔ ♮7 nel modo minore) — proibita',
+                                suggestion: ltResolvesToTonic
+                                    ? 'Eccezione: la seconda eccedente è tollerata quando la nota di arrivo è la sensibile e risolve immediatamente alla tonica.'
+                                    : 'Evita la seconda eccedente tra ♭VI e ♮VII grado nel modo minore; usa la scala melodica per correggere.',
+                                noteIds: [n1.id, n2.id],
+                            });
+                            connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: aug2Sev, ruleId: ltResolvesToTonic ? 'EXC-Aug2-LT' : 'R-16' });
+                        }
+                    } catch { /* ignore */ }
+                }
+                // Chromatic semitone (same letter, different accidental → same direction)
+                if (absSemi === 1) {
+                    const p1 = (String(n1.pitch || '').match(/[A-G]/i)?.[0] || '').toUpperCase();
+                    const p2 = (String(n2.pitch || '').match(/[A-G]/i)?.[0] || '').toUpperCase();
+                    if (p1 && p2 && p1 === p2) {
+                        // Same pitch letter, different MIDI → chromatic semitone
+                        addViolation({
+                            ruleId: 'R-16',
+                            severity: 'warning',
+                            description: 'Semitono cromatico — da evitare nella scrittura diatonica',
+                            suggestion: 'Il semitono cromatico (stessa lettera, alterazione diversa) è generalmente da evitare; preferisci movimenti diatonici.',
+                            noteIds: [n1.id, n2.id],
+                        });
+                        connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-16' });
+                    }
+                }
+                // m6 or P8 descending — permitted but not ideal, mild warning
+                if ((absSemi === 8 || absSemi === 12) && midiDiff < 0) {
+                    addViolation({
+                        ruleId: 'R-16',
+                        severity: 'exception',
+                        description: absSemi === 8
+                            ? 'Sesta minore discendente — preferibilmente ascendente'
+                            : 'Ottava discendente — preferibilmente ascendente',
+                        suggestion: 'La sesta minore e l\'ottava sono preferibilmente ascendenti; la forma discendente è tollerata ma meno fluida.',
+                        noteIds: [n1.id, n2.id],
+                    });
+                }
+            }
+
+            // ── R-17: Three-note melodic rules ─────────────────────────────
+            // These rules examine three consecutive notes in the same voice:
+            //   n0 = line[i-1], n1 = line[i], n2 = line[i+1]
+            // They require i >= 1 so that n0 exists.
+            if (i >= 1 && !n1Orn && !n2Orn) {
+                const n0 = line[i - 1];
+                const n0Orn = !!(n0 as any).ornamentType;
+
+                // Guard: skip if n0→n1 crosses a double barline
+                const n0CrossesBarline = doubleBarlineMeasures && doubleBarlineMeasures.length > 0
+                    && (n0.measureIndex ?? 0) !== (n1.measureIndex ?? 0)
+                    && doubleBarlineMeasures.includes(n0.measureIndex ?? 0);
+
+                if (!n0Orn && !n0CrossesBarline) {
+                    const midi0 = n0.midi ?? 0;
+                    const midi1 = n1.midi ?? 0;
+                    const midi2 = n2.midi ?? 0;
+                    const diff01 = midi1 - midi0;  // signed
+                    const diff12 = midi2 - midi1;  // signed
+                    const abs01 = Math.abs(diff01);
+                    const abs12 = Math.abs(diff12);
+                    const totalDiff = midi2 - midi0;  // signed total across 3 notes
+                    const absTotal = Math.abs(totalDiff);
+
+                    // R-17a: Sum of two consecutive leaps in the same direction
+                    // If both intervals are leaps (> 2 semitones) in the same direction
+                    // and their sum produces a forbidden interval (7th or 9th+), flag it.
+                    // Exception: if the middle note (n1) is longer than n0, the compound leap is tolerated.
+                    if (abs01 > 2 && abs12 > 2
+                        && Math.sign(diff01) === Math.sign(diff12)
+                        && (absTotal === 10 || absTotal === 11 || absTotal >= 13)) {
+                        const dur0 = (n0 as any).durationTicks ?? 960;
+                        const dur1 = (n1 as any).durationTicks ?? 960;
+                        if (dur1 > dur0) {
+                            // Exception: middle note longer → tolerated
+                            addViolation({
+                                ruleId: 'EXC-R17-Duration',
+                                severity: 'exception',
+                                description: `Due salti consecutivi sommano ${absTotal >= 13 ? 'una 9ª' : 'una 7ª'} — tollerato (nota intermedia più lunga)`,
+                                suggestion: 'Ammesso perché la nota intermedia è più lunga della precedente.',
+                                noteIds: [n0.id, n1.id, n2.id],
+                            });
+                            connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'exception', ruleId: 'EXC-R17-Duration' });
+                        } else {
+                            addViolation({
+                                ruleId: 'R-17',
+                                severity: 'error',
+                                description: `Due salti consecutivi nella stessa direzione sommano ${absTotal >= 13 ? 'una 9ª' : 'una 7ª'} (proibito)`,
+                                suggestion: 'Evita due salti consecutivi nella stessa direzione la cui somma produce un intervallo di 7ª o 9ª; inserisci moto contrario tra i salti.',
+                                noteIds: [n0.id, n1.id, n2.id],
+                            });
+                            connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'error', ruleId: 'R-17' });
+                        }
+                    }
+
+                    // R-17b: 7th or 9th traversed in two movements (opposite/oblique direction) — one must be a 2nd
+                    // Only fires when the two sub-leaps are NOT in the same direction (otherwise R-17a handles it).
+                    if ((absTotal === 10 || absTotal === 11 || absTotal >= 13)
+                        && abs01 > 2 && abs12 > 2
+                        && Math.sign(diff01) !== Math.sign(diff12)) {
+                        // Check exception: middle note longer than previous
+                        const dur0 = (n0 as any).durationTicks ?? 960;
+                        const dur1 = (n1 as any).durationTicks ?? 960;
+                        if (dur1 <= dur0) {
+                            addViolation({
+                                ruleId: 'R-17',
+                                severity: 'warning',
+                                description: `Intervallo di ${absTotal >= 13 ? '9ª' : '7ª'} percorso in due movimenti senza grado congiunto`,
+                                suggestion: 'Quando si percorre una 7ª o 9ª in due movimenti, uno dei due salti deve essere di 2ª. Eccezione: se la nota intermedia è più lunga della precedente.',
+                                noteIds: [n0.id, n1.id, n2.id],
+                            });
+                            connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-17' });
+                        }
+                    }
+
+                    // R-17c: Tritone outlined across two movements — resolution required
+                    // If three notes outline a tritone (6 semitones from n0 to n2),
+                    // check that n2 resolves: ascending by semitone or descending by step.
+                    if (absTotal === 6 && i + 2 < line.length) {
+                        const n3 = line[i + 2];
+                        const n3Orn = !!(n3 as any).ornamentType;
+                        // Guard: skip if n2→n3 crosses a double barline
+                        const n3CrossesBarline = doubleBarlineMeasures && doubleBarlineMeasures.length > 0
+                            && (n2.measureIndex ?? 0) !== (n3.measureIndex ?? 0)
+                            && doubleBarlineMeasures.includes(n2.measureIndex ?? 0);
+                        if (!n3Orn && !n3CrossesBarline) {
+                            const midi3 = n3.midi ?? 0;
+                            const diff23 = midi3 - midi2;
+                            const abs23 = Math.abs(diff23);
+                            const ascending = totalDiff > 0;
+                            // If tritone ascending: n3 must ascend by semitone (1 semi)
+                            // If tritone descending: n3 must descend by step (1-2 semi)
+                            let resolved = false;
+                            if (ascending && diff23 > 0 && abs23 <= 2) resolved = true;   // ascends by step
+                            if (!ascending && diff23 < 0 && abs23 <= 2) resolved = true;   // descends by step
+                            if (!resolved) {
+                                addViolation({
+                                    ruleId: 'R-17',
+                                    severity: 'warning',
+                                    description: 'Tritono delineato in due movimenti senza risoluzione corretta',
+                                    suggestion: ascending
+                                        ? 'Dopo un tritono ascendente delineato in due movimenti, prosegui ascendendo per semitono diatonico o discendendo per grado congiunto.'
+                                        : 'Dopo un tritono discendente delineato in due movimenti, prosegui discendendo per grado congiunto o ascendendo per semitono.',
+                                    noteIds: [n0.id, n1.id, n2.id, n3.id],
+                                });
+                                connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-17' });
+                            }
+                        }
+                    }
+                }
             }
 
             // R-06: incorrect resolution of augmented/diminished melodic leaps

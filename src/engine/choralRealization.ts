@@ -17,6 +17,8 @@
 
 import type { StaffNote, Voice, TimeSignature, KeySignature } from '../types';
 import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
+import type { StyleProfile } from './choralStyleProfile';
+import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,9 @@ export type ChoralRules = {
   doubleRoot?: boolean;
 };
 
+/** Re-export StyleProfile so consumers can import it from here. */
+export type { StyleProfile } from './choralStyleProfile';
+
 /** Configuration for the realization engine. */
 export type ChoralConfig = {
   tonic: string;          // e.g. 'C', 'Bb', 'F#'
@@ -85,6 +90,8 @@ export type ChoralConfig = {
   /** When false, the engine will never add automatic sevenths (only explicit V7/viio7 etc.).
    *  Defaults to true. */
   autoSevenths?: boolean;
+  /** Optional learned style profile for adaptive scoring. */
+  styleProfile?: StyleProfile | null;
   /** Initial chord voicing disposition (bottom to top: Bass=Root, then Tenor, Alto, Soprano).
    * Digits: 8=Root(octave), 3=3rd, 5=5th. e.g. 'R358' = B=Root, T=3rd, A=5th, S=8va.
    * 'auto' (default) = engine picks best voicing. Only effective for first chord in root position. */
@@ -721,6 +728,386 @@ function midiDistance(a: number, b: number): number {
   return Math.abs(a - b);
 }
 
+/** Style context passed through helper functions to scoreVoicing. */
+interface StyleContext {
+  styleProfile?: StyleProfile | null;
+  currentDegree?: string;
+  currentInversion?: number;
+}
+
+const DEGREE_NAMES_MAJ = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii\u00b0'];
+const DEGREE_NAMES_MIN = ['i', 'ii\u00b0', 'III', 'iv', 'v', 'VI', 'VII'];
+function degreeToRoman(degree: number, isMinor: boolean): string {
+  return (isMinor ? DEGREE_NAMES_MIN : DEGREE_NAMES_MAJ)[degree % 7] || `${degree}`;
+}
+
+/**
+ * ─── Unified Scoring Function ────────────────────────────────────────────────
+ * Single source of truth for ALL voice-leading rules.
+ * Every code path (first chord, fixed-soprano, non-fixed, beam search, retry)
+ * MUST use this function to evaluate voicings.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+interface ScoreVoicingOpts {
+  curr: SATBVoicing;
+  prev?: SATBVoicing | null;
+  prevPrev?: SATBVoicing | null;     // two chords ago (for 3-note melodic rules)
+  rules: ChoralRules;
+  tonicPc?: number | null;
+  tones?: ScaleDegreeNote[];         // chord tones (for LT resolution, etc.)
+  prevSeventhPc?: number | null;     // previous 7th pitch class
+  /** Adaptive style profile (from user chorales). */
+  styleProfile?: StyleProfile | null;
+  /** Current chord's roman degree name (e.g. 'V', 'ii', 'I') for inversion bonus lookup. */
+  currentDegree?: string;
+  /** Current chord inversion (0-3) for inversion bonus. */
+  currentInversion?: number;
+}
+
+/**
+ * Compute a non-negative cost for placing `curr` after `prev`.
+ * Lower = better voicing. Contributions:
+ *
+ * ■ VERTICAL (curr only — always checked):
+ *   - Voice crossing:  +1000  (bass>tenor, tenor>alto, alto>soprano)
+ *   - Spacing S-A/A-T > 8va:  +300
+ *   - Unison between voices:  +40 each
+ *   - Soprano doubles bass PC:  +25
+ *   - Leading tone doubled:  +300
+ *
+ * ■ HORIZONTAL (prev→curr — only when prev is available):
+ *   - Motion distance: common tone -15, step -5/-3, skip +9..12, leap +15..30+
+ *   - Forbidden melodic intervals: tritone +120, 7th +150, 9th+ +200, A2 +100
+ *   - Voice overlap:  +300 each
+ *   - Contrary motion S+B:  -15 / parallel +5
+ *   - Parallel 5ths/8ves:  +200 each
+ *   - Hidden/direct 5ths/8ves (Dubois):  0..150 depending on voices & context
+ *   - LT resolution:  +200 if LT doesn't resolve up to tonic
+ */
+function scoreVoicing(opts: ScoreVoicingOpts): number {
+  const { curr, prev, prevPrev, rules, tonicPc, tones, prevSeventhPc } = opts;
+  const { bass, tenor, alto, soprano } = curr;
+  let cost = 0;
+
+  // ── VERTICAL RULES (always apply) ──
+
+  // Voice crossing
+  if (!rules.allowCrossing) {
+    if (bass > tenor || tenor > alto || alto > soprano) cost += 1000;
+  }
+
+  // Spacing: S-A ≤ octave, A-T ≤ octave
+  if (soprano - alto > 12) cost += 300;
+  if (alto - tenor > 12) cost += 300;
+
+  // Unison
+  const allM = [bass, tenor, alto, soprano];
+  for (let i = 0; i < 4; i++) {
+    for (let j = i + 1; j < 4; j++) {
+      if (allM[i] === allM[j]) cost += 40;
+    }
+  }
+
+  // Soprano doubling bass PC — penalize only for subsequent chords (not the first)
+  // For the first chord (prev=null), soprano on root octave is standard.
+  if (prev && ((soprano % 12) + 12) % 12 === ((bass % 12) + 12) % 12) cost += 25;
+
+  // Leading tone doubled
+  if (tonicPc != null) {
+    const ltPc = (tonicPc + 11) % 12;
+    const pcs = allM.map(m => ((m % 12) + 12) % 12);
+    if (pcs.filter(pc => pc === ltPc).length > 1) cost += 300;
+  }
+
+  // Diminished 5th doubled — dissonant interval, should not be doubled
+  if (tones && tones.length >= 3) {
+    const rootMidiPc = ((tones[0]?.midi ?? 0) % 12 + 12) % 12;
+    const fifthMidiPc = ((tones[2]?.midi ?? 0) % 12 + 12) % 12;
+    const fifthInterval = (fifthMidiPc - rootMidiPc + 12) % 12;
+    if (fifthInterval === 6) { // diminished 5th = 6 semitones
+      const pcs = allM.map(m => ((m % 12) + 12) % 12);
+      if (pcs.filter(pc => pc === fifthMidiPc).length > 1) cost += 250;
+    }
+  }
+
+  // Incomplete voicing penalty: prefer complete chords (all chord tones present)
+  // A triad with only 2 distinct PCs means the 5th is missing — mild penalty
+  {
+    const distinctPcs = new Set(allM.map(m => ((m % 12) + 12) % 12));
+    if (distinctPcs.size <= 2) cost += 20; // incomplete: missing 5th
+  }
+
+  // ── HORIZONTAL RULES (only with prev) ──
+  if (!prev) return cost;
+
+  const prevArr = [prev.bass, prev.tenor, prev.alto, prev.soprano];
+  const currArr = allM;
+
+  // Bass motion cost — bass is freer than upper voices but large leaps are penalized
+  {
+    const bassDist = midiDistance(currArr[0], prevArr[0]);
+    if (bassDist === 0) {
+      cost -= 10; // bass common tone — good
+    } else if (bassDist <= 5) {
+      // Up to P4 (5 semitones) — normal bass motion, no penalty
+      cost += 0;
+    } else if (bassDist <= 7) {
+      // P5/m6 — acceptable but mild penalty
+      cost += 8;
+    } else if (bassDist <= 9) {
+      // M6/m7 — larger leap, moderate penalty  
+      cost += 60;
+    } else if (bassDist <= 12) {
+      // m7 to 8ve — strong penalty, pushes the optimizer to find alternatives
+      cost += 120;
+    } else {
+      // > 8ve — prohibitive
+      cost += 250 + (bassDist - 12) * 20;
+    }
+  }
+
+  // Motion distance per upper voice (T, A, S)
+  for (let vi = 1; vi < 4; vi++) {
+    const dist = midiDistance(currArr[vi], prevArr[vi]);
+    if (currArr[vi] === prevArr[vi]) {
+      cost -= 15; // common tone held
+    } else if (dist === 1) {
+      cost -= 5;  // half step
+    } else if (dist === 2) {
+      cost -= 3;  // whole step
+    } else if (dist <= 4) {
+      cost += dist * 3;  // m3/M3 skip
+    } else if (dist <= 7) {
+      cost += 15 + (dist - 4) * 5;  // P4/P5 leap
+    } else {
+      cost += 30 + (dist - 7) * 8;  // m6+ leap
+    }
+    // Forbidden melodic intervals
+    if (dist === 6) cost += 120;  // tritone
+    if (dist === 10 || dist === 11) cost += 150;  // 7th
+    if (dist >= 13) cost += 200;  // 9th+
+    // m6 (8 semitones) or P8 (12 semitones) descending — mild penalty (prefer ascending)
+    if ((dist === 8 || dist === 12) && currArr[vi] < prevArr[vi]) cost += 10;
+    // Augmented 2nd (♭6↔♮7 in minor)
+    if (dist === 3 && tonicPc != null) {
+      const fromPc = ((prevArr[vi] % 12) + 12) % 12;
+      const toPc = ((currArr[vi] % 12) + 12) % 12;
+      const deg6b = (tonicPc + 8) % 12;
+      const deg7n = (tonicPc + 11) % 12;
+      if ((fromPc === deg6b && toPc === deg7n) || (fromPc === deg7n && toPc === deg6b)) {
+        cost += 100;
+      }
+    }
+  }
+
+  // Voice overlap
+  if (!rules.allowOverlap) {
+    if (tenor < prev.bass) cost += 300;
+    if (bass > prev.tenor) cost += 300;
+    if (alto < prev.tenor) cost += 300;
+    if (tenor > prev.alto) cost += 300;
+    if (soprano < prev.alto) cost += 300;
+    if (alto > prev.soprano) cost += 300;
+  }
+
+  // Contrary motion bonus (outer voices) — only when bass moves by step/small leap
+  const sopMotion = soprano - prev.soprano;
+  const bassMotion = bass - prev.bass;
+  if (sopMotion !== 0 && bassMotion !== 0) {
+    const absBassMotion = Math.abs(bassMotion);
+    if (Math.sign(sopMotion) !== Math.sign(bassMotion)) {
+      // Contrary motion is good, but not if the bass leaps wildly to achieve it
+      cost -= absBassMotion <= 7 ? 15 : 5;
+    } else {
+      cost += 5;
+    }
+  }
+
+  // Parallel 5ths/8ves
+  if (!rules.allowParallel5ths || !rules.allowParallel8ves) {
+    cost += countParallels(prevArr, currArr, rules) * 200;
+  }
+
+  // Hidden/direct 5ths & 8ves — ALL voice pairs, Dubois exceptions
+  {
+    const _voicePairs: [number, number][] = [
+      [3, 0], [3, 2], [3, 1], [2, 1], [2, 0], [1, 0],
+    ];
+    for (const [hi, lo] of _voicePairs) {
+      const hPrev = prevArr[hi], hCurr = currArr[hi];
+      const lPrev = prevArr[lo], lCurr = currArr[lo];
+      const hMotion = hCurr - hPrev;
+      const lMotion = lCurr - lPrev;
+      if (hMotion === 0 || lMotion === 0) continue;
+      if (Math.sign(hMotion) !== Math.sign(lMotion)) continue;
+      const arrInt = ((Math.abs(hCurr - lCurr)) % 12 + 12) % 12;
+      if (arrInt !== 0 && arrInt !== 7) continue;
+      const depInt = ((Math.abs(hPrev - lPrev)) % 12 + 12) % 12;
+      const depPerf = depInt === 0 || depInt === 7;
+      const sameType = depPerf && ((depInt === 7) === (arrInt === 7));
+      if (sameType) continue; // true parallel — already penalized
+      const hiStep = Math.abs(hMotion) <= 2;
+      const loStep = Math.abs(lMotion) <= 2;
+      const isOuter = hi === 3 && lo === 0;
+      const isFifth = arrInt === 7;
+      const arrPcs = [((hCurr % 12) + 12) % 12, ((lCurr % 12) + 12) % 12];
+      const prevPcsH = prevArr.map(m => ((m % 12) + 12) % 12);
+      const hasCommonNote = arrPcs.some(pc => prevPcsH.includes(pc));
+      const bassPcH = ((currArr[0] % 12) + 12) % 12;
+      const degFromTonic = tonicPc != null ? ((bassPcH - tonicPc) % 12 + 12) % 12 : -1;
+      const isTonalDeg = degFromTonic === 0 || degFromTonic === 5 || degFromTonic === 7;
+      const isTonicOrDom = degFromTonic === 0 || degFromTonic === 7;
+
+      let hCost = 0;
+      if (isOuter) {
+        if (hiStep) {
+          if (isFifth) {
+            hCost = isTonicOrDom ? 0 : (Math.abs(hMotion) === 1 && hMotion < 0 ? 0 : 60);
+          } else {
+            hCost = (Math.abs(hMotion) === 1 && isTonalDeg) ? 0 : 60;
+          }
+        } else {
+          hCost = 150;
+        }
+      } else {
+        if (isFifth && hasCommonNote) {
+          hCost = 0;
+        } else if (hiStep) {
+          hCost = 0;
+        } else if (loStep) {
+          hCost = isFifth ? (isTonalDeg ? 0 : 30) : (lMotion > 0 ? 15 : 60);
+        } else {
+          hCost = isFifth ? 60 : 120;
+        }
+      }
+      cost += hCost;
+    }
+  }
+
+  // Leading tone resolution
+  if (tonicPc != null && tones) {
+    const ltPc = (tonicPc + 11) % 12;
+    const chordPcs = tones.map(t => ((tonicPc + t.semiFromRoot) % 12 + 12) % 12);
+    const tonicInChord = chordPcs.includes(tonicPc);
+    if (tonicInChord) {
+      for (let vi = 0; vi < 4; vi++) {
+        const prevPc = ((prevArr[vi] % 12) + 12) % 12;
+        if (prevPc === ltPc) {
+          const currPc = ((currArr[vi] % 12) + 12) % 12;
+          if (currPc !== tonicPc) cost += 200;
+        }
+      }
+    }
+  }
+
+  // Seventh resolution (prev 7th should resolve down by step)
+  // Includes transferred resolution exception (another voice takes over the resolution)
+  if (prevSeventhPc != null) {
+    const target1 = (prevSeventhPc + 11) % 12; // down half step
+    const target2 = (prevSeventhPc + 10) % 12; // down whole step
+    // Check if ANY voice in curr resolves the 7th (transferred resolution)
+    const currPcsAll = currArr.map(m => ((m % 12) + 12) % 12);
+    const hasTransferredRes = currPcsAll.some(pc => pc === target1 || pc === target2);
+    for (let vi = 0; vi < 4; vi++) {
+      const prevPc = ((prevArr[vi] % 12) + 12) % 12;
+      if (prevPc === prevSeventhPc) {
+        const currPc = ((currArr[vi] % 12) + 12) % 12;
+        const diff = prevArr[vi] - currArr[vi];
+        if (diff >= 1 && diff <= 2) {
+          cost -= 50; // proper downward step resolution — bonus
+        } else if (hasTransferredRes) {
+          cost += 80; // transferred resolution — tolerated but not ideal
+        } else {
+          cost += 250; // no resolution at all — heavy penalty
+        }
+      }
+    }
+  }
+
+  // Seventh preparation (current chord has a 7th — it should arrive by common tone or step)
+  if (tones && tones.length >= 4) {
+    const seventhPc = ((toneToMidiPc(tones[3]) % 12) + 12) % 12;
+    for (let vi = 0; vi < 4; vi++) {
+      const currPc = ((currArr[vi] % 12) + 12) % 12;
+      if (currPc === seventhPc) {
+        const motion = Math.abs(currArr[vi] - prevArr[vi]);
+        if (motion === 0) cost -= 15;      // common tone — ideal preparation
+        else if (motion <= 2) cost -= 5;   // stepwise approach — good
+        else cost += 60;                   // leap to 7th — poor preparation
+      }
+    }
+  }
+
+  // ── THREE-NOTE MELODIC RULES (prevPrev → prev → curr) ──
+  // Only when we have two prior voicings
+  if (prevPrev && prev) {
+    const ppArr = [prevPrev.bass, prevPrev.tenor, prevPrev.alto, prevPrev.soprano];
+    for (let vi = 0; vi < 4; vi++) {
+      const m0 = ppArr[vi];
+      const m1 = prevArr[vi];
+      const m2 = currArr[vi];
+      const d01 = m1 - m0;   // signed
+      const d12 = m2 - m1;   // signed
+      const a01 = Math.abs(d01);
+      const a12 = Math.abs(d12);
+      const totalDiff = m2 - m0;
+      const absTotal = Math.abs(totalDiff);
+
+      // Two consecutive leaps in the same direction summing to 7th or 9th
+      if (a01 > 2 && a12 > 2
+          && Math.sign(d01) === Math.sign(d12)
+          && (absTotal === 10 || absTotal === 11 || absTotal >= 13)) {
+        cost += 180;
+      }
+
+      // 7th/9th traversed in two movements without a step
+      // (both sub-intervals > 2 semitones, total = 7th/9th)
+      if ((absTotal === 10 || absTotal === 11 || absTotal >= 13)
+          && a01 > 2 && a12 > 2) {
+        cost += 100;  // one of the two should be a 2nd
+      }
+    }
+  }
+
+  // ── STYLE PROFILE BONUSES (adaptive, capped) ──
+  // These run AFTER all structural rules so they can never override hard constraints.
+  // Safety: max ±30 bonus vs structural penalties of +200..+1000.
+  if (opts.styleProfile) {
+    const sp = opts.styleProfile;
+
+    // Inversion preference bonus
+    if (opts.currentDegree != null && opts.currentInversion != null) {
+      cost += getInversionBonus(sp, opts.currentDegree, opts.currentInversion);
+    }
+
+    // Motion preference bonus (upper voices)
+    if (prev) {
+      const voiceNames = ['bass', 'tenor', 'alto', 'soprano'] as const;
+      const currArr = [curr.bass, curr.tenor, curr.alto, curr.soprano];
+      const prevArr = [prev.bass, prev.tenor, prev.alto, prev.soprano];
+      for (let vi = 0; vi < 4; vi++) {
+        const dist = Math.abs(currArr[vi] - prevArr[vi]);
+        let motionType: 'commonTone' | 'step' | 'skip' | 'leap';
+        if (dist === 0) motionType = 'commonTone';
+        else if (dist <= 2) motionType = 'step';
+        else if (dist <= 4) motionType = 'skip';
+        else motionType = 'leap';
+        cost += getMotionBonus(sp, voiceNames[vi], motionType);
+      }
+
+      // Contrary motion preference bonus (outer voices)
+      const sopDir = Math.sign(soprano - prev.soprano);
+      const bassDir = Math.sign(bass - prev.bass);
+      if (sopDir !== 0 && bassDir !== 0 && sopDir !== bassDir) {
+        cost += getContraryMotionBonus(sp);
+      }
+    }
+  }
+
+  return cost;
+}
+
 /**
  * Realize the first chord in a progression (no prior voicing to reference).
  * Strategy: place bass note from chord tones + inversion, then fill SAT
@@ -733,7 +1120,8 @@ export function realizeFirstChord(
   fixedSoprano?: number,
   fixedBass?: number,
   tonicPc?: number,
-  disposition?: string
+  disposition?: string,
+  styleCtx?: StyleContext
 ): SATBVoicing | null {
   if (tones.length < 3) return null;
 
@@ -935,28 +1323,29 @@ export function realizeFirstChord(
     if (!valid || midis.length < 3) continue;
 
     const [t, a, s] = midis;
-    let score = 0;
+    const cand: SATBVoicing = { soprano: s, alto: a, tenor: t, bass: bassMidi };
+    // Use unified scoring (vertical only — no prev)
+    let score = scoreVoicing({ curr: cand, prev: null, rules, tonicPc, ...styleCtx });
 
-    // Prefer soprano on tonic or 3rd over 5th (better for cadential voice leading)
+    // First chord: soprano on root octave (8va) is the standard didactic choice.
+    // Remove the "soprano = bass PC" penalty for the first chord and prefer the
+    // traditional R-3-5-8 stacking (root, third, fifth, octave bottom to top).
     const sopPcFC = ((s % 12) + 12) % 12;
-    if (sopPcFC === bassPc) score += 30; // soprano same PC as bass → limits voice leading
-    if (tonicPc != null && sopPcFC === tonicPc) score -= 10; // soprano on tonic → great
-    // Soprano on 3rd is also good for variety
+    // Prefer soprano on tonic: gives the strongest opening
+    if (tonicPc != null && sopPcFC === tonicPc) score -= 15;
+    // Soprano on 3rd is second best
     if (tones.length >= 2) {
       const thirdPc = ((toneToMidiPc(tones[1]) + 12) % 12);
-      if (sopPcFC === thirdPc) score -= 5;
+      if (sopPcFC === thirdPc) score -= 8;
     }
-
-    // Spacing: prefer well-spaced voicing
-    if (a - t > 12) score += 50;
-    if (s - a > 12) score += 50;
-
-    // Voice crossing
-    if (t > a || a > s || bassMidi > t) score += 100;
+    // Prefer close position: small total span from bass to soprano
+    const span = s - bassMidi;
+    if (span <= 19) score -= 5;  // within ~P12 — compact voicing
+    if (span > 24) score += 10;  // more than 2 octaves — too spread
 
     if (score < bestScore) {
       bestScore = score;
-      bestVoicing = { soprano: s, alto: a, tenor: t, bass: bassMidi };
+      bestVoicing = cand;
     }
   }
 
@@ -1005,7 +1394,8 @@ export function realizeNextChord(
   fixedBass?: number,
   tonicPc?: number,
   prevSeventhPc?: number,
-  isLastChord?: boolean
+  isLastChord?: boolean,
+  styleCtx?: StyleContext
 ): SATBVoicing | null {
   if (tones.length < 3) return null;
 
@@ -1015,24 +1405,27 @@ export function realizeNextChord(
   const bassCandidates = pitchesInRange(bassTone, VOICE_RANGES.bass);
   if (bassCandidates.length === 0) return null;
 
-  // Choose bass closest to previous bass
-  // Choose bass: prefer closest that stays below tenor, with strong crossing avoidance
-  let bassMidi = bassCandidates[0];
-  let bestBassScore = Infinity;
-  for (const c of bassCandidates) {
-    let score = midiDistance(c, prev.bass);
-    // Heavy penalty for bass above previous tenor (almost always wrong)
-    if (c > prev.tenor) score += 200;
-    // Mild penalty for bass above previous alto (extreme crossing)
-    if (c > prev.alto) score += 400;
-    if (score < bestBassScore) {
-      bestBassScore = score;
-      bassMidi = c;
-    }
-  }
+  // Choose bass: rank all candidates by proximity, keep top-N for outer loop
+  // This lets the engine try e.g. both F3 (up a P4) and F2 (down a P5) and pick
+  // the bass placement that yields the best overall voicing (e.g. contrary motion).
+  const bassRanked = bassCandidates
+    .map(c => {
+      let score = midiDistance(c, prev.bass);
+      if (c > prev.tenor) score += 500;
+      if (c > prev.alto) score += 1000;
+      return { midi: c, score };
+    })
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 3); // top 3 candidates
 
   // Override bass with fixed value ("basso dato")
-  if (fixedBass != null) bassMidi = fixedBass;
+  const bassOptions = fixedBass != null ? [fixedBass] : bassRanked.map(b => b.midi);
+
+  // ── Outer loop: try multiple bass candidates to find best overall voicing ──
+  let globalBestVoicing: SATBVoicing | null = null;
+  let globalBestCost = Infinity;
+
+  for (const bassMidi of bassOptions) {
 
   // ── Fixed soprano path ──────────────────────────────────────────────
   if (fixedSoprano != null) {
@@ -1049,150 +1442,47 @@ export function realizeNextChord(
     // Try all permutations of 2 inner tones → tenor, alto
     const innerPerms = [[0, 1], [1, 0]];
     const innerRanges = [VOICE_RANGES.tenor, VOICE_RANGES.alto];
-    const prevInner = [prev.tenor, prev.alto];
 
     let bestVoicing: SATBVoicing | null = null;
     let bestCost = Infinity;
 
     for (const perm of innerPerms) {
-      const midis: number[] = [];
+      // Gather ALL candidates for each inner voice (not just the closest)
+      const allCandidates: number[][] = [];
       let valid = true;
-      let cost = 0;
-
       for (let vi = 0; vi < 2; vi++) {
         const tone = innerTones[perm[vi]];
         const candidates = pitchesInRange(tone, innerRanges[vi]);
         if (candidates.length === 0) { valid = false; break; }
-
-        let best = candidates[0];
-        let bestDist = Infinity;
-        for (const c of candidates) {
-          const d = midiDistance(c, prevInner[vi]);
-          if (d < bestDist) { bestDist = d; best = c; }
-        }
-        midis.push(best);
-        cost += bestDist;
+        allCandidates.push(candidates);
       }
+      if (!valid || allCandidates.length < 2) continue;
 
-      if (!valid) continue;
+      // Evaluate all T×A combinations (capped to avoid explosion)
+      const maxCombos = 64;
+      let combos = 0;
+      for (const tenorCand of allCandidates[0]) {
+        for (const altoCand of allCandidates[1]) {
+          if (++combos > maxCombos) break;
+          const tenor = tenorCand;
+          const alto = altoCand;
+          // Use unified scoring function — single source of truth
+          const cand: SATBVoicing = { soprano: fixedSoprano, alto, tenor, bass: bassMidi };
+          let cost = scoreVoicing({ curr: cand, prev, rules, tonicPc, tones, prevSeventhPc: prevSeventhPc ?? null, ...styleCtx });
 
-      const [tenor, alto] = midis;
-
-      // Crossing penalty
-      if (!rules.allowCrossing) {
-        if (bassMidi > tenor || tenor > alto || alto > fixedSoprano) cost += 100;
-      }
-
-      // Overlap penalty
-      if (!rules.allowOverlap && prevInner) {
-        if (tenor < prevInner[3]) cost += 300;  // tenor below prev bass
-        if (bassMidi > prevInner[2]) cost += 300;  // bass above prev tenor
-        if (alto < prevInner[2]) cost += 300;  // alto below prev tenor
-        if (tenor > prevInner[1]) cost += 300;  // tenor above prev alto
-        if (fixedSoprano < prevInner[1]) cost += 300;  // soprano below prev alto
-        if (alto > prevInner[0]) cost += 300;  // alto above prev soprano
-      }
-
-      // Spacing penalty
-      if (alto - tenor > 12) cost += 80;
-      if (fixedSoprano - alto > 12) cost += 80;
-
-      // Unison penalty
-      const allMidisFs = [bassMidi, tenor, alto, fixedSoprano];
-      for (let u = 0; u < allMidisFs.length; u++) {
-        for (let w = u + 1; w < allMidisFs.length; w++) {
-          if (allMidisFs[u] === allMidisFs[w]) cost += 40;
-        }
-      }
-
-      // Parallel penalty
-      if (!rules.allowParallel5ths || !rules.allowParallel8ves) {
-        const currNotes = [bassMidi, tenor, alto, fixedSoprano];
-        const prevNotes = [prev.bass, prev.tenor, prev.alto, prev.soprano];
-        cost += countParallels(prevNotes, currNotes, rules) * 200;
-      }
-
-      // ── Advanced voice-leading rules ──
-      if (tonicPc != null) {
-        const leadingTonePc = (tonicPc + 11) % 12;
-        const currPcs = [bassMidi, tenor, alto, fixedSoprano].map(m => ((m % 12) + 12) % 12);
-        if (currPcs.filter(pc => pc === leadingTonePc).length > 1) cost += 300;
-      }
-      const sopMotionFs = fixedSoprano - prev.soprano;
-      const bassMotionFs = bassMidi - prev.bass;
-      if (sopMotionFs !== 0 && bassMotionFs !== 0) {
-        if (Math.sign(sopMotionFs) !== Math.sign(bassMotionFs)) {
-          cost -= 8;
-        } else {
-          const outerInterval = Math.abs(fixedSoprano - bassMidi) % 12;
-          if (outerInterval === 0 || outerInterval === 7) cost += 100;
-        }
-      }
-
-      // ── Leading tone resolution (inner voices, soprano is fixed) ──
-      // LT resolves to tonic when target chord contains tonic as chord tone
-      if (tonicPc != null) {
-        const ltPc = (tonicPc + 11) % 12;
-        const chordPcs = tones.map(t => ((tonicPc + t.semiFromRoot) % 12 + 12) % 12);
-        const tonicInChord = chordPcs.includes(tonicPc);
-        if (tonicInChord) {
-          const prevInner = [prev.bass, prev.tenor, prev.alto];
-          const currInner = [bassMidi, tenor, alto];
-          for (let vi = 0; vi < 3; vi++) {
-            const prevPc = ((prevInner[vi] % 12) + 12) % 12;
-            if (prevPc === ltPc) {
-              const currPc = ((currInner[vi] % 12) + 12) % 12;
-              if (currPc === tonicPc) cost -= 30;
-              else cost += 150;
-            }
+          if (cost < bestCost) {
+            bestCost = cost;
+            bestVoicing = cand;
           }
-        }
-      }
+    } // end altoCand loop
+    } // end tenorCand loop
+    } // end perm loop
 
-      // ── Seventh resolution (all voices incl. fixed soprano) ──
-      // Exception: transferred resolution (scambio di parti)
-      if (prevSeventhPc != null) {
-        const prevAllFs = [prev.bass, prev.tenor, prev.alto, prev.soprano];
-        const currAllFs = [bassMidi, tenor, alto, fixedSoprano];
-        const currPcsFs = currAllFs.map(m => ((m % 12) + 12) % 12);
-        const resPc1 = ((prevSeventhPc - 1) % 12 + 12) % 12;
-        const resPc2 = ((prevSeventhPc - 2) % 12 + 12) % 12;
-        const resTransferred = currPcsFs.some(pc => pc === resPc1 || pc === resPc2);
-
-        for (let vi = 0; vi < 4; vi++) {
-          const prevPc = ((prevAllFs[vi] % 12) + 12) % 12;
-          if (prevPc === prevSeventhPc) {
-            const diff = prevAllFs[vi] - currAllFs[vi];
-            if (diff >= 1 && diff <= 2) cost -= 50;
-            else if (resTransferred) cost += 80;
-            else cost += 250;
-          }
-        }
-      }
-
-      // ── Seventh preparation (fixedSoprano path) ──
-      if (tones.length >= 4) {
-        const seventhPc = ((toneToMidiPc(tones[3]) + 12) % 12);
-        const prevAll7 = [prev.bass, prev.tenor, prev.alto, prev.soprano];
-        const currAll7 = [bassMidi, tenor, alto, fixedSoprano];
-        for (let vi = 0; vi < 4; vi++) {
-          const currPc = ((currAll7[vi] % 12) + 12) % 12;
-          if (currPc === seventhPc) {
-            const motion = Math.abs(currAll7[vi] - prevAll7[vi]);
-            if (motion === 0) cost -= 15;
-            else if (motion <= 2) cost -= 5;
-            else cost += 60;
-          }
-        }
-      }
-
-      if (cost < bestCost) {
-        bestCost = cost;
-        bestVoicing = { soprano: fixedSoprano, alto, tenor, bass: bassMidi };
-      }
+    if (bestVoicing && bestCost < globalBestCost) {
+      globalBestCost = bestCost;
+      globalBestVoicing = bestVoicing;
     }
-
-    return bestVoicing;
+    continue; // try next bass candidate
   }
 
   // 2. Upper voices: assign chord tones with minimal total motion
@@ -1267,17 +1557,24 @@ export function realizeNextChord(
     }
   }
 
-  // Incomplete voicing variant (triple root, skip 5th) — allowed after seventh chord resolution
-  // This lets both leading tone resolve UP and 7th resolve DOWN without conflicting
-  if (prevSeventhPc != null && tones.length === 3 && inversion === 0) {
+  // Incomplete voicing variant (doubled root, skip 5th: [root, root, 3rd])
+  // Always available for root-position triads — the cost function will prefer
+  // the complete voicing when possible, but pick incomplete to avoid parallels.
+  if (tones.length === 3 && inversion === 0) {
     const incompleteUpper: ScaleDegreeNote[] = [tones[0], tones[0], tones[1]]; // root, root, 3rd (no 5th)
-    upperToneSets.push(incompleteUpper);
+    const incKey = incompleteUpper.map(t => t.letter + t.accidental).join(',');
+    const stdKey = standardUpper.map(t => t.letter + t.accidental).join(',');
+    if (incKey !== stdKey) upperToneSets.push(incompleteUpper);
   }
-  // Also try incomplete voicing on last chord (for clean PAC resolution)
-  if (isLastChord && tones.length === 3 && inversion === 0) {
-    const incompleteUpper: ScaleDegreeNote[] = [tones[0], tones[0], tones[1]];
-    // Only add if not already added
-    if (prevSeventhPc == null) upperToneSets.push(incompleteUpper);
+
+  // Incomplete voicing for seventh chords: double root, omit 5th → [root, 3rd, 7th]
+  // Common practice: V7 often omits the 5th and doubles the root for smoother voice leading.
+  if (tones.length === 4 && inversion === 0) {
+    // Upper tones: root(doubled), 3rd, 7th — skip 5th (tones[2])
+    const inc7Upper: ScaleDegreeNote[] = [tones[0], tones[1], tones[3]];
+    const inc7Key = inc7Upper.map(t => t.letter + t.accidental).join(',');
+    const stdKey = standardUpper.map(t => t.letter + t.accidental).join(',');
+    if (inc7Key !== stdKey) upperToneSets.push(inc7Upper);
   }
 
   // For each permutation of upper tones to voices, compute total motion
@@ -1293,8 +1590,7 @@ export function realizeNextChord(
 
   for (const upperTones of upperToneSets) {
   for (const perm of perms) {
-    let totalCost = 0;
-    const midis: number[] = [];
+    const voiceCandidates: number[][] = [];
     let valid = true;
 
     for (let vi = 0; vi < 3; vi++) {
@@ -1302,183 +1598,43 @@ export function realizeNextChord(
       const candidates = pitchesInRange(tone, ranges[vi]);
       if (candidates.length === 0) { valid = false; break; }
 
-      // Pick closest to previous voice position
-      let best = candidates[0];
-      let bestDist = Infinity;
-      for (const c of candidates) {
-        const d = midiDistance(c, prevMidis[vi]);
-        if (d < bestDist) {
-          bestDist = d;
-          best = c;
-        }
-      }
-      midis.push(best);
-      // Voice-leading cost: prefer common tones > stepwise > leaps
-      if (best === prevMidis[vi]) {
-        // Common tone: no penalty, bonus for staying still
-        totalCost -= 4;
-      } else if (bestDist <= 2) {
-        // Stepwise (half/whole step): small reward
-        totalCost += bestDist - 2;
-      } else if (bestDist <= 4) {
-        // Small skip (m3/M3): moderate cost
-        totalCost += bestDist;
-      } else {
-        // Leap (P4+): heavier penalty
-        totalCost += bestDist + (bestDist - 4) * 3;
-      }
+      voiceCandidates.push(candidates);
     }
 
-    if (!valid) continue;
+    if (!valid || voiceCandidates.length < 3) continue;
 
-    const [tenor, alto, soprano] = midis;
+    // Explore all combinations of candidates (capped for performance)
+    const maxPerVoice = 6; // top 6 closest candidates per voice
+    const sortedCands: number[][] = voiceCandidates.map((cands, vi) => {
+      return [...cands].sort((a, b) => midiDistance(a, prevMidis[vi]) - midiDistance(b, prevMidis[vi])).slice(0, maxPerVoice);
+    });
 
-    // Voice crossing penalty
-    if (!rules.allowCrossing) {
-      if (tenor > alto || alto > soprano || bassMidi > tenor) {
-        totalCost += 100;
-      }
-    }
-
-    // Voice overlap penalty (voice moves past where adjacent voice *was*)
-    if (!rules.allowOverlap && prev) {
-      if (tenor < prev.bass) totalCost += 300;
-      if (bassMidi > prev.tenor) totalCost += 300;
-      if (alto < prev.tenor) totalCost += 300;
-      if (tenor > prev.alto) totalCost += 300;
-      if (soprano < prev.alto) totalCost += 300;
-      if (alto > prev.soprano) totalCost += 300;
-    }
-
-    // Spacing penalty (S-A > octave or A-T > octave)
-    if (alto - tenor > 12) totalCost += 80;
-    if (soprano - alto > 12) totalCost += 80;
-
-    // Unison penalty (two voices on same MIDI)
-    const allMidis = [bassMidi, tenor, alto, soprano];
-    for (let u = 0; u < allMidis.length; u++) {
-      for (let v = u + 1; v < allMidis.length; v++) {
-        if (allMidis[u] === allMidis[v]) totalCost += 40;
-      }
-    }
-
-    // Soprano doubling bass PC penalty (limits voice-leading options, risks direct 8ves)
-    if (((soprano % 12) + 12) % 12 === ((bassMidi % 12) + 12) % 12) {
-      totalCost += 25;
-    }
-
-    // Parallel 5ths/8ves penalty
-    if (!rules.allowParallel5ths || !rules.allowParallel8ves) {
-      const currNotes = [bassMidi, tenor, alto, soprano];
-      const prevNotes = [prev.bass, prev.tenor, prev.alto, prev.soprano];
-      const parallelPenalty = countParallels(prevNotes, currNotes, rules);
-      totalCost += parallelPenalty * 200;
-    }
-
-    // ── Advanced voice-leading rules ──
-    if (tonicPc != null) {
-      const leadingTonePc = (tonicPc + 11) % 12;
-      const currPcs = [bassMidi, tenor, alto, soprano].map(m => ((m % 12) + 12) % 12);
-      // Never double leading tone
-      if (currPcs.filter(pc => pc === leadingTonePc).length > 1) totalCost += 300;
-    }
-    // Contrary motion bonus (outer voices)
-    const sopMotion = soprano - prev.soprano;
-    const bassMotion = bassMidi - prev.bass;
-    if (sopMotion !== 0 && bassMotion !== 0) {
-      if (Math.sign(sopMotion) !== Math.sign(bassMotion)) {
-        totalCost -= 8; // contrary motion rewarded
-      } else {
-        // Direct 5ths/8ves in outer voices penalty
-        const outerInterval = Math.abs(soprano - bassMidi) % 12;
-        if (outerInterval === 0 || outerInterval === 7) totalCost += 100;
-      }
-    }
-
-    // ── Leading tone resolution (all voices) ──
-    // Any voice with LT should resolve UP to tonic, whenever the target chord
-    // contains the tonic as a chord tone (covers I, vi for deceptive cadence, etc.)
-    if (tonicPc != null) {
-      const ltPc = (tonicPc + 11) % 12;
-      // Check if tonic PC exists among the current chord tones
-      const chordPcs = tones.map(t => ((tonicPc + t.semiFromRoot) % 12 + 12) % 12);
-      const tonicInChord = chordPcs.includes(tonicPc);
-      if (tonicInChord) {
-        const prevAll = [prev.bass, prev.tenor, prev.alto, prev.soprano];
-        const currAll = [bassMidi, tenor, alto, soprano];
-        for (let vi = 0; vi < 4; vi++) {
-          const prevPc = ((prevAll[vi] % 12) + 12) % 12;
-          if (prevPc === ltPc) {
-            const currPc = ((currAll[vi] % 12) + 12) % 12;
-            if (currPc === tonicPc) {
-              totalCost -= 30; // strong bonus for resolving LT → tonic
-            } else {
-              // heavier penalty in soprano (vi===3) than inner voices
-              totalCost += vi === 3 ? 250 : 150;
-            }
-          }
-        }
-      }
-    }
-
-    // ── Seventh resolution: 7th must resolve DOWN by step ──
-    // Exception: "Scambio di Parti" — the 7th can rise/hold if its resolution
-    // pitch class (down 1-2 semitones) appears in ANOTHER voice (transferred resolution).
-    if (prevSeventhPc != null) {
-      const prevAll = [prev.bass, prev.tenor, prev.alto, prev.soprano];
-      const currAll = [bassMidi, tenor, alto, soprano];
-      const currPcsAll = currAll.map(m => ((m % 12) + 12) % 12);
-      // Resolution targets: one or two semitones below the 7th
-      const resPc1 = ((prevSeventhPc - 1) % 12 + 12) % 12;
-      const resPc2 = ((prevSeventhPc - 2) % 12 + 12) % 12;
-      // Check if resolution PC exists anywhere in the current chord
-      const resolutionTransferred = currPcsAll.some(pc => pc === resPc1 || pc === resPc2);
-
-      for (let vi = 0; vi < 4; vi++) {
-        const prevPc = ((prevAll[vi] % 12) + 12) % 12;
-        if (prevPc === prevSeventhPc) {
-          const diff = prevAll[vi] - currAll[vi]; // positive = resolved down
-          if (diff >= 1 && diff <= 2) {
-            totalCost -= 50; // strong bonus for resolving 7th down by step
-          } else if (resolutionTransferred) {
-            // Transferred resolution: another voice took the resolution note
-            // Only a small penalty (prefer direct resolution but allow transfer)
-            totalCost += 80; // transferred resolution: accept reluctantly
-          } else {
-            totalCost += 250; // penalty for truly unresolved 7th
-          }
-        }
-      }
-    }
-
-    // ── Seventh preparation: 7th should arrive by step or common tone ──
-    if (tones.length >= 4) {
-      const seventhPc = ((toneToMidiPc(tones[3]) + 12) % 12);
-      const prevAll7 = [prev.bass, prev.tenor, prev.alto, prev.soprano];
-      const currAll7 = [bassMidi, tenor, alto, soprano];
-      for (let vi = 0; vi < 4; vi++) {
-        const currPc = ((currAll7[vi] % 12) + 12) % 12;
-        if (currPc === seventhPc) {
-          const motion = Math.abs(currAll7[vi] - prevAll7[vi]);
-          if (motion === 0) {
-            totalCost -= 15; // best: common tone preparation
-          } else if (motion <= 2) {
-            totalCost -= 5; // good: stepwise preparation
-          } else {
-            totalCost += 60; // penalty: unprepared 7th (leap)
-          }
-        }
-      }
-    }
+    for (const tenorC of sortedCands[0]) {
+    for (const altoC of sortedCands[1]) {
+    for (const sopC of sortedCands[2]) {
+    const [tenor, alto, soprano] = [tenorC, altoC, sopC];
+    // Use unified scoring function — single source of truth
+    const cand: SATBVoicing = { soprano, alto, tenor, bass: bassMidi };
+    const totalCost = scoreVoicing({ curr: cand, prev, rules, tonicPc, tones, prevSeventhPc: prevSeventhPc ?? null, ...styleCtx });
 
     if (totalCost < bestCost) {
       bestCost = totalCost;
-      bestVoicing = { soprano, alto, tenor, bass: bassMidi };
+      bestVoicing = cand;
     }
+    } // end sopC loop
+    } // end altoC loop
+    } // end tenorC loop
   } // end perm loop
   } // end upperToneSets loop
 
-  return bestVoicing;
+  if (bestVoicing && bestCost < globalBestCost) {
+    globalBestCost = bestCost;
+    globalBestVoicing = bestVoicing;
+  }
+
+  } // end bassOptions loop
+
+  return globalBestVoicing;
 }
 
 /** Generate all 6 permutations of [0,1,2]. */
@@ -1535,11 +1691,8 @@ export function detectViolations(
   const currArr = [curr.bass, curr.tenor, curr.alto, curr.soprano];
 
   // Voice crossing
-  if (!rules.allowCrossing) {
-    if (curr.bass > curr.tenor) violations.push({ type: 'voice-crossing', description: 'Bass crosses above tenor', measure, beat, voices: ['bass', 'tenor'] });
-    if (curr.tenor > curr.alto) violations.push({ type: 'voice-crossing', description: 'Tenor crosses above alto', measure, beat, voices: ['tenor', 'alto'] });
-    if (curr.alto > curr.soprano) violations.push({ type: 'voice-crossing', description: 'Alto crosses above soprano', measure, beat, voices: ['alto', 'soprano'] });
-  }
+  // Voice crossing — now checked in the main loop for ALL chords (including first)
+  // (removed from here to avoid duplicates)
 
   // Voice overlap
   if (!rules.allowOverlap) {
@@ -1551,17 +1704,8 @@ export function detectViolations(
     if (curr.alto > prev.soprano) violations.push({ type: 'voice-overlap', description: 'Alto goes above previous soprano', measure, beat, voices: ['alto', 'soprano'] });
   }
 
-  // Spacing (S-A ≤ 8ve, A-T ≤ 8ve, T-B can be more)
-  if (curr.soprano - curr.alto > 12) violations.push({ type: 'spacing', description: 'Soprano-Alto exceeds an octave', measure, beat, voices: ['soprano', 'alto'] });
-  if (curr.alto - curr.tenor > 12) violations.push({ type: 'spacing', description: 'Alto-Tenor exceeds an octave', measure, beat, voices: ['alto', 'tenor'] });
-
-  // Range
-  for (const [vName, midi] of [['soprano', curr.soprano], ['alto', curr.alto], ['tenor', curr.tenor], ['bass', curr.bass]] as [string, number][]) {
-    const range = VOICE_RANGES[vName];
-    if (midi < range.min || midi > range.max) {
-      violations.push({ type: 'range', description: `${vName} out of range (MIDI ${midi})`, measure, beat, voices: [vName] });
-    }
-  }
+  // Spacing & Range — now checked in the main loop for ALL chords (including first)
+  // (removed from here to avoid duplicates)
 
   // Parallel 5ths / 8ves
   for (let i = 0; i < 4; i++) {
@@ -1585,10 +1729,46 @@ export function detectViolations(
     }
   }
 
+  // Hidden/direct 5ths & 8ves (similar motion arriving at P5 or P8, not parallel)
+  for (let i = 0; i < 4; i++) {
+    for (let j = i + 1; j < 4; j++) {
+      const dir_i = currArr[i] - prevArr[i];
+      const dir_j = currArr[j] - prevArr[j];
+      if (dir_i === 0 || dir_j === 0) continue; // oblique
+      if (Math.sign(dir_i) !== Math.sign(dir_j)) continue; // contrary
+      const arrInt = ((currArr[j] - currArr[i]) % 12 + 12) % 12;
+      if (arrInt !== 0 && arrInt !== 7) continue; // not P5 or P8
+      const depInt = ((prevArr[j] - prevArr[i]) % 12 + 12) % 12;
+      if ((depInt === 7 && arrInt === 7) || (depInt === 0 && arrInt === 0)) continue; // true parallel already caught
+      const isOuter = i === 0 && j === 3; // bass=0, soprano=3
+      const hiStep = Math.abs(dir_j) <= 2;
+      const loStep = Math.abs(dir_i) <= 2;
+      // Outer voices: only exception if soprano (j=3) moves by step
+      if (isOuter && !hiStep) {
+        violations.push({
+          type: 'parallel-5th',
+          description: `Hidden ${arrInt === 7 ? '5th' : '8ve'} (S+B): both leap to ${arrInt === 7 ? 'P5' : 'P8'}`,
+          measure, beat, voices: [voiceLabels[i], voiceLabels[j]],
+        });
+      }
+      // Inner voices: both leap and no common note → violation
+      if (!isOuter && !hiStep && !loStep) {
+        const arrPcs = [((currArr[i] % 12) + 12) % 12, ((currArr[j] % 12) + 12) % 12];
+        const prevPcs = prevArr.map(m => ((m % 12) + 12) % 12);
+        const hasCommon = arrPcs.some(pc => prevPcs.includes(pc));
+        if (!hasCommon) {
+          violations.push({
+            type: 'parallel-5th',
+            description: `Hidden ${arrInt === 7 ? '5th' : '8ve'} (${voiceLabels[i]}-${voiceLabels[j]}): both leap`,
+            measure, beat, voices: [voiceLabels[i], voiceLabels[j]],
+          });
+        }
+      }
+    }
+  }
+
   return violations;
 }
-
-// ─── StaffNote Generation ──────────────────────────────────────────────────
 
 let noteIdCounter = 0;
 let noteIdPrefix = Date.now().toString(36);
@@ -1755,6 +1935,7 @@ export function realizeChorale(
   const allViolations: ChoralViolation[] = [];
   const modulationContexts: ModulationContext[] = [];
   let prevVoicing: SATBVoicing | null = null;
+  let prevPrevVoicing: SATBVoicing | null = null;
   let prevSeventhPc: number | null = null;
 
   // Build soprano constraint lookup map: "measure:beat" → MIDI
@@ -1824,6 +2005,11 @@ export function realizeChorale(
     }
     const tones = getChordTones(parsed, scale, tonic, isMinor);
 
+    // Style context for adaptive scoring (passed to scoreVoicing via helpers)
+    const styleCtx: StyleContext = config.styleProfile
+      ? { styleProfile: config.styleProfile, currentDegree: degreeToRoman(parsed.degree, isMinor), currentInversion: inv }
+      : {};
+
     // Determine duration: explicit > fill to next chord > end of measure
     const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
     let durationName: string;
@@ -1862,26 +2048,168 @@ export function realizeChorale(
       }
     }
 
-    // Realize voicing
+    // Realize voicing — with lookahead beam search
     let voicing: SATBVoicing | null;
     if (!prevVoicing) {
-      voicing = realizeFirstChord(tones, inv, rules, fixedSoprano, fixedBass, tonicPcVal, config.initialDisposition);
+      voicing = realizeFirstChord(tones, inv, rules, fixedSoprano, fixedBass, tonicPcVal, config.initialDisposition, styleCtx);
     } else {
-      voicing = realizeNextChord(tones, inv, prevVoicing, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1);
+      // ── Beam search with 1-step lookahead ──
+      // Generate multiple candidate voicings by trying slight perturbations,
+      // then pick the one whose (current_violations + next_chord_violations) is lowest.
+      const greedyVoicing = realizeNextChord(tones, inv, prevVoicing, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
+      voicing = greedyVoicing;
+
+      if (greedyVoicing && i + 1 < sortedProg.length) {
+        // Prepare next chord info for lookahead
+        const nextChord = sortedProg[i + 1];
+        const nextParsed = parseRoman(nextChord.roman);
+        const nextInv = nextChord.inversion ?? nextParsed.inversion;
+        const nextTones = getChordTones(nextParsed, scale, tonic, isMinor);
+        const nextFixedSop = sopranoMap.get(`${nextChord.measure}:${nextChord.beat}`);
+        const nextFixedBas = bassMap.get(`${nextChord.measure}:${nextChord.beat}`);
+        const currSeventhPc = tones.length >= 4 ? toneToMidiPc(tones[3]) : null;
+        const nextIsLast = (i + 1 === sortedProg.length - 1);
+
+        // Score a candidate voicing using unified scoreVoicing with 1-step lookahead
+        const scoreCandidate = (cand: SATBVoicing): number => {
+          // Current step: prev→cand
+          const s1 = scoreVoicing({ curr: cand, prev: prevVoicing!, prevPrev: prevPrevVoicing, rules, tonicPc: tonicPcVal, tones, ...styleCtx });
+          // Lookahead: cand→next
+          const nextVoicing = realizeNextChord(nextTones, nextInv, cand, rules, nextFixedSop, nextFixedBas, tonicPcVal, currSeventhPc ?? undefined, nextIsLast, styleCtx);
+          const s2 = nextVoicing ? scoreVoicing({ curr: nextVoicing, prev: cand, rules, tonicPc: tonicPcVal, tones: nextTones, ...styleCtx }) : 0;
+          // Weight: current full, next at 80%
+          return s1 + s2 * 0.8;
+        };
+
+        const greedyScore = scoreCandidate(greedyVoicing);
+        if (greedyScore > 0) {
+          // Try alternative voicings by perturbing each inner voice ±1 octave
+          let bestScore = greedyScore;
+          let bestCand = greedyVoicing;
+          // Chord-tone PCs for the current chord — perturbations must stay on these
+          const chordPcSet = new Set(tones.map(t => toneToMidiPc(t)));
+          const isChordTone = (midi: number) => chordPcSet.has(((midi % 12) + 12) % 12);
+          const tryCandidate = (cand: SATBVoicing) => {
+            // Basic validity: within SATB ranges and ordering
+            if (cand.bass > cand.tenor || cand.tenor > cand.alto || cand.alto > cand.soprano) return;
+            if (cand.soprano < VOICE_RANGES.soprano.min || cand.soprano > VOICE_RANGES.soprano.max) return;
+            if (cand.alto < VOICE_RANGES.alto.min || cand.alto > VOICE_RANGES.alto.max) return;
+            if (cand.tenor < VOICE_RANGES.tenor.min || cand.tenor > VOICE_RANGES.tenor.max) return;
+            if (cand.bass < VOICE_RANGES.bass.min || cand.bass > VOICE_RANGES.bass.max) return;
+            // All voices must be chord tones
+            if (!isChordTone(cand.bass) || !isChordTone(cand.tenor) || !isChordTone(cand.alto) || !isChordTone(cand.soprano)) return;
+            const s = scoreCandidate(cand);
+            if (s < bestScore) { bestScore = s; bestCand = cand; }
+          };
+          const g = greedyVoicing;
+          // Perturbations: shift tenor or alto ±12 (octave), ±1, ±2 (step)
+          for (const dt of [-12, 12, -1, 1, -2, 2]) {
+            tryCandidate({ ...g, tenor: g.tenor + dt });
+            tryCandidate({ ...g, alto: g.alto + dt });
+          }
+          // Swap alto and tenor pitch classes
+          if (g.alto !== g.tenor) {
+            const aDiff = g.alto - g.tenor;
+            tryCandidate({ ...g, tenor: g.tenor + aDiff, alto: g.alto - aDiff });
+          }
+          // Try re-running realizeNextChord with a slightly perturbed prevVoicing
+          for (const dt of [-1, 1, -2, 2]) {
+            const pertPrev = { ...prevVoicing!, tenor: prevVoicing!.tenor + dt };
+            const alt = realizeNextChord(tones, inv, pertPrev, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
+            if (alt) tryCandidate(alt);
+          }
+          for (const dt of [-1, 1, -2, 2]) {
+            const pertPrev = { ...prevVoicing!, alto: prevVoicing!.alto + dt };
+            const alt = realizeNextChord(tones, inv, pertPrev, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
+            if (alt) tryCandidate(alt);
+          }
+          voicing = bestCand;
+        }
+      }
     }
 
     if (!voicing) continue;
 
-    // Detect violations
+    // ── Hard crossing guard: reject voicing with voice crossing ──
+    // If the generated voicing has crossing, try to fix by swapping voices
+    if (voicing.bass > voicing.tenor || voicing.tenor > voicing.alto || voicing.alto > voicing.soprano) {
+      // Sort MIDI values and reassign: lowest→bass, next→tenor, next→alto, highest→soprano
+      const sorted = [voicing.bass, voicing.tenor, voicing.alto, voicing.soprano].sort((a, b) => a - b);
+      voicing = { bass: sorted[0], tenor: sorted[1], alto: sorted[2], soprano: sorted[3] };
+    }
+
+    // ── Last-chord retry: if the final chord has violations, try alternatives ──
+    if (prevVoicing && i === sortedProg.length - 1) {
+      const baseScore = scoreVoicing({ curr: voicing, prev: prevVoicing, prevPrev: prevPrevVoicing, rules, tonicPc: tonicPcVal, tones, ...styleCtx });
+      if (baseScore > 0) {
+        let bestV = voicing;
+        let bestS = baseScore;
+        // Chord-tone PCs for last chord — perturbations must stay on these
+        const lastChordPcSet = new Set(tones.map(t => toneToMidiPc(t)));
+        const isLastChordTone = (midi: number) => lastChordPcSet.has(((midi % 12) + 12) % 12);
+        const tryLast = (cand: SATBVoicing) => {
+          if (cand.bass > cand.tenor || cand.tenor > cand.alto || cand.alto > cand.soprano) return;
+          if (cand.soprano < VOICE_RANGES.soprano.min || cand.soprano > VOICE_RANGES.soprano.max) return;
+          if (cand.alto < VOICE_RANGES.alto.min || cand.alto > VOICE_RANGES.alto.max) return;
+          if (cand.tenor < VOICE_RANGES.tenor.min || cand.tenor > VOICE_RANGES.tenor.max) return;
+          if (cand.bass < VOICE_RANGES.bass.min || cand.bass > VOICE_RANGES.bass.max) return;
+          // All voices must be chord tones
+          if (!isLastChordTone(cand.bass) || !isLastChordTone(cand.tenor) || !isLastChordTone(cand.alto) || !isLastChordTone(cand.soprano)) return;
+          const s = scoreVoicing({ curr: cand, prev: prevVoicing!, prevPrev: prevPrevVoicing, rules, tonicPc: tonicPcVal, tones, ...styleCtx });
+          if (s < bestS) { bestS = s; bestV = cand; }
+        };
+        // Try perturbations of inner voices
+        for (const dt of [-12, 12, -1, 1, -2, 2]) {
+          tryLast({ ...voicing, tenor: voicing.tenor + dt });
+          tryLast({ ...voicing, alto: voicing.alto + dt });
+        }
+        // Try different soprano tonic candidates (if cadence-forced)
+        if (isLast && parsed.degree === 0) {
+          const tonicCands = pitchesInRange(tones[0], VOICE_RANGES.soprano);
+          for (const sc of tonicCands) {
+            const alt = realizeNextChord(tones, inv, prevVoicing, rules, sc, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, true, styleCtx);
+            if (alt) tryLast(alt);
+          }
+        }
+        // Re-run with perturbed prev
+        for (const dt of [-1, 1, -2, 2]) {
+          const pp = { ...prevVoicing, tenor: prevVoicing.tenor + dt };
+          const alt = realizeNextChord(tones, inv, pp, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, true, styleCtx);
+          if (alt) tryLast(alt);
+        }
+        for (const dt of [-1, 1, -2, 2]) {
+          const pp = { ...prevVoicing, alto: prevVoicing.alto + dt };
+          const alt = realizeNextChord(tones, inv, pp, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, true, styleCtx);
+          if (alt) tryLast(alt);
+        }
+        voicing = bestV;
+      }
+    }
+
+    // Detect violations (horizontal: between consecutive chords)
     if (prevVoicing) {
       const violations = detectViolations(prevVoicing, voicing, chord.measure, chord.beat, rules);
       allViolations.push(...violations);
+    }
+
+    // Detect vertical violations (spacing, crossing, range) for EVERY chord including the first
+    if (voicing.soprano - voicing.alto > 12) {
+      allViolations.push({ type: 'spacing', description: 'Soprano-Alto exceeds an octave', measure: chord.measure, beat: chord.beat, voices: ['soprano', 'alto'] });
+    }
+    if (voicing.alto - voicing.tenor > 12) {
+      allViolations.push({ type: 'spacing', description: 'Alto-Tenor exceeds an octave', measure: chord.measure, beat: chord.beat, voices: ['alto', 'tenor'] });
+    }
+    if (!rules.allowCrossing) {
+      if (voicing.bass > voicing.tenor) allViolations.push({ type: 'voice-crossing', description: 'Bass crosses above tenor', measure: chord.measure, beat: chord.beat, voices: ['bass', 'tenor'] });
+      if (voicing.tenor > voicing.alto) allViolations.push({ type: 'voice-crossing', description: 'Tenor crosses above alto', measure: chord.measure, beat: chord.beat, voices: ['tenor', 'alto'] });
+      if (voicing.alto > voicing.soprano) allViolations.push({ type: 'voice-crossing', description: 'Alto crosses above soprano', measure: chord.measure, beat: chord.beat, voices: ['alto', 'soprano'] });
     }
 
     // Generate StaffNotes
     const notes = voicingToStaffNotes(voicing, chord.measure, chord.beat, durationName, tones, inv, displayKeySignature);
     allNotes.push(...notes);
 
+    prevPrevVoicing = prevVoicing;
     prevVoicing = voicing;
     // Track seventh PC for next chord's resolution check
     prevSeventhPc = tones.length >= 4 ? toneToMidiPc(tones[3]) : null;

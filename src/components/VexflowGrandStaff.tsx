@@ -885,9 +885,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 .filter(n => n.voice === 1 || n.voice === 2 || n.voice === 3)
                 .filter(n => !n.manualStemDirection);
 
-              // Merge small clusters (2–4 notes). This covers close-position
-              // voicings including SATB chords where all 4 voices share the treble staff.
-              if (eligible.length < 2 || eligible.length > 4) continue;
+              // Merge clusters of 3–4 notes only. 2-note seconds are kept as separate
+              // notes with explicit X-shift (offsetMap) because VexFlow's internal chord
+              // displacement doesn't work reliably in our per-note TickContext pipeline.
+              if (eligible.length < 3 || eligible.length > 4) continue;
 
               // Only merge if the cluster contains at least one second on the staff
               // (where separate-note rendering becomes visually confusing).
@@ -1481,11 +1482,25 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               return !!accidentalTypeToVexflow(g);
             });
             if (withAcc.length < 2) continue;
-            // Remove ALL custom overrides for every note at this onset
+            // Remove custom engraving overrides for every note at this onset,
+            // BUT preserve / recompute seconds displacement so noteheads
+            // don't collapse on top of each other.
+            const onsetSecondsIds = new Set<string>();
+            try {
+              const sorted = nonRest.slice().sort((a, b) => Number(a.position) - Number(b.position));
+              for (let si = 1; si < sorted.length; si++) {
+                if ((Number(sorted[si].position) - Number(sorted[si - 1].position)) === 1) {
+                  onsetSecondsIds.add(sorted[si].id);
+                  onsetSecondsIds.add(sorted[si - 1].id);
+                }
+              }
+            } catch { /* ignore */ }
             for (const n of nonRest) {
               // Preserve offset for unison notes whose stem is hidden —
               // the offset places the secondary notehead on the other side of the stem.
-              if (!hideStemById.has(n.id)) offsetMap.delete(n.id);
+              // Also preserve offset for notes that form a second — without it,
+              // noteheads overlap and one voice disappears.
+              if (!hideStemById.has(n.id) && !onsetSecondsIds.has(n.id)) offsetMap.delete(n.id);
               accidentalStaggerById.delete(n.id);
               openPositionAccidentalInsetById.delete(n.id);
               // Keep stemOverrideById and hideStemById — voice-based stem rules
@@ -2093,11 +2108,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               const isMergedChord = Array.isArray((vfNote as any)?.__mergedIds) && ((vfNote as any).__mergedIds.length > 0);
               let xShift = isMergedChord ? 0 : (offsetMap.get(n.id) ?? 0);
 
-              // When this note has an accidental AND there are 3+ accidentals at the
+              // When this note has an accidental AND there are 4+ accidentals at the
               // same onset, suppress the note-level X shift entirely. The offset
               // moves the accidental with the notehead, causing it to collide with
               // neighbouring notes. In legacy mode (no engraving enhancements)
               // offsetMap is empty so this never happens — mimic that behavior here.
+              // NOTE: threshold is 4+ (not 2+) because zeroing the shift for seconds
+              // causes noteheads to overlap and one voice to visually disappear.
               if (xShift !== 0 && enableEngravingEnhancements) {
                 try {
                   const glyph = accidentalGlyphById.get(n.id) ?? null;
@@ -2108,7 +2125,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                       const g = accidentalGlyphById.get(nn.id) ?? null;
                       return !!accidentalTypeToVexflow(g);
                     }).length;
-                    if (onsetAccCount >= 2) xShift = 0;
+                    if (onsetAccCount >= 4) xShift = 0;
                   }
                 } catch {
                   // ignore
@@ -2136,27 +2153,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     }
                   } catch { /* ignore */ }
 
-                  // Force displacement hints for explicit seconds (e.g. Bb–C).
-                  // Stem up => displace the upper notehead; stem down => displace the lower.
+                  // Set the global displaced flag so calcNoteDisplacements
+                  // accounts for seconds in the glyph width calculation.
+                  // VexFlow 4.x API: setNoteDisplaced(boolean) — single flag for the whole note.
                   try {
                     const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
                     if (Array.isArray(mergedIds) && mergedIds.length >= 2 && typeof (vfNote as any).setNoteDisplaced === 'function') {
-                      const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
                       const chordNotes = mergedIds
                         .map(id => staffNoteById.get(String(id)))
                         .filter(Boolean) as StaffNote[];
                       const sortedByPos = chordNotes.slice().sort((a, b) => Number(a.position) - Number(b.position));
-                      const stemDir = (typeof (vfNote as any).getStemDirection === 'function') ? (Number((vfNote as any).getStemDirection()) || 0) : 0;
-                      for (let k = 1; k < sortedByPos.length; k++) {
-                        const low = sortedByPos[k - 1];
-                        const high = sortedByPos[k];
-                        if ((Number(high.position) - Number(low.position)) !== 1) continue;
-                        const displaceId = (stemDir >= 0) ? high.id : low.id;
-                        const sn = chordNotes.find(x => x.id === displaceId) as any;
-                        const keyStr = sn ? `${staffNoteToVexflowKeyName(sn)}/${sn.octave ?? 4}` : '';
-                        const keyIdx = keyStr && keysArr.length ? keysArr.indexOf(keyStr) : -1;
-                        const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(displaceId);
-                        if (idx >= 0) (vfNote as any).setNoteDisplaced(idx, true);
+                      const hasSecond = sortedByPos.some((n, i) => i > 0 && (Number(n.position) - Number(sortedByPos[i - 1].position)) === 1);
+                      if (hasSecond) {
+                        (vfNote as any).setNoteDisplaced(true);
                       }
                     }
                   } catch { /* ignore */ }

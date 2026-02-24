@@ -23,6 +23,15 @@ import {
   type ModulationContext,
 } from '../engine/choralRealization';
 import { suggestNextChord, type ChordSuggestion } from '../engine/progressionSuggester';
+import {
+  extractStyleProfile,
+  mergeProfiles,
+  loadStyleProfile,
+  saveStyleProfile,
+  clearStyleProfile,
+  type StyleProfile,
+} from '../engine/choralStyleProfile';
+import defaultStyleProfileData from '../engine/defaultStyleProfile.json';
 
 // ─── Props ─────────────────────────────────────────────────────────────────
 
@@ -316,6 +325,11 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const [doubleRoot, setDoubleRoot] = useState(true);
   const [autoSevenths, setAutoSevenths] = useState(true);
 
+  // Style profile (adaptive learning)
+  const [useStyleProfile, setUseStyleProfile] = useState(false);
+  const [styleProfile, setStyleProfile] = useState<StyleProfile | null>(() => loadStyleProfile());
+  const [learnFeedback, setLearnFeedback] = useState<string | null>(null);
+
   // Melody constraint mode
   const [useMelody, setUseMelody] = useState(false);
   /** Harmonic rhythm: 0 = per note, 1 = per quarter, 2 = per half, 4 = per whole */
@@ -474,6 +488,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
         },
         autoSevenths,
         initialDisposition: initialDisposition as any,
+        styleProfile: useStyleProfile ? styleProfile : null,
       };
 
       // Melody constraint: fix soprano from existing voice 1 notes
@@ -1098,6 +1113,102 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
 
           {/* Action buttons */}
           <div className="flex gap-2 justify-end">
+
+          {/* ── Style Profile (Adaptive Learning) ── */}
+          <div className="mb-4 p-3 rounded-lg border border-slate-700 bg-slate-800/60">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-200 mb-2">
+              <input
+                type="checkbox"
+                checked={useStyleProfile}
+                onChange={() => setUseStyleProfile(v => !v)}
+                className="accent-violet-500"
+                disabled={!styleProfile}
+              />
+              <span className={!styleProfile ? 'text-gray-500' : ''}>
+                Adatta allo stile dei miei brani
+              </span>
+            </label>
+
+            {styleProfile && (
+              <div className="text-[10px] text-gray-400 mb-2">
+                Profilo: <span className="text-violet-300 font-semibold">{styleProfile.filesAnalyzed}</span> bran{styleProfile.filesAnalyzed === 1 ? 'o' : 'i'} analizzat{styleProfile.filesAnalyzed === 1 ? 'o' : 'i'}
+                {styleProfile.lastUpdated && (
+                  <span> — agg. {new Date(styleProfile.lastUpdated).toLocaleDateString('it-IT')}</span>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (!existingNotes || existingNotes.length < 8) {
+                    setLearnFeedback('Servono almeno 8 note sullo staff per apprendere.');
+                    setTimeout(() => setLearnFeedback(null), 3000);
+                    return;
+                  }
+                  try {
+                    const newProfile = extractStyleProfile(existingNotes, localTonic, localMinor, localTs);
+                    const merged = mergeProfiles(styleProfile, newProfile);
+                    setStyleProfile(merged);
+                    saveStyleProfile(merged);
+                    setUseStyleProfile(true);
+                    setLearnFeedback(`Appreso! Profilo aggiornato (${merged.filesAnalyzed} brani).`);
+                    setTimeout(() => setLearnFeedback(null), 4000);
+                  } catch (err: any) {
+                    setLearnFeedback('Errore: ' + (err?.message || 'estrazione fallita'));
+                    setTimeout(() => setLearnFeedback(null), 4000);
+                  }
+                }}
+                className="px-2 py-1 text-[10px] rounded bg-violet-700 hover:bg-violet-600 text-white font-semibold whitespace-nowrap
+                  disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!existingNotes || existingNotes.length < 8}
+                title="Analizza le note attualmente sullo staff e aggiorna il profilo stilistico"
+              >
+                🎓 Apprendi da questo file
+              </button>
+
+              {styleProfile && (
+                <button
+                  onClick={() => {
+                    clearStyleProfile();
+                    setStyleProfile(null);
+                    setUseStyleProfile(false);
+                    setLearnFeedback('Profilo cancellato.');
+                    setTimeout(() => setLearnFeedback(null), 3000);
+                  }}
+                  className="px-2 py-1 text-[10px] rounded bg-red-900/60 hover:bg-red-800/80 text-red-300 whitespace-nowrap"
+                  title="Cancella il profilo stilistico salvato"
+                >
+                  ✕ Resetta
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  try {
+                    const imported = defaultStyleProfileData as unknown as StyleProfile;
+                    const merged = mergeProfiles(styleProfile, imported);
+                    setStyleProfile(merged);
+                    saveStyleProfile(merged);
+                    setUseStyleProfile(true);
+                    setLearnFeedback(`Repertorio caricato! ${imported.filesAnalyzed} brani (${merged.filesAnalyzed} totali nel profilo).`);
+                    setTimeout(() => setLearnFeedback(null), 4000);
+                  } catch (err: any) {
+                    setLearnFeedback('Errore: ' + (err?.message || 'caricamento fallito'));
+                    setTimeout(() => setLearnFeedback(null), 4000);
+                  }
+                }}
+                className="px-2 py-1 text-[10px] rounded bg-indigo-700 hover:bg-indigo-600 text-white font-semibold whitespace-nowrap"
+                title="Carica il profilo stilistico pre-calcolato da 46 brani di repertorio (Bach, Dubois, ecc.)"
+              >
+                📚 Carica da repertorio ({(defaultStyleProfileData as any).filesAnalyzed} brani)
+              </button>
+            </div>
+
+            {learnFeedback && (
+              <div className="mt-1.5 text-[10px] text-amber-300 animate-pulse">{learnFeedback}</div>
+            )}
+          </div>
             <button
               onClick={handleGenerate}
               className="px-4 py-2 text-sm rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-semibold

@@ -28,7 +28,9 @@ export const ORNAMENT_LEARNED_PATTERNS: Record<string, {
     "short_weak_step-down_unison": { "anticipation": 2, "_total": 2, "_dominant": "anticipation", "_probability": 1 },
     "very-short_weak_step-up_step-down": { "neighbor": 2, "_total": 2, "_dominant": "neighbor", "_probability": 1 },
     "short_moderate_leap-up_step-down": { "appoggiatura": 2, "_total": 2, "_dominant": "appoggiatura", "_probability": 1 },
-    "medium_moderate_step-down_step-down": { "passing": 2, "_total": 2, "_dominant": "passing", "_probability": 1 },
+    "medium_strong_step-up_step-up": { "appoggiatura": 1, "passing": 1, "_total": 2, "_dominant": "appoggiatura", "_probability": 0.5 },
+    "medium_moderate_step-down_step-down": { "passing": 7, "_total": 7, "_dominant": "passing", "_probability": 1 },
+    "medium_moderate_skip-up_skip-up": { "passing": 1, "_total": 1, "_dominant": "passing", "_probability": 1 },
     "medium_moderate_step-up_step-up": { "passing": 1, "_total": 1, "_dominant": "passing", "_probability": 1 },
     "short_moderate_step-up_step-down": { "neighbor": 1, "_total": 1, "_dominant": "neighbor", "_probability": 1 },
     "long_strong_unison_step-down": { "suspension": 28, "_total": 28, "_dominant": "suspension", "_probability": 1 },
@@ -45,7 +47,6 @@ export const ORNAMENT_LEARNED_PATTERNS: Record<string, {
     "medium_moderate_skip-down_step-up": { "escape": 1, "_total": 1, "_dominant": "escape", "_probability": 1 },
     "medium_strong_unison_step-up": { "suspension": 2, "_total": 2, "_dominant": "suspension", "_probability": 1 },
     "medium_moderate_step-up_skip-down": { "escape": 1, "_total": 1, "_dominant": "escape", "_probability": 1 },
-    "medium_strong_step-up_step-up": { "passing": 1, "_total": 1, "_dominant": "passing", "_probability": 1 },
     "short_strong_step-down_step-down": { "appoggiatura": 1, "_total": 1, "_dominant": "appoggiatura", "_probability": 1 },
     "long_strong_none_step-down": { "appoggiatura": 2, "_total": 2, "_dominant": "appoggiatura", "_probability": 1 },
 };
