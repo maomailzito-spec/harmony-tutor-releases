@@ -1295,12 +1295,40 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             lastKeyChangeRef.current = null;
             setKeySignatureRoot(nextRoot);
             return;
+        } else {
+            // 'none' mode: re-spell notes enharmonically for the new key
+            // signature without transposing (same sounding pitch, different
+            // notation).  This is what the user expects when switching the
+            // displayed key after a MIDI import.
+            try {
+                const targetKeySignature = getKeySignature(nextRoot, 'Major');
+                setRawNotes(prev => prev.map((n) => {
+                    try {
+                        if (n.isRest || !Number.isFinite(n.midi)) return n;
+                        const currentClef = (n.clef || 'treble') as ClefType;
+                        // Pass null: let the function choose the best spelling
+                        // based on the TARGET key signature (not the current accidental).
+                        const recalculated = getNotePropertiesFromMidi(n.midi, targetKeySignature, currentClef, null);
+                        return {
+                            ...n,
+                            ...recalculated,
+                            // Sync .accidental with the new explicit accidental
+                            accidental: recalculated.explicitAccidental,
+                            // Clear any user override so normalizedRawNotes
+                            // doesn't revert the spelling.
+                            userAccidental: undefined,
+                            id: n.id,
+                            midi: n.midi,
+                        };
+                    } catch { return n; }
+                }));
+            } catch { /* ignore */ }
         }
 
         // Record last key change so the transpose checkbox can apply/revert even if toggled after.
         lastKeyChangeRef.current = { fromRoot, toRoot: nextRoot, transposedApplied: isTranspose };
         setKeySignatureRoot(nextRoot);
-    }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, transposeAllNotesToKey]);
+    }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, setRawNotes, transposeAllNotesToKey]);
 
     const { currentTonic, currentQuality } = useMemo(() => {
         if (isMinorMode) {
@@ -4677,11 +4705,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
             const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
 
+            // Deselect all notes.
+            setSelectedNoteIds(new Set());
+
             if (wantsHarmonyOverride) {
                 setHarmonyOverrideMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex, beat });
-            } else {
-                setContextMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex, beat });
             }
+            // Normal right-click on playhead: just deselect, no context menu.
             return;
         }
 
@@ -4738,12 +4768,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Aggiorna sempre pasteCaret con beat quantizzato
         setPasteCaret({ x: snappedX, systemIndex, measureIndex: hit.measureIndex, beat });
 
+        // Deselect all notes on right-click (cursor-only positioning).
+        setSelectedNoteIds(new Set());
+
         const absBeat = Math.max(0, Math.round((((layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex] ?? (hit.measureIndex * beatsPerMeasure)) + (beat - 1)) * 1e6) / 1e6);
         if (wantsHarmonyOverride) {
             setHarmonyOverrideMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex: hit.measureIndex, beat });
-        } else {
-            setContextMenu({ x: e.clientX, y: e.clientY, absBeat, measureIndex: hit.measureIndex, beat });
         }
+        // Normal right-click: just position cursor, no context menu.
+        // Use 'T' hotkey to open the tonicization/modulation panel instead.
     }, [getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, getSystemMeasureAtX, layoutData, playheadPosition, selectedInsertion, selectedVoice, setPlaybackCursorFromMeasureBeat, timeSignature, tupletFactor]);
 
     const qAbsForOverrides = useCallback((x: number) => {
@@ -4896,9 +4929,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
 
         // Clamp so onset is always within the measure and fits the duration.
+        // If the raw click fell at or past the measure boundary, bail out rather
+        // than silently clamping back to the last beat (which would overwrite
+        // the note already sitting there).
         const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
         if (snappedLocalTicks < 0) snappedLocalTicks = 0;
-        if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
+        if (snappedLocalTicks > maxLocalStart) {
+            if (localTicksRaw >= ticksPerMeasure - snapGridTicks * 0.4) return;
+            snappedLocalTicks = maxLocalStart;
+        }
 
         const startTick = measureStartTick + snappedLocalTicks;
 
@@ -4922,6 +4961,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 let durTicks = (typeof (n as any).durationTicks === 'number' && isFinite((n as any).durationTicks) && (n as any).durationTicks > 0)
                     ? ((n as any).durationTicks as number)
                     : 0;
+
+                // Cross-check: if the duration label gives a shorter value than stored
+                // durationTicks, prefer the label (guards against stale/extended ticks).
+                if (durTicks > 0 && typeof (n as any).duration === 'string') {
+                    const labelBase = (DURATION_VALUES as any)[(n as any).duration] || 0;
+                    if (labelBase > 0) {
+                        let labelTicks = Math.round(labelBase * TICKS_PER_QUARTER);
+                        if ((n as any).isDotted) labelTicks = Math.round(labelTicks * 1.5);
+                        if ((n as any).isTriplet) labelTicks = Math.round(labelTicks * 2 / 3);
+                        if ((n as any).isDuplet) labelTicks = Math.round(labelTicks * 3 / 2);
+                        if (labelTicks > 0 && labelTicks < durTicks) durTicks = labelTicks;
+                    }
+                }
 
                 if (!durTicks) {
                     const base = (DURATION_VALUES as any)[(n as any).duration || 'quarter'] || 1;
@@ -5240,7 +5292,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const letter = pitchLetterOf((props as any)?.pitch);
                 const octave = Number((props as any)?.octave);
                 const basePc = DIATONIC_PC[letter];
-                if (letter && Number.isFinite(octave) && basePc != null) {
+                // Skip measure accidental carry when applyAutoLeadingToneInMinor
+                // (or applyActiveAccidental) already set an explicit accidental —
+                // the carry logic would blindly overwrite the midi/noteIndex back
+                // to the key-signature default.
+                if (letter && Number.isFinite(octave) && basePc != null && !(props as any).explicitAccidental) {
                     const measureIndex = Number(hit.measureIndex);
                     const beforeTick = Number(insertedStartTick);
                     const relevant = (rawNotes || [])
@@ -5301,6 +5357,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     clef: targetClef,
                     voice: selectedVoice,
                 };
+
+        // If an existing note occupies this exact pitch+tick+voice+measure, select it instead of inserting.
+        const existingAtSamePos = rawNotes.find(n =>
+            !n.isRest &&
+            n.measureIndex === newNote.measureIndex &&
+            (n.voice as any) === (newNote.voice as any) &&
+            n.pitch === newNote.pitch &&
+            n.octave === newNote.octave &&
+            Math.abs(((n as any).startTick ?? 0) - (newNote as any).startTick) < 2
+        );
+        if (existingAtSamePos) {
+            if (e?.shiftKey) {
+                // Shift+Click: toggle in/out of multi-selection
+                setSelectedNoteIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(existingAtSamePos.id)) next.delete(existingAtSamePos.id);
+                    else next.add(existingAtSamePos.id);
+                    return next;
+                });
+            } else {
+                setSelectedNoteIds(new Set([existingAtSamePos.id]));
+            }
+            return;
+        }
 
         setRawNotes(prev => {
             // Replace anything overlapping this note in tick-space.
@@ -6324,6 +6404,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
+            // Cmd/Ctrl+0: reset editor zoom to 100%
+            if (isMod && key === '0') {
+                e.preventDefault();
+                e.stopPropagation();
+                resetEditorZoom();
+                return;
+            }
+
             // K: toggle metronome
             if (!isMod && key === 'k') {
                 e.preventDefault();
@@ -6465,6 +6553,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
 
+                // Toggle: if the tonicization panel is already open, close it.
+                if (contextMenu) {
+                    setContextMenu(null);
+                    return;
+                }
+
                 if (!playheadPosition) return;
                 const container = staffContainerRef.current;
                 if (!container) return;
@@ -6513,7 +6607,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 const selected = prev.filter(n => selectedNoteIds.has(n.id));
                                 if (selected.length === 0) return prev;
 
-                                let next = prev.map(n => selectedNoteIds.has(n.id) ? ({ ...(n as any), duration } as StaffNote) : n);
+                                let next = prev.map(n => {
+                            if (!selectedNoteIds.has(n.id)) return n;
+                            let durBeats = (DURATION_VALUES as any)[duration] || 1;
+                            if ((n as any).isDotted) durBeats *= 1.5;
+                            if ((n as any).isTriplet) durBeats *= 2 / 3;
+                            if ((n as any).isDuplet) durBeats *= 3 / 2;
+                            const durationTicks = Math.max(1, Math.round(durBeats * TICKS_PER_QUARTER));
+                            return { ...(n as any), duration, durationTicks } as StaffNote;
+                        });
 
                                 const affected = new Map<string, { m: number; v: Voice }>();
                                 for (const n of selected) {
@@ -6686,6 +6788,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         timeSignature,
         staffSystemMode,
         setStaffSystemMode,
+        contextMenu,
     ]);
 
     const selectedNotesBeamState = useMemo(() => {
@@ -7261,31 +7364,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 });
                                 for (let i = 0; i < arr.length; i++) {
                                     const cur = arr[i] as any;
-                                    if (!cur.isPassing) continue;
-                                    // hide the label corresponding to the weak-beat event where the passing note sits
-                                    const curAbs = qAbs((cur.measureIndex ?? 0) * beatsPerMeasure + ((cur.beat ?? 1) - 1));
-
-                                    // If there's no label here, nothing to hide.
-                                    const sigHere = labelSigAtAbs.get(curAbs);
-                                    if (!sigHere) {
-                                        hideLabelAbsBeats.add(curAbs);
-                                        continue;
-                                    }
-
-                                    // Find neighboring label signatures.
-                                    let prevSig: string | null = null;
-                                    let nextSig: string | null = null;
-                                    for (let k = 0; k < orderedLabelAbs.length; k++) {
-                                        const a = orderedLabelAbs[k];
-                                        if (a < curAbs) prevSig = labelSigAtAbs.get(a) ?? prevSig;
-                                        if (a > curAbs) { nextSig = labelSigAtAbs.get(a) ?? null; break; }
-                                    }
-
-                                    // Hide only if this label is redundant (same as previous or next).
-                                    // If it differs from BOTH neighbors, keep it (real short harmony change).
-                                    const sameAsPrev = !!prevSig && prevSig === sigHere;
-                                    const sameAsNext = !!nextSig && nextSig === sigHere;
-                                    if (sameAsPrev || sameAsNext) hideLabelAbsBeats.add(curAbs);
+                                    // Hide labels under ALL analysis-detected ornamental notes
+                                    if (!(cur.isPassing || cur.isNeighbor || cur.isAppoggiatura || cur.isAnticipation || cur.isEscape)) continue;
+                                    // Appoggiaturas (manual OR auto-detected) use verticalization
+                                    // that produces a correct chord label — do NOT hide it.
+                                    if (cur.isAppoggiatura) continue;
+                                    // Ornamental notes create spurious chord labels because the
+                                    // analysis includes them before flagging them.  Always hide.
+                                    const mStart = (layoutData as any)?.measureStartAbsBeat?.[cur.measureIndex ?? 0] ?? ((cur.measureIndex ?? 0) * beatsPerMeasure);
+                                    const curAbs = qAbs(mStart + ((cur.beat ?? 1) - 1));
+                                    hideLabelAbsBeats.add(curAbs);
                                 }
                             }
                         } catch (_) {}
@@ -7623,8 +7711,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         return Math.round(a * 1000) / 1000;
                                                                     };
                                                                     const lblAbsQ = qAbs(Number((lbl as any).absBeat));
-                                                                    const showRoman = showRomanAnalysis && !!lbl.roman && !isHiddenMarker && !(hideLabelAbsBeats.has(lblAbsQ));
-                                                                    const showSymbol = showSymbolAnalysis && !!(lbl as any).symbol && !isHiddenMarker && !(hideLabelAbsBeats.has(lblAbsQ));
+                                                                    const showRoman = showRomanAnalysis && !!lbl.roman && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
+                                                                    const showSymbol = showSymbolAnalysis && !!(lbl as any).symbol && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
 
                                                                     // Keep a consistent left edge reference for both roman and symbols.
                                                                     const romanFont = '700 14px serif';

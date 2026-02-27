@@ -2,100 +2,100 @@
   "inversionByDegree": {
     "iii": {
       "counts": {
-        "0": 75,
-        "1": 11,
+        "0": 90,
+        "1": 13,
         "2": 3
       },
-      "total": 89
+      "total": 106
     },
     "vi": {
       "counts": {
-        "0": 144,
-        "1": 13,
+        "0": 195,
+        "1": 17,
         "2": 5
       },
-      "total": 162
+      "total": 217
     },
     "vii°": {
       "counts": {
-        "0": 40,
-        "1": 8,
+        "0": 44,
+        "1": 11,
         "2": 2
       },
-      "total": 50
+      "total": 57
     },
     "I": {
       "counts": {
-        "0": 264,
-        "1": 70,
-        "2": 34
+        "0": 366,
+        "1": 97,
+        "2": 38
       },
-      "total": 368
+      "total": 501
     },
     "IV": {
       "counts": {
-        "0": 102,
-        "1": 20,
+        "0": 124,
+        "1": 32,
         "2": 1
       },
-      "total": 123
+      "total": 157
     },
     "V": {
       "counts": {
-        "0": 225,
-        "1": 48,
-        "2": 12
+        "0": 280,
+        "1": 68,
+        "2": 16
       },
-      "total": 285
+      "total": 364
     },
     "ii": {
       "counts": {
-        "0": 118,
-        "1": 30,
+        "0": 148,
+        "1": 41,
         "2": 2
       },
-      "total": 150
+      "total": 191
     },
     "i": {
       "counts": {
-        "0": 54,
+        "0": 104,
         "1": 1
       },
-      "total": 55
+      "total": 105
     },
     "ii°": {
       "counts": {
-        "0": 66,
-        "2": 1
+        "0": 95,
+        "2": 2
       },
-      "total": 67
+      "total": 97
     },
     "iv": {
       "counts": {
-        "0": 47,
+        "0": 74,
         "2": 1
       },
-      "total": 48
+      "total": 75
     },
     "VI": {
       "counts": {
-        "0": 78,
+        "0": 121,
         "1": 2
       },
-      "total": 80
+      "total": 123
     },
     "III": {
       "counts": {
-        "0": 48
+        "0": 94
       },
-      "total": 48
+      "total": 94
     },
     "v": {
       "counts": {
-        "0": 33,
-        "1": 5
+        "0": 53,
+        "1": 6
       },
-      "total": 38
+      "total": 59
     },
     "VII": {
       "counts": {
@@ -106,50 +106,50 @@
   },
   "motionByVoice": {
     "soprano": {
-      "commonTone": 265,
-      "step": 834,
-      "skip": 263,
-      "leap": 158,
-      "total": 1520
+      "commonTone": 380,
+      "step": 1133,
+      "skip": 357,
+      "leap": 220,
+      "total": 2090
     },
     "alto": {
-      "commonTone": 488,
-      "step": 667,
-      "skip": 220,
-      "leap": 145,
-      "total": 1520
+      "commonTone": 696,
+      "step": 882,
+      "skip": 315,
+      "leap": 197,
+      "total": 2090
     },
     "tenor": {
-      "commonTone": 430,
-      "step": 653,
-      "skip": 254,
-      "leap": 183,
-      "total": 1520
+      "commonTone": 599,
+      "step": 884,
+      "skip": 338,
+      "leap": 269,
+      "total": 2090
     },
     "bass": {
-      "commonTone": 161,
-      "step": 525,
-      "skip": 298,
-      "leap": 536,
-      "total": 1520
+      "commonTone": 219,
+      "step": 738,
+      "skip": 417,
+      "leap": 716,
+      "total": 2090
     }
   },
   "contraryMotion": {
-    "contrary": 683,
-    "parallel": 485,
-    "oblique": 278,
-    "total": 1520
+    "contrary": 910,
+    "parallel": 686,
+    "oblique": 389,
+    "total": 2090
   },
   "bassMotion": {
-    "sumSemitones": 5514,
-    "count": 1520
+    "sumSemitones": 7489,
+    "count": 2090
   },
   "doubling": {
-    "root": 2584,
-    "third": 1368,
-    "fifth": 1274,
-    "total": 6268
+    "root": 3564,
+    "third": 1816,
+    "fifth": 1698,
+    "total": 8600
   },
-  "lastUpdated": "2026-02-24T09:21:17.154Z",
-  "filesAnalyzed": 47
+  "lastUpdated": "2026-02-27T12:42:43.606Z",
+  "filesAnalyzed": 60
 }

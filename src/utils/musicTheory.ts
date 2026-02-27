@@ -1079,8 +1079,8 @@ export function getNotePropertiesFromMidi(
       if (flatInKey)       noteName = flatSpelling!;
       else if (sharpInKey) noteName = sharpSpelling!;
       else if (keySignature.type === 'flat' && keySignature.count > 0)
-        // Flat key but this note isn't in the key sig → prefer sharp (chromatic raising)
-        noteName = sharpSpelling || possibleNames[0];
+        // Flat key → prefer flat spelling for chromatic tones too
+        noteName = flatSpelling || possibleNames[0];
       else
         // Sharp key or C major → prefer non-flat spelling
         noteName = possibleNames.find(n => !n.includes('b')) || possibleNames[0];
@@ -2141,8 +2141,14 @@ export function getChordSymbol(
             const ints = new Set<number>([...allPcs].map(pc => mod12(pc - chordRootPc)));
             const already = analysisText;
 
+            // Get the chord's own formula intervals so we don't re-label
+            // chord tones as tensions (e.g. minor 3rd in Am7 ≠ ♯9).
+            const formulaIntervals = new Set<number>(
+                ((CHORD_FORMULAS as any)?.[quality] as number[] | undefined) || []
+            );
+
             const addIfPresent = (interval: number, token: string) => {
-                if (ints.has(interval) && !already.includes(token)) {
+                if (ints.has(interval) && !already.includes(token) && !formulaIntervals.has(interval)) {
                     analysisText += token;
                 }
             };
@@ -2345,7 +2351,7 @@ function calculateRomanNumeral(
     {
         const qualityStr = String(quality || '');
         const typeStr = String((chordInfo as any)?.type || '');
-        const isDimQuality = quality === BuiltInChords.Diminished || /°|dim/i.test(qualityStr) || /b5/i.test(qualityStr);
+        const isDimQuality = quality === BuiltInChords.Diminished || /°|dim/i.test(qualityStr) || /[b♭]5/i.test(qualityStr) || /[b♭]5/i.test(typeStr);
         const ints: Set<number> | undefined = (chordInfo as any)?.intervals;
         const hasMinorThird = !!ints?.has?.(3);
         const hasDimFifth = !!ints?.has?.(6);
@@ -2492,7 +2498,7 @@ function calculateRomanNumeral(
 
     if (effectiveQuality === BuiltInChords.Major && roman.toLowerCase() === roman) roman = roman.toUpperCase();
     else if ((quality === BuiltInChords.Minor || quality === BuiltInChords.MinorMajor7) && roman.toUpperCase() === roman) roman = roman.toLowerCase();
-    else if (quality === BuiltInChords.Diminished && !roman.includes('°')) roman += '°';
+    else if ((quality === BuiltInChords.Diminished || /[b♭]5/i.test(String(quality || '')) || /°|dim/i.test(String(quality || ''))) && !roman.includes('°')) roman += '°';
     else if (quality === BuiltInChords.Augmented && !roman.includes('+')) roman += '+';
 
     return roman;
@@ -2524,7 +2530,6 @@ export function getRomanAnalysis(
             return true;
         })
         : chord;
-    if (!chordInput || chordInput.length < 2) return null;
 
     const baseChord = (chordInput || []).filter(n => n && !n.isRest);
     if (baseChord.length < 2) return null;
@@ -3018,6 +3023,25 @@ export function getRomanAnalysis(
             };
             const diatonicPcSet = new Set<number>(scaleIntervals.map(iv => mod12(tonicPc + iv)));
 
+            // Guard: if the pitch classes form a complete diatonic diminished degree
+            // (e.g. ii° in minor = B-D-F-A in A minor), skip secondary vii°/x
+            // interpretation. The simpler diatonic reading is always preferred.
+            const _skipDiatonicDim = (() => {
+                try {
+                    for (let d = 0; d < scaleIntervals.length; d++) {
+                        if (!romans[d].includes('°')) continue;
+                        const degPc = mod12(tonicPc + scaleIntervals[d]);
+                        const triad = new Set([degPc, mod12(degPc + 3), mod12(degPc + 6)]);
+                        const halfDim = new Set([...triad, mod12(degPc + 10)]);
+                        const fullDim = new Set([...triad, mod12(degPc + 9)]);
+                        if ((pcs.every(pc => halfDim.has(pc)) || pcs.every(pc => fullDim.has(pc)) || pcs.every(pc => triad.has(pc)))
+                            && pcs.includes(degPc)) return true;
+                    }
+                    return false;
+                } catch { return false; }
+            })();
+
+            if (!_skipDiatonicDim)
             for (let i = 0; i < scaleIntervals.length; i++) {
                 const targetPc = mod12(tonicPc + scaleIntervals[i]);
                 const ltPc = mod12(targetPc - 1);
@@ -3258,9 +3282,19 @@ export function getRomanAnalysis(
     // Just like V/x, root-identification can incorrectly prefer the bass on diminished triads
     // (e.g. B°/D can be mis-read as Dm6 -> iii6 in Bb). If a strong candidate yields a
     // secondary leading-tone label, prefer it over a plain diatonic reading.
+    // BUT: if the current label is already a diatonic diminished degree (ii° in minor,
+    // vii° in major), do NOT override it — the simpler diatonic reading is correct.
     try {
         const pcs = [...new Set(baseChord.map(pitchClassOf).map(mod12))];
         if (pcs.length >= 3 && typeof baseRomanSymbol === 'string' && baseRomanSymbol && !baseRomanSymbol.includes('/')) {
+            // Guard: skip reinterpretation when the current label is a diatonic diminished degree.
+            const _isAlreadyDiatonicDim = (() => {
+                try {
+                    const r = String(baseRomanSymbol || '');
+                    return r.includes('°') && !r.includes('/');
+                } catch { return false; }
+            })();
+            if (!_isAlreadyDiatonicDim) {
             const candidates = identifyChordCandidates(filteredChord.length >= 2 ? filteredChord : baseChord);
             let bestSecondaryLt: { roman: string; score: number } | null = null;
             for (const c of candidates as any[]) {
@@ -3275,6 +3309,7 @@ export function getRomanAnalysis(
             if (bestSecondaryLt) {
                 baseRomanSymbol = bestSecondaryLt.roman;
             }
+            } // end: if (!_isAlreadyDiatonicDim)
         }
     } catch { /* ignore */ }
 
@@ -5573,6 +5608,45 @@ export function applyHarmonyRules(
                 const isConsonantToBass = (v === 4)
                     ? false
                     : (intervalMod12 === 0 || intervalMod12 === 3 || intervalMod12 === 4 || intervalMod12 === 7 || intervalMod12 === 8 || intervalMod12 === 9);
+
+                // ── 6/4 chord guard ──
+                // A perfect 4th above the bass is normally dissonant, but in a
+                // legitimate second-inversion triad (6/4 chord) the 4th is a
+                // chord tone of the parent triad, not a suspension.
+                // Example: D bass with G-B-D above → G major 6/4 (V6/4 in C).
+                // The G (a 4th above D) is the chord root, not a suspension.
+                let is64ChordTone = false;
+                if (v !== 4 && intervalMod12 === 5) {
+                    try {
+                        const notesAtBAll = (b.notes || []) as StaffNote[];
+                        // Use all sounding notes (including S) to identify the chord
+                        const fullCands = identifyChordCandidates(notesAtBAll);
+                        if (fullCands && fullCands.length) {
+                            const bestFull = fullCands[0];
+                            const fullType = String(bestFull?.type || '');
+                            // Only accept major/minor triads (not sus chords which are ambiguous)
+                            const isTriad = /^(Major|Minor)$/i.test(fullType);
+                            if (isTriad && bestFull?.root) {
+                                const rootPcFull = mod12((bestFull.root as any).noteIndex ?? mod12((bestFull.root as any).midi ?? 0));
+                                const bassPcB = mod12(bassAtB.midi ?? 0);
+                                // Second inversion: bass = 5th of the chord (interval 7 from root)
+                                const bassIntervalFromRoot = mod12(bassPcB - rootPcFull);
+                                if (bassIntervalFromRoot === 7) {
+                                    // S is a 4th above bass → check if S is the chord root
+                                    const sPcCheck = mod12(S.midi ?? 0);
+                                    const sIntervalFromRoot = mod12(sPcCheck - rootPcFull);
+                                    if (sIntervalFromRoot === 0) {
+                                        // S is the root of a 6/4 chord → definitely a chord tone
+                                        is64ChordTone = true;
+                                        debugLog('[ANALYSIS] detectSuspensions skip-64-chord-tone', { voice: v, sId: S.id, bAbs: b.absBeat, chordType: fullType, rootPc: rootPcFull });
+                                    }
+                                }
+                            }
+                        }
+                    } catch { /* ignore */ }
+                }
+                if (is64ChordTone) continue;
+
                 const isPotentialSixthSusp = (v === 4)
                     ? false
                     : (intervalMod12 === 8 || intervalMod12 === 9);
@@ -10945,7 +11019,7 @@ export function applyHarmonyRules(
                 anyN.ornamentMark = undefined;
                 if (ov === 'passing') { anyN.isPassing = true; anyN.ornamentMark = 'P'; }
                 else if (ov === 'neighbor') { anyN.isNeighbor = true; anyN.ornamentMark = 'v'; }
-                else if (ov === 'appoggiatura') { anyN.isAppoggiatura = true; anyN.ornamentMark = 'a'; }
+                else if (ov === 'appoggiatura') { anyN.isAppoggiatura = true; anyN.isSuspension = { type: 'app', manual: true }; anyN.ornamentMark = 'a'; }
                 else if (ov === 'anticipation') { anyN.isAnticipation = true; anyN.ornamentMark = 'ant'; }
                 else if (ov === 'escape') { anyN.isEscape = true; anyN.ornamentMark = 's'; }
                 else if (ov === 'suspension') { anyN.isSuspension = { type: 'susp', manual: true }; anyN.ornamentMark = 'r'; }

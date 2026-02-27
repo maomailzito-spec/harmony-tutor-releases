@@ -382,6 +382,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 for (let j = 1; j < base.length; j++) {
                     if (autoOverrideByAbsBeat.has(base[j].q) || autoRomanDisplayByAbsBeat.has(base[j].q)
                         || overrideByAbsBeat.has(base[j].q)) continue;
+                    // If this chord is already a secondary dominant in the global key
+                    // (e.g. V/V), don't relabel it as "I=degree".  The secondary-
+                    // function label is more informative and musically correct.
+                    const _globalRomanJ = String(base[j].roman || '');
+                    if (_globalRomanJ.includes('/')) continue;
                     const evJ = base[j].ev;
                     const evPrev = base[j - 1].ev;
                     if (!evJ?.notes?.length || !evPrev?.notes?.length) continue;
@@ -437,13 +442,28 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             for (let s = firstIdx; s <= lastIdx; s++) {
                                 if (autoRomanDisplayByAbsBeat.has(base[s].q) || overrideByAbsBeat.has(base[s].q)) continue;
                                 if (!base[s].ev?.notes?.length) continue;
+
+                                // Only label chords that contain at least one chromatic note
+                                // relative to the global key.  Diatonic chords (e.g. I in C)
+                                // should keep their natural label — they are not evidence
+                                // of a tonicization by themselves.
+                                let _chordHasChromatic = false;
+                                for (const _cn of (base[s].ev.notes || [])) {
+                                    const _cpc = (((_cn as any).midi ?? 0) % 12 + 12) % 12;
+                                    if (!_scale.has(_cpc)) { _chordHasChromatic = true; break; }
+                                }
+                                if (!_chordHasChromatic) continue;
+
                                 const stS = structuralNotes(base[s].ev.notes, ornOverrideMap);
                                 const rS = getRomanAnalysis(stS, K, false);
                                 if (rS) {
+                                    // Strip any secondary-function suffix (e.g. V/V → V) to prevent
+                                    // triple-nesting like V/V/IV.  We only want the LOCAL function in key K.
+                                    const localR = String(rS.roman || '').replace(/\/.*$/, '');
                                     if (compactTonicization) {
-                                        autoRomanDisplayByAbsBeat.set(base[s].q, s === firstIdx ? `[${degLabel}] ${rS.roman}` : rS.roman);
+                                        autoRomanDisplayByAbsBeat.set(base[s].q, s === firstIdx ? `[${degLabel}] ${localR}` : localR);
                                     } else {
-                                        const display = (s === j) ? `${rS.roman}=${degLabel}` : `${rS.roman}/${degLabel}`;
+                                        const display = (s === j) ? `${localR}=${degLabel}` : `${localR}/${degLabel}`;
                                         autoRomanDisplayByAbsBeat.set(base[s].q, display);
                                     }
                                 }
@@ -518,17 +538,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (protectedAbsBeats.has(bi.q)) continue;
 
                     const rr = getRomanAnalysis(structuralNotes(bi.ev?.notes || [], ornOverrideMap), tonicizedTonic, tonicizedIsMinor, { ornamentOverrides: ornOverrideRecord });
-                    const localRoman = String(rr?.roman || '');
+                    // Strip any secondary-function suffix to prevent nesting (e.g. vii°/V → vii°)
+                    const localRoman = String(rr?.roman || '').replace(/\/.*$/, '');
 
                     // Also support the common pre-dominant pattern in tonicized minor:
                     // ii° – V – i (e.g., in G: C#° – F# – Bm = ii°/iii – V/iii – i=iii).
                     // This is often more musically informative than reading the diminished chord
                     // as vii°/V when it does not actually resolve to V.
                     if (localRoman && /^ii/i.test(localRoman) && (localRoman.includes('°') || localRoman.includes('ø'))) {
-                        autoOverrideByAbsBeat.set(bi.q, {
-                            absBeat: bi.absBeat,
-                            roman: `${localRoman}/${targetRoman}`,
-                        });
+                        // Display-only — never overwrite the structural roman.
+                        autoRomanDisplayByAbsBeat.set(bi.q, `${localRoman}/${targetRoman}`);
                         continue;
                     }
 
@@ -591,6 +610,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         const lastFiguresBySystem = new Map<number, string[]>();
         const lastChordRootPcBySystem = new Map<number, number | null>();
         const lastChordTypeBySystem = new Map<number, string | null>();
+        const lastHadAppoggBySystem = new Map<number, number>();  // absBeat of last appoggiatura onset
 
         const indexByAbsBeat = new Map<number, number>();
         for (let i = 0; i < (timeline || []).length; i++) {
@@ -1161,10 +1181,99 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 if (!voiceSet.has(v)) lastStructural.delete(v);
             }
 
+            // ── APPOGGIATURA VERTICALIZATION PRE-SCAN ──
+            // When one or more notes at this beat are appoggiaturas (auto-detected
+            // or manually overridden), the target harmony is formed by REPLACING
+            // each appoggiatura with its resolution (next note in same voice)
+            // and treating every OTHER note as a structural chord tone.
+            // This prevents the auto-detection engine from incorrectly excluding
+            // real chord tones that happen to carry ornament flags.
+            const _appoggResolutions = new Map<number, any>();
+            for (const _an of fullNotes) {
+                if (!_an || _an.isRest) continue;
+                const _av = ((_an as any)?.voice ?? 1) as number;
+                let _isAppogg = !!(_an as any).isAppoggiatura;
+                if (!_isAppogg && (_an as any).ornamentOverride === 'appoggiatura') _isAppogg = true;
+                if (!_isAppogg && ornOverrideMap.size > 0) {
+                    const _ovId = ornOverrideMap.get(_an.id);
+                    if (_ovId === 'appoggiatura') { _isAppogg = true; }
+                    else {
+                        const _am = Number(_an.midi);
+                        if (Number.isFinite(_am)) {
+                            const _ack = `${_am}-${_an.measureIndex ?? -1}-${_an.beat ?? -1}`;
+                            if (ornOverrideMap.get(_ack) === 'appoggiatura') _isAppogg = true;
+                        }
+                    }
+                }
+                if (!_isAppogg) continue;
+                // Look ahead: find the resolution note (next timeline event, same voice)
+                if (eventIndex + 1 < timelineFiltered.length) {
+                    const _nxEv = timelineFiltered[eventIndex + 1] as any;
+                    const _nxNotes = (_nxEv?.notes || []) as any[];
+                    const _rn = _nxNotes.find(
+                        (nn: any) => nn && !nn.isRest && ((nn.voice ?? 1) as number) === _av
+                    );
+                    if (_rn) _appoggResolutions.set(_av, _rn);
+                }
+            }
+            const _hasAppoggAtBeat = _appoggResolutions.size > 0;
+
+
             // Update with any currently-active non-ornamental notes.
             for (const n of fullNotes) {
                 if (!n || n.isRest) continue;
                 const v = (n?.voice ?? 1) as number;
+
+                // ── APPOGGIATURA VERTICALIZATION ──
+                // When there's an appoggiatura at this beat, build the target chord:
+                // • appoggiatura voice → resolution note
+                // • other voices → structural (bypass auto-detection flags)
+                // Only user MANUAL overrides on other voices are still respected.
+                if (_hasAppoggAtBeat) {
+                    if (_appoggResolutions.has(v)) {
+                        // This voice carries the appoggiatura → use resolution note.
+                        // Create a clean copy so getRomanAnalysis doesn't filter it.
+                        const _rn = _appoggResolutions.get(v);
+                        lastStructural.set(v, {
+                            ..._rn,
+                            isPassing: false, isNeighbor: false,
+                            isAppoggiatura: false, isAnticipation: false,
+                            isEscape: false, isSuspension: undefined,
+                        });
+                    } else {
+                        // Other voices: respect only USER manual overrides
+                        let _manualExclude = false;
+                        if (n.ornamentOverride && n.ornamentOverride !== 'structural' && n.ornamentOverride !== 'appoggiatura') {
+                            _manualExclude = true;
+                        } else if (ornOverrideMap.size > 0) {
+                            const _ov1 = ornOverrideMap.get(n.id);
+                            if (_ov1 && _ov1 !== 'structural' && _ov1 !== 'appoggiatura') {
+                                _manualExclude = true;
+                            } else {
+                                const _m2 = Number(n.midi);
+                                if (Number.isFinite(_m2)) {
+                                    const _ck2 = `${_m2}-${n.measureIndex ?? -1}-${n.beat ?? -1}`;
+                                    const _ov2 = ornOverrideMap.get(_ck2);
+                                    if (_ov2 && _ov2 !== 'structural' && _ov2 !== 'appoggiatura') _manualExclude = true;
+                                }
+                            }
+                        }
+                        if (_manualExclude) {
+                            lastStructural.delete(v);
+                        } else {
+                            // Insert a CLEAN copy: strip all auto-detection NCT
+                            // flags so getRomanAnalysis treats this as a pure
+                            // structural chord tone in the verticalization.
+                            lastStructural.set(v, {
+                                ...n,
+                                isPassing: false, isNeighbor: false,
+                                isAppoggiatura: false, isAnticipation: false,
+                                isEscape: false, isSuspension: undefined,
+                            });
+                        }
+                    }
+                    continue;
+                }
 
                 // In compound meters (6/8, 9/8, 12/8), bass lines are often written as
                 // arpeggiations on the internal 8th/16th grid. Those short bass notes should
@@ -1195,6 +1304,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const s = (n as any)?.isSuspension;
                         if (s && typeof s.fromAbsBeat === 'number' && Math.abs((s.fromAbsBeat as number) - Number(event.absBeat)) < 1e-3) {
                             lastStructural.delete(v);
+                        }
+                    } catch { /* ignore */ }
+                    // Appoggiatura: replace this voice in the structural snapshot with
+                    // the resolution note (next note in same voice) so the chord label
+                    // reflects the target harmony — just like suspensions include
+                    // the resolved note. Without this, removing the appoggiatura leaves
+                    // an incomplete chord (e.g. G-D instead of G-B-D → V).
+                    try {
+                        if ((n as any).isAppoggiatura && eventIndex + 1 < timelineFiltered.length) {
+                            const _nextEv = timelineFiltered[eventIndex + 1] as any;
+                            const _nextNotes = (_nextEv?.notes || []) as any[];
+                            const _resolNote = _nextNotes.find((nn: any) => nn && !nn.isRest && ((nn.voice ?? 1) as number) === v);
+                            if (_resolNote) {
+                                lastStructural.set(v, _resolNote);
+                                continue; // skip ornament-delete — voice uses resolution note
+                            }
                         }
                     } catch { /* ignore */ }
                     // For USER-overridden ornaments: remove voice from structural snapshot entirely.
@@ -1242,6 +1367,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
                 return true;
             });
+
             const fallbackHarmonicNotes = (harmonicNotes.length >= 2)
                 ? harmonicNotes
                 : (fullNotes || []).filter((n: any) => {
@@ -1342,8 +1468,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 .sort((a: any, b: any) => (a.midi ?? 0) - (b.midi ?? 0))[0];
             const bassPc = bassNote && Number.isFinite(bassNote.midi) ? (((bassNote.midi % 12) + 12) % 12) : null;
 
-            // If the harmonic content doesn't change (only ornaments changed), skip.
-            const harmonicSig = signatureFromNotes(baseHarmonicNotes);
+            // Use analysisNotes (suspension-filtered) for the harmonic signature.
+            // baseHarmonicNotes still includes held/suspended tones, which can make
+            // two genuinely different chords look identical by pitch-class set.
+            const harmonicSig = signatureFromNotes(analysisNotes);
             const fullSig = signatureFromNotes(fullNotes || []);
             if (!harmonicSig || baseHarmonicNotes.length < 2) {
                 return;
@@ -1370,6 +1498,28 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     return false;
                 }
             })();
+
+            // Detect if this event has an appoggiatura onset (used to suppress
+            // the label on the *next* event where the appoggiatura resolves).
+            let hasAppoggiaturaOnsetHere = false;
+            let isAppoggResolSuppressible = false;
+            let isAppoggiaturaResolution = false;
+
+            try {
+                hasAppoggiaturaOnsetHere = (fullNotes || []).some((n: any) => !!(n && !n.isRest && n.isAppoggiatura));
+
+                // If the previous event had an appoggiatura and the current event is
+                // its resolution (within 2 beats), suppress the label because the
+                // harmony is already labeled at the appoggiatura beat.  The resolved
+                // note merely completes the chord — no new label is needed.
+                const lastAppBeat = lastHadAppoggBySystem.get(systemIndex) ?? -Infinity;
+                isAppoggiaturaResolution = (absBeat - lastAppBeat > 0) && (absBeat - lastAppBeat <= 2 + 1e-6)
+                    && !hasAppoggiaturaOnsetHere;
+                // Only suppress if bass didn't change (a bass change = real harmony change).
+                const prevBassPcHere = lastBassPcBySystem.get(systemIndex);
+                isAppoggResolSuppressible = isAppoggiaturaResolution
+                    && (prevBassPcHere == null || bassPc == null || prevBassPcHere === bassPc);
+            } catch { /* ignore */ }
 
             const shouldSuppressAsCompletion = (() => {
                 try {
@@ -1432,7 +1582,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const r = getRomanAnalysis((analysisNotesForNaming || []) as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
                     if (r?.roman) return String(r.roman);
                     const rFull = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
-                    return rFull?.roman ? String(rFull.roman) : '';
+                    if (rFull?.roman) return String(rFull.roman);
+                    return '';
                 } catch {
                     return '';
                 }
@@ -1467,8 +1618,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             } catch { /* ignore */ }
 
-            const hasHiddenChange = !!(fullSig && prevSig && fullSig !== prevSig);
-            if (!hasSuspensionOnsetHere && !hasHiddenChange && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion)) {
+            // A "hidden change" means the full vertical sonority changed even though
+            // the structural-note signature is the same. This catches e.g. bass
+            // movement under sustained upper voices. BUT: if the only difference
+            // is an ornamental note (passing/neighbor) entering or leaving, that
+            // is NOT a real harmonic change — the structural notes are identical.
+            // So we only flag hasHiddenChange when the full sig differs AND the
+            // structural (harmonic) sig also differs from its previous value.
+            const hasHiddenChange = !!(fullSig && prevSig && fullSig !== prevSig && harmonicSig !== prevSig);
+
+            // If user has manually set an ornament override (suspension, appoggiatura, etc.),
+            // never auto-suppress — the user's intent takes priority.
+            const hasManualOrnOverride = (fullNotes || []).some((n: any) =>
+                n && !n.isRest && n.ornamentOverride && n.ornamentOverride !== 'structural');
+
+            if (!hasSuspensionOnsetHere && !hasManualOrnOverride && !hasHiddenChange && !overrideByAbsBeat.has(qAbs(event.absBeat)) && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion || isAppoggResolSuppressible)) {
+
                 const prevRoman = lastRomanBySystem.get(systemIndex) || '';
                 if (previewRoman && prevRoman && previewRoman !== prevRoman) {
                     // Real harmonic change -> do not suppress.
@@ -1496,6 +1661,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             lastSigBySystem.set(systemIndex, harmonicSig);
             lastCtxBySystem.set(systemIndex, ctxKey);
             lastBassPcBySystem.set(systemIndex, bassPc);
+            if (hasAppoggiaturaOnsetHere) lastHadAppoggBySystem.set(systemIndex, Number(event.absBeat));
+            else if (!isAppoggiaturaResolution) lastHadAppoggBySystem.delete(systemIndex);
 
             // L2: figures depend only on the actual vertical intervals above the real bass.
             // Never derive/overwrite them from roman/symbol/quality.
@@ -1515,6 +1682,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     roman = r.roman;
                     isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
                 }
+
 
                 // Rescue: if naming-filter collapses a triad to a dyad, vii° can be a false positive.
                 // Prefer the analysis of the fuller verticality when it yields a plausible dominant/tonic label.
@@ -1974,7 +2142,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
                             return /m\(maj7\)|mmaj7|minmaj7/i.test(sym);
                         })();
-                        if ((!roman || roman === prevRoman) && !isMinorMajor7) {
+                        // Never clear a secondary dominant (V/x) or other slash-roman:
+                        // these represent real harmonic information, not a suspension artifact.
+                        const isSlashRoman = typeof roman === 'string' && roman.includes('/');
+                        if ((!roman || roman === prevRoman) && !isMinorMajor7 && !isSlashRoman) {
                             roman = '';
                             figures = [];
                             symbol = '';
@@ -2106,17 +2277,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const autoDisp = getNear(autoRomanDisplayByAbsBeat, a);
                     if (autoDisp) {
                         const s = String(autoDisp || '');
-                        // Allow secondary function labels (V/IV, I=IV, ii/vi, etc.)
-                        // to replace even tonic I/i labels, since these indicate
-                        // a tonicization where I is re-interpreted as V of the new key.
-                        const isSecondaryFn = s.includes('/') || s.includes('=');
-                        if (!isCurrentlyTonicForDisp || isSecondaryFn) {
-                            if (s.includes('/') && !s.includes('=')) {
-                                roman = s;
-                                romanDisplay = undefined;
-                            } else {
-                                romanDisplay = s;
-                            }
+                        // Never replace a tonic label (I/i) — the tonic chord is not
+                        // a secondary function; it should always show as I.
+                        if (!isCurrentlyTonicForDisp) {
+                            romanDisplay = s;
                         }
                     }
                 }

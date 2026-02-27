@@ -190,3 +190,57 @@ Checklist estensioni:
 - Ogni richiesta nuova va classificata: `MUST v1` / `SHOULD v1.1` / `LATER`.
 - Se aggiungi una MUST, deve uscire una MUST equivalente (timebox invariato), oppure la timeline si allunga esplicitamente.
 - Revisione una volta a settimana (non giornaliera).
+
+## 6) Progetto in divenire: Apprendimento statistico per l'analisi
+
+**Stato:** futuro / in valutazione
+
+### Obiettivo
+Arricchire l'analisi armonica rule-based con **hint statistici** estratti dal corpus di repertorio (`tests/`), in modo controllato e ispezionabile.
+
+### Cosa si può apprendere dal corpus
+- **Soglie ornamenti** — posizione metrica, intervalli e contesto più frequenti per note di passaggio, volta, appoggiature, anticipazioni e note di fuga.
+- **Pesi euristici** — calibrare i criteri di riconoscimento su dati reali anziché soglie fisse.
+- **Progressioni armoniche attese** — catene di accordi più probabili per stile/periodo, usate come tiebreaker quando le regole producono risultati ambigui.
+
+### Architettura proposta
+1. Estendere `buildDefaultStyleProfile.ts` con una sezione `analysisHints`:
+   - frequenza ornamenti per posizione metrica e tipo di moto
+   - intervalli ornamentali tipici per voce
+   - matrice di transizione progressioni armoniche
+2. `applyHarmonyRules` consulta `analysisHints` come **disambiguatore**, non come fonte primaria.
+3. Le regole base restano deterministiche → stabilità garantita.
+4. L'utente controlla il corpus → controlla cosa impara. Nessun "black box".
+
+### Vantaggi
+- Nessun modello ML opaco: tutto è un JSON ispezionabile.
+- Miglioramento incrementale: più brani = hint più affidabili.
+- Retrocompatibilità: senza hint il sistema funziona come prima.
+
+### Piano di unificazione (prossimo passo concreto)
+
+Attualmente esistono due script separati:
+| Script | Output | Estrae |
+|--------|--------|--------|
+| `buildDefaultStyleProfile.ts` | `defaultStyleProfile.json` | Moti vocali (step, skip, leap, commonTone) |
+| `extract-progression-stats.ts` | `progressionStats.json` | Bigrammi/trigrammi armonici (con harmonyOverrides) |
+
+**Obiettivo:** fondere tutto in un **unico pipeline** che produce un solo `styleProfile.json` completo.
+
+#### Architettura target
+1. **Funzione pura** `buildStyleProfile(files: ProjectFile[])` in `src/engine/styleProfileBuilder.ts`:
+   - Estrae moti vocali + bigrammi/trigrammi + soglie ornamenti.
+   - Legge: note, `harmonyOverrides`, `ornamentOverrides`, `analysisContexts`.
+   - Restituisce un oggetto `StyleProfile` tipizzato.
+2. **Wrapper CLI** (`scripts/buildStyleProfile.ts`): legge i file da `tests/`, chiama la funzione, salva il JSON.
+3. **Handler IPC** (`electron/main.js` → `build-style-profile`): il bottone "Carica Repertorio" nell'app richiama la stessa funzione via IPC, rigenera il profilo al volo senza uscire dall'editor.
+4. **Output unico** `src/data/styleProfile.json`:
+   - `voiceMotion`: statistiche moti per voce (da `buildDefaultStyleProfile`)
+   - `progressions`: bigrammi/trigrammi (da `extract-progression-stats`)
+   - `analysisHints`: soglie ornamenti per posizione metrica (futuro)
+   - `meta`: timestamp, numero file analizzati, versione schema
+
+#### Vincoli
+- Il profilo resta un JSON piatto, ispezionabile e versionabile.
+- Senza profilo il sistema funziona identicamente (fallback a regole pure).
+- L'utente controlla il corpus → controlla cosa impara.

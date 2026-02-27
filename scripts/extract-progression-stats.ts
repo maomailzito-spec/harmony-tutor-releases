@@ -49,6 +49,7 @@ for (const filePath of files) {
     const contexts = proj.analysisContexts || [];
 
     const ornamentOverrides = proj.ornamentOverrides || [];
+    const harmonyOverrides: any[] = proj.harmonyOverrides || [];
     const res = applyHarmonyRules(notes as any, keySig as any, tonic, isMinor, contexts, ts as any, undefined, ornamentOverrides);
     const analyzed: any[] = (res as any).analyzedNotes || notes;
 
@@ -105,6 +106,18 @@ for (const filePath of files) {
           let label = result.roman;
           if (result.figures && result.figures.length > 0) {
             label += result.figures.join('');
+          }
+          // Apply user harmony overrides (prefer manual corrections over analysis)
+          const [_mi, _bt] = key.split(':').map(Number);
+          const absBeat = _mi * beatsPerMeasure + (_bt - 1);
+          const hOverride = harmonyOverrides.find((o: any) =>
+            Math.abs(Number(o?.absBeat) - absBeat) < 0.05 && typeof o?.roman === 'string' && o.roman.length > 0
+          );
+          if (hOverride) {
+            label = hOverride.roman;
+            if (Array.isArray(hOverride.figures) && hOverride.figures.length > 0) {
+              label += hOverride.figures.join('');
+            }
           }
           progression.push(label);
         }

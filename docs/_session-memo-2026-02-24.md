@@ -221,6 +221,246 @@ L'utente ha verificato:
 
 ## Comandi utili
 
+### Session continuazione (stessa giornata)
+
+#### Fix applicati nella 2a parte della sessione:
+
+**Fix 1 — Triple-nesting eliminato (useHarmonyLabels.ts ~L441, ~L537)**
+- Cadential detector: `rS.roman.replace(/\/.*$/, '')` → strip suffisso secondario
+- V/target lookahead: `localRoman.replace(/\/.*$/, '')` → strip suffisso secondario
+- ii°/target: spostato da `autoOverrideByAbsBeat` (strutturale) a `autoRomanDisplayByAbsBeat` (display-only)
+
+**Fix 2 — Tonica protetta (useHarmonyLabels.ts ~L2115)**
+- Rimosso bypass `isSecondaryFn` che permetteva V/IV di sovrascrivere I
+- Ora `isCurrentlyTonicForDisp` blocca SEMPRE il display override su I/i
+
+**Fix 3 — Cadential detector solo cromatici (useHarmonyLabels.ts ~L441)**
+- Aggiunto `_chordHasChromatic` check: solo accordi con almeno una nota cromatica ricevono label secondaria
+- Risultato: C in C major → sempre I, mai V/IV
+
+**Fix 4 — hideLabelAbsBeats (GrandStaffEditor.tsx ~L7270)**
+- `!sigHere` → `continue` anziché `add` (non nascondere beat senza label)
+- `sameAsPrev || sameAsNext` → `sameAsPrev && sameAsNext` (nascondere solo se identico a ENTRAMBI i vicini)
+
+**Fix 5 — harmonicSig da analysisNotes (useHarmonyLabels.ts ~L1360)**
+- `harmonicSig = signatureFromNotes(analysisNotes)` anziché `signatureFromNotes(baseHarmonicNotes)`
+- Scopo: se un ritardo rende il PC-set identico al precedente, la rimozione del ritardo fa apparire la label
+
+#### ⚠️ PROBLEMA ANCORA APERTO: label mancanti a m8 b4 e m12 b4
+L'utente conferma che i fix 1-4 funzionano (label triple sparite, analisi coerente).
+Il fix 5 NON ha risolto le label mancanti.
+
+**Diagnosi incompleta** — possibili cause ancora da indagare:
+1. `shouldSuppressAsCompletion` potrebbe sopprimere (se 2→3 note = "completion" del triade)
+2. `hasSuspensionOnsetHere` = false (il ritardo è in lastStructural, non analyzedNotes)
+3. La nota "falso ritardo" potrebbe NON avere `isSuspension` ma essere semplicemente uguale alla nota precedente → `lastStructural` mantiene la nota vecchia → PC-set invariato
+
+**Punti chiave del codice di soppressione:**
+- L1487: `if (!hasSuspensionOnsetHere && !hasHiddenChange && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion))`
+- L1489: `if (previewRoman && prevRoman && previewRoman !== prevRoman)` → rescue se Roman diverso
+- `hasSuspensionOnsetHere` cerca in `analyzedNotes` (non lastStructural) per `isSuspension.fromAbsBeat === event.absBeat`
+- `shouldSuppressAsCompletion` sopprime quando 2-note shell → 3-note triade (e.g. vi6 shell → vi6 full)
+- `harmonicSig` = `signatureFromNotes(analysisNotes)` (dopo fix 5)
+- `isNonChordToneAtLabelEvent` su nota con `isSuspension.fromAbsBeat === currentBeat` → return true → `lastStructural.delete(v)`
+- `analysisNotes` = `harmonicNotesNoSuspAtThisBeat` se >= 2, altrimenti fallback a `harmonicNotes`
+
+**Approccio per il debug:**
+- Aggiungere `console.warn` temporaneo alla L1487 per absBeat vicini a 31 (m8 b4) e 47 (m12 b4)
+- Stampare: `prevSig`, `harmonicSig`, `fullSig`, `hasSuspensionOnsetHere`, `shouldSuppressAsCompletion`, `previewRoman`, `prevRoman`, `baseHarmonicNotes.length`, `analysisNotes.length`
+
+### DEBUG LOG GIÀ INSERITO (useHarmonyLabels.ts ~L1486)
+Un `console.warn` è attivo per absBeat 27-48. Stampa tutti i valori critici.
+L'utente deve: `npm run build && npm run electron:dev`, aprire DevTools (Cmd+Shift+I), 
+caricare "Corale 1D Bach" e leggere le righe `[HarmLabel] m8 b4` e `[HarmLabel] m12 b4`.
+
+### STATO ATTUALE CODICE (dopo tutti i fix della 2a parte sessione)
+
+**useHarmonyLabels.ts fix applicati:**
+1. ~L441: cadential detector strip suffix `.replace(/\/.*$/, '')` + solo accordi cromatici
+2. ~L537: ii°/target → autoRomanDisplayByAbsBeat (display-only, non strutturale)  
+3. ~L1360: `harmonicSig = signatureFromNotes(analysisNotes)` (non baseHarmonicNotes)
+4. ~L2115: tonica I/i MAI sovrascritta da auto display (rimosso bypass isSecondaryFn)
+
+**GrandStaffEditor.tsx fix applicato:**
+- ~L7270: `!sigHere → continue`, `sameAsPrev && sameAsNext` (non ||)
+
+**File test:** `tests/Corale 1D Bach.htp` e `scripts/Corale 1D Bach.json`
+
+### PROSSIMO PASSO
+Scrivere uno script di debug standalone (tipo `scripts/_debug_corale1d_m8_v3.ts`) che:
+1. Carica `scripts/Corale 1D Bach.json`
+2. Replica la logica `lastStructural` + `isNonChordToneAtLabelEvent` del hook
+3. Stampa per ogni beat: lastStructural content, harmonicNotes, analysisNotes, 
+   harmonicSig, prevSig, shouldSuppressAsCompletion, previewRoman
+4. Identifica ESATTAMENTE perché m8 b4 e m12 b4 vengono soppressi
+
+### ARCHITETTURA DEL HOOK useHarmonyLabels.ts (numeri riga aggiornati post-fix)
+- L67: compactTonicization preference
+- L119: harmonyLabelsBySystem = useMemo(...)
+- L292-293: autoOverrideByAbsBeat, autoRomanDisplayByAbsBeat
+- L361-458: Cadential tonicization detector (span detection)
+- L460-560: V/target lookahead
+- L819-1015: isNonChordToneAtLabelEvent() function
+- L1013: isSuspension.fromAbsBeat === absBeat → return true (nota=ornamento)
+- L1086-1103: signatureFromNotes() → pitch-class set sorted
+- L1171: lastStructural = lastStructuralByVoiceBySystem.get(systemIndex)
+- L1204: if (isNonChordToneAtLabelEvent(n, event.absBeat)) → skip note
+- L1209-1212: suspension onset → lastStructural.delete(v) 
+- L1237: lastStructural.set(v, n) — update structural for voice
+- L1240-1260: harmonicNotes = Array.from(lastStructural.values()).filter(...)
+- L1262-1280: fallbackHarmonicNotes (2+ notes fallback chain)
+- L1282-1290: baseHarmonicNotes (2+ notes fallback chain)
+- L1296-1302: harmonicNotesNoSuspAtThisBeat = fallbackHarm.filter (remove susp onset)
+- L1305: analysisNotes = harmNotesNoSusp if >=2 else harmonicNotes
+- L1360: harmonicSig = signatureFromNotes(analysisNotes) [FIXED: was baseHarmonicNotes]
+- L1361: fullSig = signatureFromNotes(fullNotes)
+- L1362: if (!harmonicSig || baseHarmonicNotes.length < 2) return; — early exit
+- L1431-1443: hasSuspensionOnsetHere — checks analyzedNotes for isSuspension.fromAbsBeat
+- L1486-1500: ── DEBUG console.warn ATTIVO per absBeat 27-48 ──
+- L1502: if (!hasSuspOnset && !hasHiddenChg && (prevSig===harmSig || shouldSuppress))
+- L1504: if (previewRoman !== prevRoman) → rescue
+- L1506-1515: suppress → return (hiddenMarker or silent skip)
+- L2048-2060: autoOverrideByAbsBeat application (overwrites roman structurally)
+- L2110-2130: autoRomanDisplayByAbsBeat application (romanDisplay only, never roman)
+
+### NOTA: Debug log console.warn da RIMUOVERE dopo diagnosi
+Il console.warn a ~L1486 per absBeat 27-48 è temporaneo.
+Va rimosso una volta identificata e risolta la causa delle label mancanti.
+
+### RISULTATI DEBUG SCRIPT v3 (standalone)
+Lo script standalone (`npx tsx scripts/_debug_corale1d_m8_v3.ts`) mostra che:
+- m8 b4 (abs=31): `prevSig="0-4-7-9"`, `harmonicSig="2-6-9"` → DIFF → V/V calcolato e NON soppresso
+- Le note: A4(v1), F4(v2,midi66→F#?), D4(v3), D3(v4) → V/V correttamente
+- Il problema NON è nella logica di soppressione nello standalone
+
+**DISCREPANZA**: la logica standalone produce V/V correttamente, ma la UI lo nasconde.
+Possibili cause nell'hook LIVE:
+1. `filterTimelineForHarmonyLabels` può essere diverso nella UI (la UI usa `timelineForLabels` dal componente)
+2. Il rendering in GrandStaffEditor usa `hideLabelAbsBeats` che potrebbe nascondere il beat
+3. L'hook potrebbe calcolare `analysisNotes` con un set diverso di note (dipende da analyzedNotes dal componente)
+4. Il `autoRomanDisplayByAbsBeat` potrebbe interagire con il rendering e nascondere il label
+5. Il console.warn debug inserito nell'hook dovrebbe chiarire tutto → L'UTENTE DEVE RUNNARE L'APP
+
+### ⚠️ RISULTATI DEBUG IN-APP (24 febbraio, sera)
+L'utente ha eseguito l'app e il console.warn mostra:
+- **m8 b4 (abs=31): shouldSuppress=false, previewR=V/V, prevR=vi → NESSUNA SOPPRESSIONE NELL'HOOK**
+- **m12 b4 (abs=47): shouldSuppress=false, previewR=V, prevR=V/V → NESSUNA SOPPRESSIONE**
+- Le label VENGONO GENERATE nell'hook ma NON APPAIONO nell'UI
+
+**CONCLUSIONE: Il problema è nel RENDERER (GrandStaffEditor.tsx), NON nell'hook**
+
+### ⚠️ Dove cercare nel renderer (GrandStaffEditor.tsx):
+1. **L7618-7625**: `isHiddenMarker` — se `hiddenMarker: true` sul label, viene nascosto
+   - `showRoman = showRomanAnalysis && !!lbl.roman && !isHiddenMarker && !hideLabelAbsBeats.has(lblAbsQ)`
+2. **L7220-7290**: `hideLabelAbsBeats` Set — se `isPassing` note a quel beat E sig uguale entrambi vicini
+3. **L7654**: `romanShown = lbl.romanDisplay ?? lbl.sequenceRomanFunctional ?? lbl.sequenceRoman ?? lbl.roman`
+   - Se romanDisplay è settato ma vuoto, potrebbe nascondere?
+4. **L7748**: hold-line renderer `isHidden = hiddenMarker || hideLabelAbsBeats.has(abs)`
+5. **L7702**: `{showRoman ? (` — solo se showRoman è true
+
+### ⚠️ SCOPERTA CRITICA (24 feb, sera tardi)
+Il `[Renderer]` debug log NON APPARE per abs=31 e abs=47.
+Questo significa che il label NON VIENE MAI PUSHATO in `labelsBySystem`.
+Il console.warn dell'hook appare (previewR=V/V, shouldSuppress=false) → il label supera
+il check di soppressione L1502, MA qualcosa tra L1530 e il push finale (~L2200) lo ferma.
+
+**Path da L1530 al push finale:**
+1. L1530: lastSigBySystem.set() — aggiorna le signature
+2. L1538: `let figures = computeFiguredBassFromNotes(...)` 
+3. L1541: `let roman = ''` — inizia vuoto, poi viene calcolato
+4. L1548-1560: `getRomanAnalysis(analysisNotesForNaming, ...)` → roman = V/V
+5. Da qui in poi ci sono molti try/catch blocchi per rescue/override
+6. eventualmente si arriva a L~2148 `if (!roman && !symbol && !(figures && figures.length)) return;`
+   - Se roman diventa vuoto per qualche rescue → return (niente push)
+7. Poi c'è il `allUserOrn` check — se tutte le onset notes sono ornamenti user → hiddenMarker
+8. Infine il push a labelsBySystem
+
+**POSSIBILE COLPEVOLE**: una delle rescue/override tra L1560 e L2148 potrebbe azzerare `roman`.
+O il `autoOverrideByAbsBeat` / `autoRomanDisplayByAbsBeat` potrebbe interferire.
+
+**AZIONE**: Spostare il console.warn debug DOPO il calcolo di `roman` finale (prima del push),
+oppure aggiungere un secondo console.warn appena prima di L2148 per stampare roman/symbol/figures.
+
+### CODICE DA LEGGERE (numeri riga aggiornati con debug log):
+- L1486-1500: console.warn DEBUG (prima della soppressione)
+- L1502: if (!hasSuspOnset && !hasHiddenChg && (prevSig===harmSig || shouldSuppress))
+- L1530: lastSigBySystem.set()
+- L1538: figures calc
+- L1541: let roman = ''
+- L1548: getRomanAnalysis → roman
+- L~2148: if (!roman && !symbol && !(figures...)) return; — IL GATE FINALE
+- L~2160: allUserOrn check → hiddenMarker
+- L~2200: push a labelsBySystem
+
+### ⚠️ DA RIMUOVERE DOPO DEBUG
+- console.warn in useHarmonyLabels.ts (~L1493) — `[HarmLabel]` per absBeat 27-48
+- console.warn in useHarmonyLabels.ts (~L2168) — `[HarmLabel-GATE]` per absBeat 27-48
+- console.warn in GrandStaffEditor.tsx (~L7623) — `[Renderer]` per absBeat 27-48
+
+### 🔴 TROVATA LA CAUSA FINALE (24 feb, notte)
+
+**DIAGNOSI CONFERMATA:**
+Il `[HarmLabel-GATE]` per abs=31 mostra:
+```
+roman="" symbol="" figures=[] romanDisplay="I=ii" willReturn=true
+```
+- `roman` è VUOTO → il gate `if (!roman && !symbol && !figures.length) return;` lo uccide
+- `romanDisplay="I=ii"` è settato ma inutile (il label muore prima di essere pushato)
+
+**IL COLPEVOLE**: L'override `autoOverrideByAbsBeat` al ~L2060 sovrascrive `roman`.
+Ma in realtà, l'issue è che `roman` viene calcolato DENTRO un try-catch (L1547-L1727) e 
+probabilmente qualcosa nel blocco di rescue/override lo svuota.
+
+OPPURE: l'`autoRomanDisplayByAbsBeat` è settato su abs=31 come "I=ii" (risoluzione V/ii).
+La fonte è il V/target lookahead (~L516-522) che setta `autoRomanDisplayByAbsBeat.set(bk.q, 'I=ii')`.
+Ma `bk` sarebbe il chord di destinazione (la risoluzione), non V/target stesso...
+
+**PROBLEMA**: V/target lookahead interpreta:
+- j = chord V/ii (quelche beat) 
+- k = arrival chord "ii" → mette "I=ii" display su bk.q
+Ma bk.q potrebbe corrispondere ad abs=31! Se il V/ii è a un beat e la risoluzione (ii = Dm) è a abs=31...
+No, abs=31 è D maggiore (V/V), non Dm (ii).
+
+**POSSIBILITÀ PIÙ PROBABILE**: 
+Il cadential detector span a ~L436-454 (dopo il fix cromatico) mette una display label
+su abs=31. Ma il fix cromatico dovrebbe impedire label su accordi puramente diatonici.
+D-F#-A ha F# (cromatico in C) → IL CADENTIAL DETECTOR LO ETICHETTA come `localR/${degLabel}`.
+Ma il cadential detector calcola `localR` nella chiave K (tonicizzata), dove potrebbe dare "I".
+Poi il display diventa `I/${degLabel}` = "I/ii" o simile.
+
+**FLUSSO ESATTO DEL BUG per abs=31:**
+1. V/target lookahead trova V/ii pattern
+2. Resolution chord (ii = Dm) è a qualche beat vicino → mette "I=ii" display su quel beat  
+3. Il cadential detector span (L436-454) ANCHE processa abs=31
+4. `autoRomanDisplayByAbsBeat.set(base[s].q, ...)` sovrascrive con display span
+5. Ma il cadential detector ORA skip non-cromatici... ma F# è cromatico → processa
+6. `localR` in key K = I (se K è la chiave di D) → display = "I=ii" (j===s → `localR=degLabel`)
+
+**FIX NECESSARI:**
+1. Il gate `if (!roman && !symbol && !figures.length) return;` (L2168) dovrebbe anche 
+   considerare `romanDisplay` — se c'è un romanDisplay non vuoto, il label dovrebbe passare
+2. OPPURE: il `roman` non dovrebbe MAI essere svuotato — il bug è nel codice che lo svuota
+3. Aggiungere debug per tracciare DOVE `roman` viene modificato tra L1548 e L2168
+
+### CODICE CRITICO (numeri riga aggiornati):
+- L241-256: getNear() — tolleranza EPS ≈ 0.005 (molto piccola, non confonde beat)
+- L436-454: Cadential detector span — usa autoRomanDisplayByAbsBeat (display-only)
+- L515-525: V/target lookahead resolution — `autoRomanDisplayByAbsBeat.set(bk.q, 'I=ii')`
+- L1540: `let roman = ''` — inizia vuoto
+- L1547-1727: Grande try-catch che calcola roman/symbol
+- L1723: `} catch (_) { // ignore }` — inner catch
+- L1727: `} catch (_) { // ignore }` — outer catch → ORA con debug log
+- L2060: `if (auto.roman !== undefined) roman = auto.roman;` — autoOverrideByAbsBeat
+- L2125: `romanDisplay = autoRomanDisplayByAbsBeat` — display-only override
+- L2168: `if (!roman && !symbol && !(figures...)) return;` — GATE FINALE
+
+### DEBUG LOG ATTIVI (da rimuovere dopo fix):
+- useHarmonyLabels.ts ~L1493: `[HarmLabel]` per abs 27-48
+- useHarmonyLabels.ts ~L2168: `[HarmLabel-GATE]` per abs 27-48
+- useHarmonyLabels.ts ~L1723: `[HarmLabel-CATCH-OUTER]` per abs 27-48
+- useHarmonyLabels.ts ~L1727: `[HarmLabel-CATCH-INNER]` per abs 27-48
+- GrandStaffEditor.tsx ~L7623: `[Renderer]` per abs 27-48
+
 ```bash
 # Build + run Electron
 npm run build && npm run electron:dev
