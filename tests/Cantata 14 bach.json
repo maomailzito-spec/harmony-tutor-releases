@@ -21,6 +21,166 @@
     {
       "noteId": "midi-287-64080-60",
       "type": "passing"
+    },
+    {
+      "noteId": "midi-21-6720-48",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-50-12000-69",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-49-12000-58",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-46-11520-65",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-47-11520-70",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-48-11520-70",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-81-16800-65",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-78-16320-67",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-77-16320-51",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-80-16800-53",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-83-17040-63",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-94-19200-50",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-113-22560-47",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-109-22080-48",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-199-36960-51",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-196-36480-53",
+      "type": "structural"
+    },
+    {
+      "noteId": "b8687a65-35a4-489b-a9db-9b90cce92754",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-197-36480-60",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-198-36480-69",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-179-33600-72",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-178-33600-65",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-177-33600-60",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-176-33600-45",
+      "type": "structural"
+    },
+    {
+      "noteId": "3324fed9-f0fe-4e0e-9c4c-0617e8899490",
+      "type": "suspension"
+    },
+    {
+      "noteId": "midi-180-34080-63",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-190-35520-72",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-189-35520-65",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-188-35520-57",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-187-35520-50",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-192-36000-55",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-191-36000-52",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-194-36000-70",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-193-36000-67",
+      "type": "structural"
+    },
+    {
+      "noteId": "cd549c66-35d7-4fa7-9e90-d2242848af42",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "midi-259-47520-61",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-258-47520-57",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-257-47520-45",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-279-51360-50",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-291-52800-72",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-288-52800-45",
+      "type": "appoggiatura"
     }
   ],
   "schemaVersion": 1,
@@ -118,7 +278,7 @@
       "measureIndex": 0,
       "beat": 4,
       "startTick": 2880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -138,7 +298,7 @@
       "measureIndex": 0,
       "beat": 4,
       "startTick": 2880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -158,7 +318,7 @@
       "measureIndex": 0,
       "beat": 4,
       "startTick": 2880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -178,7 +338,7 @@
       "measureIndex": 0,
       "beat": 4,
       "startTick": 2880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -198,7 +358,7 @@
       "measureIndex": 0,
       "beat": 4.5,
       "startTick": 3360,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -218,7 +378,7 @@
       "measureIndex": 0,
       "beat": 4.5,
       "startTick": 3360,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -238,7 +398,7 @@
       "measureIndex": 1,
       "beat": 1,
       "startTick": 3840,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -258,7 +418,7 @@
       "measureIndex": 1,
       "beat": 1,
       "startTick": 3840,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -278,7 +438,7 @@
       "measureIndex": 1,
       "beat": 1,
       "startTick": 3840,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -298,7 +458,7 @@
       "measureIndex": 1,
       "beat": 1,
       "startTick": 3840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -340,7 +500,7 @@
       "measureIndex": 1,
       "beat": 2,
       "startTick": 4800,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -360,7 +520,7 @@
       "measureIndex": 1,
       "beat": 2,
       "startTick": 4800,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -380,7 +540,7 @@
       "measureIndex": 1,
       "beat": 2,
       "startTick": 4800,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -400,7 +560,7 @@
       "measureIndex": 1,
       "beat": 2,
       "startTick": 4800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -420,7 +580,7 @@
       "measureIndex": 1,
       "beat": 2.5,
       "startTick": 5280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -440,7 +600,7 @@
       "measureIndex": 1,
       "beat": 3,
       "startTick": 5760,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -460,7 +620,7 @@
       "measureIndex": 1,
       "beat": 3,
       "startTick": 5760,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -480,7 +640,7 @@
       "measureIndex": 1,
       "beat": 3,
       "startTick": 5760,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -500,7 +660,7 @@
       "measureIndex": 1,
       "beat": 3,
       "startTick": 5760,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -520,7 +680,7 @@
       "measureIndex": 1,
       "beat": 3.5,
       "startTick": 6240,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -540,7 +700,7 @@
       "measureIndex": 1,
       "beat": 4,
       "startTick": 6720,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -560,7 +720,7 @@
       "measureIndex": 1,
       "beat": 4,
       "startTick": 6720,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -580,7 +740,7 @@
       "measureIndex": 1,
       "beat": 4,
       "startTick": 6720,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -600,7 +760,7 @@
       "measureIndex": 1,
       "beat": 4,
       "startTick": 6720,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -620,7 +780,7 @@
       "measureIndex": 1,
       "beat": 4.5,
       "startTick": 7200,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -640,7 +800,7 @@
       "measureIndex": 2,
       "beat": 1,
       "startTick": 7680,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -660,7 +820,7 @@
       "measureIndex": 2,
       "beat": 1,
       "startTick": 7680,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -680,7 +840,7 @@
       "measureIndex": 2,
       "beat": 1,
       "startTick": 7680,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -700,7 +860,7 @@
       "measureIndex": 2,
       "beat": 1,
       "startTick": 7680,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -720,7 +880,7 @@
       "measureIndex": 2,
       "beat": 1.5,
       "startTick": 8160,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -740,7 +900,7 @@
       "measureIndex": 2,
       "beat": 1.5,
       "startTick": 8160,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -760,7 +920,7 @@
       "measureIndex": 2,
       "beat": 2,
       "startTick": 8640,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -780,7 +940,7 @@
       "measureIndex": 2,
       "beat": 2,
       "startTick": 8640,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -800,7 +960,7 @@
       "measureIndex": 2,
       "beat": 2,
       "startTick": 8640,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -820,7 +980,7 @@
       "measureIndex": 2,
       "beat": 2.5,
       "startTick": 9120,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -840,7 +1000,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -860,7 +1020,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -880,7 +1040,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -900,7 +1060,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -920,7 +1080,7 @@
       "measureIndex": 2,
       "beat": 4,
       "startTick": 10560,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -940,7 +1100,7 @@
       "measureIndex": 2,
       "beat": 4,
       "startTick": 10560,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -960,7 +1120,7 @@
       "measureIndex": 2,
       "beat": 4,
       "startTick": 10560,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -980,7 +1140,7 @@
       "measureIndex": 2,
       "beat": 4,
       "startTick": 10560,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -1000,7 +1160,7 @@
       "measureIndex": 2,
       "beat": 4.5,
       "startTick": 11040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1020,7 +1180,7 @@
       "measureIndex": 3,
       "beat": 1,
       "startTick": 11520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1040,7 +1200,7 @@
       "measureIndex": 3,
       "beat": 1,
       "startTick": 11520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1060,7 +1220,7 @@
       "measureIndex": 3,
       "beat": 1,
       "startTick": 11520,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -1080,7 +1240,7 @@
       "measureIndex": 3,
       "beat": 1,
       "startTick": 11520,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -1100,7 +1260,7 @@
       "measureIndex": 3,
       "beat": 1.5,
       "startTick": 12000,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1120,7 +1280,7 @@
       "measureIndex": 3,
       "beat": 1.5,
       "startTick": 12000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -1140,7 +1300,7 @@
       "measureIndex": 3,
       "beat": 2,
       "startTick": 12480,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1160,7 +1320,7 @@
       "measureIndex": 3,
       "beat": 2,
       "startTick": 12480,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -1180,7 +1340,7 @@
       "measureIndex": 3,
       "beat": 2,
       "startTick": 12480,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -1200,7 +1360,7 @@
       "measureIndex": 3,
       "beat": 2.5,
       "startTick": 12960,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1220,7 +1380,7 @@
       "measureIndex": 3,
       "beat": 2.5,
       "startTick": 12960,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1240,7 +1400,7 @@
       "measureIndex": 3,
       "beat": 3,
       "startTick": 13440,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1260,7 +1420,7 @@
       "measureIndex": 3,
       "beat": 3,
       "startTick": 13440,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1280,7 +1440,7 @@
       "measureIndex": 3,
       "beat": 3,
       "startTick": 13440,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1300,7 +1460,7 @@
       "measureIndex": 3,
       "beat": 3,
       "startTick": 13440,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -1320,7 +1480,7 @@
       "measureIndex": 3,
       "beat": 3.5,
       "startTick": 13920,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1340,7 +1500,7 @@
       "measureIndex": 3,
       "beat": 3.5,
       "startTick": 13920,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1360,7 +1520,7 @@
       "measureIndex": 3,
       "beat": 3.5,
       "startTick": 13920,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1380,7 +1540,7 @@
       "measureIndex": 3,
       "beat": 3.5,
       "startTick": 13920,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -1400,7 +1560,7 @@
       "measureIndex": 3,
       "beat": 4,
       "startTick": 14400,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -1420,7 +1580,7 @@
       "measureIndex": 3,
       "beat": 4,
       "startTick": 14400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1440,7 +1600,7 @@
       "measureIndex": 3,
       "beat": 4,
       "startTick": 14400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1460,7 +1620,7 @@
       "measureIndex": 3,
       "beat": 4,
       "startTick": 14400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -1480,7 +1640,7 @@
       "measureIndex": 3,
       "beat": 4.5,
       "startTick": 14880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1500,7 +1660,7 @@
       "measureIndex": 3,
       "beat": 4.5,
       "startTick": 14880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1520,7 +1680,7 @@
       "measureIndex": 3,
       "beat": 4.5,
       "startTick": 14880,
-      "durationTicks": 912,
+      "durationTicks": 480,
       "voice": 4,
       "isTiedToNext": true
     },
@@ -1541,7 +1701,7 @@
       "measureIndex": 4,
       "beat": 1,
       "startTick": 15360,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1561,7 +1721,7 @@
       "measureIndex": 4,
       "beat": 1,
       "startTick": 15360,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1581,7 +1741,7 @@
       "measureIndex": 4,
       "beat": 1,
       "startTick": 15360,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -1622,7 +1782,7 @@
       "measureIndex": 4,
       "beat": 1.5,
       "startTick": 15840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1642,7 +1802,7 @@
       "measureIndex": 4,
       "beat": 1.5,
       "startTick": 15840,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -1662,7 +1822,7 @@
       "measureIndex": 4,
       "beat": 1.5,
       "startTick": 15840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -1682,7 +1842,7 @@
       "measureIndex": 4,
       "beat": 2,
       "startTick": 16320,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -1702,7 +1862,7 @@
       "measureIndex": 4,
       "beat": 2,
       "startTick": 16320,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1722,7 +1882,7 @@
       "measureIndex": 4,
       "beat": 2,
       "startTick": 16320,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -1742,7 +1902,7 @@
       "measureIndex": 4,
       "beat": 2.5,
       "startTick": 16800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -1762,7 +1922,7 @@
       "measureIndex": 4,
       "beat": 2.5,
       "startTick": 16800,
-      "durationTicks": 216,
+      "durationTicks": 240,
       "voice": 3
     },
     {
@@ -1782,7 +1942,7 @@
       "measureIndex": 4,
       "beat": 2.5,
       "startTick": 16800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -1802,7 +1962,7 @@
       "measureIndex": 4,
       "beat": 2.75,
       "startTick": 17040,
-      "durationTicks": 216,
+      "durationTicks": 240,
       "voice": 3
     },
     {
@@ -1822,7 +1982,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -1842,7 +2002,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -1862,7 +2022,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -1882,7 +2042,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -1902,7 +2062,7 @@
       "measureIndex": 4,
       "beat": 4,
       "startTick": 18240,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -1922,7 +2082,7 @@
       "measureIndex": 4,
       "beat": 4,
       "startTick": 18240,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -1942,7 +2102,7 @@
       "measureIndex": 4,
       "beat": 4,
       "startTick": 18240,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1962,7 +2122,7 @@
       "measureIndex": 4,
       "beat": 4,
       "startTick": 18240,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -1982,7 +2142,7 @@
       "measureIndex": 4,
       "beat": 4.5,
       "startTick": 18720,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -2002,7 +2162,7 @@
       "measureIndex": 4,
       "beat": 4.5,
       "startTick": 18720,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -2022,7 +2182,7 @@
       "measureIndex": 5,
       "beat": 1,
       "startTick": 19200,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2042,7 +2202,7 @@
       "measureIndex": 5,
       "beat": 1,
       "startTick": 19200,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2062,7 +2222,7 @@
       "measureIndex": 5,
       "beat": 1,
       "startTick": 19200,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2082,7 +2242,7 @@
       "measureIndex": 5,
       "beat": 1,
       "startTick": 19200,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2124,7 +2284,7 @@
       "measureIndex": 5,
       "beat": 2,
       "startTick": 20160,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2144,7 +2304,7 @@
       "measureIndex": 5,
       "beat": 2,
       "startTick": 20160,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2164,7 +2324,7 @@
       "measureIndex": 5,
       "beat": 2,
       "startTick": 20160,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2184,7 +2344,7 @@
       "measureIndex": 5,
       "beat": 2,
       "startTick": 20160,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2204,7 +2364,7 @@
       "measureIndex": 5,
       "beat": 2.5,
       "startTick": 20640,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2224,7 +2384,7 @@
       "measureIndex": 5,
       "beat": 3,
       "startTick": 21120,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2244,7 +2404,7 @@
       "measureIndex": 5,
       "beat": 3,
       "startTick": 21120,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2264,7 +2424,7 @@
       "measureIndex": 5,
       "beat": 3,
       "startTick": 21120,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2284,7 +2444,7 @@
       "measureIndex": 5,
       "beat": 3,
       "startTick": 21120,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2304,7 +2464,7 @@
       "measureIndex": 5,
       "beat": 3.5,
       "startTick": 21600,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2324,7 +2484,7 @@
       "measureIndex": 5,
       "beat": 4,
       "startTick": 22080,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2344,7 +2504,7 @@
       "measureIndex": 5,
       "beat": 4,
       "startTick": 22080,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2364,7 +2524,7 @@
       "measureIndex": 5,
       "beat": 4,
       "startTick": 22080,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2384,7 +2544,7 @@
       "measureIndex": 5,
       "beat": 4,
       "startTick": 22080,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2404,7 +2564,7 @@
       "measureIndex": 5,
       "beat": 4.5,
       "startTick": 22560,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2424,7 +2584,7 @@
       "measureIndex": 6,
       "beat": 1,
       "startTick": 23040,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2444,7 +2604,7 @@
       "measureIndex": 6,
       "beat": 1,
       "startTick": 23040,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2464,7 +2624,7 @@
       "measureIndex": 6,
       "beat": 1,
       "startTick": 23040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -2484,7 +2644,7 @@
       "measureIndex": 6,
       "beat": 1,
       "startTick": 23040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2504,7 +2664,7 @@
       "measureIndex": 6,
       "beat": 1.5,
       "startTick": 23520,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2524,7 +2684,7 @@
       "measureIndex": 6,
       "beat": 1.5,
       "startTick": 23520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -2544,7 +2704,7 @@
       "measureIndex": 6,
       "beat": 2,
       "startTick": 24000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2564,7 +2724,7 @@
       "measureIndex": 6,
       "beat": 2,
       "startTick": 24000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2584,7 +2744,7 @@
       "measureIndex": 6,
       "beat": 2,
       "startTick": 24000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -2604,7 +2764,7 @@
       "measureIndex": 6,
       "beat": 2.5,
       "startTick": 24480,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -2624,7 +2784,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2644,7 +2804,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2664,7 +2824,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2684,7 +2844,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -2704,7 +2864,7 @@
       "measureIndex": 6,
       "beat": 4,
       "startTick": 25920,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2724,7 +2884,7 @@
       "measureIndex": 6,
       "beat": 4,
       "startTick": 25920,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -2744,7 +2904,7 @@
       "measureIndex": 6,
       "beat": 4,
       "startTick": 25920,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2764,7 +2924,7 @@
       "measureIndex": 6,
       "beat": 4,
       "startTick": 25920,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -2784,7 +2944,7 @@
       "measureIndex": 6,
       "beat": 4.5,
       "startTick": 26400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -2804,7 +2964,7 @@
       "measureIndex": 7,
       "beat": 1,
       "startTick": 26880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -2824,7 +2984,7 @@
       "measureIndex": 7,
       "beat": 1,
       "startTick": 26880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -2844,7 +3004,7 @@
       "measureIndex": 7,
       "beat": 1,
       "startTick": 26880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2864,7 +3024,7 @@
       "measureIndex": 7,
       "beat": 1,
       "startTick": 26880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -2884,7 +3044,7 @@
       "measureIndex": 7,
       "beat": 1.5,
       "startTick": 27360,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -2904,7 +3064,7 @@
       "measureIndex": 7,
       "beat": 1.5,
       "startTick": 27360,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2924,7 +3084,7 @@
       "measureIndex": 7,
       "beat": 2,
       "startTick": 27840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -2944,7 +3104,7 @@
       "measureIndex": 7,
       "beat": 2,
       "startTick": 27840,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2964,7 +3124,7 @@
       "measureIndex": 7,
       "beat": 2,
       "startTick": 27840,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -2984,7 +3144,7 @@
       "measureIndex": 7,
       "beat": 2.5,
       "startTick": 28320,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -3004,7 +3164,7 @@
       "measureIndex": 7,
       "beat": 2.5,
       "startTick": 28320,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3024,7 +3184,7 @@
       "measureIndex": 7,
       "beat": 3,
       "startTick": 28800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -3044,7 +3204,7 @@
       "measureIndex": 7,
       "beat": 3,
       "startTick": 28800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3064,7 +3224,7 @@
       "measureIndex": 7,
       "beat": 3,
       "startTick": 28800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3084,7 +3244,7 @@
       "measureIndex": 7,
       "beat": 3,
       "startTick": 28800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3104,7 +3264,7 @@
       "measureIndex": 7,
       "beat": 3.5,
       "startTick": 29280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -3124,7 +3284,7 @@
       "measureIndex": 7,
       "beat": 3.5,
       "startTick": 29280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3144,7 +3304,7 @@
       "measureIndex": 7,
       "beat": 3.5,
       "startTick": 29280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3164,7 +3324,7 @@
       "measureIndex": 7,
       "beat": 3.5,
       "startTick": 29280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3184,7 +3344,7 @@
       "measureIndex": 7,
       "beat": 4,
       "startTick": 29760,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -3204,7 +3364,7 @@
       "measureIndex": 7,
       "beat": 4,
       "startTick": 29760,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3224,7 +3384,7 @@
       "measureIndex": 7,
       "beat": 4,
       "startTick": 29760,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3244,7 +3404,7 @@
       "measureIndex": 7,
       "beat": 4,
       "startTick": 29760,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3264,7 +3424,7 @@
       "measureIndex": 7,
       "beat": 4.5,
       "startTick": 30240,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3284,7 +3444,7 @@
       "measureIndex": 7,
       "beat": 4.5,
       "startTick": 30240,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3304,7 +3464,7 @@
       "measureIndex": 7,
       "beat": 4.5,
       "startTick": 30240,
-      "durationTicks": 912,
+      "durationTicks": 480,
       "voice": 4,
       "isTiedToNext": true
     },
@@ -3325,7 +3485,7 @@
       "measureIndex": 8,
       "beat": 1,
       "startTick": 30720,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -3345,7 +3505,7 @@
       "measureIndex": 8,
       "beat": 1,
       "startTick": 30720,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3365,7 +3525,7 @@
       "measureIndex": 8,
       "beat": 1,
       "startTick": 30720,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -3406,7 +3566,7 @@
       "measureIndex": 8,
       "beat": 1.5,
       "startTick": 31200,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -3426,7 +3586,7 @@
       "measureIndex": 8,
       "beat": 1.5,
       "startTick": 31200,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -3446,7 +3606,7 @@
       "measureIndex": 8,
       "beat": 1.5,
       "startTick": 31200,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3466,7 +3626,7 @@
       "measureIndex": 8,
       "beat": 2,
       "startTick": 31680,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -3486,7 +3646,7 @@
       "measureIndex": 8,
       "beat": 2,
       "startTick": 31680,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3506,7 +3666,7 @@
       "measureIndex": 8,
       "beat": 2,
       "startTick": 31680,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3526,7 +3686,7 @@
       "measureIndex": 8,
       "beat": 2.5,
       "startTick": 32160,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3546,7 +3706,7 @@
       "measureIndex": 8,
       "beat": 2.5,
       "startTick": 32160,
-      "durationTicks": 216,
+      "durationTicks": 240,
       "voice": 3
     },
     {
@@ -3566,7 +3726,7 @@
       "measureIndex": 8,
       "beat": 2.5,
       "startTick": 32160,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3586,7 +3746,7 @@
       "measureIndex": 8,
       "beat": 2.75,
       "startTick": 32400,
-      "durationTicks": 216,
+      "durationTicks": 240,
       "voice": 3
     },
     {
@@ -3606,7 +3766,7 @@
       "measureIndex": 8,
       "beat": 3,
       "startTick": 32640,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -3626,7 +3786,7 @@
       "measureIndex": 8,
       "beat": 3,
       "startTick": 32640,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -3646,7 +3806,7 @@
       "measureIndex": 8,
       "beat": 3,
       "startTick": 32640,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -3666,7 +3826,7 @@
       "measureIndex": 8,
       "beat": 3,
       "startTick": 32640,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -3686,7 +3846,7 @@
       "measureIndex": 8,
       "beat": 4,
       "startTick": 33600,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -3706,7 +3866,7 @@
       "measureIndex": 8,
       "beat": 4,
       "startTick": 33600,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3747,7 +3907,7 @@
       "measureIndex": 8,
       "beat": 4,
       "startTick": 33600,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -3767,7 +3927,7 @@
       "measureIndex": 8,
       "beat": 4.5,
       "startTick": 34080,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3787,7 +3947,7 @@
       "measureIndex": 9,
       "beat": 1,
       "startTick": 34560,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -3807,7 +3967,7 @@
       "measureIndex": 9,
       "beat": 1,
       "startTick": 34560,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3848,7 +4008,7 @@
       "measureIndex": 9,
       "beat": 1,
       "startTick": 34560,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3868,7 +4028,7 @@
       "measureIndex": 9,
       "beat": 1.5,
       "startTick": 35040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3888,7 +4048,7 @@
       "measureIndex": 9,
       "beat": 1.5,
       "startTick": 35040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3908,7 +4068,7 @@
       "measureIndex": 9,
       "beat": 1.5,
       "startTick": 35040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -3928,7 +4088,7 @@
       "measureIndex": 9,
       "beat": 2,
       "startTick": 35520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -3948,7 +4108,7 @@
       "measureIndex": 9,
       "beat": 2,
       "startTick": 35520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -3968,7 +4128,7 @@
       "measureIndex": 9,
       "beat": 2,
       "startTick": 35520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3988,7 +4148,7 @@
       "measureIndex": 9,
       "beat": 2,
       "startTick": 35520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -4008,7 +4168,7 @@
       "measureIndex": 9,
       "beat": 2.5,
       "startTick": 36000,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -4028,7 +4188,7 @@
       "measureIndex": 9,
       "beat": 2.5,
       "startTick": 36000,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -4048,7 +4208,7 @@
       "measureIndex": 9,
       "beat": 2.5,
       "startTick": 36000,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4068,7 +4228,7 @@
       "measureIndex": 9,
       "beat": 2.5,
       "startTick": 36000,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -4088,7 +4248,7 @@
       "measureIndex": 9,
       "beat": 3,
       "startTick": 36480,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4108,7 +4268,7 @@
       "measureIndex": 9,
       "beat": 3,
       "startTick": 36480,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -4149,7 +4309,7 @@
       "measureIndex": 9,
       "beat": 3,
       "startTick": 36480,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -4169,7 +4329,7 @@
       "measureIndex": 9,
       "beat": 3.5,
       "startTick": 36960,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -4189,7 +4349,7 @@
       "measureIndex": 9,
       "beat": 4,
       "startTick": 37440,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4209,7 +4369,7 @@
       "measureIndex": 9,
       "beat": 4,
       "startTick": 37440,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -4229,7 +4389,7 @@
       "measureIndex": 9,
       "beat": 4,
       "startTick": 37440,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -4270,7 +4430,7 @@
       "measureIndex": 10,
       "beat": 1,
       "startTick": 38400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -4290,7 +4450,7 @@
       "measureIndex": 10,
       "beat": 1,
       "startTick": 38400,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -4310,7 +4470,7 @@
       "measureIndex": 10,
       "beat": 1,
       "startTick": 38400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4330,7 +4490,7 @@
       "measureIndex": 10,
       "beat": 1,
       "startTick": 38400,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -4350,7 +4510,7 @@
       "measureIndex": 10,
       "beat": 1.5,
       "startTick": 38880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -4370,7 +4530,7 @@
       "measureIndex": 10,
       "beat": 1.5,
       "startTick": 38880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -4390,7 +4550,7 @@
       "measureIndex": 10,
       "beat": 2,
       "startTick": 39360,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4410,7 +4570,7 @@
       "measureIndex": 10,
       "beat": 2,
       "startTick": 39360,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -4430,7 +4590,7 @@
       "measureIndex": 10,
       "beat": 2,
       "startTick": 39360,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -4450,7 +4610,7 @@
       "measureIndex": 10,
       "beat": 2.5,
       "startTick": 39840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -4470,7 +4630,7 @@
       "measureIndex": 10,
       "beat": 2.5,
       "startTick": 39840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4490,7 +4650,7 @@
       "measureIndex": 10,
       "beat": 3,
       "startTick": 40320,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4510,7 +4670,7 @@
       "measureIndex": 10,
       "beat": 3,
       "startTick": 40320,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -4530,7 +4690,7 @@
       "measureIndex": 10,
       "beat": 3,
       "startTick": 40320,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -4550,7 +4710,7 @@
       "measureIndex": 10,
       "beat": 3,
       "startTick": 40320,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -4570,7 +4730,7 @@
       "measureIndex": 10,
       "beat": 4,
       "startTick": 41280,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4590,7 +4750,7 @@
       "measureIndex": 10,
       "beat": 4,
       "startTick": 41280,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -4610,7 +4770,7 @@
       "measureIndex": 10,
       "beat": 4,
       "startTick": 41280,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -4630,7 +4790,7 @@
       "measureIndex": 10,
       "beat": 4,
       "startTick": 41280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -4650,7 +4810,7 @@
       "measureIndex": 10,
       "beat": 4.5,
       "startTick": 41760,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -4670,7 +4830,7 @@
       "measureIndex": 11,
       "beat": 1,
       "startTick": 42240,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4690,7 +4850,7 @@
       "measureIndex": 11,
       "beat": 1,
       "startTick": 42240,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -4710,7 +4870,7 @@
       "measureIndex": 11,
       "beat": 1,
       "startTick": 42240,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -4730,18 +4890,20 @@
       "measureIndex": 11,
       "beat": 1,
       "startTick": 42240,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
-      "id": "midi-228-42720-68",
-      "pitch": "G",
+      "id": "cd549c66-35d7-4fa7-9e90-d2242848af42",
+      "pitch": "A",
       "octave": 4,
-      "position": 4,
+      "position": 5,
       "midi": 68,
       "noteIndex": 8,
       "clef": "treble",
-      "explicitAccidental": "sharp",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
       "duration": "eighth",
       "isRest": false,
       "isTriplet": false,
@@ -4750,7 +4912,7 @@
       "measureIndex": 11,
       "beat": 1.5,
       "startTick": 42720,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -4770,7 +4932,7 @@
       "measureIndex": 11,
       "beat": 2,
       "startTick": 43200,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4790,7 +4952,7 @@
       "measureIndex": 11,
       "beat": 2,
       "startTick": 43200,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -4810,7 +4972,7 @@
       "measureIndex": 11,
       "beat": 2,
       "startTick": 43200,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -4830,7 +4992,7 @@
       "measureIndex": 11,
       "beat": 2,
       "startTick": 43200,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -4850,7 +5012,7 @@
       "measureIndex": 11,
       "beat": 2.5,
       "startTick": 43680,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -4870,7 +5032,7 @@
       "measureIndex": 11,
       "beat": 3,
       "startTick": 44160,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -4890,7 +5052,7 @@
       "measureIndex": 11,
       "beat": 3,
       "startTick": 44160,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -4910,7 +5072,7 @@
       "measureIndex": 11,
       "beat": 3,
       "startTick": 44160,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4930,7 +5092,7 @@
       "measureIndex": 11,
       "beat": 3,
       "startTick": 44160,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -4950,7 +5112,7 @@
       "measureIndex": 11,
       "beat": 3.5,
       "startTick": 44640,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4970,7 +5132,7 @@
       "measureIndex": 11,
       "beat": 4,
       "startTick": 45120,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -4990,7 +5152,7 @@
       "measureIndex": 11,
       "beat": 4,
       "startTick": 45120,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -5010,7 +5172,7 @@
       "measureIndex": 11,
       "beat": 4,
       "startTick": 45120,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5030,7 +5192,7 @@
       "measureIndex": 11,
       "beat": 4,
       "startTick": 45120,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -5050,7 +5212,7 @@
       "measureIndex": 11,
       "beat": 4.5,
       "startTick": 45600,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -5070,7 +5232,7 @@
       "measureIndex": 11,
       "beat": 4.5,
       "startTick": 45600,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -5090,7 +5252,7 @@
       "measureIndex": 11,
       "beat": 4.5,
       "startTick": 45600,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5110,7 +5272,7 @@
       "measureIndex": 12,
       "beat": 1,
       "startTick": 46080,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -5130,7 +5292,7 @@
       "measureIndex": 12,
       "beat": 1,
       "startTick": 46080,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -5150,7 +5312,7 @@
       "measureIndex": 12,
       "beat": 1,
       "startTick": 46080,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5170,7 +5332,7 @@
       "measureIndex": 12,
       "beat": 1,
       "startTick": 46080,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5190,7 +5352,7 @@
       "measureIndex": 12,
       "beat": 1.5,
       "startTick": 46560,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -5210,7 +5372,7 @@
       "measureIndex": 12,
       "beat": 1.5,
       "startTick": 46560,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -5230,7 +5392,7 @@
       "measureIndex": 12,
       "beat": 1.5,
       "startTick": 46560,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5250,7 +5412,7 @@
       "measureIndex": 12,
       "beat": 1.5,
       "startTick": 46560,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5270,7 +5432,7 @@
       "measureIndex": 12,
       "beat": 2,
       "startTick": 47040,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -5290,7 +5452,7 @@
       "measureIndex": 12,
       "beat": 2,
       "startTick": 47040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5310,7 +5472,7 @@
       "measureIndex": 12,
       "beat": 2,
       "startTick": 47040,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5330,7 +5492,7 @@
       "measureIndex": 12,
       "beat": 2.5,
       "startTick": 47520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -5350,7 +5512,7 @@
       "measureIndex": 12,
       "beat": 2.5,
       "startTick": 47520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5370,7 +5532,7 @@
       "measureIndex": 12,
       "beat": 2.5,
       "startTick": 47520,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5390,7 +5552,7 @@
       "measureIndex": 12,
       "beat": 3,
       "startTick": 48000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -5410,7 +5572,7 @@
       "measureIndex": 12,
       "beat": 3,
       "startTick": 48000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -5430,7 +5592,7 @@
       "measureIndex": 12,
       "beat": 3,
       "startTick": 48000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -5450,7 +5612,7 @@
       "measureIndex": 12,
       "beat": 3,
       "startTick": 48000,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -5470,7 +5632,7 @@
       "measureIndex": 12,
       "beat": 4,
       "startTick": 48960,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -5490,7 +5652,7 @@
       "measureIndex": 12,
       "beat": 4,
       "startTick": 48960,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -5510,7 +5672,7 @@
       "measureIndex": 12,
       "beat": 4,
       "startTick": 48960,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -5530,7 +5692,7 @@
       "measureIndex": 12,
       "beat": 4,
       "startTick": 48960,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5550,7 +5712,7 @@
       "measureIndex": 12,
       "beat": 4.5,
       "startTick": 49440,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5570,7 +5732,7 @@
       "measureIndex": 13,
       "beat": 1,
       "startTick": 49920,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -5590,7 +5752,7 @@
       "measureIndex": 13,
       "beat": 1,
       "startTick": 49920,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -5610,7 +5772,7 @@
       "measureIndex": 13,
       "beat": 1,
       "startTick": 49920,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5630,7 +5792,7 @@
       "measureIndex": 13,
       "beat": 1,
       "startTick": 49920,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5650,7 +5812,7 @@
       "measureIndex": 13,
       "beat": 1.5,
       "startTick": 50400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5670,7 +5832,7 @@
       "measureIndex": 13,
       "beat": 1.5,
       "startTick": 50400,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5690,7 +5852,7 @@
       "measureIndex": 13,
       "beat": 2,
       "startTick": 50880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -5710,7 +5872,7 @@
       "measureIndex": 13,
       "beat": 2,
       "startTick": 50880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -5730,7 +5892,7 @@
       "measureIndex": 13,
       "beat": 2,
       "startTick": 50880,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -5750,7 +5912,7 @@
       "measureIndex": 13,
       "beat": 2,
       "startTick": 50880,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5770,7 +5932,7 @@
       "measureIndex": 13,
       "beat": 2.5,
       "startTick": 51360,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5790,7 +5952,7 @@
       "measureIndex": 13,
       "beat": 3,
       "startTick": 51840,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -5810,7 +5972,7 @@
       "measureIndex": 13,
       "beat": 3,
       "startTick": 51840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -5830,7 +5992,7 @@
       "measureIndex": 13,
       "beat": 3,
       "startTick": 51840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -5850,7 +6012,7 @@
       "measureIndex": 13,
       "beat": 3,
       "startTick": 51840,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5870,7 +6032,7 @@
       "measureIndex": 13,
       "beat": 3.5,
       "startTick": 52320,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -5890,7 +6052,7 @@
       "measureIndex": 13,
       "beat": 3.5,
       "startTick": 52320,
-      "durationTicks": 216,
+      "durationTicks": 240,
       "voice": 3
     },
     {
@@ -5910,7 +6072,7 @@
       "measureIndex": 13,
       "beat": 3.5,
       "startTick": 52320,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -5930,7 +6092,7 @@
       "measureIndex": 13,
       "beat": 3.75,
       "startTick": 52560,
-      "durationTicks": 216,
+      "durationTicks": 240,
       "voice": 3
     },
     {
@@ -5950,7 +6112,7 @@
       "measureIndex": 13,
       "beat": 4,
       "startTick": 52800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -5970,7 +6132,7 @@
       "measureIndex": 13,
       "beat": 4,
       "startTick": 52800,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -5990,7 +6152,7 @@
       "measureIndex": 13,
       "beat": 4,
       "startTick": 52800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -6010,7 +6172,7 @@
       "measureIndex": 13,
       "beat": 4,
       "startTick": 52800,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -6030,7 +6192,7 @@
       "measureIndex": 13,
       "beat": 4.5,
       "startTick": 53280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -6050,7 +6212,7 @@
       "measureIndex": 13,
       "beat": 4.5,
       "startTick": 53280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -6070,7 +6232,7 @@
       "measureIndex": 13,
       "beat": 4.5,
       "startTick": 53280,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 4
     },
     {
@@ -6090,7 +6252,7 @@
       "measureIndex": 14,
       "beat": 1,
       "startTick": 53760,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -6110,7 +6272,7 @@
       "measureIndex": 14,
       "beat": 1,
       "startTick": 53760,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -6151,7 +6313,7 @@
       "measureIndex": 14,
       "beat": 1,
       "startTick": 53760,
-      "durationTicks": 1728,
+      "durationTicks": 1920,
       "voice": 4
     },
     {
@@ -6171,7 +6333,7 @@
       "measureIndex": 14,
       "beat": 1.5,
       "startTick": 54240,
-      "durationTicks": 432,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -6191,7 +6353,7 @@
       "measureIndex": 14,
       "beat": 2,
       "startTick": 54720,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -6211,7 +6373,7 @@
       "measureIndex": 14,
       "beat": 2,
       "startTick": 54720,
-      "durationTicks": 864,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -6252,7 +6414,7 @@
       "measureIndex": 14,
       "beat": 3,
       "startTick": 55680,
-      "durationTicks": 864,
+      "durationTicks": 1920,
       "voice": 1
     },
     {
@@ -6272,7 +6434,7 @@
       "measureIndex": 14,
       "beat": 3,
       "startTick": 55680,
-      "durationTicks": 864,
+      "durationTicks": 1920,
       "voice": 2
     },
     {
@@ -6292,7 +6454,7 @@
       "measureIndex": 14,
       "beat": 3,
       "startTick": 55680,
-      "durationTicks": 864,
+      "durationTicks": 1920,
       "voice": 3
     },
     {
@@ -6312,7 +6474,7 @@
       "measureIndex": 14,
       "beat": 3,
       "startTick": 55680,
-      "durationTicks": 864,
+      "durationTicks": 1920,
       "voice": 4
     }
   ],
@@ -6326,7 +6488,7 @@
     "denominator": 4
   },
   "timeSignatureChanges": [],
-  "isMinorMode": false,
+  "isMinorMode": true,
   "autoLeadingToneInMinor": true,
   "keyChangeMode": "none",
   "modalTonicOverride": "",
@@ -6348,6 +6510,7 @@
     "notations",
     "analysis",
     "key",
-    "more"
+    "more",
+    "voiceInstrument"
   ]
 }

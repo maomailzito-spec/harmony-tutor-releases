@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Export helpers (main process): render a supplied HTML snapshot to PDF/PNG.
   exportPdfFromHtml: (html, options) => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_PDF_FROM_HTML, html, options),
   exportPngFromHtml: (html, options) => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_PNG_FROM_HTML, html, options),
+  exportMusicXml: (xml) => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_MUSICXML, xml),
 
   addRecentFile: (filePath) => ipcRenderer.send(IPC_CHANNELS.ADD_RECENT, filePath),
   // Keep native app menu in sync with renderer state (for checkmarks)

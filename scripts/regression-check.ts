@@ -197,7 +197,8 @@ const runInferredContextRegression = () => {
       const t = String(c?.newTonic || '');
       // Guard against known false positives.
       // NOTE: Eb can be a legitimate local tonicization in this excerpt; do not forbid it.
-      return t === 'B' || t === 'Db';
+      // NOTE: Db is now a legitimate inferred tonic for the modulating sequence at m24 (V-I-iv in Db).
+      return t === 'B';
     });
 
     if (!hasGb) fail(`[${name}] missing inferred context Gb@absBeat≈76`);

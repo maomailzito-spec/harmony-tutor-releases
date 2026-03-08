@@ -1847,6 +1847,12 @@ export function voicingToStaffNotes(
       midi: v.midi,
       noteIndex,
       clef: v.clef,
+      // accidental: the effective accidental of the note (including key sig)
+      accidental: (accidental === '#' ? 'sharp'
+        : accidental === 'b' ? 'flat'
+        : accidental === '##' ? 'double-sharp'
+        : accidental === 'bb' ? 'double-flat'
+        : 'natural') as any,
       explicitAccidental: explicitAccidental as any,
       duration: duration as any,
       isRest: false,
@@ -1998,9 +2004,10 @@ export function realizeChorale(
         if (nextParsed.degree === 4) inv = 1;
       }
       // I6/4 cadenzale: I before V → 2nd inversion (cadential 6/4)
-      if (parsed.degree === 0 && i + 1 < sortedProg.length) {
+      // Only for diatonic V (not secondary dominants), and never on the first chord.
+      if (parsed.degree === 0 && i > 0 && i + 1 < sortedProg.length) {
         const nextParsed = parseRoman(sortedProg[i + 1].roman);
-        if (nextParsed.degree === 4) inv = 2;
+        if (nextParsed.degree === 4 && nextParsed.secondaryTarget == null) inv = 2;
       }
     }
     const tones = getChordTones(parsed, scale, tonic, isMinor);

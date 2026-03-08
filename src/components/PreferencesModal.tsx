@@ -11,6 +11,72 @@ export type PreferencesModalProps = {
   initialTab?: PreferenceSectionId;
 };
 
+// ─── Consigli personalizzati – costanti e editor inline ───
+const RULE_LABELS: Record<string, string> = {
+  'R-01': 'Ottave/unisoni paralleli', 'R-02': 'Quinte parallele',
+  'R-04': 'Incrocio di voci', 'R-05': 'Quinte/ottave nascoste',
+  'R-06': 'Risoluzione salti aug/dim', 'R-07': 'Risoluzione sensibile',
+  'R-08': 'Spaziatura eccessiva', 'R-09': 'Falsa relazione cromatica',
+  'R-10': 'Raddoppio sensibile', 'R-10-7TH': 'Raddoppio 7ª',
+  'R-12': 'Risoluzione della 7ª', 'R-13': 'Moto parallelo tutte le voci',
+  'R-14': 'Moto simile voci estreme', 'R-15': 'Salti ampi voci interne',
+  'R-16': 'Sincope armonica', 'R-17a': 'Due salti → 7ª/9ª (proibito)',
+  'R-17b': '7ª/9ª senza grado congiunto', 'R-17c': 'Successione di tritono',
+  'R-N-RES': 'Risoluz. nota non armonica', 'R-AUG6-RES': 'Risoluz. 6ª aumentata',
+  'R-CAD64': 'Risoluz. accordo cadenzale 6/4',
+};
+const KNOWN_RULE_IDS = Object.keys(RULE_LABELS);
+
+function RuleSuggestionsEditor() {
+  const [suggestions, setSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
+  const suggs = (suggestions ?? {}) as Record<string, string>;
+  const [expanded, setExpanded] = React.useState(false);
+
+  const handleChange = (ruleId: string, text: string) => {
+    const next = { ...suggs };
+    if (text.trim()) { next[ruleId] = text; } else { delete next[ruleId]; }
+    setSuggestions(next);
+  };
+
+  const customCount = Object.keys(suggs).filter(k => suggs[k]?.trim()).length;
+
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+      <button type="button" onClick={() => setExpanded(!expanded)}
+        className="w-full text-left flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-slate-100">Consigli personalizzati</div>
+          <div className="text-xs text-slate-400 mt-0.5">
+            Personalizza il testo &quot;Consiglio&quot; per ogni regola.
+            Le regole e le descrizioni non sono modificabili.
+            {customCount > 0 && <span className="ml-1 text-cyan-400">({customCount} personalizzati)</span>}
+          </div>
+        </div>
+        <span className="text-slate-400 text-xs">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-2 max-h-64 overflow-y-auto pr-1">
+          {KNOWN_RULE_IDS.map(ruleId => (
+            <div key={ruleId} className="flex flex-col gap-0.5">
+              <label className="text-xs text-slate-300 font-semibold select-none">
+                {ruleId} — {RULE_LABELS[ruleId]}
+              </label>
+              <textarea
+                className="bg-slate-800 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1 resize-none focus:border-cyan-500 focus:outline-none"
+                rows={2}
+                placeholder="(consiglio predefinito — lascia vuoto)"
+                value={suggs[ruleId] || ''}
+                onChange={(e) => handleChange(ruleId, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TAB_LABEL: Record<PreferenceSectionId, string> = {
   Editor: 'Editor',
   Analysis: 'Analisi',
@@ -45,8 +111,10 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [harmonyLabelMinSpanBeats, setHarmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
   const [, setAnalysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
   const [useStatisticalCorrection, setUseStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
+  const [statisticalBiasThreshold, setStatisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
   const [enableLearnedOrnaments, setEnableLearnedOrnaments] = usePreference<boolean>('analysis.enableLearnedOrnaments');
   const [tonicizationCompact, setTonicizationCompact] = usePreference<boolean>('analysis.tonicizationCompact');
+  const [cadentialPatterns, setCadentialPatterns] = usePreference<boolean>('analysis.cadentialPatterns');
 
   const analysisProfileSelectionValue = useMemo(() => {
     return profileCustomized ? 'custom' : profileBaseId;
@@ -441,6 +509,24 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 </label>
 
+                {!!useStatisticalCorrection && (
+                  <div className="ml-6 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                    <div className="text-sm font-semibold text-slate-100 mb-1">Soglia bias statistico</div>
+                    <div className="text-xs text-slate-400 mb-2">
+                      R14 interviene quando la differenza di score tra i due migliori candidati è inferiore a questa soglia.
+                    </div>
+                    <select
+                      className="bg-slate-800 text-slate-100 text-sm rounded px-2 py-1 border border-slate-600"
+                      value={statisticalBiasThreshold ?? 2}
+                      onChange={(e) => setStatisticalBiasThreshold(Number(e.target.value))}
+                    >
+                      <option value={1}>Conservativo (1)</option>
+                      <option value={2}>Moderato (2)</option>
+                      <option value={4}>Aggressivo (4)</option>
+                    </select>
+                  </div>
+                )}
+
                 <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input
                     type="checkbox"
@@ -471,6 +557,21 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 </label>
 
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!cadentialPatterns}
+                    onChange={(e) => setCadentialPatterns(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Riconoscimento pattern cadenzali</div>
+                    <div className="text-xs text-slate-400">
+                      Rileva automaticamente cadenze (ii–V–I, IV–V–I, ecc.) e inietta tonicizzazioni temporanee verso la tonalità target.
+                    </div>
+                  </div>
+                </label>
+
                 <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <div className="text-sm font-semibold text-slate-100">Filtro anti-rumore (etichette)</div>
                   <div className="text-xs text-slate-400 mt-1">
@@ -493,6 +594,10 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     </select>
                   </div>
                 </div>
+
+                {/* ─── Consigli personalizzati per regole ─── */}
+                <RuleSuggestionsEditor />
+
               </div>
             )}
 

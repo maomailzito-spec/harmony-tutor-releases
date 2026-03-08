@@ -10,8 +10,11 @@ import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, T
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol } from '../utils/musicTheory';
 import { structuralNotes } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
+import { evaluateCadentialPatterns, type ChordEvent, pcToNoteName, noteNameToPc, qualityFamily, getScalePcs } from '../utils/cadentialPatterns';
+import { CADENTIAL_PATTERN_RECOGNITION_KEY } from '../storage/storageKeys';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
-import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS } from '../constants';
+import { getBigramProbability, type StyleProfile } from '../engine/choralStyleProfile';
+import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS, DURATION_VALUES } from '../constants';
 import { suggestNextChord } from '../engine/progressionSuggester';
 
 // ─── Utility: note name → chromatic index (0-11) ──────────────────────────
@@ -49,6 +52,8 @@ export interface UseHarmonyLabelsParams {
     timeSignatureChangeAbsBeat: (tc: TimeSignatureChange) => number;
     harmonyLabelMinSpanBeats?: number;
     useStatisticalCorrection?: boolean;
+    statisticalBiasThreshold?: number;
+    styleProfile?: StyleProfile | null;
     ornamentOverrides?: Array<{ noteId: string; type: string }>;
 }
 
@@ -61,6 +66,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         analysisContextAbsBeat, timeSignatureChangeAbsBeat,
         harmonyLabelMinSpanBeats,
         useStatisticalCorrection,
+        statisticalBiasThreshold,
+        styleProfile,
         ornamentOverrides,
     } = params;
 
@@ -88,8 +95,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             }
             // Add composite key from stored fields (for orphaned IDs)
-            if (o.midi != null && o.measureIndex != null && o.beat != null) {
-                m.set(`${o.midi}-${o.measureIndex}-${o.beat}`, o.type);
+            if ((o as any).midi != null && (o as any).measureIndex != null && (o as any).beat != null) {
+                m.set(`${(o as any).midi}-${(o as any).measureIndex}-${(o as any).beat}`, o.type);
             }
         }
         // Also include IDs from analyzedNotes that carry ornamentOverride
@@ -224,9 +231,190 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         })();
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-        const ctxAtAbsBeat = (absBeat: number) => (analysisContexts || [])
+        // ─── Cadential Pattern Recognition (Fase 1) ───
+        let _effectiveCtxs: AnalysisContext[] = [...(analysisContexts || [])];
+        const _pivotCandidates = new Map<number, {tonic: string, isMinor: boolean}>();
+        try {
+            const _cadEnabled = typeof localStorage !== 'undefined'
+                && localStorage.getItem(CADENTIAL_PATTERN_RECOGNITION_KEY) !== '0';
+            if (_cadEnabled && timelineForLabels.length >= 2) {
+                const _chEvts: ChordEvent[] = [];
+                for (const ev of timelineForLabels) {
+                    if (!ev?.notes?.length) continue;
+                    try {
+                        const cands = identifyChordCandidates(ev.notes);
+                        const top = cands?.[0];
+                        if (!top?.root) continue;
+                        // root can be string or object {noteIndex, midi}
+                        const rootPc = typeof top.root === 'string'
+                            ? noteNameToPc(top.root)
+                            : (((Number((top.root as any)?.noteIndex ?? (top.root as any)?.midi ?? 0)) % 12) + 12) % 12;
+                        const bassMidi = Math.min(...(ev.notes as any[]).map((n: any) => Number(n.midi)));
+                        const bassPc = ((bassMidi % 12) + 12) % 12;
+                        _chEvts.push({ rootPc, quality: top.type || '', bassPc, absBeat: ev.absBeat,
+                            notePcs: [...new Set((ev.notes as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] });
+                    } catch { /* skip event */ }
+                }
+                const _cadMatches = evaluateCadentialPatterns(
+                    _chEvts, noteNameToPc(currentTonic), isMinorMode, { minConfidence: 70 },
+                );
+                const _manualBeats = new Set(
+                    (analysisContexts || []).filter((c: any) => c.source !== 'inferred')
+                        .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
+                );
+                for (const m of _cadMatches) {
+                    if (!_manualBeats.has(m.startBeat)) {
+                        // Deceptive cadences confirm the *matched* key
+                        // (e.g. Am when the home key is C). Inject the
+                        // matched tonic at the cadence span, then return to
+                        // the home key after the resolution.
+                        if (m.deceptive) {
+                            const _decTonic = pcToNoteName(m.targetTonicPc);
+                            const _decMinor = m.targetIsMinor;
+                            _effectiveCtxs.push({
+                                absBeat: m.startBeat,
+                                newTonic: _decTonic,
+                                newIsMinor: _decMinor,
+                                score: 100,
+                                source: 'inferred',
+                            });
+                            // Return to home key after the deceptive resolution
+                            const nextAfterDec = _chEvts.find(
+                                ev => ev.absBeat > m.endBeat + 1e-6,
+                            );
+                            if (nextAfterDec) {
+                                // Pivot detection on chord after resolution
+                                const _decScale = new Set(
+                                    getScalePcs(m.targetTonicPc, _decMinor),
+                                );
+                                if (nextAfterDec.notePcs?.every(pc => _decScale.has(pc))) {
+                                    _pivotCandidates.set(nextAfterDec.absBeat,
+                                        { tonic: _decTonic, isMinor: _decMinor });
+                                }
+                                if (!_manualBeats.has(nextAfterDec.absBeat)) {
+                                    _effectiveCtxs.push({
+                                        absBeat: nextAfterDec.absBeat,
+                                        newTonic: currentTonic,
+                                        newIsMinor: isMinorMode,
+                                        score: 0,
+                                        source: 'inferred',
+                                    });
+                                }
+                            }
+                            continue;
+                        }
+                        // ── Tonicisation START: switch to target key ──
+                        _effectiveCtxs.push({
+                            absBeat: m.startBeat,
+                            newTonic: pcToNoteName(m.targetTonicPc),
+                            newIsMinor: m.targetIsMinor,
+                            score: m.confidence,
+                            source: 'inferred',
+                        });
+                        // ── Tonicisation END: return to home key ──
+                        // The resolution chord (at m.endBeat) must stay entirely
+                        // in the target key.  Return only at the NEXT timeline
+                        // event after the resolution onset.
+                        const nextEvAfterRes = _chEvts.find(
+                            ev => ev.absBeat > m.endBeat + 1e-6,
+                        );
+                        if (nextEvAfterRes) {
+                            // ── Pivot detection: if the chord right after
+                            // the resolution is diatonic to the target key,
+                            // record it as a pivot candidate (VI=III style).
+                            const _tgtScale = new Set(getScalePcs(m.targetTonicPc, m.targetIsMinor));
+                            const nextIsDiatonic = nextEvAfterRes.notePcs?.every(pc => _tgtScale.has(pc));
+                            if (nextIsDiatonic) {
+                                _pivotCandidates.set(nextEvAfterRes.absBeat,
+                                    { tonic: pcToNoteName(m.targetTonicPc), isMinor: m.targetIsMinor });
+                            }
+                            const returnBeat = nextEvAfterRes.absBeat;
+                            const coveredByNext = _cadMatches.some(
+                                other => other !== m
+                                    && other.startBeat <= returnBeat + 1e-6
+                                    && other.endBeat >= returnBeat - 1e-6,
+                            );
+                            if (!coveredByNext && !_manualBeats.has(returnBeat)) {
+                                _effectiveCtxs.push({
+                                    absBeat: returnBeat,
+                                    newTonic: currentTonic,
+                                    newIsMinor: isMinorMode,
+                                    score: 0,
+                                    source: 'inferred',
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // ─── Dominant Resolution Extension ───
+                // When a chord acts as V of a new key (with chromatic notes
+                // outside the home scale) and the next chord resolves as I/i,
+                // extend the tonicised context so the resolution stays in the
+                // target key rather than snapping back to the home key.
+                const _homeScalePcs = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
+                for (let ci = 0; ci < _chEvts.length - 1; ci++) {
+                    const dom = _chEvts[ci], res = _chEvts[ci + 1];
+                    // V→I/i: dominant root is 7 semitones above resolution root
+                    if (((dom.rootPc - res.rootPc + 12) % 12) !== 7) continue;
+                    if (qualityFamily(dom.quality) !== 'major') continue;
+                    // In minor keys, ♭VII → III is V → I of the relative major
+                    // and needs no chromatic evidence (all notes are diatonic).
+                    const _homePc = noteNameToPc(currentTonic);
+                    const isBVII_to_III = isMinorMode
+                        && dom.rootPc === (_homePc + 10) % 12
+                        && res.rootPc === (_homePc + 3) % 12
+                        && qualityFamily(res.quality) === 'major';
+                    // Require chromatic evidence unless it's the ♭VII → III case
+                    if (!isBVII_to_III && !dom.notePcs?.some(pc => !_homeScalePcs.has(pc))) continue;
+                    const targetPc = res.rootPc;
+                    const targetIsMinor = qualityFamily(res.quality) !== 'major';
+                    // Skip if already covered by a cadential match or manual marker
+                    const alreadyCovered = _effectiveCtxs.some(c =>
+                        Math.abs(analysisContextAbsBeat(c) - dom.absBeat) < 0.1
+                        && noteNameToPc(c.newTonic) === targetPc);
+                    if (alreadyCovered) continue;
+                    // Inject tonicisation context covering V + resolution
+                    _effectiveCtxs.push({
+                        absBeat: dom.absBeat,
+                        newTonic: pcToNoteName(targetPc),
+                        newIsMinor: targetIsMinor,
+                        score: 65,
+                        source: 'inferred',
+                    });
+                    // Return to home key + pivot detection:
+                    // if the chord after the resolution is diatonic to the
+                    // target key, record it as a pivot candidate (VI=III).
+                    const _nextAfterRes = _chEvts.find(ev => ev.absBeat > res.absBeat + 1e-6);
+                    if (_nextAfterRes) {
+                        const _tgtScaleD = new Set(getScalePcs(targetPc, targetIsMinor));
+                        const nextIsDiatonicD = _nextAfterRes.notePcs?.every(pc => _tgtScaleD.has(pc));
+                        if (nextIsDiatonicD) {
+                            _pivotCandidates.set(_nextAfterRes.absBeat,
+                                { tonic: pcToNoteName(targetPc), isMinor: targetIsMinor });
+                        }
+                        if (!_manualBeats.has(_nextAfterRes.absBeat)) {
+                            _effectiveCtxs.push({
+                                absBeat: _nextAfterRes.absBeat,
+                                newTonic: currentTonic,
+                                newIsMinor: isMinorMode,
+                                score: 0,
+                                source: 'inferred',
+                            });
+                        }
+                    }
+                }
+            }
+        } catch { /* cadential recognition failed gracefully */ }
+
+        const ctxAtAbsBeat = (absBeat: number) => _effectiveCtxs
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
-            .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
+            .sort((a, b) => {
+                const d = analysisContextAbsBeat(b) - analysisContextAbsBeat(a);
+                if (Math.abs(d) > 1e-6) return d;
+                // Same beat: prefer higher-confidence entry (tonicisation > return-to-home)
+                return ((b as any).score ?? 0) - ((a as any).score ?? 0);
+            })[0];
 
         const qAbs = (x: number) => {
             try {
@@ -358,6 +546,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             }
 
+            // ─── Pivot labels from cadential resolution ───
+            for (const [pivBeat, pivInfo] of _pivotCandidates) {
+                if (autoRomanDisplayByAbsBeat.has(pivBeat)) continue;
+                const bEntry = base.find((b: any) => Math.abs(b.q - pivBeat) < 0.1);
+                if (!bEntry?.ev?.notes?.length) continue;
+                const rTgt = getRomanAnalysis(
+                    structuralNotes(bEntry.ev.notes, ornOverrideMap),
+                    pivInfo.tonic, pivInfo.isMinor,
+                    { ornamentOverrides: ornOverrideRecord },
+                );
+                const homeR = String(bEntry.roman || '');
+                if (rTgt?.roman && homeR && rTgt.roman !== homeR) {
+                    autoRomanDisplayByAbsBeat.set(bEntry.q, `${rTgt.roman}=${homeR}`);
+                }
+            }
+
             // ── Cadential tonicization detector ──
             // Detect V→I cadential patterns in secondary keys that the engine missed.
             // E.g., in C major: Bb/D → C/E → F ≡ IV→V→I in F (tonicization to IV).
@@ -387,6 +591,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // function label is more informative and musically correct.
                     const _globalRomanJ = String(base[j].roman || '');
                     if (_globalRomanJ.includes('/')) continue;
+                    // Hybrid guard: skip 12-key scan when DRE already provides
+                    // a strong diatonic function in a modulated (non-global) context.
+                    // This prevents tautological matches (e.g. F#=I in F# key)
+                    // while still allowing tonicization detection in the global key zone.
+                    const _dreStrong = /^(I|i|II|ii|III|iii|IV|iv|V|v|VI|vi|VII|vii)(°|ø|7|6|64|$)/.test(_globalRomanJ);
+                    if (_dreStrong && base[j].ctxTonic !== currentTonic) continue;
                     const evJ = base[j].ev;
                     const evPrev = base[j - 1].ev;
                     if (!evJ?.notes?.length || !evPrev?.notes?.length) continue;
@@ -398,6 +608,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (K === currentTonic) continue;
                         const rJ = getRomanAnalysis(stJ, K, false);
                         if (!rJ || rJ.roman !== 'I') continue;
+                        // Guard: skip enharmonic tautological match (e.g. K='Gb' for an F# chord)
+                        const _kPc = noteNameToChromaticIndex(K);
+                        const _rootNote = stJ.find(n => ((Number(n?.midi) % 12) + 12) % 12 === _kPc);
+                        if (_rootNote) {
+                            const _sp = String(_rootNote.pitch || '') + (_rootNote.accidental === 'sharp' ? '#' : _rootNote.accidental === 'flat' ? 'b' : '');
+                            if (_sp !== K) continue;
+                        }
                         const rPrev = getRomanAnalysis(stPrev, K, false);
                         if (!rPrev || !/^V/.test(rPrev.roman)) continue;
                         // V° (diminished) is not a real dominant — skip auto-tonicization
@@ -607,6 +824,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         const lastStructuralByVoiceBySystem = new Map<number, Map<number, any>>();
         const lastBassPcBySystem = new Map<number, number | null>();
         const lastRomanBySystem = new Map<number, string>();
+        const lastContextBySystem = new Map<number, { tonic: string; isMinor: boolean }>();
         const lastFiguresBySystem = new Map<number, string[]>();
         const lastChordRootPcBySystem = new Map<number, number | null>();
         const lastChordTypeBySystem = new Map<number, string | null>();
@@ -1300,10 +1518,23 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // If the current active note for this voice is a suspension onset,
                     // do not keep any structural note for this voice at this scanpoint.
                     // For other ornaments (passing/neighbor/etc.), keep the previous structural note.
+                    // HELD SUSPENSIONS (onset at a previous beat) are still sounding →
+                    // treat them as structural chord tones.
                     try {
                         const s = (n as any)?.isSuspension;
-                        if (s && typeof s.fromAbsBeat === 'number' && Math.abs((s.fromAbsBeat as number) - Number(event.absBeat)) < 1e-3) {
-                            lastStructural.delete(v);
+                        if (s && typeof s.fromAbsBeat === 'number') {
+                            if (Math.abs((s.fromAbsBeat as number) - Number(event.absBeat)) < 1e-3) {
+                                lastStructural.delete(v);
+                            } else {
+                                // Held suspension: still sounding at this beat → structural
+                                lastStructural.set(v, {
+                                    ...n,
+                                    isPassing: false, isNeighbor: false,
+                                    isAppoggiatura: false, isAnticipation: false,
+                                    isEscape: false, isSuspension: undefined,
+                                });
+                            }
+                            continue;
                         }
                     } catch { /* ignore */ }
                     // Appoggiatura: replace this voice in the structural snapshot with
@@ -1345,7 +1576,36 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                     continue;
                 }
-                lastStructural.set(v, n);
+                // We only reach here when isNonChordToneAtLabelEvent returned false,
+                // meaning this note is structural.  Clear any residual isSuspension
+                // flag so downstream filters (harmonicNotesNoSuspAtThisBeat) don't
+                // accidentally remove it from the chord verticalization.
+                const _suspFlag = (n as any)?.isSuspension;
+                // ── Targeted diagnostic for F#3 isSuspension clean ──
+                try {
+                    const _dbgRaw2 = localStorage.getItem('_HT_DEBUG_BEAT');
+                    const _dbgB2 = _dbgRaw2 !== null ? Number(_dbgRaw2) : NaN;
+                    if (!isNaN(_dbgB2) && _dbgB2 >= 0 && Math.abs(Number(event.absBeat) - _dbgB2) < 0.5 && v === 4) {
+                        console.log('[HT-DBG] v4 path at ab=' + event.absBeat +
+                            ' _suspFlag=' + JSON.stringify(_suspFlag) +
+                            ' cleaning=' + !!_suspFlag);
+                    }
+                } catch { /* ignore */ }
+                lastStructural.set(v, _suspFlag ? { ...n, isSuspension: undefined } : n);
+            }
+
+            // ── Diagnostic: dump lastStructural content when tracer is active ──
+            const _dbgRawEarly = localStorage.getItem('_HT_DEBUG_BEAT');
+            const _dbgBeatEarly = _dbgRawEarly !== null ? Number(_dbgRawEarly) : NaN;
+            const _dbgEarly = !isNaN(_dbgBeatEarly) && _dbgBeatEarly >= 0 && Math.abs(event.absBeat - _dbgBeatEarly) < 0.5;
+            if (_dbgEarly) {
+                const lsEntries = Array.from(lastStructural.entries()).map(([v, n]) => ({
+                    v, midi: (n as any)?.midi, pitch: (n as any)?.pitch, acc: (n as any)?.accidental, explAcc: (n as any)?.explicitAccidental, noteIndex: (n as any)?.noteIndex, susp: !!(n as any)?.isSuspension
+                }));
+                console.log('[HT-DBG] lastStructural at ab=' + event.absBeat + ':', JSON.stringify(lsEntries));
+                console.log('[HT-DBG] fullNotes at ab=' + event.absBeat + ':', JSON.stringify((fullNotes || []).map((n: any) => ({
+                    midi: n?.midi, pitch: n?.pitch, voice: n?.voice, acc: n?.accidental, explAcc: n?.explicitAccidental, susp: !!n?.isSuspension
+                }))));
             }
 
             // Filter out user-overridden ornamental notes from the structural snapshot.
@@ -1442,8 +1702,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
                         // Only drop/keep suspension behavior at its actual onset. During preparation,
                         // a note can be marked as isSuspension but should still count as chord tone.
-                        const isSuspStartHere = isSusp && Math.abs((s.fromAbsBeat as number) - absBeat) < SUSP_EPS;
-                        if (isSusp && isSuspStartHere) return n;
+                        // Suspensions are sounding notes in the vertical — keep them structural
+                        // regardless of which beat they started on (held suspensions matter too).
+                        if (isSusp) return n;
 
                         if (dissonantVsBass) return n;
 
@@ -1481,6 +1742,21 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
             const contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
 
+            // ── Permanent diagnostic tracer ──────────────────────────────────
+            // Activate from browser console:  localStorage.setItem('_HT_DEBUG_BEAT', '43')
+            // List all beats:                 localStorage.setItem('_HT_DEBUG_BEAT', '-1')
+            // Deactivate:                     localStorage.removeItem('_HT_DEBUG_BEAT')
+            // Persists across reloads — set once, reload, see output.
+            const _dbgRaw = localStorage.getItem('_HT_DEBUG_BEAT');
+            const _dbgBeat = _dbgRaw !== null ? Number(_dbgRaw) : NaN;
+            const _dbg = !isNaN(_dbgBeat) && _dbgBeat >= 0 && Math.abs(event.absBeat - _dbgBeat) < 0.5;
+            if (_dbgBeat === -1) console.log(`[HT-BEATS] ab=${event.absBeat} bassPc=${bassPc} midis=[${event.notes?.map((n: any) => n.midi).join(',') ?? ''}]`);
+            const _tr: Array<{ step: string; roman: string; detail?: any }> = [];
+            const _dt = (step: string, romanVal: string, detail?: any) => {
+                if (_dbg) _tr.push({ step, roman: romanVal, ...(detail ? { detail } : {}) });
+            };
+            // ─────────────────────────────────────────────────────────────────
+
             const ctxKey = `${contextTonic}::${contextIsMinor ? 'm' : 'M'}`;
             const prevSig = lastSigBySystem.get(systemIndex);
             const prevCtx = lastCtxBySystem.get(systemIndex);
@@ -1513,7 +1789,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // harmony is already labeled at the appoggiatura beat.  The resolved
                 // note merely completes the chord — no new label is needed.
                 const lastAppBeat = lastHadAppoggBySystem.get(systemIndex) ?? -Infinity;
-                isAppoggiaturaResolution = (absBeat - lastAppBeat > 0) && (absBeat - lastAppBeat <= 2 + 1e-6)
+                isAppoggiaturaResolution = (event.absBeat - lastAppBeat > 0) && (event.absBeat - lastAppBeat <= 2 + 1e-6)
                     && !hasAppoggiaturaOnsetHere;
                 // Only suppress if bass didn't change (a bass change = real harmony change).
                 const prevBassPcHere = lastBassPcBySystem.get(systemIndex);
@@ -1677,9 +1953,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const prevType = lastChordTypeBySystem.get(systemIndex);
 
             try {
+                // ── Diagnostic: dump analysisNotesForNaming before getRomanAnalysis ──
+                if (_dbgEarly) {
+                    console.log('[HT-DBG] analysisNotesForNaming at ab=' + event.absBeat + ':',
+                        JSON.stringify((analysisNotesForNaming || []).map((n: any) => ({
+                            midi: n?.midi, pitch: n?.pitch, noteIndex: n?.noteIndex,
+                            acc: n?.accidental, explAcc: n?.explicitAccidental,
+                            susp: !!(n as any)?.isSuspension, voice: n?.voice
+                        }))));
+                }
                 const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
                 if (r) {
                     roman = r.roman;
+                    _dt('R0:getRoman', roman);
                     isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
                 }
 
@@ -1715,6 +2001,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const pick = [alt1, alt2].find(x => x?.roman && isPlausible(String(x.roman)));
                         if (pick?.roman) {
                             roman = String(pick.roman);
+                            _dt('R1:viiRescue', roman, { pick: pick?.roman, rr0 });
                             isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
                         }
                     }
@@ -1737,6 +2024,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             if (!bestSecondary || score > bestSecondary.score) bestSecondary = { roman: rr, score };
                         }
                         if (bestSecondary) roman = bestSecondary.roman;
+                        if (bestSecondary) _dt('R2:secDom', roman);
                     }
                 } catch { /* ignore */ }
 
@@ -1757,6 +2045,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const tonicPc = contextTonic ? noteNameToChromaticIndex(contextTonic) : null;
                             if (rootPc != null && tonicPc != null && rootPc === tonicPc) {
                                 roman = 'I7';
+                                _dt('R3:I7', roman);
                             }
                         }
                     }
@@ -1780,6 +2069,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
                     if (inferred) {
                         roman = inferred.roman;
+                        _dt('R4:dyadBass', roman, { bassPc, inferred: inferred?.roman });
                     }
                 }
             } catch { /* ignore */ }
@@ -1794,12 +2084,15 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             try {
                 const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
                 const pcs = pcSetFromNotes(analysisNotes as any);
-                if (!isSecondaryOrSlashRoman && prevRoman && bassPc != null && pcs.size > 0 && pcs.size <= 2) {
+                const prevCtx = lastContextBySystem.get(systemIndex);
+                const sameCtx = !prevCtx || (prevCtx.tonic === contextTonic && prevCtx.isMinor === contextIsMinor);
+                if (!isSecondaryOrSlashRoman && prevRoman && bassPc != null && pcs.size > 0 && pcs.size <= 2 && sameCtx) {
                     const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
                     if (prevTriad) {
                         const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
                         if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
                             roman = prevRoman;
+                            _dt('R5:shellCont', roman, { prevRoman, sameCtx });
                         }
                     }
                 }
@@ -1820,6 +2113,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // Allow very sparse sets (2 pcs) to still count as the triad.
                         if (pcsSubset && pcs.size > 0 && pcs.size <= 3) {
                             roman = inferred.roman;
+                            _dt('R6:rootless', roman, { bassPc });
                         }
                     }
                 }
@@ -1837,6 +2131,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // Current vertical may be rootless; allow subset of the triad.
                         if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
                             roman = prevRoman;
+                            _dt('R7:postInvRoot', roman, { prevRoman, prevRootPc });
                         }
                     }
                 }
@@ -1844,12 +2139,15 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // If the previous chord is a *diatonic triad label* (I/ii/iii/IV/V/vi/vii° etc.)
                 // keep that roman when the current vertical is a subset of its triad, even if the
                 // bass alone would imply a different diatonic root (e.g. Am/C shell -> vi6, not I).
-                if (prevRoman && bassPc != null && roman && roman !== prevRoman && !String(roman).includes('/')) {
+                const prevCtx2 = lastContextBySystem.get(systemIndex);
+                const sameCtx2 = !prevCtx2 || (prevCtx2.tonic === contextTonic && prevCtx2.isMinor === contextIsMinor);
+                if (sameCtx2 && prevRoman && bassPc != null && roman && roman !== prevRoman && !String(roman).includes('/')) {
                     const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
                     if (prevTriad) {
                         const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
                         if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
                             roman = prevRoman;
+                            _dt('R8:postInvDiat', roman, { prevRoman, sameCtx2 });
                         }
                     }
                 }
@@ -1874,6 +2172,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             if (roman) {
                 lastRomanBySystem.set(systemIndex, roman);
+                lastContextBySystem.set(systemIndex, { tonic: contextTonic, isMinor: contextIsMinor });
                 lastFiguresBySystem.set(systemIndex, (figures || []).slice());
             }
 
@@ -1967,8 +2266,17 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const isDominantish = (r: string) => r === 'V' || r.startsWith('V/');
                         const isPlainDiatonic = (r: string) => !!r && !r.includes('/') && !r.includes('It+') && !r.includes('Fr+') && !r.includes('Ger+');
 
-                        if ((!onsetRoman && resRoman) || (isPlainDiatonic(onsetRoman) && isDominantish(resRoman) && resRoman !== onsetRoman)) {
+                        // Guard: don't override a plain diatonic roman with the resolution's
+                        // dominant when the onset analysisNotes already form a full triad
+                        // (3+ distinct pitch classes). The R9 heuristic is meant for sparse
+                        // voicings where the suspending note removal collapses the chord to a
+                        // misleading dyad (e.g. iii instead of V). A complete triad like iv
+                        // should never be replaced by V just because the next beat is V.
+                        const onsetPcCount = new Set((analysisNotes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((n.midi % 12) + 12) % 12)).size;
+
+                        if ((!onsetRoman && resRoman) || (isPlainDiatonic(onsetRoman) && isDominantish(resRoman) && resRoman !== onsetRoman && onsetPcCount < 3)) {
                             roman = resRoman;
+                            _dt('R9:domRes', roman, { resRoman });
                         }
                         if (!roman) {
                             // Fallback: underlying harmony at suspension onset.
@@ -2015,7 +2323,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const forced = preferred
                                 ? calculateRomanFromChordInfo({ root: preferred.root, type: preferred.type, intervals: preferred.intervals }, tonicHere, isMinorHere)
                                 : null;
-                            if (forced && !roman) roman = forced;
+                            if (forced && !roman) { roman = forced; _dt('R11:sparseRescue', roman); }
                         }
                         }
                     } catch (_) {}
@@ -2147,6 +2455,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const isSlashRoman = typeof roman === 'string' && roman.includes('/');
                         if ((!roman || roman === prevRoman) && !isMinorMajor7 && !isSlashRoman) {
                             roman = '';
+                            _dt('R10:suspDedup', roman, { prevRoman });
                             figures = [];
                             symbol = '';
                         }
@@ -2218,7 +2527,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (auto) {
                         const isCurrentlyTonic = roman === 'I' || roman === 'i';
                         if (!isCurrentlyTonic) {
-                            if (auto.roman !== undefined) roman = auto.roman;
+                            if (auto.roman !== undefined) { roman = auto.roman; _dt('R12:autoOvr', roman); }
                             if (auto.symbol !== undefined) symbol = auto.symbol;
                             if (auto.figures !== undefined) figures = auto.figures;
                         }
@@ -2230,7 +2539,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             try {
                 const ov = overrideByAbsBeat.get(qAbs(event.absBeat));
                 if (ov) {
-                    if (ov.roman !== undefined) roman = ov.roman;
+                    if (ov.roman !== undefined) { roman = ov.roman; _dt('R13:manualOvr', roman); }
                     if (ov.symbol !== undefined) symbol = ov.symbol;
                     if (ov.figures !== undefined) figures = ov.figures;
                 }
@@ -2263,6 +2572,39 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             } catch { /* ignore */ }
 
+            // ── R14: Statistical corpus bias ──
+            // When useStatisticalCorrection is on and two chord candidates are close in score,
+            // use bigram probability P(roman | prevRoman) to prefer the more likely progression.
+            try {
+                if (useStatisticalCorrection && styleProfile?.romanBigrams && prevRoman && roman) {
+                    const threshold = Number(statisticalBiasThreshold) || 2;
+                    const candNotes = (analysisNotesForNaming && analysisNotesForNaming.length >= 2)
+                        ? analysisNotesForNaming : (analysisNotes && analysisNotes.length >= 2 ? analysisNotes : null);
+                    if (candNotes) {
+                        const allCands = identifyChordCandidates(candNotes as any);
+                        if (Array.isArray(allCands) && allCands.length >= 2) {
+                            const c0 = allCands[0] as any;
+                            const c1 = allCands[1] as any;
+                            const scoreDiff = (c0.score ?? 0) - (c1.score ?? 0);
+                            if (scoreDiff < threshold && c1.root && c1.type) {
+                                const altRoman = calculateRomanFromChordInfo(
+                                    { root: c1.root, type: c1.type, intervals: c1.intervals },
+                                    contextTonic, contextIsMinor,
+                                );
+                                if (altRoman && altRoman !== roman) {
+                                    const pCurr = getBigramProbability(styleProfile, prevRoman, roman);
+                                    const pAlt = getBigramProbability(styleProfile, prevRoman, altRoman);
+                                    if (pAlt > pCurr * 1.5 && pAlt > 0.05) {
+                                        roman = altRoman;
+                                        _dt('R14:corpusBias', roman, { prevRoman, pCurr, pAlt, scoreDiff });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
             // Display-only: when we are in a tonicization/modulation context, show pivot tonics as `I=V`.
             // This keeps the analysis context in the new key (so following chords aren't distorted),
             // while still showing the functional relation to the global key.
@@ -2280,7 +2622,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // Never replace a tonic label (I/i) — the tonic chord is not
                         // a secondary function; it should always show as I.
                         if (!isCurrentlyTonicForDisp) {
-                            romanDisplay = s;
+                            // Don't override dominant (V) with bare tonic (I)
+                            // from tautological tonicization (e.g. F# maj = I in F#)
+                            const _isDom = /^V($|[0-9°+])/.test(roman);
+                            const _isBareI = /^[Ii]$/.test(s);
+                            if (!_isDom || !_isBareI) {
+                                romanDisplay = s;
+                                _dt('D1:cadPivot', String(romanDisplay));
+                            }
                         }
                     }
                 }
@@ -2296,6 +2645,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // Common/pedagogical: show I=V on dominant-key pivot.
                         if (globalRoman === 'V' || globalRoman.startsWith('V/')) {
                             romanDisplay = `${localRoman}=${globalRoman}`;
+                            _dt('D2:nonGlobalPivot', String(romanDisplay));
                         }
                     }
                 }
@@ -2357,6 +2707,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Anchor label to the current timeline event's beat (not just the note's attack)
             const x = getXForAbsBeat(event.absBeat, system);
 
+
+
+            // ── Diagnostic dump ──────────────────────────────────────────────
+            if (_dbg && _tr.length) {
+                console.groupCollapsed(
+                    `[HT-DEBUG] beat ${event.absBeat} → roman="${roman}" display="${romanDisplay ?? ''}" ctx=${contextTonic}${contextIsMinor ? 'm' : ''}`
+                );
+                console.table(_tr);
+                console.log({ contextTonic, contextIsMinor, bassPc, prevRoman, appCtx: applicableContext?.newTonic });
+                console.groupEnd();
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             labelsBySystem[systemIndex].push({
                 id: `hlabel-${systemIndex}-${event.absBeat}`,
                 x,
@@ -2372,8 +2735,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
         // Sort labels in each system by x
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
+
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
+    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, statisticalBiasThreshold, styleProfile, timeSignature, useStatisticalCorrection]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
@@ -3190,7 +3554,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             };
         }).filter(Boolean) as Array<{ absBeat: number; roman?: string; symbol?: string; figures?: string[] }>;
 
-        return detectVoiceLeadingSequences(notes, timeSignature, timeSignatureChanges, labelPoints);
+        return detectVoiceLeadingSequences(notes, timeSignature, timeSignatureChanges, labelPoints, undefined, {
+            keySignatureRoot: String(currentTonic || 'C'),
+            isMinorMode: !!isMinorMode,
+        });
     }, [analyzedNotes, currentTonic, analysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, isSequencesEnabled, minSpanBeats, notes, timeSignature, timeSignatureChanges]);
 
     const harmonyLabelsBySystemSequenced = useMemo(() => {
@@ -3394,14 +3761,15 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Build a stable mapping from TEMPLATE slot k -> functional roman.
             // This avoids recomputing (and potentially changing) the inferred local tonic
             // for each copied label.
-            const templateByK: Array<{ lab: typeof flat[number] | null; src: string; stripped: string; functional: string }> = [];
+            const templateByK: Array<{ lab: typeof flat[number] | null; src: string; stripped: string; functional: string; figures?: string[] }> = [];
             const tmplRomans: string[] = [];
             for (let kk = 0; kk <= L; kk += 1) {
                 const slot = slots[seq.startSlotIdx + kk];
                 const lab = Number.isFinite(slot) ? findNearestLabelIndex(slot) : null;
                 const src = String(lab?.label?.roman ?? '').trim();
                 if (src) tmplRomans.push(src);
-                templateByK.push({ lab, src, stripped: stripSecondary(src), functional: src });
+                const figures = lab?.label?.figures;
+                templateByK.push({ lab, src, stripped: stripSecondary(src), functional: src, figures: Array.isArray(figures) ? figures : undefined });
             }
             const inferred0 = inferLocalTonicFromTemplate(tmplRomans);
             // If we have no explicit tonicization evidence but the sequence is truly transposed,
@@ -3429,14 +3797,21 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // or the inferred local tonic IS the global tonic), propagating the template's
             // literal roman to copies would override each copy's native Roman
             // (e.g. "vi" → "V" for a diatonic non-modulating sequence).
-            // Skip sequence annotation entirely in that case.
-            const skipFunctional = (inferred.degreeIdx == null || (inferred.degreeIdx === 0 && !inferred.isMinor));
+            // Skip sequence annotation entirely in that case — UNLESS it's a modulating
+            // sequence, where each link must replicate the model's exact roman numerals.
+            const isModulatingSeq = !!seq.isModulating;
+            const skipFunctional = !isModulatingSeq && (inferred.degreeIdx == null || (inferred.degreeIdx === 0 && !inferred.isMinor));
 
             for (let kk = 0; kk < templateByK.length; kk += 1) {
                 const row = templateByK[kk];
-                const functional = (!skipFunctional && row.src && inferred.degreeIdx != null && inferred.isMinor != null)
-                    ? normalizeFunctionalRomanInSequence(row.src, inferred.degreeIdx, inferred.isMinor)
-                    : '';
+                // For modulating sequences: each link is an exact transposition of the
+                // model, so the functional roman IS the template's own roman (V→I repeats
+                // as V→I in each new local key).
+                const functional = isModulatingSeq
+                    ? (row.src || '')
+                    : ((!skipFunctional && row.src && inferred.degreeIdx != null && inferred.isMinor != null)
+                        ? normalizeFunctionalRomanInSequence(row.src, inferred.degreeIdx, inferred.isMinor)
+                        : '');
                 templateByK[kk] = { ...row, functional };
             }
 
@@ -3475,6 +3850,17 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (row.functional) {
                         (target as any).sequenceRomanFunctional = row.functional;
                         (target as any).sequenceRomanSource = templateRoman;
+                        // For modulating sequences the model's roman must win
+                        // over any romanDisplay generated by the pivot / secondary
+                        // analysis pipeline (which analyses in a potentially wrong tonic).
+                        if (isModulatingSeq) {
+                            (target as any).romanDisplay = undefined;
+                            // Also propagate figures from the model — the chord
+                            // voicing is an exact transposition of the model.
+                            if (Array.isArray(row.figures)) {
+                                (target as any).figures = row.figures;
+                            }
+                        }
                     }
                 }
             }

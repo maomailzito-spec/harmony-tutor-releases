@@ -41,6 +41,7 @@ const ExceptionIcon: React.FC = () => (
 
 const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     const [filters, setFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
+    const [ruleSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
     const showError = !!filters?.showError;
     const showWarning = !!filters?.showWarning;
     const showException = !!filters?.showException;
@@ -48,6 +49,17 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
     const [ruleSearch, setRuleSearch] = useState('');
 
     const suppressBroadcastRef = useRef(false);
+    const itemRefs = useRef<Map<number, HTMLLIElement>>(new Map());
+
+    // Auto-scroll to selected violation when selectedViolationIndex changes
+    // (e.g. user clicked a note overlay on the staff).
+    useEffect(() => {
+        if (selectedViolationIndex == null) return;
+        const el = itemRefs.current.get(selectedViolationIndex);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [selectedViolationIndex]);
 
     // Broadcast changes for overlays that listen to the legacy event.
     useEffect(() => {
@@ -341,6 +353,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         return (
                             <li
                                 key={`${violation.ruleId}-${index}`}
+                                ref={(el) => { if (el) itemRefs.current.set(index, el); else itemRefs.current.delete(index); }}
                                 className={`bg-gray-700/50 px-2 py-1.5 rounded-md border border-gray-700/50 hover:bg-gray-600/50 transition-colors cursor-pointer ${isSelected ? 'ring-1 ring-cyan-400 border-cyan-400' : ''}`}
                                 onMouseEnter={() => onHoverViolation(violation.noteIds)}
                                 onMouseLeave={() => onHoverViolation(null)}
@@ -368,9 +381,16 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                                 {detailLines}
                                             </p>
                                         )}
-                                        {isSelected && violation.suggestion && (
+                                        {isSelected && (violation.suggestion || (ruleSuggestions as Record<string,string>)?.[violation.ruleId]) && (
                                             <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
-                                                <span className="font-semibold">Consiglio:</span> {violation.suggestion}
+                                                {violation.suggestion && (
+                                                    <><span className="font-semibold">Consiglio:</span> {violation.suggestion}</>
+                                                )}
+                                                {(ruleSuggestions as Record<string,string>)?.[violation.ruleId] && (
+                                                    <span className="block mt-1 italic" style={{ color: '#fcd34d' }}>
+                                                        📝 {(ruleSuggestions as Record<string,string>)[violation.ruleId]}
+                                                    </span>
+                                                )}
                                             </p>
                                         )}
                                     </div>

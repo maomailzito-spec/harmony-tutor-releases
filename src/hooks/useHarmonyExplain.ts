@@ -42,7 +42,13 @@ export function useHarmonyExplain(params: UseHarmonyExplainParams) {
             const labelNotes = notes.filter((n: any) => {
                 if (!n || n.isRest) return false;
                 const noteAbsBeat = (n.measureIndex ?? 0) * beatsPerMeasure + (Number(n.beat ?? 1) - 1);
-                return Math.abs(noteAbsBeat - labelAbsBeat) < 0.01;
+                // Include held notes: active if onset <= labelAbsBeat < onset + duration
+                const _DV: Record<string,number> = { whole:4, half:2, quarter:1, '8th':0.5, '16th':0.25, '32nd':0.125 };
+                let dur = (_DV[n.duration] || 1);
+                if (n.isDotted) dur *= 1.5;
+                if (n.isTriplet) dur *= 2 / 3;
+                if (n.isDuplet) dur *= 3 / 2;
+                return noteAbsBeat <= labelAbsBeat + 1e-6 && labelAbsBeat < noteAbsBeat + dur - 1e-6;
             });
             if (!labelNotes.length) return;
 

@@ -9,6 +9,7 @@ export const MENU_ACTION_TARGET: Record<MenuAction, MenuActionTarget> = {
   [MENU_ACTIONS.IMPORT_MIDI]: 'grandStaff',
   [MENU_ACTIONS.IMPORT_MUSICXML]: 'grandStaff',
   [MENU_ACTIONS.EXPORT_MIDI]: 'grandStaff',
+  [MENU_ACTIONS.EXPORT_MUSICXML]: 'grandStaff',
   [MENU_ACTIONS.EXPORT_PDF]: 'grandStaff',
   [MENU_ACTIONS.EXPORT_PNG]: 'grandStaff',
   [MENU_ACTIONS.PRINT]: 'grandStaff',

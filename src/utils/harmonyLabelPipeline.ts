@@ -304,8 +304,19 @@ export function computeStructuralSnapshotForHarmonyLabelEvent(opts: {
         if (isNonChordToneAtLabelEvent(n, eventAbsBeat)) {
             try {
                 const s = (n as any)?.isSuspension;
-                if (s && typeof s.fromAbsBeat === 'number' && Math.abs((s.fromAbsBeat as number) - Number(eventAbsBeat)) < 1e-3) {
-                    lastStructural.delete(v);
+                if (s && typeof s.fromAbsBeat === 'number') {
+                    if (Math.abs((s.fromAbsBeat as number) - Number(eventAbsBeat)) < 1e-3) {
+                        lastStructural.delete(v);
+                    } else {
+                        // Held suspension: still sounding at this beat → structural
+                        lastStructural.set(v, {
+                            ...n,
+                            isPassing: false, isNeighbor: false,
+                            isAppoggiatura: false, isAnticipation: false,
+                            isEscape: false, isSuspension: undefined,
+                        });
+                    }
+                    continue;
                 }
             } catch {
                 // ignore
@@ -689,7 +700,7 @@ export function computeLookaheadTonicizationOverrides(opts: {
                     const hasM3 = !!ints?.has?.(4);
                     const hasP5 = !!ints?.has?.(7);
                     const hasm7 = !!ints?.has?.(10);
-                    const isMajTriad = t === 'Major' || t === BuiltInChords.Major;
+                    const isMajTriad = t === 'Major';
                     const isDomType = t.startsWith('Dominant');
                     // Triad: require M3; Seventh: require a dominant shell (P5+m7) even if 3rd is delayed.
                     if (isMajTriad) return hasM3;
@@ -885,68 +896,11 @@ export function computeLookaheadTonicizationOverrides(opts: {
         // ignore
     }
 
-    // ── Statistical refinement: correct improbable romans using corpus probabilities ──
-    // Rules: (1) only intervene on extreme improbability (<2%), (2) never invent
-    // chords — only pick from identifyChordCandidates alternatives, (3) the
-    // alternative must have >5% probability AND >5× the current probability.
-    if (useStatisticalCorrection) {
-        try {
-            const stripFig = (s: string) => s.replace(/[0-9♭♯]+$/g, '');
-            for (let i = 1; i < base.length; i++) {
-                const bi = base[i];
-                if (!bi?.roman) continue;
-                // Never override user or existing auto overrides
-                if (overrideByAbsBeat.has(bi.q) || autoOverrideByAbsBeat.has(bi.q)) continue;
-                const prev = base[i - 1];
-                if (!prev?.roman) continue;
-                const prevBase = stripFig(prev.roman);
-                const curBase = stripFig(bi.roman);
-                if (!prevBase || !curBase) continue;
-                // Build context (trigram if available, else bigram)
-                const context = i >= 2 && base[i - 2]?.roman
-                    ? [stripFig(base[i - 2].roman), prevBase] : [prevBase];
-                const suggestions = suggestNextChord(context, 20);
-                if (suggestions.length === 0) continue;
-                const curProb = suggestions.find(s => s.chord === curBase)?.probability ?? 0;
-                // Only intervene on extreme improbability
-                if (curProb >= 0.02) continue;
-                // Get alternative chord interpretations from the SAME notes
-                const cands = identifyChordCandidates(bi.notes || []);
-                if (!Array.isArray(cands) || cands.length < 2) continue;
-                let bestAlt: { roman: string; prob: number } | null = null;
-                for (const c of cands) {
-                    if (!c?.root) continue;
-                    // Reorder notes so this candidate's root is lowest → different inversion reading
-                    const reordered = [...(bi.notes || [])].sort((a: any, b: any) => {
-                        const aR = (((a.noteIndex ?? -1) % 12) + 12) % 12 === (((c.root.noteIndex ?? -1) % 12) + 12) % 12;
-                        const bR = (((b.noteIndex ?? -1) % 12) + 12) % 12 === (((c.root.noteIndex ?? -1) % 12) + 12) % 12;
-                        if (aR && !bR) return -1;
-                        if (!aR && bR) return 1;
-                        return 0;
-                    });
-                    const alt = getRomanAnalysis(structuralNotes(reordered), bi.ctxTonic, bi.ctxIsMinor);
-                    if (!alt?.roman) continue;
-                    const altBase = stripFig(String(alt.roman));
-                    if (altBase === curBase) continue;
-                    const altProb = suggestions.find(s => s.chord === altBase)?.probability ?? 0;
-                    if (altProb > 0.05 && altProb > curProb * 5) {
-                        if (!bestAlt || altProb > bestAlt.prob) {
-                            bestAlt = { roman: String(alt.roman), prob: altProb };
-                        }
-                    }
-                }
-                if (bestAlt) {
-                    autoOverrideByAbsBeat.set(bi.q, {
-                        absBeat: bi.absBeat,
-                        roman: bestAlt.roman,
-                        note: 'stat-correction',
-                    });
-                }
-            }
-        } catch {
-            // ignore
-        }
-    }
+    // ── Statistical refinement (TODO: re-enable once scoping is fixed) ──
+    // This block needs access to `base`, `overrideByAbsBeat`, `identifyChordCandidates`,
+    // and `getRomanAnalysis` which are scoped inside the try above. Disabled until
+    // the function is restructured to expose them at this level.
+    // See: useStatisticalCorrection in opts
 
     return {
         autoOverrideByAbsBeat,

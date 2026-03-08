@@ -87,7 +87,10 @@ Queste regole sono implementate nel motore di analisi in [src/utils/musicTheory.
 | R-13 | warning | Moto parallelo di tutte le voci |
 | R-14 | warning | Moto simile tra voci estreme |
 | R-15 | warning | Salti ampi in voci interne |
-| R-16 | warning | Sincope armonica (“regola della stanghetta”) |
+| R-16 | warning | Sincope armonica ("regola della stanghetta") |
+| R-17a | error | Due salti stessa direzione sommano 7ª/9ª (proibito). Sblocco: nota intermedia più lunga → EXC-R17-Duration |
+| R-17b | warning | Intervallo di 7ª/9ª in due salti entrambi > 2ª — nessun grado congiunto. Sblocco: nota intermedia più lunga |
+| R-17c | error/warning | Successione di tritono (4ª eccedente): 2+ movimenti stessa direzione sommano un tritono. Filtro "Cambio Direzione": se la nota intermedia inverte il moto, il warning resta inattivo. Gravità alta (error) per valori brevi (crome/semicrome), media (warning) per valori lunghi (minime+). Sblocco: l'ultima nota risolve per grado congiunto in senso opposto al salto |
 | ORN-NEIGH | exception | Marker: nota di volta riconosciuta (condotta ok) |
 | R-ORN-NEIGH | warning | Nota di volta sospetta/atipica (es. su tempo forte) |
 | ORN-APP | exception | Marker: appoggiatura riconosciuta (condotta ok) |
@@ -107,6 +110,28 @@ Queste regole sono implementate nel motore di analisi in [src/utils/musicTheory.
 | CAD-IAC | exception | Marker informativo: cadenza autentica imperfetta |
 | CAD-HC | exception | Marker informativo: semicadenza |
 | CAD-PLAG | exception | Marker informativo: cadenza plagale |
+
+### Come modificare le "tab" del pannello Analisi
+
+Le descrizioni che appaiono nel pannello **Analisi** a destra dell'app vengono generate direttamente dalle chiamate `addViolation()` in **`src/utils/musicTheory.ts`** (helper definito a L3956).
+
+Ogni violazione ha questi campi visibili nel pannello:
+
+| Campo | Dove appare | Come si usa |
+| --- | --- | --- |
+| `ruleId` | Badge colorato (es. "R-17c:") | Stringa univoca. Usare suffisso lettera per varianti (a/b/c). |
+| `severity` | Colore badge: `'error'` = rosso, `'warning'` = arancione, `'exception'` = verde | |
+| `description` | Testo della tab. **Supporta multi-riga con `\n`**: la prima riga è l'intestazione sempre visibile; le righe successive appaiono cliccando ▼. | |
+| `suggestion` | Testo "Consiglio:" mostrato sotto il dettaglio espanso | |
+
+**Per aggiungere/modificare una tab:**
+1. Cercare `addViolation({` con il `ruleId` desiderato in `src/utils/musicTheory.ts`.
+2. Modificare il campo `description` — usare `\n` per separare intestazione e dettaglio.
+3. Modificare il campo `suggestion` per il consiglio pratico.
+4. Fare `npm run build` — la modifica è immediatamente visibile ricaricando l'app.
+5. Verificare con `npm run regress` che nessun test si rompa.
+
+**Rendering:** `src/components/HarmonyAnalysisPanel.tsx` (L337) fa `description.split('\n')` → riga 0 = intestazione, righe 1+ = dettaglio espandibile.
 
 ### Motore di analisi (contesto)
 - L’analisi supporta cambi di contesto (tonica/modo) tramite `analysisContexts` e selezione del contesto attivo per `absBeat`.

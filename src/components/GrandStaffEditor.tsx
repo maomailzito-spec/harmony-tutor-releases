@@ -18,6 +18,7 @@ import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysi
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
+import { exportMusicXML } from '../exporters/exportMusicXML';
 import { useEditorZoom } from '../hooks/useEditorZoom';
 import { useHarmonyLabels } from '../hooks/useHarmonyLabels';
 import { useHarmonyExplain } from '../hooks/useHarmonyExplain';
@@ -30,6 +31,8 @@ import { usePreference } from '../preferences/usePreference';
 import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData } from '../storage/projectSchema';
+import { recordAnalysedTransitions } from '../engine/progressionSuggester';
+import { loadStyleProfile } from '../engine/choralStyleProfile';
 import { handleGrandStaffProjectIOMenuAction } from '../controllers/grandStaffProjectIOAdapter';
 import { useGrandStaffMidi } from '../hooks/useGrandStaffMidi';
 import GrandStaffToolbar from './GrandStaffToolbar';
@@ -512,6 +515,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
     const [harmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
     const [useStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
+    const [statisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
+    const _styleProfile = useMemo(() => loadStyleProfile(), []);
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
 
     const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
@@ -533,7 +538,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Menu-driven toggles (Electron)
     const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
-    const [showHarmonyDebug, setShowHarmonyDebug] = useState(false);
+    const [showHarmonyDebug, setShowHarmonyDebug] = useState(
+        () => { try { return localStorage.getItem('harmony-tutor.showHarmonyDebug.v1') === '1'; } catch { return false; } }
+    );
     const [toolbarGroupOrder, setToolbarGroupOrder] = useState<ToolbarGroupId[]>(() => {
         // Load toolbar prefs synchronously to avoid overwriting them with defaults on first mount.
         try {
@@ -1366,7 +1373,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         };
 
-        return (rawNotes || []).map((n: any) => {
+        // Sort by measure / startTick / voice so we can propagate accidentals
+        // within each measure (same voice, same pitch+octave) like in standard notation.
+        const sorted = (rawNotes || []).slice().sort((a: any, b: any) => {
+            const ma = Number(a?.measureIndex ?? 0);
+            const mb = Number(b?.measureIndex ?? 0);
+            if (ma !== mb) return ma - mb;
+            const ta = Number(a?.startTick ?? 0);
+            const tb = Number(b?.startTick ?? 0);
+            if (ta !== tb) return ta - tb;
+            return (a?.voice ?? 1) - (b?.voice ?? 1);
+        });
+
+        // Track accidental state per measure+voice+pitch+octave.
+        // Key: "measure-voice-letter-octave", value: delta (from explicit accidental).
+        const accState = new Map<string, number>();
+
+        const result = sorted.map((n: any) => {
             try {
                 if (!n || n.isRest) return n;
                 const letter = String(n.pitch || '').charAt(0).toUpperCase();
@@ -1374,11 +1397,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const octave = Number(n.octave);
                 if (!Number.isFinite(octave)) return n;
 
+                const measureIdx = Number(n.measureIndex ?? 0);
+                const voice = Number(n.voice ?? 1);
+                const stateKey = `${measureIdx}-${voice}-${letter}-${octave}`;
+
                 const explicit = (n.explicitAccidental ?? n.userAccidental ?? null) as any;
-                const delta = (explicit != null) ? accidentalToDelta(explicit) : keySigAccidentalForLetter(letter);
+                let delta: number;
+                if (explicit != null) {
+                    delta = accidentalToDelta(explicit);
+                    // Record this explicit accidental for subsequent notes in the same measure
+                    accState.set(stateKey, delta);
+                } else {
+                    // Check if a previous note in the same measure/voice/pitch+octave set an accidental
+                    const carried = accState.get(stateKey);
+                    delta = (carried != null) ? carried : keySigAccidentalForLetter(letter);
+                }
 
                 const noteIndex = ((basePc[letter] + delta) % 12 + 12) % 12;
-                const midi = (octave + 1) * 12 + noteIndex;
+                const rawPc = basePc[letter] + delta;
+                let octaveAdj = octave;
+                if (rawPc < 0) octaveAdj -= 1;
+                else if (rawPc >= 12) octaveAdj += 1;
+                const midi = (octaveAdj + 1) * 12 + noteIndex;
 
                 const curIdx = Number(n.noteIndex);
                 const curMidi = Number(n.midi);
@@ -1391,6 +1431,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return n;
             }
         });
+
+        return result;
     }, [rawNotes, keySignature]);
 
     const notes = useMemo(() => {
@@ -1575,11 +1617,41 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // If the user is editing text (title/BPM/inputs), let menu operations behave like standard app edit commands.
             if (isTypingTarget) {
-                try {
-                    // Note: 'redo' in execCommand is typically 'redo', not 'repeat'.
-                    document.execCommand(command);
-                } catch {
-                    // ignore
+                const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+                if (command === 'paste' && el) {
+                    navigator.clipboard.readText().then(text => {
+                        if (!text) return;
+                        // Insert at cursor position (or replace selection)
+                        const start = el.selectionStart ?? el.value.length;
+                        const end = el.selectionEnd ?? start;
+                        const before = el.value.slice(0, start);
+                        const after = el.value.slice(end);
+                        el.value = before + text + after;
+                        const newPos = start + text.length;
+                        el.setSelectionRange(newPos, newPos);
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                    }).catch(() => { /* clipboard access denied */ });
+                } else if (command === 'copy' && el) {
+                    const start = el.selectionStart ?? 0;
+                    const end = el.selectionEnd ?? 0;
+                    if (start !== end) {
+                        navigator.clipboard.writeText(el.value.slice(start, end)).catch(() => {});
+                    }
+                } else if (command === 'cut' && el) {
+                    const start = el.selectionStart ?? 0;
+                    const end = el.selectionEnd ?? 0;
+                    if (start !== end) {
+                        navigator.clipboard.writeText(el.value.slice(start, end)).catch(() => {});
+                        const before = el.value.slice(0, start);
+                        const after = el.value.slice(end);
+                        el.value = before + after;
+                        el.setSelectionRange(start, start);
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                } else if (command === 'selectAll' && el) {
+                    el.setSelectionRange(0, el.value.length);
+                } else {
+                    try { document.execCommand(command); } catch { /* ignore */ }
                 }
                 return;
             }
@@ -1880,6 +1952,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
+        if (action === MENU_ACTIONS.EXPORT_MUSICXML) {
+            try {
+                const xml = exportMusicXML({
+                    notes: latestRawNotes.current || [],
+                    title: projectTitle || 'Untitled',
+                    keySignature: getKeySignature(keySignatureRoot, 'Major'),
+                    timeSignature,
+                    timeSignatureChanges,
+                    isMinorMode,
+                    keySignatureRoot,
+                });
+                await electronBridge.exportMusicXml(xml);
+            } catch {
+                // ignore
+            }
+            return;
+        }
+
         if (
             action === 'close-project' ||
             action === 'save' ||
@@ -1975,6 +2065,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     timeSignature,
                 },
             });
+            // Record harmonic transitions on save (Progression Suggester corpus)
+            if (action === 'save' || action === 'save-as') {
+                try {
+                    const romans = (_harmonyLabelsRef.current || [])
+                        .flatMap((sys: any[]) => sys.map((l: any) => l.roman))
+                        .filter(Boolean);
+                    if (romans.length >= 2) recordAnalysedTransitions(romans);
+                } catch { /* silent */ }
+            }
             return;
         } else if (action === MENU_ACTIONS.IMPORT_MUSICXML) {
             // MusicXML import: renderer-safe (no fs/path); XML is provided by main via IPC.
@@ -2917,8 +3016,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
         harmonyLabelMinSpanBeats: Number(harmonyLabelMinSpanBeats) || 0,
         useStatisticalCorrection: !!useStatisticalCorrection,
+        statisticalBiasThreshold: Number(statisticalBiasThreshold) || 2,
+        styleProfile: useStatisticalCorrection ? _styleProfile : null,
         ornamentOverrides,
     });
+
+    // Keep a ref to latest harmony labels for save-time corpus recording
+    const _harmonyLabelsRef = useRef(harmonyLabelsBySystemSequenced);
+    _harmonyLabelsRef.current = harmonyLabelsBySystemSequenced;
 
     // Chord identity card (explain modal)
     const { isExplainOpen, explainData, openExplain, closeExplain } = useHarmonyExplain({ analyzedNotes, analysisContexts, currentTonic, isMinorMode, analysisContextAbsBeat, timeSignature });
@@ -3216,7 +3321,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         const byVoice = new Map<number, StaffNote[]>();
-        rawNotes.forEach(n => {
+        // Use normalizedRawNotes so MIDI values reflect the current key signature
+        // and any explicit accidentals the user applied after insertion.
+        (normalizedRawNotes || rawNotes).forEach(n => {
             const v = (n.voice ?? 1) as number;
             if (!byVoice.has(v)) byVoice.set(v, []);
             byVoice.get(v)!.push(n);
@@ -3322,7 +3429,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const lookaheadMs = 80;
         const startMs = performance.now() + lookaheadMs; // small lookahead
         const audioStartTime = audioCtx.currentTime + (lookaheadMs / 1000);
-        const defaultStartAbsBeat = events[0].absBeat;
+        const defaultStartAbsBeat = 0;
         const startAbsBeat = Number.isFinite(playbackCursorAbsBeatRef.current as any)
             ? Math.max(0, playbackCursorAbsBeatRef.current as number)
             : defaultStartAbsBeat;
@@ -3444,7 +3551,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         const endMs = (maxEndAbsBeat - startAbsBeat) * beatDurationSec * 1000;
         playbackTimeoutsRef.current.push(window.setTimeout(() => stopPlayback(), Math.max(0, (startMs - performance.now()) + endMs + 200)));
-    }, [audioService, bpm, getPlayheadPosForAbsBeat, isAudioReady, isSwing, midiToName, rawNotes, selectedMidiOutput, sendMidiNote, startMetronomeScheduler, stopPlayback, timeSignature, playbackTransposeSemitones]);
+    }, [audioService, bpm, getPlayheadPosForAbsBeat, isAudioReady, isSwing, midiToName, normalizedRawNotes, rawNotes, selectedMidiOutput, sendMidiNote, startMetronomeScheduler, stopPlayback, timeSignature, playbackTransposeSemitones]);
 
     const togglePlayback = useCallback(() => {
         if (isPlaying) stopPlayback();
@@ -3817,10 +3924,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         const n = rawNotes.find(nn => nn.id === noteId);
 
-        // INSERT UX FIX: clicking a rest should overwrite it (run insertion) rather than select it.
-        // This avoids the "pause blocks insertion" annoyance.
-        const isModifier = !!((e as any).shiftKey || (e as any).metaKey || (e as any).ctrlKey || (e as any).altKey);
-        if (tool === 'insert' && n?.isRest && !isModifier) {
+        // INSERT UX FIX: clicking a rest in insert mode should overwrite it
+        // by running insertion rather than toggling selection.
+        const isModifier = !!((e as any).shiftKey || (e as any).ctrlKey || (e as any).altKey);
+        const isCmdHeld = !!(e as any).metaKey;
+        if (tool === 'insert' && n?.isRest && !isModifier && !isCmdHeld) {
             try {
                 const target = (e as any).target as Element | null;
                 const svg = target?.closest?.('svg') as SVGSVGElement | null;
@@ -4868,10 +4976,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Prevent the container click handler from immediately clearing selection after a staff click.
         e?.stopPropagation?.();
 
-        // Click on empty staff clears current selection.
-        // Do not clear on Cmd/Ctrl (used for paste-caret placement).
-        if (!(e?.metaKey || e?.ctrlKey || e?.altKey)) {
+        // ⌘ (Cmd) required to insert notes — plain clicks only deselect.
+        if (!e?.metaKey) {
             setSelectedNoteIds(new Set());
+            return;
         }
 
 
@@ -5358,7 +5466,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     voice: selectedVoice,
                 };
 
-        // If an existing note occupies this exact pitch+tick+voice+measure, select it instead of inserting.
+        // If an existing note occupies this exact pitch+tick+voice+measure AND has the
+        // same accidental, select it instead of inserting.  When the user has armed
+        // a different accidental (e.g. # on a ♮ note) we let the insertion proceed
+        // so the note is effectively overwritten with the new accidental.
         const existingAtSamePos = rawNotes.find(n =>
             !n.isRest &&
             n.measureIndex === newNote.measureIndex &&
@@ -5367,7 +5478,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             n.octave === newNote.octave &&
             Math.abs(((n as any).startTick ?? 0) - (newNote as any).startTick) < 2
         );
-        if (existingAtSamePos) {
+        const sameAccidental = existingAtSamePos &&
+            (existingAtSamePos.accidental ?? '') === (newNote.accidental ?? '');
+        if (existingAtSamePos && sameAccidental) {
             if (e?.shiftKey) {
                 // Shift+Click: toggle in/out of multi-selection
                 setSelectedNoteIds(prev => {
@@ -7017,7 +7130,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             <PreferencesModal
                 isOpen={isPreferencesOpen}
-                onClose={() => setIsPreferencesOpen(false)}
+                onClose={() => {
+                    setIsPreferencesOpen(false);
+                    // Re-read debug prefs from localStorage after modal closes
+                    try { setShowHarmonyDebug(localStorage.getItem('harmony-tutor.showHarmonyDebug.v1') === '1'); } catch { /* ignore */ }
+                }}
             />
 
             <RomanProgressionEditor
@@ -7449,7 +7566,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             y={yTop}
                                                                             width={r.w}
                                                                             height={h}
-                                                                            fill="rgba(239,68,68,0.3)"
+                                                                            fill="rgba(239,68,68,0.13)"
                                                                         >
                                                                         </rect>
                                                                     ));
@@ -7787,6 +7904,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                     {(lbl as any).symbol}
                                                                                 </text>
                                                                             ) : null}
+
+                                                                            {/* PCS Debug: always shown when debug toggle is on, independent of showRoman */}
+                                                                            {showHarmonyDebug && (() => {
+                                                                                const s = String((lbl as any).pcsSig || '').trim();
+                                                                                if (!s) return null;
+                                                                                return (
+                                                                                    <text
+                                                                                        x={baseX}
+                                                                                        y={romanBelowY + 12}
+                                                                                        textAnchor="start"
+                                                                                        fontSize={10}
+                                                                                        fontWeight={600}
+                                                                                        fill="magenta"
+                                                                                        opacity={0.85}
+                                                                                    >
+                                                                                        {s}
+                                                                                    </text>
+                                                                                );
+                                                                            })()}
 
                                                                             {/* Roman numerals + figured bass below the bass staff */}
                                                                             {showRoman ? (

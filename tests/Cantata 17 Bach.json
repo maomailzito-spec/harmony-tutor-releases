@@ -19,10 +19,6 @@
       "type": "passing"
     },
     {
-      "noteId": "midi-350-110400-63",
-      "type": "passing"
-    },
-    {
       "noteId": "midi-359-113280-57",
       "type": "passing"
     },
@@ -60,6 +56,22 @@
     {
       "noteId": "midi-255-82080-57",
       "type": "passing"
+    },
+    {
+      "noteId": "midi-274-85440-59",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-277-85920-58",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-350-110400-63",
+      "type": "structural"
+    },
+    {
+      "noteId": "dfd07b11-cd6c-4fc7-a884-2faac9f7d915",
+      "type": "structural"
     }
   ],
   "schemaVersion": 1,
@@ -7059,7 +7071,7 @@
       "voice": 4
     },
     {
-      "id": "midi-349-109440-69",
+      "id": "3aae5280-0f3a-43c1-8238-506cd00c5bc5",
       "pitch": "A",
       "octave": 4,
       "position": 5,
@@ -7067,6 +7079,7 @@
       "noteIndex": 9,
       "clef": "treble",
       "explicitAccidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -7099,7 +7112,7 @@
       "voice": 2
     },
     {
-      "id": "midi-347-109440-57",
+      "id": "2c85848f-814e-4f61-acf6-2968b4878a9e",
       "pitch": "A",
       "octave": 3,
       "position": -2,
@@ -7107,6 +7120,7 @@
       "noteIndex": 9,
       "clef": "bass",
       "explicitAccidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -7119,14 +7133,15 @@
       "voice": 3
     },
     {
-      "id": "midi-346-109440-54",
+      "id": "e9f0df79-09db-45f4-9f82-d2a3e13af644",
       "pitch": "F",
       "octave": 3,
       "position": -4,
       "midi": 54,
       "noteIndex": 6,
       "clef": "bass",
-      "explicitAccidental": "sharp",
+      "explicitAccidental": null,
+      "accidental": "sharp",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -8583,6 +8598,7 @@
     "notations",
     "analysis",
     "key",
-    "more"
+    "more",
+    "voiceInstrument"
   ]
 }

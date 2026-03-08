@@ -578,6 +578,10 @@ function createMenu() {
           click: () => { sendAction(MENU_ACTIONS.EXPORT_MIDI); }
         },
         {
+          label: 'Esporta MusicXML…',
+          click: () => { sendAction(MENU_ACTIONS.EXPORT_MUSICXML); }
+        },
+        {
           label: 'Esporta PDF…',
           accelerator: 'CmdOrCtrl+Shift+P',
           click: () => { sendAction(MENU_ACTIONS.EXPORT_PDF); }
@@ -1223,6 +1227,23 @@ ipcMain.handle(IPC_CHANNELS.EXPORT_PNG_FROM_HTML, async (_event, html, options) 
     return { success: false, error: String(err && err.message ? err.message : err) };
   } finally {
     try { if (win && !win.isDestroyed()) win.close(); } catch { /* ignore */ }
+  }
+});
+
+ipcMain.handle(IPC_CHANNELS.EXPORT_MUSICXML, async (_event, xml) => {
+  if (!mainWindow) return { success: false, error: 'Finestra non disponibile' };
+  try {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      filters: [{ name: 'MusicXML', extensions: ['musicxml', 'xml'] }],
+      defaultPath: 'export.musicxml',
+    });
+    if (canceled || !filePath) return { success: false, canceled: true, error: 'Salvataggio annullato' };
+    fs.writeFileSync(filePath, String(xml || ''), 'utf-8');
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('[MAIN] export musicxml failed:', err);
+    try { sendError('export-musicxml-failed', String(err && err.message ? err.message : err)); } catch { /* ignore */ }
+    return { success: false, error: String(err && err.message ? err.message : err) };
   }
 });
 

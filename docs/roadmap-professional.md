@@ -244,3 +244,70 @@ Attualmente esistono due script separati:
 - Il profilo resta un JSON piatto, ispezionabile e versionabile.
 - Senza profilo il sistema funziona identicamente (fallback a regole pure).
 - L'utente controlla il corpus → controlla cosa impara.
+
+---
+
+## Fase F — Analisi & Generazione per Simmetria (Futuro)
+
+Progetto basato sulla ricerca sulle proprietà simmetriche delle strutture musicali
+(vedi `docs/simmetria.txt`). Applicabile a livello armonico, melodico e creativo.
+
+### F1 — Analisi armonica di simmetrie e sequenze
+- Rilevamento sequenze armoniche (ii-V-I ripetuto trasposto per gradi)
+- Simmetria strutturale: periodo antecedente/conseguente (stessa progressione, cadenza diversa)
+- Palindromi armonici e archi di tensione simmetrici
+- **Pattern Registry** (JSON locale): catalogo strutturato dei pattern ricorrenti
+
+### F2 — Analisi melodica di simmetrie
+- Trasposizione melodica (stessa sequenza di intervalli, offset diverso)
+- Inversione speculare (moto contrario degli intervalli)
+- Retrogradazione e retrogradazione dell'inversione
+- Indice di simmetria (metrica quantitativa)
+
+### F3 — Suggerimento creativo armonico
+- Completamento per simmetria: A-B → A-B-A' con variazione cadenzale
+- Risposta trasposta: dato un periodo, proponi il conseguente
+- Sequenza estesa: ii-V-I → iii-VI-ii → ii-V-I
+
+### F4 — Suggerimento creativo melodico
+- Generazione varianti: trasposizione, inversione, retrogradazione
+- Risposta melodica guidata: domanda → risposta con cadenza risolutiva
+
+### F5 — Apprendimento statistico locale
+- Ogni `.hmt` analizzato contribuisce a un corpus locale
+- Modello Markov leggero (tutto locale, nessun server)
+- L'utente sceglie: "genera nello stile dei corali analizzati"
+
+### Prerequisiti e dipendenze
+- **F1** (Pattern Registry) è prerequisito naturale di F5
+- L'infrastruttura del **Cadential Pattern Recognizer** (17 formule) è estendibile per F1
+- Il **Progression Suggester** (bigram/trigram) è la base per F3/F5
+- Nessuno sforzo sprecato: ogni fase alimenta la successiva
+
+---
+
+## 6) Fase G — Localizzazione (i18n: EN/IT)
+
+Obiettivo: permettere all'utente di scegliere la lingua dell'interfaccia (italiano o inglese) dal menu Preferenze.
+
+### G1 — Infrastruttura i18n
+- File JSON per lingua: `src/locales/it.json`, `src/locales/en.json`
+- Hook `useLocale()` → funzione `t(key)` che ritorna la stringa nella lingua attiva
+- Chiave lingua nel Preferences Registry (`ui.language`), persistenza in localStorage
+- Selettore lingua nella modale Preferenze (IT/EN)
+
+### G2 — Traduzione stringhe UI
+- Menu Electron (File, Modifica/Edit, Vista/View, Analisi/Analysis, Preferenze/Preferences)
+- Modali (Preferenze, Salva/Apri, Conferme)
+- Tooltip, bottoni, etichette
+- Messaggi di errore e stato
+
+### G3 — Menu Electron in lingua
+- IPC `set-language` dal renderer al main process
+- Ricostruzione menu nativo nella lingua scelta
+- Sincronizzazione al cambio lingua (senza restart)
+
+### Note
+- **NON va tradotto:** numeri romani (I, IV, V7, vii°), sigle musicali (Dm, F#, Bb), abbreviazioni analitiche (P, S, App)
+- Approccio leggero senza librerie esterne (~100-200 stringhe totali)
+- Effort stimato: ~1-2 sessioni dedicate

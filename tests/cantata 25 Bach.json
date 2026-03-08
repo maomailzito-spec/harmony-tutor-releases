@@ -1,4 +1,136 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "midi-97-21120-67",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-96-21120-62",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-98-21120-69",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-95-21120-50",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-90-19680-66",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-112-24480-71",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-124-26640-77",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "midi-127-26880-67",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-128-26880-76",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-125-26880-48",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-126-26880-62",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-131-27840-60",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-149-32400-72",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "48bb21c1-79df-429d-887d-ec885da1f8e9",
+      "type": "anticipation"
+    },
+    {
+      "noteId": "midi-158-34080-62",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-169-36000-69",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-179-38880-62",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-188-40800-64",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-197-42720-59",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-211-46560-62",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-216-47520-71",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-221-48480-71",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-227-49440-74",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-232-50400-64",
+      "type": "escape"
+    },
+    {
+      "noteId": "midi-237-51360-60",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-243-52800-64",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-242-52800-56",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-261-58080-71",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-129-27360-60",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-163-35040-57",
+      "type": "anticipation"
+    },
+    {
+      "noteId": "midi-29-6240-66",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-27-5760-67",
+      "type": "appoggiatura"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -198,7 +330,7 @@
       "measureIndex": 0,
       "beat": 3,
       "startTick": 1920,
-      "durationTicks": 896,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -358,7 +490,7 @@
       "measureIndex": 1,
       "beat": 1,
       "startTick": 3840,
-      "durationTicks": 896,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -378,7 +510,7 @@
       "measureIndex": 1,
       "beat": 1,
       "startTick": 3840,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -418,7 +550,7 @@
       "measureIndex": 1,
       "beat": 1.5,
       "startTick": 4320,
-      "durationTicks": 528,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -458,7 +590,7 @@
       "measureIndex": 1,
       "beat": 2,
       "startTick": 4800,
-      "durationTicks": 896,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -538,7 +670,7 @@
       "measureIndex": 1,
       "beat": 3,
       "startTick": 5760,
-      "durationTicks": 896,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -638,7 +770,7 @@
       "measureIndex": 1,
       "beat": 4,
       "startTick": 6720,
-      "durationTicks": 896,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -718,7 +850,7 @@
       "measureIndex": 2,
       "beat": 1,
       "startTick": 7680,
-      "durationTicks": 896,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -858,7 +990,7 @@
       "measureIndex": 2,
       "beat": 2.5,
       "startTick": 9120,
-      "durationTicks": 464,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -918,7 +1050,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1158,7 +1290,7 @@
       "measureIndex": 3,
       "beat": 1,
       "startTick": 11520,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -1278,7 +1410,7 @@
       "measureIndex": 3,
       "beat": 2.5,
       "startTick": 12960,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -2158,7 +2290,7 @@
       "measureIndex": 6,
       "beat": 2,
       "startTick": 24000,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 2
     },
     {
@@ -2278,7 +2410,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -2358,7 +2490,7 @@
       "measureIndex": 6,
       "beat": 4,
       "startTick": 25920,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -2518,7 +2650,7 @@
       "measureIndex": 7,
       "beat": 1,
       "startTick": 26880,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -2618,7 +2750,7 @@
       "measureIndex": 7,
       "beat": 2,
       "startTick": 27840,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -2638,7 +2770,7 @@
       "measureIndex": 7,
       "beat": 2,
       "startTick": 27840,
-      "durationTicks": 968,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -2658,11 +2790,11 @@
       "measureIndex": 7,
       "beat": 2.5,
       "startTick": 28320,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
-      "id": "midi-135-28560-72",
+      "id": "9592dd57-4794-4f01-b053-d073e2d678ed",
       "pitch": "C",
       "octave": 5,
       "position": 7,
@@ -2670,15 +2802,16 @@
       "noteIndex": 0,
       "clef": "treble",
       "explicitAccidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
       "isDotted": false,
       "measureIndex": 7,
-      "beat": 2.75,
-      "startTick": 28560,
-      "durationTicks": 2160,
+      "beat": 3,
+      "startTick": 28800,
+      "durationTicks": 1920,
       "voice": 1
     },
     {
@@ -2902,14 +3035,16 @@
       "voice": 4
     },
     {
-      "id": "midi-148-32160-70",
-      "pitch": "A",
+      "id": "48bb21c1-79df-429d-887d-ec885da1f8e9",
+      "pitch": "B",
       "octave": 4,
-      "position": 5,
+      "position": 6,
       "midi": 70,
       "noteIndex": 10,
       "clef": "treble",
-      "explicitAccidental": "sharp",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
       "duration": "sixteenth",
       "isRest": false,
       "isTriplet": false,
@@ -2938,7 +3073,7 @@
       "measureIndex": 8,
       "beat": 2.75,
       "startTick": 32400,
-      "durationTicks": 248,
+      "durationTicks": 240,
       "voice": 2
     },
     {
@@ -2962,14 +3097,16 @@
       "voice": 1
     },
     {
-      "id": "midi-152-32640-70",
-      "pitch": "A",
+      "id": "3e178ac6-0439-4096-a90e-22434fd38c9e",
+      "pitch": "B",
       "octave": 4,
-      "position": 5,
+      "position": 6,
       "midi": 70,
       "noteIndex": 10,
       "clef": "treble",
-      "explicitAccidental": "sharp",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -3038,7 +3175,7 @@
       "measureIndex": 8,
       "beat": 4,
       "startTick": 33600,
-      "durationTicks": 1024,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -3078,7 +3215,7 @@
       "measureIndex": 8,
       "beat": 4,
       "startTick": 33600,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3118,7 +3255,7 @@
       "measureIndex": 8,
       "beat": 4.5,
       "startTick": 34080,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3178,7 +3315,7 @@
       "measureIndex": 9,
       "beat": 1,
       "startTick": 34560,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3278,7 +3415,7 @@
       "measureIndex": 9,
       "beat": 2,
       "startTick": 35520,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3338,7 +3475,7 @@
       "measureIndex": 9,
       "beat": 2.5,
       "startTick": 36000,
-      "durationTicks": 528,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3358,7 +3495,7 @@
       "measureIndex": 9,
       "beat": 2.75,
       "startTick": 36240,
-      "durationTicks": 248,
+      "durationTicks": 240,
       "voice": 2
     },
     {
@@ -3458,7 +3595,7 @@
       "measureIndex": 10,
       "beat": 1,
       "startTick": 38400,
-      "durationTicks": 912,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -3498,7 +3635,7 @@
       "measureIndex": 10,
       "beat": 1,
       "startTick": 38400,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -3678,7 +3815,7 @@
       "measureIndex": 10,
       "beat": 3,
       "startTick": 40320,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4138,7 +4275,7 @@
       "measureIndex": 12,
       "beat": 1,
       "startTick": 46080,
-      "durationTicks": 528,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4178,7 +4315,7 @@
       "measureIndex": 12,
       "beat": 1.5,
       "startTick": 46560,
-      "durationTicks": 544,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4398,7 +4535,7 @@
       "measureIndex": 12,
       "beat": 4,
       "startTick": 48960,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 1
     },
     {
@@ -4438,7 +4575,7 @@
       "measureIndex": 12,
       "beat": 4,
       "startTick": 48960,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4558,7 +4695,7 @@
       "measureIndex": 13,
       "beat": 1,
       "startTick": 49920,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4658,7 +4795,7 @@
       "measureIndex": 13,
       "beat": 2,
       "startTick": 50880,
-      "durationTicks": 496,
+      "durationTicks": 480,
       "voice": 3
     },
     {
@@ -4942,14 +5079,16 @@
       "voice": 2
     },
     {
-      "id": "midi-249-55680-58",
-      "pitch": "A",
+      "id": "3653b2ad-e255-446d-977d-045248cdb2da",
+      "pitch": "B",
       "octave": 3,
-      "position": -2,
+      "position": -1,
       "midi": 58,
       "noteIndex": 10,
       "clef": "bass",
-      "explicitAccidental": "sharp",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -5022,14 +5161,16 @@
       "voice": 1
     },
     {
-      "id": "midi-255-56640-70",
-      "pitch": "A",
+      "id": "77657c9c-81ff-408e-87af-bb0409d19c6f",
+      "pitch": "B",
       "octave": 4,
-      "position": 5,
+      "position": 6,
       "midi": 70,
       "noteIndex": 10,
       "clef": "treble",
-      "explicitAccidental": "sharp",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -5698,10 +5839,7 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [],
   "bpm": 90,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -5717,6 +5855,7 @@
     "notations",
     "analysis",
     "key",
-    "more"
+    "more",
+    "voiceInstrument"
   ]
 }

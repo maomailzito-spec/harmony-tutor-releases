@@ -94,6 +94,7 @@ import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERV
 import { HARMONY_DEV_LOG_R06_KEY, ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
+import { getRuleText } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
 
 /** Ornament learning — duration bucket */
@@ -1483,49 +1484,68 @@ const CHROMATIC_CHORD_DEFINITIONS: { [key: string]: { symbol: string, matcher: (
         symbol: 'Ger+',
         matcher: (chord, keyInfo) => {
             // Ger+ contains ♭6–1–♭3–♯4 (e.g. in C: Ab–C–Eb–F#).
+            // Also match applied aug6 chords resolving to any diatonic degree.
             const pcs = new Set(chord.map(pitchClassOf));
-            // Allow extra pitch-classes (passing tones/doublings) without losing the core sonority.
             if (pcs.size < 4) return false;
 
-            const b6 = (keyInfo.tonicIndex + 8) % 12;  // ♭6
-            const one = keyInfo.tonicIndex % 12;       // 1
-            const flat3 = (keyInfo.tonicIndex + 3) % 12; // ♭3
-            const sharp4 = (keyInfo.tonicIndex + 6) % 12; // ♯4
-            return pcs.has(b6) && pcs.has(one) && pcs.has(flat3) && pcs.has(sharp4);
+            const majorInts = [0, 2, 4, 5, 7, 9, 11];
+            const minorInts = [0, 2, 3, 5, 7, 8, 10, 11]; // natural + harmonic
+            const intervals = keyInfo.isMinor ? minorInts : majorInts;
+            for (const iv of intervals) {
+                const target = (keyInfo.tonicIndex + iv) % 12;
+                const b6 = (target + 1) % 12;
+                const one = (target + 5) % 12;
+                const flat3 = (target + 8) % 12;
+                const sharp4 = (target + 11) % 12;
+                if (pcs.has(b6) && pcs.has(one) && pcs.has(flat3) && pcs.has(sharp4)) return true;
+            }
+            return false;
         }
     },
     FRENCH_AUGMENTED_SIXTH: {
         symbol: 'Fr+',
         matcher: (chord, keyInfo) => {
             // Fr+ contains ♭6–1–2–♯4.
+            // Also match applied aug6 chords resolving to any diatonic degree.
             const pcs = new Set(chord.map(pitchClassOf));
-            // Allow extra pitch-classes (passing tones/doublings) without losing the core sonority.
             if (pcs.size < 4) return false;
 
-            const b6 = (keyInfo.tonicIndex + 8) % 12;  // ♭6
-            const one = keyInfo.tonicIndex % 12;       // 1
-            const two = (keyInfo.tonicIndex + 2) % 12; // 2
-            const sharp4 = (keyInfo.tonicIndex + 6) % 12; // ♯4
-
-            // If ♭3 is present too, prefer labeling as Ger+.
-            const flat3 = (keyInfo.tonicIndex + 3) % 12;
-            if (pcs.has(flat3)) return false;
-
-            return pcs.has(b6) && pcs.has(one) && pcs.has(two) && pcs.has(sharp4);
+            const majorInts = [0, 2, 4, 5, 7, 9, 11];
+            const minorInts = [0, 2, 3, 5, 7, 8, 10, 11];
+            const intervals = keyInfo.isMinor ? minorInts : majorInts;
+            for (const iv of intervals) {
+                const target = (keyInfo.tonicIndex + iv) % 12;
+                const b6 = (target + 1) % 12;
+                const one = (target + 5) % 12;
+                const two = (target + 7) % 12;
+                const sharp4 = (target + 11) % 12;
+                // If ♭3 (relative to this target) is present, prefer Ger+.
+                const flat3 = (target + 8) % 12;
+                if (pcs.has(flat3)) continue;
+                if (pcs.has(b6) && pcs.has(one) && pcs.has(two) && pcs.has(sharp4)) return true;
+            }
+            return false;
         }
     },
     ITALIAN_AUGMENTED_SIXTH: {
         symbol: 'It+',
         matcher: (chord, keyInfo) => {
             // It+ contains ♭6–1–♯4.
+            // Also match applied aug6 chords resolving to any diatonic degree.
             const pcs = new Set(chord.map(pitchClassOf));
-            // Allow extra pitch-classes (passing tones/doublings) without losing the core sonority.
             if (pcs.size < 3) return false;
 
-            const b6 = (keyInfo.tonicIndex + 8) % 12;  // ♭6
-            const one = keyInfo.tonicIndex % 12;       // 1
-            const sharp4 = (keyInfo.tonicIndex + 6) % 12; // ♯4
-            return pcs.has(b6) && pcs.has(one) && pcs.has(sharp4);
+            const majorInts = [0, 2, 4, 5, 7, 9, 11];
+            const minorInts = [0, 2, 3, 5, 7, 8, 10, 11];
+            const intervals = keyInfo.isMinor ? minorInts : majorInts;
+            for (const iv of intervals) {
+                const target = (keyInfo.tonicIndex + iv) % 12;
+                const b6 = (target + 1) % 12;     // semitone above target (bass)
+                const one = (target + 5) % 12;    // P4 above target
+                const sharp4 = (target + 11) % 12; // semitone below target
+                if (pcs.has(b6) && pcs.has(one) && pcs.has(sharp4)) return true;
+            }
+            return false;
         }
     },
 };
@@ -2338,8 +2358,19 @@ function calculateRomanNumeral(
             if (!n) return false;
             if ((n as any).userAccidental != null) return true;
             if ((n as any).explicitAccidental != null) return true;
+            // Check separate accidental field (e.g. MusicXML import: pitch='D', accidental='#')
+            const acc = (n as any).accidental;
+            if (acc != null && acc !== '' && acc !== 'natural') return true;
             const p = String((n as any).pitch || '');
-            return p.includes('b') || p.includes('#');
+            if (p.includes('b') || p.includes('#')) return true;
+            // Infer from midi: if midi%12 ≠ natural pitch class → implicit accidental
+            const midi = (n as any).midi;
+            if (typeof midi === 'number' && p.length === 1) {
+                const nat: Record<string,number> = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+                const natPc = nat[p.toUpperCase()];
+                if (natPc !== undefined && (midi % 12) !== natPc) return true;
+            }
+            return false;
         } catch {
             return false;
         }
@@ -3015,8 +3046,19 @@ export function getRomanAnalysis(
                     if (!n) return false;
                     if ((n as any).userAccidental != null) return true;
                     if ((n as any).explicitAccidental != null) return true;
+                    // Check separate accidental field (e.g. MusicXML import: pitch='D', accidental='#')
+                    const acc = (n as any).accidental;
+                    if (acc != null && acc !== '' && acc !== 'natural') return true;
                     const p = String((n as any).pitch || '');
-                    return p.includes('b') || p.includes('#');
+                    if (p.includes('b') || p.includes('#')) return true;
+                    // Infer from midi: if midi%12 ≠ natural pitch class → implicit accidental
+                    const midi = (n as any).midi;
+                    if (typeof midi === 'number' && p.length === 1) {
+                        const nat: Record<string,number> = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+                        const natPc = nat[p.toUpperCase()];
+                        if (natPc !== undefined && (midi % 12) !== natPc) return true;
+                    }
+                    return false;
                 } catch {
                     return false;
                 }
@@ -3746,6 +3788,9 @@ export function applyHarmonyRules(
                     maxSteps: 8,
                     minConfidence: 0.7,
                     maxMatches: 200,
+                }, {
+                    keySignatureRoot: String(keyTonic || 'C'),
+                    isMinorMode: !!isMinor,
                 }) as any;
             } catch {
                 cached = [];
@@ -3930,6 +3975,14 @@ export function applyHarmonyRules(
 
     const addViolation = (v: RuleViolation) => {
         if (!v.noteIds || v.noteIds.length === 0) return;
+        // Auto-enrich from ruleTexts registry (centralised educational texts).
+        const _rt = getRuleText(v.ruleId);
+        if (_rt.body && !v.description.includes('\n')) {
+            v = { ...v, description: v.description + '\n' + _rt.body };
+        }
+        if (_rt.suggestion && !v.suggestion) {
+            v = { ...v, suggestion: _rt.suggestion };
+        }
         // de-dupe by (ruleId + same set of noteIds at least)
         const key = `${v.ruleId}::${[...new Set(v.noteIds)].sort().join(',')}`;
         if ((addViolation as any)._seen?.has(key)) return;
@@ -4461,6 +4514,11 @@ export function applyHarmonyRules(
                 // own harmony, and it is not part of the surrounding harmonies (or is a short
                 // interpolating note).
                 // This avoids false positives like I–V7–I with soprano C–D–E: D is a chord tone of V7.
+                // Also skip if the note is a recognized chord tone of its own vertical event —
+                // even when the structural-PCs heuristic (which excludes weak-beat upper voices)
+                // reports it as non-consonant.  This prevents marking real chord tones (e.g. 5th
+                // of a triad on an off-beat) as passing.
+                if (curIsChordToneOfOwnEvent && !isShortNonHarmonic) continue;
                 if (prevConsonant && nextConsonant && (((!curConsonant) && !curInPrevOrNext) || isShortNonHarmonic)) {
                     cur.isPassing = true;
                     (cur as any).ornamentMark = 'P';
@@ -4645,8 +4703,12 @@ export function applyHarmonyRules(
                 // is a chord member (including chordal 7ths), treat it as consonant.
                 // This avoids misclassifying essential tones (e.g. the 7th of V7) as appoggiature
                 // just because the other voices happen to form a triad shell.
+                // Filter out notes already tagged as ornamental — they can pollute the chord ID
+                // and cause real chord tones to look dissonant (e.g. appoggiatura G on a Dm event
+                // makes identifyChord see G-D-F → "G7" instead of D-F-A → "Dm").
+                const _isOrn = (n: any) => !!(n?.isPassing || n?.isNeighbor || n?.isAnticipation || n?.isAppoggiatura || n?.isEscape || (n?.ornamentOverride && n?.ornamentOverride !== 'structural'));
                 try {
-                    const fullAtEvent = otherNotesAtEvent(ev);
+                    const fullAtEvent = (otherNotesAtEvent(ev) || []).filter(n => !_isOrn(n));
                     const uniqueFullPcs = [...new Set((fullAtEvent || [])
                         .filter(n => n && !(n as any).isRest)
                         .filter(n => Number.isFinite((n as any).midi))
@@ -4665,7 +4727,7 @@ export function applyHarmonyRules(
                     }
                 } catch { /* ignore */ }
 
-                const others = otherNotesAtEvent(ev, note.id);
+                const others = (otherNotesAtEvent(ev, note.id) || []).filter(n => !_isOrn(n));
 
                 const uniqueOtherPcs = [...new Set((others || []).map(n => pitchClassOf(n)))];
 
@@ -7928,6 +7990,124 @@ export function applyHarmonyRules(
                 inferredAnalysisContexts.push(...inferredSoFar());
             } catch { /* ignore */ }
 
+            // ── Modulating-sequence inferred contexts ──
+            // When the sequence detector found modulating sequences, inject
+            // local-tonic contexts for each repetition link.  This lets the
+            // downstream display/tooltip show the correct Roman numeral in
+            // the transposed key.
+            //
+            // The detector's `modulationTonics` are computed from the global
+            // key signature root, which is often wrong when the sequence sits
+            // inside a modulation.  We recompute the model's local tonic by
+            // looking at the **active context** at the sequence's start beat
+            // and using the notes of the model to refine it.
+            try {
+                const _bpm = (timeSignature?.numerator ?? 4) * (4 / (timeSignature?.denominator ?? 4));
+                // Gather all known contexts so far (user + inferred)
+                const allCtx = [
+                    ...(analysisContexts || []),
+                    ...(inferredAnalysisContexts || []),
+                ].sort((a, b) => ctxAbsBeat(a) - ctxAbsBeat(b));
+
+                const getActiveTonicAt = (absBeat: number): string => {
+                    let tonic = String(keyTonic || 'C');
+                    for (const c of allCtx) {
+                        if (ctxAbsBeat(c) <= absBeat + 0.01) tonic = c.newTonic || tonic;
+                    }
+                    return tonic;
+                };
+
+                for (const _sq of getSequenceMatchesForRules()) {
+                    const sq = _sq as SequenceMatch;
+                    if (!sq.isModulating || !sq.modulationTonics?.length) continue;
+                    const L = sq.lengthSteps;
+                    const transpo = sq.transpositionSemitones ?? 0;
+                    if (transpo === 0) continue;
+                    const slots = sq.slotTicks || [];
+                    const startTick = slots[sq.startSlotIdx];
+                    if (startTick == null) continue;
+                    const startAbsBeat = startTick / TICKS_PER_QUARTER;
+
+                    // --- Determine the model's local tonic ---
+                    // Strategy: look at the bass note (lowest MIDI) at the model's
+                    // "resolution" slot (middle of the model, where the I chord
+                    // typically lands) and use its pitch class as a tonic candidate.
+                    // Verified against the active context to prefer it when reasonable.
+                    const activeTonicName = getActiveTonicAt(startAbsBeat);
+                    const _npc: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+                    const activeTonicPC = _npc[activeTonicName] ?? 0;
+
+                    // Find the bass PC at the model's resolution slot (L/2 or slot 1)
+                    // by looking at the notes directly.
+                    let modelTonicPC = activeTonicPC; // fallback
+                    let lowestNoteSpelling: { pitch?: string; accidental?: string } | null = null;
+                    const nearNotes: Array<{ pitch?: string; accidental?: string }> = [];
+                    const resTick = slots[sq.startSlotIdx + Math.floor(L / 2)];
+                    if (resTick != null && Number.isFinite(resTick)) {
+                        const resAbsBeat = resTick / TICKS_PER_QUARTER;
+                        // Find the lowest-MIDI note at or very near this beat
+                        let lowestMidi = Infinity;
+                        for (const n of (notes || []) as any[]) {
+                            if (n.isRest) continue;
+                            const nAbs = typeof n.absoluteBeat === 'number' ? n.absoluteBeat
+                                : (typeof n.absBeat === 'number' ? n.absBeat
+                                    : (n.measureIndex ?? 0) * _bpm + ((n.beat ?? 1) - 1));
+                            if (Math.abs(nAbs - resAbsBeat) < 0.25) {
+                                const midi = n.midi ?? n.midiNote ?? 0;
+                                nearNotes.push({ pitch: n.pitch, accidental: n.accidental });
+                                if (midi > 0 && midi < lowestMidi) {
+                                    lowestMidi = midi;
+                                    lowestNoteSpelling = { pitch: n.pitch, accidental: n.accidental };
+                                }
+                            }
+                        }
+                        if (Number.isFinite(lowestMidi)) {
+                            modelTonicPC = ((lowestMidi % 12) + 12) % 12;
+                        }
+                    }
+
+                    // Determine preferFlats from the actual spelling of notes at this beat,
+                    // falling back to the active context tonic when no spelling info is available.
+                    const spellingHasFlat = lowestNoteSpelling?.accidental === 'flat' ||
+                        nearNotes.some(n => n.accidental === 'flat');
+                    const preferFlats = spellingHasFlat ||
+                        activeTonicName.includes('b') ||
+                        ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'].includes(activeTonicName);
+                    const FLAT_NAMES: Record<number, string> = { 0: 'C', 1: 'Db', 2: 'D', 3: 'Eb', 4: 'E', 5: 'F', 6: 'Gb', 7: 'G', 8: 'Ab', 9: 'A', 10: 'Bb', 11: 'B' };
+                    const SHARP_NAMES: Record<number, string> = { 0: 'C', 1: 'C#', 2: 'D', 3: 'D#', 4: 'E', 5: 'F', 6: 'F#', 7: 'G', 8: 'G#', 9: 'A', 10: 'A#', 11: 'B' };
+                    const toName = (pc: number) => preferFlats ? FLAT_NAMES[((pc % 12) + 12) % 12] : SHARP_NAMES[((pc % 12) + 12) % 12];
+
+                    for (let rep = 0; rep < (sq.repeatsCount ?? 2); rep++) {
+                        const localPC = ((modelTonicPC + transpo * rep) % 12 + 12) % 12;
+                        let tonicName = toName(localPC);
+                        if (!tonicName) continue;
+                        // When preferring flats, re-spell sharp-side tonics that are
+                        // enharmonic equivalents in the flat world (e.g. B → Cb, F# → Gb).
+                        if (preferFlats) {
+                            const enharmonicFlat: Record<string, string> = {
+                                'B': 'Cb', 'F#': 'Gb', 'C#': 'Db', 'G#': 'Ab', 'D#': 'Eb', 'A#': 'Bb',
+                            };
+                            if (enharmonicFlat[tonicName]) tonicName = enharmonicFlat[tonicName];
+                        }
+                        // Skip when tonic matches the globally active tonic
+                        if (rep === 0 && tonicName === activeTonicName) continue;
+                        const slotIdx = sq.startSlotIdx + rep * L;
+                        const tick = slots[slotIdx];
+                        if (tick == null || !Number.isFinite(tick)) continue;
+                        const absBeat = tick / TICKS_PER_QUARTER;
+                        // Don't duplicate an existing context at the same beat
+                        const isDup = inferredAnalysisContexts.some(c =>
+                            Math.abs(c.absBeat - absBeat) < 0.01 && c.newTonic === tonicName);
+                        if (isDup) continue;
+                        inferredAnalysisContexts.push({
+                            absBeat,
+                            newTonic: tonicName,
+                            newIsMinor: false,
+                        } as AnalysisContext);
+                    }
+                }
+            } catch { /* ignore */ }
+
             // ---------------------------------------------------------
             // Neapolitan: expect resolution to V (or V/...) soon.
             // Accept variants like N6.
@@ -8445,7 +8625,7 @@ export function applyHarmonyRules(
                         ruleId: string,
                         severity: 'error' | 'warning' | 'exception',
                         description: string,
-                        suggestion: string,
+                        suggestion: string | undefined,
                         doubledNotes: StaffNote[]
                     ) => {
                         if (!doubledNotes || doubledNotes.length < 2) return;
@@ -8482,14 +8662,20 @@ export function applyHarmonyRules(
                     };
 
                     // R-10-7TH: doubled chordal 7th (avoid in classical harmony).
-                    if (seventhPc !== null) {
+                    // Guard: skip if the detected "7th" is actually the leading tone
+                    // (already caught by R-10 above — avoids double-flagging when
+                    // identifyChord picks a different root, e.g. C for {A,C,Eb}).
+                    // Check both local (leadingPcAtEvent) and global (leadingPc)
+                    // leading tone, because inferred modulation contexts may shift
+                    // the local tonic beyond the sequence boundary.
+                    if (seventhPc !== null && seventhPc !== leadingPcAtEvent && seventhPc !== leadingPc) {
                         const seventhNotes = harmonicPresent.filter(n => n.noteIndex === seventhPc);
                         if (seventhNotes.length >= 2) {
                             addDoublingViolation(
                                 'R-10-7TH',
                                 'error',
                                 'Raddoppio della 7ª dell’accordo',
-                                'In stile corale, la 7ª è una dissonanza che tende a risolvere: evita di raddoppiarla.',
+                                undefined,
                                 seventhNotes
                             );
                         }
@@ -8506,7 +8692,7 @@ export function applyHarmonyRules(
                                     'R-10-DIM5',
                                     'error',
                                     'Raddoppio della 5ª diminuita',
-                                    'La quinta diminuita è un intervallo dissonante che tende a risolvere: evita di raddoppiarla.',
+                                    undefined,
                                     dim5Notes
                                 );
                             }
@@ -8540,7 +8726,7 @@ export function applyHarmonyRules(
                                                 'R-10-64',
                                                 'warning',
                                                 'Raddoppio atipico in 6/4 (2ª inversione)',
-                                                'In un 6/4 (accordo in 2ª inversione) di norma si raddoppia la 5ª (il basso) per stabilizzare la sonorità.',
+                                                undefined,
                                                 doubled
                                             );
                                         }
@@ -9112,6 +9298,11 @@ export function applyHarmonyRules(
                 if ((n1.voice ?? 1) === (n2.voice ?? 1)) continue;
                 const p2 = (n2.pitch || '').toUpperCase();
                 if (p1 !== p2) continue;
+                // Guard: if noteIndex (spelled pitch class) is the same, no false relation.
+                // Generated notes may omit 'accidental' but noteIndex encodes the correct PC.
+                const ni1 = (n1 as any).noteIndex;
+                const ni2 = (n2 as any).noteIndex;
+                if (ni1 != null && ni2 != null && ((ni1 % 12 + 12) % 12) === ((ni2 % 12 + 12) % 12)) continue;
                 const acc2 = (n2.explicitAccidental ?? n2.accidental ?? null) as AccidentalType | null;
                 if (normAcc(acc1) !== normAcc(acc2)) {
                     // Exception: if the pitch letter that would create the false relation does NOT
@@ -9353,14 +9544,14 @@ export function applyHarmonyRules(
 
                 // R-01: Parallel octaves (similar motion)
                 if (similar && isPerfectOctaveOrUnison(intA) && isPerfectOctaveOrUnison(intB)) {
-                    addViolation({ ruleId: 'R-01', severity: 'error', description: 'Ottave parallele', suggestion: 'Introduci moto contrario o cambia disposizione delle voci.', noteIds: [a1.id, a2.id, b1.id, b2.id] });
+                    addViolation({ ruleId: 'R-01', severity: 'error', description: 'Ottave parallele', noteIds: [a1.id, a2.id, b1.id, b2.id] });
                     connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-01' });
                     connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-01' });
                     continue;
                 }
                 // R-02: Parallel fifths (similar motion)
                 if (similar && isPerfectFifth(intA) && isPerfectFifth(intB)) {
-                    addViolation({ ruleId: 'R-02', severity: 'error', description: 'Quinte parallele', suggestion: 'Evita il moto parallelo verso quinte perfette; usa moto contrario/obliquo.', noteIds: [a1.id, a2.id, b1.id, b2.id] });
+                    addViolation({ ruleId: 'R-02', severity: 'error', description: 'Quinte parallele', noteIds: [a1.id, a2.id, b1.id, b2.id] });
                     connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-02' });
                     connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-02' });
                     continue;
@@ -9943,20 +10134,20 @@ export function applyHarmonyRules(
                             : `Quinta nascosta ${_pairLabel} con ${pair.nameLo} per grado ma non su grado tonale`;
                         _sugg = 'Dubois: con la voce inferiore per grado, la quinta nascosta è ammessa solo sui gradi tonali (I, IV, V).';
                     } else {
-                        _sev = _loDir > 0 ? 'warning' : 'error';
+                        _sev = 'warning';
                         _desc = _loDir > 0
                             ? `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado ascendente (tollerata con riserva — Dubois)`
-                            : `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado discendente (non ammessa — Dubois)`;
-                        _sugg = 'Dubois: l\'ottava nascosta con la voce inferiore per grado è tollerata solo salendo.';
+                            : `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado discendente (evitare — tra parti interne tollerata, cfr. Piston)`;
+                        _sugg = 'Tra parti interne, l\'ottava nascosta con la voce inferiore per grado è tollerata con più libertà (Piston, Bach).';
                     }
                 } else {
                     // Both leap
                     if (_is8) {
-                        _sev = _inSeq ? 'exception' : 'error';
+                        _sev = _inSeq ? 'exception' : 'warning';
                         _desc = _inSeq
                             ? `Ottava nascosta ${_pairLabel} per salto in progressione imitata (tollerata)`
-                            : `Ottava nascosta ${_pairLabel} per salto in entrambe le voci (proibita — Dubois)`;
-                        _sugg = 'Dubois: l\'ottava nascosta è proibita quando entrambe le voci procedono per salto.';
+                            : `Ottava nascosta ${_pairLabel} per salto in entrambe le voci (evitare — tra parti interne tollerata, cfr. Piston/Bach)`;
+                        _sugg = 'Tra parti interne, l\'ottava nascosta per salto è più tollerata che tra voci estreme (Piston, Bach).';
                     } else {
                         _sev = _inSeq ? 'exception' : 'warning';
                         _desc = _inSeq
@@ -10335,7 +10526,6 @@ export function applyHarmonyRules(
                             ruleId: 'R-12',
                             severity: 'error',
                             description: 'Risoluzione errata della settima dell’accordo',
-                            suggestion: 'La 7a tende a risolvere scendendo di grado (per moto congiunto).',
                             noteIds: [n7.id, nNext.id],
                         });
                     }
@@ -10501,7 +10691,25 @@ export function applyHarmonyRules(
                     && doubleBarlineMeasures.includes(n1.measureIndex ?? 0)) continue;
             }
 
-            const midiDiff = (n2.midi ?? 0) - (n1.midi ?? 0);
+            // Recompute MIDI from pitch+octave+accidental to handle
+            // stale values (e.g. Cb4 stored as midi 71 instead of 59).
+            const _safeMidi = (n: typeof n1): number => {
+                // Prefer the stored midi value — it is always correct.
+                // Only fall back to pitch+accidental when midi is missing.
+                const storedMidi = Number(n.midi);
+                if (Number.isFinite(storedMidi) && storedMidi > 0) return storedMidi;
+                if (n.pitch == null || (n as any).octave == null) return 0;
+                const _bp: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                const base = _bp[String(n.pitch)[0]] ?? 0;
+                let acc = 0;
+                const a = (n as any).accidental || (n as any).explicitAccidental || '';
+                if (a === 'sharp' || a === '#') acc = 1;
+                else if (a === 'flat' || a === 'b') acc = -1;
+                else if (a === 'double-sharp' || a === '##') acc = 2;
+                else if (a === 'double-flat' || a === 'bb') acc = -2;
+                return ((n as any).octave + 1) * 12 + base + acc;
+            };
+            const midiDiff = _safeMidi(n2) - _safeMidi(n1);
             const absSemi = Math.abs(midiDiff);
 
             // R-15: large leaps in inner voices (Alto/Tenore > 6th)
@@ -10554,13 +10762,24 @@ export function applyHarmonyRules(
                     connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-16' });
                 }
                 // Augmented 2nd (3 semitones between ♭6 ↔ ♮7 in minor)
+                // Must also verify SPELLING: an augmented 2nd is 1 letter-name step,
+                // a minor 3rd is 2 letter-name steps. Both are 3 semitones.
                 if (absSemi === 3) {
+                    const _letterIdx: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+                    const _l1 = _letterIdx[String((n1 as any).pitch || '')[0]] ?? -1;
+                    const _l2 = _letterIdx[String((n2 as any).pitch || '')[0]] ?? -1;
+                    const _letterDist = (_l1 >= 0 && _l2 >= 0)
+                        ? Math.min((_l2 - _l1 + 7) % 7, (_l1 - _l2 + 7) % 7)
+                        : -1;
+                    // Only flag as augmented 2nd if the letter distance is 1 (a 2nd)
+                    // If letter distance is 2 (a 3rd) or unknown, skip — it's a minor 3rd.
+                    if (_letterDist === 1) {
                     try {
                         const _localCtx16 = getContextAtAbsBeat(n1.beat + (n1.measureIndex ?? 0) * beatsPerMeasure);
                         const _tPcMap16: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
                         const _tPc16 = _tPcMap16[_localCtx16.tonic] ?? _tPcMap16[keyTonic] ?? 0;
-                        const pc1 = mod12(n1.midi);
-                        const pc2 = mod12(n2.midi);
+                        const pc1 = mod12(_safeMidi(n1));
+                        const pc2 = mod12(_safeMidi(n2));
                         const deg6b = (_tPc16 + 8) % 12;  // ♭6
                         const deg7n = (_tPc16 + 11) % 12;  // ♮7
                         if ((pc1 === deg6b && pc2 === deg7n) || (pc1 === deg7n && pc2 === deg6b)) {
@@ -10571,8 +10790,8 @@ export function applyHarmonyRules(
                             let ltResolvesToTonic = false;
                             if (landsOnLT && i + 2 < line.length) {
                                 const nNext = line[i + 2];
-                                const nNextPc = mod12(nNext.midi);
-                                if (nNextPc === tonicPc16 && Math.abs((nNext.midi ?? 0) - (n2.midi ?? 0)) <= 2) {
+                                const nNextPc = mod12(_safeMidi(nNext));
+                                if (nNextPc === tonicPc16 && Math.abs(_safeMidi(nNext) - _safeMidi(n2)) <= 2) {
                                     ltResolvesToTonic = true;
                                 }
                             }
@@ -10591,21 +10810,53 @@ export function applyHarmonyRules(
                             connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: aug2Sev, ruleId: ltResolvesToTonic ? 'EXC-Aug2-LT' : 'R-16' });
                         }
                     } catch { /* ignore */ }
+                    }
                 }
                 // Chromatic semitone (same letter, different accidental → same direction)
                 if (absSemi === 1) {
                     const p1 = (String(n1.pitch || '').match(/[A-G]/i)?.[0] || '').toUpperCase();
                     const p2 = (String(n2.pitch || '').match(/[A-G]/i)?.[0] || '').toUpperCase();
                     if (p1 && p2 && p1 === p2) {
-                        // Same pitch letter, different MIDI → chromatic semitone
-                        addViolation({
-                            ruleId: 'R-16',
-                            severity: 'warning',
-                            description: 'Semitono cromatico — da evitare nella scrittura diatonica',
-                            suggestion: 'Il semitono cromatico (stessa lettera, alterazione diversa) è generalmente da evitare; preferisci movimenti diatonici.',
-                            noteIds: [n1.id, n2.id],
-                        });
-                        connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-16' });
+                        // Exception: tonicization — if the tonal context changes between
+                        // n1 and n2, or one of the notes is chromatic to the local scale,
+                        // the semitone is structural (leading-tone motion) → skip.
+                        let isTonicization = false;
+                        try {
+                            const abs1 = (n1.beat ?? 1) + (n1.measureIndex ?? 0) * beatsPerMeasure;
+                            const abs2 = (n2.beat ?? 1) + (n2.measureIndex ?? 0) * beatsPerMeasure;
+                            const ctx1 = getContextAtAbsBeat(abs1);
+                            const ctx2 = getContextAtAbsBeat(abs2);
+                            if (ctx1.tonic !== ctx2.tonic) {
+                                isTonicization = true;
+                            } else {
+                                // Check if either note is chromatic to the local diatonic scale
+                                const _tPcMap: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+                                const tPc = _tPcMap[ctx1.tonic] ?? _tPcMap[keyTonic] ?? 0;
+                                const isMin = ctx1.isMinor;
+                                const majorScale = [0, 2, 4, 5, 7, 9, 11];
+                                const minorScale = [0, 2, 3, 5, 7, 8, 10]; // natural minor
+                                const scale = (isMin ? minorScale : majorScale).map(s => (s + tPc) % 12);
+                                // In minor, also accept raised 6th and 7th (melodic minor)
+                                if (isMin) { scale.push((tPc + 9) % 12); scale.push((tPc + 11) % 12); }
+                                const scaleSet = new Set(scale);
+                                const pc1 = mod12(_safeMidi(n1));
+                                const pc2 = mod12(_safeMidi(n2));
+                                if (!scaleSet.has(pc1) || !scaleSet.has(pc2)) {
+                                    isTonicization = true;
+                                }
+                            }
+                        } catch { /* ignore */ }
+                        if (!isTonicization) {
+                            // Same pitch letter, different MIDI → chromatic semitone
+                            addViolation({
+                                ruleId: 'R-16',
+                                severity: 'warning',
+                                description: 'Semitono cromatico — da evitare nella scrittura diatonica',
+                                suggestion: 'Il semitono cromatico (stessa lettera, alterazione diversa) è generalmente da evitare; preferisci movimenti diatonici.',
+                                noteIds: [n1.id, n2.id],
+                            });
+                            connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-16' });
+                        }
                     }
                 }
                 // m6 or P8 descending — permitted but not ideal, mild warning
@@ -10636,9 +10887,9 @@ export function applyHarmonyRules(
                     && doubleBarlineMeasures.includes(n0.measureIndex ?? 0);
 
                 if (!n0Orn && !n0CrossesBarline) {
-                    const midi0 = n0.midi ?? 0;
-                    const midi1 = n1.midi ?? 0;
-                    const midi2 = n2.midi ?? 0;
+                    const midi0 = _safeMidi(n0);
+                    const midi1 = _safeMidi(n1);
+                    const midi2 = _safeMidi(n2);
                     const diff01 = midi1 - midi0;  // signed
                     const diff12 = midi2 - midi1;  // signed
                     const abs01 = Math.abs(diff01);
@@ -10666,14 +10917,16 @@ export function applyHarmonyRules(
                             });
                             connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'exception', ruleId: 'EXC-R17-Duration' });
                         } else {
+                            // ── R-17a: Due salti stessa direzione sommano 7ª/9ª ──
+                            // Gravità: error (proibito nello stile scolastico).
+                            // Condizione di sblocco: solo se nota intermedia più lunga → EXC-R17-Duration.
                             addViolation({
-                                ruleId: 'R-17',
+                                ruleId: 'R-17a',
                                 severity: 'error',
                                 description: `Due salti consecutivi nella stessa direzione sommano ${absTotal >= 13 ? 'una 9ª' : 'una 7ª'} (proibito)`,
-                                suggestion: 'Evita due salti consecutivi nella stessa direzione la cui somma produce un intervallo di 7ª o 9ª; inserisci moto contrario tra i salti.',
                                 noteIds: [n0.id, n1.id, n2.id],
                             });
-                            connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'error', ruleId: 'R-17' });
+                            connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'error', ruleId: 'R-17a' });
                         }
                     }
 
@@ -10686,21 +10939,41 @@ export function applyHarmonyRules(
                         const dur0 = (n0 as any).durationTicks ?? 960;
                         const dur1 = (n1 as any).durationTicks ?? 960;
                         if (dur1 <= dur0) {
+                            // ── R-17b: Intervallo di 7ª/9ª in due salti entrambi > 2ª ──
+                            // Gravità: warning (meno grave di R-17a perché le direzioni
+                            // possono non essere identiche, ma nessun salto è congiunto).
+                            // Condizione di sblocco: se la nota intermedia è più lunga
+                            // della prima, il controllo non scatta.
                             addViolation({
-                                ruleId: 'R-17',
+                                ruleId: 'R-17b',
                                 severity: 'warning',
                                 description: `Intervallo di ${absTotal >= 13 ? '9ª' : '7ª'} percorso in due movimenti senza grado congiunto`,
-                                suggestion: 'Quando si percorre una 7ª o 9ª in due movimenti, uno dei due salti deve essere di 2ª. Eccezione: se la nota intermedia è più lunga della precedente.',
                                 noteIds: [n0.id, n1.id, n2.id],
                             });
-                            connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-17' });
+                            connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-17b' });
                         }
                     }
 
-                    // R-17c: Tritone outlined across two movements — resolution required
-                    // If three notes outline a tritone (6 semitones from n0 to n2),
-                    // check that n2 resolves: ascending by semitone or descending by step.
-                    if (absTotal === 6 && i + 2 < line.length) {
+                    // ──────────────────────────────────────────────────────────
+                    // R-17c — Successione di Tritono (4ª eccedente)
+                    // ──────────────────────────────────────────────────────────
+                    // Logica: segnala due o più movimenti consecutivi nella STESSA
+                    // direzione la cui somma produce un tritono (6 semitoni).
+                    //
+                    // Filtro "Cambio Direzione": se la nota intermedia inverte il
+                    // moto (es. F→F#↑ poi F#→B↓), la tensione è annullata e il
+                    // warning resta inattivo.  → Math.sign(diff01) === Math.sign(diff12)
+                    //
+                    // Gerarchia di gravità:
+                    //   Alta  (severity 'error')   — valori brevi (crome/semicrome ≤ 480 ticks)
+                    //   Media (severity 'warning')  — valori lunghi (semiminime+, > 480 ticks)
+                    //   La durata attenua la durezza della successione.
+                    //
+                    // Condizione di sblocco: il movimento è tollerato solo se
+                    // l'ultima nota risolve immediatamente per grado congiunto
+                    // in senso opposto al salto (≤ 2 semitoni, direzione inversa).
+                    // ──────────────────────────────────────────────────────────
+                    if (absTotal === 6 && Math.sign(diff01) === Math.sign(diff12) && i + 2 < line.length) {
                         const n3 = line[i + 2];
                         const n3Orn = !!(n3 as any).ornamentType;
                         // Guard: skip if n2→n3 crosses a double barline
@@ -10708,26 +10981,34 @@ export function applyHarmonyRules(
                             && (n2.measureIndex ?? 0) !== (n3.measureIndex ?? 0)
                             && doubleBarlineMeasures.includes(n2.measureIndex ?? 0);
                         if (!n3Orn && !n3CrossesBarline) {
-                            const midi3 = n3.midi ?? 0;
+                            const midi3 = _safeMidi(n3);
                             const diff23 = midi3 - midi2;
                             const abs23 = Math.abs(diff23);
                             const ascending = totalDiff > 0;
-                            // If tritone ascending: n3 must ascend by semitone (1 semi)
-                            // If tritone descending: n3 must descend by step (1-2 semi)
+
+                            // Condizione di sblocco: risoluzione per grado congiunto
+                            // in senso opposto al salto (≤ 2 semitoni).
                             let resolved = false;
-                            if (ascending && diff23 > 0 && abs23 <= 2) resolved = true;   // ascends by step
-                            if (!ascending && diff23 < 0 && abs23 <= 2) resolved = true;   // descends by step
+                            if (ascending && diff23 < 0 && abs23 <= 2) resolved = true;   // tritono asc → risolve scendendo
+                            if (!ascending && diff23 > 0 && abs23 <= 2) resolved = true;   // tritono disc → risolve salendo
+
                             if (!resolved) {
+                                // Gerarchia di gravità basata sulla durata
+                                const _durTrit0 = (n0 as any).durationTicks ?? 960;
+                                const _durTrit1 = (n1 as any).durationTicks ?? 960;
+                                const _isShortTrit = _durTrit0 <= 480 || _durTrit1 <= 480;  // croma = 480 ticks
+                                const _tritSev: HarmonyViolation['severity'] = _isShortTrit ? 'error' : 'warning';
+
                                 addViolation({
-                                    ruleId: 'R-17',
-                                    severity: 'warning',
-                                    description: 'Tritono delineato in due movimenti senza risoluzione corretta',
+                                    ruleId: 'R-17c',
+                                    severity: _tritSev,
+                                    description: `Successione di tritono (4ª eccedente) delineata in due movimenti senza risoluzione${_isShortTrit ? ' — valori brevi, gravità alta' : ''}`,
                                     suggestion: ascending
-                                        ? 'Dopo un tritono ascendente delineato in due movimenti, prosegui ascendendo per semitono diatonico o discendendo per grado congiunto.'
-                                        : 'Dopo un tritono discendente delineato in due movimenti, prosegui discendendo per grado congiunto o ascendendo per semitono.',
+                                        ? 'Dopo un tritono ascendente, l\'ultima nota deve risolvere discendendo di semitono o tono.'
+                                        : 'Dopo un tritono discendente, l\'ultima nota deve risolvere ascendendo di semitono o tono.',
                                     noteIds: [n0.id, n1.id, n2.id, n3.id],
                                 });
-                                connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: 'warning', ruleId: 'R-17' });
+                                connections.push({ type: 'horizontal', noteId1: n0.id, noteId2: n2.id, severity: _tritSev, ruleId: 'R-17c' });
                             }
                         }
                     }
@@ -10737,6 +11018,29 @@ export function applyHarmonyRules(
             // R-06: incorrect resolution of augmented/diminished melodic leaps
             // IMPORTANT: the interval quality must be computed from spelling (pitch letter + octave),
             // not from the global key. Otherwise chromatic lines get misclassified.
+
+            // Recompute MIDI from pitch+octave+accidental to handle stale values (e.g. Cb4=71→59)
+            // But prefer stored midi when accidental is missing (generated notes).
+            const _safeMidi06 = (n: StaffNote): number => {
+                const hasSpelling = n.pitch != null && (n as any).octave != null;
+                const hasAcc = !!(n as any).accidental || !!(n as any).explicitAccidental;
+                // If no spelling info or no accidental info, trust stored midi
+                if (!hasSpelling || !hasAcc) {
+                    const stored = Number(n.midi);
+                    if (Number.isFinite(stored) && stored > 0) return stored;
+                    if (!hasSpelling) return 0;
+                }
+                const _bp: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                const base = _bp[String(n.pitch)[0]] ?? 0;
+                let acc = 0;
+                const a = (n as any).accidental || (n as any).explicitAccidental || '';
+                if (a === 'sharp' || a === '#') acc = 1;
+                else if (a === 'flat' || a === 'b') acc = -1;
+                else if (a === 'double-sharp' || a === '##') acc = 2;
+                else if (a === 'double-flat' || a === 'bb') acc = -2;
+                return ((n as any).octave + 1) * 12 + base + acc;
+            };
+
             const spellingPc = (n: StaffNote): number | null => {
                 try {
                     const letter = (String(n.pitch || '').match(/[A-G]/i)?.[0] || '').toUpperCase();
@@ -10781,8 +11085,8 @@ export function applyHarmonyRules(
             try {
                 const pc1 = spellingPc(n1);
                 const pc2 = spellingPc(n2);
-                const mpc1 = mod12(n1.midi ?? 0);
-                const mpc2 = mod12(n2.midi ?? 0);
+                const mpc1 = mod12(_safeMidi06(n1));
+                const mpc2 = mod12(_safeMidi06(n2));
                 if (pc1 != null && pc1 !== mpc1) continue;
                 if (pc2 != null && pc2 !== mpc2) continue;
             } catch { /* ignore */ }
@@ -10840,7 +11144,7 @@ export function applyHarmonyRules(
                     if (isOrnamental(n3)) {
                         continue;
                     }
-                    const nextDiff = (n3.midi ?? 0) - (n2.midi ?? 0);
+                    const nextDiff = _safeMidi06(n3) - _safeMidi06(n2);
                     const nextAbs = Math.abs(nextDiff);
                     const resolvesByStep = nextAbs > 0 && nextAbs <= 2;
                     // Classical rule: after an augmented/diminished leap, resolve by step
@@ -10857,6 +11161,8 @@ export function applyHarmonyRules(
                                 suggestion: 'Dopo un intervallo aumentato, risolvi per grado congiunto (moto congiunto).',
                                 noteIds: [n1.id, n2.id, n3.id],
                             });
+                            connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'error', ruleId: 'R-06' });
+                            connections.push({ type: 'horizontal', noteId1: n2.id, noteId2: n3.id, severity: 'error', ruleId: 'R-06' });
                         }
                     } else {
                         if (!resolvesByStep) {
@@ -10867,6 +11173,8 @@ export function applyHarmonyRules(
                                 suggestion: 'Dopo un intervallo diminuito, risolvi per grado congiunto (moto congiunto).',
                                 noteIds: [n1.id, n2.id, n3.id],
                             });
+                            connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'error', ruleId: 'R-06' });
+                            connections.push({ type: 'horizontal', noteId1: n2.id, noteId2: n3.id, severity: 'error', ruleId: 'R-06' });
                         }
                     }
                 }

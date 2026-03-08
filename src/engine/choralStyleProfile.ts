@@ -68,6 +68,8 @@ export interface StyleProfile {
   contraryMotion: ContraryMotionStats;
   bassMotion: BassMotionStats;
   doubling: DoublingStats;
+  /** Bigram counts: romanBigrams[prevRoman][currRoman] = count */
+  romanBigrams?: Record<string, Record<string, number>>;
   /** ISO timestamp of last extraction */
   lastUpdated: string;
   /** Number of files/excerpts analyzed */
@@ -292,6 +294,18 @@ export function extractStyleProfile(
     profile.contraryMotion.total++;
   }
 
+  // --- Roman bigrams ---
+  const DEGREE_NAMES_MAJOR = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+  const DEGREE_NAMES_MINOR = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+  const degName = (d: number) => (isMinor ? DEGREE_NAMES_MINOR : DEGREE_NAMES_MAJOR)[d % 7] || `${d}`;
+  profile.romanBigrams = {};
+  for (let i = 1; i < snapshots.length; i++) {
+    const prev = degName(snapshots[i - 1].degree);
+    const curr = degName(snapshots[i].degree);
+    if (!profile.romanBigrams[prev]) profile.romanBigrams[prev] = {};
+    profile.romanBigrams[prev][curr] = (profile.romanBigrams[prev][curr] || 0) + 1;
+  }
+
   profile.filesAnalyzed = 1;
   profile.lastUpdated = new Date().toISOString();
   return profile;
@@ -312,6 +326,7 @@ export function createEmptyProfile(): StyleProfile {
     contraryMotion: { contrary: 0, parallel: 0, oblique: 0, total: 0 },
     bassMotion: { sumSemitones: 0, count: 0 },
     doubling: { root: 0, third: 0, fifth: 0, total: 0 },
+    romanBigrams: {},
     lastUpdated: '',
     filesAnalyzed: 0,
   };
@@ -381,6 +396,17 @@ export function mergeProfiles(existing: StyleProfile | null, incoming: StyleProf
     fifth: existing.doubling.fifth + incoming.doubling.fifth,
     total: existing.doubling.total + incoming.doubling.total,
   };
+
+  // Merge roman bigrams
+  merged.romanBigrams = {};
+  for (const src of [existing.romanBigrams || {}, incoming.romanBigrams || {}]) {
+    for (const prev of Object.keys(src)) {
+      if (!merged.romanBigrams[prev]) merged.romanBigrams[prev] = {};
+      for (const curr of Object.keys(src[prev])) {
+        merged.romanBigrams[prev][curr] = (merged.romanBigrams[prev][curr] || 0) + (src[prev][curr] || 0);
+      }
+    }
+  }
 
   merged.filesAnalyzed = existing.filesAnalyzed + incoming.filesAnalyzed;
   merged.lastUpdated = new Date().toISOString();
@@ -492,6 +518,25 @@ export function getContraryMotionBonus(profile: StyleProfile | null | undefined)
   // Positive deviation → negative bonus (more cost reduction for contrary motion)
   const rawBonus = -deviation * MAX_BONUS / 0.5;
   return capBonus(rawBonus * weight);
+}
+
+/**
+ * Get the bigram probability P(currRoman | prevRoman) from the corpus.
+ * Returns a value in [0, 1], or 0 if no data for that bigram.
+ */
+export function getBigramProbability(
+  profile: StyleProfile | null | undefined,
+  prevRoman: string,
+  currRoman: string,
+): number {
+  if (!profile?.romanBigrams) return 0;
+  const row = profile.romanBigrams[prevRoman];
+  if (!row) return 0;
+  const count = row[currRoman] || 0;
+  if (count <= 0) return 0;
+  let total = 0;
+  for (const v of Object.values(row)) total += (v || 0);
+  return total > 0 ? count / total : 0;
 }
 
 // ─── Persistence ───────────────────────────────────────────────────────────

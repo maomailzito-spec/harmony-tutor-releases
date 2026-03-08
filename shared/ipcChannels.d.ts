@@ -11,6 +11,7 @@ export const IPC_CHANNELS: Readonly<{
 
   EXPORT_PDF_FROM_HTML: 'export-pdf-from-html';
   EXPORT_PNG_FROM_HTML: 'export-png-from-html';
+  EXPORT_MUSICXML: 'export-musicxml';
 
   GUITAR_LIBRARY_LOAD: 'guitar-library-load';
   GUITAR_LIBRARY_SAVE: 'guitar-library-save';

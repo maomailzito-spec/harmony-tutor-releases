@@ -451,9 +451,17 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       // Auto-harmonize when melody mode is active and no progression text
       if (progression.length === 0 && ((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))) {
         const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
-        if (useBass && bassFromScore.length > 0 && !(useMelody && sopranoFromScore.length > 0)) {
+        // When continuing from a later measure, keep only notes >= insertMeasure
+        // and rebase their measureIndex so the generator sees them starting at 0.
+        const rebaseSop = sopranoFromScore
+          .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+          .map(n => ({ ...n, measureIndex: (n.measureIndex ?? 0) - insertMeasure }));
+        const rebaseBass = bassFromScore
+          .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+          .map(n => ({ ...n, measureIndex: (n.measureIndex ?? 0) - insertMeasure }));
+        if (useBass && rebaseBass.length > 0 && !(useMelody && rebaseSop.length > 0)) {
           // Bass-only: use bass-specific auto-harmonize
-          const constraints: SopranoConstraint[] = bassFromScore.map(n => ({
+          const constraints: SopranoConstraint[] = rebaseBass.map(n => ({
             midi: n.midi,
             measure: n.measureIndex ?? 0,
             beat: n.beat ?? 1,
@@ -461,7 +469,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           progression = autoHarmonizeFromBass(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
         } else {
           // Soprano (or both): use soprano auto-harmonize
-          const constraints: SopranoConstraint[] = sopranoFromScore.map(n => ({
+          const constraints: SopranoConstraint[] = rebaseSop.map(n => ({
             midi: n.midi,
             measure: n.measureIndex ?? 0,
             beat: n.beat ?? 1,
@@ -492,22 +500,27 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       };
 
       // Melody constraint: fix soprano from existing voice 1 notes
+      // Rebase to 0 when continuing from a later measure.
       if (useMelody && sopranoFromScore.length > 0) {
-        const sopranoMelody: SopranoConstraint[] = sopranoFromScore.map(n => ({
-          midi: n.midi,
-          measure: n.measureIndex ?? 0,
-          beat: n.beat ?? 1,
-        }));
+        const sopranoMelody: SopranoConstraint[] = sopranoFromScore
+          .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+          .map(n => ({
+            midi: n.midi,
+            measure: (n.measureIndex ?? 0) - insertMeasure,
+            beat: n.beat ?? 1,
+          }));
         config.sopranoMelody = sopranoMelody;
       }
 
-      // Bass constraint ("basso dato")
+      // Bass constraint ("basso dato") — also rebased.
       if (useBass && bassFromScore.length > 0) {
-        config.bassMelody = bassFromScore.map(n => ({
-          midi: n.midi,
-          measure: n.measureIndex ?? 0,
-          beat: n.beat ?? 1,
-        }));
+        config.bassMelody = bassFromScore
+          .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+          .map(n => ({
+            midi: n.midi,
+            measure: (n.measureIndex ?? 0) - insertMeasure,
+            beat: n.beat ?? 1,
+          }));
       }
 
       resetNoteIdCounter();
@@ -521,7 +534,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setGeneratedNotes(null);
       setViolations([]);
     }
-  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition]);
+  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure]);
 
   // Apply to editor
   const handleApply = useCallback(() => {
@@ -544,7 +557,11 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     if (useMelody && sopranoFromScore.length > 0) lockedVoices.push(1);
     if (useBass && bassFromScore.length > 0) lockedVoices.push(4);
     if (lockedVoices.length > 0) {
-      const originals = (existingNotes || []).filter(n => n && lockedVoices.includes((n as any).voice ?? 1));
+      // Keep only locked-voice notes from the insertion range (>= insertMeasure).
+      // Notes from earlier measures are preserved by the merge logic in the parent handler.
+      const originals = (existingNotes || []).filter(n =>
+        n && lockedVoices.includes((n as any).voice ?? 1) && ((n as any).measureIndex ?? 0) >= offset
+      );
       const generatedInner = voiceFiltered.filter(n => !lockedVoices.includes(n.voice ?? 1));
       onApplyNotes([...originals, ...applyOffset(generatedInner)]);
     } else {
@@ -578,11 +595,14 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const handleAutoHarmonize = useCallback(() => {
     if (sopranoFromScore.length === 0) return;
     try {
-      const constraints: SopranoConstraint[] = sopranoFromScore.map(n => ({
-        midi: n.midi,
-        measure: n.measureIndex ?? 0,
-        beat: n.beat ?? 1,
-      }));
+      // Rebase to 0 when continuing from a later measure.
+      const constraints: SopranoConstraint[] = sopranoFromScore
+        .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+        .map(n => ({
+          midi: n.midi,
+          measure: (n.measureIndex ?? 0) - insertMeasure,
+          beat: n.beat ?? 1,
+        }));
       const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
       const autoProgression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
       // Build text representation
@@ -594,7 +614,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     } catch (err: any) {
       setError(err?.message || 'Errore nell\'armonizzazione automatica.');
     }
-  }, [sopranoFromScore, localTonic, localMinor, harmonicRhythmBeats, localTs]);
+  }, [sopranoFromScore, localTonic, localMinor, harmonicRhythmBeats, localTs, insertMeasure]);
 
   if (!isOpen) return null;
 

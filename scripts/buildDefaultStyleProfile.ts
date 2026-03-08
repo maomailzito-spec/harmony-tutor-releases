@@ -30,6 +30,15 @@ function noteNameToPc(name: string): number {
   return ((base + offset) % 12 + 12) % 12;
 }
 
+const RELATIVE_MINORS: Record<string, string> = {
+  'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
+  'F': 'D', 'Bb': 'G', 'Eb': 'C', 'Ab': 'F', 'Db': 'Bb', 'Gb': 'Eb', 'Cb': 'Ab'
+};
+
+function minorTonicFromMajorRoot(majorRoot: string): string {
+  return RELATIVE_MINORS[majorRoot] || 'A';
+}
+
 function buildScalePcs(tonic: string, isMinor: boolean): number[] {
   const root = noteNameToPc(tonic);
   const intervals = isMinor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
@@ -72,6 +81,7 @@ interface StyleProfile {
   contraryMotion: ContraryMotionStats;
   bassMotion: { sumSemitones: number; count: number };
   doubling: DoublingStats;
+  romanBigrams?: Record<string, Record<string, number>>;
   lastUpdated: string;
   filesAnalyzed: number;
 }
@@ -88,6 +98,7 @@ function createEmptyProfile(): StyleProfile {
     contraryMotion: { contrary: 0, parallel: 0, oblique: 0, total: 0 },
     bassMotion: { sumSemitones: 0, count: 0 },
     doubling: { root: 0, third: 0, fifth: 0, total: 0 },
+    romanBigrams: {},
     lastUpdated: '',
     filesAnalyzed: 0,
   };
@@ -116,6 +127,16 @@ function mergeProfiles(existing: StyleProfile | null, incoming: StyleProfile): S
   merged.contraryMotion = { contrary: existing.contraryMotion.contrary + incoming.contraryMotion.contrary, parallel: existing.contraryMotion.parallel + incoming.contraryMotion.parallel, oblique: existing.contraryMotion.oblique + incoming.contraryMotion.oblique, total: existing.contraryMotion.total + incoming.contraryMotion.total };
   merged.bassMotion = { sumSemitones: existing.bassMotion.sumSemitones + incoming.bassMotion.sumSemitones, count: existing.bassMotion.count + incoming.bassMotion.count };
   merged.doubling = { root: existing.doubling.root + incoming.doubling.root, third: existing.doubling.third + incoming.doubling.third, fifth: existing.doubling.fifth + incoming.doubling.fifth, total: existing.doubling.total + incoming.doubling.total };
+  // Merge roman bigrams
+  merged.romanBigrams = {};
+  for (const src of [existing.romanBigrams || {}, incoming.romanBigrams || {}]) {
+    for (const prev of Object.keys(src)) {
+      if (!merged.romanBigrams[prev]) merged.romanBigrams[prev] = {};
+      for (const curr of Object.keys(src[prev])) {
+        merged.romanBigrams[prev][curr] = (merged.romanBigrams[prev][curr] || 0) + (src[prev][curr] || 0);
+      }
+    }
+  }
   merged.filesAnalyzed = existing.filesAnalyzed + incoming.filesAnalyzed;
   merged.lastUpdated = new Date().toISOString();
   return merged;
@@ -221,6 +242,15 @@ function extractFromNotes(notes: any[], tonic: string, isMinor: boolean, beatsPe
     profile.contraryMotion.total++;
   }
 
+  // --- Roman bigrams ---
+  profile.romanBigrams = {};
+  for (let i = 1; i < snapshots.length; i++) {
+    const prev = degreeName(snapshots[i - 1].degree, isMinor);
+    const curr = degreeName(snapshots[i].degree, isMinor);
+    if (!profile.romanBigrams[prev]) profile.romanBigrams[prev] = {};
+    profile.romanBigrams[prev][curr] = (profile.romanBigrams[prev][curr] || 0) + 1;
+  }
+
   profile.filesAnalyzed = 1;
   profile.lastUpdated = new Date().toISOString();
   return profile;
@@ -243,6 +273,9 @@ for (const file of files) {
     const notes = data.notes || data.rawNotes || [];
     const tonic = data.keySignatureRoot || 'C';
     const isMinor = !!data.isMinorMode;
+    // keySignatureRoot is always the MAJOR root (e.g. 'C' for A minor).
+    // For minor mode, derive the actual minor tonic (relative minor = major root - 3 semitones).
+    const actualTonic = isMinor ? minorTonicFromMajorRoot(tonic) : tonic;
     const ts = data.timeSignature || { numerator: 4, denominator: 4 };
     const beatsPerMeasure = ts.numerator * (4 / ts.denominator);
 
@@ -254,7 +287,7 @@ for (const file of files) {
       continue;
     }
 
-    const profile = extractFromNotes(notes, tonic, isMinor, beatsPerMeasure);
+    const profile = extractFromNotes(notes, actualTonic, isMinor, beatsPerMeasure);
     // Only merge if we got meaningful data (at least some snapshots)
     if (profile.contraryMotion.total > 0 || Object.keys(profile.inversionByDegree).length > 0) {
       merged = mergeProfiles(merged, profile);

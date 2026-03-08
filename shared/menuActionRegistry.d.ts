@@ -4,6 +4,7 @@ export const MENU_ACTIONS: Readonly<{
   IMPORT_MIDI: 'import-midi';
   IMPORT_MUSICXML: 'import-musicxml';
   EXPORT_MIDI: 'export-midi';
+  EXPORT_MUSICXML: 'export-musicxml';
   EXPORT_PDF: 'export-pdf';
   EXPORT_PNG: 'export-png';
   PRINT: 'print';
@@ -42,6 +43,7 @@ export type MenuActionPayloadMap = {
   'import-midi': { base64: string; filePath: string };
   'import-musicxml': { xml: string; filePath: string };
   'export-midi': undefined;
+  'export-musicxml': undefined;
   'export-pdf': undefined;
   'export-png': undefined;
   'print': undefined;

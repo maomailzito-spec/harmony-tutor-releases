@@ -37,6 +37,9 @@ declare global {
           tileMaxHeightPx?: number;
         }
       ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean; files?: string[] }>;
+      exportMusicXml: (
+        xml: string
+      ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
       // Fire-and-forget: renderer notifies main to update the Recents menu.
       addRecentFile: (filePath: string) => void;
 

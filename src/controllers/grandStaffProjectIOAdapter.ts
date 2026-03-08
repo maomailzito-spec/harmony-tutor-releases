@@ -480,7 +480,28 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 			const data = payload?.data;
 			if (!data) throw new Error("Nessun dato fornito per l'apertura.");
 			const parsed = JSON.parse(data);
-			applyGrandStaffProjectIOCommand({ type: 'open', parsed, filePath: payload?.filePath ? String(payload.filePath) : null }, args.apply);
+
+                        // ── Sanitize stale MIDI values ──────────────────────
+                        // Notes like Cb4 can have midi=71 (wrong) instead of 59
+                        // because the original save didn't handle octave-boundary accidentals.
+                        if (Array.isArray(parsed.notes)) {
+                                const _bp: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                                for (const n of parsed.notes) {
+                                        if (!n.pitch || n.octave == null || n.isRest) continue;
+                                        const base = _bp[String(n.pitch)[0]] ?? 0;
+                                        let acc = 0;
+                                        const a = n.accidental || n.explicitAccidental || '';
+                                        if (a === 'sharp' || a === '#') acc = 1;
+                                        else if (a === 'flat' || a === 'b') acc = -1;
+                                        else if (a === 'double-sharp' || a === '##') acc = 2;
+                                        else if (a === 'double-flat' || a === 'bb') acc = -2;
+                                        const correct = (n.octave + 1) * 12 + base + acc;
+                                        n.midi = correct;
+                                        n.noteIndex = ((correct % 12) + 12) % 12;
+                                }
+                        }
+
+                        applyGrandStaffProjectIOCommand({ type: 'open', parsed, filePath: payload?.filePath ? String(payload.filePath) : null }, args.apply);
 
 			try {
 				const fp = payload?.filePath ? String(payload.filePath) : '';

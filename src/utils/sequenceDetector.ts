@@ -1,5 +1,38 @@
 import { StaffNote, TimeSignature, TimeSignatureChange, SequenceMatch } from '../types';
 import { DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
+import { ALL_NOTE_SPELLINGS } from '../constants';
+
+// ── helpers for modulating-sequence detection ──
+
+const MAJOR_SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11]; // W W H W W W H
+
+const noteNameToPC: Record<string, number> = {};
+ALL_NOTE_SPELLINGS.forEach((names, idx) => {
+    for (const n of names) noteNameToPC[n] = idx;
+});
+
+/** Build the set of 7 diatonic pitch-classes for a given tonic + mode. */
+function diatonicPCSet(tonicName: string, isMinor: boolean): Set<number> {
+    const root = noteNameToPC[tonicName];
+    if (root == null) return new Set();
+    const intervals = isMinor
+        ? [0, 2, 3, 5, 7, 8, 10] // natural-minor; raised 6/7 are considered accidentals
+        : MAJOR_SCALE_INTERVALS;
+    return new Set(intervals.map(i => (root + i) % 12));
+}
+
+/** Return a human-readable tonic name for a given pitch class, preferring
+ *  flat spellings when the original tonic uses flats, sharp spellings otherwise. */
+function pcToTonicName(pc: number, preferFlats: boolean): string {
+    const names = ALL_NOTE_SPELLINGS[((pc % 12) + 12) % 12] || [];
+    if (preferFlats) return names.find(n => n.includes('b') && !n.includes('bb')) || names.find(n => !n.includes('#')) || names[0] || '?';
+    return names.find(n => !n.includes('b')) || names[0] || '?';
+}
+
+export type SequenceKeyInfo = {
+    keySignatureRoot: string;
+    isMinorMode: boolean;
+};
 
 export type SequenceLabelPoint = {
     absBeat?: number;
@@ -202,44 +235,52 @@ const buildVoicingSignatures = (snapshots: SlotSnapshot[]): VoicingSignature[] =
     return sigs;
 };
 
-const signatureEqual = (a: VoicingSignature, b: VoicingSignature): boolean => {
+const signatureEqual = (a: VoicingSignature, b: VoicingSignature, verticalOnly = false): boolean => {
     if (a.vertical.length !== b.vertical.length || a.melodic.length !== b.melodic.length) return false;
+    let matchedSlots = 0;
     for (let i = 0; i < a.vertical.length; i += 1) {
+        // Both null → same voice absent in both → skip
+        if (a.vertical[i] == null && b.vertical[i] == null) continue;
+        // One null, other not → structural mismatch
         if (a.vertical[i] == null || b.vertical[i] == null) return false;
         if (a.vertical[i] !== b.vertical[i]) return false;
+        matchedSlots++;
     }
-    for (let i = 0; i < a.melodic.length; i += 1) {
-        if (a.melodic[i] == null || b.melodic[i] == null) return false;
-        if (a.melodic[i] !== b.melodic[i]) return false;
+    if (!verticalOnly) {
+        for (let i = 0; i < a.melodic.length; i += 1) {
+            if (a.melodic[i] == null && b.melodic[i] == null) continue;
+            if (a.melodic[i] == null || b.melodic[i] == null) return false;
+            if (a.melodic[i] !== b.melodic[i]) return false;
+            matchedSlots++;
+        }
     }
-    return true;
+    // Require at least 2 actual matched intervals to avoid vacuous matches
+    return matchedSlots >= 2;
 };
 
 const snapshotVoicingEqual = (a: SlotSnapshot, b: SlotSnapshot): boolean => {
-    const aS = a.voices[0]?.position;
-    const aA = a.voices[1]?.position;
-    const aT = a.voices[2]?.position;
-    const aB = a.voices[3]?.position;
-    const bS = b.voices[0]?.position;
-    const bA = b.voices[1]?.position;
-    const bT = b.voices[2]?.position;
-    const bB = b.voices[3]?.position;
-    if (aS == null || aA == null || aT == null || aB == null) return false;
-    if (bS == null || bA == null || bT == null || bB == null) return false;
+    // Collect positions for each voice in both snapshots
+    const aPos = [a.voices[0]?.position, a.voices[1]?.position, a.voices[2]?.position, a.voices[3]?.position];
+    const bPos = [b.voices[0]?.position, b.voices[1]?.position, b.voices[2]?.position, b.voices[3]?.position];
 
-    const aPattern = [
-        reduceDiatonicSteps(aS - aA),
-        reduceDiatonicSteps(aA - aT),
-        reduceDiatonicSteps(aT - aB),
-    ];
-    const bPattern = [
-        reduceDiatonicSteps(bS - bA),
-        reduceDiatonicSteps(bA - bT),
-        reduceDiatonicSteps(bT - bB),
-    ];
+    // Build intervals only between voices present in BOTH snapshots
+    const presentIndices: number[] = [];
+    for (let i = 0; i < 4; i++) {
+        if (aPos[i] != null && bPos[i] != null) presentIndices.push(i);
+    }
+    // Need at least 2 common voices to form an interval pattern
+    if (presentIndices.length < 2) return false;
+    // Voice presence pattern must match (same voices absent in both)
+    for (let i = 0; i < 4; i++) {
+        if ((aPos[i] == null) !== (bPos[i] == null)) return false;
+    }
 
-    for (let i = 0; i < aPattern.length; i += 1) {
-        if (aPattern[i] !== bPattern[i]) return false;
+    for (let k = 0; k < presentIndices.length - 1; k++) {
+        const i0 = presentIndices[k];
+        const i1 = presentIndices[k + 1];
+        const aInterval = reduceDiatonicSteps(aPos[i0]! - aPos[i1]!);
+        const bInterval = reduceDiatonicSteps(bPos[i0]! - bPos[i1]!);
+        if (aInterval !== bInterval) return false;
     }
     return true;
 };
@@ -264,12 +305,27 @@ const computeTranspositionSemitones = (
             const b = snapB.voices[v]?.midi;
             if (!Number.isFinite(a as number) || !Number.isFinite(b as number)) continue;
             const d = Number(b) - Number(a);
-            if (slotDelta == null) slotDelta = d;
-            if (slotDelta !== d) return null;
+            if (slotDelta == null) {
+                slotDelta = d;
+            } else if (slotDelta !== d) {
+                // Tolerate octave differences: check if the pitch-class shift
+                // is the same (e.g. +2 and -10 are both 2 semitones mod 12).
+                const pcA = ((slotDelta % 12) + 12) % 12;
+                const pcB = ((d % 12) + 12) % 12;
+                if (pcA !== pcB) return null;
+                // Keep the smallest-absolute-value delta as the canonical one
+                if (Math.abs(d) < Math.abs(slotDelta)) slotDelta = d;
+            }
         }
         if (slotDelta == null) return null;
-        if (deltaAll == null) deltaAll = slotDelta;
-        if (deltaAll !== slotDelta) return null;
+        if (deltaAll == null) {
+            deltaAll = slotDelta;
+        } else if (deltaAll !== slotDelta) {
+            const pcA = ((deltaAll % 12) + 12) % 12;
+            const pcB = ((slotDelta % 12) + 12) % 12;
+            if (pcA !== pcB) return null;
+            if (Math.abs(slotDelta) < Math.abs(deltaAll)) deltaAll = slotDelta;
+        }
     }
     return deltaAll;
 };
@@ -301,9 +357,10 @@ export function detectVoiceLeadingSequences(
     timeSignature: TimeSignature,
     timeSignatureChanges?: TimeSignatureChange[],
     harmonyLabels?: SequenceLabelPoint[],
-    options?: SequenceDetectionOptions
+    options?: SequenceDetectionOptions,
+    keyInfo?: SequenceKeyInfo,
 ): SequenceMatch[] {
-    const minSteps = Math.max(1, Math.round(options?.minSteps ?? 1));
+    const minSteps = Math.max(2, Math.round(options?.minSteps ?? 2));
     const maxSteps = Math.max(minSteps, Math.round(options?.maxSteps ?? 8));
     const snapTicks = Math.max(0, Math.round(options?.snapTicks ?? 8));
     const maxMatches = Math.max(0, Math.round(options?.maxMatches ?? 200));
@@ -377,7 +434,7 @@ export function detectVoiceLeadingSequences(
                     if (!snapA || !snapB || !snapshotVoicingEqual(snapA, snapB)) return false;
                     const a = modelBlock[k];
                     const b = signatures[blockStart + k];
-                    if (!signatureEqual(a, b)) return false;
+                    if (!signatureEqual(a, b, k === L - 1)) return false;
                 }
                 return true;
             };
@@ -395,7 +452,14 @@ export function detectVoiceLeadingSequences(
                     for (let bi = 0; bi < len; bi += 1) {
                         const snapA = snapshots[startIndex + bi];
                         const snapB = snapshots[blockStart + bi];
-                        if (!snapA || !snapB || !snapshotVoicingEqual(snapA, snapB) || !signatureEqual(model[bi], block[bi])) {
+                        // For the last slot of a block, the melodic component of
+                        // the signature points to the NEXT block's first slot.
+                        // This can differ between repetitions even if the block
+                        // itself is an exact transposition.  Compare verticals only
+                        // for the boundary slot.
+                        const isLastSlot = (bi === len - 1);
+                        if (!snapA || !snapB || !snapshotVoicingEqual(snapA, snapB)
+                            || !signatureEqual(model[bi], block[bi], isLastSlot)) {
                             firstMismatch = bi;
                             break;
                         }
@@ -454,7 +518,7 @@ export function detectVoiceLeadingSequences(
                 });
             }
 
-            matches.push({
+            const matchObj: SequenceMatch = {
                 startSlotIdx,
                 endSlotIdx,
                 lengthSteps: L,
@@ -470,7 +534,49 @@ export function detectVoiceLeadingSequences(
                 repeatEndMeasure,
                 slotTicks: slots,
                 transpositionSemitones,
-            });
+            };
+
+            // ── Modulating-sequence classification ──
+            // A sequence is modulating when:
+            //   1. It has a non-zero transposition (exact transposition of the model)
+            //   2. At least one repetition contains pitch-classes outside the home key
+            if (keyInfo && transpositionSemitones != null && transpositionSemitones !== 0) {
+                const diatonic = diatonicPCSet(keyInfo.keySignatureRoot, keyInfo.isMinorMode);
+                if (diatonic.size > 0) {
+                    // Collect all PCs in each repetition block (model + repeats)
+                    let hasOutOfKey = false;
+                    const tonics: string[] = [];
+                    const preferFlats = keyInfo.keySignatureRoot.includes('b') ||
+                        ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'].includes(keyInfo.keySignatureRoot);
+                    const rootPC = noteNameToPC[keyInfo.keySignatureRoot] ?? 0;
+
+                    for (let rep = 0; rep < fullRepeats; rep++) {
+                        const blockStart = i + rep * L;
+                        const blockPCs = new Set<number>();
+                        for (let k = 0; k < L && blockStart + k < snapshots.length; k++) {
+                            const snap = snapshots[blockStart + k];
+                            if (!snap) continue;
+                            for (const v of snap.voices) {
+                                if (v.pc != null) blockPCs.add(v.pc);
+                            }
+                        }
+                        // Check if any PC falls outside home key
+                        for (const pc of blockPCs) {
+                            if (!diatonic.has(pc)) { hasOutOfKey = true; break; }
+                        }
+                        // Compute local tonic: model tonic + transposition * rep
+                        const localTonicPC = ((rootPC + transpositionSemitones * rep) % 12 + 12) % 12;
+                        tonics.push(pcToTonicName(localTonicPC, preferFlats));
+                    }
+
+                    if (hasOutOfKey) {
+                        matchObj.isModulating = true;
+                        matchObj.modulationTonics = tonics;
+                    }
+                }
+            }
+
+            matches.push(matchObj);
 
             if (DEBUG_SEQUENCE) {
                 console.log('[sequence] match', {
@@ -511,5 +617,8 @@ export function detectVoiceLeadingSequences(
         filtered.push(...best);
     }
 
-    return filtered;
+    // Reject sequences shorter than 1 measure (model + copy combined)
+    const beatsPerMeasure = (timeSignature?.numerator ?? 4) * (4 / (timeSignature?.denominator ?? 4));
+    const minTotalTicks = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
+    return filtered.filter(m => (m.endTick - m.startTick) >= minTotalTicks);
 }

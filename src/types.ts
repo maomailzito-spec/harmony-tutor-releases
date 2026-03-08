@@ -304,6 +304,12 @@ export type SequenceMatch = {
   slotTicks?: number[];
   transpositionSemitones?: number | null;
   label?: string;
+  /** True when the sequence contains chromatic alterations outside the key signature,
+   *  indicating each link modulates to a new local tonic. */
+  isModulating?: boolean;
+  /** For modulating sequences: the inferred local tonic for each repetition
+   *  (index 0 = model, 1 = first repeat, etc.). */
+  modulationTonics?: string[];
 };
 
 export type HarmonyLabelOverride = {

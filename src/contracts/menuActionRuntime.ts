@@ -11,6 +11,7 @@ export const MENU_ACTIONS = {
   IMPORT_MIDI: 'import-midi',
   IMPORT_MUSICXML: 'import-musicxml',
   EXPORT_MIDI: 'export-midi',
+  EXPORT_MUSICXML: 'export-musicxml',
   EXPORT_PDF: 'export-pdf',
   EXPORT_PNG: 'export-png',
   PRINT: 'print',

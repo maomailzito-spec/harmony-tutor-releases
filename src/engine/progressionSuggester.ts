@@ -158,3 +158,43 @@ export function getKnownChords(): string[] {
   const stats = getMergedStats();
   return Object.keys(stats.unigramsBase).sort();
 }
+
+// ── Corpus writing ───────────────────────────────────────────────────────
+
+/**
+ * Record analysed Roman-numeral transitions into the user corpus.
+ * Call once per file analysis (e.g. on file save) so the suggester
+ * gradually learns from the user's repertoire.
+ */
+export function recordAnalysedTransitions(romanLabels: string[]): void {
+  const norm = romanLabels.map(stripFigures).filter(Boolean);
+  if (norm.length < 2) return;
+
+  const user: ProgressionStats = loadUserStats() ?? {
+    bigramsBase: {},
+    trigramsBase: {},
+    unigramsBase: {},
+  };
+
+  // Unigrams
+  for (const ch of norm)
+    user.unigramsBase[ch] = (user.unigramsBase[ch] || 0) + 1;
+
+  // Bigrams
+  for (let i = 0; i < norm.length - 1; i++) {
+    const from = norm[i], to = norm[i + 1];
+    if (!user.bigramsBase[from]) user.bigramsBase[from] = {};
+    user.bigramsBase[from][to] = (user.bigramsBase[from][to] || 0) + 1;
+  }
+
+  // Trigrams
+  for (let i = 0; i < norm.length - 2; i++) {
+    const key = `${norm[i]}|${norm[i + 1]}`;
+    const to = norm[i + 2];
+    if (!user.trigramsBase[key]) user.trigramsBase[key] = {};
+    user.trigramsBase[key][to] = (user.trigramsBase[key][to] || 0) + 1;
+  }
+
+  try { localStorage.setItem(LS_KEY, JSON.stringify(user)); }
+  catch { /* quota exceeded — silently drop */ }
+}

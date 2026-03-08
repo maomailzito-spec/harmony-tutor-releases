@@ -1,4 +1,6 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
   "schemaVersion": 1,
   "notes": [
     {
@@ -854,7 +856,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -874,7 +876,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -894,7 +896,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -914,7 +916,7 @@
       "measureIndex": 2,
       "beat": 3,
       "startTick": 9600,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -1734,7 +1736,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -1754,7 +1756,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -1774,7 +1776,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -1794,7 +1796,7 @@
       "measureIndex": 4,
       "beat": 3,
       "startTick": 17280,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -2594,7 +2596,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 1
     },
     {
@@ -2614,7 +2616,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 2
     },
     {
@@ -2634,7 +2636,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 3
     },
     {
@@ -2654,7 +2656,7 @@
       "measureIndex": 6,
       "beat": 3,
       "startTick": 24960,
-      "durationTicks": 480,
+      "durationTicks": 960,
       "voice": 4
     },
     {
@@ -3434,9 +3436,53 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "midi-27-7200-56",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-26-7200-52",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-32-8160-69",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-52-12480-56",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-56-12960-54",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-58-13440-56",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-57-13440-52",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-62-13920-57",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-61-13920-54",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-109-22080-50",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "midi-113-22560-49",
+      "type": "structural"
+    }
+  ],
   "bpm": 70,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -3452,6 +3498,7 @@
     "notations",
     "analysis",
     "key",
-    "more"
+    "more",
+    "voiceInstrument"
   ]
 }

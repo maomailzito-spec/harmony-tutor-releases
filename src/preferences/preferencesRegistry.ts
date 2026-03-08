@@ -20,8 +20,11 @@ import {
   ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY,
   AUTO_SAVE_INTERVAL_KEY,
   ANALYSIS_STATISTICAL_CORRECTION_KEY,
+  STATISTICAL_BIAS_THRESHOLD_KEY,
   ENABLE_LEARNED_ORNAMENTS_KEY,
   TONICIZATION_COMPACT_KEY,
+  CADENTIAL_PATTERN_RECOGNITION_KEY,
+  RULE_SUGGESTIONS_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
@@ -45,10 +48,13 @@ export type PreferenceId =
   | 'analysis.harmonyLabelMinSpanBeats'
   | 'analysis.filters'
   | 'analysis.useStatisticalCorrection'
+  | 'analysis.statisticalBiasThreshold'
   | 'analysis.enableLearnedOrnaments'
   | 'export.includeTitle'
   | 'debug.showHarmonyDebug'
-  | 'analysis.tonicizationCompact';
+  | 'analysis.tonicizationCompact'
+  | 'analysis.cadentialPatterns'
+  | 'analysis.ruleSuggestions';
 
 export type PreferenceDef<T> = {
   id: PreferenceId;
@@ -385,6 +391,17 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
+  'analysis.statisticalBiasThreshold': {
+    id: 'analysis.statisticalBiasThreshold',
+    section: 'Analysis',
+    label: 'Soglia bias statistico',
+    storageKey: STATISTICAL_BIAS_THRESHOLD_KEY,
+    defaultValue: 2,
+    kind: 'number',
+    parse: (raw) => { const n = Number(raw); return Number.isFinite(n) && n >= 0 ? n : 2; },
+    serialize: (value: number) => String(value),
+  },
+
   'analysis.enableLearnedOrnaments': {
     id: 'analysis.enableLearnedOrnaments',
     section: 'Analysis',
@@ -427,6 +444,27 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     kind: 'boolean',
     parse: (raw) => parseBool(raw, false),
     serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'analysis.cadentialPatterns': {
+    id: 'analysis.cadentialPatterns',
+    section: 'Analysis',
+    label: 'Riconoscimento pattern cadenzali',
+    storageKey: CADENTIAL_PATTERN_RECOGNITION_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+  'analysis.ruleSuggestions': {
+    id: 'analysis.ruleSuggestions',
+    section: 'Analysis',
+    label: 'Consigli personalizzati regole',
+    storageKey: RULE_SUGGESTIONS_KEY,
+    defaultValue: {} as Record<string, string>,
+    kind: 'json',
+    parse: (raw) => { try { return raw ? JSON.parse(raw) : {}; } catch { return {}; } },
+    serialize: (value: Record<string, string>) => JSON.stringify(value),
   },
 };
 

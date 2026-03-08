@@ -79,4 +79,10 @@ export const electronBridge = {
     if (!api?.exportPngFromHtml) return Promise.resolve({ success: false, error: 'electronAPI.exportPngFromHtml unavailable', canceled: false });
     return api.exportPngFromHtml(html, options);
   },
+
+  exportMusicXml(xml: string) {
+    const api = getAPI();
+    if (!api?.exportMusicXml) return Promise.resolve({ success: false, error: 'electronAPI.exportMusicXml unavailable', canceled: false });
+    return api.exportMusicXml(xml);
+  },
 } as const;

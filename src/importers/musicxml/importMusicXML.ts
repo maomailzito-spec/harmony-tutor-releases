@@ -132,7 +132,11 @@ function keyRootFromFifths(fifths: number, mode: 'major' | 'minor'): { root: str
   };
 
   const safeFifths = Number.isFinite(fifths) ? Math.max(-7, Math.min(7, Math.trunc(fifths))) : 0;
-  if (mode === 'minor') return { root: minorByFifths[safeFifths] || 'A', isMinor: true };
+  if (mode === 'minor') {
+    // The app stores keySignatureRoot as the RELATIVE MAJOR root.
+    // For minor mode, fifths=0 → C major signature → A minor, so root='C'.
+    return { root: majorByFifths[safeFifths] || 'C', isMinor: true };
+  }
   return { root: majorByFifths[safeFifths] || 'C', isMinor: false };
 }
 
@@ -190,8 +194,11 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   // Heuristic: if any note declares staff=2, assume grandstaff.
   let sawSecondStaff = false;
 
-  // Parse up to 2 parts for MVP.
-  const partsToParse = parts.slice(0, 2);
+  // Parse up to 4 parts (handles SATB as separate parts).
+  const partsToParse = parts.slice(0, 4);
+
+  // Detect multi-part SATB: 3+ parts typically means S/A/T/B as individual parts
+  const isSeparateSATB = partsToParse.length >= 3;
 
   for (let partIndex = 0; partIndex < partsToParse.length; partIndex++) {
     const part = partsToParse[partIndex];
@@ -199,12 +206,14 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
     // Score cursor at measure granularity (ticks). We derive it from timeSignature changes.
     // Inside each measure we position notes by their MusicXML position in divisions.
+    // `divisions` persists across measures per MusicXML spec — only updated when <attributes> declares a new value.
+    let divisions = 1;
     for (let measureIndex = 0; measureIndex < measures.length; measureIndex++) {
       const measure = measures[measureIndex];
 
       // attributes
       const attrs = measure.querySelector(':scope > attributes');
-      let divisions = 1;
+      // divisions persists from previous measure (MusicXML spec); only update when declared.
       if (attrs) {
         const div = intOf(attrs.querySelector('divisions'));
         if (div != null && div > 0) divisions = div;
@@ -326,11 +335,21 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         const staff = (Number.isFinite(staffRaw) && staffRaw > 0) ? staffRaw : 1;
         if (staff >= 2) sawSecondStaff = true;
 
-        const clef: ClefType = clefByStaff.get(staff) || (staff === 2 ? 'bass' : (partIndex === 1 ? 'bass' : 'treble'));
+        const clef: ClefType = clefByStaff.get(staff) || (
+          isSeparateSATB
+            ? (partIndex >= 2 ? 'bass' : 'treble')
+            : (staff === 2 ? 'bass' : (partIndex === 1 ? 'bass' : 'treble'))
+        );
 
         const voice: 1 | 2 | 3 | 4 = (() => {
-          // MVP mapping: staff 1 -> voices 1/2; staff 2 -> voices 3/4.
+          if (isSeparateSATB) {
+            // Each part → one voice: part 0=S(1), part 1=A(2), part 2=T(3), part 3=B(4)
+            return Math.min(4, partIndex + 1) as 1 | 2 | 3 | 4;
+          }
+          // 1–2 parts: use staff+voice mapping (staff 1 → voices 1/2; staff 2 → voices 3/4)
           const v = Math.max(1, Math.min(4, Math.trunc(voiceRaw)));
+          // If this is the second part and staff is still 1, offset to bass voices
+          if (partIndex === 1 && staff === 1) return (v === 1 ? 3 : 4) as 1 | 2 | 3 | 4;
           if (staff === 2) return (v === 1 ? 3 : (v === 2 ? 4 : (v as any)));
           return (v as any);
         })();
@@ -375,7 +394,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
         const accidental = accidentalFromAlter(alter);
 
-        const chordId = `mx-chord-${partIndex}-${measureIndex}-${startDiv}-${staff}`;
+        const chordId = `mx-chord-${partIndex}-${measureIndex}-${startDiv}-${staff}-${voice}`;
 
         // Beat is measured in quarter-note units from the measure start.
         const beatInMeasure = Math.max(1, startBeats + 1);
@@ -420,7 +439,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     }
   }
 
-  const staffSystemMode: MusicXMLImportResult['staffSystemMode'] = (partsToParse.length >= 2 || sawSecondStaff)
+  const staffSystemMode: MusicXMLImportResult['staffSystemMode'] = (isSeparateSATB || partsToParse.length >= 2 || sawSecondStaff)
     ? 'grandstaff'
     : 'treble_only';
 
