@@ -45,6 +45,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
     const showError = !!filters?.showError;
     const showWarning = !!filters?.showWarning;
     const showException = !!filters?.showException;
+    const showChromatic = filters?.showChromatic !== false;
     const disabledRuleIds = (filters?.disabledRuleIds && typeof filters.disabledRuleIds === 'object') ? filters.disabledRuleIds : {};
     const [ruleSearch, setRuleSearch] = useState('');
 
@@ -70,13 +71,13 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
         try {
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('harmony-analysis-filters-changed', {
-                    detail: { showError, showWarning, showException, disabledRuleIds },
+                    detail: { showError, showWarning, showException, showChromatic, disabledRuleIds },
                 }));
             }
         } catch {
             // ignore
         }
-    }, [disabledRuleIds, showError, showException, showWarning]);
+    }, [disabledRuleIds, showError, showException, showWarning, showChromatic]);
 
     // Listen for external updates (e.g. profile presets) and sync UI.
     useEffect(() => {
@@ -90,6 +91,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         showError: typeof d.showError === 'boolean' ? d.showError : !!prev.showError,
                         showWarning: typeof d.showWarning === 'boolean' ? d.showWarning : !!prev.showWarning,
                         showException: typeof d.showException === 'boolean' ? d.showException : !!prev.showException,
+                        showChromatic: typeof d.showChromatic === 'boolean' ? d.showChromatic : prev.showChromatic !== false,
                         disabledRuleIds: (d.disabledRuleIds && typeof d.disabledRuleIds === 'object') ? d.disabledRuleIds : (prev.disabledRuleIds || {}),
                     };
                     return next;
@@ -140,15 +142,20 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
         setFilters((prev) => ({ ...prev, showException: !prev?.showException }));
     }, [setFilters]);
 
+    const toggleShowChromatic = useCallback(() => {
+        setFilters((prev) => ({ ...prev, showChromatic: prev?.showChromatic === false ? true : false }));
+    }, [setFilters]);
+
     const setDisabledRuleIds = useCallback((next: Record<string, boolean>) => {
         setFilters((prev) => ({ ...prev, disabledRuleIds: next || {} }));
     }, [setFilters]);
 
     const counts = useMemo(() => {
-        const c = { error: 0, warning: 0, exception: 0 };
+        const c = { error: 0, warning: 0, exception: 0, chromatic: 0 };
         for (const v of (violations || [])) {
             if (v?.severity === 'error') c.error++;
             else if (v?.severity === 'exception') c.exception++;
+            else if (v?.severity === 'chromatic') c.chromatic++;
             else c.warning++;
         }
         return c;
@@ -161,12 +168,13 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
             if (v.severity === 'error' && !showError) return;
             if (v.severity === 'warning' && !showWarning) return;
             if (v.severity === 'exception' && !showException) return;
+            if (v.severity === 'chromatic' && !showChromatic) return;
             const rid = String(v.ruleId || '');
             if (rid && disabledRuleIds[rid]) return;
             out.push({ v, index });
         });
         return out;
-    }, [violations, showError, showWarning, showException, disabledRuleIds]);
+    }, [violations, showError, showWarning, showException, showChromatic, disabledRuleIds]);
 
     const sequences = (sequenceMatches || []).slice();
     const hasAnyViolations = (violations || []).length > 0;
@@ -199,6 +207,13 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         title="Mostra/Nascondi eccezioni"
                     >
                         Eccezioni ({counts.exception})
+                    </button>
+                    <button
+                        onClick={toggleShowChromatic}
+                        className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showChromatic ? 'bg-violet-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                        title="Mostra/Nascondi cromatici"
+                    >
+                        Cromatici ({counts.chromatic})
                     </button>
                 </div>
 
@@ -340,9 +355,10 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                     {filtered.map(({ v: violation, index }) => {
                         const isError = violation.severity === 'error';
                         const isException = violation.severity === 'exception';
+                        const isChromatic = violation.severity === 'chromatic';
                         const isCadenceMarker = typeof violation.ruleId === 'string' && violation.ruleId.startsWith('CAD-');
-                        const Icon = isError ? ErrorIcon : isException ? ExceptionIcon : WarningIcon;
-                        const textColor = isError ? 'text-red-400' : isException ? 'text-green-400' : 'text-orange-400';
+                        const Icon = isError ? ErrorIcon : isException ? ExceptionIcon : isChromatic ? ExceptionIcon : WarningIcon;
+                        const textColor = isError ? 'text-red-400' : isException ? 'text-green-400' : isChromatic ? 'text-violet-400' : 'text-orange-400';
                         const isSelected = selectedViolationIndex === index;
 
                         // Split description: first line = summary, rest = detail
@@ -369,7 +385,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                                 </>
                                             ) : (
                                                 <>
-                                                    {isException ? 'Eccezione' : violation.ruleId}: <span className="text-white">{summaryLine}</span>
+                                                    {isException ? 'Eccezione' : isChromatic ? 'Cromatico' : violation.ruleId}: <span className="text-white">{summaryLine}</span>
                                                 </>
                                             )}
                                             {(detailLines || violation.suggestion) && (

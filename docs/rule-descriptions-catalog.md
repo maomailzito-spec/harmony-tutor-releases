@@ -988,6 +988,49 @@ può non risolvere subito alla tonica.
 
 ---
 
+### EXC-LT-FREE — Risoluzione libera della sensibile (VII) ✅
+
+**Severità**: `exception`
+
+**Intestazione attuale**:
+```
+Risoluzione libera della sensibile
+```
+
+**Dettaglio espanso**:
+L'obbligo di risoluzione ascendente della sensibile (VII → I) è sospeso quando
+l'accordo di destinazione non esercita una funzione di attrazione tonale
+risolutiva (non è I né vi).
+
+- **Priorità lineare**: in passaggi non cadenzali (es. VII → IV o VII → III),
+  la sensibile è considerata una nota melodica mobile. Se il soprano o una voce
+  interna segue un disegno discendente, la coerenza della linea prevale sulla
+  tensione del grado.
+- **Neutralizzazione della tensione**: la spinta verso la tonica è massima solo
+  nella successione V → I o vii° → I. In successioni non cadenzali la sensibile
+  può scendere di grado congiunto o saltare alla quinta dell'accordo successivo
+  per garantire la completezza armonica.
+- **Nota tecnica**: la sensibile è definita "libera" anche se l'accordo di
+  destinazione contiene la tonica come nota reale (es. il IV grado in stato
+  fondamentale), purché la successione non sia classificabile come cadenza
+  perfetta o d'inganno.
+
+**Condizione di sblocco (algoritmo)**:
+Il sistema disattiva R-07 se si verifica almeno una delle seguenti condizioni:
+1. Movimento congiunto discendente verso una nota appartenente all'accordo
+   successivo (es. Si → La su accordo di Fa o Re).
+2. L'accordo di destinazione non è I né vi.
+3. Il movimento discendente è necessario per evitare errori di 6/4 o per
+   completare la triade di arrivo (voci interne, IV grado).
+
+**Consiglio attuale**:
+```
+L'accordo di destinazione non è I né vi: la sensibile è melodicamente
+libera in contesto non cadenzale.
+```
+
+---
+
 ## 6. ECCEZIONI — RISOLUZIONE DELLA SETTIMA (🟢 exception)
 
 ### EXC-7-TRANSFERRED-RES — Settima trasferita ❌
@@ -1268,6 +1311,54 @@ R-17 tollerata: la nota intermedia è più lunga della precedente
 
 ---
 
+### CAD-PIC — Terza Piccarda (Cadenza Perfetta o Plagale) ✅
+
+**Severità**: `exception`  
+**Intestazione**: `Terza Piccarda: conclusione su I maggiore in tonalità minore`
+
+**Testo proposto**:
+
+Rilevata conclusione su accordo di tonica maggiore (I) in un brano in tonalità minore. Questa risoluzione è considerata regolare sia nella formula di cadenza perfetta (V−I) che in quella plagale (IV−I o iv−I).
+
+ℹ️ **Effetto stilistico**: L'uso della Terza Piccarda trasforma il carattere della risoluzione finale, conferendo un senso di maggiore stabilità, solennità o "luce" rispetto alla conclusione in minore.
+
+⚠️ **Nota tecnica**: Il marker CAD-PIC viene applicato ogni volta che l'ultimo accordo di una composizione in minore presenta la terza alzata (es. in Do minore, l'accordo finale è Do-Mi-Sol). Questa implementazione evita che il I maggiore finale venga interpretato come una dominante secondaria del IV grado (V/iv).
+
+---
+
+## 10. ARMONIA CROMATICA (🟣 chromatic)
+
+### CHROM-AUG6-VAR — Sesta aumentata con alterazioni eccedenti
+
+**Severità:** 🟣 chromatic (informativa, colore viola)
+
+**Descrizione pannello (multi-riga):**
+
+> **CHROM-AUG6-VAR — Sesta aumentata con alterazioni eccedenti**
+>
+> **Dettaglio:** Rilevato accordo di sesta aumentata contenente una o più note
+> con intervallo eccedente o più che eccedente rispetto alla fondamentale
+> (3+, 5x, 8x). Queste note aggiuntive non appartengono alla struttura
+> tradizionale delle seste aumentate (Italiana, Francese, Tedesca) ma svolgono
+> una funzione cromatica precisa: ciascuna di esse agisce come sensibile
+> individuale, tendendo a risolvere per semitono ascendente su una nota specifica
+> dell'accordo di destinazione.
+>
+> **ℹ️ Info — Funzione armonico-cromatica:** L'accordo che ne risulta è un
+> aggregato di attrazioni semitonali convergenti — ogni nota alterata "punta"
+> per moto cromatico alla nota corrispondente dell'accordo successivo.
+>
+> Le alterazioni possibili sono:
+> — **8x** (ottava più che eccedente): risolve sulla 3a maggiore dell'accordo di
+>   arrivo. Disponibile solo in tonalità maggiore.
+> — **5x** (quinta più che eccedente): risolve sulla 7a maggiore dell'accordo di
+>   arrivo.
+> — **3+** (terza eccedente): risolve sulla 5a dell'accordo di arrivo.
+
+**Fonte:** Delamont, *Tecnica Moderna di Armonia* vol. 2, pp. 34–35.
+
+---
+
 ## Riepilogo
 
 | Stato | Conteggio | Regole |
@@ -1275,9 +1366,10 @@ R-17 tollerata: la nota intermedia è più lunga della precedente
 | ✅ Multi-riga completo | 13 | R-01, R-02, R-05, R-10, R-10-7TH, R-10-DIM5, R-10-64, R-10-3RD, R-10-6, R-12, R-17a, R-17b, R-17c |
 | ❌ Da completare — Errori | 8 | R-02c, R-04, R-06, R-07, R-09, R-N-RES, R-AUG6-RES, R-CAD64 |
 | ❌ Da completare — Avvisi | 9 | R-03, R-08, R-13, R-14, R-15, R-16, R-CHORD-COMPLETE, R-RANGE, R-SPACING-TB |
-| ❌ Da completare — Eccezioni | 20 | EXC-M03, EXC-M04, EXC-OBL-PERF, EXC-Hidden-Stepwise, EXC-Hidden-BassStep, EXC-S02, EXC-Unison-Lower, EXC-Unison-Step, EXC-Unison-Cadence, EXC-LT-Transfer, EXC-LT-Chromatic-Line, EXC-7-TRANSFERRED-RES, EXC-7-UP, EXC-7-P4-TO7, EXC-7-STATIC, EXC-7-DELAYED, EXC-7m01, EXC-7-TRANSFER, EXC-7-FREE, EXC-R17-Duration |
+| ❌ Da completare — Eccezioni | 20 | EXC-M03, EXC-M04, EXC-OBL-PERF, EXC-Hidden-Stepwise, EXC-Hidden-BassStep, EXC-S02, EXC-Unison-Lower, EXC-Unison-Step, EXC-Unison-Cadence, EXC-LT-Transfer, EXC-LT-Chromatic-Line, EXC-LT-FREE, EXC-7-TRANSFERRED-RES, EXC-7-UP, EXC-7-P4-TO7, EXC-7-STATIC, EXC-7-DELAYED, EXC-7m01, EXC-7-TRANSFER, EXC-7-FREE, EXC-R17-Duration |
 | ❌ Da completare — Ornamenti | 9 | ORN-NEIGH, R-ORN-NEIGH, ORN-APP, R-ORN-APP, ORN-ANT, R-ORN-ANT, ORN-ESC, R-ORN-ESC, ORN-PASS |
 | ❌ Da completare — Cadenze | 4 | CAD-PAC, CAD-IAC, CAD-HC, CAD-PLAG |
+| ✅ Cadenze completate | 1 | CAD-PIC |
 | **Totale** | **63** | |
 
 ---

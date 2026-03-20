@@ -12,6 +12,7 @@ import {
 } from '../src/utils/musicTheory';
 
 import { TICKS_PER_QUARTER } from '../src/constants';
+import { detectVoiceLeadingSequences } from '../src/utils/sequenceDetector';
 
 type Fixture = {
   name: string;
@@ -52,6 +53,17 @@ type Fixture = {
     isSuspension?: boolean;
     suspensionFromAbsBeat?: number;
   }>;
+  expectsViolations?: Array<{
+    ruleId: string;
+    severity?: 'error' | 'warning' | 'exception';
+    // At least one noteId must match a note at this absBeat
+    atAbsBeat?: number;
+  }>;
+  forbidsViolations?: Array<{
+    ruleId: string;
+    atAbsBeat?: number;
+  }>;
+  forbidsSequences?: boolean;
 };
 
 const fixturesDir = path.resolve(__dirname, 'fixtures');
@@ -520,7 +532,7 @@ const main = () => {
   for (const fx of fixtures) {
     let fixtureFailed = false;
     const beatsPerMeasure = fx.timeSignature.numerator * (4 / fx.timeSignature.denominator);
-    const keySignature = getKeySignature(fx.keySignatureRoot, 'Major');
+    const keySignature = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
 
     const result = applyHarmonyRules(
       fx.notes as any,
@@ -529,6 +541,9 @@ const main = () => {
       fx.isMinorMode,
       (fx.analysisContexts || []) as any,
       fx.timeSignature as any,
+      (fx as any).doubleBarlineMeasures || [],
+      (fx as any).ornamentOverrides || [],
+      (fx as any).harmonyOverrides || [],
     );
 
     const timeline = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
@@ -675,6 +690,94 @@ const main = () => {
           }
         }
       }
+    }
+
+    // ── expectsViolations ──
+    if (fx.expectsViolations && fx.expectsViolations.length) {
+      const viols = (result.violations || []) as Array<{ ruleId: string; severity: string; noteIds: string[] }>;
+      // Build absBeat→noteId mapping for matching
+      const noteAbsBeat = new Map<string, number>();
+      for (const n of result.analyzedNotes as any[]) {
+        if (!n || !n.id) continue;
+        const ab = ((n.measureIndex ?? 0) * beatsPerMeasure) + ((n.beat ?? 1) - 1);
+        noteAbsBeat.set(n.id, ab);
+      }
+      for (const exp of fx.expectsViolations) {
+        const match = viols.find(v => {
+          if (v.ruleId !== exp.ruleId) return false;
+          if (exp.severity && v.severity !== exp.severity) return false;
+          if (exp.atAbsBeat != null) {
+            return (v.noteIds || []).some(id => {
+              const ab = noteAbsBeat.get(id);
+              return ab != null && Math.abs(ab - exp.atAbsBeat!) < 0.5;
+            });
+          }
+          return true;
+        });
+        if (!match) {
+          fixtureFailed = true;
+          anyFailed = true;
+          fail(
+            `[${fx.name}] expected violation ruleId='${exp.ruleId}'` +
+            (exp.severity ? ` severity='${exp.severity}'` : '') +
+            (exp.atAbsBeat != null ? ` atAbsBeat=${exp.atAbsBeat}` : '') +
+            ` — not found`,
+          );
+        }
+      }
+    }
+
+    // ── forbidsViolations ──
+    if (fx.forbidsViolations && fx.forbidsViolations.length) {
+      const viols = (result.violations || []) as Array<{ ruleId: string; severity: string; noteIds: string[] }>;
+      const noteAbsBeat = new Map<string, number>();
+      for (const n of result.analyzedNotes as any[]) {
+        if (!n || !n.id) continue;
+        const ab = ((n.measureIndex ?? 0) * beatsPerMeasure) + ((n.beat ?? 1) - 1);
+        noteAbsBeat.set(n.id, ab);
+      }
+      for (const forbid of fx.forbidsViolations) {
+        const match = viols.find(v => {
+          if (v.ruleId !== forbid.ruleId) return false;
+          if (forbid.atAbsBeat != null) {
+            return (v.noteIds || []).some(id => {
+              const ab = noteAbsBeat.get(id);
+              return ab != null && Math.abs(ab - forbid.atAbsBeat!) < 0.5;
+            });
+          }
+          return true;
+        });
+        if (match) {
+          fixtureFailed = true;
+          anyFailed = true;
+          fail(
+            `[${fx.name}] forbidden violation ruleId='${forbid.ruleId}'` +
+            (forbid.atAbsBeat != null ? ` atAbsBeat=${forbid.atAbsBeat}` : '') +
+            ` — was found`,
+          );
+        }
+      }
+    }
+
+    // ── forbidsSequences ──
+    if (fx.forbidsSequences) {
+      try {
+        const seqMatches = detectVoiceLeadingSequences(
+          result.analyzedNotes as any,
+          fx.timeSignature as any,
+          [],
+          undefined,
+          undefined,
+          { keySignatureRoot: fx.keyTonic || fx.keySignatureRoot, isMinorMode: fx.isMinorMode },
+        );
+        if (seqMatches.length > 0) {
+          fixtureFailed = true;
+          anyFailed = true;
+          fail(
+            `[${fx.name}] forbidden sequences — found ${seqMatches.length} sequence(s), expected none`,
+          );
+        }
+      } catch { /* detector not available */ }
     }
 
     const status = fixtureFailed ? 'FAIL' : 'OK';

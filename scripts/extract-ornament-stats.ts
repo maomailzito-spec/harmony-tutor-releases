@@ -180,6 +180,7 @@ for (const file of jsonFiles) {
     for (const ov of proj.ornamentOverrides) {
         if (!ov?.noteId || !ov?.type) continue;
         if (ov.type === 'structural') continue;   // "structural" is an undo, not a pattern
+        if (ov.type === 'ornamental') continue; // manual label-suppression, not a learnable pattern
 
         const n = noteById.get(ov.noteId);
         if (!n || n.isRest) continue;

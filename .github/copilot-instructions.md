@@ -4,6 +4,7 @@ Prima di proporre o modificare codice, leggi:
 - START-HERE.md
 - docs/project-directives.md
 - docs/capabilities.md
+- docs/debug-guide.md
 
 ## Vincoli hard
 

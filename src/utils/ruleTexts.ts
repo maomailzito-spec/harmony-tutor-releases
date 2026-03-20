@@ -299,6 +299,15 @@ export const RULE_TEXTS: Record<string, RuleText> = {
     suggestion: 'Dopo il tritono delineato, porta la voce a risolvere per grado congiunto nella direzione opposta. Se la quarta eccedente è ascendente, la nota successiva deve scendere per grado; se la quinta diminuita è discendente, la nota successiva deve salire per grado.',
   },
 
+  'R-18': {
+    body: [
+      'Due note con lo stesso nome ma alterazione diversa (es. Si naturale e Si♭) suonano contemporaneamente nello stesso accordo.',
+      'Questo "scontro cromatico simultaneo" crea una forte dissonanza di seconda minore (o equivalente enarmonico) che non ha giustificazione funzionale nell\'armonia tonale. A differenza della falsa relazione (R-09), che avviene fra accordi consecutivi, qui le due versioni della stessa nota coesistono nello stesso istante.',
+      'Il risultato è un suono confuso: l\'orecchio non riesce a decidere quale sia la "vera" versione della nota.',
+    ].join('\n'),
+    suggestion: 'Correggi una delle due note in modo che abbiano la stessa alterazione, oppure verifica se una delle due è un errore di inserimento.',
+  },
+
   'R-CHORD-COMPLETE': {
       body: [
         'Un accordo si dice completo quando contiene almeno una voce per ciascuna delle sue note costitutive (fondamentale, terza e quinta per una triade; fondamentale, terza, quinta e settima per un accordo di settima).',
@@ -413,6 +422,22 @@ export const RULE_TEXTS: Record<string, RuleText> = {
 
 
   // ═══════════════════════════════════════════════════════════
+  // 4b. ECCEZIONI — QUINTE DI STILE (warning)
+  // ═══════════════════════════════════════════════════════════
+
+  'EXC-STYLE-5': {
+      body: [
+        'Quinte parallele tollerate (Sesta Tedesca / Cromatismi).\n'
+        + 'Successione di quinte parallele ammessa per ragioni di colore o rinforzo armonico in due contesti specifici:',
+        'Ambito Classico (Quinte di Mozart): generate dalla risoluzione diretta della Sesta Tedesca (♭VI) sull\'accordo di Dominante (V). La tensione della sesta eccedente giustifica il movimento parallelo all\'orecchio.',
+        'Ambito Moderno (Delamont): definite "quinte orchestrali", sono ammesse in movimenti cromatici su vari gradi per dare spessore alla massa sonora.',
+        'Condizioni d\'uso:\n• Devono essere collocate preferibilmente nelle voci inferiori.\n• Vanno evitate nelle successioni diatoniche standard (es. V–IV o I–ii), dove produrrebbero un suono rigido e sgradevole.',
+        '⚠️ Nota Tecnica: Nello stile rigoroso (Bach), si evita il caso di Mozart inserendo una quarta e sesta cadenzale (I⁶₄) prima del V.',
+      ].join('\n'),
+    suggestion: 'Quinte di stile riconosciute. In contesto orchestrale/cromatico, le quinte parallele nelle voci inferiori sono tollerate per rinforzo armonico.',
+  },
+
+  // ═══════════════════════════════════════════════════════════
   // 5. ECCEZIONI — SENSIBILE (exception)
   // ═══════════════════════════════════════════════════════════
 
@@ -431,6 +456,16 @@ export const RULE_TEXTS: Record<string, RuleText> = {
         'Questa licenza è propria dello stile più elaborato e si ritrova frequentemente in Bach, dove le voci interne tracciano linee cromatiche continue che temporaneamente "sospendono" le regole di risoluzione.',
       ].join('\n'),
     suggestion: 'Eccezione riconosciuta per le voci interne in contesto cromatico. Assicurati che la linea cromatica sia melodicamente coerente e che la sensibile risolva alla tonica in un punto successivo della frase.',
+  },
+
+  'EXC-LT-FREE': {
+      body: [
+        'L\'obbligo di risoluzione ascendente della sensibile (VII → I) è sospeso quando l\'accordo di destinazione non esercita una funzione di attrazione tonale risolutiva (non è I né vi).',
+        'Priorità lineare: in passaggi non cadenzali (es. VII → IV o VII → III), la sensibile è considerata una nota melodica mobile. Se il soprano o una voce interna segue un disegno discendente, la coerenza della linea prevale sulla tensione del grado.',
+        'Neutralizzazione della tensione: la spinta verso la tonica è massima solo nella successione V → I o vii° → I. In successioni non cadenzali la sensibile può scendere di grado congiunto o saltare alla quinta dell\'accordo successivo per garantire la completezza armonica.',
+        'La sensibile è definita "libera" anche se l\'accordo di destinazione contiene la tonica come nota reale (es. il IV grado in stato fondamentale contiene la tonica), purché la successione non sia classificabile come cadenza perfetta o d\'inganno.',
+      ].join('\n'),
+    suggestion: 'Eccezione valida. L\'accordo di destinazione non è I né vi: la sensibile è melodicamente libera in contesto non cadenzale.',
   },
 
 
@@ -631,6 +666,14 @@ export const RULE_TEXTS: Record<string, RuleText> = {
         'È frequente come conclusione aggiuntiva dopo una cadenza autentica (il classico "Amen" della musica sacra), oppure come cadenza interna in brani di carattere tranquillo. È considerata una cadenza di "conferma" più che di "risoluzione".',
       ].join('\n'),
     suggestion: 'Marker informativo — nessuna correzione necessaria. La cadenza plagale è stata rilevata correttamente.',
+  },
+
+  'CAD-PIC': {
+      body: [
+        'Rilevata conclusione su accordo di tonica maggiore (I) in un brano in tonalità minore. Questa pratica, detta Terza Piccarda, è considerata regolare sia nella formula di cadenza perfetta (V→I) che in quella plagale (IV→I o iv→I).',
+        'L\'uso della Terza Piccarda trasforma il carattere della risoluzione finale, conferendo un senso di maggiore stabilità, solennità o "luce" rispetto alla conclusione in minore. È particolarmente comune nel periodo barocco e classico (es. Bach).',
+      ].join('\n'),
+    suggestion: 'Marker informativo — nessuna correzione necessaria. L\'accordo di I maggiore sostituisce il i minore nella formula di cadenza finale.',
   },
 
 };

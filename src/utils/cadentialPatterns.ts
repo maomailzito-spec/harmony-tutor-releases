@@ -182,6 +182,27 @@ export const CADENTIAL_FORMULAS: readonly CadentialFormula[] = [
     targetMode: 'major',
     confidence: 55,   // lower — only half-cadence, no resolution
   },
+  // ---- Simple V→I / V→i (2-slot) ----
+  {
+    id: 'PAC-V-I',
+    name: 'V → I (Authentic Cadence in major)',
+    slots: [
+      { intervalFromTonic: 7,  quality: 'major' },   // V
+      { intervalFromTonic: 0,  quality: 'major' },   // I
+    ],
+    targetMode: 'major',
+    confidence: 70,
+  },
+  {
+    id: 'PAC-V-i',
+    name: 'V → i (Authentic Cadence in minor)',
+    slots: [
+      { intervalFromTonic: 7,  quality: 'major' },   // V
+      { intervalFromTonic: 0,  quality: 'minor' },   // i
+    ],
+    targetMode: 'minor',
+    confidence: 70,
+  },
   // ---- Minor-target cadences ----
   {
     id: 'PAC-iv-V-i',
@@ -387,6 +408,12 @@ export function evaluateCadentialPatterns(
             // Quality check
             if (!slotMatchesQuality(slot.quality, ev.quality)) { allMatch = false; break; }
 
+            // A chord with a major 7th (e.g. Ebmaj7) on a dominant slot (V)
+            // is not a real dominant — dominants have minor 7ths.
+            if (slot.intervalFromTonic === 7 && /maj.*7|major\s*7/i.test(ev.quality)) {
+              allMatch = false; break;
+            }
+
             // Bass check (optional)
             if (slot.bassInterval !== undefined) {
               const expectedBassPc = mod12(candidateTonic + slot.bassInterval);
@@ -416,7 +443,16 @@ export function evaluateCadentialPatterns(
                 ? (arrival.notePcs ? arrival.notePcs.every(pc => homeScale.has(pc))
                                    : homeScale.has(arrival.rootPc))
                 : false;
-              if (arrivalDiatonic && !isRelativeKey) continue;   // skip – no chromatic evidence in target
+              // Also check if the dominant slot (penultimate) has chromatic
+              // evidence — e.g. V/ii contains A♮ in Ab major.  If so, the
+              // tonicisation is real even if the arrival chord is diatonic.
+              const dominantHasChromaticEvidence = window.length >= 2
+                ? (() => {
+                    const dom = window[window.length - 2];
+                    return dom?.notePcs?.some(pc => !homeScale.has(pc)) ?? false;
+                  })()
+                : false;
+              if (arrivalDiatonic && !isRelativeKey && !dominantHasChromaticEvidence) continue;
             }
 
             matches.push({

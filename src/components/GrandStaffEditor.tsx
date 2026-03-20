@@ -33,7 +33,7 @@ import { useMenuStateSync } from '../controllers/useMenuStateSync';
 import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
-import { handleGrandStaffProjectIOMenuAction } from '../controllers/grandStaffProjectIOAdapter';
+import { handleGrandStaffProjectIOMenuAction, buildGrandStaffProjectSnapshot } from '../controllers/grandStaffProjectIOAdapter';
 import { useGrandStaffMidi } from '../hooks/useGrandStaffMidi';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
@@ -338,6 +338,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const bpmInputRef = useRef<HTMLInputElement>(null);
     const [playingNoteIds, setPlayingNoteIds] = useState<string[]>([]);
     const [playheadPosition, setPlayheadPosition] = useState<{ x: number, systemIndex: number } | null>(null);
+    const playheadPositionRef = useRef<{ x: number; systemIndex: number } | null>(null);
+    useEffect(() => { playheadPositionRef.current = playheadPosition; }, [playheadPosition]);
     const playbackCursorAbsBeatRef = useRef<number | null>(null);
     const playbackTimeoutsRef = useRef<number[]>([]);
     const playbackStartBeatRef = useRef<number>(0);
@@ -1588,6 +1590,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [buildExportHtml]);
 
     const projectExtrasRef = useRef<Record<string, unknown>>(EMPTY_EXTRAS);
+    const draftArgsRef = useRef<any>(null);
 
     const handleMenuActionLegacy = useCallback(async (action: MenuAction, payload: any) => {
         const api = window.electronAPI;
@@ -2178,6 +2181,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // can reliably dispatch without depending on effect ordering.
     dispatchMenuActionRef.current = dispatchMenuAction;
 
+    // Keep draft snapshot args current every render (used by backup timer + beforeunload).
+    draftArgsRef.current = {
+        latestRawNotes, latestHarmonyOverrides, latestOrnamentOverrides, projectExtrasRef,
+        staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
+        timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
+        keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
+        repeatBarlines, voltaBrackets, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+    };
+
     // Auto-save: periodically trigger 'save' if a file path is already set.
     useEffect(() => {
         const intervalSec = Number(autoSaveInterval) || 0;
@@ -2191,6 +2203,103 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }, intervalSec * 1000);
         return () => clearInterval(timer);
     }, [autoSaveInterval, currentProjectFilePath]);
+
+    // Draft backup: periodically snapshot project to localStorage for reload recovery.
+    // Also flushes on beforeunload so Cmd-R never loses more than a few seconds.
+    useEffect(() => {
+        const DRAFT_KEY = 'harmony-tutor.draftBackup.v1';
+        const writeDraft = () => {
+            try {
+                const args = draftArgsRef.current;
+                if (!args) return;
+                const notes = args.latestRawNotes.current || [];
+                // Never overwrite a richer draft with fewer notes (e.g. after
+                // page refresh that loads an empty/default project).
+                if (notes.length === 0) return;
+                const existingRaw = localStorage.getItem(DRAFT_KEY);
+                if (existingRaw) {
+                    try {
+                        const existing = JSON.parse(existingRaw);
+                        const existingCount = existing?.snapshot?.notes?.length ?? 0;
+                        if (notes.length < existingCount && notes.length < 4) return;
+                    } catch { /* corrupt entry — ok to overwrite */ }
+                }
+                const snapshot = buildGrandStaffProjectSnapshot(args);
+                localStorage.setItem(DRAFT_KEY, JSON.stringify({
+                    snapshot,
+                    filePath: currentProjectFilePathRef.current,
+                    timestamp: Date.now(),
+                }));
+            } catch { /* ignore quota / serialization errors */ }
+        };
+        const timer = setInterval(writeDraft, 30_000);
+        window.addEventListener('beforeunload', writeDraft);
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener('beforeunload', writeDraft);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Draft recovery: on mount, offer to restore unsaved backup from localStorage.
+    useEffect(() => {
+        const DRAFT_KEY = 'harmony-tutor.draftBackup.v1';
+        const id = setTimeout(() => {
+            try {
+                const raw = localStorage.getItem(DRAFT_KEY);
+                if (!raw) return;
+                const draft = JSON.parse(raw);
+                if (!draft?.snapshot?.notes?.length) {
+                    localStorage.removeItem(DRAFT_KEY);
+                    return;
+                }
+                if (Date.now() - (draft.timestamp || 0) > 48 * 3600_000) {
+                    localStorage.removeItem(DRAFT_KEY);
+                    return;
+                }
+                const name = draft.filePath
+                    ? String(draft.filePath).split('/').pop()
+                    : 'senza nome';
+                const when = new Date(draft.timestamp).toLocaleString();
+                if (!window.confirm(
+                    `Trovato un backup non salvato di "${name}" (${when}).\nVuoi ripristinarlo?`
+                )) {
+                    localStorage.removeItem(DRAFT_KEY);
+                    return;
+                }
+                const p = draft.snapshot;
+                setRawNotes(p.notes || []);
+                setKeySignatureRoot(p.keySignatureRoot || 'C');
+                setIsMinorMode(!!p.isMinorMode);
+                setProjectTitle(p.projectTitle || '');
+                setTimeSignature(p.timeSignature || { numerator: 4, denominator: 4 });
+                setTimeSignatureChanges(p.timeSignatureChanges || []);
+                setHarmonyOverrides(p.harmonyOverrides || []);
+                setOrnamentOverrides(p.ornamentOverrides || []);
+                setAnalysisContexts(p.analysisContexts || []);
+                setDoubleBarlineMeasures(p.doubleBarlineMeasures || []);
+                setRepeatBarlines(p.repeatBarlines || {});
+                setVoltaBrackets(p.voltaBrackets || []);
+                setAutoLeadingToneInMinor(p.autoLeadingToneInMinor ?? true);
+                setKeyChangeMode(p.keyChangeMode || 'none');
+                setModalTonicOverride(p.modalTonicOverride || '');
+                setStaffSystemMode(p.staffSystemMode || 'grandstaff');
+                setBpm(p.bpm ?? 120);
+                setIsBpmActive(!!p.isBpmActive);
+                setIsMetronomeOn(!!p.isMetronomeOn);
+                setMetronomeUnit(p.metronomeUnit || 'quarter');
+                if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
+                if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
+                if (p.toolbarGroupOrder) setToolbarGroupOrder(p.toolbarGroupOrder);
+                setCurrentProjectFilePath(draft.filePath || null);
+                localStorage.removeItem(DRAFT_KEY);
+            } catch {
+                try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+            }
+        }, 500);
+        return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Listener Electron: registrazione unica e cleanup
     useEffect(() => {
@@ -3312,6 +3421,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const safeBpm = Math.max(20, Math.min(300, bpm || 120));
         const beatDurationSec = 60 / safeBpm;
 
+        // Helper: effective beats-per-measure at a given measure index,
+        // accounting for timeSignatureChanges.
+        const _sortedTsChanges = [...(timeSignatureChanges || [])].sort(
+            (a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0),
+        );
+        const bpmAtMeasure = (mi: number): number => {
+            let ts = timeSignature;
+            for (const ch of _sortedTsChanges) {
+                if ((ch.measureIndex ?? Infinity) <= mi) ts = ch;
+                else break;
+            }
+            return ts.numerator * (4 / ts.denominator);
+        };
+        // Pre-compute cumulative beat offsets per measure so absStartBeat is correct.
+        // We build lazily up to the needed measure index.
+        const _measureStartBeatCache: number[] = [0];
+        const measureStartBeat = (mi: number): number => {
+            while (_measureStartBeatCache.length <= mi) {
+                const prev = _measureStartBeatCache.length - 1;
+                _measureStartBeatCache.push(_measureStartBeatCache[prev] + bpmAtMeasure(prev));
+            }
+            return _measureStartBeatCache[mi];
+        };
+
         // Build a per-voice timeline so we can merge tied notes into a single longer note.
         type PlaybackItem = {
             note: StaffNote;
@@ -3347,13 +3480,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 if (tupletContext) durationBeatsNotated = tupletContext.beatsForGroup / tupletContext.notesInGroup;
 
-                if (durationInMeasureNotated + durationBeatsNotated > beatsPerMeasure + 0.001) {
+                if (durationInMeasureNotated + durationBeatsNotated > bpmAtMeasure(measureIndex) + 0.001) {
                     measureIndex++;
                     durationInMeasureNotated = 0;
                 }
 
                 const beat = durationInMeasureNotated + 1;
-                const absStartBeatNotated = (measureIndex * beatsPerMeasure) + (beat - 1);
+                const absStartBeatNotated = measureStartBeat(measureIndex) + (beat - 1);
 
                 // Swing (ottavi terzinati): playback-only mapping for straight eighths.
                 // Notation stays in straight time; playback maps offbeats (x.5) to triplet offbeats (x + 2/3).
@@ -4494,7 +4627,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const offset = hasNoteheadSnap ? 0 : estimateNoteheadOffsetPxForSystem(basePos.systemIndex);
         const targetX = (hasNoteheadSnap ? snappedToNotehead : (basePos.x + offset));
 
-        if (!playheadPosition || playheadPosition.systemIndex !== basePos.systemIndex || Math.abs(playheadPosition.x - targetX) > 0.5) {
+        const curPH = playheadPositionRef.current;
+        if (!curPH || curPH.systemIndex !== basePos.systemIndex || Math.abs(curPH.x - targetX) > 0.5) {
             setPlayheadPosition({ x: targetX, systemIndex: basePos.systemIndex });
         }
 
@@ -4503,10 +4637,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const measureIndex = Math.floor((absBeat as number) / beatsPerMeasure);
         const beat = Math.round((((absBeat as number) - (measureIndex * beatsPerMeasure)) + 1) * 1e6) / 1e6;
 
-        if (!pasteCaret || pasteCaret.systemIndex !== basePos.systemIndex || Math.abs(pasteCaret.x - targetX) > 0.5) {
+        const curPC = latestPasteCaretRef.current;
+        if (!curPC || curPC.systemIndex !== basePos.systemIndex || Math.abs(curPC.x - targetX) > 0.5) {
             setPasteCaret({ x: targetX, systemIndex: basePos.systemIndex, measureIndex, beat });
         }
-    }, [estimateNoteheadOffsetPxForSystem, getPlayheadPosForAbsBeat, isPlaying, layoutData, pasteCaret, playheadPosition, refinePlayheadXToRenderedNoteheads, timeSignature]);
+    }, [estimateNoteheadOffsetPxForSystem, getPlayheadPosForAbsBeat, isPlaying, layoutData, refinePlayheadXToRenderedNoteheads, timeSignature]);
 
     const getCurrentAbsBeatForPlayhead = useCallback(() => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -5619,6 +5754,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setSelectedInsertion(prev => ({ ...prev, isDotted: false }));
             }
         } catch { /* ignore */ }
+        // Auto-disarm triplet after a full group (3 notes).
+        if (isTriplet) {
+            const next = tupletNoteCount + 1;
+            if (next >= 3) {
+                setIsTriplet(false);
+                setTupletNoteCount(0);
+                setTripletBaseDuration(null);
+            } else {
+                setTupletNoteCount(next);
+            }
+        }
         // Log after a tick to capture updated positions
         setTimeout(() => {
             try {
@@ -6432,7 +6578,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // ── Ornament override shortcuts (⌥ + key) ──
             if (!isMod && e.altKey && selectedNoteIds.size > 0) {
-                const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyN: 'anticipation', KeyH: 'structural' };
+                const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyN: 'anticipation', KeyH: 'structural', KeyO: 'ornamental' };
                 const ornType = ornMap[e.code];
                 if (ornType) {
                     e.preventDefault();
@@ -7928,25 +8074,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             {showRoman ? (
                                                                                 <g>
                                                                                     {(() => {
-                                                                                        // Display-only suffix: show vii°7 for diminished seventh chords
-                                                                                        // without changing the underlying roman used for stability heuristics.
-                                                                                        const needsDim7Suffix = (() => {
-                                                                                            try {
-                                                                                                const base = String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
-                                                                                                if (!(base.includes('°') || base.includes('ø'))) return false;
-                                                                                                const figTexts = (lbl.figures || []) as string[];
-                                                                                                const has7th = figTexts.some(t => String(t).includes('7'));
-                                                                                                if (has7th) return true;
-                                                                                                const sym = String((lbl as any).symbol || '');
-                                                                                                return /dim7/i.test(sym) || (sym.includes('°') && /7/.test(sym));
-                                                                                            } catch {
-                                                                                                return false;
-                                                                                            }
-                                                                                        })();
 
                                                                                         const romanBaseText = String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
-                                                                                        const romanText = romanBaseText + (needsDim7Suffix ? '7' : '');
-                                                                                        const romanW = measureTextWidth(romanText, romanFont);
+                                                                                        const romanW = measureTextWidth(romanBaseText, romanFont);
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanW + 6;
 
@@ -8068,7 +8198,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     textAnchor="start"
                                                                                                     fontSize={14}
                                                                                                     fontWeight={700}
-                                                                                                    fill="black"
+fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     style={{ cursor: 'pointer', pointerEvents: 'all' }}
                     onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
                 >
@@ -8085,7 +8215,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                                 y={figuresY0 + (i * 12)}
                                                                                                                 textAnchor="start"
                                                                                                                 fontSize={12}
-                                                                                                                fill="black"
+                                                                                                                fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                             >
                                                                                                                 {f}
                                                                                                             </text>
@@ -8378,6 +8508,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             const sevLower = (sev || 'error').toLowerCase();
                                                                             if (sevLower.includes('warning') && !analysisFilters.showWarning) return false;
                                                                             if ((sevLower.includes('exception') || sevLower.includes('green')) && !analysisFilters.showException) return false;
+                                                                            if (sevLower.includes('chromatic') && analysisFilters.showChromatic === false) return false;
                                                                             if (sevLower.includes('error') && !analysisFilters.showError) return false;
                                                                             // Also check per-rule disable.
                                                                             const rid = String(c.ruleId || '');

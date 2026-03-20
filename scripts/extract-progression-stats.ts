@@ -9,6 +9,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { applyHarmonyRules, getKeySignature, getRomanAnalysis } from '../src/utils/musicTheory';
 
+// Files known to hang in applyHarmonyRules — skip them.
+const SKIP_FILES = new Set<string>();
+
 // ── Collect all test files ──────────────────────────────────────────────
 const TESTS_DIR = path.join(__dirname, '..', 'tests');
 const files = fs.readdirSync(TESTS_DIR)
@@ -37,6 +40,13 @@ function stripFigures(label: string): string {
 
 for (const filePath of files) {
   try {
+    const idx = files.indexOf(filePath) + 1;
+    const basename = path.basename(filePath);
+    if (SKIP_FILES.has(basename)) {
+      process.stderr.write(`  [${idx}/${files.length}] ${basename} — SKIPPED (known hang)\n`);
+      continue;
+    }
+    process.stderr.write(`  [${idx}/${files.length}] ${basename}...\n`);
     const raw = fs.readFileSync(filePath, 'utf-8');
     const proj = JSON.parse(raw);
     const notes = proj.notes || [];
@@ -47,7 +57,6 @@ for (const filePath of files) {
     const ts = proj.timeSignature || { top: 4, bottom: 4 };
     const keySig = getKeySignature(tonic, isMinor ? 'Minor' : 'Major');
     const contexts = proj.analysisContexts || [];
-
     const ornamentOverrides = proj.ornamentOverrides || [];
     const harmonyOverrides: any[] = proj.harmonyOverrides || [];
     const res = applyHarmonyRules(notes as any, keySig as any, tonic, isMinor, contexts, ts as any, undefined, ornamentOverrides);

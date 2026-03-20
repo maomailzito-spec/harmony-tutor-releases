@@ -16,6 +16,7 @@ import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
 import { getBigramProbability, type StyleProfile } from '../engine/choralStyleProfile';
 import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS, DURATION_VALUES } from '../constants';
 import { suggestNextChord } from '../engine/progressionSuggester';
+import { shouldBlockTonicization } from '../utils/modalInterchange';
 
 // ─── Utility: note name → chromatic index (0-11) ──────────────────────────
 function noteNameToChromaticIndex(name: string): number {
@@ -231,6 +232,50 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         })();
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+
+        // ── TS-aware helpers: compute beat-in-measure accounting for TS changes ──
+        const tsEffectiveAt = (absBeat: number): TimeSignature => {
+            let ts = timeSignature;
+            for (const c of (timeSignatureChanges || [])) {
+                if (typeof c.absBeat === 'number' && c.absBeat <= absBeat + 1e-6) {
+                    ts = { numerator: c.numerator, denominator: c.denominator } as TimeSignature;
+                }
+            }
+            return ts;
+        };
+
+        const getInMeasure = (absBeat: number): number => {
+            let runAbs = 0;
+            let curTs = timeSignature;
+            let curMi = 0;
+            for (const c of (timeSignatureChanges || [])) {
+                if (typeof c.absBeat !== 'number') continue;
+                if (c.absBeat > absBeat + 1e-6) break;
+                const bpm = curTs.numerator * (4 / curTs.denominator);
+                const measBefore = (c.measureIndex ?? curMi) - curMi;
+                runAbs += measBefore * bpm;
+                curTs = { numerator: c.numerator, denominator: c.denominator } as TimeSignature;
+                curMi = c.measureIndex ?? curMi;
+            }
+            const bpm = curTs.numerator * (4 / curTs.denominator);
+            const inRegion = absBeat - runAbs;
+            return inRegion - Math.floor(inRegion / bpm) * bpm;
+        };
+
+        const isStrongAtAbsBeat = (absBeat: number): boolean => {
+            const ts2 = tsEffectiveAt(absBeat);
+            const cm = ts2.denominator === 8 && (ts2.numerator % 3 === 0) && ts2.numerator > 3;
+            const inMeas = getInMeasure(absBeat);
+            const EPS = 1e-3;
+            if (cm) {
+                const pulse = 1.5;
+                const r = ((inMeas % pulse) + pulse) % pulse;
+                return Math.abs(r) < EPS || Math.abs(pulse - r) < EPS;
+            }
+            const nearInt = (x: number) => Math.abs(x - Math.round(x)) < EPS;
+            return nearInt(inMeas);
+        };
+
         // ─── Cadential Pattern Recognition (Fase 1) ───
         let _effectiveCtxs: AnalysisContext[] = [...(analysisContexts || [])];
         const _pivotCandidates = new Map<number, {tonic: string, isMinor: boolean}>();
@@ -242,27 +287,72 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 for (const ev of timelineForLabels) {
                     if (!ev?.notes?.length) continue;
                     try {
-                        const cands = identifyChordCandidates(ev.notes);
+                        // Substitute bass suspension-onset notes with their resolution
+                        // so cadential pattern detection sees the target chord.
+                        const SUSP_EPS_CAD = 1e-3;
+                        const notesForCad = (ev.notes as any[]).map((n: any) => {
+                            if (!n || n.isRest || (n.voice ?? 1) !== 4) return n;
+                            const s = n.isSuspension;
+                            if (!s || typeof s.fromAbsBeat !== 'number') return n;
+                            if (Math.abs(s.fromAbsBeat - ev.absBeat) >= SUSP_EPS_CAD) return n;
+                            if (typeof s.resolvedMidi !== 'number') return n;
+                            return { ...n, midi: s.resolvedMidi, pitch: s.resolvedPitch ?? n.pitch,
+                                octave: s.resolvedOctave ?? n.octave,
+                                accidental: s.resolvedAccidental != null ? s.resolvedAccidental : (n.accidental ?? ''),
+                                isSuspension: undefined };
+                        });
+                        const cands = identifyChordCandidates(notesForCad);
                         const top = cands?.[0];
                         if (!top?.root) continue;
                         // root can be string or object {noteIndex, midi}
                         const rootPc = typeof top.root === 'string'
                             ? noteNameToPc(top.root)
                             : (((Number((top.root as any)?.noteIndex ?? (top.root as any)?.midi ?? 0)) % 12) + 12) % 12;
-                        const bassMidi = Math.min(...(ev.notes as any[]).map((n: any) => Number(n.midi)));
+                        const bassMidi = Math.min(...(notesForCad as any[]).map((n: any) => Number(n.midi)));
                         const bassPc = ((bassMidi % 12) + 12) % 12;
                         _chEvts.push({ rootPc, quality: top.type || '', bassPc, absBeat: ev.absBeat,
-                            notePcs: [...new Set((ev.notes as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] });
+                            notePcs: [...new Set((notesForCad as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] });
                     } catch { /* skip event */ }
                 }
-                const _cadMatches = evaluateCadentialPatterns(
+                const _cadMatchesRaw = evaluateCadentialPatterns(
                     _chEvts, noteNameToPc(currentTonic), isMinorMode, { minConfidence: 70 },
                 );
+                // Post-filter: reject cadence matches whose "dominant" chord is
+                // actually a Major-7th sonority (maj7 ≠ dominant). The dominant
+                // slot is always the penultimate chord in the formula window.
+                const _cadMatches = _cadMatchesRaw.filter(m => {
+                    // Find the penultimate event (the V slot)
+                    const domBeat = (() => {
+                        if (m.startBeat === m.endBeat) return m.startBeat;
+                        const candidates = _chEvts.filter(e => e.absBeat >= m.startBeat && e.absBeat < m.endBeat);
+                        return candidates.length > 0 ? candidates[candidates.length - 1].absBeat : m.startBeat;
+                    })();
+                    const domEv = _chEvts.find(e => Math.abs(e.absBeat - domBeat) < 0.05);
+                    // Reject cadences whose dominant is maj7
+                    if (domEv && /maj.*7|major\s*7/i.test(domEv.quality)) return false;
+                    // Reject cadences whose resolution is a borrowed chord (modal interchange)
+                    const resEv = _chEvts.find(e => Math.abs(e.absBeat - m.endBeat) < 0.05);
+                    if (resEv && shouldBlockTonicization(resEv.rootPc, resEv.quality, currentTonic, isMinorMode)) return false;
+                    return true;
+                });
                 const _manualBeats = new Set(
                     (analysisContexts || []).filter((c: any) => c.source !== 'inferred')
                         .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
                 );
                 for (const m of _cadMatches) {
+                    // ── Overlap guard: skip cadences whose startBeat falls
+                    // inside the span of a higher-confidence cadence.
+                    // This prevents a spurious low-confidence deceptive
+                    // cadence (e.g. Db conf=70) from overriding a
+                    // legitimate tonicization (e.g. Ab conf=85).
+                    const _isOverlapped = _cadMatches.some(other =>
+                        other !== m &&
+                        other.confidence > m.confidence &&
+                        m.startBeat >= other.startBeat - 1e-6 &&
+                        m.startBeat <= other.endBeat + 1e-6,
+                    );
+                    if (_isOverlapped) continue;
+
                     if (!_manualBeats.has(m.startBeat)) {
                         // Deceptive cadences confirm the *matched* key
                         // (e.g. Am when the home key is C). Inject the
@@ -358,6 +448,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // V→I/i: dominant root is 7 semitones above resolution root
                     if (((dom.rootPc - res.rootPc + 12) % 12) !== 7) continue;
                     if (qualityFamily(dom.quality) !== 'major') continue;
+                    // A chord with a major 7th (e.g. Ebmaj7) is NOT a dominant
+                    if (/maj.*7|major\s*7/i.test(dom.quality)) continue;
                     // In minor keys, ♭VII → III is V → I of the relative major
                     // and needs no chromatic evidence (all notes are diatonic).
                     const _homePc = noteNameToPc(currentTonic);
@@ -369,6 +461,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (!isBVII_to_III && !dom.notePcs?.some(pc => !_homeScalePcs.has(pc))) continue;
                     const targetPc = res.rootPc;
                     const targetIsMinor = qualityFamily(res.quality) !== 'major';
+                    // If the resolution chord is a borrowed chord from the parallel
+                    // minor (iv, ♭VI, ♭VII…), this is modal interchange, not a
+                    // tonicization — skip.
+                    if (shouldBlockTonicization(res.rootPc, res.quality, currentTonic, isMinorMode)) continue;
                     // Skip if already covered by a cadential match or manual marker
                     const alreadyCovered = _effectiveCtxs.some(c =>
                         Math.abs(analysisContextAbsBeat(c) - dom.absBeat) < 0.1
@@ -610,6 +706,24 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (!rJ || rJ.roman !== 'I') continue;
                         // Guard: skip enharmonic tautological match (e.g. K='Gb' for an F# chord)
                         const _kPc = noteNameToChromaticIndex(K);
+                        // If the arrival chord is a borrowed chord from the parallel
+                        // minor (iv, ♭VI, …), prefer modal interchange over tonicization —
+                        // UNLESS the preceding chord has chromatic evidence (notes outside
+                        // the home scale), which indicates a genuine secondary dominant.
+                        {
+                            const _arrivCands = identifyChordCandidates(stJ as any);
+                            const _arrivQ = _arrivCands?.[0]?.type || '';
+                            if (shouldBlockTonicization(_kPc, _arrivQ, currentTonic, isMinorMode)) {
+                                // Check: does the dominant (stPrev) contain chromatic notes?
+                                let _domHasChromatic = false;
+                                for (const _dn of stPrev) {
+                                    const _dpc = ((Number((_dn as any).midi) % 12) + 12) % 12;
+                                    if (!_scale.has(_dpc)) { _domHasChromatic = true; break; }
+                                }
+                                if (!_domHasChromatic) continue; // block: no chromatic evidence
+                                // else: allow — this is a real secondary dominant
+                            }
+                        }
                         const _rootNote = stJ.find(n => ((Number(n?.midi) % 12) + 12) % 12 === _kPc);
                         if (_rootNote) {
                             const _sp = String(_rootNote.pitch || '') + (_rootNote.accidental === 'sharp' ? '#' : _rootNote.accidental === 'flat' ? 'b' : '');
@@ -617,8 +731,27 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         }
                         const rPrev = getRomanAnalysis(stPrev, K, false);
                         if (!rPrev || !/^V/.test(rPrev.roman)) continue;
+                        // V/x (secondary dominant of another degree) is not the
+                        // primary dominant of K — skip auto-tonicization.
+                        if (rPrev.roman.includes('/')) continue;
                         // V° (diminished) is not a real dominant — skip auto-tonicization
                         if (/°|dim/.test(rPrev.roman)) continue;
+                        // A chord with a major 7th (e.g. Ebmaj7) is NOT a dominant —
+                        // dominants have minor 7ths. Check the actual pitch content.
+                        {
+                            const _prevPcs = [...new Set(stPrev.map((n: any) => ((Number(n?.midi) % 12) + 12) % 12))];
+                            const _kPc = noteNameToChromaticIndex(K);
+                            // The dominant root is a 5th above K (7 semitones)
+                            const _domRoot = (_kPc + 7) % 12;
+                            // Major 7th above dominant root = 11 semitones
+                            const _maj7Pc = (_domRoot + 11) % 12;
+                            // Minor 7th above dominant root = 10 semitones
+                            const _min7Pc = (_domRoot + 10) % 12;
+                            const _hasMaj7 = _prevPcs.includes(_maj7Pc);
+                            const _hasMin7 = _prevPcs.includes(_min7Pc);
+                            // If the chord has a major 7th but no minor 7th, it's not a dominant
+                            if (_hasMaj7 && !_hasMin7) continue;
+                        }
 
                         const degLabel = _keyDeg(K);
                         if (!degLabel) continue;
@@ -670,6 +803,23 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     if (!_scale.has(_cpc)) { _chordHasChromatic = true; break; }
                                 }
                                 if (!_chordHasChromatic) continue;
+
+                                // If this chord is already a borrowed chord (modal interchange)
+                                // in the home key (iv, ♭VI, ♭VII…), prefer that label over the
+                                // tonicization display — modal interchange is more informative.
+                                {
+                                    const _stSCheck = structuralNotes(base[s].ev.notes, ornOverrideMap);
+                                    const _candsCheck = identifyChordCandidates(_stSCheck as any);
+                                    const _topC = _candsCheck?.[0];
+                                    const _topQ = _topC?.type || '';
+                                    const _topRootPc = (() => {
+                                        if (!_topC?.root) return -1;
+                                        if (typeof _topC.root === 'string') return noteNameToChromaticIndex(_topC.root);
+                                        const ni = Number((_topC.root as any)?.noteIndex);
+                                        return Number.isFinite(ni) ? ((ni % 12) + 12) % 12 : -1;
+                                    })();
+                                    if (_topRootPc >= 0 && shouldBlockTonicization(_topRootPc, _topQ, currentTonic, isMinorMode)) continue;
+                                }
 
                                 const stS = structuralNotes(base[s].ev.notes, ornOverrideMap);
                                 const rS = getRomanAnalysis(stS, K, false);
@@ -753,6 +903,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (overrideByAbsBeat.has(bi.q)) continue; // user override always wins
                     if (autoOverrideByAbsBeat.has(bi.q)) continue;
                     if (protectedAbsBeats.has(bi.q)) continue;
+                    // Don't relabel beats that already carry a secondary-function
+                    // label (e.g. vii°/IV) — they belong to a different tonicization.
+                    if (String(bi.roman || '').includes('/')) continue;
 
                     const rr = getRomanAnalysis(structuralNotes(bi.ev?.notes || [], ornOverrideMap), tonicizedTonic, tonicizedIsMinor, { ornamentOverrides: ornOverrideRecord });
                     // Strip any secondary-function suffix to prevent nesting (e.g. vii°/V → vii°)
@@ -771,6 +924,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Only reinterpret a *minor* subdominant as iv/target (e.g. Gm -> iv/ii in C).
                     // Do not relabel a major IV in the tonicized key (often a mixture/pivot sonority).
                     if (localRoman !== 'iv') continue;
+
+                    // Double-check: a true iv is a minor triad. A dominant 7th
+                    // chord (e.g. Eb7 = Eb-G-Bb-Db) is NOT iv — it's a dominant
+                    // sonority regardless of scale degree. Also reject major/augmented.
+                    {
+                        const _ivNotes = structuralNotes(bi.ev?.notes || [], ornOverrideMap);
+                        const _ivCands = identifyChordCandidates(_ivNotes as any);
+                        const _ivQuality = String(_ivCands?.[0]?.type || '').toLowerCase();
+                        if (_ivQuality.includes('dom') || _ivQuality.includes('major') || _ivQuality.includes('aug')) continue;
+                    }
 
                     // Pivot display (keep base roman stable, but show that this chord is a pivot):
                     // Example in C: Am (vi) before V/iii→iii becomes vi=iv.
@@ -953,26 +1116,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 const isSeventh = intervalFromRoot === 10 || intervalFromRoot === 11;
                                 const isMajor7Like = /Major\s*7/i.test(chordType) || /Minor\s*7/i.test(chordType);
                                 const isDominant7 = /Dominant\s*7/i.test(chordType) || (/7/.test(chordType) && /Dominant/i.test(chordType));
-                                if (isSeventh && isMajor7Like && !isDominant7) {
-                                    const remaining = notesHere.filter(nn => String(nn?.id ?? '') !== String(n?.id ?? ''));
-                                    if (remaining.length >= 2) {
-                                        const c2 = identifyChordCandidates(remaining as any);
-                                        const b2 = (c2 && c2.length) ? c2[0] : null;
-                                        const mt2 = (b2 as any)?.matchType;
-                                        const confident2 = mt2 === 'exact' || mt2 === 'no_fifth' || mt2 === 'no_third';
-                                        const t2 = String(b2?.type || '');
-                                        const isTriad2 = !/7|9|11|13/i.test(t2) && !/Major\s*7|Minor\s*7|Dominant\s*7/i.test(t2);
-                                        if (confident2 && isTriad2) {
-                                            // Do NOT short-circuit; allow the resolution tests below.
-                                        } else {
-                                            return false;
-                                        }
-                                    } else {
-                                        return false;
-                                    }
-                                } else {
+                                if (isSeventh && (isMajor7Like || isDominant7)) {
+                                    // The 7th is a chord tone of a confident
+                                    // 7th-chord candidate — keep it structural
+                                    // so figures (7/5 etc.) are generated.
                                     return false;
                                 }
+                                // Non-7th chord tones of confident candidates:
+                                return false;
                             } catch {
                                 return false;
                             }
@@ -1362,6 +1513,15 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             return true;
         };
 
+        // Precompute: index of the last non-rest event for Picardy-third detection.
+        const lastNonRestEventIndex = (() => {
+            for (let i = timelineFiltered.length - 1; i >= 0; i--) {
+                const ev: any = timelineFiltered[i];
+                if ((ev?.notes || []).some((n: any) => n && !n.isRest)) return i;
+            }
+            return timelineFiltered.length - 1;
+        })();
+
         timelineFiltered.forEach((event, eventIndex) => {
             // Find which system this event belongs to
             const measureIndex = event.measureIndex;
@@ -1497,11 +1657,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // arpeggiations on the internal 8th/16th grid. Those short bass notes should
                 // not flip the harmony label/figures on weak subdivisions.
                 try {
-                    if (v === 4 && isCompoundMeter) {
-                        const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                    const isCompoundHereBass = (() => {
+                        const te = tsEffectiveAt(Number(event.absBeat));
+                        return te.denominator === 8 && (te.numerator % 3 === 0) && te.numerator > 3;
+                    })();
+                    if (v === 4 && (isCompoundMeter || isCompoundHereBass)) {
                         const absBeat = Number(event.absBeat);
-                        const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                        const strongPulse = isStrongPulseInMeasure(inMeasure);
+                        const inMeasure = getInMeasure(absBeat);
+                        const strongPulse = isStrongAtAbsBeat(absBeat);
                         const base = ({ whole: 4, half: 2, quarter: 1, eighth: 0.5, sixteenth: 0.25, 'thirty-second': 0.125, 'sixty-fourth': 0.0625 } as any)[n.duration || 'quarter'] || 1;
                         let dur = base;
                         if (n.isDotted) dur *= 1.5;
@@ -1581,32 +1744,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // flag so downstream filters (harmonicNotesNoSuspAtThisBeat) don't
                 // accidentally remove it from the chord verticalization.
                 const _suspFlag = (n as any)?.isSuspension;
-                // ── Targeted diagnostic for F#3 isSuspension clean ──
-                try {
-                    const _dbgRaw2 = localStorage.getItem('_HT_DEBUG_BEAT');
-                    const _dbgB2 = _dbgRaw2 !== null ? Number(_dbgRaw2) : NaN;
-                    if (!isNaN(_dbgB2) && _dbgB2 >= 0 && Math.abs(Number(event.absBeat) - _dbgB2) < 0.5 && v === 4) {
-                        console.log('[HT-DBG] v4 path at ab=' + event.absBeat +
-                            ' _suspFlag=' + JSON.stringify(_suspFlag) +
-                            ' cleaning=' + !!_suspFlag);
-                    }
-                } catch { /* ignore */ }
+
                 lastStructural.set(v, _suspFlag ? { ...n, isSuspension: undefined } : n);
             }
 
-            // ── Diagnostic: dump lastStructural content when tracer is active ──
-            const _dbgRawEarly = localStorage.getItem('_HT_DEBUG_BEAT');
-            const _dbgBeatEarly = _dbgRawEarly !== null ? Number(_dbgRawEarly) : NaN;
-            const _dbgEarly = !isNaN(_dbgBeatEarly) && _dbgBeatEarly >= 0 && Math.abs(event.absBeat - _dbgBeatEarly) < 0.5;
-            if (_dbgEarly) {
-                const lsEntries = Array.from(lastStructural.entries()).map(([v, n]) => ({
-                    v, midi: (n as any)?.midi, pitch: (n as any)?.pitch, acc: (n as any)?.accidental, explAcc: (n as any)?.explicitAccidental, noteIndex: (n as any)?.noteIndex, susp: !!(n as any)?.isSuspension
-                }));
-                console.log('[HT-DBG] lastStructural at ab=' + event.absBeat + ':', JSON.stringify(lsEntries));
-                console.log('[HT-DBG] fullNotes at ab=' + event.absBeat + ':', JSON.stringify((fullNotes || []).map((n: any) => ({
-                    midi: n?.midi, pitch: n?.pitch, voice: n?.voice, acc: n?.accidental, explAcc: n?.explicitAccidental, susp: !!n?.isSuspension
-                }))));
-            }
+
 
             // Filter out user-overridden ornamental notes from the structural snapshot.
             // Notes in lastStructural may have been stored at a PREVIOUS event, before
@@ -1666,12 +1808,51 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // If a suspension originates at this event, the held tone is a non-chord tone
             // against the new harmony. Exclude it from the chord-analysis snapshot so we
             // don't accidentally label the verticality as a sus/add sonority (e.g. V7/6).
+            // We scan fullNotes to find suspension-onset notes (they may already be absent
+            // from harmonicNotes/fallbackHarmonicNotes due to lastStructural.delete).
+            // When the suspension carries resolution data, substitute a synthetic note
+            // so chord identification sees the target harmony (e.g. Db sus → C → I).
             const SUSP_EPS = 1e-3;
+            const suspResolutions: any[] = [];
+            for (const n of fullNotes) {
+                if (!n || n.isRest) continue;
+                const s = (n as any)?.isSuspension;
+                if (!s || typeof s.fromAbsBeat !== 'number') continue;
+                if (Math.abs(s.fromAbsBeat - event.absBeat) >= SUSP_EPS) continue;
+                if (typeof s.resolvedMidi === 'number') {
+                    suspResolutions.push({
+                        ...n,
+                        midi: s.resolvedMidi,
+                        pitch: s.resolvedPitch ?? n.pitch,
+                        octave: s.resolvedOctave ?? n.octave,
+                        accidental: s.resolvedAccidental != null ? s.resolvedAccidental : (n.accidental ?? ''),
+                        isSuspension: undefined,
+                        _isSuspensionResolutionSubstitute: true,
+                    });
+                }
+            }
+            // Voices for which we have a resolution substitute — remove originals
+            const suspSubstVoices = new Set(suspResolutions.map((n: any) => n.voice ?? 1));
             const harmonicNotesNoSuspAtThisBeat = fallbackHarmonicNotes.filter((n: any) => {
+                // Remove if we have a substitution for this voice (covers cases
+                // where fallbackHarmonicNotes lacks the isSuspension flag)
+                if (suspSubstVoices.has(n.voice ?? 1)) return false;
                 const s = n?.isSuspension;
                 if (!s || typeof s.fromAbsBeat !== 'number') return true;
                 return Math.abs(s.fromAbsBeat - event.absBeat) >= SUSP_EPS;
             });
+            if (suspResolutions.length) harmonicNotesNoSuspAtThisBeat.push(...suspResolutions);
+
+            // Guard: suspension-onset substitution replaces actually-sounding notes
+            // with their future resolutions. This "anticipates" the resolution harmony
+            // and distorts both the roman label and figured-bass figures at the
+            // onset beat.  Revert the substitution unconditionally so the analysis
+            // reflects what actually sounds.
+            if (suspResolutions.length) {
+                harmonicNotesNoSuspAtThisBeat.length = 0;
+                harmonicNotesNoSuspAtThisBeat.push(...fallbackHarmonicNotes);
+            }
+
             const analysisNotes = (harmonicNotesNoSuspAtThisBeat.length >= 2)
                 ? harmonicNotesNoSuspAtThisBeat
                 : harmonicNotes;
@@ -1682,10 +1863,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // (e.g. Bb/D -> iii5 and missing chord symbol).
             const analysisNotesForNaming = (() => {
                 try {
-                    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
                     const absBeat = Number(event.absBeat);
-                    const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                    const isStrong = isStrongPulseInMeasure(inMeasure);
+                    const inMeasure = getInMeasure(absBeat);
+                    const isStrong = isStrongAtAbsBeat(absBeat);
 
                     if (!isStrong) return analysisNotes;
 
@@ -1734,13 +1914,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // two genuinely different chords look identical by pitch-class set.
             const harmonicSig = signatureFromNotes(analysisNotes);
             const fullSig = signatureFromNotes(fullNotes || []);
-            if (!harmonicSig || baseHarmonicNotes.length < 2) {
-                return;
-            }
+            if (!harmonicSig || baseHarmonicNotes.length < 2) return;
 
             const applicableContext = ctxAtAbsBeat(event.absBeat);
             const contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
             const contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
+
 
             // ── Permanent diagnostic tracer ──────────────────────────────────
             // Activate from browser console:  localStorage.setItem('_HT_DEBUG_BEAT', '43')
@@ -1750,7 +1929,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const _dbgRaw = localStorage.getItem('_HT_DEBUG_BEAT');
             const _dbgBeat = _dbgRaw !== null ? Number(_dbgRaw) : NaN;
             const _dbg = !isNaN(_dbgBeat) && _dbgBeat >= 0 && Math.abs(event.absBeat - _dbgBeat) < 0.5;
-            if (_dbgBeat === -1) console.log(`[HT-BEATS] ab=${event.absBeat} bassPc=${bassPc} midis=[${event.notes?.map((n: any) => n.midi).join(',') ?? ''}]`);
+
             const _tr: Array<{ step: string; roman: string; detail?: any }> = [];
             const _dt = (step: string, romanVal: string, detail?: any) => {
                 if (_dbg) _tr.push({ step, roman: romanVal, ...(detail ? { detail } : {}) });
@@ -1840,6 +2019,30 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             })();
 
+            // ── Arpeggio suppression (generalised) ──────────────────────
+            // When the previous Roman is known, ALL current PCs belong to
+            // that chord's triad (plus 7th for dominants), and the bass
+            // hasn't changed, suppress as continuation of the same harmony.
+            const shouldSuppressAsArpeggio = (() => {
+                try {
+                    if (!prevSig || prevCtx !== ctxKey) return false;
+                    if (prevBassPc == null || bassPc == null) return false;
+                    if (prevBassPc !== bassPc) return false;
+                    const curPcs = new Set(harmonicSig.split('-').filter(Boolean).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n)));
+                    if (curPcs.size < 1) return false;
+                    const prevRoman2 = lastRomanBySystem.get(systemIndex) || '';
+                    if (!prevRoman2) return false;
+                    const prevTriad2 = inferDiatonicTriadFromRoman(prevRoman2, contextTonic, contextIsMinor);
+                    if (!prevTriad2) return false;
+                    const triadSet2 = new Set<number>([prevTriad2.root, prevTriad2.third, prevTriad2.fifth]);
+                    const seventh = ((prevTriad2.root + 10) % 12 + 12) % 12;
+                    if (/^(V|vii|VII)/i.test(prevRoman2)) triadSet2.add(seventh);
+                    return Array.from(curPcs).every(p => triadSet2.has(p));
+                } catch {
+                    return false;
+                }
+            })();
+
             const hasSuspensionOnsetHere = (() => {
                 try {
                     return (analyzedNotes as any[] || []).some((n: any) =>
@@ -1870,10 +2073,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // don't emit a new harmony label/figures just because upper voices arpeggiate/passage.
             // Keep the previous label alive via a hidden marker so the hold-line renderer can show continuity.
             try {
-                if (!hasSuspensionOnsetHere && isCompoundMeter) {
+                const isCompoundHere = (() => {
+                    const te = tsEffectiveAt(Number(event.absBeat));
+                    return te.denominator === 8 && (te.numerator % 3 === 0) && te.numerator > 3;
+                })();
+                if (!hasSuspensionOnsetHere && (isCompoundMeter || isCompoundHere)) {
                     const absBeat = Number(event.absBeat);
-                    const inMeasure = absBeat - Math.floor(absBeat / beatsPerMeasure) * beatsPerMeasure;
-                    const strongPulse = isStrongPulseInMeasure(inMeasure);
+                    const inMeasure = getInMeasure(absBeat);
+                    const strongPulse = isStrongAtAbsBeat(absBeat);
 
                     if (!strongPulse && prevCtx === ctxKey && prevBassPc != null && bassPc != null && prevBassPc === bassPc) {
                         const prevRoman2 = lastRomanBySystem.get(systemIndex) || '';
@@ -1908,7 +2115,59 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const hasManualOrnOverride = (fullNotes || []).some((n: any) =>
                 n && !n.isRest && n.ornamentOverride && n.ornamentOverride !== 'structural');
 
-            if (!hasSuspensionOnsetHere && !hasManualOrnOverride && !hasHiddenChange && !overrideByAbsBeat.has(qAbs(event.absBeat)) && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion || isAppoggResolSuppressible)) {
+            // ── Voicing-change suppression ──────────────────────────────────
+            // When only the upper-voice layout changes (e.g. soprano jumps to a
+            // different octave of a chord tone) but the Roman numeral base, bass
+            // PC, and tonal context remain identical, suppress the redundant label.
+            // Applies only on weak beats to avoid hiding real harmonic changes.
+            const shouldSuppressAsVoicingChange = (() => {
+                try {
+                    if (!previewRoman || !prevCtx || prevCtx !== ctxKey) return false;
+                    const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+                    if (!prevRoman) return false;
+                    // Compare only the functional base (strip trailing figures/digits)
+                    const romanBase = (r: string) => r.replace(/[\d/]+$/, '');
+                    if (romanBase(previewRoman) !== romanBase(prevRoman)) return false;
+                    if (prevBassPc == null || bassPc == null || prevBassPc !== bassPc) return false;
+                    const absBeatN = Number(event.absBeat);
+                    if (!Number.isFinite(absBeatN)) return false;
+                    if (isStrongAtAbsBeat(absBeatN)) return false;
+                    return true;
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (shouldSuppressAsVoicingChange && !hasSuspensionOnsetHere && !hasManualOrnOverride && !overrideByAbsBeat.has(qAbs(event.absBeat))) {
+                const prevRoman2 = lastRomanBySystem.get(systemIndex) || '';
+                if (prevRoman2) {
+                    const x = getXForAbsBeat(event.absBeat, system);
+                    labelsBySystem[systemIndex].push({
+                        id: `hlabel-hidden-voicing-${systemIndex}-${event.absBeat}`,
+                        x,
+                        roman: prevRoman2,
+                        figures: lastFiguresBySystem.get(systemIndex) || [],
+                        symbol: '',
+                        absBeat: event.absBeat,
+                        hiddenMarker: true,
+                    });
+                }
+                return;
+            }
+
+            if (!hasSuspensionOnsetHere && !hasManualOrnOverride && (!hasHiddenChange || shouldSuppressAsArpeggio) && !overrideByAbsBeat.has(qAbs(event.absBeat)) && ((prevSig === harmonicSig && prevCtx === ctxKey) || shouldSuppressAsCompletion || shouldSuppressAsArpeggio || isAppoggResolSuppressible)) {
+
+                // Before suppressing, verify figured-bass figures haven't changed.
+                // Even when the PCS signature is identical (same chord), the voicing
+                // may have changed (e.g. root position → second inversion) producing
+                // different figures (e.g. "4" → "6/4"). In that case, emit the label.
+                try {
+                    const earlyFigures = computeFiguredBassFromNotes(analysisNotes as any, FIGURED_BASS_UI_OPTIONS).figures;
+                    const prevFigs = lastFiguresBySystem.get(systemIndex) || [];
+                    const _figKey = (f: string[]) => f.join('/');
+                    if (_figKey(earlyFigures || []) !== _figKey(prevFigs)) {
+                        // Figures changed → do NOT suppress, fall through to normal label emit
+                    } else {
 
                 const prevRoman = lastRomanBySystem.get(systemIndex) || '';
                 if (previewRoman && prevRoman && previewRoman !== prevRoman) {
@@ -1916,7 +2175,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 } else {
                 // Keep the label stable, but record that *something happened* here (ornament/appoggiatura)
                 // so the renderer can draw a short hold-line across hidden beats.
-                if (hasOrnamentOnsetAtThisBeat || shouldSuppressAsCompletion) {
+                if (hasOrnamentOnsetAtThisBeat || shouldSuppressAsCompletion || shouldSuppressAsArpeggio) {
                     const prevRoman = lastRomanBySystem.get(systemIndex) || '';
                     if (prevRoman) {
                         const x = getXForAbsBeat(event.absBeat, system);
@@ -1933,6 +2192,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
                 return;
                 }
+
+                    } // close figures-same block
+                } catch { /* fall through on error */ }
             }
             lastSigBySystem.set(systemIndex, harmonicSig);
             lastCtxBySystem.set(systemIndex, ctxKey);
@@ -1947,28 +2209,27 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             let roman = '';
             let symbol = '';
             let isAug6Roman = false;
+            let hasAug6Variants = false;
 
             const prevRoman = lastRomanBySystem.get(systemIndex) || '';
             const prevRootPc = lastChordRootPcBySystem.get(systemIndex);
             const prevType = lastChordTypeBySystem.get(systemIndex);
 
             try {
-                // ── Diagnostic: dump analysisNotesForNaming before getRomanAnalysis ──
-                if (_dbgEarly) {
-                    console.log('[HT-DBG] analysisNotesForNaming at ab=' + event.absBeat + ':',
-                        JSON.stringify((analysisNotesForNaming || []).map((n: any) => ({
-                            midi: n?.midi, pitch: n?.pitch, noteIndex: n?.noteIndex,
-                            acc: n?.accidental, explAcc: n?.explicitAccidental,
-                            susp: !!(n as any)?.isSuspension, voice: n?.voice
-                        }))));
-                }
+
                 const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
+
                 if (r) {
                     roman = r.roman;
                     _dt('R0:getRoman', roman);
-                    isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                    isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+' || roman === 'Sw+');
+                    if (isAug6Roman && r.figures?.length) {
+                        figures = r.figures;
+                    }
+                    if ((r as any).aug6Variants?.length) {
+                        hasAug6Variants = true;
+                    }
                 }
-
 
                 // Rescue: if naming-filter collapses a triad to a dyad, vii° can be a false positive.
                 // Prefer the analysis of the fuller verticality when it yields a plausible dominant/tonic label.
@@ -2002,7 +2263,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (pick?.roman) {
                             roman = String(pick.roman);
                             _dt('R1:viiRescue', roman, { pick: pick?.roman, rr0 });
-                            isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+');
+                            isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+' || roman === 'Sw+');
                         }
                     }
                 } catch {
@@ -2065,7 +2326,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             try {
                 const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
                 const pcs = pcSetFromNotes(analysisNotes as any);
-                if (!isSecondaryOrSlashRoman && bassPc != null && pcs.size <= 2) {
+                if (!isSecondaryOrSlashRoman && bassPc != null && pcs.size <= 2 && !roman) {
                     const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
                     if (inferred) {
                         roman = inferred.roman;
@@ -2170,6 +2431,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             } catch (_) {}
 
+            // Save pre-update roman for suspension dedup comparison (R10).
+            // lastRomanBySystem is about to be overwritten with the current roman,
+            // so we must capture the *previous* value before updating.
+            const _prevRomanBeforeUpdate = lastRomanBySystem.get(systemIndex) || '';
+
             if (roman) {
                 lastRomanBySystem.set(systemIndex, roman);
                 lastContextBySystem.set(systemIndex, { tonic: contextTonic, isMinor: contextIsMinor });
@@ -2264,7 +2530,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const onsetRoman = String(roman || '').trim();
                         const resRoman = String(resolvedRoman || '').trim();
                         const isDominantish = (r: string) => r === 'V' || r.startsWith('V/');
-                        const isPlainDiatonic = (r: string) => !!r && !r.includes('/') && !r.includes('It+') && !r.includes('Fr+') && !r.includes('Ger+');
+                        const isPlainDiatonic = (r: string) => !!r && !r.includes('/') && !r.includes('It+') && !r.includes('Fr+') && !r.includes('Ger+') && !r.includes('Sw+');
 
                         // Guard: don't override a plain diatonic roman with the resolution's
                         // dominant when the onset analysisNotes already form a full triad
@@ -2445,7 +2711,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const hasNonClassic = resolvingSuspensions.some((s: any) => !CLASSIC_TYPES.has(String(s.type)));
                     if (!isSuspensionOnsetHere && hasClassic && !hasNonClassic) {
                         // Only suppress if the harmony is unchanged (avoid hiding a real change).
-                        const prevRoman = lastRomanBySystem.get(systemIndex) || '';
+                        // Use the roman from BEFORE this beat's update to avoid self-comparison.
+                        const prevRoman = _prevRomanBeforeUpdate;
+
                         const isMinorMajor7 = (() => {
                             const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
                             return /m\(maj7\)|mmaj7|minmaj7/i.test(sym);
@@ -2587,6 +2855,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const c1 = allCands[1] as any;
                             const scoreDiff = (c0.score ?? 0) - (c1.score ?? 0);
                             if (scoreDiff < threshold && c1.root && c1.type) {
+                                // Guard: when the two candidates have different roots,
+                                // the spelling-first winner (c0) is structurally preferred.
+                                // Don't let a bigram override swap the fundamental root
+                                // (e.g. C#m=iii → E Maj 6=V just because ii→V is common).
+                                const rootPc0 = Number.isFinite(Number((c0.root as any)?.midi))
+                                    ? ((Number((c0.root as any).midi) % 12) + 12) % 12 : -1;
+                                const rootPc1 = Number.isFinite(Number((c1.root as any)?.midi))
+                                    ? ((Number((c1.root as any).midi) % 12) + 12) % 12 : -1;
+                                const sameRoot = rootPc0 < 0 || rootPc1 < 0 || rootPc0 === rootPc1;
+                                if (sameRoot) {
                                 const altRoman = calculateRomanFromChordInfo(
                                     { root: c1.root, type: c1.type, intervals: c1.intervals },
                                     contextTonic, contextIsMinor,
@@ -2600,6 +2878,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     }
                                 }
                             }
+                            } // end sameRoot guard
                         }
                     }
                 }
@@ -2650,6 +2929,40 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                 }
             } catch { /* ignore */ }
+
+            // ── Diagnostic dump (activated via localStorage._HT_DEBUG_BEAT) ──
+            if (_dbg && _tr.length) {
+                console.groupCollapsed(`[HT-DEBUG] beat ${event.absBeat} → roman="${roman}" figs=${JSON.stringify(figures)} ctx=${contextTonic}${contextIsMinor ? 'm' : ''}`);
+                console.table(_tr);
+                console.groupEnd();
+            }
+
+            // ── Final Picardy-third override (Terza Piccarda) ──
+            // Applied AFTER all overrides (auto, user, display) to ensure nothing
+            // can reintroduce V/iv or I=V/iv at the last chord in minor.
+            if (isMinorMode && eventIndex >= lastNonRestEventIndex) {
+                try {
+                    const _picTonicPc2 = noteNameToChromaticIndex(currentTonic);
+                    const _pNotes2 = (analysisNotes || fullNotes || []) as any[];
+                    const _pPcs2 = new Set<number>();
+                    let _pBass2 = Infinity;
+                    let _pBassPc2 = -1;
+                    for (const n of _pNotes2) {
+                        if (!n || n.isRest) continue;
+                        const mi = Number(n.midi);
+                        if (!Number.isFinite(mi)) continue;
+                        _pPcs2.add(((mi % 12) + 12) % 12);
+                        if (mi < _pBass2) { _pBass2 = mi; _pBassPc2 = ((mi % 12) + 12) % 12; }
+                    }
+                    if (_pBassPc2 === _picTonicPc2 && _pPcs2.size >= 3
+                        && _pPcs2.has(_picTonicPc2)
+                        && _pPcs2.has(((_picTonicPc2 + 4) % 12))
+                        && _pPcs2.has(((_picTonicPc2 + 7) % 12))) {
+                        roman = 'I';
+                        romanDisplay = undefined;
+                    }
+                } catch { /* ignore */ }
+            }
 
             if (!roman && !symbol && !(figures && figures.length)) return;
 
@@ -2707,21 +3020,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Anchor label to the current timeline event's beat (not just the note's attack)
             const x = getXForAbsBeat(event.absBeat, system);
 
-
-
-            // ── Diagnostic dump ──────────────────────────────────────────────
-            if (_dbg && _tr.length) {
-                console.groupCollapsed(
-                    `[HT-DEBUG] beat ${event.absBeat} → roman="${roman}" display="${romanDisplay ?? ''}" ctx=${contextTonic}${contextIsMinor ? 'm' : ''}`
-                );
-                console.table(_tr);
-                console.log({ contextTonic, contextIsMinor, bassPc, prevRoman, appCtx: applicableContext?.newTonic });
-                console.groupEnd();
-            }
             // ─────────────────────────────────────────────────────────────────
 
+
             labelsBySystem[systemIndex].push({
-                id: `hlabel-${systemIndex}-${event.absBeat}`,
+                id: `lbl-${event.absBeat}`,
                 x,
                 roman,
                 romanDisplay,
@@ -2730,6 +3033,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 absBeat: event.absBeat,
                 isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)),
                 pcsSig: signatureFromNotes((fullNotes || []) as any),
+                ...(hasAug6Variants ? { isChromatic: true } : {}),
             });
         });
 
@@ -2737,7 +3041,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
 
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, statisticalBiasThreshold, styleProfile, timeSignature, useStatisticalCorrection]);
+    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
@@ -3268,12 +3572,28 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 return true;
             };
 
+            // Helper: detect literal pitch repetition (not a transposing sequence).
+            // If the bass starts on the same absolute pitch in both blocks and
+            // the melodic deltas are the same, it's a repetition at the same pitch level.
+            const isLiteralRepetition = (a: NoteSig | null, b: NoteSig | null): boolean => {
+                if (!a || !b) return false;
+                const firstBassA = a.bassSeq?.find(v => v != null);
+                const firstBassB = b.bassSeq?.find(v => v != null);
+                if (firstBassA == null || firstBassB == null) return false;
+                // Same starting bass pitch + same deltas → same absolute pitches → repetition
+                return firstBassA === firstBassB;
+            };
+
             const maxM = Math.max(0, maxMeasureIndex);
             for (let m0 = 0; m0 <= maxM - 3; m0++) {
                 const oa = onsetSigForTwoMeasures(m0);
                 const ob = onsetSigForTwoMeasures(m0 + 2);
                 const a = sigForTwoMeasures(m0);
                 const b = sigForTwoMeasures(m0 + 2);
+
+                // Skip literal repetitions: identical pitches → not a transposing sequence
+                if (isLiteralRepetition(a, b)) continue;
+
                 const onsetOK = !!oa && !!ob && onsetMatch(oa, ob);
                 const sampleOK = !!a && !!b && noteMatch(a, b);
                 if (onsetOK || sampleOK) {

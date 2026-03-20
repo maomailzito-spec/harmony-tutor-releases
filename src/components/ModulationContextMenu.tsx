@@ -381,6 +381,7 @@ const ModulationContextMenu: React.FC<{
                         { label: 'Anticipazione  ⌥N', type: 'anticipation' },
                         { label: 'Nota di sfuggita  ⌥S', type: 'escape' },
                         { label: 'Ritardo  ⌥R', type: 'suspension' },
+                        { label: 'Ornamentale (fioritura)  ⌥O', type: 'ornamental' },
                     ] as const).map(item => (
                         <button key={item.type} onClick={() => onApplyOrnamentOverride(item.type)}
                             className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">

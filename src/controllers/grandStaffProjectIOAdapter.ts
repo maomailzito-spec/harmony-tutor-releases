@@ -468,6 +468,8 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 					// ignore
 				}
 				setCurrentProjectFilePath(result.filePath);
+				// Clear emergency draft — project is safely on disk.
+				try { localStorage.removeItem('harmony-tutor.draftBackup.v1'); } catch { /* ignore */ }
 			}
 		} catch {
 			// ignore

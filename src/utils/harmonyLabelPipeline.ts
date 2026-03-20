@@ -354,11 +354,41 @@ export function computeStructuralSnapshotForHarmonyLabelEvent(opts: {
         : (fullNotes || []).filter((n: any) => n && !n.isRest);
 
     const SUSP_EPS = 1e-3;
+    // When a suspension has onset at this beat, substitute it with
+    // the resolution note so chord identification sees the target harmony.
+    // We scan fullNotes (not fallbackHarmonicNotes) because the suspension-onset
+    // note was already deleted from lastStructural and may be absent from
+    // harmonicNotes/fallbackHarmonicNotes.
+    const suspResolutions: any[] = [];
+    const suspVoicesAtThisBeat = new Set<number>();
+    for (const n of fullNotes) {
+        if (!n || n.isRest) continue;
+        if ((n.voice ?? 1) !== 4) continue; // Only substitute bass suspensions
+        const s = (n as any)?.isSuspension;
+        if (!s || typeof s.fromAbsBeat !== 'number') continue;
+        if (Math.abs(s.fromAbsBeat - eventAbsBeat) >= SUSP_EPS) continue;
+        // This note is a suspension starting at this beat.
+        suspVoicesAtThisBeat.add((n.voice ?? 1) as number);
+        if (typeof s.resolvedMidi === 'number') {
+            suspResolutions.push({
+                ...n,
+                midi: s.resolvedMidi,
+                pitch: s.resolvedPitch ?? n.pitch,
+                octave: s.resolvedOctave ?? n.octave,
+                accidental: s.resolvedAccidental != null ? s.resolvedAccidental : (n.accidental ?? ''),
+                isSuspension: undefined,
+                _isSuspensionResolutionSubstitute: true,
+            });
+        }
+    }
+    // Remove any leftover suspension-onset notes from fallbackHarmonicNotes
+    // (they might be there via the held-suspension path) and add resolutions.
     const harmonicNotesNoSuspAtThisBeat = fallbackHarmonicNotes.filter((n: any) => {
         const s = n?.isSuspension;
         if (!s || typeof s.fromAbsBeat !== 'number') return true;
         return Math.abs(s.fromAbsBeat - eventAbsBeat) >= SUSP_EPS;
     });
+    if (suspResolutions.length) harmonicNotesNoSuspAtThisBeat.push(...suspResolutions);
     const analysisNotes = (harmonicNotesNoSuspAtThisBeat.length >= 2)
         ? harmonicNotesNoSuspAtThisBeat
         : harmonicNotes;

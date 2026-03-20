@@ -229,6 +229,8 @@ function main() {
     startX: 0,
     measurePaddingX: 10,
     harmonyLabelMinSpanBeats: 0,
+    useStatisticalCorrection: false,
+    minorScaleMode: 'natural',
   });
 
   const bpm = beatsPerMeasure(ts) || 4;

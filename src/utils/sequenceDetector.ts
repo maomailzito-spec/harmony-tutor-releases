@@ -576,6 +576,13 @@ export function detectVoiceLeadingSequences(
                 }
             }
 
+            // Skip exact repetitions (transposition = 0): these are literal repeats,
+            // not sequential patterns. A true sequence transposes the model.
+            if (transpositionSemitones === 0) {
+                i += validLength;
+                continue;
+            }
+
             matches.push(matchObj);
 
             if (DEBUG_SEQUENCE) {

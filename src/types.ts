@@ -190,7 +190,7 @@ export type StaffNote = {
 };
 
 /** Manual ornament classification for a note. */
-export type OrnamentType = 'passing' | 'neighbor' | 'appoggiatura' | 'anticipation' | 'escape' | 'suspension' | 'structural';
+export type OrnamentType = 'passing' | 'neighbor' | 'appoggiatura' | 'anticipation' | 'escape' | 'suspension' | 'structural' | 'ornamental';
 
 /** User override that forces a specific ornament classification on a note. */
 export interface OrnamentOverride {

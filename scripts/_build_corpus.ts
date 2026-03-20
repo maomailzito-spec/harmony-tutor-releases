@@ -90,7 +90,7 @@ function main() {
   const outPath = path.resolve(__dirname, '..', 'src', 'data', 'progressionStats.json');
 
   const allFiles = fs.readdirSync(testsDir)
-    .filter(f => f.endsWith('.json') || f.endsWith('.htp'))
+    .filter(f => (f.endsWith('.json') || f.endsWith('.htp')))
     .sort();
 
   console.log(`Found ${allFiles.length} files in tests/\n`);

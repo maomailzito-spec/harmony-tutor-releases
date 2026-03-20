@@ -686,8 +686,14 @@ export function spelledInterval(noteA: StaffNote, noteB: StaffNote): SpelledInte
 
 const alterationToGlyph = (alt: number): string => {
     if (!Number.isFinite(alt) || alt === 0) return '';
-    if (alt > 0) return '♯'.repeat(Math.min(4, Math.round(alt)));
-    return '♭'.repeat(Math.min(4, Math.round(-alt)));
+    if (alt > 0) {
+        const n = Math.min(4, Math.round(alt));
+        if (n === 2) return '×';        // double-sharp: multiplication sign (U+00D7)
+        return '♯'.repeat(n);
+    }
+    const n = Math.min(4, Math.round(-alt));
+    if (n === 2) return '♭♭';          // double-flat: two flat signs
+    return '♭'.repeat(n);
 };
 
 const midiFromSpelling = (n: any): number | null => {
@@ -906,7 +912,9 @@ export function computeFiguredBassFromIntervals(intervals: BassInterval[], optio
         } else if (has(3) && has(5) && has(6)) {
             baseNums = [6, 5];
         } else if (has(7)) {
-            baseNums = [7];
+            // Root-position seventh: show 5/7 when the UI convention shows triads as '5',
+            // so the student can see the seventh is added to the triad.
+            baseNums = (showRootPositionTriadAs5 && has(5)) ? [5, 7] : [7];
         } else if (has(6) && has(4)) {
             baseNums = [6, 4];
         } else if (has(6)) {
@@ -1476,79 +1484,107 @@ export function getRomanAnalysisDebugSnapshot(
     }
 }
 
-// Important: order matters. Fr+/Ger+ are supersets of It+; we must test them first
-// or they'll be swallowed by the more general It+ matcher.
-// If both Ger+ and Fr+ pitch-classes are present (common with added tones), prefer Ger+.
-const CHROMATIC_CHORD_DEFINITIONS: { [key: string]: { symbol: string, matcher: (chord: StaffNote[], keyInfo: { tonicIndex: number, isMinor: boolean }) => boolean } } = {
-    GERMAN_AUGMENTED_SIXTH: {
-        symbol: 'Ger+',
-        matcher: (chord, keyInfo) => {
-            // Ger+ contains ♭6–1–♭3–♯4 (e.g. in C: Ab–C–Eb–F#).
-            // Also match applied aug6 chords resolving to any diatonic degree.
-            const pcs = new Set(chord.map(pitchClassOf));
-            if (pcs.size < 4) return false;
+// ── Augmented-sixth chord detection ──
+// Interval-based, spelling-first approach.
+// Each pattern is defined as a set of {diatonicNumber, semitones} intervals
+// measured FROM THE BASS note. The characteristic augmented 6th interval
+// (diatonic 6, semitones 10) is what distinguishes these from enharmonic
+// dominants (which would have diatonic 7, semitones 10).
+// Order matters: Sw+/Ger+/Fr+ (4-note) must be tested before It+ (3-note).
+const AUG6_INTERVAL_PATTERNS: { symbol: string; required: { d: number; s: number }[]; minNotes: number }[] = [
+    // ── Standard Aug6 ──
+    // Sw+ (Swiss): ♭6–1–#2–#4 → 3M(4st), 4++(7st), 6A(10st)
+    { symbol: 'Sw+', required: [{ d: 3, s: 4 }, { d: 4, s: 7 }, { d: 6, s: 10 }], minNotes: 4 },
+    // Ger+ (German): ♭6–1–♭3–#4 → 3M(4st), 5P(7st), 6A(10st)
+    { symbol: 'Ger+', required: [{ d: 3, s: 4 }, { d: 5, s: 7 }, { d: 6, s: 10 }], minNotes: 4 },
+    // Fr+ (French): ♭6–1–2–#4 → 3M(4st), 4A(6st), 6A(10st)
+    { symbol: 'Fr+', required: [{ d: 3, s: 4 }, { d: 4, s: 6 }, { d: 6, s: 10 }], minNotes: 4 },
 
-            const majorInts = [0, 2, 4, 5, 7, 9, 11];
-            const minorInts = [0, 2, 3, 5, 7, 8, 10, 11]; // natural + harmonic
-            const intervals = keyInfo.isMinor ? minorInts : majorInts;
-            for (const iv of intervals) {
-                const target = (keyInfo.tonicIndex + iv) % 12;
-                const b6 = (target + 1) % 12;
-                const one = (target + 5) % 12;
-                const flat3 = (target + 8) % 12;
-                const sharp4 = (target + 11) % 12;
-                if (pcs.has(b6) && pcs.has(one) && pcs.has(flat3) && pcs.has(sharp4)) return true;
+    // ── Variants with 8x (ottava più che eccedente, no 3rd) ──
+    // Ger+8x: ♭6–♭3–#4–#8 → 1A(2st), 5P(7st), 6A(10st)
+    { symbol: 'Ger+', required: [{ d: 1, s: 2 }, { d: 5, s: 7 }, { d: 6, s: 10 }], minNotes: 4 },
+    // Fr+8x: ♭6–2–#4–#8 → 1A(2st), 4A(6st), 6A(10st)
+    { symbol: 'Fr+', required: [{ d: 1, s: 2 }, { d: 4, s: 6 }, { d: 6, s: 10 }], minNotes: 4 },
+
+    // ── Variants with 3+ (terza eccedente, replaces 3M) ──
+    // Ger+3+: ♭6–F#–♭3–#4 → 3+(5st), 5P(7st), 6A(10st)
+    { symbol: 'Ger+', required: [{ d: 3, s: 5 }, { d: 5, s: 7 }, { d: 6, s: 10 }], minNotes: 4 },
+    // Fr+3+: ♭6–F#–2–#4 → 3+(5st), 4A(6st), 6A(10st)
+    { symbol: 'Fr+', required: [{ d: 3, s: 5 }, { d: 4, s: 6 }, { d: 6, s: 10 }], minNotes: 4 },
+
+    // ── Variants with 5x (quinta più che eccedente, replaces 5P) ──
+    // Ger+5x: ♭6–1–A#–#4 → 3M(4st), 5x(9st), 6A(10st)
+    { symbol: 'Ger+', required: [{ d: 3, s: 4 }, { d: 5, s: 9 }, { d: 6, s: 10 }], minNotes: 4 },
+
+    // ── Variants with 3+ + 8x (no 5P) ──
+    // Ger+3+8x: ♭6–F#–#4–#8 → 1A(2st), 3+(5st), 6A(10st)
+    { symbol: 'Ger+', required: [{ d: 1, s: 2 }, { d: 3, s: 5 }, { d: 6, s: 10 }], minNotes: 4 },
+
+    // ── Variants with 5x + 8x (no 3M) ──
+    // Ger+5x8x: ♭6–A#–#4–#8 → 1A(2st), 5x(9st), 6A(10st)
+    { symbol: 'Ger+', required: [{ d: 1, s: 2 }, { d: 5, s: 9 }, { d: 6, s: 10 }], minNotes: 4 },
+
+    // ── Variants with 3+ + 5x ──
+    // Ger+3+5x: ♭6–F#–A#–#4 → 3+(5st), 5x(9st), 6A(10st)
+    { symbol: 'Ger+', required: [{ d: 3, s: 5 }, { d: 5, s: 9 }, { d: 6, s: 10 }], minNotes: 4 },
+
+    // ── It+ (Italian, last — fewest required) ──
+    // It+: ♭6–1–#4 → 3M(4st), 6A(10st)
+    { symbol: 'It+', required: [{ d: 3, s: 4 }, { d: 6, s: 10 }], minNotes: 3 },
+    // It+ with 3+: ♭6–F#–#4 → 3+(5st), 6A(10st)
+    { symbol: 'It+', required: [{ d: 3, s: 5 }, { d: 6, s: 10 }], minNotes: 3 },
+];
+
+const CHROMATIC_CHORD_DEFINITIONS: { [key: string]: { symbol: string, matcher: (chord: StaffNote[], keyInfo: { tonicIndex: number, isMinor: boolean }) => boolean } } = {};
+
+// Group patterns by symbol so multiple patterns map to one entry.
+const _aug6BySymbol = new Map<string, typeof AUG6_INTERVAL_PATTERNS>();
+for (const p of AUG6_INTERVAL_PATTERNS) {
+    if (!_aug6BySymbol.has(p.symbol)) _aug6BySymbol.set(p.symbol, []);
+    _aug6BySymbol.get(p.symbol)!.push(p);
+}
+// Preserve order: use the position of the first pattern for each symbol.
+const _aug6Symbols: string[] = [];
+for (const p of AUG6_INTERVAL_PATTERNS) {
+    if (!_aug6Symbols.includes(p.symbol)) _aug6Symbols.push(p.symbol);
+}
+
+for (const sym of _aug6Symbols) {
+    const patterns = _aug6BySymbol.get(sym)!;
+    CHROMATIC_CHORD_DEFINITIONS[sym] = {
+        symbol: sym,
+        matcher: (chord, keyInfo) => {
+            const validNotes = chord.filter(n => n && !(n as any).isRest);
+
+            // Require at least one chromatic note (not in the home scale).
+            const homeScale = new Set(
+                (keyInfo.isMinor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11])
+                    .map(iv => (keyInfo.tonicIndex + iv) % 12));
+            const pcs = validNotes.map(pitchClassOf);
+            if (!pcs.some(pc => !homeScale.has(pc))) return false;
+
+            // Try each note as potential root (fondamentale).
+            // In root position the root is the bass, but in inversions any
+            // note could be the root; the defining intervals are the same.
+            for (const root of validNotes) {
+                const intervals: { d: number; s: number }[] = [];
+                for (const n of validNotes) {
+                    if (n === root) continue;
+                    const iv = spelledSimpleIntervalFromRoot(root as any, n as any);
+                    if (iv) intervals.push({ d: iv.diatonicNumber, s: iv.semitones });
+                }
+
+                const matched = patterns.some(pattern => {
+                    if (validNotes.length < pattern.minNotes) return false;
+                    return pattern.required.every(req =>
+                        intervals.some(iv => iv.d === req.d && iv.s === req.s));
+                });
+                if (matched) return true;
             }
             return false;
-        }
-    },
-    FRENCH_AUGMENTED_SIXTH: {
-        symbol: 'Fr+',
-        matcher: (chord, keyInfo) => {
-            // Fr+ contains ♭6–1–2–♯4.
-            // Also match applied aug6 chords resolving to any diatonic degree.
-            const pcs = new Set(chord.map(pitchClassOf));
-            if (pcs.size < 4) return false;
-
-            const majorInts = [0, 2, 4, 5, 7, 9, 11];
-            const minorInts = [0, 2, 3, 5, 7, 8, 10, 11];
-            const intervals = keyInfo.isMinor ? minorInts : majorInts;
-            for (const iv of intervals) {
-                const target = (keyInfo.tonicIndex + iv) % 12;
-                const b6 = (target + 1) % 12;
-                const one = (target + 5) % 12;
-                const two = (target + 7) % 12;
-                const sharp4 = (target + 11) % 12;
-                // If ♭3 (relative to this target) is present, prefer Ger+.
-                const flat3 = (target + 8) % 12;
-                if (pcs.has(flat3)) continue;
-                if (pcs.has(b6) && pcs.has(one) && pcs.has(two) && pcs.has(sharp4)) return true;
-            }
-            return false;
-        }
-    },
-    ITALIAN_AUGMENTED_SIXTH: {
-        symbol: 'It+',
-        matcher: (chord, keyInfo) => {
-            // It+ contains ♭6–1–♯4.
-            // Also match applied aug6 chords resolving to any diatonic degree.
-            const pcs = new Set(chord.map(pitchClassOf));
-            if (pcs.size < 3) return false;
-
-            const majorInts = [0, 2, 4, 5, 7, 9, 11];
-            const minorInts = [0, 2, 3, 5, 7, 8, 10, 11];
-            const intervals = keyInfo.isMinor ? minorInts : majorInts;
-            for (const iv of intervals) {
-                const target = (keyInfo.tonicIndex + iv) % 12;
-                const b6 = (target + 1) % 12;     // semitone above target (bass)
-                const one = (target + 5) % 12;    // P4 above target
-                const sharp4 = (target + 11) % 12; // semitone below target
-                if (pcs.has(b6) && pcs.has(one) && pcs.has(sharp4)) return true;
-            }
-            return false;
-        }
-    },
-};
+        },
+    };
+}
 Object.freeze(CHROMATIC_CHORD_DEFINITIONS);
 
 const getDirection = (notePrev: StaffNote, noteCurr: StaffNote): 'ASCENDING' | 'DESCENDING' | 'STATIONARY' => {
@@ -2324,17 +2360,17 @@ function calculateRomanNumeral(
     if (isNeapolitanRoot && quality === BuiltInChords.Major) return 'N';
 
     const isFlatTwoRoot = chordRootIndex === (keyTonicIndex + 1) % 12;
-    if (isFlatTwoRoot && quality === BuiltInChords.Major7) return '♭IImaj7';
+    if (isFlatTwoRoot && quality === BuiltInChords.Major7) return '♭II';
 
     const isFourthDegreeRoot = chordRootIndex === (keyTonicIndex + 5) % 12;
-    if (!isMinorMode && isFourthDegreeRoot && quality === BuiltInChords.Minor7) return 'iv7';
+    if (!isMinorMode && isFourthDegreeRoot && quality === BuiltInChords.Minor7) return 'iv';
     if (!isMinorMode && isFourthDegreeRoot && (quality === BuiltInChords.Minor || String(quality || '').startsWith('m'))) return 'iv';
 
     const isFifthDegreeRoot = chordRootIndex === (keyTonicIndex + 7) % 12;
     if (!isMinorMode && isFifthDegreeRoot && (quality === BuiltInChords.Minor || String(quality || '').startsWith('m'))) return 'v';
 
     const isFlatSixthRoot = chordRootIndex === (keyTonicIndex + 8) % 12;
-    if (!isMinorMode && isFlatSixthRoot && quality === BuiltInChords.Major7) return '♭VImaj7';
+    if (!isMinorMode && isFlatSixthRoot && quality === BuiltInChords.Major7) return '♭VI';
 
     const romanNumeralsMajor = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
     // In minor, the III degree is not *always* augmented; it depends on the actual chord spelling.
@@ -2484,6 +2520,40 @@ function calculateRomanNumeral(
         }
     }
 
+    // Secondary dominants targeting borrowed (chromatic) degrees: ♭II, ♭III, ♭VI, ♭VII.
+    // These are common in major keys (e.g. V7/♭VI, V7/♭VII) but the diatonic
+    // loop above misses them because the target root is not in the diatonic scale.
+    if (!isMinorMode) {
+        const isDominantType = typeof quality === 'string' && quality.startsWith('Dominant');
+        const hasMajorThird = !!(chordInfo as any)?.intervals?.has?.(4);
+        const hasDominantShell = (() => {
+            try {
+                const ints = (chordInfo as any)?.intervals;
+                return !!(ints?.has?.(7) && ints?.has?.(10));
+            } catch { return false; }
+        })();
+        const isMajorTriad = quality === BuiltInChords.Major;
+        if ((isDominantType && (hasMajorThird || hasDominantShell)) || (isMajorTriad && hasMajorThird)) {
+            const borrowedTargets: Array<{ semitones: number; roman: string }> = [
+                { semitones: 1, roman: '♭II' },
+                { semitones: 3, roman: '♭III' },
+                { semitones: 8, roman: '♭VI' },
+                { semitones: 10, roman: '♭VII' },
+            ];
+            for (const bt of borrowedTargets) {
+                const targetRootIndex = mod12(keyTonicIndex + bt.semitones);
+                if (mod12(chordRootIndex - targetRootIndex) !== 7) continue;
+                // For triads, require a chromatic leading tone of the target.
+                if (isMajorTriad && !isDominantType) {
+                    const diatonicPcSet = new Set<number>(scaleIntervalsMajor.map(iv => mod12(keyTonicIndex + iv)));
+                    const targetLt = mod12(targetRootIndex - 1);
+                    if (!diatonicPcSet.has(targetLt) === false) continue;
+                }
+                return `V/${bt.roman}`;
+            }
+        }
+    }
+
     const degreeIndex = scaleIntervals.indexOf((chordRootIndex - keyTonicIndex + 12) % 12);
     if (degreeIndex === -1) {
         const allRoman = ['I', '♭II', 'II', '♭III', 'III', 'IV', '♯IV', 'V', '♭VI', 'VI', '♭VII', 'VII'];
@@ -2496,7 +2566,7 @@ function calculateRomanNumeral(
     }
 
     if (isMinorMode && degreeIndex === 0 && quality === BuiltInChords.MinorMajor7) {
-        return 'I7';
+        return 'I';
     }
 
     let roman = romanNumerals[degreeIndex];
@@ -2527,7 +2597,10 @@ function calculateRomanNumeral(
         }
     } catch { /* ignore */ }
 
-    if (effectiveQuality === BuiltInChords.Major && roman.toLowerCase() === roman) roman = roman.toUpperCase();
+    // Dominant-family types (Dominant 7, Dominant 9, etc.) always have a major 3rd → uppercase roman.
+    const isDominantFamily = typeof quality === 'string' && /^Dominant/i.test(quality);
+
+    if ((effectiveQuality === BuiltInChords.Major || isDominantFamily) && roman.toLowerCase() === roman) roman = roman.toUpperCase();
     else if ((quality === BuiltInChords.Minor || quality === BuiltInChords.MinorMajor7) && roman.toUpperCase() === roman) roman = roman.toLowerCase();
     else if ((quality === BuiltInChords.Diminished || /[b♭]5/i.test(String(quality || '')) || /°|dim/i.test(String(quality || ''))) && !roman.includes('°')) roman += '°';
     else if (quality === BuiltInChords.Augmented && !roman.includes('+')) roman += '+';
@@ -2540,7 +2613,7 @@ export function getRomanAnalysis(
     keySignatureRoot: string,
     isMinorMode: boolean,
     opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string> }
-): { roman: string; figures: string[] } | null {
+): { roman: string; figures: string[]; aug6Variants?: string[] } | null {
     if (!chord || chord.length < 2) return null;
 
     // ── Filter out manually overridden ornamental notes ──
@@ -2755,41 +2828,31 @@ export function getRomanAnalysis(
     })();
 
     // For Roman numerals, prefer the underlying harmony: drop dissonant suspension tones.
+    // Resolution substitution happens upstream in the labeling pipeline
+    // (harmonyLabelPipeline.ts) where the structural snapshot is built.
     // (But do not affect the figured-bass output above.)
     let filteredChord = filteredChordForFigures;
     try {
+        const suspFilter = (n: any) => {
+            if (!(n as any)?.isSuspension) return true;
+            if (triadPcSetForSuspensionGuard) return true;
+            if (!isDissonantVsBass(n)) return true;
+            if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
+            return false;
+        };
         if (has64) {
             const bass = pickPreferredBassNote(filteredChordForFigures as any);
             if (bass) {
                 const bassPc = mod12(pitchClassOf(bass));
                 const dominantBassPc = mod12(keyTonicIndex + 7);
                 if (bassPc !== dominantBassPc) {
-                    // Not a cadential 6/4: keep the suspension-removal behavior.
-                    filteredChord = filteredChordForFigures.filter((n: any) => {
-                        if (!(n as any)?.isSuspension) return true;
-                        if (triadPcSetForSuspensionGuard) return true;
-                        if (!isDissonantVsBass(n)) return true;
-                        if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
-                        return false;
-                    });
+                    filteredChord = filteredChordForFigures.filter(suspFilter);
                 }
             } else {
-                filteredChord = filteredChordForFigures.filter((n: any) => {
-                    if (!(n as any)?.isSuspension) return true;
-                    if (triadPcSetForSuspensionGuard) return true;
-                    if (!isDissonantVsBass(n)) return true;
-                    if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
-                    return false;
-                });
+                filteredChord = filteredChordForFigures.filter(suspFilter);
             }
         } else {
-            filteredChord = filteredChordForFigures.filter((n: any) => {
-                if (!(n as any)?.isSuspension) return true;
-                if (triadPcSetForSuspensionGuard) return true;
-                if (!isDissonantVsBass(n)) return true;
-                if (isChordToneOfConfidentCandidate(n, filteredChordForFigures as any)) return true;
-                return false;
-            });
+            filteredChord = filteredChordForFigures.filter(suspFilter);
         }
     } catch {
         filteredChord = filteredChordForFigures.filter((n: any) => {
@@ -2915,7 +2978,7 @@ export function getRomanAnalysis(
             ]);
             const hasAll = [...halfDimSet].every(pc => pcs.includes(pc));
             if (hasAll) {
-                // Convention: label as vii°; figures already encode it's a 7th chord.
+                // Convention: label as vii°; figures carry the 7th information.
                 return { roman: 'vii°', figures: figuresL2 };
             }
         }
@@ -2990,7 +3053,83 @@ export function getRomanAnalysis(
     } catch { /* ignore */ }
 
     for (const definition of Object.values(CHROMATIC_CHORD_DEFINITIONS)) {
-        if (definition.matcher(filteredChord, keyInfo)) return { roman: definition.symbol, figures: figuresL2 };
+        if (definition.matcher(filteredChord, keyInfo)) {
+            // ── Aug6 chromatic variant detection (Delamont bII+6 variants) ──
+            // Post-processing: detect augmented/doubly-augmented intervals from
+            // the ROOT (fondamentale = bII), NOT the bass note. This ensures
+            // correct detection in ALL inversions.
+            // Notation: + = eccedente (+1st), x = più che eccedente (+2st)
+            let enrichedFigures = [...figuresL2];
+            const aug6Variants: string[] = [];
+            try {
+                const validNotes = filteredChord.filter(n => n && !(n as any).isRest);
+
+                // Find the Aug6 root: the note that has an augmented 6th (d:6, s:10)
+                // interval with another note. That note is the fondamentale (bII).
+                let root: any = null;
+                for (const candidate of validNotes) {
+                    for (const other of validNotes) {
+                        if (candidate === other) continue;
+                        const iv = spelledSimpleIntervalFromRoot(candidate as any, other as any);
+                        if (iv && iv.diatonicNumber === 6 && iv.semitones === 10) {
+                            root = candidate;
+                            break;
+                        }
+                    }
+                    if (root) break;
+                }
+                // Fallback to bass if no aug6 interval found (shouldn't happen)
+                if (!root) {
+                    root = validNotes[0];
+                    for (const n of validNotes) {
+                        if ((n as any).midi < (root as any).midi) root = n;
+                    }
+                }
+
+                // Compute intervals FROM ROOT using both mod-12 and spelled approaches.
+                const pcFromRoot = new Set<number>();
+                let has8xSpelling = false;
+                for (const n of validNotes) {
+                    if (n === root) continue;
+                    const dist = ((n as any).midi - (root as any).midi + 1200) % 12;
+                    pcFromRoot.add(dist);
+                    // Check spelled interval for 8x: same letter name, doubly-augmented unison
+                    const iv = spelledSimpleIntervalFromRoot(root as any, n as any);
+                    if (iv && iv.diatonicNumber === 1 && iv.semitones >= 2) has8xSpelling = true;
+                }
+
+                const hasPc = (st: number) => pcFromRoot.has(st);
+
+                // 8x — ottava più che eccedente (spelled: same letter, +2st from root)
+                if (has8xSpelling) {
+                    aug6Variants.push('8x');
+                    enrichedFigures = enrichedFigures.filter(f => !/[×𝄪]8|♯♯8/.test(f));
+                    enrichedFigures.push('8x');
+                }
+
+                // 5x — quinta più che eccedente (9st from root) — non-conflict: no 5P (7st)
+                if (hasPc(9) && !hasPc(7)) {
+                    aug6Variants.push('5x');
+                    const idx5 = enrichedFigures.findIndex(f => /^[♯♭×]*5$/.test(f));
+                    if (idx5 >= 0) enrichedFigures[idx5] = '5x';
+                    else enrichedFigures.push('5x');
+                }
+
+                // 3+ — terza eccedente (5st from root) — non-conflict: no 3M (4st)
+                if (hasPc(5) && !hasPc(4)) {
+                    aug6Variants.push('3+');
+                    const idx3 = enrichedFigures.findIndex(f => /^[♯♭×]*3$/.test(f));
+                    if (idx3 >= 0) enrichedFigures[idx3] = '3+';
+                    else enrichedFigures.push('3+');
+                }
+            } catch { /* ignore */ }
+
+            return {
+                roman: definition.symbol,
+                figures: enrichedFigures,
+                ...(aug6Variants.length > 0 ? { aug6Variants } : {}),
+            };
+        }
     }
 
     // Secondary leading-tone diminished 7th (and rootless V7♭9) heuristic:
@@ -5123,7 +5262,31 @@ export function applyHarmonyRules(
                     const outSemis = semis(cur, next);
                     const stepOut = outSemis > 0 && outSemis <= 2;
 
-                    if ((unknownIn || leapIn || stepIn || prepared) && stepOut) {
+                    // Guard: stepwise passing 7th — when a note enters AND exits
+                    // by step (classic passing-tone profile) and it forms a 7th
+                    // (major or minor) above the bass, treat it as a passing
+                    // tone, not appoggiatura.  Lightweight check: use bass midi
+                    // directly instead of calling identifyChordCandidates
+                    // (which is too expensive inside the per-note ornament loop).
+                    let _passing7th = false;
+                    if (stepIn && stepOut) {
+                        const _otherNotes = (curEv?.notes || []).filter(
+                            (nn: any) => nn && !nn.isRest && nn.id !== cur.id && Number.isFinite(nn.midi));
+                        if (_otherNotes.length >= 2) {
+                            // Use lowest note as proxy for root
+                            const bass = _otherNotes.reduce((lo: any, nn: any) =>
+                                (nn.midi < lo.midi ? nn : lo), _otherNotes[0]);
+                            const _interval = ((((cur.midi ?? 0) - bass.midi) % 12) + 12) % 12;
+                            // 10 = minor 7th, 11 = major 7th
+                            if (_interval === 10 || _interval === 11) {
+                                _passing7th = true;
+                                (cur as any).isPassing = true;
+                                (cur as any).ornamentMark = 'P';
+                            }
+                        }
+                    }
+
+                    if (!_passing7th && (unknownIn || leapIn || stepIn || prepared) && stepOut) {
                         (cur as any).isAppoggiatura = true;
                         const oppositeDir = prev ? (sgn(prev, cur) !== 0 && sgn(prev, cur) === -sgn(cur, next)) : true;
 
@@ -5157,10 +5320,34 @@ export function applyHarmonyRules(
                 }
 
                 // Escape tone (cambiata): step into a dissonance, leap out in opposite direction.
-                if (prev && prevEv && !curCon && prevCon && nextCon && isWeakBeat(cur, curEv)) {
+                // Also catches "consonant 9ths/extensions" that melodically behave as escape tones:
+                // a short weak-beat note that is step-in + leap-out-opposite is an escape
+                // even if the chord identifier labels the full vertical as an add9/add11.
+                const curConForEscape = (() => {
+                    if (!curCon) return false; // already dissonant → standard path
+                    // curCon is true but the note might be an extension (9th/11th/13th)
+                    // treated as consonant by identifyChord. Check if it's a triad tone.
+                    try {
+                        const others = (otherNotesAtEvent(curEv, cur.id) || []).filter((n: any) =>
+                            n && !n.isRest && !(n as any).isPassing && !(n as any).isNeighbor &&
+                            !(n as any).isAppoggiatura && !(n as any).isAnticipation && !(n as any).isEscape);
+                        const chordInfo = identifyChord(others as any);
+                        if (chordInfo && chordInfo.root) {
+                            const rootPc = mod12((chordInfo.root as any).noteIndex ?? mod12((chordInfo.root as any).midi ?? 0));
+                            const intv = mod12(mod12(pitchClassOf(cur)) - rootPc);
+                            // Triad tones: unison(0), m3(3), M3(4), P5(7), m6/aug5(8)
+                            if (intv === 0 || intv === 3 || intv === 4 || intv === 7 || intv === 8) return true;
+                            // It's an extension (2/9, 4/11, 6/13) — NOT a core triad tone
+                            return false;
+                        }
+                    } catch { /* ignore */ }
+                    return true;
+                })();
+                if (prev && prevEv && (!curCon || !curConForEscape) && prevCon && nextCon && isWeakBeat(cur, curEv)) {
                     // Guardrail: if the note is actually a chord tone of a confident harmony candidate
                     // (even when excluding itself from chord-ID), do not classify it as an escape.
-                    if (isChordToneOfConfidentCandidateExcludingSelf(cur, curEv)) {
+                    const _ctGuard = isChordToneOfConfidentCandidateExcludingSelf(cur, curEv);
+                    if (_ctGuard) {
                         continue;
                     }
                     // A true escape tone is typically a short-value melodic ornament.
@@ -5172,6 +5359,7 @@ export function applyHarmonyRules(
                     const oppositeDir = sgn(prev, cur) !== 0 && sgn(prev, cur) === -sgn(cur, next);
                     if (stepIn && leapOut && oppositeDir) {
                         (cur as any).isEscape = true;
+                        (cur as any).ornamentMark = 's';
                         addOrnament(
                             'ORN-ESC',
                             'exception',
@@ -5186,7 +5374,7 @@ export function applyHarmonyRules(
                 }
 
                 // Escape-like on strong beat: flag as suspicious (often reads as accented dissonance).
-                if (prev && prevEv && !curCon && prevCon && nextCon && !isWeakBeat(cur, curEv)) {
+                if (prev && prevEv && (!curCon || !curConForEscape) && prevCon && nextCon && !isWeakBeat(cur, curEv)) {
                     // Guardrail: avoid false positives when the downbeat note is a real chord tone.
                     if (isChordToneOfConfidentCandidateExcludingSelf(cur, curEv)) {
                         continue;
@@ -5199,6 +5387,7 @@ export function applyHarmonyRules(
                     const oppositeDir = sgn(prev, cur) !== 0 && sgn(prev, cur) === -sgn(cur, next);
                     if (stepIn && leapOut && oppositeDir) {
                         (cur as any).isEscape = true;
+                        (cur as any).ornamentMark = 's';
                         const tick = Number((cur as any).startTick);
                         const inSeq = isTickInsideImitatedSequence(Number.isFinite(tick) ? tick : null);
                         const harmonyUnclear = !hasConfidentHarmonyCandidate(curEv);
@@ -5342,6 +5531,7 @@ export function applyHarmonyRules(
 
                 if (leapOut && oppositeDir) {
                     (cur as any).isEscape = true;
+                    (cur as any).ornamentMark = 's';
                     // No analysis-panel entry; this is a label-stability aid.
                     continue;
                 }
@@ -5357,6 +5547,7 @@ export function applyHarmonyRules(
     // -----------------------
     function detectSuspensions(notesByVoice: Record<Voice, StaffNote[]>, chordEvents: ChordEvent[], beatsPerMeasure: number) {
         debugLog('[ANALYSIS] detectSuspensions start');
+
 
         // Build note start/end map (absolute beats)
         const noteSpanMap = new Map<string, { start: number; end: number }>();
@@ -5508,7 +5699,7 @@ export function applyHarmonyRules(
                 })();
 
                 const prep = heldBefore || a.byVoice.get(v) || null;
-                if (!prep) continue; // no preparatory note found
+                if (!prep) continue;
 
                 // find the sounding note at the downbeat in this voice (S)
                 const sounders = analyzedNotes.filter(n => (n.voice ?? 1) === v).filter(n => {
@@ -5585,7 +5776,6 @@ export function applyHarmonyRules(
                     debugLog('[ANALYSIS] detectSuspensions skip-no-harmony-change-under-held-note', { voice: v, bAbs: b.absBeat, sId: S.id });
                     continue;
                 }
-
                 // Determine bass-at-B excluding S (if possible)
                 const notesAtB = (b.notes || []) as StaffNote[];
                 const otherAtB = notesAtB.filter(n => n.id !== S.id);
@@ -6224,7 +6414,60 @@ export function applyHarmonyRules(
                 // Do not coerce them into appoggiature here; fixtures and pedagogy expect
                 // them to be stored as suspensions and to participate in span logic.
 
-                const suspPayload = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum };
+                // ── Chord-tone guard ────────────────────────────────────
+                // If the "suspended" note is actually a chord tone of the triad
+                // formed by the OTHER voices at beat b, it is not a suspension
+                // but a structural member of the new harmony.  Skip it.
+                {
+                    const otherAtB = (b.notes || []).filter(
+                        (nn: any) => nn && !nn.isRest && nn.id !== prep.id && (S ? nn.id !== S.id : true) && Number.isFinite(nn.midi));
+                    if (otherAtB.length >= 2) {
+                        const otherPCs = otherAtB.map((nn: any) => ((nn.midi % 12) + 12) % 12);
+                        const prepPC = ((prep.midi ?? 0) % 12 + 12) % 12;
+                        // Check whether prep PC fits a standard triad or seventh chord built on
+                        // any of the other pitch-classes (Major, minor, dim, aug, dom7, m7, etc.).
+                        // Strategy: only use 7th-chord templates when prepPC is the ROOT
+                        // (a root that forms a 7th chord with the others is clearly structural).
+                        // For otherPCs as root, use triads only (to avoid blocking real suspensions
+                        // that happen to form a 7th with the new chord, e.g. 4-3 over C = CMaj7).
+                        const triadTemplates = [[0,4,7],[0,3,7],[0,3,6],[0,4,8]];
+                        const seventhTemplates = [
+                            [0,4,7,10],[0,3,7,10],[0,3,6,10],[0,3,6,9], // dom7, m7, m7b5, dim7
+                            [0,4,7,11],[0,3,7,11],                      // maj7, mMaj7
+                        ];
+                        let isChordMember = false;
+                        // (A) Try otherPCs as root — triads only
+                        for (const rootPC of otherPCs) {
+                            for (const tmpl of triadTemplates) {
+                                const members = tmpl.map(iv => (rootPC + iv) % 12);
+                                if (members.includes(prepPC) && otherPCs.every(pc => members.includes(pc))) {
+                                    isChordMember = true; break;
+                                }
+                            }
+                            if (isChordMember) break;
+                        }
+                        // (B) Try prepPC as root — triads + 7ths
+                        if (!isChordMember) {
+                            const allTemplates = [...triadTemplates, ...seventhTemplates];
+                            for (const tmpl of allTemplates) {
+                                const members = tmpl.map(iv => (prepPC + iv) % 12);
+                                if (otherPCs.every(pc => members.includes(pc))) {
+                                    isChordMember = true; break;
+                                }
+                            }
+                        }
+                        if (isChordMember) continue; // not a suspension — skip
+                    }
+                }
+
+                const suspPayload = {
+                    type: displayType || 'susp', fromAbsBeat: b.absBeat,
+                    resolvedById: resolved.id, fromNum, toNum,
+                    resolvedMidi: resolved.midi,
+                    resolvedPitch: (resolved as any).pitch,
+                    resolvedOctave: (resolved as any).octave,
+                    resolvedAccidental: (resolved as any).accidental ?? '',
+                };
                 (prep as any).isSuspension = suspPayload;
                 try {
                     if (S && S.id && prep.id && S.id !== prep.id) {
@@ -6525,7 +6768,7 @@ export function applyHarmonyRules(
             // are materialized, so it can use the best available context (manual + inferred).
 
             // Augmented sixth chords: It+/Fr+/Ger+ should resolve to V.
-            if (aRoman === 'It+' || aRoman === 'Fr+' || aRoman === 'Ger+') {
+            if (aRoman === 'It+' || aRoman === 'Fr+' || aRoman === 'Ger+' || aRoman === 'Sw+') {
                 const ok = bRoman.toLowerCase().startsWith('v');
                 if (!ok) {
                     addViolation({
@@ -6537,6 +6780,39 @@ export function applyHarmonyRules(
                     });
                     addResolutionConnection(a, b, 'R-AUG6-RES', 'warning');
                 }
+            }
+
+            // ── CHROM-AUG6-VAR: chromatic leading-tone variants of Aug6 ──
+            if (aRoman === 'It+' || aRoman === 'Fr+' || aRoman === 'Ger+' || aRoman === 'Sw+') {
+                try {
+                    const ctx = getContextAtAbsBeat(a.absBeat);
+                    const rFull = getRomanAnalysis(notesForRomanAt(a), ctx.tonic, ctx.isMinor);
+                    if (rFull?.aug6Variants?.length) {
+                        const varLabels: Record<string, string> = {
+                            '8x': 'ottava più che eccedente (8x)',
+                            '5x': 'quinta più che eccedente (5x)',
+                            '3+': 'terza eccedente (3+)',
+                        };
+                        const desc = rFull.aug6Variants.map(v => varLabels[v] || v).join(', ');
+                        const varDetailLines: string[] = [];
+                        if (rFull.aug6Variants.includes('8x')) varDetailLines.push('— 8x (ottava più che eccedente): risolve sulla 3a maggiore dell\'accordo di arrivo. Disponibile solo in tonalità maggiore.');
+                        if (rFull.aug6Variants.includes('5x')) varDetailLines.push('— 5x (quinta più che eccedente): risolve sulla 7a maggiore dell\'accordo di arrivo. Posizione preferita: soprano.');
+                        if (rFull.aug6Variants.includes('3+')) varDetailLines.push('— 3+ (terza eccedente): risolve sulla 5a dell\'accordo di arrivo.');
+                        addViolation({
+                            ruleId: 'CHROM-AUG6-VAR',
+                            severity: 'chromatic',
+                            description: `♭II ${aRoman} — Sesta aumentata con ${desc}\n`
+                                + `Rilevato accordo di sesta aumentata contenente note con intervallo eccedente o più che eccedente rispetto alla fondamentale. `
+                                + `Queste note non appartengono alla struttura tradizionale delle seste aumentate (Italiana, Francese, Tedesca) ma svolgono una funzione cromatica precisa: ciascuna agisce come sensibile individuale, tendendo a risolvere per semitono ascendente su una nota specifica dell'accordo di destinazione.\n\n`
+                                + `ℹ️ Funzione armonico-cromatica: L'accordo che ne risulta è un aggregato di attrazioni semitonali convergenti — ogni nota alterata "punta" per moto cromatico alla nota corrispondente dell'accordo successivo. Questo meccanismo amplia la forza risolutiva della sesta aumentata ben oltre la coppia tradizionale basso/sesta, trasformando l'intero accordo in un fascio di tensioni direzionali. L'effetto è una risoluzione particolarmente intensa e cromaticamente ricca, tipica dell'armonia tardo-romantica e dell'armonia moderna.\n\n`
+                                + `Alterazioni rilevate:\n`
+                                + varDetailLines.join('\n')
+                                + `\n\nQueste alterazioni possono comparire singolarmente o in combinazione. Con quattro voci a disposizione, l'inclusione di ciascuna alterazione richiede l'omissione di un'altra nota dell'accordo base.`,
+                            suggestion: '⚠️ Nota Tecnica: Il riconoscimento avviene come post-processing su un accordo già classificato come sesta aumentata. Il motore verifica la presenza di intervalli a 14 semitoni (8x), 9 semitoni (5x) o 5 semitoni (3+) dal basso, con controllo di non-conflitto. La label e le figure vengono renderizzate in colore viola per distinguere l\'accordo dagli accordi tradizionali. L\'accordo non genera warning né errori — è un riconoscimento informativo di armonia cromatica funzionale.',
+                            noteIds: (a.notes || []).slice(0, 4).map(n => n.id),
+                        });
+                    }
+                } catch { /* ignore */ }
             }
 
             // Cadential 6/4 heuristic: I(6/4) over V bass should resolve to V.
@@ -6711,6 +6987,47 @@ export function applyHarmonyRules(
                     b
                 );
                 continue;
+            }
+        }
+
+        // ── Picardy third (Terza Piccarda) ──
+        // If the piece is in minor mode and the very last chord event is a major
+        // triad on the tonic, mark it as CAD-PIC.  The Picardy third often
+        // co-occurs with a PAC/IAC/PLAG cadence, so this marker is additive.
+        if (isMinor && chordEvents.length >= 2) {
+            // Find the last chordEvent that actually has notes.
+            let lastEvIdx = chordEvents.length - 1;
+            while (lastEvIdx >= 1 && chordEvents[lastEvIdx].byVoice.size === 0) lastEvIdx--;
+            if (lastEvIdx >= 1) {
+                const lastEv = chordEvents[lastEvIdx];
+                const prevEv = chordEvents[lastEvIdx - 1];
+                try {
+                    const lastPcs = new Set<number>();
+                    let lastBassMidi = Infinity;
+                    let lastBassPc = -1;
+                    for (const [, n] of lastEv.byVoice) {
+                        if (!n) continue;
+                        const pc = mod12(n.midi);
+                        lastPcs.add(pc);
+                        if (n.midi < lastBassMidi) { lastBassMidi = n.midi; lastBassPc = pc; }
+                    }
+                    if (lastBassPc === tonicPc && lastPcs.size >= 3
+                        && lastPcs.has(tonicPc)
+                        && lastPcs.has(mod12(tonicPc + 4))
+                        && lastPcs.has(mod12(tonicPc + 7))) {
+                        markCadence(
+                            'CAD-PIC',
+                            'Terza Piccarda: conclusione su I maggiore in tonalità minore',
+                            'Cadenze\n'
+                            + '• Terza Piccarda: L\'ultimo accordo del brano in minore presenta la terza alzata, '
+                            + 'trasformando il i minore in I maggiore. Pratica comune nel Barocco e Classico (es. Bach).\n'
+                            + '\n'
+                            + 'Rilevamento: ultimo accordo = triade maggiore sulla tonica in tonalità minore.',
+                            prevEv,
+                            lastEv
+                        );
+                    }
+                } catch { /* ignore */ }
             }
         }
 
@@ -8277,6 +8594,12 @@ export function applyHarmonyRules(
         return bInt === 1;
     };
 
+    // ── EXC-S02: Voice crossing duration tracker ──
+    // Track consecutive beats where each voice pair is crossed.
+    // Key: "hi-lo" (e.g. "3-2" for T above A), Value: number of consecutive events.
+    const _crossDurTracker = new Map<string, number>();
+    let _crossPrevAbsBeat: number | null = null;
+
     chordEvents.forEach(ev => {
         const v1 = ev.byVoice.get(1);
         const v2 = ev.byVoice.get(2);
@@ -9062,6 +9385,67 @@ export function applyHarmonyRules(
     });
 
     _pmark('09d-end-modulation+neapolitan');
+
+    // ── R-18: Simultaneous chromatic clash ──────────────────────────
+    // Two notes with the same letter name but different accidentals sounding
+    // at the same time (e.g. B natural + Bb in the same chord).
+    const accSymbol = (n: StaffNote): string => {
+        const a = String((n as any).explicitAccidental ?? (n as any).accidental ?? '').toLowerCase();
+        if (a === 'sharp') return '♯';
+        if (a === 'flat') return '♭';
+        if (a === 'double-sharp') return '𝄪';
+        if (a === 'double-flat') return '𝄫';
+        if (a === 'natural') return '♮';
+        return '';
+    };
+    try {
+        for (const ev of chordEvents) {
+            const present = ev.notes.filter(n => n && !(n as any).isRest) as StaffNote[];
+            if (present.length < 2) continue;
+            // Group by letter name (A–G)
+            const byLetter = new Map<string, StaffNote[]>();
+            for (const n of present) {
+                const letter = String((n as any).pitch || '').toUpperCase();
+                if (!letter) continue;
+                const arr = byLetter.get(letter) || [];
+                arr.push(n);
+                byLetter.set(letter, arr);
+            }
+            for (const [, group] of byLetter) {
+                if (group.length < 2) continue;
+                // Collect distinct pitch classes (midi % 12) within same letter
+                const pcNotes = new Map<number, StaffNote>();
+                for (const n of group) {
+                    const pc = ((Number((n as any).midi) % 12) + 12) % 12;
+                    if (!pcNotes.has(pc)) pcNotes.set(pc, n);
+                }
+                if (pcNotes.size < 2) continue;
+                // Same letter, different accidentals → clash
+                const entries = [...pcNotes.values()];
+                for (let i = 0; i < entries.length - 1; i++) {
+                    for (let j = i + 1; j < entries.length; j++) {
+                        const n1 = entries[i], n2 = entries[j];
+                        const msg = `Scontro cromatico: ${(n1 as any).pitch}${accSymbol(n1)} e ${(n2 as any).pitch}${accSymbol(n2)} suonano contemporaneamente.`;
+                        addViolation({
+                            ruleId: 'R-18',
+                            description: msg,
+                            noteIds: [(n1 as any).id, (n2 as any).id],
+                            severity: 'error',
+                        });
+                        corrections.push({
+                            message: msg,
+                            type: 'vertical',
+                            noteId1: (n1 as any).id,
+                            noteId2: (n2 as any).id,
+                            severity: 'error',
+                            ruleId: 'R-18',
+                        });
+                    }
+                }
+            }
+        }
+    } catch { /* ignore */ }
+
     _pmark('10-verticalChecks');
     // =========================================================
     // Horizontal checks (between consecutive chords)
@@ -9308,6 +9692,8 @@ export function applyHarmonyRules(
                     // Exception: if the pitch letter that would create the false relation does NOT
                     // persist across the change in its own voice (i.e. that voice moves away),
                     // do not flag R-09. This prevents over-reporting when both voices move.
+                    // However, ONLY skip when n2's voice already had that same letter in chord A
+                    // (i.e. the chromatic alteration is a continuation, not a fresh introduction).
                     try {
                         const v1 = (n1.voice ?? 1) as Voice;
                         const nextSameVoice = bV[v1] as StaffNote | undefined;
@@ -9316,7 +9702,16 @@ export function applyHarmonyRules(
                         }
                         const pNext = (nextSameVoice.pitch || '').toUpperCase();
                         if (pNext !== p1) {
-                            continue;
+                            // n1's voice moved away — only skip if n2's voice
+                            // already had the same pitch letter in chord A
+                            // (continuing / modifying an existing note, not
+                            // introducing a fresh chromatic clash).
+                            const prevInN2Voice = aV[(n2.voice ?? 1) as Voice] as StaffNote | undefined;
+                            const pPrevN2 = (prevInN2Voice?.pitch || '').toUpperCase();
+                            if (pPrevN2 === p2) {
+                                continue;
+                            }
+                            // else: n2 introduces the pitch letter fresh → real false relation
                         }
                         // Symmetric attenuation: chromatic motion in the *same voice* of n1.
                         const accNext = (nextSameVoice.explicitAccidental ?? nextSameVoice.accidental ?? null) as AccidentalType | null;
@@ -9460,6 +9855,47 @@ export function applyHarmonyRules(
                 return; // Salva il paziente ed esci
             }
 
+            // ── EXC-LT-FREE: Risoluzione libera della sensibile ────────
+            // L'obbligo di risoluzione è sospeso quando l'accordo di arrivo
+            // non è I né vi (contesti non cadenzali).  In questi casi la
+            // sensibile è considerata melodicamente mobile e può scendere
+            // per grado congiunto o saltare alla quinta dell'accordo
+            // successivo per linearità o completezza armonica.
+            // Condizioni:
+            //   (a) accordo di destinazione ≠ I e ≠ vi, OPPURE
+            //   (b) movimento congiunto discendente verso chord-tone di arrivo,
+            //       con accordo di destinazione ≠ I.
+            try {
+                const evB2 = (typeof idx2 === 'number' && chordEvents[idx2]) ? chordEvents[idx2] : b;
+                const arrStructural = getStructuralNotes(evB2 as any) || [];
+                if (arrStructural.length >= 2) {
+                    const arrChord = identifyChord(arrStructural);
+                    if (arrChord && arrChord.root) {
+                        const arrRootPc = mod12(arrChord.root.midi);
+                        const arrInterval = mod12(arrRootPc - ctxTonicPc);
+                        // arrInterval: 0 = I, 9 = vi (major), 8 = vi (minor)
+                        const isTonicChord = arrInterval === 0;
+                        const isVI = ctx.isMinor ? arrInterval === 8 : arrInterval === 9;
+                        if (!isTonicChord && !isVI) {
+                            // Non-cadential destination: leading tone is free
+                            const stepDown = (n1.midi ?? 0) - (n2.midi ?? 0);
+                            const descr = (stepDown >= 1 && stepDown <= 2)
+                                ? 'Risoluzione libera della sensibile (discesa per grado congiunto)'
+                                : 'Risoluzione libera della sensibile';
+                            addViolation({
+                                ruleId: 'EXC-LT-FREE',
+                                severity: 'exception',
+                                description: descr,
+                                suggestion: 'L\'accordo di destinazione non è I né vi: la sensibile è melodicamente libera in contesto non cadenzale.',
+                                noteIds: [n1.id, n2.id],
+                            });
+                            handledLeadingToneIds.add(n1.id);
+                            return;
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
             // 3. Se non è risolto e non è un'eccezione -> ERRORE/WARNING
             // Additional attenuation: inner-voice chromatic semitone motion is very common in
             // linear chromatic voice-leading; keep it visible but do not spam warnings.
@@ -9551,6 +9987,18 @@ export function applyHarmonyRules(
                 }
                 // R-02: Parallel fifths (similar motion)
                 if (similar && isPerfectFifth(intA) && isPerfectFifth(intB)) {
+                    // ── EXC-STYLE-5: Quinte di stile (Mozart / orchestrali) ──
+                    // Tolerate parallel fifths between lower voices (tenor + bass,
+                    // voices 3 & 4) when both move by chromatic semitone.
+                    const _r02VoicesLower = Math.min(vA, vB) >= 3;
+                    const _r02Chromatic = Math.abs((b1m as number) - (a1m as number)) === 1
+                        && Math.abs((b2m as number) - (a2m as number)) === 1;
+                    if (_r02VoicesLower && _r02Chromatic) {
+                        addViolation({ ruleId: 'EXC-STYLE-5', severity: 'warning', description: 'Quinte di stile (orchestrali)', noteIds: [a1.id, a2.id, b1.id, b2.id] });
+                        connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'warning', ruleId: 'EXC-STYLE-5' });
+                        connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'warning', ruleId: 'EXC-STYLE-5' });
+                        continue;
+                    }
                     addViolation({ ruleId: 'R-02', severity: 'error', description: 'Quinte parallele', noteIds: [a1.id, a2.id, b1.id, b2.id] });
                     connections.push({ type: 'horizontal', noteId1: a1.id, noteId2: b1.id, severity: 'error', ruleId: 'R-02' });
                     connections.push({ type: 'horizontal', noteId1: a2.id, noteId2: b2.id, severity: 'error', ruleId: 'R-02' });
@@ -9688,9 +10136,27 @@ export function applyHarmonyRules(
             }
         }
 
-        // R-04 (overlap): Voice overlap — voice crosses where adjacent voice was in previous chord
+        // R-04 (overlap) / EXC-S02: Voice overlap — multi-level severity
+        // Voice overlap: a voice crosses where the adjacent voice was in the previous chord.
+        // Duration-aware: brief notes (eighth or less) get suppressed or downgraded.
         {
             const adjacentPairsOv: [number, number][] = [[1, 2], [2, 3], [3, 4]];
+            const ovNames: Record<number, string> = { 1: 'Soprano', 2: 'Alto', 3: 'Tenore', 4: 'Basso' };
+            const _durBeats = (n: any): number => {
+                if (!n) return 4;
+                const d = String(n.duration || '').toLowerCase();
+                if (d === 'sixteenth' || d === '16th') return 0.25;
+                if (d === 'eighth' || d === '8th') return 0.5;
+                if (d === 'quarter') return 1;
+                if (d === 'half') return 2;
+                if (d === 'whole') return 4;
+                if (d.includes('dotted')) {
+                    if (d.includes('eighth')) return 0.75;
+                    if (d.includes('quarter')) return 1.5;
+                    if (d.includes('half')) return 3;
+                }
+                return 1;
+            };
             for (const [hi, lo] of adjacentPairsOv) {
                 const aHi = aV[hi as Voice], aLo = aV[lo as Voice], bHi = bV[hi as Voice], bLo = bV[lo as Voice];
                 if (!aHi || !aLo || !bHi || !bLo) continue;
@@ -9699,22 +10165,35 @@ export function applyHarmonyRules(
                 const bHiM = effectiveMidi(bHi as any) as number;
                 const bLoM = effectiveMidi(bLo as any) as number;
                 if (!Number.isFinite(aHiM) || !Number.isFinite(aLoM) || !Number.isFinite(bHiM) || !Number.isFinite(bLoM)) continue;
-                const vNames: Record<number, string> = { 1: 'Soprano', 2: 'Alto', 3: 'Tenore', 4: 'Basso' };
+                const isInternalPair = (hi === 2 && lo === 3);
+
+                const emitOverlap = (noteA: any, noteB: any, desc: string) => {
+                    const shortA = _durBeats(noteA) <= 0.5;
+                    const shortB = _durBeats(noteB) <= 0.5;
+                    const anyShort = shortA || shortB;
+                    // Internal pair + any short note -> suppress entirely
+                    if (isInternalPair && anyShort) return;
+                    // Any pair + both notes short -> suppress
+                    if (shortA && shortB) return;
+                    // Any pair + one short note -> warning
+                    const sev = anyShort || isInternalPair ? 'warning' : 'error';
+                    const rid = sev === 'warning' ? 'EXC-S02' : 'R-04';
+                    addViolation({ ruleId: rid, severity: sev as any,
+                        description: desc,
+                        suggestion: sev === 'warning'
+                            ? 'Sovrapposizione momentanea: tollerata se di breve durata.'
+                            : 'Una voce non deve superare la posizione che la voce adiacente occupava nel beat precedente.',
+                        noteIds: [noteA.id, noteB.id] });
+                    connections.push({ type: 'horizontal', noteId1: noteA.id, noteId2: noteB.id, severity: sev, ruleId: rid });
+                };
+
                 // Lower voice goes above where higher voice was
                 if (bLoM > aHiM) {
-                    addViolation({ ruleId: 'R-04', severity: 'error',
-                        description: `Sovrapposizione di voci: ${vNames[lo]} supera la posizione precedente del ${vNames[hi]}`,
-                        suggestion: 'Una voce non deve superare la posizione che la voce adiacente occupava nel beat precedente.',
-                        noteIds: [aHi.id, bLo.id] });
-                    connections.push({ type: 'horizontal', noteId1: aHi.id, noteId2: bLo.id, severity: 'error', ruleId: 'R-04' });
+                    emitOverlap(aHi, bLo, `Sovrapposizione di voci: ${ovNames[lo]} supera la posizione precedente del ${ovNames[hi]}`);
                 }
                 // Higher voice goes below where lower voice was
                 if (bHiM < aLoM) {
-                    addViolation({ ruleId: 'R-04', severity: 'error',
-                        description: `Sovrapposizione di voci: ${vNames[hi]} scende sotto la posizione precedente del ${vNames[lo]}`,
-                        suggestion: 'Una voce non deve scendere sotto la posizione che la voce adiacente occupava nel beat precedente.',
-                        noteIds: [aLo.id, bHi.id] });
-                    connections.push({ type: 'horizontal', noteId1: aLo.id, noteId2: bHi.id, severity: 'error', ruleId: 'R-04' });
+                    emitOverlap(aLo, bHi, `Sovrapposizione di voci: ${ovNames[hi]} scende sotto la posizione precedente del ${ovNames[lo]}`);
                 }
             }
         }
@@ -10177,7 +10656,7 @@ export function applyHarmonyRules(
         // note resolves upward by semitone). We therefore skip R-12 on these sonorities.
         const ctxAFor7 = getContextAtAbsBeat(a.absBeat);
         const romanAFor7 = getRomanAnalysis(getStructuralNotes(a) || [], ctxAFor7.tonic, ctxAFor7.isMinor)?.roman ?? '';
-        const isAug6Chord = romanAFor7 === 'It+' || romanAFor7 === 'Fr+' || romanAFor7 === 'Ger+';
+        const isAug6Chord = romanAFor7 === 'It+' || romanAFor7 === 'Fr+' || romanAFor7 === 'Ger+' || romanAFor7 === 'Sw+';
 
         const structuralFor7 = getStructuralNotes(a);
         // Be conservative: if the sonority has > 4 distinct pitch-classes, it likely includes
@@ -11235,7 +11714,7 @@ export function applyHarmonyRules(
         const _lrnEnabled = getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0';
         if (_lrnEnabled && ORNAMENT_LEARNED_PATTERNS && typeof ORNAMENT_LEARNED_PATTERNS === 'object') {
             const _LRN_MIN_PROB = 0.9;
-            const _LRN_MIN_SAMPLES = 3;
+            const _LRN_MIN_SAMPLES = 2;
             const _lrnVoiceChains = new Map<number, any[]>();
             for (const n of analyzedNotes) {
                 if (!n || (n as any).isRest) continue;
@@ -11262,22 +11741,30 @@ export function applyHarmonyRules(
                 if ((pat._total ?? 0) < _LRN_MIN_SAMPLES || (pat._probability ?? 0) < _LRN_MIN_PROB) continue;
                 const dom = pat._dominant;
                 if (dom === 'suspension') continue; // suspensions need richer context
-                // ── Guardrail: skip chord tones on beat ──
-                // A note on an integer beat with ≥2 other structural notes is
-                // very likely a chord tone, not an ornament (e.g. E in C-G-C-E).
+                // ── Guardrail: skip chord tones on/off beat ──
+                // A note with ≥2 (on-beat) or ≥3 (off-beat) other structural
+                // notes *sounding* at the same moment (including held notes) is
+                // very likely a chord tone, not an ornament (e.g. E in C-G-C-E,
+                // or G in a cadential I6/4→V where the upper voices are held).
                 {
                     const _beat = Number(an.beat) || 1;
+                    const _meas = an.measureIndex ?? 0;
                     const _isOnBeat = Math.abs(_beat - Math.round(_beat)) < 0.01;
-                    if (_isOnBeat) {
-                        const _sameSpot = analyzedNotes.filter((bn: any) =>
-                            bn && !bn.isRest && bn.id !== an.id &&
-                            bn.measureIndex === an.measureIndex &&
-                            Math.abs((Number(bn.beat) || 1) - _beat) < 0.01 &&
-                            !bn.isPassing && !bn.isNeighbor && !bn.isAppoggiatura &&
-                            !bn.isAnticipation && !bn.isEscape && !bn.isSuspension
-                        );
-                        if (_sameSpot.length >= 2) continue;
-                    }
+                    const _soundingAtBeat = analyzedNotes.filter((bn: any) => {
+                        if (!bn || bn.isRest || bn.id === an.id) return false;
+                        if ((bn.measureIndex ?? 0) !== _meas) return false;
+                        if (bn.isPassing || bn.isNeighbor || bn.isAppoggiatura ||
+                            bn.isAnticipation || bn.isEscape || bn.isSuspension) return false;
+                        const bnBeat = Number(bn.beat) || 1;
+                        if (bnBeat > _beat + 0.01) return false;
+                        const bnDur = (DURATION_VALUES as any)[bn.duration] || 1;
+                        const bnDurAdj = bn.isDotted ? bnDur * 1.5 : bnDur;
+                        return (bnBeat + bnDurAdj) > _beat + 0.01;
+                    });
+                    // On-beat: ≥2 other sounding structural notes → chord tone
+                    // Off-beat: ≥3 other sounding structural notes → very likely chord tone
+                    const _threshold = _isOnBeat ? 2 : 3;
+                    if (_soundingAtBeat.length >= _threshold) continue;
                 }
                 if (dom === 'passing') { an.isPassing = true; an.ornamentMark = 'P'; }
                 else if (dom === 'neighbor') { an.isNeighbor = true; an.ornamentMark = 'v'; }
@@ -11331,6 +11818,7 @@ export function applyHarmonyRules(
                 else if (ov === 'anticipation') { anyN.isAnticipation = true; anyN.ornamentMark = 'ant'; }
                 else if (ov === 'escape') { anyN.isEscape = true; anyN.ornamentMark = 's'; }
                 else if (ov === 'suspension') { anyN.isSuspension = { type: 'susp', manual: true }; anyN.ornamentMark = 'r'; }
+                else if (ov === 'ornamental') { /* no flags, no mark — ornamentOverride alone excludes from analysis */ }
                 anyN.ornamentOverride = ov;
             }
         }

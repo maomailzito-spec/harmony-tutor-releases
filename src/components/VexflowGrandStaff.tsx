@@ -1282,6 +1282,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 .filter(n => !n.isRest)
                 .filter(n => n.voice === 3 || n.voice === 4);
 
+
+
               if (g.length < 2) continue;
 
               const sorted = g.slice().sort((a, b) => Number(a.position) - Number(b.position));
@@ -1382,6 +1384,44 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
 
         const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
+
+        // --- Bass staff: cross-voice accidental collision (voices 3+4) ---
+        // When two notes at the same onset are a unison/second AND both have
+        // accidentals, the shifted note's accidental lands on top of the
+        // non-shifted note's accidental. Fix: push the non-shifted note's
+        // accidental further left so the two glyphs don't overlap.
+        const bassAccPushLeftById = new Map<string, number>();
+        if (isBassStaff && enableEngravingEnhancements) {
+          const ACC_PUSH_LEFT = 14;
+          for (const group of byX.values()) {
+            const byTime = new Map<string, StaffNote[]>();
+            for (const n of group) {
+              const tk = getNoteOnsetKey(n);
+              if (!byTime.has(tk)) byTime.set(tk, []);
+              byTime.get(tk)!.push(n);
+            }
+            for (const gRaw of byTime.values()) {
+              const g = gRaw
+                .filter(n => n.id !== '__ghost__' && !n.isRest)
+                .filter(n => n.voice === 3 || n.voice === 4);
+              if (g.length < 2) continue;
+              for (let i = 0; i < g.length; i++) {
+                for (let j = i + 1; j < g.length; j++) {
+                  const posDiff = Math.abs(Number(g[i].position) - Number(g[j].position));
+                  if (posDiff > 1) continue;
+                  const gA = accidentalTypeToVexflow(accidentalGlyphById.get(g[i].id) ?? null);
+                  const gB = accidentalTypeToVexflow(accidentalGlyphById.get(g[j].id) ?? null);
+                  if (!gA || !gB) continue;
+                  // The non-shifted note keeps its accidental pushed further left.
+                  const nonShifted = offsetMap.has(g[i].id) ? g[j] : (offsetMap.has(g[j].id) ? g[i] : null);
+                  if (nonShifted) {
+                    bassAccPushLeftById.set(nonShifted.id, ACC_PUSH_LEFT);
+                  }
+                }
+              }
+            }
+          }
+        }
 
         // In open position ("parti late"), the default accidental layout can leave too much
         // empty space between accidentals and the nearest notehead (especially early in a bar).
@@ -1489,7 +1529,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             try {
               const sorted = nonRest.slice().sort((a, b) => Number(a.position) - Number(b.position));
               for (let si = 1; si < sorted.length; si++) {
-                if ((Number(sorted[si].position) - Number(sorted[si - 1].position)) === 1) {
+                const diff = Number(sorted[si].position) - Number(sorted[si - 1].position);
+                // Preserve offset for seconds (diff===1) AND unisons (diff===0)
+                if (diff === 0 || diff === 1) {
                   onsetSecondsIds.add(sorted[si].id);
                   onsetSecondsIds.add(sorted[si - 1].id);
                 }
@@ -1891,6 +1933,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                       try {
                         const extra = accidentalStaggerById.get(n.id) ?? 0;
                         const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
+                        const bassPush = bassAccPushLeftById.get(n.id) ?? 0;
                         // Count how many accidentals exist at this onset
                         const tk = getNoteTimeKey(n);
                         const onsetNotes = byTimeKeyAll.get(tk) ?? [];
@@ -1898,8 +1941,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                           const g = accidentalGlyphById.get(nn.id) ?? null;
                           return !!accidentalTypeToVexflow(g);
                         }).length;
+                        // Apply bass cross-voice push-left unconditionally when set
+                        if (bassPush && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
+                          const cur = (acc as any).getXShift() ?? 0;
+                          (acc as any).setXShift(cur + bassPush);
+                        }
                         // Only apply custom stagger for ≤2 accidentals; for 3+, VF default is better
-                        if (onsetAccCount <= 2 && (extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
+                        else if (onsetAccCount <= 2 && (extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
                           const cur = (acc as any).getXShift() ?? 0;
                           // extra pushes left; inset pulls back right.
                           (acc as any).setXShift(cur + extra - inset);

@@ -75,6 +75,7 @@ export type HarmonyAnalysisFiltersPref = {
   showError: boolean;
   showWarning: boolean;
   showException: boolean;
+  showChromatic: boolean;
   disabledRuleIds: Record<string, boolean>;
 };
 
@@ -347,22 +348,24 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
       showError: true,
       showWarning: true,
       showException: true,
+      showChromatic: true,
       disabledRuleIds: {},
     } as HarmonyAnalysisFiltersPref,
     kind: 'json',
     parse: (raw) => {
       try {
         if (!raw) {
-          return { showError: true, showWarning: true, showException: true, disabledRuleIds: {} };
+          return { showError: true, showWarning: true, showException: true, showChromatic: true, disabledRuleIds: {} };
         }
         const p = JSON.parse(String(raw));
         const showError = typeof p?.showError === 'boolean' ? p.showError : true;
         const showWarning = typeof p?.showWarning === 'boolean' ? p.showWarning : true;
         const showException = typeof p?.showException === 'boolean' ? p.showException : true;
+        const showChromatic = typeof p?.showChromatic === 'boolean' ? p.showChromatic : true;
         const disabledRuleIds = (p?.disabledRuleIds && typeof p.disabledRuleIds === 'object') ? p.disabledRuleIds : {};
-        return { showError, showWarning, showException, disabledRuleIds };
+        return { showError, showWarning, showException, showChromatic, disabledRuleIds };
       } catch {
-        return { showError: true, showWarning: true, showException: true, disabledRuleIds: {} };
+        return { showError: true, showWarning: true, showException: true, showChromatic: true, disabledRuleIds: {} };
       }
     },
     serialize: (value: HarmonyAnalysisFiltersPref) => {
@@ -372,10 +375,11 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
           showError: !!v.showError,
           showWarning: !!v.showWarning,
           showException: !!v.showException,
+          showChromatic: v.showChromatic !== false,
           disabledRuleIds: (v.disabledRuleIds && typeof v.disabledRuleIds === 'object') ? v.disabledRuleIds : {},
         });
       } catch {
-        return JSON.stringify({ showError: true, showWarning: true, showException: true, disabledRuleIds: {} });
+        return JSON.stringify({ showError: true, showWarning: true, showException: true, showChromatic: true, disabledRuleIds: {} });
       }
     },
   },
