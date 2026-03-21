@@ -1,0 +1,3561 @@
+=== SPELLING FILTER IMPACT REPORT ===
+
+Spelling weight used: 8 score points per enharmonic mismatch
+Files analyzed: 222
+Files with differences: 138
+Total chord events compared: 6806
+Events with different labels: 591 (8.7%)
+
+Improvements (spelling cost reduced): 83
+Regressions (spelling cost increased): 0
+Neutral (cost same, label changed): 508
+
+--- IMPROVEMENTS (spelling cost reduced) ---
+
+[Bach cantata 71.htp] m10 b4.25 (absBeat=39.25):
+  BEFORE: III°  (spelling cost: 1)
+  AFTER:  ♯IV  (spelling cost: 0)
+  Notes:  F3, D4, C5
+  Key:    Am
+
+[Bach cantata 71.htp] m15 b4 (absBeat=59):
+  BEFORE: V+  (spelling cost: 1)
+  AFTER:  vii+  (spelling cost: 0)
+  Notes:  E3, G4, E4, C4
+  Key:    Am
+
+[Bach cantata 71.htp] m17 b4 (absBeat=67):
+  BEFORE: V  (spelling cost: 1)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  D4, B3, C5, E3
+  Key:    Am
+
+[Bach cantata 71.htp] m21 b2.25 (absBeat=81.25):
+  BEFORE: VI°  (spelling cost: 1)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  B2, G4, F4
+  Key:    Am
+
+[Bach cantata 71.htp] m25 b2.25 (absBeat=97.25):
+  BEFORE: VI°  (spelling cost: 1)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  B3, G3, F3
+  Key:    Am
+
+[Bach cantata 71.htp] m27 b2.25 (absBeat=105.25):
+  BEFORE: III°  (spelling cost: 1)
+  AFTER:  ♯IV  (spelling cost: 0)
+  Notes:  F4, D4, C4
+  Key:    Am
+
+[Bach cantata 71.htp] m29 b2.25 (absBeat=113.25):
+  BEFORE: VI°  (spelling cost: 1)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  B3, B3, G4, F4
+  Key:    Am
+
+[Bach corale 19.json] m12 b2.5 (absBeat=45.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, Eb4, C4, A3
+  Key:    Bb
+
+[Cantata 14 bach.json] m9 b4.5 (absBeat=35.5):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, C4, A2, E4
+  Key:    Gm
+
+[Cantata 14 bach.json] m10 b2.5 (absBeat=37.5):
+  BEFORE: VI°  (spelling cost: 1)
+  AFTER:  i°  (spelling cost: 0)
+  Notes:  B4, G4, G3, E3
+  Key:    Gm
+
+[Cantata 17 Bach.json] m44 b2.5 (absBeat=130.5):
+  BEFORE: vi  (spelling cost: 1)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  A4, C4, F3, G4
+  Key:    A
+
+[Cantata 18 bis.json] m4 b4 (absBeat=15):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  A4, E4, C4, A2
+  Key:    Gm
+
+[Cantata 18 bis.json] m8 b4 (absBeat=31):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  A4, E4, C4, A2
+  Key:    Gm
+
+[Cantata 18 bis.json] m12 b3 (absBeat=46):
+  BEFORE: ♭vii  (spelling cost: 1)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  F4, C4, F3, G2
+  Key:    Gm
+
+[Cantata 19 bach.json] m12 b2.5 (absBeat=45.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, Eb4, C4, A3
+  Key:    Bb
+
+[Cantata 2 <bach.htp] m2 b4 (absBeat=7):
+  BEFORE: III  (spelling cost: 1)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  D5, B4, G4, A3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m6 b4 (absBeat=23):
+  BEFORE: III  (spelling cost: 1)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  D5, B4, G4, A3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m14 b3 (absBeat=54):
+  BEFORE: iv  (spelling cost: 1)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  C5, D4, G3, D3
+  Key:    Gm
+
+[Cantata 2 bach.json] m6 b4 (absBeat=23):
+  BEFORE: VI  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, Bb4, G4, A3
+  Key:    Dm
+
+[Cantata 2 bach.json] m14 b3.5 (absBeat=54.5):
+  BEFORE: ♭vii  (spelling cost: 1)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  C5, Eb4, G3, D3
+  Key:    Dm
+
+[Cantata 22.json] m24 b1.5 (absBeat=92.5):
+  BEFORE: I  (spelling cost: 1)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  B3, D5, A3, G4
+  Key:    Bb
+
+[Cantata 38 Bach.json] m14 b3.5 (absBeat=54.5):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, D4, B2, F4
+  Key:    Am
+
+[Cantata 40 bach.json] m2 b1.5 (absBeat=4.5):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  G4, D4, B2, G4
+  Key:    Fm
+
+[Cantata 40 bach.json] m3 b2.5 (absBeat=9.5):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, G4, B3, D3
+  Key:    Fm
+
+[Cantata 40 bach.json] m13 b3.5 (absBeat=50.5):
+  BEFORE: v  (spelling cost: 1)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  E5, G4, C4, D3
+  Key:    Fm
+
+[Cantata 46 Bach.json] m12 b4 (absBeat=47):
+  BEFORE: VI°  (spelling cost: 1)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  B4, E4, G3, G3
+  Key:    Gm
+
+[Cantata 65 Bacht.htp] m19 b1 (absBeat=72):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, F4, D4, B2
+  Key:    Am
+
+[Cantata 7.json] m16 b1 (absBeat=60):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  F4, D4, F3, B2
+  Key:    Am
+
+[Cantata 8 .json] m2 b3 (absBeat=6):
+  BEFORE: ii  (spelling cost: 1)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A4, G4, C4, F3
+  Key:    E
+
+[Cantata 8 .json] m7 b3 (absBeat=26):
+  BEFORE: ii  (spelling cost: 1)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A4, G4, C4, F3
+  Key:    E
+
+[Delachi 1 p55.htp] m2 b3 (absBeat=6):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, B4, F4, B3
+  Key:    C
+
+[Delachi 1 p55.htp] m7 b1 (absBeat=24):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, B4, F4, B3
+  Key:    C
+
+[Delachi 1 p55.htp] m13 b1 (absBeat=48):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, B4, F4, B3
+  Key:    C
+
+[Delachi 1 p55.htp] m13 b3 (absBeat=50):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, B4, F4, B3
+  Key:    C
+
+[Delachi n4 p16:68.htp] m3 b3 (absBeat=10):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, Ab4, D4, F3
+  Key:    Eb
+
+[Delachi n5 p14:67.htp] m2 b1 (absBeat=4):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    Eb
+
+[Delamont 42.htp] m1 b3 (absBeat=2):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  IV°  (spelling cost: 0)
+  Notes:  C4, C4, Eb4, A3
+  Key:    G
+
+[Delamont 45.htp] m2 b4 (absBeat=7):
+  BEFORE: Fr+  (spelling cost: 1)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  A3, Eb5, G4, C#3
+  Key:    D
+
+[Delamont 46.htp] m7 b3 (absBeat=20):
+  BEFORE: V°  (spelling cost: 1)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  Db5, G4, Bb3, G2
+  Key:    C
+
+[Delamont 50 3f.htp] m2 b4 (absBeat=7):
+  BEFORE: Fr+  (spelling cost: 1)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  A4, Eb4, C#4, G3
+  Key:    D
+
+[Delamont C 31 5b.htp] m2 b4 (absBeat=7):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  C4, Gb3, Eb3, C5
+  Key:    Bb
+
+[Delamont C34 2c.htp] m1 b3 (absBeat=2):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  G4, G4, Bb3, E3
+  Key:    Dm
+
+[Delamont C34 2c.htp] m1 b3.5 (absBeat=2.5):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  G4, E3, Bb4, G3
+  Key:    Dm
+
+[Delamont C34 2c.htp] m2 b2 (absBeat=4):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  E5, G4, Bb3, G3
+  Key:    Dm
+
+[Delamont C34 2c.htp] m3 b2 (absBeat=7):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  G4, E4, Bb3, E3
+  Key:    Dm
+
+[Delamont C35 5.htp] m1 b2 (absBeat=1):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, Eb4, Gb3, C3
+  Key:    Bbm
+
+[Delamont C50 3f.htp] m2 b4 (absBeat=7):
+  BEFORE: Fr+  (spelling cost: 1)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  A4, Eb4, C#4, G3
+  Key:    D
+
+[Delamont C55 b.htp] m3 b4 (absBeat=11):
+  BEFORE: V  (spelling cost: 1)
+  AFTER:  ♭III+  (spelling cost: 0)
+  Notes:  D5, Bb3, D3, F#4
+  Key:    G
+
+[Delamont C59 B 1.htp] m4 b1 (absBeat=12):
+  BEFORE: It+  (spelling cost: 1)
+  AFTER:  V/♭VII  (spelling cost: 0)
+  Notes:  G#4, E4, Bb3, D3
+  Key:    F
+
+[Delamont C60 1g.htp] m2 b2 (absBeat=4):
+  BEFORE: VI°  (spelling cost: 1)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  C#4, C#3, G5, A#4
+  Key:    Bm
+
+[Dubois 1 p11.json] m3 b1 (absBeat=12):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, A4, D4, F3
+  Key:    Eb
+
+[Dubois 1 p11.json] m15 b5 (absBeat=88):
+  BEFORE: vi°  (spelling cost: 1)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, Gb4, Eb4, E3
+  Key:    Eb
+
+[Dubois 1 p11.json] m27 b3 (absBeat=158):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D4, Ab4, F4, Ab3
+  Key:    Eb
+
+[Dubois 2 p 55.htp] m3 b1 (absBeat=8):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Bb4, Bb3, G3, E3
+  Key:    F
+
+[Dubois 2 p 55.htp] m3 b2.5 (absBeat=9.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Bb3, G3, E3, G4
+  Key:    F
+
+[Dubois 2 p 55.htp] m5 b4.5 (absBeat=19.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Bb3, E5, G4, E3
+  Key:    F
+
+[Dubois 3 p55.htp] m5 b2 (absBeat=13):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Ab4, F5, F4, D4
+  Key:    Eb
+
+[Dubois 4 p2.htp] m3 b3 (absBeat=10):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, B2
+  Key:    Am
+
+[Dubois n 2 p55.htp] m3 b1 (absBeat=8):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Bb4, Bb3, G3, E3
+  Key:    F
+
+[Dubois n 2 p55.htp] m3 b2.5 (absBeat=9.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Bb3, G3, E3, G4
+  Key:    F
+
+[Dubois n 2 p55.htp] m5 b4.5 (absBeat=19.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Bb3, E5, G4, E3
+  Key:    F
+
+[Dubois n3 p1 .htp] m6 b3 (absBeat=22):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, B2
+  Key:    Am
+
+[Dubois n3 p12.htp] m6 b1 (absBeat=20):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, A4, Eb4, A3
+  Key:    Bb
+
+[Dubois n3 p12.htp] m39 b1 (absBeat=152):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, Eb4, A3, A2
+  Key:    Bb
+
+[Dubois n4 p13.htp] m22 b1 (absBeat=84):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, F4, D4, Ab3
+  Key:    Cm
+
+[Dubois n4 p13.htp] m23 b3 (absBeat=90):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    Cm
+
+[Dubois n4 p13.htp] m27 b3 (absBeat=106):
+  BEFORE: vii°/VI  (spelling cost: 1)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  G4, Db4, Bb3, Bb2
+  Key:    Cm
+
+[Dubois n4 p13.htp] m29 b3 (absBeat=114):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  F4, D4, Ab3, D3
+  Key:    Cm
+
+[Dubois n4 p13.htp] m35 b3 (absBeat=138):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, D3
+  Key:    Cm
+
+[Dubois n5 p5.htp] m5 b3 (absBeat=18):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    Cm
+
+[Dubois n5 p5.htp] m9 b3 (absBeat=34):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    Cm
+
+[Pedron n 16 p4.htp] m1 b3 (absBeat=2):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, Ab4, D4, F3
+  Key:    Cm
+
+[Pedron n 16 p4.htp] m10 b1 (absBeat=36):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    Cm
+
+[Pedron n 16 p4.htp] m11 b1 (absBeat=40):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, D3
+  Key:    Cm
+
+[Pedron n 16 p4.htp] m13 b3 (absBeat=50):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    Cm
+
+[Pedron n 20 p4.htp] m6 b1 (absBeat=20):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, A4, E4, A3
+  Key:    Gm
+
+[Pedron n50 p 10.htp] m16 b3 (absBeat=62):
+  BEFORE: V+  (spelling cost: 1)
+  AFTER:  III+  (spelling cost: 0)
+  Notes:  C3, C5, Ab4, E4
+  Key:    Fm
+
+[Progr ton 3.htp] m7 b3 (absBeat=26):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    C
+
+[Progr ton. 2.htp] m4 b3 (absBeat=14):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  D5, F4, Ab3, F3
+  Key:    C
+
+[Raddoppi ed Accordi Incompleti Dubois.htp] m17 b1 (absBeat=64):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  F4, D4, F3, B2
+  Key:    C
+
+[cantata 25 Bach.json] m15 b3 (absBeat=58):
+  BEFORE: vii°/IV  (spelling cost: 1)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  E5, G4, Bb3, G3
+  Key:    C
+
+[ornamenti.json] m1 b3.5 (absBeat=2.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  F4, D4, B2, B4
+  Key:    C
+
+[seste ecc.htp] m7 b3 (absBeat=26):
+  BEFORE: ii°  (spelling cost: 1)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  D5, Ab4, F4, F3
+  Key:    C
+
+--- NEUTRAL (same cost, different label) ---
+
+[Am riv e settime.htp] m3 b1 (absBeat=8):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    Am
+
+[Bach cantata 71.htp] m4 b2.5 (absBeat=13.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  A3, D3
+  Key:    Am
+
+[Bach cantata 71.htp] m6 b3 (absBeat=22):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  E3, F4, A3
+  Key:    Am
+
+[Bach cantata 71.htp] m6 b3.5 (absBeat=22.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  E3, F4, G3
+  Key:    Am
+
+[Bach cantata 71.htp] m6 b3.75 (absBeat=22.75):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  E3, F4, A3
+  Key:    Am
+
+[Bach cantata 71.htp] m6 b4.25 (absBeat=23.25):
+  BEFORE: III°  (spelling cost: 0)
+  AFTER:  ♯IV  (spelling cost: 0)
+  Notes:  F4, D3, C4
+  Key:    Am
+
+[Bach cantata 71.htp] m7 b4 (absBeat=27):
+  BEFORE: V+  (spelling cost: 0)
+  AFTER:  III+  (spelling cost: 0)
+  Notes:  E5, G3, C3, C3
+  Key:    Am
+
+[Bach cantata 71.htp] m8 b3.5 (absBeat=30.5):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  E3, A4, B3, C3
+  Key:    Am
+
+[Bach cantata 71.htp] m9 b4 (absBeat=35):
+  BEFORE: ♭VII+  (spelling cost: 0)
+  AFTER:  ♯IV+  (spelling cost: 0)
+  Notes:  G4, B4, D3
+  Key:    Am
+
+[Bach cantata 71.htp] m10 b1.5 (absBeat=36.5):
+  BEFORE: VI  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  E4, B3, F3
+  Key:    Am
+
+[Bach cantata 71.htp] m10 b4.75 (absBeat=39.75):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  F3, D4, A4
+  Key:    Am
+
+[Bach cantata 71.htp] m11 b4 (absBeat=43):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  B4, C4, A3, E3
+  Key:    Am
+
+[Bach cantata 71.htp] m12 b3 (absBeat=46):
+  BEFORE: iv  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 1)
+  Notes:  A2, F5, D4, B3
+  Key:    Am
+
+[Bach cantata 71.htp] m12 b3.75 (absBeat=46.75):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  A2, B3, D5, D4
+  Key:    Am
+
+[Bach cantata 71.htp] m12 b4.25 (absBeat=47.25):
+  BEFORE: VI°  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  B3, B4, G2, F4
+  Key:    Am
+
+[Bach cantata 71.htp] m13 b4 (absBeat=51):
+  BEFORE: ii+  (spelling cost: 0)
+  AFTER:  ♭VII+  (spelling cost: 0)
+  Notes:  B4, D4, B3, G3
+  Key:    Am
+
+[Bach cantata 71.htp] m18 b2.75 (absBeat=69.75):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    Am
+
+[Bach cantata 71.htp] m20 b2 (absBeat=77):
+  BEFORE: V+  (spelling cost: 0)
+  AFTER:  vii+  (spelling cost: 0)
+  Notes:  E5, C4, G2
+  Key:    Am
+
+[Bach cantata 71.htp] m20 b3.5 (absBeat=78.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  E4, A3, B2
+  Key:    Am
+
+[Bach cantata 71.htp] m21 b1 (absBeat=80):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D4, B2
+  Key:    Am
+
+[Bach cantata 71.htp] m21 b1.75 (absBeat=80.75):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B2, D4
+  Key:    Am
+
+[Bach cantata 71.htp] m21 b2.75 (absBeat=81.75):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B2, G4, D4
+  Key:    Am
+
+[Bach cantata 71.htp] m23 b2.25 (absBeat=89.25):
+  BEFORE: III°  (spelling cost: 0)
+  AFTER:  ♯IV  (spelling cost: 0)
+  Notes:  F3, D3, C5
+  Key:    Am
+
+[Bach cantata 71.htp] m24 b2 (absBeat=93):
+  BEFORE: V+  (spelling cost: 0)
+  AFTER:  III+  (spelling cost: 0)
+  Notes:  E5, G3, E4, C3
+  Key:    Am
+
+[Bach cantata 71.htp] m29 b1 (absBeat=112):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D4, B3, B3
+  Key:    Am
+
+[Bach cantata 71.htp] m29 b1.75 (absBeat=112.75):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B3, B3, D4
+  Key:    Am
+
+[Bach cantata 71.htp] m29 b2.75 (absBeat=113.75):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B3, G4, B3, D4
+  Key:    Am
+
+[Bach cantata 71.htp] m30 b2.5 (absBeat=117.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  G3, E5, G4, B3
+  Key:    Am
+
+[Bach cantata 71.htp] m30 b4.5 (absBeat=119.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  F3, D5, F4, A3
+  Key:    Am
+
+[Bach cantata 71.htp] m31 b1 (absBeat=120):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  B4, D4, G3, F3
+  Key:    Am
+
+[Bach cantata 71.htp] m31 b1.75 (absBeat=120.75):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  G3, F3, B4, D4
+  Key:    Am
+
+[Bach cantata 71.htp] m32 b3.5 (absBeat=126.5):
+  BEFORE: III  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  C5, C4, C3, G4
+  Key:    Am
+
+[Bach cantata 71.htp] m33 b3 (absBeat=130):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, D4, E3
+  Key:    Am
+
+[Bach cantata 71.htp] m33 b3.5 (absBeat=130.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, B4, G4, E3
+  Key:    Am
+
+[Bach cantata 71.htp] m35 b1 (absBeat=136):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, D4, F3, D3
+  Key:    Am
+
+[Bach cantata 71.htp] m35 b1.5 (absBeat=136.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, D4, D3, B2
+  Key:    Am
+
+[Bach cantata 71.htp] m35 b4 (absBeat=139):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  E3, A2, A3, E5
+  Key:    Am
+
+[Bach cantata 71.htp] m36 b4.75 (absBeat=143.75):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  A4, E4, C4, G3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b1 (absBeat=144):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b1.25 (absBeat=144.25):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  A4, F4, D4, G3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b1.75 (absBeat=144.75):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  A4, F4, D4, G3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b2 (absBeat=145):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b2.25 (absBeat=145.25):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  A4, F4, D4, G3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b2.5 (absBeat=145.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b2.75 (absBeat=145.75):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F4, D4, E3
+  Key:    Am
+
+[Bach cantata 71.htp] m37 b3.75 (absBeat=146.75):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, D4, D4, B2
+  Key:    Am
+
+[Bach corale 19.json] m2 b2.5 (absBeat=5.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, A4, Eb4, C4
+  Key:    Bb
+
+[Bach corale 19.json] m6 b2.5 (absBeat=21.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, Eb4, C3, A4
+  Key:    Bb
+
+[Bach corale 19.json] m6 b4 (absBeat=23):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Eb5, C5, A3, Eb3
+  Key:    Bb
+
+[Beethoven:Piston p218.htp] m2 b3 (absBeat=5):
+  BEFORE: iii+  (spelling cost: 0)
+  AFTER:  I+  (spelling cost: 0)
+  Notes:  F#4, D3, D3, A#3
+  Key:    D
+
+[Beethoven:Piston p218.htp] m3 b3 (absBeat=8):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  B3, G3, G2, E4
+  Key:    D
+
+[Beethoven:Piston p218.htp] m5 b2 (absBeat=13):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  E4, C#4
+  Key:    D
+
+[Cantata 14 bach.json] m2 b1.5 (absBeat=4.5):
+  BEFORE: i  (spelling cost: 1)
+  AFTER:  V/VI  (spelling cost: 1)
+  Notes:  B4, G4, D4, Ab3
+  Key:    Gm
+
+[Cantata 14 bach.json] m2 b2.5 (absBeat=5.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  B4, G4, D4, F3
+  Key:    Gm
+
+[Cantata 14 bach.json] m2 b4 (absBeat=7):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, G4, D4, C3
+  Key:    Gm
+
+[Cantata 14 bach.json] m3 b4.5 (absBeat=11.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, E4, C3, A4
+  Key:    Gm
+
+[Cantata 14 bach.json] m4 b1 (absBeat=12):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  B4, B4, F4, D3
+  Key:    Gm
+
+[Cantata 14 bach.json] m5 b4.5 (absBeat=19.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  E4, E3, A4, C4
+  Key:    Gm
+
+[Cantata 14 bach.json] m6 b2.5 (absBeat=21.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  B4, G4, D4, F3
+  Key:    Gm
+
+[Cantata 14 bach.json] m6 b4 (absBeat=23):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, G4, D4, C3
+  Key:    Gm
+
+[Cantata 14 bach.json] m7 b4.5 (absBeat=27.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, E4, C3, A4
+  Key:    Gm
+
+[Cantata 14 bach.json] m11 b1 (absBeat=40):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, E4, A3, C3
+  Key:    Gm
+
+[Cantata 14 bach.json] m12 b2 (absBeat=45):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  B4, G4, D4, D3
+  Key:    Gm
+
+[Cantata 14 bach.json] m12 b2.5 (absBeat=45.5):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V°  (spelling cost: 0)
+  Notes:  B4, D4, D3, F4
+  Key:    Gm
+
+[Cantata 14 bach.json] m12 b3.5 (absBeat=46.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, E4, C3, A3
+  Key:    Gm
+
+[Cantata 14 bach.json] m14 b4 (absBeat=55):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  C5, G4, D4, A2
+  Key:    Gm
+
+[Cantata 17 Bach.json] m5 b3.5 (absBeat=14.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, C4, A3, F4
+  Key:    A
+
+[Cantata 17 Bach.json] m6 b2 (absBeat=16):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  G4, C4, F3, B4
+  Key:    A
+
+[Cantata 17 Bach.json] m13 b3.5 (absBeat=38.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, C4, A3, F4
+  Key:    A
+
+[Cantata 17 Bach.json] m14 b2 (absBeat=40):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  G4, C4, F3, B4
+  Key:    A
+
+[Cantata 17 Bach.json] m39 b2 (absBeat=115):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  A4, A3, F#3, D4
+  Key:    A
+
+[Cantata 17 Bach.json] m44 b3.5 (absBeat=131.5):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  A4, F4, D3, B4
+  Key:    A
+
+[Cantata 18 bis.json] m2 b2 (absBeat=5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  G4, E4, C4, E3
+  Key:    Gm
+
+[Cantata 18 bis.json] m3 b4.5 (absBeat=11.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  E4, C4, C3, A4
+  Key:    Gm
+
+[Cantata 18 bis.json] m6 b2 (absBeat=21):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  G4, E4, C4, E3
+  Key:    Gm
+
+[Cantata 18 bis.json] m7 b4.5 (absBeat=27.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  E4, C4, C3, A4
+  Key:    Gm
+
+[Cantata 18 bis.json] m8 b2.5 (absBeat=29.5):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  C5, G3, D4, D3
+  Key:    Gm
+
+[Cantata 18 bis.json] m11 b4.5 (absBeat=43.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  G4, G3, E3, C4
+  Key:    Gm
+
+[Cantata 18 bis.json] m14 b4.5 (absBeat=55.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  A4, C4, C3, E4
+  Key:    Gm
+
+[Cantata 18 bis.json] m16 b4 (absBeat=63):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  B4, D4, G3, B2
+  Key:    Gm
+
+[Cantata 18 bis.json] m16 b4.5 (absBeat=63.5):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  B4, D4, G3, C3
+  Key:    Gm
+
+[Cantata 19 bach.json] m2 b2.5 (absBeat=5.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, A4, Eb4, C4
+  Key:    Bb
+
+[Cantata 19 bach.json] m4 b4 (absBeat=15):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  Eb5, C5, F4, Bb2
+  Key:    Bb
+
+[Cantata 19 bach.json] m6 b2.5 (absBeat=21.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, Eb4, C3, A4
+  Key:    Bb
+
+[Cantata 19 bach.json] m6 b4 (absBeat=23):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Eb5, C5, A3, Eb3
+  Key:    Bb
+
+[Cantata 2 <bach.htp] m2 b2 (absBeat=5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  A4, F4, C4, A3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m5 b2.25 (absBeat=17.25):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D4, A4, D3, A3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m6 b2 (absBeat=21):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  A4, F4, C4, A3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m9 b2.25 (absBeat=33.25):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D4, A4, D3, A3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m10 b3.5 (absBeat=38.5):
+  BEFORE: V/V  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  E4, C4, A3, G3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m11 b1.5 (absBeat=40.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F4, D4, A3, C3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m11 b4.5 (absBeat=43.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F4, A3, D3, C4
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m12 b4.5 (absBeat=47.5):
+  BEFORE: III+  (spelling cost: 1)
+  AFTER:  V  (spelling cost: 1)
+  Notes:  B4, D4, F3, C3
+  Key:    Gm
+
+[Cantata 2 <bach.htp] m14 b3.5 (absBeat=54.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  C5, D4, G3, D3
+  Key:    Gm
+
+[Cantata 2 bach.json] m2 b2 (absBeat=5):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  A4, F#4, C4, A3
+  Key:    Dm
+
+[Cantata 2 bach.json] m5 b2.25 (absBeat=17.25):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, A4, D3, A3
+  Key:    Dm
+
+[Cantata 2 bach.json] m6 b2 (absBeat=21):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  A4, F#4, C4, A3
+  Key:    Dm
+
+[Cantata 2 bach.json] m9 b2.25 (absBeat=33.25):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, A4, D3, A3
+  Key:    Dm
+
+[Cantata 2 bach.json] m10 b3.5 (absBeat=38.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  E4, C4, A3, G3
+  Key:    Dm
+
+[Cantata 2 bach.json] m11 b1.5 (absBeat=40.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  F#4, D4, A3, C3
+  Key:    Dm
+
+[Cantata 2 bach.json] m14 b2.5 (absBeat=53.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Bb4, D4, G3, Fb3
+  Key:    Dm
+
+[Cantata 2 bach.json] m15 b3 (absBeat=58):
+  BEFORE: vii°/VI  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  A4, C4, G3, A2
+  Key:    Dm
+
+[Cantata 2 bach.json] m15 b3.5 (absBeat=58.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  A4, A2, D4, F#3
+  Key:    Dm
+
+[Cantata 22.json] m2 b2.5 (absBeat=5.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  B3, B3, D5, G4
+  Key:    Bb
+
+[Cantata 22.json] m3 b3 (absBeat=10):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  G2, D4, G4, G4
+  Key:    Bb
+
+[Cantata 22.json] m6 b3.5 (absBeat=22.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  B3, B3, D5, G4
+  Key:    Bb
+
+[Cantata 22.json] m11 b2.5 (absBeat=41.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  B3, B3, D5, G4
+  Key:    Bb
+
+[Cantata 22.json] m12 b3 (absBeat=46):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  G2, D4, G4, G4
+  Key:    Bb
+
+[Cantata 22.json] m15 b3.5 (absBeat=58.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  B3, B3, D5, G4
+  Key:    Bb
+
+[Cantata 22.json] m20 b2 (absBeat=77):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  B3, D4, G4, D5
+  Key:    Bb
+
+[Cantata 22.json] m20 b2.5 (absBeat=77.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  D4, G4, D5, G3
+  Key:    Bb
+
+[Cantata 37 bach.json] m3 b2 (absBeat=9):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  F4, D4, A3, B2
+  Key:    A
+
+[Cantata 37 bach.json] m3 b2.25 (absBeat=9.25):
+  BEFORE: V/V  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  F4, D4, B2, G3
+  Key:    A
+
+[Cantata 37 bach.json] m4 b3.5 (absBeat=14.5):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  A4, F3, D4, B3
+  Key:    A
+
+[Cantata 37 bach.json] m4 b3.75 (absBeat=14.75):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  A4, F3, D4, A3
+  Key:    A
+
+[Cantata 37 bach.json] m5 b2 (absBeat=17):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  F4, D4, A3, B2
+  Key:    A
+
+[Cantata 37 bach.json] m5 b2.25 (absBeat=17.25):
+  BEFORE: V/V  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  F4, D4, B2, G3
+  Key:    A
+
+[Cantata 37 bach.json] m6 b3 (absBeat=22):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  A4, D4, F3, B2
+  Key:    A
+
+[Cantata 37 bach.json] m7 b2.5 (absBeat=25.5):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  F4, B2, D4, A3
+  Key:    A
+
+[Cantata 37 bach.json] m11 b4 (absBeat=43):
+  BEFORE: vii°/ii  (spelling cost: 0)
+  AFTER:  iii°  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    A
+
+[Cantata 37 bach.json] m12 b2 (absBeat=45):
+  BEFORE: vii°/ii  (spelling cost: 0)
+  AFTER:  iii°  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    A
+
+[Cantata 37 bach.json] m12 b3.5 (absBeat=46.5):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, B4, E4, E3
+  Key:    A
+
+[Cantata 37 bach.json] m17 b4.5 (absBeat=67.5):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  B4, G3, E3, C4
+  Key:    A
+
+[Cantata 38 Bach.json] m1 b4 (absBeat=3):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, G4, D4, B2
+  Key:    Am
+
+[Cantata 38 Bach.json] m2 b2 (absBeat=5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  B4, G4, D4, B2
+  Key:    Am
+
+[Cantata 38 Bach.json] m2 b4 (absBeat=7):
+  BEFORE: VI°  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  A4, F4, C4, A2
+  Key:    Am
+
+[Cantata 38 Bach.json] m4 b2.5 (absBeat=13.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, B4, F4, F3
+  Key:    Am
+
+[Cantata 38 Bach.json] m6 b4 (absBeat=23):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, G4, D4, B2
+  Key:    Am
+
+[Cantata 38 Bach.json] m7 b4 (absBeat=27):
+  BEFORE: VI°  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  A4, F4, C4, A2
+  Key:    Am
+
+[Cantata 38 Bach.json] m9 b2.5 (absBeat=33.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, B4, F4, F3
+  Key:    Am
+
+[Cantata 38 Bach.json] m11 b4.5 (absBeat=43.5):
+  BEFORE: VI°  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  C5, C4, A3, F4
+  Key:    Am
+
+[Cantata 38 Bach.json] m12 b3 (absBeat=46):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, B4, F4, D3
+  Key:    Am
+
+[Cantata 38 Bach.json] m15 b1.5 (absBeat=56.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  B4, D4, D3, G3
+  Key:    Am
+
+[Cantata 40 bach.json] m1 b3.5 (absBeat=2.5):
+  BEFORE: iv°  (spelling cost: 0)
+  AFTER:  VI°  (spelling cost: 0)
+  Notes:  B4, B3, D3, E4
+  Key:    Fm
+
+[Cantata 40 bach.json] m5 b2.5 (absBeat=17.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  B4, G4, D4, B2
+  Key:    Fm
+
+[Cantata 40 bach.json] m7 b3.5 (absBeat=26.5):
+  BEFORE: iv  (spelling cost: 1)
+  AFTER:  VI  (spelling cost: 1)
+  Notes:  D5, F4, B3, C4
+  Key:    Fm
+
+[Cantata 40 bach.json] m7 b4 (absBeat=27):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  D5, F4, B3, D4
+  Key:    Fm
+
+[Cantata 40 bach.json] m9 b3.5 (absBeat=34.5):
+  BEFORE: iv  (spelling cost: 1)
+  AFTER:  VI  (spelling cost: 1)
+  Notes:  D5, B4, F4, C3
+  Key:    Fm
+
+[Cantata 40 bach.json] m9 b4 (absBeat=35):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  D5, B4, F4, D3
+  Key:    Fm
+
+[Cantata 40 bach.json] m10 b1 (absBeat=36):
+  BEFORE: Fr+  (spelling cost: 1)
+  AFTER:  vii°/VI  (spelling cost: 1)
+  Notes:  C5, B4, Gb4, E3
+  Key:    Fm
+
+[Cantata 40 bach.json] m11 b2 (absBeat=41):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  A4, F4, C4, A3
+  Key:    Fm
+
+[Cantata 40 bach.json] m11 b3 (absBeat=42):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, F4, B3, G3
+  Key:    Fm
+
+[Cantata 40 bach.json] m11 b3.5 (absBeat=42.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, B3, G3, E4
+  Key:    Fm
+
+[Cantata 40 bach.json] m13 b2.5 (absBeat=49.5):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  F5, A4, C4, B2
+  Key:    Fm
+
+[Cantata 40 bach.json] m13 b4 (absBeat=51):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  E5, G4, C4, E3
+  Key:    Fm
+
+[Cantata 40 bach.json] m13 b4.5 (absBeat=51.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  E5, G4, C4, F3
+  Key:    Fm
+
+[Cantata 40 bach.json] m14 b1 (absBeat=52):
+  BEFORE: VI  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, G4, C4, G3
+  Key:    Fm
+
+[Cantata 40 bach.json] m15 b2.5 (absBeat=57.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  C5, F4, A3, C3
+  Key:    Fm
+
+[Cantata 40 bach.json] m15 b3.5 (absBeat=58.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  D5, B3, B2, G4
+  Key:    Fm
+
+[Cantata 40 bach.json] m17 b3.5 (absBeat=66.5):
+  BEFORE: iv  (spelling cost: 1)
+  AFTER:  VI  (spelling cost: 1)
+  Notes:  D5, B4, F4, C3
+  Key:    Fm
+
+[Cantata 40 bach.json] m17 b4 (absBeat=67):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  D5, B4, F4, D3
+  Key:    Fm
+
+[Cantata 40 bach.json] m18 b2.5 (absBeat=69.5):
+  BEFORE: ♭VII  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  B4, G4, E4, D3
+  Key:    Fm
+
+[Cantata 40 bach.json] m18 b3.5 (absBeat=70.5):
+  BEFORE: v  (spelling cost: 1)
+  AFTER:  V/III  (spelling cost: 1)
+  Notes:  E5, C5, G4, D3
+  Key:    Fm
+
+[Cantata 40 bach.json] m18 b4 (absBeat=71):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  E5, C5, G4, E3
+  Key:    Fm
+
+[Cantata 43 bach.json] m17 b3 (absBeat=50):
+  BEFORE: vii°/ii  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  B4, D4, G#3, B2
+  Key:    G
+
+[Cantata 43 bach.json] m18 b3 (absBeat=53):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  C5, E4, A3, C3
+  Key:    G
+
+[Cantata 43 bach.json] m20 b1 (absBeat=57):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  A4, E4, A3, A2
+  Key:    G
+
+[Cantata 43 bach.json] m22 b2.5 (absBeat=64.5):
+  BEFORE: vii°/IV  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  A4, D5, D4, B3
+  Key:    G
+
+[Cantata 44 Bach.json] m1 b3 (absBeat=2):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, E4, A3, C3
+  Key:    Bb
+
+[Cantata 44 Bach.json] m4 b3 (absBeat=14):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  B4, G4, G3, E4
+  Key:    Bb
+
+[Cantata 44 Bach.json] m5 b3.5 (absBeat=18.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, E4, C3, A4
+  Key:    Bb
+
+[Cantata 44 Bach.json] m9 b3.5 (absBeat=34.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F5, F4, B3, B3
+  Key:    Bb
+
+[Cantata 45 bach.json] m2 b2 (absBeat=5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  F4, D4, A3, F3
+  Key:    E
+
+[Cantata 45 bach.json] m2 b2.5 (absBeat=5.5):
+  BEFORE: vii°  (spelling cost: 1)
+  AFTER:  ii  (spelling cost: 1)
+  Notes:  D4, A3, F3, E4
+  Key:    E
+
+[Cantata 45 bach.json] m2 b3.5 (absBeat=6.5):
+  BEFORE: vii°/IV  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  B4, B3, G3, F4
+  Key:    E
+
+[Cantata 45 bach.json] m8 b2 (absBeat=29):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi°  (spelling cost: 0)
+  Notes:  A#4, E4, C4, C3
+  Key:    E
+
+[Cantata 45 bach.json] m12 b2 (absBeat=45):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi°  (spelling cost: 0)
+  Notes:  C5, A#4, C4, E3
+  Key:    E
+
+[Cantata 45 bach.json] m12 b4.5 (absBeat=47.5):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi°  (spelling cost: 0)
+  Notes:  E5, E4, C3, A#4
+  Key:    E
+
+[Cantata 45 bach.json] m14 b3 (absBeat=54):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C5, B4, A3, F3
+  Key:    E
+
+[Cantata 46 Bach.json] m2 b4.5 (absBeat=7.5):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V°  (spelling cost: 0)
+  Notes:  F4, F4, D4, B4
+  Key:    Gm
+
+[Cantata 46 Bach.json] m4 b4 (absBeat=15):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  A4, F#4, C4, A3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m5 b2 (absBeat=17):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m6 b4.5 (absBeat=23.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F4, D4, A3, C3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m7 b2.5 (absBeat=25.5):
+  BEFORE: VI°  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  G4, E4, B3, G3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m9 b1.5 (absBeat=32.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  E4, C5, A4, E3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m9 b3 (absBeat=34):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  C5, B4, F4, F3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m9 b3.5 (absBeat=34.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  C5, B4, F4, F3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m17 b1.5 (absBeat=64.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  G4, G3, E3, C4
+  Key:    Gm
+
+[Cantata 46 Bach.json] m19 b3 (absBeat=74):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  G4, E4, C4, E3
+  Key:    Gm
+
+[Cantata 46 Bach.json] m19 b4.5 (absBeat=75.5):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V°  (spelling cost: 0)
+  Notes:  F4, F4, D3, B4
+  Key:    Gm
+
+[Cantata 65 Bacht.htp] m5 b2 (absBeat=17):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    Am
+
+[Cantata 65 Bacht.htp] m10 b2 (absBeat=37):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    Am
+
+[Cantata 65 Bacht.htp] m13 b2.5 (absBeat=49.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, E4, B3, D3
+  Key:    Am
+
+[Cantata 65 Bacht.htp] m14 b4.5 (absBeat=55.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  B4, F4, D4, G3
+  Key:    Am
+
+[Cantata 65 Bacht.htp] m18 b4.5 (absBeat=71.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F3, F4, D4
+  Key:    Am
+
+[Cantata 65 Bacht.htp] m19 b2 (absBeat=73):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, F4, B3, D3
+  Key:    Am
+
+[Cantata 65 Bacht.htp] m20 b1 (absBeat=76):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  E4, B4, E4, E3
+  Key:    Am
+
+[Cantata 7.json] m4 b2.5 (absBeat=13.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  B4, B3, G3, E4
+  Key:    Am
+
+[Cantata 7.json] m4 b3.5 (absBeat=14.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F3, D4, D4
+  Key:    Am
+
+[Cantata 7.json] m4 b4 (absBeat=15):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, D4, E4, E3
+  Key:    Am
+
+[Cantata 7.json] m4 b4.5 (absBeat=15.5):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, E4, E3, C#4
+  Key:    Am
+
+[Cantata 7.json] m8 b2.5 (absBeat=29.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  B4, B3, G3, E4
+  Key:    Am
+
+[Cantata 7.json] m8 b3.5 (absBeat=30.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F3, D4, D4
+  Key:    Am
+
+[Cantata 7.json] m8 b4 (absBeat=31):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, D4, E4, E3
+  Key:    Am
+
+[Cantata 7.json] m8 b4.5 (absBeat=31.5):
+  BEFORE: vii°/iv  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, E4, E3, C#4
+  Key:    Am
+
+[Cantata 7.json] m12 b1.5 (absBeat=44.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  D5, A3, F3, E4
+  Key:    Am
+
+[Cantata 7.json] m14 b2 (absBeat=53):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, D4, F3, D3
+  Key:    Am
+
+[Cantata 7.json] m16 b2.5 (absBeat=61.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  G4, B3, G2, E4
+  Key:    Am
+
+[Cantata 7.json] m16 b4 (absBeat=63):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  G4, E4, B3, G2
+  Key:    Am
+
+[Cantata 7.json] m18 b1.5 (absBeat=68.5):
+  BEFORE: ♭VII  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  D5, G4, B3, F3
+  Key:    Am
+
+[Cantata 7.json] m18 b2 (absBeat=69):
+  BEFORE: ♭VII  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D5, G4, B3, E3
+  Key:    Am
+
+[Cantata 8 .json] m4 b2 (absBeat=13):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  C5, G4, E4, E3
+  Key:    E
+
+[Cantata 8 .json] m9 b2 (absBeat=33):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  C5, G4, E4, E3
+  Key:    E
+
+[Cantata 8 .json] m10 b1 (absBeat=36):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  F4, C#4, F3
+  Key:    E
+
+[Cantata 8 .json] m11 b2 (absBeat=41):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  F4, D4
+  Key:    E
+
+[Cantata 8 .json] m12 b1.5 (absBeat=44.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  C5, F4, A4, D3
+  Key:    E
+
+[Cantata 8 .json] m13 b2 (absBeat=49):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  E3, C5, G4, E4
+  Key:    E
+
+[Cantata 8 .json] m16 b1 (absBeat=60):
+  BEFORE: ♭vi  (spelling cost: 0)
+  AFTER:  vii°/vi  (spelling cost: 0)
+  Notes:  B#4, F4, D4
+  Key:    E
+
+[Cantata 8 .json] m16 b2 (absBeat=61):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi°  (spelling cost: 0)
+  Notes:  C5, A4, E4
+  Key:    E
+
+[Cantata 8 .json] m16 b2.5 (absBeat=61.5):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi°  (spelling cost: 0)
+  Notes:  C5, E4, A4
+  Key:    E
+
+[Cantata 8 .json] m16 b3 (absBeat=62):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  C5, G4, D4
+  Key:    E
+
+[Cantata 8 .json] m18 b1.5 (absBeat=68.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C5, C4, B3
+  Key:    E
+
+[Cantata 8 .json] m19 b2.5 (absBeat=73.5):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  A2, E4, E4
+  Key:    E
+
+[Cantata 8 .json] m20 b1 (absBeat=76):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B3, F3, B2
+  Key:    E
+
+[Corale 17 Schinelli.htp] m5 b3 (absBeat=18):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F5, B4, D#4, A3
+  Key:    Em
+
+[Corale 17 Schinelli.htp] m7 b4 (absBeat=27):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    Em
+
+[Corale 17 Schinelli.htp] m19 b2 (absBeat=73):
+  BEFORE: ♭VII  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  F#4, D4, A3, C3
+  Key:    Em
+
+[Corale 17 Schinelli.htp] m21 b3 (absBeat=82):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  B4, G#4, E4, B3
+  Key:    Em
+
+[Corale 17 Schinelli.htp] m32 b2 (absBeat=125):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  B4, F#4, D4, A2
+  Key:    Em
+
+[Corale 17 Schinelli.htp] m33 b2 (absBeat=129):
+  BEFORE: V/iv  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  B4, E4, D4, C3
+  Key:    Em
+
+[Corale 1D Bach.htp] m10 b2 (absBeat=37):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/IV  (spelling cost: 0)
+  Notes:  G4, E4, C4, Bb2
+  Key:    C
+
+[Corale 1D Bach.htp] m11 b1 (absBeat=40):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  G4, E4, A3, D3
+  Key:    C
+
+[Corale 28 Bach.json] m10 b1 (absBeat=36):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, D4, B2
+  Key:    Am
+
+[Corale 28 Bach.json] m10 b3 (absBeat=38):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D3
+  Key:    Am
+
+[Corale 28 Bach.json] m10 b3.5 (absBeat=38.5):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, E4, E3
+  Key:    Am
+
+[Corale 28 Bach.json] m10 b4.5 (absBeat=39.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F3, A3, D4
+  Key:    Am
+
+[Corale 28 Bach.json] m13 b4 (absBeat=51):
+  BEFORE: ♭VII  (spelling cost: 0)
+  AFTER:  V/III  (spelling cost: 0)
+  Notes:  B4, G4, D4, F3
+  Key:    Am
+
+[Corale 28 Bach.json] m14 b2.5 (absBeat=53.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, F4, D3, B3
+  Key:    Am
+
+[Corale 28 Bach.json] m14 b4 (absBeat=55):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  C5, A4, E4, B2
+  Key:    Am
+
+[Corale 28 Bach.json] m15 b1 (absBeat=56):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, A4, D4, B2
+  Key:    Am
+
+[Corale 2b Bach.htp] m17 b3 (absBeat=66):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  B4, E4, G3, G3
+  Key:    C
+
+[Corale 3C bach:Schinelli.json] m2 b1.5 (absBeat=4.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, E4, A3, B2
+  Key:    C
+
+[Corale 3C bach:Schinelli.json] m2 b2 (absBeat=5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    C
+
+[Corale 3C bach:Schinelli.json] m2 b2.5 (absBeat=5.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  C5, A4, E4, D3
+  Key:    C
+
+[Corale n 5c Bach:Schinelli.json] m2 b2 (absBeat=5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  B4, F4, D4, E3
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m2 b2.5 (absBeat=5.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m3 b1.5 (absBeat=8.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  B4, G4, G3, E4
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m3 b4.5 (absBeat=11.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, E4, B3, D3
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m7 b2.5 (absBeat=25.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, B4, F4, F3
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m9 b3 (absBeat=34):
+  BEFORE: VI  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  A4, G4, E4, F3
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m9 b3.5 (absBeat=34.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F3, F4, D4
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m9 b4 (absBeat=35):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  F3, A4, F4, D4
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m10 b4 (absBeat=39):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  F4, B3, F3, D3
+  Key:    Am
+
+[Corale n 5c Bach:Schinelli.json] m11 b3.5 (absBeat=42.5):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  C5, E4, A3, D3
+  Key:    Am
+
+[Corale n 5d Bach:Schinelli.json] m3 b1.5 (absBeat=8.5):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  B4, G3, G3, E4
+  Key:    Am
+
+[Corale n 5d Bach:Schinelli.json] m9 b1 (absBeat=32):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    Am
+
+[Corale n 5d Bach:Schinelli.json] m9 b2 (absBeat=33):
+  BEFORE: III°  (spelling cost: 0)
+  AFTER:  vii°/V  (spelling cost: 0)
+  Notes:  A4, F#4, C4, D#3
+  Key:    Am
+
+[Corale n3b Schinelli.json] m3 b4 (absBeat=11):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, E4, A3, C3
+  Key:    C
+
+[Corale n3b Schinelli.json] m15 b1 (absBeat=56):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, F4, B3, D3
+  Key:    C
+
+[Corale n4c bach:Schinelli.json] m2 b2 (absBeat=5):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  G4, D4, G3, C3
+  Key:    C
+
+[Corale n4c bach:Schinelli.json] m5 b2 (absBeat=17):
+  BEFORE: V/V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  C5, A4, D4, G3
+  Key:    C
+
+[Corale n4c bach:Schinelli.json] m6 b4.5 (absBeat=23.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/IV  (spelling cost: 0)
+  Notes:  G4, E4, C4, Bb2
+  Key:    C
+
+[Corale n4c bach:Schinelli.json] m9 b2.5 (absBeat=33.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D3, F4, D4, B3
+  Key:    C
+
+[Corale n4c bach:Schinelli.json] m13 b2.5 (absBeat=49.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  F4, D3, B3, F3
+  Key:    C
+
+[Corale semplce N1.htp] m3 b3 (absBeat=10):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  B4, F4, F3, D3
+  Key:    C
+
+[Corale semplce N1.htp] m13 b2 (absBeat=49):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  C5, C4, A2, F#4
+  Key:    C
+
+[Corale semplce N1.htp] m22 b1 (absBeat=84):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C4, G3, G3, C3
+  Key:    C
+
+[Dealmont C56 3b.htp] m2 b1 (absBeat=4):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  D#5, G4, B3, E3
+  Key:    Em
+
+[Delachi 1 p35.htp] m3 b3 (absBeat=10):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    C
+
+[Delachi 1 p35.htp] m5 b1 (absBeat=16):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    C
+
+[Delachi 1 p35.htp] m7 b3 (absBeat=26):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    C
+
+[Delachi 1 p55.htp] m10 b1 (absBeat=36):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    C
+
+[Delachi 1 p55.htp] m13 b2 (absBeat=49):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, B4, F4, C4
+  Key:    C
+
+[Delachi 1 p55.htp] m14 b2 (absBeat=53):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  B4, E4, G3, F5
+  Key:    C
+
+[Delachi n2 p34:71.htp] m2 b1 (absBeat=4):
+  BEFORE: vii°/IV  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  D5, F4, D4, C4
+  Key:    Bb
+
+[Delachi n2 p34:71.htp] m5 b3 (absBeat=18):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  Bb4, G4, G3, E5
+  Key:    Bb
+
+[Delachi n2 p34:71.htp] m7 b3 (absBeat=26):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  G4, Eb4, Eb3, C5
+  Key:    Bb
+
+[Delachi n2 p34:71.htp] m13 b3 (absBeat=50):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  G4, Eb3, C5, C4
+  Key:    Bb
+
+[Delachi n2 p36:71.htp] m3 b3 (absBeat=14):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  Eb5, Ab4, Eb4, C3
+  Key:    Ab
+
+[Delachi n2 p36:71.htp] m6 b3 (absBeat=32):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  F5, Bb4, F4, Db3
+  Key:    Ab
+
+[Delachi n2 p36:71.htp] m7 b3 (absBeat=38):
+  BEFORE: vii°/ii  (spelling cost: 0)
+  AFTER:  iii°  (spelling cost: 0)
+  Notes:  C5, A4, Eb4, C3
+  Key:    Ab
+
+[Delachi n2 p36:71.htp] m8 b1 (absBeat=42):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  Ab4, Eb4, Db4, Eb3
+  Key:    Ab
+
+[Delachi n2 p36:71.htp] m13 b1 (absBeat=72):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  Db5, Ab4, Eb4, Eb2
+  Key:    Ab
+
+[Delachi n4 p16:68.htp] m7 b1 (absBeat=24):
+  BEFORE: vii°/IV  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  Bb4, G4, Db4, Bb2
+  Key:    Eb
+
+[Delamont 42.htp] m2 b3 (absBeat=6):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  G4, E4, B3, G3
+  Key:    G
+
+[Delamont 42.htp] m3 b2 (absBeat=9):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, C4, C3, G4
+  Key:    G
+
+[Delamont 42.htp] m4 b3 (absBeat=14):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  G4, E4, C4, G2
+  Key:    G
+
+[Delamont 44.htp] m3 b2.5 (absBeat=9.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  ♭VI  (spelling cost: 0)
+  Notes:  G3, Eb4, C5, Eb3
+  Key:    G
+
+[Delamont 45.htp] m2 b3 (absBeat=6):
+  BEFORE: V°  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  A3, C5, A4, Eb3
+  Key:    D
+
+[Delamont 50 3f.htp] m1 b4 (absBeat=3):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  A3, C#5, G4, Eb3
+  Key:    D
+
+[Delamont 50 3f.htp] m3 b4 (absBeat=11):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  B4, Eb4, C#4, G3
+  Key:    D
+
+[Delamont 50 3f.htp] m4 b4 (absBeat=15):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭VI  (spelling cost: 0)
+  Notes:  Eb5, E#4, A3, C#3
+  Key:    D
+
+[Delamont 51 2b.htp] m1 b4 (absBeat=3):
+  BEFORE: Ger+  (spelling cost: 1)
+  AFTER:  V/♭VII  (spelling cost: 1)
+  Notes:  C4, A4, F3, D#5
+  Key:    C
+
+[Delamont 51 2b.htp] m2 b1.67 (absBeat=4.666666666666666):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, C4, C3, C5
+  Key:    C
+
+[Delamont 51 2b.htp] m2 b1.67 (absBeat=4.666666666666667):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, C4, C3, C5
+  Key:    C
+
+[Delamont 51 2b.htp] m2 b3.67 (absBeat=6.666666666666666):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C4, F4, F3, C5
+  Key:    C
+
+[Delamont 51 2b.htp] m2 b3.67 (absBeat=6.666666666666667):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C4, F4, F3, C5
+  Key:    C
+
+[Delamont 51 2b.htp] m2 b4.33 (absBeat=7.333333333333334):
+  BEFORE: Ger+  (spelling cost: 1)
+  AFTER:  V/♭VII  (spelling cost: 1)
+  Notes:  C4, F3, D#4, A4
+  Key:    C
+
+[Delamont 51 2b.htp] m3 b4.33 (absBeat=11.333333333333334):
+  BEFORE: Fr+  (spelling cost: 1)
+  AFTER:  V/♭VII  (spelling cost: 1)
+  Notes:  F3, B4, D#4, A3
+  Key:    C
+
+[Delamont C 33 5.htp] m6 b3 (absBeat=22):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  C3, A4, Eb4, C4
+  Key:    Gm
+
+[Delamont C 36 3a.htp] m1 b2.5 (absBeat=1.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F4, Bb3, Bb3, Bb4
+  Key:    Bb
+
+[Delamont C 55 1c.htp] m1 b4 (absBeat=3):
+  BEFORE: ♭VII  (spelling cost: 1)
+  AFTER:  I  (spelling cost: 1)
+  Notes:  Eb3, C5, F#4, Db4
+  Key:    Eb
+
+[Delamont C 55 1c.htp] m3 b1 (absBeat=8):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  Eb4, Bb3, F#3, Eb3
+  Key:    Eb
+
+[Delamont C 55 1c.htp] m3 b2 (absBeat=9):
+  BEFORE: I  (spelling cost: 1)
+  AFTER:  ♭VI  (spelling cost: 1)
+  Notes:  Eb4, Eb3, Cb4, Bb3
+  Key:    Eb
+
+[Delamont C 55 1c.htp] m3 b2.5 (absBeat=9.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  Eb4, Eb3, Cb4, Ab3
+  Key:    Eb
+
+[Delamont C 60 1c.htp] m1 b4.33 (absBeat=3.3333333333333335):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  C#4, E4
+  Key:    Dm
+
+[Delamont C 60 1c.htp] m1 b4.67 (absBeat=3.666666666666666):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  C#4, E4, C#5, E3
+  Key:    Dm
+
+[Delamont C 60 1c.htp] m1 b4.67 (absBeat=3.6666666666666674):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  C#4, E4, C#5, E3
+  Key:    Dm
+
+[Delamont C 60 1c.htp] m2 b2.5 (absBeat=5.5):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  A3, C#5, G4, Eb3
+  Key:    Dm
+
+[Delamont C 60 1d.htp] m1 b1.5 (absBeat=0.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  A4, F4, B3, G3
+  Key:    F
+
+[Delamont C26 4a.htp] m3 b4 (absBeat=11):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F4, D4, A3, F3
+  Key:    Bb
+
+[Delamont C27 1b.htp] m1 b3 (absBeat=2):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  Bb4, G4, D4, Bb3
+  Key:    F
+
+[Delamont C27 1b.htp] m2 b1 (absBeat=4):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    F
+
+[Delamont C27 1b.htp] m3 b3 (absBeat=10):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C4, E4, A3, C3
+  Key:    F
+
+[Delamont C30 2a.htp] m2 b1 (absBeat=4):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    G
+
+[Delamont C34 2a.htp] m1 b3 (absBeat=2):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  F4, Ab3, F3, Db5
+  Key:    Fm
+
+[Delamont C34 2c.htp] m2 b3 (absBeat=5):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  v  (spelling cost: 0)
+  Notes:  C5, E4, A3, A3
+  Key:    Dm
+
+[Delamont C34 2c.htp] m3 b3 (absBeat=8):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  v  (spelling cost: 0)
+  Notes:  A4, E4, A3, C3
+  Key:    Dm
+
+[Delamont C34 2c.htp] m4 b3 (absBeat=11):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, A3, D3
+  Key:    Dm
+
+[Delamont C36 4.htp] m5 b2.5 (absBeat=17.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D5, D3, A3, A4
+  Key:    D
+
+[Delamont C39 3b .htp] m3 b3.5 (absBeat=8.5):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  Eb4, Bb3, Eb3, Bb4
+  Key:    Bbm
+
+[Delamont C50 3a.htp] m1 b4 (absBeat=3):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  A#4, F#4, Eb4, Ab3
+  Key:    G
+
+[Delamont C50 3a.htp] m3 b2 (absBeat=9):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/IV  (spelling cost: 0)
+  Notes:  B4, D4, G3, F3
+  Key:    G
+
+[Delamont C50 3a.htp] m3 b4 (absBeat=11):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭VI  (spelling cost: 0)
+  Notes:  A#4, F#4, Ab3, D3
+  Key:    G
+
+[Delamont C50 3a.htp] m5 b4 (absBeat=19):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  Ab4, A#4, Eb4, F#3
+  Key:    G
+
+[Delamont C50 3f.htp] m1 b4 (absBeat=3):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭VI  (spelling cost: 0)
+  Notes:  A3, C#5, E#4, Eb3
+  Key:    D
+
+[Delamont C50 3f.htp] m3 b4 (absBeat=11):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  G4, B#4, C#4, Eb3
+  Key:    D
+
+[Delamont C50 3f.htp] m4 b4 (absBeat=15):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭VI  (spelling cost: 0)
+  Notes:  Eb5, E#4, A3, C#3
+  Key:    D
+
+[Delamont C50 c.htp] m1 b3 (absBeat=2):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/♭VII  (spelling cost: 0)
+  Notes:  F5, F#4, C4, Ab3
+  Key:    Eb
+
+[Delamont C50 c.htp] m1 b4 (absBeat=3):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭VII  (spelling cost: 0)
+  Notes:  F#4, Ab3, C5, D4
+  Key:    Eb
+
+[Delamont C52.htp] m1 b4 (absBeat=3):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  F3, B4, G#4, Db4
+  Key:    F
+
+[Delamont C52.htp] m3 b3 (absBeat=10):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/iii  (spelling cost: 0)
+  Notes:  Ab4, D4, Fb3, B2
+  Key:    F
+
+[Delamont C52.htp] m5 b1 (absBeat=16):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  Db5, Ab4, B3, F3
+  Key:    F
+
+[Delamont C52.htp] m5 b1.5 (absBeat=16.5):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  Db5, Ab4, B3, F2
+  Key:    F
+
+[Delamont C52.htp] m5 b2 (absBeat=17):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  B3, G#4, Db4, F3
+  Key:    F
+
+[Delamont C52.htp] m5 b2.5 (absBeat=17.5):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  B3, G#4, Db4, F2
+  Key:    F
+
+[Delamont C52.htp] m6 b1 (absBeat=20):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  B4, Db4, G#3, F3
+  Key:    F
+
+[Delamont C52.htp] m6 b1.5 (absBeat=20.5):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  B4, Db4, G#3, F2
+  Key:    F
+
+[Delamont C52.htp] m6 b2.5 (absBeat=21.5):
+  BEFORE: vii°/IV  (spelling cost: 0)
+  AFTER:  V°  (spelling cost: 0)
+  Notes:  C5, C4, A3, Eb3
+  Key:    F
+
+[Delamont C52.htp] m6 b3 (absBeat=22):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  G4, F4, B3, Db3
+  Key:    F
+
+[Delamont C52.htp] m6 b4.5 (absBeat=23.5):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  G4, F4, B3, Db3
+  Key:    F
+
+[Delamont C53 4.htp] m1 b4 (absBeat=3):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  G4, Eb5, C#4, A#3
+  Key:    G
+
+[Delamont C53 4.htp] m2 b4 (absBeat=7):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  A#4, F#4, Eb4, Ab3
+  Key:    G
+
+[Delamont C53 4.htp] m3 b4 (absBeat=11):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  Eb5, F#4, A#3, Ab3
+  Key:    G
+
+[Delamont C54 1b.htp] m4 b3 (absBeat=14):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  D4, F#4, E4, E3
+  Key:    Am
+
+[Delamont C54 1bis.htp] m2 b3 (absBeat=6):
+  BEFORE: VI°  (spelling cost: 0)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  G#3, B4, F4, D4
+  Key:    Am
+
+[Delamont C54 1bis.htp] m3 b1 (absBeat=8):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, E4, D4, A3
+  Key:    Am
+
+[Delamont C54 1bis.htp] m4 b4 (absBeat=15):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  E4, D4, Bb2, G#4
+  Key:    Am
+
+[Delamont C54 1bis.htp] m5 b2 (absBeat=17):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  A4, G4, A2, E4
+  Key:    Am
+
+[Delamont C54 1d.htp] m1 b4 (absBeat=3):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  F4, A3, C#3, D5
+  Key:    Dm
+
+[Delamont C54 1d.htp] m2 b1 (absBeat=4):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  F5, G4, A3, B2
+  Key:    Dm
+
+[Delamont C54 1d.htp] m3 b3 (absBeat=10):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  D3, G#4, E4, D4
+  Key:    Dm
+
+[Delamont C54 1f.htp] m2 b1 (absBeat=4):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  F4, Bb3, Ab3, Eb3
+  Key:    Eb
+
+[Delamont C54 1f.htp] m2 b3 (absBeat=6):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D5, F4, Bb3, C3
+  Key:    Eb
+
+[Delamont C54 2.htp] m1 b1 (absBeat=0):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/IV  (spelling cost: 0)
+  Notes:  D5, F#4, C4, D3
+  Key:    D
+
+[Delamont C54 2.htp] m3 b4 (absBeat=11):
+  BEFORE: ♭III  (spelling cost: 0)
+  AFTER:  V/♭VI  (spelling cost: 0)
+  Notes:  F4, A2, Eb5, C4
+  Key:    D
+
+[Delamont C54 2.htp] m4 b1 (absBeat=12):
+  BEFORE: ♭III  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  Eb5, F4, C4, Bb2
+  Key:    D
+
+[Delamont C54 2.htp] m4 b4 (absBeat=15):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  G4, A3, Eb3, C#5
+  Key:    D
+
+[Delamont C55 b.htp] m1 b1 (absBeat=0):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  A4, D4, C4, C3
+  Key:    G
+
+[Delamont C56 2f.htp] m2 b2 (absBeat=5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  F4, Eb3, C5, Ab3
+  Key:    Eb
+
+[Delamont C57 2a.htp] m1 b4 (absBeat=3):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  E4, Db4, Gb3, Bb4
+  Key:    F
+
+[Delamont C57 2b.htp .htp] m1 b4.33 (absBeat=3.333333333333333):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  F4, Eb4, F3
+  Key:    Bb
+
+[Delamont C57 2b.htp .htp] m3 b4.5 (absBeat=11.5):
+  BEFORE: IV  (spelling cost: 1)
+  AFTER:  ♭VI  (spelling cost: 1)
+  Notes:  Gb4, Eb4, F3, Bb4
+  Key:    Bb
+
+[Delamont C59 B 1.htp] m3 b3 (absBeat=10):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  D5, F4, Bb3, C3
+  Key:    F
+
+[Delamont C59 B 1.htp] m4 b2 (absBeat=13):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  V/♭VII  (spelling cost: 0)
+  Notes:  G#4, Bb3, D3, F4
+  Key:    F
+
+[Delamont C59 B 1.htp] m5 b1 (absBeat=16):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  F4, D4, C4, Bb3
+  Key:    F
+
+[Delamont C60 1a.htp] m1 b2.33 (absBeat=1.333333333333333):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  Bb3, Eb3, Eb4, Bb4
+  Key:    Eb
+
+[Delamont C60 1a.htp] m2 b2 (absBeat=5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  G3, Eb3, Eb4, C4
+  Key:    Eb
+
+[Delamont C60 1g.htp] m2 b1 (absBeat=3):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  E5, B4, C#4, C#3
+  Key:    Bm
+
+[Delamont C60 1g.htp] m2 b1.5 (absBeat=3.5):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  i  (spelling cost: 0)
+  Notes:  B4, C#4, C#3, F#5
+  Key:    Bm
+
+[Delamont C60 1g.htp] m3 b2 (absBeat=7):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  B3, D3, F#5, G4
+  Key:    Bm
+
+[Delamont C60 1g.htp] m4 b1 (absBeat=9):
+  BEFORE: ♭vii  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  C5, G4, E4, A2
+  Key:    Bm
+
+[Delamont C60 1g.htp] m4 b1.5 (absBeat=9.5):
+  BEFORE: N  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  C5, G4, E4, B2
+  Key:    Bm
+
+[Delamont C60 1g.htp] m4 b3.5 (absBeat=11.5):
+  BEFORE: ♭vii  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  G4, E4, C5, A2
+  Key:    Bm
+
+[Delamont C60 1g.htp] m5 b1 (absBeat=12):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  B4, E4, D4, B2
+  Key:    Bm
+
+[Delamont C60 1g.htp] m6 b1 (absBeat=15):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  C#5, A4, C#4, E3
+  Key:    Bm
+
+[Delamont C60 1g.htp] m7 b1 (absBeat=18):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  B4, G4, D4, F#3
+  Key:    Bm
+
+[Delamont C60 1g.htp] m7 b3 (absBeat=20):
+  BEFORE: vii°/VI  (spelling cost: 1)
+  AFTER:  V  (spelling cost: 1)
+  Notes:  G#4, E4, A3, F#2
+  Key:    Bm
+
+[Delamot C30 3a.htp] m3 b2 (absBeat=9):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  G4, Eb3, Eb5, C4
+  Key:    Eb
+
+[Dubois 1 p.6.json] m29 b3 (absBeat=114):
+  BEFORE: v  (spelling cost: 0)
+  AFTER:  ♭VII  (spelling cost: 0)
+  Notes:  Bb4, D4, Bb2, G3
+  Key:    C
+
+[Dubois 1 p.6.json] m31 b3 (absBeat=122):
+  BEFORE: ♭vii  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  Db5, F4, Db3, Bb3
+  Key:    C
+
+[Dubois 1 p11.json] m23 b1 (absBeat=132):
+  BEFORE: ♭VI  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  Ab4, Eb4, Eb3, Cb3
+  Key:    Eb
+
+[Dubois 1 p11.json] m23 b5 (absBeat=136):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  ♭VI  (spelling cost: 0)
+  Notes:  Eb4, Eb3, Cb3, Ab4
+  Key:    Eb
+
+[Dubois 1 p5.htp] m7 b3 (absBeat=26):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    C
+
+[Dubois 1 p5.htp] m14 b3 (absBeat=54):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, E4, B3, G3
+  Key:    C
+
+[Dubois 2 p 55.htp] m2 b2 (absBeat=5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  F3, D3, G4
+  Key:    F
+
+[Dubois 2 p 55.htp] m3 b2 (absBeat=9):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  V/vi  (spelling cost: 0)
+  Notes:  Bb3, G3, E3, A4
+  Key:    F
+
+[Dubois 2 p 55.htp] m4 b3 (absBeat=14):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  A3, F3, D5, F4
+  Key:    F
+
+[Dubois 2 p 55.htp] m5 b2.5 (absBeat=17.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, Bb3, G3, C5
+  Key:    F
+
+[Dubois 2 p 55.htp] m5 b3 (absBeat=18):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  Bb3, G3, E5, G4
+  Key:    F
+
+[Dubois 2 p 55.htp] m6 b2 (absBeat=21):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V/ii  (spelling cost: 0)
+  Notes:  E4, C4, A3, D5
+  Key:    F
+
+[Dubois 3 p55.htp] m3 b1 (absBeat=6):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  F5, Ab4, Bb3, Eb3
+  Key:    Eb
+
+[Dubois 3 p55.htp] m3 b2.5 (absBeat=7.5):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F5, Ab4, Bb3, C3
+  Key:    Eb
+
+[Dubois 3 p55.htp] m4 b3.5 (absBeat=11.5):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  Bb4, F4, D4, G5
+  Key:    Eb
+
+[Dubois 5 p 13.htp.json] m30 b3 (absBeat=89):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  F#3, D3, B4, D4
+  Key:    A
+
+[Dubois 5 p 13.json] m30 b3 (absBeat=89):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  F#3, D3, B4, D4
+  Key:    A
+
+[Dubois N2 p.7.json] m6 b3 (absBeat=22):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  IV°  (spelling cost: 0)
+  Notes:  A4, Eb4, C4, C3
+  Key:    G
+
+[Dubois Note sfuggite p.214.htp] m3 b3 (absBeat=10):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A3, F3, F4, D4
+  Key:    C
+
+[Dubois Note sfuggite p.214.htp] m3 b4.5 (absBeat=11.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  A3, F3, D4, G4
+  Key:    C
+
+[Dubois Note sfuggite p.214.htp] m18 b1.75 (absBeat=68.75):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  C4, A3, F3, D5
+  Key:    C
+
+[Dubois Note sfuggite p.214.htp] m20 b4 (absBeat=79):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C3, G5, C5
+  Key:    C
+
+[Dubois Note sfuggite p.214.htp] m21 b4.75 (absBeat=83.75):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  B3, G3, B4, E5
+  Key:    C
+
+[Dubois Note sfuggite p.214.htp] m22 b3 (absBeat=86):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C4, C3, C5, G4
+  Key:    C
+
+[Dubois n 2 p55.htp] m2 b2 (absBeat=5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  V/V  (spelling cost: 0)
+  Notes:  F3, D3, G4
+  Key:    F
+
+[Dubois n 2 p55.htp] m4 b3 (absBeat=14):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  A3, F3, D5, F4
+  Key:    F
+
+[Dubois n 2 p55.htp] m5 b2.5 (absBeat=17.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, Bb3, G3, C5
+  Key:    F
+
+[Dubois n 2 p55.htp] m5 b3 (absBeat=18):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  Bb3, G3, E5, G4
+  Key:    F
+
+[Dubois n1 p 71.json] m11 b3 (absBeat=32):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  B4, F4, B3, D3
+  Key:    C
+
+[Dubois n2 p14.htp] m5 b5 (absBeat=28):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    Am
+
+[Dubois n2 p14.htp] m16 b1 (absBeat=90):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    Am
+
+[Dubois n2 p14.htp] m19 b3 (absBeat=110):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  F4, D4, D3, B4
+  Key:    Am
+
+[Dubois n2 p14.htp] m23 b5 (absBeat=136):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A3, A4, F3, D4
+  Key:    Am
+
+[Dubois n2 p14.htp] m27 b5 (absBeat=160):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D4, B4, F3, D3
+  Key:    Am
+
+[Dubois n2 p14.htp] m28 b5 (absBeat=166):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  E3, A2
+  Key:    Am
+
+[Dubois n2 p5.json] m7 b3 (absBeat=26):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    F
+
+[Dubois n2 p71.json] m3 b2.5 (absBeat=5.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    G
+
+[Dubois n2 p71.json] m6 b2.5 (absBeat=11.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  G4, E4, B3, G3
+  Key:    G
+
+[Dubois n2 p71.json] m14 b2.75 (absBeat=27.75):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  E4, C4, C3, A4
+  Key:    G
+
+[Dubois n3 p12.htp] m6 b3 (absBeat=22):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  vii  (spelling cost: 0)
+  Notes:  C5, A4, A3, C4
+  Key:    Bb
+
+[Dubois n3 p12.htp] m7 b3 (absBeat=26):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  A4, F3, D5, F4
+  Key:    Bb
+
+[Dubois n3 p12.htp] m9 b3 (absBeat=34):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  G4, Eb3, C5, Eb4
+  Key:    Bb
+
+[Dubois n3 p12.htp] m11 b3 (absBeat=42):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  Bb2, G4, D4, Bb3
+  Key:    Bb
+
+[Dubois n3 p12.htp] m12 b3 (absBeat=46):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C3, A4, Eb4, C4
+  Key:    Bb
+
+[Dubois n3 p12.htp] m14 b3 (absBeat=54):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  Eb3, C5, G4, Eb4
+  Key:    Bb
+
+[Dubois n3 p12.htp] m39 b3 (absBeat=154):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  Eb4, A3, A4, C3
+  Key:    Bb
+
+[Dubois n3 p12.htp] m40 b1 (absBeat=156):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  G4, D4, Bb3, D3
+  Key:    Bb
+
+[Dubois n3 p12.htp] m45 b1 (absBeat=176):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  A4, Eb4, A3, C3
+  Key:    Bb
+
+[Dubois n3 p12.htp] m52 b3 (absBeat=206):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  ♭VI  (spelling cost: 0)
+  Notes:  Bb4, Bb3, Gb3, Eb4
+  Key:    Bb
+
+[Dubois n4 p13.htp] m19 b3 (absBeat=74):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  Ab3, F2, D5, F4
+  Key:    Cm
+
+[Dubois ornamenti.htp] m4 b2.5 (absBeat=13.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  Eb4, Bb3, G2, C5
+  Key:    Eb
+
+[Dubuois 145 p 216.htp] m4 b2.5 (absBeat=13.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  Eb4, Bb3, G2, C5
+  Key:    Eb
+
+[Gloria Vivaldi.json] m19 b1 (absBeat=72):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/ii  (spelling cost: 0)
+  Notes:  B4, F4, D4, A3
+  Key:    D
+
+[Gloria Vivaldi.json] m19 b2.5 (absBeat=73.5):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/ii  (spelling cost: 0)
+  Notes:  B4, F4, D4, A3
+  Key:    D
+
+[Gloria Vivaldi.json] m19 b3 (absBeat=74):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/ii  (spelling cost: 0)
+  Notes:  B4, F4, D4, A3
+  Key:    D
+
+[Gloria Vivaldi.json] m20 b1 (absBeat=76):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  B4, G4, E4, G3
+  Key:    D
+
+[Gloria Vivaldi.json] m20 b3 (absBeat=78):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  B4, G4, E4, G3
+  Key:    D
+
+[Gloria Vivaldi.json] m30 b3 (absBeat=118):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/vi  (spelling cost: 0)
+  Notes:  C5, F4, E4, A3
+  Key:    D
+
+[Gloria Vivaldi.json] m30 b4 (absBeat=119):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/vi  (spelling cost: 0)
+  Notes:  C5, F4, E4, A3
+  Key:    D
+
+[Gloria Vivaldi.json] m34 b1 (absBeat=132):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  vii°/ii  (spelling cost: 0)
+  Notes:  C5, A4, F4, D3
+  Key:    D
+
+[Gloria Vivaldi.json] m42 b1 (absBeat=164):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  A4, D4
+  Key:    D
+
+[Gloria Vivaldi.json] m42 b2 (absBeat=165):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, A4
+  Key:    D
+
+[Michel Baron.json] m2 b2 (absBeat=5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/IV  (spelling cost: 0)
+  Notes:  C5, G4, E4, Bb2
+  Key:    C
+
+[Pedron 14 p.39.json] m9 b3 (absBeat=34):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D5, B4, G4, B3
+  Key:    E
+
+[Pedron n 16 p4.htp] m3 b3 (absBeat=10):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  Eb3, C5, G4, C4
+  Key:    Cm
+
+[Pedron n 16 p4.htp] m13 b1 (absBeat=48):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  C5, Ab4, F4, Ab3
+  Key:    Cm
+
+[Pedron n 16 p4.htp] m15 b1 (absBeat=56):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  Ab4, F4, D4, F3
+  Key:    Cm
+
+[Pedron n 20 p4.htp] m5 b1 (absBeat=16):
+  BEFORE: V+  (spelling cost: 0)
+  AFTER:  III+  (spelling cost: 0)
+  Notes:  D5, B4, F4, Bb3
+  Key:    Gm
+
+[Pedron n 20 p4.htp] m10 b3 (absBeat=38):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  E5, A4, C4, C3
+  Key:    Gm
+
+[Pedron n 20 p4.htp] m12 b1 (absBeat=44):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, D4, G3, G2
+  Key:    Gm
+
+[Pedron n22 p5.htp] m3 b3 (absBeat=10):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  Db5, F4, Bb3, Db3
+  Key:    Ab
+
+[Pedron n22 p5.htp] m9 b1 (absBeat=32):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, Eb4, C4, Eb3
+  Key:    Ab
+
+[Pedron n36 p8.htp] m5 b3 (absBeat=18):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  D5, B4, F4, D3
+  Key:    Am
+
+[Pedron n36 p8.htp] m6 b3 (absBeat=22):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    Am
+
+[Pedron n36 p8.htp] m9 b1 (absBeat=32):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  E4, C4, A3, C3
+  Key:    Am
+
+[Pedron n36 p8.htp] m11 b1 (absBeat=40):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    Am
+
+[Pedron n47 p 10.htp] m11 b3 (absBeat=62):
+  BEFORE: iv  (spelling cost: 0)
+  AFTER:  VI  (spelling cost: 0)
+  Notes:  Bb4, G4, D4, Bb2
+  Key:    Dm
+
+[Pedron n47 p 10.htp] m11 b5 (absBeat=64):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V/iv  (spelling cost: 0)
+  Notes:  D5, F#4, D4, A2
+  Key:    Dm
+
+[Pedron n50 p 10.htp] m1 b1 (absBeat=0):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F5, C5, F4
+  Key:    Fm
+
+[Piston 6-5p69.htp] m2 b3 (absBeat=6):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  D5, F#4, B3, D3
+  Key:    A
+
+[Piston 9-12 p 141.htp] m4 b3 (absBeat=14):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv  (spelling cost: 0)
+  Notes:  E5, G4, E2, C#4
+  Key:    Bm
+
+[Piston 9.14 p145.htp] m1 b5 (absBeat=4):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  C5, Eb4, A3, C3
+  Key:    Bb
+
+[Piston 9.19 p147.htp] m1 b2.5 (absBeat=1.5):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  F#4, D4, D3, B4
+  Key:    G
+
+[Piston Es. 28 p.432.htp] m1 b2 (absBeat=1):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  V/♭III  (spelling cost: 0)
+  Notes:  F4, D4, G#4, Bb3
+  Key:    C
+
+[Progr ton 3.htp] m2 b1 (absBeat=4):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  C5, C5, F#4, Ab3
+  Key:    C
+
+[Progr ton 3.htp] m4 b1 (absBeat=12):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  C5, Ab4, F#4, Ab3
+  Key:    C
+
+[Progr ton 3.htp] m6 b1 (absBeat=20):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  C5, Ab4, F#4, Ab3
+  Key:    C
+
+[Progr ton 3.htp] m8 b1 (absBeat=28):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  C5, F#4, D4, Ab3
+  Key:    C
+
+[Progr ton 7.htp] m7 b3 (absBeat=26):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, B4, F4, D3
+  Key:    C
+
+[Progr ton 8.htp] m5 b3 (absBeat=18):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  F4, F4, B3, D3
+  Key:    C
+
+[Progr ton. 2.htp] m2 b3 (absBeat=6):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  F5, F4, B3, D3
+  Key:    C
+
+[Progressione 6.htp] m6 b1 (absBeat=20):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  B4, F4, F3, D3
+  Key:    C
+
+[Progressione 6.htp] m10 b1 (absBeat=36):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  A4, F4, D4, F2
+  Key:    C
+
+[Raddoppi ed Accordi Incompleti Dubois.htp] m21 b1 (absBeat=80):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C5, G4, C4, C3
+  Key:    C
+
+[Raddoppi ed Accordi Incompleti Dubois.htp] m22 b1 (absBeat=84):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G4, C4, G3, C3
+  Key:    C
+
+[Ris. Ecc. 7a e rivolti.htp] m2 b5 (absBeat=10):
+  BEFORE: iii  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  G3, E5, B4, E4
+  Key:    C
+
+[Ris.Ecc. ImMaj7.json] m2 b1 (absBeat=4):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, B3, D3
+  Key:    Am
+
+[Ris.Ecc. ImMaj7.json] m5 b3 (absBeat=18):
+  BEFORE: ii°  (spelling cost: 0)
+  AFTER:  iv°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    Am
+
+[Ris.Ecc. ImMaj7.json] m25 b3 (absBeat=98):
+  BEFORE: vii°/ii°  (spelling cost: 0)
+  AFTER:  vii°/iv  (spelling cost: 0)
+  Notes:  C#5, G4, E4, Bb2
+  Key:    Am
+
+[Rit  post. con cmbio pos..json] m2 b1 (absBeat=4):
+  BEFORE: vii°/IV  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  E5, E4, G3, D3
+  Key:    C
+
+[Rit 2° riv 7-6.json] m2 b1 (absBeat=4):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  G4, F4, C4, G3
+  Key:    C
+
+[Rit con nota di volta inf con elisione.json] m2 b1 (absBeat=4):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  G4, F4, C4, G3
+  Key:    C
+
+[Rit della 3a con nota di v e elisione.json] m2 b2 (absBeat=5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C5, G4, C4, G3
+  Key:    C
+
+[Rit doppio 4_3, 7_8.json] m2 b1 (absBeat=4):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  B4, F4, G3, C3
+  Key:    C
+
+[Rit doppio 9,4-8,3.json] m2 b1 (absBeat=4):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  F4, D4, G3, C3
+  Key:    C
+
+[Ritardo fondam con pass note.json] m1 b3 (absBeat=2):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  F4, G3, D3, C5
+  Key:    C
+
+[Tesoro sopra tutti i tesori.htp] m14 b3 (absBeat=54):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  B4, F4, D4, D3
+  Key:    C
+
+[Tesoro sopra tutti i tesori.htp] m27 b4 (absBeat=107):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  C5, E4, A3, C3
+  Key:    C
+
+[Test cromatici.htp] m1 b1 (absBeat=0):
+  BEFORE: Fr+  (spelling cost: 0)
+  AFTER:  V/♭VI  (spelling cost: 0)
+  Notes:  G4, D#4, B3, Db3
+  Key:    C
+
+[cantata 25 Bach.json] m3 b2.5 (absBeat=9.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, F4, D3, B4
+  Key:    C
+
+[cantata 25 Bach.json] m7 b2.5 (absBeat=25.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, F4, D3, B4
+  Key:    C
+
+[cantata 25 Bach.json] m9 b4.5 (absBeat=35.5):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  F5, A4, F3, D4
+  Key:    C
+
+[cantata 25 Bach.json] m10 b1.5 (absBeat=36.5):
+  BEFORE: vii°/ii  (spelling cost: 0)
+  AFTER:  V/ii  (spelling cost: 0)
+  Notes:  E5, G4, C3, A3
+  Key:    C
+
+[cantata 25 Bach.json] m11 b1.5 (absBeat=40.5):
+  BEFORE: vii°/IV  (spelling cost: 0)
+  AFTER:  iii  (spelling cost: 0)
+  Notes:  G5, G4, E3, D4
+  Key:    C
+
+[cantata 25 Bach.json] m13 b3.5 (absBeat=50.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  F5, F4, D3, B4
+  Key:    C
+
+[cantata 25 Bach.json] m16 b1.5 (absBeat=60.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  F5, F3, D3, B4
+  Key:    C
+
+[cantata 25 Bach.json] m16 b4.5 (absBeat=63.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  C5, G4, C4, C3
+  Key:    C
+
+[cantata 3 bach.htp] m4 b2 (absBeat=13):
+  BEFORE: vii°/V  (spelling cost: 1)
+  AFTER:  V/iii  (spelling cost: 1)
+  Notes:  A4, F4, D4, G3
+  Key:    A
+
+[cantata 3 bach.htp] m4 b2.5 (absBeat=13.5):
+  BEFORE: vii°/V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  A4, F4, D4, F3
+  Key:    A
+
+[cantata 3 bach.htp] m6 b4.5 (absBeat=23.5):
+  BEFORE: vii°/ii  (spelling cost: 0)
+  AFTER:  iii°  (spelling cost: 0)
+  Notes:  C5, A4, E4, C3
+  Key:    A
+
+[cantata 3 bach.htp] m7 b1.5 (absBeat=24.5):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  D5, B4, B2, G4
+  Key:    A
+
+[delamont C 39 3c.htp] m4 b1.5 (absBeat=12.5):
+  BEFORE: I  (spelling cost: 0)
+  AFTER:  V  (spelling cost: 0)
+  Notes:  D4, A3, D3, D5
+  Key:    D
+
+[ornamenti.json] m1 b3 (absBeat=2):
+  BEFORE: vii°  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  C5, F4, D4, B2
+  Key:    C
+
+[ornamenti.json] m1 b4.5 (absBeat=3.5):
+  BEFORE: vi  (spelling cost: 0)
+  AFTER:  I  (spelling cost: 0)
+  Notes:  E4, C4, C3, A4
+  Key:    C
+
+[ritardi simultanei.json] m1 b1 (absBeat=0):
+  BEFORE: IV  (spelling cost: 0)
+  AFTER:  ii°  (spelling cost: 0)
+  Notes:  D5, B4, F4, F3
+  Key:    C
+
+[ritardi simultanei.json] m2 b1 (absBeat=4):
+  BEFORE: V  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  C5, A4, D4, G3
+  Key:    C
+
+[ritardo fondamentale corretto.json] m2 b3 (absBeat=6):
+  BEFORE: ii  (spelling cost: 0)
+  AFTER:  vi  (spelling cost: 0)
+  Notes:  A4, D3
+  Key:    C
+
+[seste ecc con 8va ecc.htp] m1 b1 (absBeat=0):
+  BEFORE: Sw+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  D#5, F#4, C4, Ab3
+  Key:    C
+
+[seste ecc con 8va ecc.htp] m2 b1 (absBeat=4):
+  BEFORE: Ger+  (spelling cost: 0)
+  AFTER:  ♭II  (spelling cost: 0)
+  Notes:  B4, D4, Ab3, Db3
+  Key:    C
+
+[seste ecc.htp] m2 b1 (absBeat=4):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  C5, F#4, C4, Ab3
+  Key:    C
+
+[seste ecc.htp] m4 b1 (absBeat=12):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  C5, Ab4, F#4, Ab3
+  Key:    C
+
+[seste ecc.htp] m6 b1 (absBeat=20):
+  BEFORE: It+  (spelling cost: 0)
+  AFTER:  V/♭II  (spelling cost: 0)
+  Notes:  C5, Ab4, F#4, Ab3
+  Key:    C
+
+[triplo ritardo.json] m1 b1 (absBeat=0):
+  BEFORE: VI°  (spelling cost: 0)
+  AFTER:  vii°  (spelling cost: 0)
+  Notes:  B4, F4, D4, G#3
+  Key:    Am
+
+[triplo ritardo.json] m2 b1 (absBeat=4):
+  BEFORE: VI  (spelling cost: 1)
+  AFTER:  ii°  (spelling cost: 1)
+  Notes:  B4, F4, D4, A3
+  Key:    Am
+
+[∂elamont C58 2d.htp] m1 b1 (absBeat=0):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  A4, E4, C4, B3
+  Key:    Am
+
+[∂elamont C58 2d.htp] m1 b3 (absBeat=2):
+  BEFORE: III  (spelling cost: 0)
+  AFTER:  IV  (spelling cost: 0)
+  Notes:  C5, F#4, D4, E3
+  Key:    Am
+
+[∂elamont C58 2d.htp] m1 b4 (absBeat=3):
+  BEFORE: III+  (spelling cost: 1)
+  AFTER:  V  (spelling cost: 1)
+  Notes:  C5, D4, E3, G#4
+  Key:    Am
+
+[∂elamont C58 2d.htp] m2 b1 (absBeat=4):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  ii  (spelling cost: 0)
+  Notes:  B4, E4, D4, A3
+  Key:    Am
+
+[∂elamont C58 2d.htp] m3 b1 (absBeat=8):
+  BEFORE: i  (spelling cost: 0)
+  AFTER:  III  (spelling cost: 0)
+  Notes:  A4, E4, C4, B3
+  Key:    Am

@@ -300,6 +300,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 octave: s.resolvedOctave ?? n.octave,
                                 accidental: s.resolvedAccidental != null ? s.resolvedAccidental : (n.accidental ?? ''),
                                 isSuspension: undefined };
+                        }).filter((n: any) => {
+                            if (!n || n.isRest) return false;
+                            // Exclude ornamental notes from cadential pattern recognition
+                            if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                            if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape) return false;
+                            return true;
                         });
                         const cands = identifyChordCandidates(notesForCad);
                         const top = cands?.[0];
@@ -2386,6 +2392,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const pcs = pcSetFromNotes(analysisNotes as any);
                 const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
                 if (prevRoman && prevRootPc != null && prevType && bassPc != null && roman && roman !== prevRoman && !String(roman).includes('/')) {
+                    // Guard: do NOT override a strong dominant label (V, V7, vii°, etc.)
+                    // with a weaker tonic/subdominant reuse. V is functionally critical.
+                    const isCurrentDominant = /^(V|vii°|VII)$/i.test(String(roman).replace(/[⁶⁴₆₄]/g, ''));
+                    if (!isCurrentDominant) {
                     const triad = triadPcsFromRootAndType(prevRootPc, prevType);
                     if (triad) {
                         const triadSet = new Set<number>([triad.root, triad.third, triad.fifth]);
@@ -2394,6 +2404,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             roman = prevRoman;
                             _dt('R7:postInvRoot', roman, { prevRoman, prevRootPc });
                         }
+                    }
                     }
                 }
 
@@ -3021,7 +3032,6 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const x = getXForAbsBeat(event.absBeat, system);
 
             // ─────────────────────────────────────────────────────────────────
-
 
             labelsBySystem[systemIndex].push({
                 id: `lbl-${event.absBeat}`,

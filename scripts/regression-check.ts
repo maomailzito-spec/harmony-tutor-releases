@@ -787,4 +787,60 @@ const main = () => {
   if (anyFailed) process.exitCode = 1;
 };
 
-main();
+const updateSnapshots = () => {
+  const fixtures = loadFixtures();
+  let updated = 0;
+  for (const fx of fixtures) {
+    if (!fx.name.endsWith('(snapshot)')) continue;
+    const keySignature = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
+    const result = applyHarmonyRules(
+      fx.notes as any,
+      keySignature as any,
+      fx.keyTonic,
+      fx.isMinorMode,
+      (fx.analysisContexts || []) as any,
+      fx.timeSignature as any,
+      (fx as any).doubleBarlineMeasures || [],
+      (fx as any).ornamentOverrides || [],
+      (fx as any).harmonyOverrides || [],
+    );
+    const timeline = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
+    const newExpects: typeof fx.expects = [];
+    for (const ev of timeline) {
+      const ab = Math.round(Number(ev.absBeat) * 1e6) / 1e6;
+      if (!Number.isFinite(ab)) continue;
+      const ra = getRomanAnalysis(ev.notes as any, fx.keyTonic, fx.isMinorMode);
+      const roman = ra?.roman ?? '';
+      const figures = ra?.figures ?? [];
+      if (!roman) continue;
+      const entry: any = { absBeat: ab, roman };
+      if (figures.length > 0 && !(figures.length === 1 && figures[0] === '5')) {
+        entry.figuresInclude = figures;
+      }
+      newExpects.push(entry);
+    }
+    if (newExpects.length === 0) continue;
+    fx.expects = newExpects;
+    // Write back — find the file
+    const files = fs.readdirSync(fixturesDir).filter(f => f.endsWith('.json')).sort();
+    for (const f of files) {
+      const full = path.join(fixturesDir, f);
+      const obj = JSON.parse(fs.readFileSync(full, 'utf8'));
+      if (obj.name === fx.name) {
+        obj.expects = newExpects;
+        fs.writeFileSync(full, JSON.stringify(obj, null, 2) + '\n');
+        updated++;
+        console.log(`UPDATED  ${fx.name} (${newExpects.length} expects)`);
+        break;
+      }
+    }
+  }
+  console.log(`\nDone: ${updated} snapshots updated`);
+};
+
+if (process.argv.includes('--update-snapshots')) {
+  updateSnapshots();
+} else {
+  main();
+}
+

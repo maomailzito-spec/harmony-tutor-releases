@@ -134,6 +134,7 @@ export const CHORD_FORMULAS: Partial<Record<ChordType, number[]>> = {
   [BuiltInChords.Minor9]: [0, 3, 7, 10, 2],
   [BuiltInChords.Dominant9]: [0, 4, 7, 10, 2],
   [BuiltInChords.Add9]: [0, 4, 7, 2],
+  [BuiltInChords.MinorAdd9]: [0, 3, 7, 2],
   [BuiltInChords.Dominant7b9]: [0, 4, 7, 10, 1],
   [BuiltInChords.Dominant7sharp9]: [0, 4, 7, 10, 3],
   // Elevenths
@@ -971,6 +972,7 @@ const chordStyling = {
     [BuiltInChords.Minor9]: { rgb: 'rgb(96, 165, 250)', text: 'text-blue-400', fill: 'fill-blue-400/20 stroke-blue-400', dot: 'bg-blue-400 text-white border-blue-600', rootDot: 'bg-blue-400 text-white border-stone-200' },
     [BuiltInChords.Dominant9]: { rgb: 'rgb(56, 189, 248)', text: 'text-sky-400', fill: 'fill-sky-400/20 stroke-sky-400', dot: 'bg-sky-400 text-gray-900 border-sky-600', rootDot: 'bg-sky-400 text-gray-900 border-stone-200' },
     [BuiltInChords.Add9]: { rgb: 'rgb(250, 204, 21)', text: 'text-yellow-400', fill: 'fill-yellow-400/20 stroke-yellow-400', dot: 'bg-yellow-400 text-gray-900 border-yellow-600', rootDot: 'bg-yellow-400 text-gray-900 border-stone-200' },
+    [BuiltInChords.MinorAdd9]: { rgb: 'rgb(250, 204, 21)', text: 'text-yellow-400', fill: 'fill-yellow-400/20 stroke-yellow-400', dot: 'bg-yellow-400 text-gray-900 border-yellow-600', rootDot: 'bg-yellow-400 text-gray-900 border-stone-200' },
     [BuiltInChords.Dominant7b9]: { rgb: 'rgb(56, 189, 248)', text: 'text-sky-400', fill: 'fill-sky-400/20 stroke-sky-400', dot: 'bg-sky-400 text-gray-900 border-sky-600', rootDot: 'bg-sky-400 text-gray-900 border-stone-200' },
     [BuiltInChords.Dominant7sharp9]: { rgb: 'rgb(56, 189, 248)', text: 'text-sky-400', fill: 'fill-sky-400/20 stroke-sky-400', dot: 'bg-sky-400 text-gray-900 border-sky-600', rootDot: 'bg-sky-400 text-gray-900 border-stone-200' },
     [BuiltInChords.Minor11]: { rgb: 'rgb(96, 165, 250)', text: 'text-blue-400', fill: 'fill-blue-400/20 stroke-blue-400', dot: 'bg-blue-400 text-white border-blue-600', rootDot: 'bg-blue-400 text-white border-stone-200' },

@@ -912,9 +912,17 @@ export function computeFiguredBassFromIntervals(intervals: BassInterval[], optio
         } else if (has(3) && has(5) && has(6)) {
             baseNums = [6, 5];
         } else if (has(7)) {
-            // Root-position seventh: show 5/7 when the UI convention shows triads as '5',
-            // so the student can see the seventh is added to the triad.
-            baseNums = (showRootPositionTriadAs5 && has(5)) ? [5, 7] : [7];
+            // ── Ninth chords (root position): 7th + 9th present ──
+            // V9, V7♭9, etc.: the 9th (raw interval 9, reduced to 2) is above
+            // a root-position 7th chord.  Display as 9/7 (or ♭9/7).
+            const hasRaw9Root = altByRaw.has(9);
+            if (hasRaw9Root && has(2)) {
+                baseNums = [9, 7];
+            } else {
+                // Root-position seventh: show 5/7 when the UI convention shows triads as '5',
+                // so the student can see the seventh is added to the triad.
+                baseNums = (showRootPositionTriadAs5 && has(5)) ? [5, 7] : [7];
+            }
         } else if (has(6) && has(4)) {
             baseNums = [6, 4];
         } else if (has(6)) {
@@ -988,7 +996,11 @@ export function computeFiguredBassFromIntervals(intervals: BassInterval[], optio
         const figures = Array.from(shown)
             .filter(n => n !== 1 && n !== 8)
             .sort((a, b) => a - b)
-            .map(n => `${alterationToGlyph(alt(n))}${n}`);
+            .map(n => {
+                // For compound intervals (9, 11, 13), get alteration from altByRaw
+                const a = (n >= 9 ? altByRaw.get(n) : alt(n)) ?? 0;
+                return `${alterationToGlyph(a)}${n}`;
+            });
 
         return { figures: normalizeFiguresVertical(figures) };
     } catch {
@@ -1609,7 +1621,7 @@ const CHORD_CHECK_ORDER: ChordType[] = [
     BuiltInChords.Dominant13, BuiltInChords.Dominant7b13, BuiltInChords.Dominant11,
     BuiltInChords.Dominant7sharp11, BuiltInChords.Major9, BuiltInChords.Minor9,
     BuiltInChords.Dominant9, BuiltInChords.Dominant7b9, BuiltInChords.Dominant7sharp9,
-    BuiltInChords.Minor11, BuiltInChords.Add9, BuiltInChords.Major7,
+    BuiltInChords.Minor11, BuiltInChords.Add9, BuiltInChords.MinorAdd9, BuiltInChords.Major7,
     BuiltInChords.MinorMajor7,
     BuiltInChords.Minor7, BuiltInChords.Dominant7, BuiltInChords.Diminished7,
     BuiltInChords.Minor7b5, BuiltInChords.Major6, BuiltInChords.Minor6,
@@ -1936,6 +1948,7 @@ const CHORD_TYPE_TO_SYMBOL: Partial<Record<ChordType, string>> = {
   [BuiltInChords.Minor9]: 'm9',
   [BuiltInChords.Dominant9]: '9',
   [BuiltInChords.Add9]: 'add9',
+  [BuiltInChords.MinorAdd9]: 'm(add9)',
   [BuiltInChords.Dominant7b9]: '7♭9',
   [BuiltInChords.Dominant7sharp9]: '7♯9',
 
@@ -3551,6 +3564,79 @@ export function getRomanAnalysis(
         }
     } catch { /* ignore */ }
 
+    // ── V9 / Dominant-ninth figured bass from ROOT (not bass) ──
+    // When the chord is a dominant 9th type, compute figures based on which
+    // chord member is in the bass, using conventional Dubois shorthand.
+    try {
+        const chType = String((chordInfo as any)?.type || '');
+        const isDom9Type = chType === BuiltInChords.Dominant9
+            || chType === BuiltInChords.Dominant7b9
+            || chType === BuiltInChords.Dominant7sharp9;
+        if (isDom9Type && chordInfo?.root && filteredChord?.length >= 3) {
+            const rootMidi = effectiveMidi(chordInfo.root as any);
+            if (Number.isFinite(rootMidi)) {
+                // Find the actual bass note (lowest midi)
+                let bassMidi = Infinity;
+                for (const n of filteredChord) {
+                    if (n?.isRest) continue;
+                    const m = effectiveMidi(n as any);
+                    if (Number.isFinite(m) && m! < bassMidi) bassMidi = m!;
+                }
+                if (Number.isFinite(bassMidi) && bassMidi < Infinity) {
+                    const bassIntervalPc = mod12(bassMidi - rootMidi!);
+                    // Determine inversion from interval between root and bass
+                    // 0 = root pos, 4 = 1st inv (M3 = sensibile), 7 = 2nd inv (P5),
+                    // 10 = 3rd inv (m7), 2/1/3 = 4th inv (9th)
+                    let v9figs: string[] | null = null;
+
+                    // Determine alteration prefix for the 9th
+                    const ninthAlt = (() => {
+                        for (const n of filteredChord) {
+                            if (n?.isRest) continue;
+                            const iv = spelledSimpleIntervalFromRoot(chordInfo!.root as any, n as any);
+                            if (iv && iv.diatonicNumber === 2) {
+                                const expected9 = expectedSemitonesForMajorPerfect(2); // M2 = 2 semitones
+                                const alt9 = iv.semitones - expected9;
+                                return alt9 < 0 ? '♭' : alt9 > 0 ? '♯' : '';
+                            }
+                        }
+                        return '';
+                    })();
+
+                    if (bassIntervalPc === 0) {
+                        // Root position: 9/7
+                        v9figs = [`${ninthAlt}9`, '7'];
+                    } else if (bassIntervalPc === 4 || bassIntervalPc === 3) {
+                        // 1st inversion (sensibile/3rd at bass): ♭5/3 or just 6/5
+                        // Dubois: cifra = 7/5 (derivato da 6/9)
+                        v9figs = ['7', '5'];
+                    } else if (bassIntervalPc === 7) {
+                        // 2nd inversion (5th at bass): Dubois cifra = 6/4/3
+                        v9figs = ['6', '4', '3'];
+                    } else if (bassIntervalPc === 10) {
+                        // 3rd inversion (7th at bass): Dubois cifra = 4/2
+                        v9figs = ['4', '2'];
+                    } else if (bassIntervalPc === 2 || bassIntervalPc === 1 || bassIntervalPc === 3) {
+                        // 4th inversion (9th at bass): Dubois cifra = 6/4/3
+                        // Only if 9th is truly the bass (check diatonic)
+                        const bassIv = spelledSimpleIntervalFromRoot(chordInfo!.root as any,
+                            filteredChord.reduce((lo, n) => {
+                                if (n?.isRest) return lo;
+                                const m = effectiveMidi(n as any);
+                                return (Number.isFinite(m) && m! < (effectiveMidi(lo as any) ?? Infinity)) ? n : lo;
+                            }, filteredChord[0]) as any);
+                        if (bassIv && bassIv.diatonicNumber === 2) {
+                            v9figs = ['6', '4', '3'];
+                        }
+                    }
+                    if (v9figs) {
+                        return { roman: baseRomanSymbol, figures: v9figs };
+                    }
+                }
+            }
+        }
+    } catch { /* ignore */ }
+
     return { roman: baseRomanSymbol, figures: figuresL2 };
 }
 
@@ -3896,9 +3982,12 @@ export function applyHarmonyRules(
     const _romanCache = new Map<string, { roman: string; figures: string[] } | null>();
     const _gRA = (chord: StaffNote[], keyRoot: string, minor: boolean): { roman: string; figures: string[] } | null => {
         if (!chord || chord.length < 2) return null;
-        const k = chord.map(n => `${n.midi ?? 0}:${n.pitch ?? ''}${n.explicitAccidental || ''}`).sort().join(',') + '|' + keyRoot + (minor ? 'm' : 'M');
+        // Filter out notes with manual ornament override (appoggiatura, etc.)
+        const filtered = chord.filter((n: any) => !(n?.ornamentOverride && n.ornamentOverride !== 'structural'));
+        if (filtered.length < 2) return null;
+        const k = filtered.map(n => `${n.midi ?? 0}:${n.pitch ?? ''}${n.explicitAccidental || ''}`).sort().join(',') + '|' + keyRoot + (minor ? 'm' : 'M');
         if (_romanCache.has(k)) return _romanCache.get(k)!;
-        const r = getRomanAnalysis(chord, keyRoot, minor);
+        const r = getRomanAnalysis(filtered, keyRoot, minor);
         _romanCache.set(k, r);
         return r;
     };
@@ -3907,9 +3996,11 @@ export function applyHarmonyRules(
     const _chordCache = new Map<string, ReturnType<typeof identifyChord>>();
     const _iC = (notes: StaffNote[]): ReturnType<typeof identifyChord> => {
         if (!notes || notes.length < 2) return identifyChord(notes);
-        const k = notes.map(n => n.midi ?? 0).sort((a, b) => a - b).join(',');
+        const filtered = notes.filter((n: any) => !(n?.ornamentOverride && n.ornamentOverride !== 'structural'));
+        if (filtered.length < 2) return identifyChord(filtered);
+        const k = filtered.map(n => n.midi ?? 0).sort((a, b) => a - b).join(',');
         if (_chordCache.has(k)) return _chordCache.get(k)!;
-        const r = identifyChord(notes);
+        const r = identifyChord(filtered);
         _chordCache.set(k, r);
         return r;
     };
@@ -7090,6 +7181,9 @@ export function applyHarmonyRules(
                     for (const ev of events || []) {
                         for (const n of (ev?.notes || []) as any[]) {
                             if (!n || (n as any).isRest) continue;
+                            // Skip ornamental notes (manual override + auto-detected)
+                            if ((n as any).ornamentOverride && (n as any).ornamentOverride !== 'structural') continue;
+                            if ((n as any).isPassing || (n as any).isNeighbor || (n as any).isAppoggiatura || (n as any).isAnticipation || (n as any).isEscape) continue;
                             pcs.add(mod12(pitchClassOf(n as any)));
                         }
                     }
@@ -9456,6 +9550,7 @@ export function applyHarmonyRules(
         if (!n) return false;
         try {
             const anyN = n as any;
+            if (anyN.ornamentOverride && anyN.ornamentOverride !== 'structural') return true;
             return Boolean(anyN.isPassing || anyN.isNeighbor || anyN.isAnticipation || anyN.isAppoggiatura || anyN.isEscape || anyN.isSuspension);
         } catch {
             return false;

@@ -272,6 +272,8 @@ export function computeStructuralSnapshotForHarmonyLabelEvent(opts: {
 
     for (const n of fullNotes) {
         if (!n || n.isRest) continue;
+        // Skip notes with manual ornament override (appoggiatura, etc.)
+        if ((n as any).ornamentOverride && (n as any).ornamentOverride !== 'structural') continue;
         const v = (n?.voice ?? 1) as number;
 
         try {
@@ -333,6 +335,8 @@ export function computeStructuralSnapshotForHarmonyLabelEvent(opts: {
         try {
             return (fullNotes || []).filter((n: any) => {
                 if (!n || n.isRest) return false;
+                // Manual ornament override
+                if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
                 // Surface ornaments should not drive fallback harmony labeling.
                 return !(
                     n.isPassing ||

@@ -81,6 +81,7 @@ export const BuiltInChords = {
   Minor9: 'Minor 9',
   Dominant9: 'Dominant 9',
   Add9: 'Add 9',
+  MinorAdd9: 'Minor Add 9',
   Dominant7b9: 'Dominant 7♭9',
   Dominant7sharp9: 'Dominant 7♯9',
 
