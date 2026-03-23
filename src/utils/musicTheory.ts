@@ -5327,7 +5327,45 @@ export function applyHarmonyRules(
                 const nextDissBass = isDissonantAgainstBass(next, nextEv);
                 const passesDissonanceTest = (!curCon && nextCon) || (curDissBass && !nextDissBass);
 
-                if (passesDissonanceTest && strongBeat) {
+                // Secondary path: last beat of the measure (e.g. beat 4 in 4/4)
+                // but not metrically "strong". Appoggiaturas on the last beat
+                // resolving within the same beat are common in tonal music.
+                // Very strict evidence required to avoid false positives:
+                //   a) it IS the last integer beat of the bar
+                //   b) dissonant vs bass now, consonant vs bass next
+                //   c) strictly shorter than ALL other voices at this event
+                //   d) resolution note forms a TRIAD consonance (P1/m3/M3/P5)
+                //      with the bass
+                const curBeatVal = cur.beat ?? curEv.beat ?? 1;
+                const isLastBeat = Math.abs(curBeatVal - beatsPerMeasure) < 1e-6;
+                let weakBeatAppogg = false;
+                if (!strongBeat && isLastBeat && curDissBass && !nextDissBass && next) {
+                    const _durCur = DURATION_VALUES[cur.duration as keyof typeof DURATION_VALUES] ?? 1;
+                    const _otherDurs = (curEv?.notes || [])
+                        .filter((n: any) => n && !n.isRest && n.id !== cur.id && Number.isFinite(n.midi))
+                        .map((n: any) => DURATION_VALUES[n.duration as keyof typeof DURATION_VALUES] ?? 1);
+                    const _minOther = _otherDurs.length ? Math.min(..._otherDurs) : _durCur;
+                    if (_durCur < _minOther - 1e-6) {
+                        const _bassPool = (curEv?.notes || []).filter(
+                            (nn: any) => nn && !nn.isRest && Number.isFinite(nn.midi) && nn.id !== cur.id);
+                        const _bass = _bassPool.length
+                            ? _bassPool.reduce((lo: any, nn: any) => (nn.midi < lo.midi ? nn : lo), _bassPool[0])
+                            : null;
+                        if (_bass) {
+                            const _resIntv = ((((next.midi ?? 0) - (_bass.midi ?? 0)) % 12) + 12) % 12;
+                            // 3=m3, 4=M3, 7=P5: triad consonances above
+                            // bass. Exclude P1 (0) — landing on the same
+                            // pitch-class as the bass is ambiguous: it may
+                            // just be a doubling, not evidence of a better
+                            // chord.
+                            if (_resIntv === 3 || _resIntv === 4 || _resIntv === 7) {
+                                weakBeatAppogg = true;
+                            }
+                        }
+                    }
+                }
+
+                if (passesDissonanceTest && (strongBeat || weakBeatAppogg)) {
                     // Guardrail: if the note is a chord tone of a confident harmonic candidate at this event
                     // AND it has a duration at least as long as the other chord members,
                     // do NOT treat it as appoggiatura. Otherwise we can filter
@@ -5379,6 +5417,14 @@ export function applyHarmonyRules(
 
                     if (!_passing7th && (unknownIn || leapIn || stepIn || prepared) && stepOut) {
                         (cur as any).isAppoggiatura = true;
+                        // Store resolution note info so downstream chord-ID can
+                        // substitute the ornament with its resolution pitch.
+                        if (next && Number.isFinite(next.midi)) {
+                            (cur as any)._appoggResolution = {
+                                midi: next.midi, pitch: (next as any).pitch,
+                                octave: (next as any).octave, voice: (cur as any).voice,
+                            };
+                        }
                         const oppositeDir = prev ? (sgn(prev, cur) !== 0 && sgn(prev, cur) === -sgn(cur, next)) : true;
 
                         // Only apply the stricter “opposite direction” expectation when the approach is by leap.
@@ -6794,13 +6840,29 @@ export function applyHarmonyRules(
             const absBeat = Number(ev?.absBeat);
             const notes = (ev?.notes || []) as any[];
             if (!Number.isFinite(absBeat) || notes.length === 0) return notes;
+            const resolutionSubs: any[] = [];
             const filtered = notes.filter((n) => {
                 try {
                     // Exclude notes with manual ornament override (non-structural)
                     // so they don't distort Roman numeral / figured bass labels.
                     if (n?.ornamentOverride && n.ornamentOverride !== 'structural') return false;
                     // Exclude auto-detected ornamental notes (passing, neighbor, etc.)
-                    if (n?.isPassing || n?.isNeighbor || n?.isAppoggiatura || n?.isAnticipation || n?.isEscape) return false;
+                    // For appoggiaturas, look up the resolution (next note in the
+                    // same voice) and include it as a substitute so that the
+                    // chord-ID sees the correct pitch.
+                    if (n?.isPassing || n?.isNeighbor || n?.isAppoggiatura || n?.isAnticipation || n?.isEscape) {
+                        if (n.isAppoggiatura && n.voice) {
+                            const vLine = notesByVoice[n.voice as Voice] || [];
+                            const idx = vLine.indexOf(n);
+                            if (idx >= 0 && idx < vLine.length - 1) {
+                                const nxt = vLine[idx + 1] as any;
+                                if (nxt && !nxt.isRest && Number.isFinite(nxt.midi)) {
+                                    resolutionSubs.push(nxt);
+                                }
+                            }
+                        }
+                        return false;
+                    }
                     // If a note is explicitly marked as a suspension *starting at this scanpoint*,
                     // treat it as a non-chord tone for the purpose of naming the underlying harmony.
                     const s = n?.isSuspension;
@@ -6810,6 +6872,17 @@ export function applyHarmonyRules(
                     return true;
                 }
             });
+            // Append resolution substitutes (avoid duplicates if the resolution
+            // is already present in the filtered set).
+            if (resolutionSubs.length > 0) {
+                const existingIds = new Set(filtered.map((n: any) => n?.id));
+                for (const sub of resolutionSubs) {
+                    if (!existingIds.has(sub.id)) {
+                        filtered.push(sub);
+                        existingIds.add(sub.id);
+                    }
+                }
+            }
             // When all notes at a beat are ornamental, let the chord shrink below 2
             // so getRomanAnalysis returns null and no spurious Roman label appears.
             return filtered;

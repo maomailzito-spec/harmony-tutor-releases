@@ -3815,7 +3815,11 @@
     },
     {
       "absBeat": 39,
-      "roman": "vii°/ii"
+      "roman": "vii°/ii",
+      "figuresInclude": [
+        "♭♭7",
+        "5"
+      ]
     },
     {
       "absBeat": 40,

@@ -710,6 +710,15 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (K === currentTonic) continue;
                         const rJ = getRomanAnalysis(stJ, K, false);
                         if (!rJ || rJ.roman !== 'I') continue;
+                        // Guard: a minor chord on the tonic (has ♭3 in figures)
+                        // is not a genuine "I" arrival — it is i (modal interchange).
+                        // Skip so tonicization is not spuriously triggered.
+                        // Use chord quality (not figures) to avoid false positives on inversions.
+                        {
+                            const _arrCands = identifyChordCandidates(stJ as any);
+                            const _arrQ = (_arrCands?.[0]?.type || '').toLowerCase();
+                            if (_arrQ.includes('minor') && !_arrQ.includes('diminish')) continue;
+                        }
                         // Guard: skip enharmonic tautological match (e.g. K='Gb' for an F# chord)
                         const _kPc = noteNameToChromaticIndex(K);
                         // If the arrival chord is a borrowed chord from the parallel
@@ -736,15 +745,18 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             if (_sp !== K) continue;
                         }
                         const rPrev = getRomanAnalysis(stPrev, K, false);
-                        if (!rPrev || !/^V/.test(rPrev.roman)) continue;
+                        if (!rPrev || !/^(V|vii[°o])/.test(rPrev.roman)) continue;
                         // V/x (secondary dominant of another degree) is not the
                         // primary dominant of K — skip auto-tonicization.
                         if (rPrev.roman.includes('/')) continue;
-                        // V° (diminished) is not a real dominant — skip auto-tonicization
-                        if (/°|dim/.test(rPrev.roman)) continue;
+                        // V° (diminished) is not a real dominant — skip auto-tonicization.
+                        // However vii° IS a valid leading-tone dominant function.
+                        const _isLeadingTone = /^vii[°o]/.test(rPrev.roman);
+                        if (!_isLeadingTone && /°|dim/.test(rPrev.roman)) continue;
                         // A chord with a major 7th (e.g. Ebmaj7) is NOT a dominant —
                         // dominants have minor 7ths. Check the actual pitch content.
-                        {
+                        // Skip this check for vii° which has no 7th from the dominant root.
+                        if (!_isLeadingTone) {
                             const _prevPcs = [...new Set(stPrev.map((n: any) => ((Number(n?.midi) % 12) + 12) % 12))];
                             const _kPc = noteNameToChromaticIndex(K);
                             // The dominant root is a 5th above K (7 semitones)
@@ -795,6 +807,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (!_hasChromatic) continue;
 
                         if ((lastIdx - firstIdx + 1) >= 2) {
+                            let _firstDisplayedForK = true;
                             for (let s = firstIdx; s <= lastIdx; s++) {
                                 if (autoRomanDisplayByAbsBeat.has(base[s].q) || overrideByAbsBeat.has(base[s].q)) continue;
                                 if (!base[s].ev?.notes?.length) continue;
@@ -832,19 +845,81 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 if (rS) {
                                     // Strip any secondary-function suffix (e.g. V/V → V) to prevent
                                     // triple-nesting like V/V/IV.  We only want the LOCAL function in key K.
-                                    const localR = String(rS.roman || '').replace(/\/.*$/, '');
+                                    let localR = String(rS.roman || '').replace(/\/.*$/, '');
+
+                                    // Melodic minor correction: in a tonicization to a minor chord,
+                                    // a half-diminished chord whose root is the raised 6th degree
+                                    // (= semitone below the 5th of K) is vi° not vii°.
+                                    // E.g. C#m7♭5 in Em context = vi° (melodic/dorian minor), not vii°.
+                                    if (/^vii[°o]/.test(localR)) {
+                                        const _arrCands = identifyChordCandidates(stJ as any);
+                                        const _arrQ = (_arrCands?.[0]?.type || '').toLowerCase();
+                                        if (_arrQ.includes('minor')) {
+                                            // Arrival chord is minor → tonicization target is minor.
+                                            // Check if this chord's root is the raised 6th (major 6th above tonic of K)
+                                            const _kPcLocal = noteNameToChromaticIndex(K);
+                                            const _raised6thPcLocal = ((_kPcLocal + 9) % 12);
+                                            const _stSPcs = (stS as any[]).map((n: any) => ((Number(n?.midi) % 12) + 12) % 12);
+                                            const _bassMidi = Math.min(...(stS as any[]).filter((n: any) => Number.isFinite(n?.midi)).map((n: any) => Number(n.midi)));
+                                            const _bassPc = ((_bassMidi % 12) + 12) % 12;
+                                            // Raised 6th = major 6th above tonic
+                                            if (_bassPc === _raised6thPcLocal) {
+                                                localR = localR.replace(/^vii/, 'vi');
+                                            }
+                                        }
+                                    }
                                     if (compactTonicization) {
-                                        autoRomanDisplayByAbsBeat.set(base[s].q, s === firstIdx ? `[${degLabel}] ${localR}` : localR);
+                                        autoRomanDisplayByAbsBeat.set(base[s].q, _firstDisplayedForK ? `${localR}/${degLabel}` : localR);
                                     } else {
                                         const display = (s === j) ? `${localR}=${degLabel}` : `${localR}/${degLabel}`;
                                         autoRomanDisplayByAbsBeat.set(base[s].q, display);
                                     }
+                                    _firstDisplayedForK = false;
                                 }
                             }
                             break; // don't try more keys for this arrival beat
                         }
                     }
                 }
+            }
+
+            // ── Melodic-minor vi° at context boundary ──
+            // When a vii° chord in the old context immediately precedes a V→i
+            // cadence in a new minor context, the vii° is really vi° of the new
+            // minor key (melodic/dorian raised 6th).  E.g. C#m7♭5 before V→i in
+            // Em = vi°/ii in D major.
+            for (let i = 0; i < base.length - 2; i++) {
+                if (autoRomanDisplayByAbsBeat.has(base[i].q)) continue;
+                if (!/^vii[°o]/.test(base[i].roman)) continue;
+                const next = base[i + 1];
+                // Next chord must be in a different, minor context and be V
+                if (next.ctxTonic === base[i].ctxTonic) continue;
+                if (!next.ctxIsMinor) continue;
+                if (next.roman !== 'V') continue;
+                // The chord after V should resolve to i in the same context
+                const res = base[i + 2];
+                if (res.ctxTonic !== next.ctxTonic || res.roman !== 'i') continue;
+                // Verify root is the raised 6th (semitone below 5th of new key)
+                const _stVii = structuralNotes(base[i].ev?.notes || [], ornOverrideMap);
+                const _cands = identifyChordCandidates(_stVii as any);
+                const _q = (_cands?.[0]?.type || '').toLowerCase();
+                if (!_q.includes('diminish') && !(_q.includes('minor') && _q.includes('5'))) continue;
+                const _newKeyPc = noteNameToChromaticIndex(next.ctxTonic);
+                // Raised 6th = major 6th above the tonic (e.g. C# in Em = E+9 semitones)
+                const _raised6thPc = ((_newKeyPc + 9) % 12);
+                const _bassMidi = Math.min(...(_stVii as any[]).filter((n: any) => Number.isFinite(n?.midi)).map((n: any) => Number(n.midi)));
+                const _bassPc = ((_bassMidi % 12) + 12) % 12;
+                if (_bassPc !== _raised6thPc) continue;
+                // Compute degree label for the new context tonic in the global key
+                const _ctxBoundaryGlobalPc = noteNameToChromaticIndex(currentTonic);
+                const _ctxBoundaryTargetPc = noteNameToChromaticIndex(next.ctxTonic);
+                const _ctxBoundaryInterval = ((_ctxBoundaryTargetPc - _ctxBoundaryGlobalPc) % 12 + 12) % 12;
+                const _ctxBoundaryDegNames = isMinorMode
+                    ? ['i','\u266DII','ii\u00B0','\u266DIII','iv','v','\u266DVI','\u266DVII','VI','vi\u00B0','VII','vii\u00B0']
+                    : ['I','\u266DII','ii','\u266DIII','iii','IV','\u266EIV\u00B0','V','\u266DVI','vi','\u266DVII','vii\u00B0'];
+                const _newKeyDeg = _ctxBoundaryDegNames[_ctxBoundaryInterval] || null;
+                if (!_newKeyDeg) continue;
+                autoRomanDisplayByAbsBeat.set(base[i].q, `vi°/${_newKeyDeg}`);
             }
 
             const maxLookaheadBeats = beatsPerMeasure * 2;
@@ -925,6 +1000,20 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // Display-only — never overwrite the structural roman.
                         autoRomanDisplayByAbsBeat.set(bi.q, `${localRoman}/${targetRoman}`);
                         continue;
+                    }
+
+                    // Melodic minor correction: in a tonicization to a minor key,
+                    // a half-diminished chord on the raised 6th (e.g. C#m7♭5 in Em)
+                    // appears as VI in the natural minor analysis.  Re-label it vi°/target,
+                    // which reflects the melodic/dorian minor context.
+                    if (tonicizedIsMinor && localRoman === 'VI') {
+                        const _lbNotes = structuralNotes(bi.ev?.notes || [], ornOverrideMap);
+                        const _lbCands = identifyChordCandidates(_lbNotes as any);
+                        const _lbQ = String(_lbCands?.[0]?.type || '').toLowerCase();
+                        if (_lbQ.includes('diminish') || (_lbQ.includes('minor 7') && _lbQ.includes('5'))) {
+                            autoRomanDisplayByAbsBeat.set(bi.q, `vi°/${targetRoman}`);
+                            continue;
+                        }
                     }
 
                     // Only reinterpret a *minor* subdominant as iv/target (e.g. Gm -> iv/ii in C).

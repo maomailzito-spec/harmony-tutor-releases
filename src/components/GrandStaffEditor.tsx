@@ -69,7 +69,7 @@ const TOP_STAFF_HEIGHT = 100;
 const TOP_STAFF_TOP = 30;
 const BOTTOM_STAFF_HEIGHT = 180;
 const BOTTOM_STAFF_TOP = 20;
-const CONNECTOR_HEIGHT = 40;
+const CONNECTOR_HEIGHT = 60;
 // Forward-compat: unknown fields from loaded project files.
 // These are round-tripped on Save/Save As to avoid destroying future data.
 const EMPTY_EXTRAS: Record<string, unknown> = {};
@@ -3710,7 +3710,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const measureSet = new Set(system.measureIndices);
             const systemNotes = layoutData.positionedNotes
                 .filter(n => !n.isRest && n.isTriplet && measureSet.has(n.measureIndex ?? -1))
-                .sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
+                .sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.voice ?? 1) - (b.voice ?? 1) || (a.beat ?? 0) - (b.beat ?? 0));
 
             const groups: {
                 id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; curveHeight: number;
@@ -3739,7 +3739,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (x1 > x2 - 12) x1 = x2 - 12;
                 const midX = (x1 + x2) / 2;
 
-                const bracketY = (highestY + yOffset) - 34;
+                let bracketY = (highestY + yOffset) - 34;
+                // Clamp treble brackets so they don't overlap chord symbols above the staff
+                if (clef === 'treble') {
+                    const symbolsBottom = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 18 + 6 + 4;
+                    if (bracketY < symbolsBottom) bracketY = symbolsBottom;
+                }
                 const textY = bracketY + 14;
 
                 groups.push({
@@ -3768,11 +3773,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             flush();
 
-            systems[systemIndex] = groups;
+            // Deduplicate overlapping brackets: when multiple voices have triplets
+            // at the same x-range, keep only one bracket (the highest position).
+            const merged: typeof groups = [];
+            for (const g of groups) {
+                const overlap = merged.find(m => Math.abs(m.x1 - g.x1) < 20 && Math.abs(m.x2 - g.x2) < 20);
+                if (overlap) {
+                    // Keep the higher bracket (smaller Y = higher on screen)
+                    if (g.bracketY < overlap.bracketY) {
+                        overlap.bracketY = g.bracketY;
+                        overlap.textY = g.bracketY + 14;
+                        overlap.midX = (Math.min(overlap.x1, g.x1) + Math.max(overlap.x2, g.x2)) / 2;
+                    }
+                } else {
+                    merged.push({ ...g });
+                }
+            }
+
+            systems[systemIndex] = merged;
         });
 
         return systems;
-    }, [layoutData, getNoteY]);
+    }, [layoutData, getNoteY, staffSystemMode]);
 
     // -----------------------
     // Duplet groups (2 notes per bracket)
@@ -3793,7 +3815,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const measureSet = new Set(system.measureIndices);
             const systemNotes = layoutData.positionedNotes
                 .filter(n => !n.isRest && n.isDuplet && measureSet.has(n.measureIndex ?? -1))
-                .sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.beat ?? 0) - (b.beat ?? 0));
+                .sort((a, b) => (a.measureIndex ?? 0) - (b.measureIndex ?? 0) || (a.voice ?? 1) - (b.voice ?? 1) || (a.beat ?? 0) - (b.beat ?? 0));
 
             const groups: {
                 id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; curveHeight: number;
@@ -3821,7 +3843,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (x1 > x2 - 12) x1 = x2 - 12;
                 const midX = (x1 + x2) / 2;
 
-                const bracketY = (highestY + yOffset) - 34;
+                let bracketY = (highestY + yOffset) - 34;
+                // Clamp treble brackets so they don't overlap chord symbols above the staff
+                if (clef === 'treble') {
+                    const symbolsBottom = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 18 + 6 + 4;
+                    if (bracketY < symbolsBottom) bracketY = symbolsBottom;
+                }
                 const textY = bracketY + 14;
 
                 groups.push({
@@ -3848,11 +3875,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             flush();
 
-            systems[systemIndex] = groups;
+            // Deduplicate overlapping brackets: when multiple voices have duplets
+            // at the same x-range, keep only one bracket (the highest position).
+            const merged: typeof groups = [];
+            for (const g of groups) {
+                const overlap = merged.find(m => Math.abs(m.x1 - g.x1) < 20 && Math.abs(m.x2 - g.x2) < 20);
+                if (overlap) {
+                    if (g.bracketY < overlap.bracketY) {
+                        overlap.bracketY = g.bracketY;
+                        overlap.textY = g.bracketY + 14;
+                        overlap.midX = (Math.min(overlap.x1, g.x1) + Math.max(overlap.x2, g.x2)) / 2;
+                    }
+                } else {
+                    merged.push({ ...g });
+                }
+            }
+
+            systems[systemIndex] = merged;
         });
 
         return systems;
-    }, [layoutData, getNoteY]);
+    }, [layoutData, getNoteY, staffSystemMode]);
 
     // -----------------------
     // Accidentals (apply on insertion)
@@ -3992,20 +4035,47 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setSelectedNoteIds(new Set());
             return;
         }
+
+        const LETTER_SEMI: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+        const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
+        const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
+
         applyEditToSelectedNotes((n) => {
             if (n.isRest) return n;
+
+            const pitch = (n as any).pitch as string;
+            const octave = (n as any).octave as number;
+            // MIDI naturale dalla lettera + ottava (senza alcuna alterazione)
+            const baseMidi = (octave + 1) * 12 + (LETTER_SEMI[pitch] ?? 0);
+            // Alterazione implicita dall'armatura di chiave
+            const keyAlt =
+                (keySignature.type === 'sharp' && sharpNotes.includes(pitch)) ? 1 :
+                (keySignature.type === 'flat' && flatNotes.includes(pitch)) ? -1 : 0;
+
             if (!acc) {
+                // Rimozione alterazione -> torna al MIDI dell'armatura
+                const restoredMidi = baseMidi + keyAlt;
                 const { userAccidental, explicitAccidental, accidental, ...rest } = n as any;
-                return { ...(rest as StaffNote) };
+                return { ...(rest as StaffNote), midi: restoredMidi, noteIndex: ((restoredMidi % 12) + 12) % 12 };
             }
+
+            const accOffset =
+                acc === 'sharp' ? 1 :
+                acc === 'flat' ? -1 :
+                acc === 'double-sharp' ? 2 :
+                acc === 'double-flat' ? -2 : 0; // 'natural' -> 0
+            const finalMidi = baseMidi + accOffset;
+
             return {
                 ...(n as any),
+                midi: finalMidi,
+                noteIndex: ((finalMidi % 12) + 12) % 12,
                 userAccidental: acc,
                 explicitAccidental: acc,
                 accidental: acc,
             } as StaffNote;
         });
-    }, [applyEditToSelectedNotes, selectedNoteIds]);
+    }, [applyEditToSelectedNotes, keySignature, selectedNoteIds]);
 
     const setActiveAccidentalAndApply = useCallback((next: AccidentalType | null) => {
         activeAccidentalRef.current = next;

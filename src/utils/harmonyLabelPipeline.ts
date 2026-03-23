@@ -8,6 +8,7 @@ import { suggestNextChord } from '../engine/progressionSuggester';
  *                      (survives object copies / different object graphs). */
 export function structuralNotes(notes: any[], overrideMap?: Map<string, string>): any[] {
     if (!notes || notes.length === 0) return notes;
+    const resolutionSubs: any[] = [];
     const filtered = notes.filter((n: any) => {
         if (!n) return true;
         // Direct ID check against override map
@@ -24,9 +25,26 @@ export function structuralNotes(notes: any[], overrideMap?: Map<string, string>)
             }
         }
         if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
-        if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape) return false;
+        if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape) {
+            // For appoggiaturas, collect the resolution pitch info so the
+            // chord-ID can see the "real" pitch at this beat position.
+            if (n.isAppoggiatura && n._appoggResolution) {
+                resolutionSubs.push(n._appoggResolution);
+            }
+            return false;
+        }
         return true;
     });
+    // Append resolution substitutes for appoggiaturas (avoid duplicates)
+    if (resolutionSubs.length > 0) {
+        const existingMidis = new Set(filtered.map((nn: any) => nn?.midi));
+        for (const sub of resolutionSubs) {
+            if (sub.midi != null && !existingMidis.has(sub.midi)) {
+                filtered.push({ ...sub, isRest: false, _isResolutionSub: true });
+                existingMidis.add(sub.midi);
+            }
+        }
+    }
     // If user manual overrides were responsible for the filtering, respect
     // the override even when fewer than 2 notes remain (avoid re-including
     // the ornamental note via the safety fallback).

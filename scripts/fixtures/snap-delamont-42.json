@@ -1059,9 +1059,9 @@
     },
     {
       "absBeat": 2,
-      "roman": "ii\u00b0",
+      "roman": "ii°",
       "figuresInclude": [
-        "\u266d5",
+        "♭5",
         "3"
       ]
     },
@@ -1069,7 +1069,7 @@
       "absBeat": 3,
       "roman": "iv",
       "figuresInclude": [
-        "\u266d6",
+        "♭6",
         "4"
       ]
     },
@@ -1154,6 +1154,14 @@
       "roman": "iv",
       "figuresInclude": [
         "6"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "I",
+      "figuresInclude": [
+        "6",
+        "4"
       ]
     },
     {

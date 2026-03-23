@@ -98,6 +98,13 @@ Se già qui è sbagliato → il problema è in `musicTheory.ts` (spelling, chord
 **Causa:** `_effectiveCtxs` contiene un contesto iniettato da cadenze o pivot detection che cambia la tonica prematuramente/tardivamente.
 **Diagnosi:** log `contextTonic` al beat incriminato (tracer `_HT_DEBUG_BEAT`).
 
+### 3.5 Appoggiatura su beat debole non riconosciuta → chord errato
+**Sintomo:** Una nota corta su un beat "debole" (es. beat 4 in 4/4) non viene classificata come appoggiatura; il Roman numeral include quella nota spuria.
+**Causa:** `strongBeats()` copre solo beat 1 e 3 in 4/4. Il gate `passesDissonanceTest && strongBeat` esclude beat 2 e 4.
+**Causa correlata:** Anche se l'appoggiatura viene marcata, la pipeline di filtro (`notesForRomanAt` / `structuralNotes`) rimuove la nota ornamentale ma **non inserisce la risoluzione** nel set strutturale.
+**Diagnosi:** Verificare `isAppoggiatura` e `_appoggResolution` sulla nota incriminata (diagnostico rapido con `getRomanAnalysis` su note filtrate manualmente).
+**Fix tipo:** (1) Aggiungere un percorso `weakBeatAppogg` con condizioni strette (ultimo beat, dissonanza vs basso, più corta dei peer, risoluzione triadica). (2) In tutti i filtri ornamentali, sostituire l'appo con `_appoggResolution.midi` nella fetta strutturale.
+
 ---
 
 ## 4. Strategia di debug rapido
