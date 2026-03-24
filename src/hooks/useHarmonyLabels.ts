@@ -828,6 +828,24 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 }
                                 if (!_chordHasChromatic) continue;
 
+                                // Never relabel the home key's dominant 7th (V7, V9…) as
+                                // a secondary function.  The tritone resolution makes V7
+                                // unambiguously the primary dominant.  A plain V triad
+                                // can legitimately be I of a secondary key (tonicization).
+                                {
+                                    const _homeRoman = String(base[s].roman || '');
+                                    // The tonic chord (I/i) must never be relabeled as a
+                                    // secondary function — it's the strongest harmonic anchor.
+                                    // Also protect V7/V9 (dom7 quality).
+                                    if (/^(I|i)(6|64)?$/.test(_homeRoman)) { /* tonic anchor */ continue; }
+                                    if (/^V/.test(_homeRoman) && !_homeRoman.includes('/')) {
+                                        const _stSDom = structuralNotes(base[s].ev.notes, ornOverrideMap);
+                                        const _candsDom = identifyChordCandidates(_stSDom as any);
+                                        const _topQDom = (_candsDom?.[0]?.type || '').toLowerCase();
+                                        if (_topQDom.includes('dominant') && /7|9|11|13/.test(_topQDom)) continue;
+                                    }
+                                }
+
                                 // If this chord is already a borrowed chord (modal interchange)
                                 // in the home key (iv, ♭VI, ♭VII…), prefer that label over the
                                 // tonicization display — modal interchange is more informative.
@@ -1047,6 +1065,31 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                 }
             }
+
+            // ── Post-filter: protect tonic & dominant-7th from spurious relabel ──
+            // If a beat's raw roman in the home key is I/i (tonic) or V7 (dom7),
+            // never override it with a secondary-function display label.
+            for (const [abQ] of [...autoRomanDisplayByAbsBeat]) {
+                const bEntry = base.find((b: any) => Math.abs(b.q - abQ) < 0.1);
+                if (!bEntry) continue;
+                const homeR = String(bEntry.roman || '');
+                // Tonic chord anchor — never relabel
+                if (/^(I|i)(6|64)?$/.test(homeR)) {
+                    autoRomanDisplayByAbsBeat.delete(abQ);
+                    continue;
+                }
+                // Dominant 7th anchor — never relabel
+                if (/^V/.test(homeR) && !homeR.includes('/')) {
+                    const _sn = structuralNotes(bEntry.ev?.notes || [], ornOverrideMap);
+                    const _cc = identifyChordCandidates(_sn as any);
+                    const _qq = (_cc?.[0]?.type || '').toLowerCase();
+                    if (_qq.includes('dominant') && /7|9|11|13/.test(_qq)) {
+                        autoRomanDisplayByAbsBeat.delete(abQ);
+                    }
+                }
+            }
+
+
         } catch { /* ignore */ }
 
         // For each system, collect all timeline events that fall within its measures
@@ -2017,8 +2060,28 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             if (!harmonicSig || baseHarmonicNotes.length < 2) return;
 
             const applicableContext = ctxAtAbsBeat(event.absBeat);
-            const contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
-            const contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
+            let contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
+            let contextIsMinor = applicableContext ? applicableContext.newIsMinor : isMinorMode;
+
+            // Guard: if a tonicization context would reassign the home key's
+            // tonic triad (I/i) or dominant 7th (V7/V9), fall back to the global key.
+            // These chords are too structurally important to be relabeled.
+            if (applicableContext && (contextTonic !== currentTonic || contextIsMinor !== isMinorMode)) {
+                const _gR = getRomanAnalysis(analysisNotes as any, currentTonic, isMinorMode, { ornamentOverrides: ornOverrideRecord });
+                const _gRoman = String(_gR?.roman || '');
+                if (/^(I|i)(6|64)?$/.test(_gRoman)) {
+                    // Tonic chord — never reassign context
+                    contextTonic = currentTonic;
+                    contextIsMinor = isMinorMode;
+                } else if (/^V/.test(_gRoman) && !_gRoman.includes('/')) {
+                    const _gCands = identifyChordCandidates(analysisNotes as any);
+                    const _gQ = (_gCands?.[0]?.type || '').toLowerCase();
+                    if (_gQ.includes('dominant') && /7|9|11|13/.test(_gQ)) {
+                        contextTonic = currentTonic;
+                        contextIsMinor = isMinorMode;
+                    }
+                }
+            }
 
 
             // ── Permanent diagnostic tracer ──────────────────────────────────
