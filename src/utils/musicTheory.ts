@@ -1817,7 +1817,82 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
         candidate.score = score;
     }
 
+    // ── Spelling-first filter: penalise candidates with enharmonic mismatches ──
+    // Applied only as a tiebreaker: when two candidates have similar base scores,
+    // prefer the one whose root spelling matches the written notes.
+    const SPELLING_WEIGHT = 8;
+    const _LETTER_IDX: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+    const _IDX2LET = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+    const _BASE_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    const _ITV2STEP: Record<number, number> = { 0:0, 1:1, 2:1, 3:2, 4:2, 5:3, 6:3, 7:4, 8:4, 9:5, 10:6, 11:6 };
+    const _letterOf = (n: any): string | null => {
+        const p = String(n?.pitch || '').trim().toUpperCase();
+        const m = p.match(/^([A-G])/);
+        return m ? m[1] : null;
+    };
+    const _accAlt = (n: any): number => {
+        const p = String(n?.pitch || '').trim();
+        const m2 = p.match(/^[A-Ga-g]([#b]+)$/);
+        if (m2) return m2[1][0] === '#' ? m2[1].length : -m2[1].length;
+        const acc = n?.userAccidental ?? n?.explicitAccidental ?? n?.accidental ?? null;
+        if (!acc) return 0;
+        const a = String(acc).trim().replace(/♯/g, '#').replace(/♭/g, 'b').replace(/♮/g, '');
+        if (a.startsWith('#')) return a.length;
+        if (a.startsWith('b')) return -a.length;
+        return 0;
+    };
+    const _spCost = (candidate: any): number => {
+        try {
+            const rl = _letterOf(candidate.root);
+            if (!rl) return 0;
+            const rIdx = _LETTER_IDX[rl];
+            const rPc = ((_BASE_PC[rl] + _accAlt(candidate.root)) % 12 + 12) % 12;
+            const expected = new Map<number, string>();
+            for (const itv of candidate.intervals) {
+                const pc = ((rPc + itv) % 12 + 12) % 12;
+                const step = _ITV2STEP[itv] ?? 0;
+                expected.set(pc, _IDX2LET[(rIdx + step) % 7]);
+            }
+            if (expected.size === 0) return 0;
+            let cost = 0;
+            const seen = new Set<number>();
+            for (const n of uniqueNotes) {
+                if (!n || (n as any).isRest) continue;
+                const nl = _letterOf(n);
+                if (!nl) continue;
+                const midi = Number((n as any).midi ?? n.noteIndex);
+                if (!Number.isFinite(midi)) continue;
+                const pc = ((midi % 12) + 12) % 12;
+                if (seen.has(pc)) continue;
+                seen.add(pc);
+                const exp = expected.get(pc);
+                if (exp && exp !== nl) cost += 1;
+            }
+            return cost;
+        } catch { return 0; }
+    };
+    // Sort first by base score, then apply spelling as tiebreaker
+    // between candidates whose base scores are within a narrow band.
     allCandidates.sort((a, b) => b.score - a.score);
+    if (allCandidates.length >= 2) {
+        const topScore = allCandidates[0].score;
+        // Gather candidates with exactly the same score (pure tiebreaker)
+        const tieband = allCandidates.filter(c => c.score === topScore);
+        if (tieband.length >= 2) {
+            for (const c of tieband) {
+                (c as any)._spCost = _spCost(c);
+            }
+            tieband.sort((a, b) => {
+                const da = (a as any)._spCost * SPELLING_WEIGHT;
+                const db = (b as any)._spCost * SPELLING_WEIGHT;
+                return (b.score - db) - (a.score - da);
+            });
+            // Replace the head of allCandidates with the tieband result
+            const rest = allCandidates.filter(c => topScore - c.score > 5);
+            allCandidates.length = 0;
+            allCandidates.push(...tieband, ...rest);
+        }
+    }
     const { score, priority, matchType, ...bestMatch } = allCandidates[0];
     return bestMatch;
 }
@@ -11978,6 +12053,7 @@ export function applyHarmonyRules(
                 anyN.isAppoggiatura = false;
                 anyN.isAnticipation = false;
                 anyN.isEscape = false;
+                anyN.isCambiata = false;
                 anyN.isSuspension = undefined;
                 anyN.ornamentMark = undefined;
                 if (ov === 'passing') { anyN.isPassing = true; anyN.ornamentMark = 'P'; }
@@ -11985,6 +12061,7 @@ export function applyHarmonyRules(
                 else if (ov === 'appoggiatura') { anyN.isAppoggiatura = true; anyN.isSuspension = { type: 'app', manual: true }; anyN.ornamentMark = 'a'; }
                 else if (ov === 'anticipation') { anyN.isAnticipation = true; anyN.ornamentMark = 'ant'; }
                 else if (ov === 'escape') { anyN.isEscape = true; anyN.ornamentMark = 's'; }
+                else if (ov === 'cambiata') { anyN.isCambiata = true; anyN.ornamentMark = 'C'; }
                 else if (ov === 'suspension') { anyN.isSuspension = { type: 'susp', manual: true }; anyN.ornamentMark = 'r'; }
                 else if (ov === 'ornamental') { /* no flags, no mark — ornamentOverride alone excludes from analysis */ }
                 anyN.ornamentOverride = ov;

@@ -1,4 +1,72 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "0f627f25-b01b-46d9-a4cd-7781edf60991",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "a5b1a1c5-163a-4c08-aae1-f56271eca333",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1a7c4998-3482-43ff-bb57-ab45b177a7f0",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "90438a7e-6551-4980-a05b-b6c048ae7bd2",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "d608b6f7-63fe-477b-acdf-43695ca1b46e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "3fa3d482-87b4-4b3d-9e26-22b696a6a1cf",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "846476cb-f56d-4944-a986-ea88ef64dad0",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "4c14bdb1-2697-4609-9bff-a78d236d32d2",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "5437bb1a-a1cf-42e6-8853-e86e11df4e89",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "4f00de17-e7a2-41d5-b663-eb77f718622a",
+      "type": "structural"
+    },
+    {
+      "noteId": "73c9284f-c2f6-4e88-998a-8bffc65079a2",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "80997342-669b-4aed-8d19-eaa4a8c94be8",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "a7c8a69d-a16d-4efb-be65-b42c36bce118",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "9d0f3000-af48-40f5-afd8-b270b7063f4a",
+      "type": "passing"
+    },
+    {
+      "noteId": "a0b4268e-fe06-4714-a06b-843f7ab8a300",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "8485bb17-c733-498d-be22-fc62c1d5076f",
+      "type": "appoggiatura"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -1074,71 +1142,7 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "0f627f25-b01b-46d9-a4cd-7781edf60991",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "a5b1a1c5-163a-4c08-aae1-f56271eca333",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "1a7c4998-3482-43ff-bb57-ab45b177a7f0",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "90438a7e-6551-4980-a05b-b6c048ae7bd2",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "d608b6f7-63fe-477b-acdf-43695ca1b46e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "3fa3d482-87b4-4b3d-9e26-22b696a6a1cf",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "846476cb-f56d-4944-a986-ea88ef64dad0",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "4c14bdb1-2697-4609-9bff-a78d236d32d2",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "5437bb1a-a1cf-42e6-8853-e86e11df4e89",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "4f00de17-e7a2-41d5-b663-eb77f718622a",
-      "type": "structural"
-    },
-    {
-      "noteId": "73c9284f-c2f6-4e88-998a-8bffc65079a2",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "80997342-669b-4aed-8d19-eaa4a8c94be8",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "a7c8a69d-a16d-4efb-be65-b42c36bce118",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "9d0f3000-af48-40f5-afd8-b270b7063f4a",
-      "type": "passing"
-    },
-    {
-      "noteId": "a0b4268e-fe06-4714-a06b-843f7ab8a300",
-      "type": "appoggiatura"
-    }
-  ],
   "bpm": 90,
   "isBpmActive": false,
   "isMetronomeOn": false,

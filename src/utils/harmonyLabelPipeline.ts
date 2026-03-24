@@ -25,7 +25,7 @@ export function structuralNotes(notes: any[], overrideMap?: Map<string, string>)
             }
         }
         if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
-        if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape) {
+        if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape || n.isCambiata) {
             // For appoggiaturas, collect the resolution pitch info so the
             // chord-ID can see the "real" pitch at this beat position.
             if (n.isAppoggiatura && n._appoggResolution) {

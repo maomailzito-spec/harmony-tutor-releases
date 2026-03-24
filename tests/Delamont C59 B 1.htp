@@ -1273,14 +1273,14 @@
     },
     {
       "id": "bcf675db-2bde-46f9-8e95-69790be248e7",
-      "pitch": "C",
-      "octave": 5,
-      "position": 7,
-      "midi": 72,
-      "noteIndex": 0,
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 70,
+      "noteIndex": 10,
       "clef": "treble",
-      "explicitAccidental": null,
-      "accidental": "natural",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -1290,7 +1290,9 @@
       "beat": 1,
       "startTick": 19200,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "clefOverride": "treble",
+      "userAccidental": "flat"
     },
     {
       "id": "31b60478-9142-4b97-beb1-3922b20f5582",
@@ -1916,6 +1918,26 @@
     {
       "noteId": "8069254a-27fb-4e19-bcb1-26af5cbd460e",
       "type": "appoggiatura"
+    },
+    {
+      "noteId": "a8f70341-63df-41c8-a227-d6ad42d58291",
+      "type": "structural"
+    },
+    {
+      "noteId": "11712c09-8491-4c84-aa99-bd64f70e8bc2",
+      "type": "structural"
+    },
+    {
+      "noteId": "438ad15d-e30b-4723-8599-8c555b63cc08",
+      "type": "structural"
+    },
+    {
+      "noteId": "983a2430-7062-4d07-98d6-59cbbf5df1d7",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "31b60478-9142-4b97-beb1-3922b20f5582",
+      "type": "ornamental"
     }
   ],
   "bpm": 120,

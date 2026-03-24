@@ -69,7 +69,7 @@ const TOP_STAFF_HEIGHT = 100;
 const TOP_STAFF_TOP = 30;
 const BOTTOM_STAFF_HEIGHT = 180;
 const BOTTOM_STAFF_TOP = 20;
-const CONNECTOR_HEIGHT = 60;
+const CONNECTOR_HEIGHT = 70;
 // Forward-compat: unknown fields from loaded project files.
 // These are round-tripped on Save/Save As to avoid destroying future data.
 const EMPTY_EXTRAS: Record<string, unknown> = {};
@@ -78,7 +78,7 @@ const TOTAL_SYSTEM_HEIGHT = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_H
 // VexFlow stave geometry (must match values in VexflowGrandStaff.tsx)
 // Used for cursor->pitch mapping so the ghost note aligns with the pointer.
 const VF_TREBLE_Y = 40;
-const VF_BASS_Y = 140;
+const VF_BASS_Y = 170;
 const VF_LINE_SPACING = 10;
 
 // SATB (chiavi antiche): soprano (C1), alto (C3), tenore (C4), basso (F4)
@@ -6648,7 +6648,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // ── Ornament override shortcuts (⌥ + key) ──
             if (!isMod && e.altKey && selectedNoteIds.size > 0) {
-                const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyN: 'anticipation', KeyH: 'structural', KeyO: 'ornamental' };
+                const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyC: 'cambiata', KeyN: 'anticipation', KeyH: 'structural', KeyO: 'ornamental' };
                 const ornType = ornMap[e.code];
                 if (ornType) {
                     e.preventDefault();

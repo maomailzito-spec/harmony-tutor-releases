@@ -397,7 +397,7 @@ function createMenu() {
         '• Cmd/Ctrl+Z  Annulla   |   Shift+Cmd/Ctrl+Z  Ripeti',
         '• Cmd/Ctrl+X  Taglia   |   Cmd/Ctrl+C  Copia   |   Cmd/Ctrl+V  Incolla   |   Cmd/Ctrl+A  Seleziona tutto',
         '• Alt/Option+S  Seleziona solo voce corrente (rettangolo)',
-        '• Alt/Option+C  Colori voci (BTAS)',
+        '• Ctrl/Control+C  Colori voci (BTAS)',
         '• Cmd/Ctrl+]  Aumenta dimensione titolo   |   Cmd/Ctrl+[  Diminuisci dimensione titolo',
         '',
         'GRAND STAFF (Editor)',
@@ -804,7 +804,7 @@ function createMenu() {
           {
             label: 'Colori voci (BTAS)',
             type: 'checkbox',
-            accelerator: 'Alt+C',
+            accelerator: 'Control+C',
             checked: !!showVoiceColorsEnabled,
             click: (menuItem) => {
               showVoiceColorsEnabled = !!menuItem.checked;

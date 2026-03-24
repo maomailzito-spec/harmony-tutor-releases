@@ -28,14 +28,14 @@ interface VexflowGrandStaffProps {
 }
 
 const DEFAULT_WIDTH = 900;
-const DEFAULT_HEIGHT = 250;
+const DEFAULT_HEIGHT = 280;
 // SATB needs extra bottom space so very low bass notes (e.g. C below the staff)
 // are not clipped by the SVG viewport.
 const DEFAULT_HEIGHT_SATB = 480;
 // Keep X alignment consistent with GrandStaffEditor layout (START_X = 50)
 const STAFF_MARGIN = 50;
 const TREBLE_Y = 40;
-const BASS_Y = 140;
+const BASS_Y = 170;
 // SATB (chiavi antiche): soprano (C1), alto (C3), tenor (C4), bass (F4)
 // Keep these in sync with GrandStaffEditor.tsx for cursor->pitch mapping and playhead overlays.
 const SOPRANO_Y = 40;
