@@ -8,7 +8,7 @@
 import { useMemo } from 'react';
 import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol } from '../utils/musicTheory';
-import { structuralNotes } from '../utils/harmonyLabelPipeline';
+import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
 import { evaluateCadentialPatterns, type ChordEvent, pcToNoteName, noteNameToPc, qualityFamily, getScalePcs } from '../utils/cadentialPatterns';
 import { CADENTIAL_PATTERN_RECOGNITION_KEY } from '../storage/storageKeys';
@@ -56,6 +56,7 @@ export interface UseHarmonyLabelsParams {
     statisticalBiasThreshold?: number;
     styleProfile?: StyleProfile | null;
     ornamentOverrides?: Array<{ noteId: string; type: string }>;
+    autoHarmonyLabelOverrides?: any[];
 }
 
 export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
@@ -339,6 +340,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Reject cadences whose resolution is a borrowed chord (modal interchange)
                     const resEv = _chEvts.find(e => Math.abs(e.absBeat - m.endBeat) < 0.05);
                     if (resEv && shouldBlockTonicization(resEv.rootPc, resEv.quality, currentTonic, isMinorMode)) return false;
+                    // Reject cadences whose resolution is a dominant 7th sonority:
+                    // a dom7 chord is not a stable "I" arrival — it's a passing
+                    // secondary dominant (e.g. V/V → V7 is NOT a tonicization to V).
+                    if (resEv && /dominant\s*7/i.test(resEv.quality)) return false;
                     return true;
                 });
                 const _manualBeats = new Set(
@@ -579,7 +584,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // Goal: allow a short, "provisional" functional reading of a few events without
         // emitting a key-context change. Example in C: Gm before V/ii → ii can be shown as iv/ii.
         // This pass only creates display overrides and never beats a user override.
-        const autoOverrideByAbsBeat = new Map<number, HarmonyLabelOverride>();
+        const autoOverrideByAbsBeat = buildEngineHarmonyOverrideMap(params.autoHarmonyLabelOverrides || []);
         const autoRomanDisplayByAbsBeat = new Map<number, string>();
         const protectedAbsBeats = new Set<number>();
         try {

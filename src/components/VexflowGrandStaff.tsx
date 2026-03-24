@@ -2363,9 +2363,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
           const dy = lastY - firstY;
           const THRESH_PX = 2;
+          // Use a gentler slope for inner voices (alto = voice 2, tenor = voice 3)
+          // to prevent beams from overlapping adjacent voices.
+          const voices = new Set(group.map(g => g.staffNote.voice ?? 1));
+          const isInnerVoice = voices.has(2) || voices.has(3);
+          const MAX_SLOPE = isInnerVoice ? 0.10 : 0.18;
           let desiredSlope = 0;
-          if (dy <= -THRESH_PX) desiredSlope = -0.22;
-          else if (dy >= THRESH_PX) desiredSlope = 0.22;
+          if (dy <= -THRESH_PX) desiredSlope = -MAX_SLOPE;
+          else if (dy >= THRESH_PX) desiredSlope = MAX_SLOPE;
 
           try {
             // IMPORTANT: VexFlow's Beam.calculateSlope iterates `for (slope = min; slope <= max; slope += increment)`.
@@ -2382,6 +2387,21 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         // Build Beam instances BEFORE drawing notes, so VexFlow suppresses flags/stems on beamed notes.
         const beamInstances: Array<{ beam: Beam; isSelected: boolean }> = [];
+
+        // Clamp beam slope for ALL voices (global safety net).
+        // The tight-treble heuristics may already set a lower slope for inner voices;
+        // this function only tightens the bounds if they haven't been set or are too wide.
+        const clampBeamSlope = (beam: Beam, group: Array<{ staffNote: StaffNote; vfNote: StaveNote }>) => {
+          try {
+            const ro = (beam as any).render_options = (beam as any).render_options || {};
+            const voices = new Set(group.map(g => g.staffNote.voice ?? 1));
+            const isInner = voices.has(2) || voices.has(3);
+            const limit = isInner ? 0.10 : 0.18;
+            // Only tighten — never widen past the limit
+            if (ro.max_slope == null || ro.max_slope > limit) ro.max_slope = limit;
+            if (ro.min_slope == null || ro.min_slope < -limit) ro.min_slope = -limit;
+          } catch { /* ignore */ }
+        };
           const tieInstances: Array<{ tie: StaveTie; fromId: string; toId: string }> = [];
 
         // Manual beam groups (set by the editor button).
@@ -2405,6 +2425,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             prepareTightTrebleBeamedNotes(group);
             const b = new Beam(group.map(g => g.vfNote));
             applyTightTrebleBeamHeuristics(b, group);
+            clampBeamSlope(b, group);
             applyBeamStyle(b as any, group);
             const isSelected = group.every(g => selectedNoteIds.includes(String(g.staffNote.id)));
             beamInstances.push({ beam: b, isSelected });
@@ -2467,6 +2488,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               prepareTightTrebleBeamedNotes(current);
               const b = new Beam(current.map(c => c.vfNote));
               applyTightTrebleBeamHeuristics(b, current);
+              clampBeamSlope(b, current);
               applyBeamStyle(b as any, current);
               const isSelected = current.every(c => selectedNoteIds.includes(String(c.staffNote.id)));
               beamInstances.push({ beam: b, isSelected });

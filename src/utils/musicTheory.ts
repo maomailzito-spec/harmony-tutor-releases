@@ -4587,6 +4587,102 @@ export function applyHarmonyRules(
         autoHarmonyLabelOverrides.sort((a, b) => qAbs(a.absBeat) - qAbs(b.absBeat));
     } catch { /* ignore */ }
 
+    // =========================================================
+    // Predominant disambiguation: prefer ii/ii°/iv/IV before V
+    // =========================================================
+    // Independent of ENABLE_AUTO_CADENCE_LABEL_OVERRIDES.
+    // When a chord immediately precedes a clear dominant (V or V/x) and its
+    // current roman label is an exotic secondary function (e.g. vii°/IV),
+    // re-analyse it in the target key of the dominant.  If the result is a
+    // natural predominant (ii, ii°, iv, IV), override the label.
+    try {
+        const PREDOM_RE = /^(ii[°⁰o]?|iv|IV)$/i;
+        const V_RE = /^V(\/|$)/;
+        const _pushOverride = (absBeat: number, roman: string, figures?: string[]) => {
+            const existing = autoHarmonyLabelOverrides.findIndex(
+                x => Math.abs(x.absBeat - absBeat) < 1e-9
+            );
+            const entry: HarmonyLabelOverride = { absBeat, roman, figures } as any;
+            if (existing >= 0) autoHarmonyLabelOverrides[existing] = entry;
+            else autoHarmonyLabelOverrides.push(entry);
+        };
+        const _getRootPc = (ev: ChordEvent): number | null => {
+            try {
+                const cands = identifyChordCandidates(ev.notes || []);
+                const best = Array.isArray(cands) ? cands[0] : null;
+                const pc = Number((best as any)?.root?.noteIndex);
+                return Number.isFinite(pc) ? mod12(pc) : null;
+            } catch { return null; }
+        };
+
+        for (let pi = 1; pi < (chordEvents || []).length; pi++) {
+            const curr = chordEvents[pi];
+            const prev = chordEvents[pi - 1];
+            if (!curr || !prev) continue;
+            if ((curr.absBeat - prev.absBeat) > 2.01) continue;
+
+            const currCtx = getContextAtAbsBeat(curr.absBeat);
+            const currRoman = String(getRomanAnalysis(
+                curr.notes || [], currCtx.tonic, currCtx.isMinor
+            )?.roman || '').replace(/\s+/g, '');
+
+            if (!V_RE.test(currRoman)) continue;
+
+            // Determine target key
+            let targetPc: number;
+            let targetIsMinor: boolean;
+            if (currRoman === 'V' || (currRoman.startsWith('V') && !currRoman.includes('/'))) {
+                const tonicName = String(currCtx.tonic || '').trim();
+                const tonicBaseIdx = NOTE_NAMES.indexOf(tonicName.replace(/[#b♯♭]/g, '').toUpperCase());
+                if (tonicBaseIdx < 0) continue;
+                const tonicAcc = tonicName.replace(/^[A-G]/i, '');
+                const accVal = tonicAcc.split('').reduce((s, ch) => s + (ch === '#' || ch === '♯' ? 1 : ch === 'b' || ch === '♭' ? -1 : 0), 0);
+                targetPc = mod12(tonicBaseIdx + accVal);
+                targetIsMinor = currCtx.isMinor;
+            } else {
+                const rPc = _getRootPc(curr);
+                if (rPc == null) continue;
+                targetPc = mod12(rPc - 7);
+                const afterSlash = currRoman.split('/')[1] || '';
+                targetIsMinor = afterSlash === afterSlash.toLowerCase();
+            }
+
+            const targetKey = pcToKeyNameAuto(targetPc);
+
+            // Get the current roman of the previous chord in its OWN context
+            const prevCtx = getContextAtAbsBeat(prev.absBeat);
+            const prevRomanOwn = String(getRomanAnalysis(
+                prev.notes || [], prevCtx.tonic, prevCtx.isMinor
+            )?.roman || '').replace(/\s+/g, '');
+
+            // Skip if already a clean predominant
+            if (PREDOM_RE.test(prevRomanOwn)) continue;
+            // Skip if already a plain diatonic function (not exotic)
+            if (!prevRomanOwn.includes('/') && /^(I|i|V|vi|VI|iii|III)$/i.test(prevRomanOwn)) continue;
+
+            // Re-analyse the previous chord in the TARGET key (both modes)
+            const prevRomanMaj = String(getRomanAnalysis(
+                prev.notes || [], targetKey, false
+            )?.roman || '').replace(/\s+/g, '');
+            const prevRomanMin = String(getRomanAnalysis(
+                prev.notes || [], targetKey, true
+            )?.roman || '').replace(/\s+/g, '');
+
+            let bestPredom: string | null = null;
+            if (PREDOM_RE.test(prevRomanMin)) bestPredom = prevRomanMin;
+            else if (PREDOM_RE.test(prevRomanMaj)) bestPredom = prevRomanMaj;
+
+            if (bestPredom) {
+                const useMinor = PREDOM_RE.test(prevRomanMin);
+                const figResult = getRomanAnalysis(prev.notes || [], targetKey, useMinor);
+                // Append tonicization target: V/ii → ii°/ii
+                const slashIdx = currRoman.indexOf('/');
+                const tonicSuffix = slashIdx >= 0 ? currRoman.slice(slashIdx) : '';
+                _pushOverride(prev.absBeat, bestPredom + tonicSuffix, figResult?.figures);
+            }
+        }
+    } catch { /* ignore */ }
+
     _pmark('03-autoCadenceLabels');
     // ---- Sounding harmony per beat (duration-aware) ----
     // Needed for rules that depend on harmonic rhythm (e.g., harmonic syncopation).

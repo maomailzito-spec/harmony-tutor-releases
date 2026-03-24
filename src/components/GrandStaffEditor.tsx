@@ -3128,6 +3128,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         statisticalBiasThreshold: Number(statisticalBiasThreshold) || 2,
         styleProfile: useStatisticalCorrection ? _styleProfile : null,
         ornamentOverrides,
+        autoHarmonyLabelOverrides: (analysisResult as any).autoHarmonyLabelOverrides,
     });
 
     // Keep a ref to latest harmony labels for save-time corpus recording
@@ -8023,8 +8024,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         : (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + (BOTTOM_STAFF_TOP + 4 * LINE_HEIGHT));
                                                                     // Trial positioning: move roman+figures to the right of bass stems and lower.
                                                                       const RB_SHIFT_X = 25;
-                                                                      const RB_SHIFT_Y = 30;
-
+                                                                       const RB_SHIFT_Y = 40;
                                                                                                                                         // SATB antiche: lower the whole bass-analysis block (roman + figures)
                                                                                                                                         // with a fixed offset to avoid collisions with bass noteheads/ties.
                                                                                                                                         // No dynamic collision detection.
