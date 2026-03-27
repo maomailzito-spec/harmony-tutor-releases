@@ -359,6 +359,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // a dom7 chord is not a stable "I" arrival — it's a passing
                     // secondary dominant (e.g. V/V → V7 is NOT a tonicization to V).
                     if (resEv && /dominant\s*7/i.test(resEv.quality)) return false;
+                    // Reject cadences resolving to a diatonic degree of the home key:
+                    // this is a secondary dominant (V/x → x), not a modulation.
+                    if (resEv != null) {
+                        const _homeScale = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
+                        if (_homeScale.has(resEv.rootPc)) return false;
+                    }
                     return true;
                 });
                 const _manualBeats = new Set(
@@ -1746,6 +1752,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                 }
                 if (!_isAppogg) continue;
+                // Guard: if the "appoggiatura" note forms a standard chord
+                // interval with the bass (3rd, 5th, 7th…), it is likely a real
+                // chord tone mis-tagged — skip substitution so the label sees
+                // the actual vertical (e.g. Cm7 stays Cm7, not Ab).
+                try {
+                    const _appoggPc2 = ((Number(_an.midi) % 12) + 12) % 12;
+                    const _bassN2 = (event.notes as any[])
+                        .filter((nn: any) => nn && !nn.isRest && Number.isFinite(nn.midi))
+                        .sort((a: any, b: any) => (a.midi ?? 0) - (b.midi ?? 0))[0];
+                    if (_bassN2) {
+                        const _bassPc2 = ((Number(_bassN2.midi) % 12) + 12) % 12;
+                        const _iv = ((_appoggPc2 - _bassPc2) + 12) % 12;
+                        // Standard chord intervals: unison(0), m3(3), M3(4), P5(7), m6(8), M6(9), m7(10), M7(11)
+                        if ([0, 3, 4, 7, 8, 9, 10, 11].includes(_iv)) continue;
+                    }
+                } catch { /* ignore */ }
                 // Look ahead: find the resolution note (next timeline event, same voice)
                 if (eventIndex + 1 < timelineFiltered.length) {
                     const _nxEv = timelineFiltered[eventIndex + 1] as any;
@@ -1873,8 +1895,43 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const _nextNotes = (_nextEv?.notes || []) as any[];
                             const _resolNote = _nextNotes.find((nn: any) => nn && !nn.isRest && ((nn.voice ?? 1) as number) === v);
                             if (_resolNote) {
-                                lastStructural.set(v, _resolNote);
-                                continue; // skip ornament-delete — voice uses resolution note
+                                // Guard: if the appoggiatura note forms a standard chord
+                                // interval (3rd, 5th, 7th, or unison/octave) with the bass,
+                                // it is likely a real chord tone (e.g. 7th) mis-tagged as
+                                // appoggiatura — keep it structural instead of substituting.
+                                const _appoggPc = ((Number(n.midi) % 12) + 12) % 12;
+                                // Find the bass note from current context
+                                const _bassN = (event.notes as any[])
+                                    .filter((nn: any) => nn && !nn.isRest && Number.isFinite(nn.midi))
+                                    .sort((a: any, b: any) => (a.midi ?? 0) - (b.midi ?? 0))[0];
+                                if (_bassN) {
+                                    const _bassPc = ((Number(_bassN.midi) % 12) + 12) % 12;
+                                    const _interval = ((_appoggPc - _bassPc) + 12) % 12;
+                                    // 0=unison, 3/4=3rd, 7=5th, 8/9=6th, 10/11=7th
+                                    const _chordIntervals = new Set([0, 3, 4, 7, 8, 9, 10, 11]);
+                                    if (_chordIntervals.has(_interval)) {
+                                        // Appoggiatura is consonant/standard with bass — treat as structural
+                                        lastStructural.set(v, { ...n, isAppoggiatura: false });
+                                        continue;
+                                    }
+                                }
+                                // Guard: don't substitute if the resolution pitch-class
+                                // duplicates another voice already in the snapshot — this
+                                // would collapse a richer chord (e.g. Cm7 → Ab major).
+                                const _resPc = ((Number(_resolNote.midi) % 12) + 12) % 12;
+                                const _existingPcs = new Set<number>();
+                                for (const [_vk, _vn] of lastStructural.entries()) {
+                                    if (_vk === v) continue;
+                                    if (_vn && !_vn.isRest && Number.isFinite(_vn.midi)) {
+                                        _existingPcs.add(((Number(_vn.midi) % 12) + 12) % 12);
+                                    }
+                                }
+                                if (!_existingPcs.has(_resPc)) {
+                                    lastStructural.set(v, _resolNote);
+                                    continue;
+                                }
+                                // Resolution duplicates existing pc — keep the appoggiatura
+                                // as structural (it was likely a real chord tone, e.g. 7th).
                             }
                         }
                     } catch { /* ignore */ }
