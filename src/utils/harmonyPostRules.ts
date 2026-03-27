@@ -425,3 +425,316 @@ export function applyStatelessRules(input: StatelessRulesInput): { roman: string
 
     return { roman, symbol, figures };
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  STATELESS convenience: apply all stateless rules
+// ══════════════════════════════════════════════════════════════════════════════
+
+export interface StatelessRulesInput {
+    analysisNotesForNaming: any[];
+    analysisNotes: any[];
+    fullNotes: any[];
+    contextTonic: string;
+    contextIsMinor: boolean;
+    bassPc: number | null;
+    ornamentOverrides?: Record<string, string>;
+    absBeat: number;
+    autoOverrideByAbsBeat: Map<number, { roman?: string; symbol?: string; figures?: string[] }>;
+    overrideByAbsBeat: Map<number, { roman?: string; symbol?: string; figures?: string[] }>;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  STATEFUL R-rules (Phase 3)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Mutable scan state carried between beats. Mirrors the per-system Maps
+ * in useHarmonyLabels (lastRomanBySystem, lastChordRootPcBySystem, etc.).
+ */
+export interface ScanState {
+    prevRoman: string;
+    prevRootPc: number | null;
+    prevType: string | null;
+    prevContext: { tonic: string; isMinor: boolean } | null;
+    currentTonic: string;
+    currentIsMinor: boolean;
+}
+
+export function createInitialScanState(tonic: string, isMinor: boolean): ScanState {
+    return {
+        prevRoman: '',
+        prevRootPc: null,
+        prevType: null,
+        prevContext: null,
+        currentTonic: tonic,
+        currentIsMinor: isMinor,
+    };
+}
+
+// ────────────────── R4: dyadBass ──────────────────
+
+export interface R4Input {
+    roman: string;
+    bassPc: number | null;
+    analysisNotes: any[];
+    contextTonic: string;
+    contextIsMinor: boolean;
+}
+
+/**
+ * R4: If we only have ≤2 pitch classes and no roman, infer from bass.
+ */
+export function applyR4DyadBass(input: R4Input): string {
+    const { roman, bassPc, analysisNotes, contextTonic, contextIsMinor } = input;
+    try {
+        const isSecondaryOrSlash = typeof roman === 'string' && roman.includes('/');
+        const pcs = pcSetFromNotes(analysisNotes);
+        if (!isSecondaryOrSlash && bassPc != null && pcs.size <= 2 && !roman) {
+            const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
+            if (inferred) return inferred.roman;
+        }
+    } catch { /* ignore */ }
+    return roman;
+}
+
+// ────────────────── R5: shellCont ──────────────────
+
+export interface R5Input {
+    roman: string;
+    bassPc: number | null;
+    analysisNotes: any[];
+    prevRoman: string;
+    contextTonic: string;
+    contextIsMinor: boolean;
+    prevContext: { tonic: string; isMinor: boolean } | null;
+}
+
+/**
+ * R5: Shell continuation — if previous label is a diatonic triad and
+ * current vertical is a sparse subset, keep the previous roman.
+ */
+export function applyR5ShellCont(input: R5Input): string {
+    const { roman, bassPc, analysisNotes, prevRoman, contextTonic, contextIsMinor, prevContext } = input;
+    try {
+        const isSecondaryOrSlash = typeof roman === 'string' && roman.includes('/');
+        const pcs = pcSetFromNotes(analysisNotes);
+        const sameCtx = !prevContext || (prevContext.tonic === contextTonic && prevContext.isMinor === contextIsMinor);
+        if (!isSecondaryOrSlash && prevRoman && bassPc != null && pcs.size > 0 && pcs.size <= 2 && sameCtx) {
+            const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
+            if (prevTriad) {
+                const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
+                if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
+                    return prevRoman;
+                }
+            }
+        }
+    } catch { /* ignore */ }
+    return roman;
+}
+
+// ────────────────── R7: postInvRoot ──────────────────
+
+export interface R7Input {
+    roman: string;
+    bassPc: number | null;
+    analysisNotes: any[];
+    prevRoman: string;
+    prevRootPc: number | null;
+    prevType: string | null;
+}
+
+/**
+ * R7: Post-inversion root inference — if prevRootPc/prevType form a triad
+ * that contains the current PCs and bass, keep prevRoman.
+ */
+export function applyR7PostInvRoot(input: R7Input): string {
+    const { roman, bassPc, analysisNotes, prevRoman, prevRootPc, prevType } = input;
+    try {
+        const pcs = pcSetFromNotes(analysisNotes);
+        const isSecondaryOrSlash = typeof roman === 'string' && roman.includes('/');
+        if (prevRoman && prevRootPc != null && prevType && bassPc != null && roman && roman !== prevRoman && !isSecondaryOrSlash) {
+            const isCurrentDominant = /^(V|vii°|VII)$/i.test(String(roman).replace(/[⁶⁴₆₄]/g, ''));
+            if (!isCurrentDominant) {
+                const triad = triadPcsFromRootAndType(prevRootPc, prevType);
+                if (triad) {
+                    const triadSet = new Set<number>([triad.root, triad.third, triad.fifth]);
+                    if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
+                        return prevRoman;
+                    }
+                }
+            }
+        }
+    } catch { /* ignore */ }
+    return roman;
+}
+
+function triadPcsFromRootAndType(rootPc: number, typeStr: string): { root: number; third: number; fifth: number } | null {
+    const t = String(typeStr || '').toLowerCase();
+    let thirdInt = 4; // major
+    let fifthInt = 7;
+    if (t.includes('min') || t === 'm') { thirdInt = 3; }
+    if (t.includes('dim')) { thirdInt = 3; fifthInt = 6; }
+    if (t.includes('aug')) { fifthInt = 8; }
+    return {
+        root: ((rootPc % 12) + 12) % 12,
+        third: ((rootPc + thirdInt) % 12 + 12) % 12,
+        fifth: ((rootPc + fifthInt) % 12 + 12) % 12,
+    };
+}
+
+// ────────────────── R8: postInvDiat ──────────────────
+
+export interface R8Input {
+    roman: string;
+    bassPc: number | null;
+    analysisNotes: any[];
+    prevRoman: string;
+    contextTonic: string;
+    contextIsMinor: boolean;
+    prevContext: { tonic: string; isMinor: boolean } | null;
+}
+
+/**
+ * R8: Post-inversion diatonic — keep prevRoman if current PCs ⊆ prevRoman's triad.
+ */
+export function applyR8PostInvDiat(input: R8Input): string {
+    const { roman, bassPc, analysisNotes, prevRoman, contextTonic, contextIsMinor, prevContext } = input;
+    try {
+        const sameCtx = !prevContext || (prevContext.tonic === contextTonic && prevContext.isMinor === contextIsMinor);
+        const isSecondaryOrSlash = typeof roman === 'string' && roman.includes('/');
+        if (sameCtx && prevRoman && bassPc != null && roman && roman !== prevRoman && !isSecondaryOrSlash) {
+            const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
+            if (prevTriad) {
+                const pcs = pcSetFromNotes(analysisNotes);
+                const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
+                if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
+                    return prevRoman;
+                }
+            }
+        }
+    } catch { /* ignore */ }
+    return roman;
+}
+
+// ────────────────── R10: suspDedup ──────────────────
+
+export interface R10Input {
+    roman: string;
+    symbol: string;
+    figures: string[];
+    prevRoman: string;
+    isSuspensionOnsetHere: boolean;
+    hasClassicSuspension: boolean;
+    hasNonClassicSuspension: boolean;
+}
+
+/**
+ * R10: Suppress duplicate roman at classic suspension resolution.
+ */
+export function applyR10SuspDedup(input: R10Input): { roman: string; symbol: string; figures: string[] } {
+    let { roman, symbol, figures } = input;
+    const { prevRoman, isSuspensionOnsetHere, hasClassicSuspension, hasNonClassicSuspension } = input;
+    try {
+        if (!isSuspensionOnsetHere && hasClassicSuspension && !hasNonClassicSuspension) {
+            const isMinorMajor7 = (() => {
+                const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
+                return /m\(maj7\)|mmaj7|minmaj7/i.test(sym);
+            })();
+            const isSlashRoman = typeof roman === 'string' && roman.includes('/');
+            if ((!roman || roman === prevRoman) && !isMinorMajor7 && !isSlashRoman) {
+                roman = '';
+                figures = [];
+                symbol = '';
+            }
+        }
+    } catch { /* ignore */ }
+    return { roman, symbol, figures };
+}
+
+// ────────────────── R14: corpusBias ──────────────────
+
+export interface R14Input {
+    roman: string;
+    prevRoman: string;
+    analysisNotesForNaming: any[];
+    contextTonic: string;
+    contextIsMinor: boolean;
+    prevContext: { tonic: string; isMinor: boolean } | null;
+    styleProfile: any;
+    getBigramProbability: (profile: any, prev: string, curr: string) => number;
+}
+
+/**
+ * R14: Statistical corpus bias — disambiguate close-score candidates using bigram probs.
+ * CRITICAL: Skip if tonal context changed (modulation) to avoid cross-key bias.
+ */
+export function applyR14CorpusBias(input: R14Input): string {
+    const { roman, prevRoman, analysisNotesForNaming, contextTonic, contextIsMinor, prevContext, styleProfile, getBigramProbability } = input;
+    if (!roman || !prevRoman || !styleProfile) return roman;
+    try {
+        // Guard: skip bias when tonal context has changed (modulation edge case)
+        if (prevContext && (prevContext.tonic !== contextTonic || prevContext.isMinor !== contextIsMinor)) {
+            return roman;
+        }
+
+        const candidates = identifyChordCandidates(analysisNotesForNaming as any);
+        if (!candidates || (candidates as any[]).length < 2) return roman;
+        const c0 = (candidates as any[])[0];
+        const c1 = (candidates as any[])[1];
+        const scoreDiff = Math.abs(Number((c0 as any).score ?? 0) - Number((c1 as any).score ?? 0));
+        if (scoreDiff > 4) return roman;
+
+        const rootPc0 = Number.isFinite(Number((c0.root as any)?.midi))
+            ? ((Number((c0.root as any).midi) % 12) + 12) % 12 : -1;
+        const rootPc1 = Number.isFinite(Number((c1.root as any)?.midi))
+            ? ((Number((c1.root as any).midi) % 12) + 12) % 12 : -1;
+        const sameRoot = rootPc0 < 0 || rootPc1 < 0 || rootPc0 === rootPc1;
+        if (!sameRoot) return roman;
+
+        const altRoman = calculateRomanFromChordInfo(
+            { root: c1.root, type: c1.type, intervals: c1.intervals },
+            contextTonic, contextIsMinor,
+        );
+        if (altRoman && altRoman !== roman) {
+            const pCurr = getBigramProbability(styleProfile, prevRoman, roman);
+            const pAlt = getBigramProbability(styleProfile, prevRoman, altRoman);
+            if (pAlt > pCurr * 1.5 && pAlt > 0.05) {
+                return altRoman;
+            }
+        }
+    } catch { /* ignore */ }
+    return roman;
+}
+
+// ────────────────── Update scan state ──────────────────
+
+/**
+ * Update the scan state after processing a beat. Call this after applying all rules.
+ */
+export function updateScanState(
+    state: ScanState,
+    roman: string,
+    analysisNotesForNaming: any[],
+    contextTonic: string,
+    contextIsMinor: boolean,
+): void {
+    if (roman) {
+        state.prevRoman = roman;
+    }
+    state.prevContext = { tonic: contextTonic, isMinor: contextIsMinor };
+
+    // Update root/type from top candidate
+    try {
+        const candidates = identifyChordCandidates(analysisNotesForNaming as any);
+        if (candidates && (candidates as any[]).length) {
+            const chosen = (candidates as any[])[0];
+            const rootPc = (chosen?.root?.noteIndex ?? null);
+            if (rootPc != null && Number.isFinite(rootPc)) {
+                state.prevRootPc = (((rootPc % 12) + 12) % 12);
+            }
+            if (chosen?.type) {
+                state.prevType = String(chosen.type);
+            }
+        }
+    } catch { /* ignore */ }
+}
