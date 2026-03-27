@@ -738,6 +738,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
                     for (const K of _allKeys) {
                         if (K === currentTonic) continue;
+                        // Guard: if K's root is diatonic to the home key, V→I in K
+                        // is really V/x→x (secondary dominant), not a modulation.
+                        const _kPcGuard = noteNameToChromaticIndex(K);
+                        if (_kPcGuard >= 0 && _scale.has(_kPcGuard)) continue;
                         const rJ = getRomanAnalysis(stJ, K, false);
                         if (!rJ || rJ.roman !== 'I') continue;
                         // Guard: a minor chord on the tonic (has ♭3 in figures)
