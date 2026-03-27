@@ -702,6 +702,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const _globalPc = noteNameToChromaticIndex(currentTonic);
                 const _scaleIntervals = isMinorMode ? [0,2,3,5,7,8,10] : [0,2,4,5,7,9,11];
                 const _scale = new Set(_scaleIntervals.map(i => (i + _globalPc) % 12));
+                // Extended scale: natural + harmonic + melodic (for diatonic guard)
+                const _scaleExt = new Set(getScalePcs(_globalPc, isMinorMode));
                 const _degreeNames = isMinorMode
                     ? ['i','\u266DII','ii\u00B0','\u266DIII','iv','v','\u266DVI','\u266DVII','VI','vi\u00B0','VII','vii\u00B0']
                     : ['I','\u266DII','ii','\u266DIII','iii','IV','\u266EIV\u00B0','V','\u266DVI','vi','\u266DVII','vii\u00B0'];
@@ -741,7 +743,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // Guard: if K's root is diatonic to the home key, V→I in K
                         // is really V/x→x (secondary dominant), not a modulation.
                         const _kPcGuard = noteNameToChromaticIndex(K);
-                        if (_kPcGuard >= 0 && _scale.has(_kPcGuard)) continue;
+                        if (_kPcGuard >= 0 && _scaleExt.has(_kPcGuard)) continue;
                         const rJ = getRomanAnalysis(stJ, K, false);
                         if (!rJ || rJ.roman !== 'I') continue;
                         // Guard: a minor chord on the tonic (has ♭3 in figures)
