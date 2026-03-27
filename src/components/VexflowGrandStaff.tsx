@@ -2149,8 +2149,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
             try {
               if (typeof n.xPosition !== 'number') {
-                // eslint-disable-next-line no-console
-                console.log('[Vexflow] fallbackX', { id: n.id, startTick: (n as any).startTick, absBeat: (typeof (n as any).startTick === 'number' ? ((n as any).startTick / TICKS_PER_QUARTER) : undefined), absoluteX });
+                // fallback position — no debug logging in production
               }
             } catch (e) {
               // ignore

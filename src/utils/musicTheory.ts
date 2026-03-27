@@ -91,7 +91,7 @@ export function getActiveNotesTimeline(
 }
 import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange, OrnamentOverride } from '../types';
 import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
-import { HARMONY_DEV_LOG_R06_KEY, ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
+import { ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
 import { getRuleText } from './ruleTexts';
@@ -8879,16 +8879,7 @@ export function applyHarmonyRules(
             if (esc.length) {
                 const passMap = new Map<string, boolean>();
                 for (const n of analyzedNotes as any[]) passMap.set(n.id, !!n.isPassing);
-                for (const v of esc) {
-                    const ids: string[] = Array.isArray(v?.noteIds) ? v.noteIds : [];
-                    // eslint-disable-next-line no-console
-                    console.warn('[ANALYSIS][DEV] ORN-ESC still present', {
-                        ruleId: v.ruleId,
-                        noteIds: ids,
-                        passingFlags: ids.map(id => ({ id, isPassing: passMap.get(id) ?? null })),
-                        description: v.description,
-                    });
-                }
+
             }
         }
     } catch { /* ignore */ }
@@ -11941,22 +11932,7 @@ export function applyHarmonyRules(
             const simpleSemi = absSemi % 12;
             const quality = getIntervalQuality(diatonicSize, simpleSemi);
             if (quality === 'Augmented' || quality === 'Diminished') {
-                try {
-                    const dbg = getString(HARMONY_DEV_LOG_R06_KEY, '');
-                    if (dbg === '1') {
-                        // eslint-disable-next-line no-console
-                        console.warn('[R-06][DBG]', {
-                            voice: v,
-                            n1: { id: n1.id, pitch: n1.pitch, acc: (n1.explicitAccidental ?? n1.accidental ?? null), midi: n1.midi },
-                            n2: { id: n2.id, pitch: n2.pitch, acc: (n2.explicitAccidental ?? n2.accidental ?? null), midi: n2.midi },
-                            midiDiff,
-                            diatonicSize,
-                            absSemi,
-                            simpleSemi,
-                            quality,
-                        });
-                    }
-                } catch { /* ignore */ }
+
                 const n3 = line[i + 2];
                 if (n3) {
                     if (isOrnamental(n3)) {
