@@ -491,6 +491,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // minor (iv, ♭VI, ♭VII…), this is modal interchange, not a
                     // tonicization — skip.
                     if (shouldBlockTonicization(res.rootPc, res.quality, currentTonic, isMinorMode)) continue;
+                    // Guard: if the resolution root is diatonic to the home key,
+                    // this is a secondary dominant (V/x → x), not a modulation.
+                    // E.g. in Bb minor: G7 → Cm is V7/ii → ii, not a tonicization to Cm.
+                    if (_homeScalePcs.has(targetPc)) continue;
                     // Skip if already covered by a cadential match or manual marker
                     const alreadyCovered = _effectiveCtxs.some(c =>
                         Math.abs(analysisContextAbsBeat(c) - dom.absBeat) < 0.1

@@ -317,7 +317,8 @@
       "beat": 1,
       "startTick": 3840,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "clefOverride": "treble"
     },
     {
       "id": "1d4c9c83-aa7d-4cb0-bc66-4be37d32c4cc",
@@ -1233,15 +1234,15 @@
     },
     {
       "id": "98569441-041e-40aa-b714-22f6b810f0d8",
-      "pitch": "C",
-      "octave": 4,
-      "position": 0,
-      "midi": 61,
-      "noteIndex": 1,
+      "pitch": "B",
+      "octave": 3,
+      "position": -1,
+      "midi": 59,
+      "noteIndex": 11,
       "clef": "bass",
-      "explicitAccidental": "sharp",
-      "accidental": "sharp",
-      "userAccidental": "sharp",
+      "explicitAccidental": "natural",
+      "accidental": "natural",
+      "userAccidental": "natural",
       "duration": "whole",
       "isRest": false,
       "isTriplet": false,
@@ -1336,8 +1337,17 @@
   "repeatBarlines": {},
   "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [],
-  "bpm": 120,
+  "ornamentOverrides": [
+    {
+      "noteId": "d0172446-9eba-4e3f-b852-d820303e14ec",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "9368efb0-d063-4d66-b42f-ae5bad13f940",
+      "type": "ornamental"
+    }
+  ],
+  "bpm": 100,
   "isBpmActive": false,
   "isMetronomeOn": false,
   "metronomeUnit": "quarter",
