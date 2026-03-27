@@ -5812,6 +5812,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setSelectedNoteIds(new Set([newNote.id]));
         justInsertedNoteRef.current = newNote.id;
         void playNote(newNote);
+        // ── Advance playhead to next beat after insertion ──
+        try {
+            const nextAbsBeat = (startTick + durationTicks) / TICKS_PER_QUARTER;
+            playbackCursorAbsBeatRef.current = nextAbsBeat;
+            const nextPos = getPlayheadPosForAbsBeat(nextAbsBeat);
+            if (nextPos) {
+                setPlayheadPosition(nextPos);
+                // Keep paste caret in sync
+                const beatsPerMeasureAdv = timeSignature.numerator * (4 / timeSignature.denominator);
+                const measureIndexAdv = Math.floor(nextAbsBeat / beatsPerMeasureAdv);
+                const beatAdv = Math.round(((nextAbsBeat - (measureIndexAdv * beatsPerMeasureAdv)) + 1) * 1e6) / 1e6;
+                setPasteCaret({ x: nextPos.x, systemIndex: nextPos.systemIndex, measureIndex: measureIndexAdv, beat: beatAdv });
+            }
+        } catch { /* ignore */ }
         // Auto-disarm accidental only when armed via hotkey.
         if (activeAccidental && accidentalOneShotRef.current) {
             accidentalOneShotRef.current = false;
