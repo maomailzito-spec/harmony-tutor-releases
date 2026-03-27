@@ -1345,6 +1345,10 @@
     {
       "noteId": "9368efb0-d063-4d66-b42f-ae5bad13f940",
       "type": "ornamental"
+    },
+    {
+      "noteId": "e89d1b11-b0f6-44a3-83d4-392d562fecf6",
+      "type": "passing"
     }
   ],
   "bpm": 100,

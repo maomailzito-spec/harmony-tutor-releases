@@ -2047,6 +2047,26 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 if (!s.manual && ((n as any).voice ?? 1) !== 4) continue;
                 if (Math.abs(s.fromAbsBeat - event.absBeat) >= SUSP_EPS) continue;
                 if (typeof s.resolvedMidi === 'number') {
+                    // Guard: if the "suspended" note is the lowest note in the
+                    // verticality AND it forms a standard chord interval (3rd, 5th,
+                    // tritone, 7th) with the notes above, it is likely a real bass
+                    // note (e.g. F in Fr+ = F-G-B-Db), not a true suspension.
+                    // Don't substitute — the label would collapse to a wrong chord.
+                    const _suspMidi = Number(n.midi);
+                    const _otherNotes = (fullNotes || []).filter((on: any) =>
+                        on && !on.isRest && Number.isFinite(on.midi) && on !== n
+                        && !on.isSuspension);
+                    const _isLowest = _otherNotes.every((on: any) => on.midi >= _suspMidi);
+                    if (_isLowest && _otherNotes.length >= 2) {
+                        // Check: does the suspended note form useful intervals with upper notes?
+                        const _suspPc = ((_suspMidi % 12) + 12) % 12;
+                        const _chordIvs = new Set([3, 4, 6, 7, 8, 9, 10, 11]); // m3,M3,tritone,P5,m6,M6,m7,M7
+                        const _hasChordInterval = _otherNotes.some((on: any) => {
+                            const _iv = ((((on.midi % 12) - _suspPc) % 12) + 12) % 12;
+                            return _chordIvs.has(_iv);
+                        });
+                        if (_hasChordInterval) continue; // keep original bass, skip substitution
+                    }
                     suspResolutions.push({
                         ...n,
                         midi: s.resolvedMidi,
