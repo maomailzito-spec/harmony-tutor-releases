@@ -17,6 +17,21 @@ import { getBigramProbability, type StyleProfile } from '../engine/choralStylePr
 import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS, DURATION_VALUES } from '../constants';
 import { suggestNextChord } from '../engine/progressionSuggester';
 import { shouldBlockTonicization } from '../utils/modalInterchange';
+import {
+    applyR1ViiRescue,
+    applyR2SecDom,
+    applyR3I7,
+    applyR4DyadBass,
+    applyR5ShellCont,
+    applyR6Rootless,
+    applyR7PostInvRoot,
+    applyR8PostInvDiat,
+    applyR10SuspDedup,
+    applyR11SparseRescue,
+    applyR12AutoOverride,
+    applyR13ManualOverride,
+    applyR14CorpusBias,
+} from '../utils/harmonyPostRules';
 
 // ─── Utility: note name → chromatic index (0-11) ──────────────────────────
 function noteNameToChromaticIndex(name: string): number {
@@ -2386,62 +2401,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                 }
 
-                // Rescue: if naming-filter collapses a triad to a dyad, vii° can be a false positive.
-                // Prefer the analysis of the fuller verticality when it yields a plausible dominant/tonic label.
+                // R1: viiRescue — prefer fuller verticality when naming-filter collapses to dyad
                 try {
-                    const rr0 = String(roman || '');
-                    const pcCount = (arr: any[]): number => {
-                        try {
-                            const set = new Set<number>();
-                            for (const n of (arr || [])) {
-                                if (!n || n.isRest) continue;
-                                const ni = Number(n.noteIndex);
-                                const mi = Number(n.midi);
-                                const pc = Number.isFinite(ni) ? ((ni % 12) + 12) % 12 : Number.isFinite(mi) ? ((mi % 12) + 12) % 12 : null;
-                                if (pc == null) continue;
-                                set.add(pc);
-                            }
-                            return set.size;
-                        } catch {
-                            return 0;
-                        }
-                    };
-                    const pcsNaming = pcCount(analysisNotesForNaming as any);
-                    const pcsAnalysis = pcCount(analysisNotes as any);
-                    const pcsFull = pcCount((fullNotes || []) as any);
-
-                    if (rr0.startsWith('vii') && pcsNaming > 0 && pcsNaming < 3 && (pcsAnalysis >= 3 || pcsFull >= 3)) {
-                        const alt1 = getRomanAnalysis(analysisNotes as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
-                        const alt2 = getRomanAnalysis((fullNotes || []) as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
-                        const isPlausible = (s: string) => s === 'V' || s === 'I' || s.startsWith('V/') || s.startsWith('I/');
-                        const pick = [alt1, alt2].find(x => x?.roman && isPlausible(String(x.roman)));
-                        if (pick?.roman) {
-                            roman = String(pick.roman);
-                            _dt('R1:viiRescue', roman, { pick: pick?.roman, rr0 });
-                            isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+' || roman === 'Sw+');
-                        }
+                    const r1 = applyR1ViiRescue({ roman, analysisNotesForNaming: analysisNotesForNaming as any, analysisNotes: analysisNotes as any, fullNotes: (fullNotes || []) as any, contextTonic, contextIsMinor, ornamentOverrides: ornOverrideRecord });
+                    if (r1 !== roman) {
+                        roman = r1;
+                        _dt('R1:viiRescue', roman);
+                        isAug6Roman = (roman === 'It+' || roman === 'Fr+' || roman === 'Ger+' || roman === 'Sw+');
                     }
                 } catch {
                     // ignore
                 }
 
-                // Rescue: secondary dominants (V/x) should stay visible even in inversions.
-                // In some sparse/incomplete verticalities (common when voices are tied or filtered as NCT),
-                // getRomanAnalysis can return null/empty, leaving only Arabic figures (6, 6/5, ...).
-                // If chord candidates yield a confident V/x under the current context, prefer that label.
+                // R2: secDom — rescue secondary dominants from candidates
                 try {
-                    if (!roman) {
-                        const candidates = identifyChordCandidates(analysisNotesForNaming as any);
-                        let bestSecondary: { roman: string; score: number } | null = null;
-                        for (const c of (candidates as any[]) || []) {
-                            const rr = calculateRomanFromChordInfo({ root: c.root, type: c.type, intervals: c.intervals }, contextTonic, contextIsMinor);
-                            if (!rr || !String(rr).startsWith('V/')) continue;
-                            const score = Number.isFinite((c as any).score) ? Number((c as any).score) : 0;
-                            if (!bestSecondary || score > bestSecondary.score) bestSecondary = { roman: rr, score };
-                        }
-                        if (bestSecondary) roman = bestSecondary.roman;
-                        if (bestSecondary) _dt('R2:secDom', roman);
-                    }
+                    const r2 = applyR2SecDom({ roman, analysisNotesForNaming: analysisNotesForNaming as any, contextTonic, contextIsMinor });
+                    if (r2 !== roman) { roman = r2; _dt('R2:secDom', roman); }
                 } catch { /* ignore */ }
 
                 const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
@@ -2450,21 +2425,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const s = getChordSymbol((fullNotes || []) as any, contextKeySignature, contextTonic);
                 if (s) symbol = s;
 
-                // Fallback for tonic minor-maj7: if symbol matches and roman is still empty, show I7.
+                // R3: I7 — minor tonic maj7 fallback
                 try {
-                    if (!roman && symbol && contextIsMinor) {
-                        const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
-                        if (/m\(maj7\)|mmaj7|minmaj7/i.test(sym)) {
-                            const rootMatch = sym.match(/^([A-G])([#b]?)/);
-                            const rootName = rootMatch ? `${rootMatch[1]}${rootMatch[2] || ''}` : '';
-                            const rootPc = rootName ? noteNameToChromaticIndex(rootName) : null;
-                            const tonicPc = contextTonic ? noteNameToChromaticIndex(contextTonic) : null;
-                            if (rootPc != null && tonicPc != null && rootPc === tonicPc) {
-                                roman = 'I7';
-                                _dt('R3:I7', roman);
-                            }
-                        }
-                    }
+                    const r3 = applyR3I7({ roman, symbol, contextTonic, contextIsMinor });
+                    if (r3 !== roman) { roman = r3; _dt('R3:I7', roman); }
                 } catch { /* ignore */ }
 
                 // If the chord symbol explicitly indicates a slash (e.g. D7/F#),
@@ -2475,110 +2439,39 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // (slash-root roman override removed)
                 } catch { /* ignore */ }
 
-            // If we only have a dyad (2 pitch classes), roman labeling is inherently ambiguous.
-            // Prefer a diatonic bass-inferred label to avoid V/III misreads on power-chord shells
-            // (e.g. C–G should read as I in C, A–E as vi).
+            } catch { /* ignore — outer try for R0-R3 */ }
+
+            // R4: dyadBass — infer from bass when ≤2 PCs
             try {
-                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
-                const pcs = pcSetFromNotes(analysisNotes as any);
-                if (!isSecondaryOrSlashRoman && bassPc != null && pcs.size <= 2 && !roman) {
-                    const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
-                    if (inferred) {
-                        roman = inferred.roman;
-                        _dt('R4:dyadBass', roman, { bassPc, inferred: inferred?.roman });
-                    }
-                }
+                const r4 = applyR4DyadBass({ roman, bassPc, analysisNotes: analysisNotes as any, contextTonic, contextIsMinor });
+                if (r4 !== roman) { roman = r4; _dt('R4:dyadBass', roman, { bassPc }); }
             } catch { /* ignore */ }
 
-            // --- Shell continuation (appoggiature / sparse textures) ---
-            // If the previous label is a diatonic triad (e.g. vi) and the current vertical
-            // is just a sparse subset of that triad (often 2 PCs, because one chord tone is
-            // momentarily missing), keep the previous Roman numeral and reflect the inversion
-            // from the bass.
-            // This prevents weak-beat shells like C–E over C from collapsing to I when the
-            // intended harmony is still vi6 (A–C–E with A omitted).
+            // R5: shellCont — keep previous roman if current is sparse subset
             try {
-                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
-                const pcs = pcSetFromNotes(analysisNotes as any);
                 const prevCtx = lastContextBySystem.get(systemIndex);
-                const sameCtx = !prevCtx || (prevCtx.tonic === contextTonic && prevCtx.isMinor === contextIsMinor);
-                if (!isSecondaryOrSlashRoman && prevRoman && bassPc != null && pcs.size > 0 && pcs.size <= 2 && sameCtx) {
-                    const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
-                    if (prevTriad) {
-                        const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
-                        if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
-                            roman = prevRoman;
-                            _dt('R5:shellCont', roman, { prevRoman, sameCtx });
-                        }
-                    }
-                }
+                const r5 = applyR5ShellCont({ roman, bassPc, analysisNotes: analysisNotes as any, prevRoman, contextTonic, contextIsMinor, prevContext: prevCtx || null });
+                if (r5 !== roman) { roman = r5; _dt('R5:shellCont', roman, { prevRoman }); }
             } catch { /* ignore */ }
 
-            // --- Diatonic shell/rootless inference (your "due accordi" policy) ---
-            // This is a *fallback* only: use the bass to infer a diatonic triad when we
-            // cannot confidently label the harmony. Do NOT override an existing roman label,
-            // otherwise inversions start looking like "root=bass".
+            // R6: rootless — diatonic shell inference from bass
             try {
-                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
-                if (!isSecondaryOrSlashRoman && bassPc != null && !roman) {
-                    const inferred = inferDiatonicRomanFromBass(bassPc, contextTonic, contextIsMinor);
-                    if (inferred) {
-                        const pcs = pcSetFromNotes(analysisNotes as any);
-                        const triadSet = new Set<number>([inferred.triad.root, inferred.triad.third, inferred.triad.fifth]);
-                        const pcsSubset = isSubset(pcs, triadSet);
-                        // Allow very sparse sets (2 pcs) to still count as the triad.
-                        if (pcsSubset && pcs.size > 0 && pcs.size <= 3) {
-                            roman = inferred.roman;
-                            _dt('R6:rootless', roman, { bassPc });
-                        }
-                    }
-                }
+                const r6 = applyR6Rootless({ roman, bassPc, analysisNotes: analysisNotes as any, contextTonic, contextIsMinor });
+                if (r6 !== roman) { roman = r6; _dt('R6:rootless', roman, { bassPc }); }
             } catch { /* ignore */ }
 
-            // --- Post-processing: infer inversions from the previous harmony when the bass moves
-            // to a chord tone.
+            // R7: postInvRoot — infer inversion from previous chord root/type
             try {
-                const pcs = pcSetFromNotes(analysisNotes as any);
-                const isSecondaryOrSlashRoman = typeof roman === 'string' && roman.includes('/');
-                if (prevRoman && prevRootPc != null && prevType && bassPc != null && roman && roman !== prevRoman && !String(roman).includes('/')) {
-                    // Guard: do NOT override a strong dominant label (V, V7, vii°, etc.)
-                    // with a weaker tonic/subdominant reuse. V is functionally critical.
-                    const isCurrentDominant = /^(V|vii°|VII)$/i.test(String(roman).replace(/[⁶⁴₆₄]/g, ''));
-                    if (!isCurrentDominant) {
-                    const triad = triadPcsFromRootAndType(prevRootPc, prevType);
-                    if (triad) {
-                        const triadSet = new Set<number>([triad.root, triad.third, triad.fifth]);
-                        // Current vertical may be rootless; allow subset of the triad.
-                        if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
-                            roman = prevRoman;
-                            _dt('R7:postInvRoot', roman, { prevRoman, prevRootPc });
-                        }
-                    }
-                    }
-                }
+                const r7 = applyR7PostInvRoot({ roman, bassPc, analysisNotes: analysisNotes as any, prevRoman, prevRootPc, prevType });
+                if (r7 !== roman) { roman = r7; _dt('R7:postInvRoot', roman, { prevRoman, prevRootPc }); }
+            } catch { /* ignore */ }
 
-                // If the previous chord is a *diatonic triad label* (I/ii/iii/IV/V/vi/vii° etc.)
-                // keep that roman when the current vertical is a subset of its triad, even if the
-                // bass alone would imply a different diatonic root (e.g. Am/C shell -> vi6, not I).
+            // R8: postInvDiat — keep prevRoman if current PCs ⊆ prevRoman's triad
+            try {
                 const prevCtx2 = lastContextBySystem.get(systemIndex);
-                const sameCtx2 = !prevCtx2 || (prevCtx2.tonic === contextTonic && prevCtx2.isMinor === contextIsMinor);
-                if (sameCtx2 && prevRoman && bassPc != null && roman && roman !== prevRoman && !String(roman).includes('/')) {
-                    const prevTriad = inferDiatonicTriadFromRoman(prevRoman, contextTonic, contextIsMinor);
-                    if (prevTriad) {
-                        const triadSet = new Set<number>([prevTriad.root, prevTriad.third, prevTriad.fifth]);
-                        if (isSubset(pcs, triadSet) && triadSet.has(bassPc)) {
-                            roman = prevRoman;
-                            _dt('R8:postInvDiat', roman, { prevRoman, sameCtx2 });
-                        }
-                    }
-                }
-            } catch (_) {
-                // ignore
-            }
-
-            } catch (_) {
-                // ignore
-            }
+                const r8 = applyR8PostInvDiat({ roman, bassPc, analysisNotes: analysisNotes as any, prevRoman, contextTonic, contextIsMinor, prevContext: prevCtx2 || null });
+                if (r8 !== roman) { roman = r8; _dt('R8:postInvDiat', roman, { prevRoman }); }
+            } catch { /* ignore */ }
 
             // Capture the most likely chord root/type for inversion inference on the next label.
             try {
@@ -2893,25 +2786,20 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 if (resolvingSuspensions.length) {
                     const hasClassic = resolvingSuspensions.some((s: any) => CLASSIC_TYPES.has(String(s.type)));
                     const hasNonClassic = resolvingSuspensions.some((s: any) => !CLASSIC_TYPES.has(String(s.type)));
-                    if (!isSuspensionOnsetHere && hasClassic && !hasNonClassic) {
-                        // Only suppress if the harmony is unchanged (avoid hiding a real change).
-                        // Use the roman from BEFORE this beat's update to avoid self-comparison.
-                        const prevRoman = _prevRomanBeforeUpdate;
-
-                        const isMinorMajor7 = (() => {
-                            const sym = String(symbol || '').replace('♯', '#').replace('♭', 'b');
-                            return /m\(maj7\)|mmaj7|minmaj7/i.test(sym);
-                        })();
-                        // Never clear a secondary dominant (V/x) or other slash-roman:
-                        // these represent real harmonic information, not a suspension artifact.
-                        const isSlashRoman = typeof roman === 'string' && roman.includes('/');
-                        if ((!roman || roman === prevRoman) && !isMinorMajor7 && !isSlashRoman) {
-                            roman = '';
-                            _dt('R10:suspDedup', roman, { prevRoman });
-                            figures = [];
-                            symbol = '';
-                        }
+                    // R10: suspDedup — suppress duplicate roman at classic suspension resolution
+                    const r10 = applyR10SuspDedup({
+                        roman, symbol, figures,
+                        prevRoman: _prevRomanBeforeUpdate,
+                        isSuspensionOnsetHere,
+                        hasClassicSuspension: hasClassic,
+                        hasNonClassicSuspension: hasNonClassic,
+                    });
+                    if (r10.roman !== roman || r10.symbol !== symbol) {
+                        _dt('R10:suspDedup', r10.roman, { prevRoman: _prevRomanBeforeUpdate });
                     }
+                    roman = r10.roman;
+                    figures = r10.figures;
+                    symbol = r10.symbol;
                 }
             } catch (_) {}
 
@@ -2969,32 +2857,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             } catch { /* ignore */ }
 
-            // Auto (analysis) overrides: label-only tonicization. Never beats a user override.
-            // Guard: never let auto tonicization replace a tonic chord (I/i) — the tonic
-            // label is too important to be overwritten by a lookahead heuristic.
+            // R12 + R13: auto/manual overrides
             try {
-                const a = qAbs(event.absBeat);
-                if (!overrideByAbsBeat.has(a)) {
-                    const auto = getNear(autoOverrideByAbsBeat, a);
-                    if (auto) {
-                        const isCurrentlyTonic = roman === 'I' || roman === 'i';
-                        if (!isCurrentlyTonic) {
-                            if (auto.roman !== undefined) { roman = auto.roman; _dt('R12:autoOvr', roman); }
-                            if (auto.symbol !== undefined) symbol = auto.symbol;
-                            if (auto.figures !== undefined) figures = auto.figures;
-                        }
-                    }
-                }
+                const r12 = applyR12AutoOverride({ roman, symbol, figures, absBeat: event.absBeat, autoOverrideByAbsBeat, overrideByAbsBeat });
+                if (r12.roman !== roman) _dt('R12:autoOvr', r12.roman);
+                roman = r12.roman; symbol = r12.symbol; figures = r12.figures;
             } catch { /* ignore */ }
-
-            // User overrides: allow forcing Roman/figures/symbol at this absBeat.
             try {
-                const ov = overrideByAbsBeat.get(qAbs(event.absBeat));
-                if (ov) {
-                    if (ov.roman !== undefined) { roman = ov.roman; _dt('R13:manualOvr', roman); }
-                    if (ov.symbol !== undefined) symbol = ov.symbol;
-                    if (ov.figures !== undefined) figures = ov.figures;
-                }
+                const r13 = applyR13ManualOverride({ roman, symbol, figures, absBeat: event.absBeat, overrideByAbsBeat });
+                if (r13.roman !== roman) _dt('R13:manualOvr', r13.roman);
+                roman = r13.roman; symbol = r13.symbol; figures = r13.figures;
             } catch { /* ignore */ }
 
             // Final rescue: if we still ended up with vii° but the *unfiltered* verticality spells the
@@ -3025,45 +2897,21 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             } catch { /* ignore */ }
 
             // ── R14: Statistical corpus bias ──
-            // When useStatisticalCorrection is on and two chord candidates are close in score,
-            // use bigram probability P(roman | prevRoman) to prefer the more likely progression.
             try {
                 if (useStatisticalCorrection && styleProfile?.romanBigrams && prevRoman && roman) {
-                    const threshold = Number(statisticalBiasThreshold) || 2;
-                    const candNotes = (analysisNotesForNaming && analysisNotesForNaming.length >= 2)
-                        ? analysisNotesForNaming : (analysisNotes && analysisNotes.length >= 2 ? analysisNotes : null);
-                    if (candNotes) {
-                        const allCands = identifyChordCandidates(candNotes as any);
-                        if (Array.isArray(allCands) && allCands.length >= 2) {
-                            const c0 = allCands[0] as any;
-                            const c1 = allCands[1] as any;
-                            const scoreDiff = (c0.score ?? 0) - (c1.score ?? 0);
-                            if (scoreDiff < threshold && c1.root && c1.type) {
-                                // Guard: when the two candidates have different roots,
-                                // the spelling-first winner (c0) is structurally preferred.
-                                // Don't let a bigram override swap the fundamental root
-                                // (e.g. C#m=iii → E Maj 6=V just because ii→V is common).
-                                const rootPc0 = Number.isFinite(Number((c0.root as any)?.midi))
-                                    ? ((Number((c0.root as any).midi) % 12) + 12) % 12 : -1;
-                                const rootPc1 = Number.isFinite(Number((c1.root as any)?.midi))
-                                    ? ((Number((c1.root as any).midi) % 12) + 12) % 12 : -1;
-                                const sameRoot = rootPc0 < 0 || rootPc1 < 0 || rootPc0 === rootPc1;
-                                if (sameRoot) {
-                                const altRoman = calculateRomanFromChordInfo(
-                                    { root: c1.root, type: c1.type, intervals: c1.intervals },
-                                    contextTonic, contextIsMinor,
-                                );
-                                if (altRoman && altRoman !== roman) {
-                                    const pCurr = getBigramProbability(styleProfile, prevRoman, roman);
-                                    const pAlt = getBigramProbability(styleProfile, prevRoman, altRoman);
-                                    if (pAlt > pCurr * 1.5 && pAlt > 0.05) {
-                                        roman = altRoman;
-                                        _dt('R14:corpusBias', roman, { prevRoman, pCurr, pAlt, scoreDiff });
-                                    }
-                                }
-                            }
-                            } // end sameRoot guard
-                        }
+                    const prevCtxR14 = lastContextBySystem.get(systemIndex);
+                    const r14 = applyR14CorpusBias({
+                        roman, prevRoman,
+                        analysisNotesForNaming: (analysisNotesForNaming && analysisNotesForNaming.length >= 2
+                            ? analysisNotesForNaming : (analysisNotes && analysisNotes.length >= 2 ? analysisNotes : [])) as any,
+                        contextTonic, contextIsMinor,
+                        prevContext: prevCtxR14 || null,
+                        styleProfile,
+                        getBigramProbability,
+                    });
+                    if (r14 !== roman) {
+                        roman = r14;
+                        _dt('R14:corpusBias', roman, { prevRoman });
                     }
                 }
             } catch { /* ignore */ }
