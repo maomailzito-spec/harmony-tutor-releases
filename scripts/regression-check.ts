@@ -14,6 +14,7 @@ import {
 
 import { TICKS_PER_QUARTER } from '../src/constants';
 import { detectVoiceLeadingSequences } from '../src/utils/sequenceDetector';
+import { applyStatelessRules } from '../src/utils/harmonyPostRules';
 
 type Fixture = {
   name: string;
@@ -560,10 +561,31 @@ const main = () => {
         continue;
       }
 
-      const ra = getRomanAnalysis(substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat) as any, fx.keyTonic, fx.isMinorMode);
-      const roman = ra?.roman ?? '';
-      const figures = ra?.figures ?? [];
-      const symbol = getChordSymbol(ev.notes as any, keySignature as any, fx.keyTonic) ?? '';
+      const substNotes = substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat);
+      const bassPc = (() => {
+        let lowest: any = null;
+        for (const n of (substNotes || [])) {
+          if (!n || n.isRest) continue;
+          const m = Number(n.midi);
+          if (!Number.isFinite(m)) continue;
+          if (!lowest || m < lowest.midi) lowest = { midi: m, pc: ((m % 12) + 12) % 12 };
+        }
+        return lowest?.pc ?? null;
+      })();
+      const stateless = applyStatelessRules({
+        analysisNotesForNaming: substNotes as any,
+        analysisNotes: substNotes as any,
+        fullNotes: ev.notes as any,
+        contextTonic: fx.keyTonic,
+        contextIsMinor: fx.isMinorMode,
+        bassPc,
+        absBeat: ev.absBeat,
+        autoOverrideByAbsBeat: new Map(),
+        overrideByAbsBeat: new Map(),
+      });
+      const roman = stateless.roman;
+      const figures = stateless.figures;
+      const symbol = stateless.symbol || (getChordSymbol(ev.notes as any, keySignature as any, fx.keyTonic) ?? '');
 
       if (exp.roman != null && roman !== exp.roman) {
         fixtureFailed = true;
