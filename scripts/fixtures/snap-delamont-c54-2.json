@@ -1261,11 +1261,7 @@
     },
     {
       "absBeat": 4,
-      "roman": "V",
-      "figuresInclude": [
-        "4",
-        "2"
-      ]
+      "roman": "iii"
     },
     {
       "absBeat": 5,
@@ -1332,10 +1328,10 @@
     },
     {
       "absBeat": 15,
-      "roman": "Fr+",
+      "roman": "V",
       "figuresInclude": [
-        "4",
-        "3"
+        "7",
+        "5"
       ]
     },
     {

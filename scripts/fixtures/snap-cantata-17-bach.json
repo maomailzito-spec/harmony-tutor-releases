@@ -8576,11 +8576,9 @@
     },
     {
       "absBeat": 16,
-      "roman": "vi",
+      "roman": "iii",
       "figuresInclude": [
-        "5",
-        "4",
-        "2"
+        "♭♭6"
       ]
     },
     {
@@ -8709,11 +8707,9 @@
     },
     {
       "absBeat": 40,
-      "roman": "vi",
+      "roman": "iii",
       "figuresInclude": [
-        "5",
-        "4",
-        "2"
+        "♭♭6"
       ]
     },
     {

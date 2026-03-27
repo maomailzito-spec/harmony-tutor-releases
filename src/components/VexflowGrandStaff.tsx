@@ -845,10 +845,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Group by musical onset (tick-space) so edits that change visual spacing do not
         // break collision-avoidance logic (e.g., accidentals overlapping after a click).
         const byTimeKeyAll = new Map<string, StaffNote[]>();
+        const byOnsetKeyAll = new Map<string, StaffNote[]>();
         for (const n of staffNotes) {
           const tk = getNoteTimeKey(n);
           if (!byTimeKeyAll.has(tk)) byTimeKeyAll.set(tk, []);
           byTimeKeyAll.get(tk)!.push(n);
+          const ok = getNoteOnsetKey(n);
+          if (!byOnsetKeyAll.has(ok)) byOnsetKeyAll.set(ok, []);
+          byOnsetKeyAll.get(ok)!.push(n);
         }
 
         // --- NEW: Merge aligned SAT notes into a single chord (parti strette) ---
@@ -1485,7 +1489,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         if (isTightTreble && enableEngravingEnhancements) {
           try {
             const BASE_STAGGER_PX = 8;
-            for (const g of byTimeKeyAll.values()) {
+            for (const g of byOnsetKeyAll.values()) {
                 const withAcc = g
                   .filter(n => n && n.id !== '__ghost__')
                   .filter(n => !n.isRest)
@@ -1497,6 +1501,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
                 // Scale stagger when 3+ accidentals share the same onset
                 const staggerPx = withAcc.length >= 3 ? BASE_STAGGER_PX + 4 : BASE_STAGGER_PX;
+                // Sort by position ascending (soprano = lowest position number = first).
+                // Higher notes (larger position) get pushed further left so their
+                // accidental doesn't overlap the lower note's accidental.
                 const sorted = withAcc.slice().sort((a, b) => Number(a.position) - Number(b.position));
                 for (let i = 0; i < sorted.length; i++) {
                   accidentalStaggerById.set(sorted[i].id, i * staggerPx);
@@ -1521,7 +1528,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               const g = accidentalGlyphById.get(n.id) ?? null;
               return !!accidentalTypeToVexflow(g);
             });
-            if (withAcc.length < 2) continue;
+            if (withAcc.length < 3) continue;
             // Remove custom engraving overrides for every note at this onset,
             // BUT preserve / recompute seconds displacement so noteheads
             // don't collapse on top of each other.
@@ -1935,8 +1942,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                         const inset = openPositionAccidentalInsetById.get(n.id) ?? 0;
                         const bassPush = bassAccPushLeftById.get(n.id) ?? 0;
                         // Count how many accidentals exist at this onset
-                        const tk = getNoteTimeKey(n);
-                        const onsetNotes = byTimeKeyAll.get(tk) ?? [];
+                        const tk = getNoteOnsetKey(n);
+                        const onsetNotes = byOnsetKeyAll.get(tk) ?? [];
                         const onsetAccCount = onsetNotes.filter(nn => {
                           const g = accidentalGlyphById.get(nn.id) ?? null;
                           return !!accidentalTypeToVexflow(g);

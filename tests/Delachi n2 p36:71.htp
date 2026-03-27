@@ -1,4 +1,48 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "7d75afe5-2b97-4068-a538-f042eafbf933",
+      "type": "suspension"
+    },
+    {
+      "noteId": "dcd256fc-0d27-4d83-9cc6-731396d2643a",
+      "type": "suspension"
+    },
+    {
+      "noteId": "f714fe5b-1bd2-4e1e-820d-f443279877c0",
+      "type": "suspension"
+    },
+    {
+      "noteId": "da0af36f-79b6-4a90-a1d0-ad1ed4207c28",
+      "type": "structural"
+    },
+    {
+      "noteId": "5cb42235-4899-4f5e-9270-66fdc05c1f46",
+      "type": "structural"
+    },
+    {
+      "noteId": "b1741e44-8a29-4eaa-bab7-53ce1f539b0d",
+      "type": "structural"
+    },
+    {
+      "noteId": "00883657-6f5c-48e4-9f4a-e57199b964eb",
+      "type": "suspension"
+    },
+    {
+      "noteId": "d9385d96-27ff-47d1-a7f2-30bbd093d309",
+      "type": "structural"
+    },
+    {
+      "noteId": "f83fac99-477e-40f4-9ec7-50cd65bdd5ce",
+      "type": "structural"
+    },
+    {
+      "noteId": "6bdfe801-c7bc-42d5-a531-85b78ba68711",
+      "type": "suspension"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -3046,8 +3090,6 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [
     {
       "absBeat": 72,
@@ -3057,32 +3099,6 @@
         "4",
         "7"
       ]
-    }
-  ],
-  "ornamentOverrides": [
-    {
-      "noteId": "7d75afe5-2b97-4068-a538-f042eafbf933",
-      "type": "suspension"
-    },
-    {
-      "noteId": "dcd256fc-0d27-4d83-9cc6-731396d2643a",
-      "type": "suspension"
-    },
-    {
-      "noteId": "f714fe5b-1bd2-4e1e-820d-f443279877c0",
-      "type": "suspension"
-    },
-    {
-      "noteId": "da0af36f-79b6-4a90-a1d0-ad1ed4207c28",
-      "type": "structural"
-    },
-    {
-      "noteId": "5cb42235-4899-4f5e-9270-66fdc05c1f46",
-      "type": "structural"
-    },
-    {
-      "noteId": "b1741e44-8a29-4eaa-bab7-53ce1f539b0d",
-      "type": "structural"
     }
   ],
   "bpm": 120,

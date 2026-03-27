@@ -833,7 +833,11 @@
     },
     {
       "absBeat": 0.25,
-      "roman": "i"
+      "roman": "III+",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
     },
     {
       "absBeat": 0.5,

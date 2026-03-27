@@ -1,4 +1,56 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "ac5f21af-1e3a-4280-8e57-f752cba193aa",
+      "type": "structural"
+    },
+    {
+      "noteId": "c0f3a0df-7e08-4621-9d5d-07fe565d0543",
+      "type": "structural"
+    },
+    {
+      "noteId": "01be8b20-2c65-4c9e-9331-78b82cf81364",
+      "type": "structural"
+    },
+    {
+      "noteId": "720c2b91-9b63-4afd-b542-7ec96c8def05",
+      "type": "structural"
+    },
+    {
+      "noteId": "f915b5fe-6c25-410a-b7cb-020ed8bd34cc",
+      "type": "structural"
+    },
+    {
+      "noteId": "39d9ecac-a21f-454c-b5b4-d924cb1ac3d7",
+      "type": "structural"
+    },
+    {
+      "noteId": "defb5d85-de25-440e-a0c1-911f57c7855b",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1b9d75ca-c2f9-4014-aaf3-0ad2ebc0c258",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "dbb97c99-d33d-498b-847c-72d8f1ad76bb",
+      "type": "anticipation"
+    },
+    {
+      "noteId": "74f4b17e-f054-4a18-82d1-1aa9625bca33",
+      "type": "suspension"
+    },
+    {
+      "noteId": "43a370c9-96e0-4023-b1fe-57ca4b1a573a",
+      "type": "passing"
+    },
+    {
+      "noteId": "dea19aa5-e206-4166-9c33-34b18415bab3",
+      "type": "suspension"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -1777,51 +1829,7 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "dbb97c99-d33d-498b-847c-72d8f1ad76bb",
-      "type": "passing"
-    },
-    {
-      "noteId": "ac660576-70c4-4f3d-bab0-71a4ba971cbb",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "ac5f21af-1e3a-4280-8e57-f752cba193aa",
-      "type": "structural"
-    },
-    {
-      "noteId": "c0f3a0df-7e08-4621-9d5d-07fe565d0543",
-      "type": "structural"
-    },
-    {
-      "noteId": "d9c08cc6-0b7c-45f6-ba76-c4ae6a190c21",
-      "type": "structural"
-    },
-    {
-      "noteId": "01be8b20-2c65-4c9e-9331-78b82cf81364",
-      "type": "structural"
-    },
-    {
-      "noteId": "720c2b91-9b63-4afd-b542-7ec96c8def05",
-      "type": "structural"
-    },
-    {
-      "noteId": "f915b5fe-6c25-410a-b7cb-020ed8bd34cc",
-      "type": "structural"
-    },
-    {
-      "noteId": "39d9ecac-a21f-454c-b5b4-d924cb1ac3d7",
-      "type": "structural"
-    },
-    {
-      "noteId": "defb5d85-de25-440e-a0c1-911f57c7855b",
-      "type": "ornamental"
-    }
-  ],
   "bpm": 92,
   "isBpmActive": false,
   "isMetronomeOn": false,

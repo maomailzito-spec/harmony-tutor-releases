@@ -8308,7 +8308,12 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                                 Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - ((lbl as any).absBeat ?? -999)) < 1e-6,
                                                                                                         );
                                                                                                         if (!suspNotes.length) return null;
-                                                                                                        const suspInfos = suspNotes
+                                                                                                        // Deduplicate: keep only the most specific type per voice
+                                                                                                        const _CLASSIC_SUSP = new Set(['4-3','6-5','7-6','7-8','8-7','9-8','2-3']);
+                                                                                                        const _suspByV = new Map<number, any>();
+                                                                                                        for (const _sn of suspNotes) { const _v = (_sn as any).voice ?? 0; const _ex = _suspByV.get(_v); if (!_ex) { _suspByV.set(_v, _sn); } else { if (_CLASSIC_SUSP.has(String((_sn as any).isSuspension?.type??'')) && !_CLASSIC_SUSP.has(String((_ex as any).isSuspension?.type??''))) _suspByV.set(_v, _sn); } }
+                                                                                                        const dedupSuspNotes = Array.from(_suspByV.values());
+                                                                                                        const suspInfos = dedupSuspNotes
                                                                                                             .map(sn => ({
                                                                                                                 s: (sn as any).isSuspension,
                                                                                                                 sn,

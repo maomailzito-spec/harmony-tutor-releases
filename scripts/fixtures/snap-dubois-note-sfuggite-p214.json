@@ -4455,6 +4455,14 @@
       ]
     },
     {
+      "absBeat": 21,
+      "roman": "V/vi",
+      "figuresInclude": [
+        "5",
+        "♭♭4"
+      ]
+    },
+    {
       "absBeat": 24,
       "roman": "I",
       "figuresInclude": [

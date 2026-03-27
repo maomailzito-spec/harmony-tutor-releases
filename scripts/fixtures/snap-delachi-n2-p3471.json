@@ -2207,11 +2207,7 @@
     },
     {
       "absBeat": 4,
-      "roman": "vii°/IV",
-      "figuresInclude": [
-        "4",
-        "2"
-      ]
+      "roman": "I"
     },
     {
       "absBeat": 6,
@@ -2231,11 +2227,7 @@
     },
     {
       "absBeat": 12,
-      "roman": "V",
-      "figuresInclude": [
-        "4",
-        "2"
-      ]
+      "roman": "iii"
     },
     {
       "absBeat": 14,
@@ -2305,6 +2297,13 @@
       "roman": "I",
       "figuresInclude": [
         "6"
+      ]
+    },
+    {
+      "absBeat": 32,
+      "roman": "ii",
+      "figuresInclude": [
+        "7"
       ]
     },
     {

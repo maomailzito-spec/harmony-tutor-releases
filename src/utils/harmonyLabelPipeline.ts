@@ -385,9 +385,10 @@ export function computeStructuralSnapshotForHarmonyLabelEvent(opts: {
     const suspVoicesAtThisBeat = new Set<number>();
     for (const n of fullNotes) {
         if (!n || n.isRest) continue;
-        if ((n.voice ?? 1) !== 4) continue; // Only substitute bass suspensions
         const s = (n as any)?.isSuspension;
         if (!s || typeof s.fromAbsBeat !== 'number') continue;
+        // Auto-detected: only substitute bass (voice 4). Manual overrides: any voice.
+        if (!s.manual && (n.voice ?? 1) !== 4) continue;
         if (Math.abs(s.fromAbsBeat - eventAbsBeat) >= SUSP_EPS) continue;
         // This note is a suspension starting at this beat.
         suspVoicesAtThisBeat.add((n.voice ?? 1) as number);

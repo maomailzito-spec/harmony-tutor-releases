@@ -19365,13 +19365,6 @@
       ]
     },
     {
-      "absBeat": 11,
-      "roman": "V",
-      "figuresInclude": [
-        "6"
-      ]
-    },
-    {
       "absBeat": 11.5,
       "roman": "vii°"
     },
@@ -19405,13 +19398,6 @@
       "roman": "i",
       "figuresInclude": [
         "7"
-      ]
-    },
-    {
-      "absBeat": 15,
-      "roman": "vii",
-      "figuresInclude": [
-        "6"
       ]
     },
     {
@@ -19501,10 +19487,10 @@
     },
     {
       "absBeat": 22,
-      "roman": "V",
+      "roman": "IV",
       "figuresInclude": [
-        "4",
-        "2"
+        "5",
+        "♭♭3"
       ]
     },
     {
@@ -19791,14 +19777,6 @@
       ]
     },
     {
-      "absBeat": 38.5,
-      "roman": "V",
-      "figuresInclude": [
-        "9",
-        "7"
-      ]
-    },
-    {
       "absBeat": 38.75,
       "roman": "VI",
       "figuresInclude": [
@@ -19947,10 +19925,10 @@
     },
     {
       "absBeat": 46,
-      "roman": "iv",
+      "roman": "V/III",
       "figuresInclude": [
-        "4",
-        "2"
+        "7",
+        "5"
       ]
     },
     {
@@ -20580,9 +20558,9 @@
     },
     {
       "absBeat": 80.75,
-      "roman": "ii°",
+      "roman": "i",
       "figuresInclude": [
-        "3"
+        "4"
       ]
     },
     {
@@ -21100,6 +21078,14 @@
       "roman": "ii°"
     },
     {
+      "absBeat": 112.5,
+      "roman": "i",
+      "figuresInclude": [
+        "3",
+        "2"
+      ]
+    },
+    {
       "absBeat": 112.75,
       "roman": "ii°",
       "figuresInclude": [
@@ -21166,10 +21152,10 @@
     },
     {
       "absBeat": 116,
-      "roman": "ii°",
+      "roman": "V/III",
       "figuresInclude": [
-        "4",
-        "2"
+        "7",
+        "5"
       ]
     },
     {
@@ -21215,10 +21201,10 @@
     },
     {
       "absBeat": 118,
-      "roman": "i",
+      "roman": "VI",
       "figuresInclude": [
-        "4",
-        "2"
+        "7",
+        "5"
       ]
     },
     {
@@ -21290,11 +21276,10 @@
     },
     {
       "absBeat": 120.5,
-      "roman": "VI",
+      "roman": "i",
       "figuresInclude": [
-        "5",
-        "3",
-        "2"
+        "6",
+        "4"
       ]
     },
     {
@@ -21596,11 +21581,10 @@
     },
     {
       "absBeat": 134.25,
-      "roman": "iv",
+      "roman": "V/III",
       "figuresInclude": [
-        "5",
-        "4",
-        "2"
+        "6",
+        "5"
       ]
     },
     {

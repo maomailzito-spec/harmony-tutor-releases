@@ -15,6 +15,14 @@
       "midi": 67,
       "measureIndex": 5,
       "beat": 2.5
+    },
+    {
+      "noteId": "bc10cab4-7189-4693-afd5-fa7cc238622f",
+      "type": "structural"
+    },
+    {
+      "noteId": "4f56304c-8d08-448c-bbc0-c408c89c3b94",
+      "type": "structural"
     }
   ],
   "schemaVersion": 1,
@@ -2790,6 +2798,7 @@
     "notations",
     "analysis",
     "key",
-    "more"
+    "more",
+    "voiceInstrument"
   ]
 }

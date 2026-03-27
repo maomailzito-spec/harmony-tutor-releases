@@ -149,7 +149,7 @@
       "voice": 2
     },
     {
-      "id": "62398d13-8023-40ce-b4c4-efd0ebc56022",
+      "id": "fd40010e-8cb7-4ba3-8fd6-6428dd5f6b56",
       "pitch": "C",
       "octave": 5,
       "position": 7,
@@ -162,12 +162,13 @@
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
-      "isDotted": true,
+      "isDotted": false,
       "measureIndex": 0,
       "beat": 3,
       "startTick": 1920,
-      "durationTicks": 1440,
-      "voice": 1
+      "durationTicks": 960,
+      "voice": 1,
+      "isTiedToNext": true
     },
     {
       "id": "dd38a568-e7f2-4677-8897-52d464a1ae79",
@@ -231,6 +232,27 @@
       "startTick": 1920,
       "durationTicks": 1920,
       "voice": 4
+    },
+    {
+      "id": "e376ecae-456b-422a-9672-d6b8290486e3",
+      "pitch": "C",
+      "octave": 5,
+      "position": 7,
+      "midi": 72,
+      "noteIndex": 0,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 4,
+      "startTick": 2880,
+      "durationTicks": 480,
+      "voice": 1
     },
     {
       "id": "2d28a444-3875-456b-afd8-1e1cd824a273",
@@ -424,7 +446,7 @@
       "voice": 2
     },
     {
-      "id": "4182c1cb-5301-4e92-8f59-ae15dfd1c316",
+      "id": "a4e5d88c-5f0e-497c-ba31-30acc084a501",
       "pitch": "B",
       "octave": 4,
       "position": 6,
@@ -437,12 +459,13 @@
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
-      "isDotted": true,
+      "isDotted": false,
       "measureIndex": 1,
       "beat": 3,
       "startTick": 5760,
-      "durationTicks": 1440,
-      "voice": 1
+      "durationTicks": 960,
+      "voice": 1,
+      "isTiedToNext": true
     },
     {
       "id": "8301cfee-d749-4f1a-97d1-e423400cf20e",
@@ -487,7 +510,7 @@
       "voice": 3
     },
     {
-      "id": "f7443ce1-5224-4481-b69f-9311dcdc3394",
+      "id": "4f6b5bae-7fc8-487c-855d-3c465268ec97",
       "pitch": "D",
       "octave": 3,
       "position": -6,
@@ -506,6 +529,27 @@
       "startTick": 5760,
       "durationTicks": 1920,
       "voice": 4
+    },
+    {
+      "id": "9de9a292-23e1-4800-9f5f-5dd4ad11d960",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 71,
+      "noteIndex": 11,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 1,
+      "beat": 4,
+      "startTick": 6720,
+      "durationTicks": 480,
+      "voice": 1
     },
     {
       "id": "e838c165-8394-48bb-825d-5dab3a7ea8fb",
@@ -2329,10 +2373,6 @@
   "harmonyOverrides": [],
   "ornamentOverrides": [
     {
-      "noteId": "e838c165-8394-48bb-825d-5dab3a7ea8fb",
-      "type": "passing"
-    },
-    {
       "noteId": "449b5181-9d80-40d8-a6d6-22922fb37c2f",
       "type": "suspension"
     },
@@ -2375,6 +2415,50 @@
     {
       "noteId": "f5a34226-1d6c-4f3e-b17f-2ac32a500c2d",
       "type": "neighbor"
+    },
+    {
+      "noteId": "3e85d4b5-703a-4f4f-9975-2aae054a6a8f",
+      "type": "structural"
+    },
+    {
+      "noteId": "1ddf5824-e8ef-45bc-ace7-064812cc7340",
+      "type": "structural"
+    },
+    {
+      "noteId": "e376ecae-456b-422a-9672-d6b8290486e3",
+      "type": "suspension"
+    },
+    {
+      "noteId": "909fce93-6835-4bb6-8501-5fec93d13cfd",
+      "type": "structural"
+    },
+    {
+      "noteId": "f7443ce1-5224-4481-b69f-9311dcdc3394",
+      "type": "structural"
+    },
+    {
+      "noteId": "2199ba6b-7e12-4d31-86b2-839ea6fb6ed6",
+      "type": "structural"
+    },
+    {
+      "noteId": "6df35470-ab74-4e55-adfa-f01114d4d31d",
+      "type": "suspension"
+    },
+    {
+      "noteId": "a537d99b-36c6-4694-8d8c-1256dfc6b842",
+      "type": "structural"
+    },
+    {
+      "noteId": "4f6b5bae-7fc8-487c-855d-3c465268ec97",
+      "type": "structural"
+    },
+    {
+      "noteId": "e838c165-8394-48bb-825d-5dab3a7ea8fb",
+      "type": "structural"
+    },
+    {
+      "noteId": "9de9a292-23e1-4800-9f5f-5dd4ad11d960",
+      "type": "suspension"
     }
   ],
   "bpm": 92,

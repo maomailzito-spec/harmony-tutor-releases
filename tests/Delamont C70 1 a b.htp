@@ -1,4 +1,80 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "94ec55bc-7fa4-4551-8ea8-dfe2dde6370a",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "1836c5a5-72c0-494d-9fd8-3e075a929d5b",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "13350162-014c-487a-9a99-a0fc841ca4fa",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "b35dacf1-7693-435c-a08f-530b8f7fcccf",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "cee2c17e-66d7-493d-a11b-fb94e176deb8",
+      "type": "passing"
+    },
+    {
+      "noteId": "86b54d6d-31f1-4187-9e1b-de2441d207fe",
+      "type": "passing"
+    },
+    {
+      "noteId": "73d9be11-4ea4-4a60-b874-983ea2ab3e38",
+      "type": "structural"
+    },
+    {
+      "noteId": "251d4271-d349-430f-8efb-694bbbf3036a",
+      "type": "structural"
+    },
+    {
+      "noteId": "a5484d94-d322-4fc5-a2ec-684090864d05",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "5fbe03f6-c65d-49b6-adc4-5456b48075d9",
+      "type": "passing"
+    },
+    {
+      "noteId": "40538041-2866-46ca-b6a0-64a08dfcac06",
+      "type": "structural"
+    },
+    {
+      "noteId": "f4751a0a-f075-4ff5-8560-207f0e673261",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "419a6ef0-fd96-4587-99e9-3afa89f77ec8",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "6e9fc51a-b39c-4315-9832-82681d0bbc0f",
+      "type": "structural"
+    },
+    {
+      "noteId": "8531c1d7-e91c-48ab-b51a-3698a1a1b641",
+      "type": "structural"
+    },
+    {
+      "noteId": "3dc370f7-cbeb-40b3-9328-be9d8e488b42",
+      "type": "structural"
+    },
+    {
+      "noteId": "85da3f3e-79d9-45ce-b7ff-b84e4b81b37c",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "d411d204-d963-4cc4-9e4f-d2e95cd9ba5b",
+      "type": "passing"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -1300,83 +1376,7 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "94ec55bc-7fa4-4551-8ea8-dfe2dde6370a",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "1836c5a5-72c0-494d-9fd8-3e075a929d5b",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "13350162-014c-487a-9a99-a0fc841ca4fa",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "b35dacf1-7693-435c-a08f-530b8f7fcccf",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "cee2c17e-66d7-493d-a11b-fb94e176deb8",
-      "type": "passing"
-    },
-    {
-      "noteId": "86b54d6d-31f1-4187-9e1b-de2441d207fe",
-      "type": "passing"
-    },
-    {
-      "noteId": "85da3f3e-79d9-45ce-b7ff-b84e4b81b37c",
-      "type": "structural"
-    },
-    {
-      "noteId": "d411d204-d963-4cc4-9e4f-d2e95cd9ba5b",
-      "type": "structural"
-    },
-    {
-      "noteId": "73d9be11-4ea4-4a60-b874-983ea2ab3e38",
-      "type": "structural"
-    },
-    {
-      "noteId": "251d4271-d349-430f-8efb-694bbbf3036a",
-      "type": "structural"
-    },
-    {
-      "noteId": "3dc370f7-cbeb-40b3-9328-be9d8e488b42",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "8531c1d7-e91c-48ab-b51a-3698a1a1b641",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "a5484d94-d322-4fc5-a2ec-684090864d05",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "5fbe03f6-c65d-49b6-adc4-5456b48075d9",
-      "type": "passing"
-    },
-    {
-      "noteId": "419a6ef0-fd96-4587-99e9-3afa89f77ec8",
-      "type": "structural"
-    },
-    {
-      "noteId": "40538041-2866-46ca-b6a0-64a08dfcac06",
-      "type": "structural"
-    },
-    {
-      "noteId": "f4751a0a-f075-4ff5-8560-207f0e673261",
-      "type": "neighbor"
-    },
-    {
-      "noteId": "6e9fc51a-b39c-4315-9832-82681d0bbc0f",
-      "type": "passing"
-    }
-  ],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,

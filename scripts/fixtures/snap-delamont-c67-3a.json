@@ -1170,8 +1170,7 @@
       "absBeat": 1,
       "roman": "I",
       "figuresInclude": [
-        "9",
-        "7"
+        "3"
       ]
     },
     {
@@ -1235,7 +1234,7 @@
     },
     {
       "absBeat": 7,
-      "roman": "V/ii",
+      "roman": "♭II",
       "figuresInclude": [
         "3"
       ]

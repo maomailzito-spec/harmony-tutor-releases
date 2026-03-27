@@ -12161,6 +12161,78 @@ export function applyHarmonyRules(
                 else if (ov === 'suspension') { anyN.isSuspension = { type: 'susp', manual: true }; anyN.ornamentMark = 'r'; }
                 else if (ov === 'ornamental') { /* no flags, no mark — ornamentOverride alone excludes from analysis */ }
                 anyN.ornamentOverride = ov;
+
+                // ── For manual appoggiatura / suspension, populate resolution data
+                // so the label pipeline can substitute the ornament note with
+                // its resolution and identify the correct chord. ──
+                if (ov === 'appoggiatura' || ov === 'suspension') {
+                    const voice = (n as any).voice ?? 1;
+                    const beatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
+                    const nAbsBeat = ((n as any).measureIndex ?? 0) * beatsPerMeas + (((n as any).beat ?? 1) - 1);
+                    // Find next note in same voice after this one
+                    let bestNext: any = null;
+                    let bestDist = Infinity;
+                    for (const cand of analyzedNotes) {
+                        if ((cand as any).voice !== voice) continue;
+                        if (cand === n) continue;
+                        const cAbsBeat = ((cand as any).measureIndex ?? 0) * beatsPerMeas + (((cand as any).beat ?? 1) - 1);
+                        const dist = cAbsBeat - nAbsBeat;
+                        if (dist > 1e-6 && dist < bestDist) {
+                            bestDist = dist;
+                            bestNext = cand;
+                        }
+                    }
+                    if (bestNext) {
+                        const s = anyN.isSuspension || {};
+                        s.fromAbsBeat = nAbsBeat;
+                        s.resolvedMidi = (bestNext as any).midi;
+                        s.resolvedPitch = (bestNext as any).pitch;
+                        s.resolvedOctave = (bestNext as any).octave;
+                        s.resolvedAccidental = (bestNext as any).accidental ?? '';
+                        s.resolvedById = (bestNext as any).id;
+
+                        // ── Compute classic suspension type (e.g. "4-3") from intervals ──
+                        // Find the bass note at the same onset to measure intervals.
+                        try {
+                            const beatsPerMeas2 = timeSignature.numerator * (4 / timeSignature.denominator);
+                            const suspMidi = Number((n as any).midi);
+                            const resMidi = Number((bestNext as any).midi);
+                            let bassMidi: number | null = null;
+                            for (const bn of analyzedNotes) {
+                                if ((bn as any).voice !== 4 && (bn as any).voice !== 3) continue;
+                                const bAbs = ((bn as any).measureIndex ?? 0) * beatsPerMeas2 + (((bn as any).beat ?? 1) - 1);
+                                if (Math.abs(bAbs - nAbsBeat) > 1e-6) continue;
+                                const bm = Number((bn as any).midi);
+                                if (!Number.isFinite(bm)) continue;
+                                if (bassMidi === null || bm < bassMidi) bassMidi = bm;
+                            }
+                            if (bassMidi !== null && Number.isFinite(suspMidi) && Number.isFinite(resMidi)) {
+                                const diatonicInterval = (interval: number): number => {
+                                    // Simple diatonic interval number from semitone distance
+                                    const semis = Math.abs(interval);
+                                    const table = [1, 2, 2, 3, 3, 4, 4, 5, 6, 6, 7, 7, 8];
+                                    return semis <= 12 ? table[semis] : (((semis - 1) % 12) + 1);
+                                };
+                                const fromNum = diatonicInterval(suspMidi - bassMidi);
+                                const toNum = diatonicInterval(resMidi - bassMidi);
+                                if (fromNum > 0 && toNum > 0) {
+                                    s.fromNum = fromNum;
+                                    s.toNum = toNum;
+                                    const classicTypes: Record<string, string> = {
+                                        '4-3': '4-3', '6-5': '6-5', '7-6': '7-6',
+                                        '7-8': '7-8', '8-7': '8-7', '9-8': '9-8', '2-3': '2-3',
+                                    };
+                                    const typeKey = `${fromNum}-${toNum}`;
+                                    if (classicTypes[typeKey]) {
+                                        s.type = classicTypes[typeKey];
+                                    }
+                                }
+                            }
+                        } catch { /* ignore */ }
+
+                        anyN.isSuspension = s;
+                    }
+                }
             }
         }
     } catch { /* ignore */ }
@@ -12168,4 +12240,51 @@ export function applyHarmonyRules(
     _pmark('15-postProcessing');
     if (_profiling) { (globalThis as any).__HARMONY_TIMINGS = _pTimings; }
     return { analyzedNotes, violations, connections, inferredAnalysisContexts, autoHarmonyLabelOverrides };
+}
+
+/**
+ * Pure function: substitute suspension/appoggiatura notes with their resolution
+ * counterparts in a set of event notes. This mirrors the substitution logic in
+ * useHarmonyLabels so that headless callers (e.g. regression-check) can obtain
+ * the same analysisNotes used for getRomanAnalysis in the live UI.
+ *
+ * @param eventNotes  - notes sounding at one beat (e.g. from getActiveNotesTimeline)
+ * @param absBeat     - the absolute beat of this event
+ * @returns notes with suspensions replaced by their resolutions
+ */
+export function substituteSuspensionsForAnalysis(eventNotes: any[], absBeat: number): any[] {
+    const SUSP_EPS = 1e-3;
+    const suspResolutions: any[] = [];
+    for (const n of eventNotes) {
+        if (!n || n.isRest) continue;
+        const s = n?.isSuspension;
+        if (!s || typeof s.fromAbsBeat !== 'number') continue;
+        // Mirror useHarmonyLabels: auto-detected suspensions only substitute bass (voice 4).
+        // Manual overrides substitute any voice.
+        if (!s.manual && ((n as any).voice ?? 1) !== 4) continue;
+        if (Math.abs(s.fromAbsBeat - absBeat) >= SUSP_EPS) continue;
+        if (typeof s.resolvedMidi === 'number') {
+            suspResolutions.push({
+                ...n,
+                midi: s.resolvedMidi,
+                pitch: s.resolvedPitch ?? n.pitch,
+                octave: s.resolvedOctave ?? n.octave,
+                accidental: s.resolvedAccidental != null ? s.resolvedAccidental : (n.accidental ?? ''),
+                isSuspension: undefined,
+                _isSuspensionResolutionSubstitute: true,
+            });
+        }
+    }
+    if (!suspResolutions.length) return eventNotes;
+
+    const suspSubstVoices = new Set(suspResolutions.map((n: any) => n.voice ?? 1));
+    const filtered = eventNotes.filter((n: any) => {
+        if (!n || n.isRest) return true;
+        if (suspSubstVoices.has(n.voice ?? 1)) return false;
+        const s = n?.isSuspension;
+        if (!s || typeof s.fromAbsBeat !== 'number') return true;
+        return Math.abs(s.fromAbsBeat - absBeat) >= SUSP_EPS;
+    });
+    filtered.push(...suspResolutions);
+    return filtered.length >= 2 ? filtered : eventNotes;
 }

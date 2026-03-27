@@ -638,9 +638,10 @@
     },
     {
       "absBeat": 9,
-      "roman": "vi",
+      "roman": "V/ii",
       "figuresInclude": [
-        "6"
+        "7",
+        "5"
       ]
     },
     {

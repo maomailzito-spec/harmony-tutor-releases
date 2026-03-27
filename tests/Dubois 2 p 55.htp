@@ -1,4 +1,52 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "f6d92984-6cce-4abe-a2a5-067a3f458aae",
+      "type": "passing"
+    },
+    {
+      "noteId": "2a33c474-475e-436e-9cf7-e88c26cf0bec",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "32e72374-0fb1-4b1d-bf22-1fc3e829a439",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "cea4ed2b-a6e9-47ee-9e61-3bccbf5365d1",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "fee10cbb-4ac0-472d-93b3-42d9b9f3541b",
+      "type": "passing"
+    },
+    {
+      "noteId": "75c7e3fd-69df-4fe9-8388-d4f03eba4962",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "cf510268-5f84-43f6-a686-d6f1d0286f69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "7cb56c81-294f-4026-989e-40de8647bc31",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4a8bac32-4b56-48b3-b9d0-ff8515ceca2c",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "a96eda62-f69e-4b88-b8c8-e618428450a3",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "62bf7211-3447-4a49-a177-50ee2c18cb2a",
+      "type": "passing"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -186,14 +234,17 @@
       "voice": 1
     },
     {
-      "id": "de45644a-6907-477d-af16-498261afe895",
-      "pitch": "B",
-      "octave": 4,
-      "position": 8,
-      "midi": 0,
-      "noteIndex": 0,
+      "id": "80a7de04-4add-406a-a427-f68d0e950d6d",
+      "pitch": "A",
+      "octave": 3,
+      "position": -2,
+      "midi": 57,
+      "noteIndex": 9,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
       "duration": "half",
-      "isRest": true,
+      "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
       "isDotted": false,
@@ -201,7 +252,6 @@
       "beat": 1,
       "startTick": 3840,
       "durationTicks": 1920,
-      "clef": "treble",
       "voice": 2
     },
     {
@@ -1549,43 +1599,7 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "f6d92984-6cce-4abe-a2a5-067a3f458aae",
-      "type": "passing"
-    },
-    {
-      "noteId": "62bf7211-3447-4a49-a177-50ee2c18cb2a",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "2a33c474-475e-436e-9cf7-e88c26cf0bec",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "d0948c8b-ce3e-4260-9d73-2d80724c9f5f",
-      "type": "suspension"
-    },
-    {
-      "noteId": "32e72374-0fb1-4b1d-bf22-1fc3e829a439",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "cea4ed2b-a6e9-47ee-9e61-3bccbf5365d1",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "fee10cbb-4ac0-472d-93b3-42d9b9f3541b",
-      "type": "passing"
-    },
-    {
-      "noteId": "75c7e3fd-69df-4fe9-8388-d4f03eba4962",
-      "type": "neighbor"
-    }
-  ],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -1601,6 +1615,7 @@
     "notations",
     "analysis",
     "key",
-    "more"
+    "more",
+    "voiceInstrument"
   ]
 }

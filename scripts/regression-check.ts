@@ -9,6 +9,7 @@ import {
   getChordSymbol,
   getKeySignature,
   getRomanAnalysis,
+  substituteSuspensionsForAnalysis,
 } from '../src/utils/musicTheory';
 
 import { TICKS_PER_QUARTER } from '../src/constants';
@@ -559,7 +560,7 @@ const main = () => {
         continue;
       }
 
-      const ra = getRomanAnalysis(ev.notes as any, fx.keyTonic, fx.isMinorMode);
+      const ra = getRomanAnalysis(substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat) as any, fx.keyTonic, fx.isMinorMode);
       const roman = ra?.roman ?? '';
       const figures = ra?.figures ?? [];
       const symbol = getChordSymbol(ev.notes as any, keySignature as any, fx.keyTonic) ?? '';
@@ -809,7 +810,7 @@ const updateSnapshots = () => {
     for (const ev of timeline) {
       const ab = Math.round(Number(ev.absBeat) * 1e6) / 1e6;
       if (!Number.isFinite(ab)) continue;
-      const ra = getRomanAnalysis(ev.notes as any, fx.keyTonic, fx.isMinorMode);
+      const ra = getRomanAnalysis(substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat) as any, fx.keyTonic, fx.isMinorMode);
       const roman = ra?.roman ?? '';
       const figures = ra?.figures ?? [];
       if (!roman) continue;

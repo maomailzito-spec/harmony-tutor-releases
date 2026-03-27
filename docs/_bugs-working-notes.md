@@ -136,3 +136,23 @@ grep -n "circle\|rect\|noteHead\|note_head\|drawNote\|renderNote" src/components
 - [2] Note-Rest anti-collision — NOT STARTED (key lines: L1149, L1219)
 - [3] Unisons side-by-side — NOT STARTED (NO existing logic found)
 - [4] Ties select only 2nd — NOT STARTED (key lines: L2705, L6160, L6691)
+
+---
+
+## BUG FIX: Accidentali sovrapposti soprano/alto (2026-03-27)
+
+**Sintomo:** In C75 3 m8 b1 (Gm), G# soprano e F# alto hanno i diesis sovrapposti. Il fix era già stato implementato (stagger) ma regredito.
+
+**Causa (3 livelli):**
+
+1. **`byTimeKeyAll` raggruppa per onset+durata.** G# (eighth) e F# (half) avevano time key diversi → non raggruppati → stagger mai calcolato. **Fix:** creato `byOnsetKeyAll` (solo onset, ignora durata) e usato per il calcolo stagger e il conteggio `onsetAccCount` nel non-merged path.
+
+2. **Dense-accidental cleanup scattava per 2+ accidentali** (`withAcc.length < 2`), mentre il commento e l'intenzione erano per 3+. Questo cancellava lo stagger appena calcolato. **Fix:** soglia da `< 2` a `< 3`.
+
+3. **Stagger direction:** la nota più alta (soprano, position più basso numericamente) è sorted[0] e riceve stagger=0. La nota più bassa (alto) riceve stagger=8px. Questo è corretto: il diesis dell'alto si sposta a sinistra, evitando sovrapposizione col diesis del soprano sopra.
+
+**File modificato:** `src/components/VexflowGrandStaff.tsx`
+- L847-855: aggiunto `byOnsetKeyAll` (Map per onset senza durata)
+- L1489: `byTimeKeyAll` → `byOnsetKeyAll` nel loop stagger
+- L1522: guard `< 2` → `< 3` (dense-cleanup threshold)
+- L1945: `getNoteTimeKey` → `getNoteOnsetKey` nel non-merged path

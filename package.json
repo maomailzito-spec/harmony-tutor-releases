@@ -24,6 +24,7 @@
     "electron:dev:enh": "cross-env VITE_ENHARMONIC_WARNINGS=1 npm run electron:dev",
     "electron:prod": "npm run build && cross-env NODE_ENV=production electron .",
     "regress": "tsx scripts/regression-check.ts",
+    "drift": "tsx scripts/_snapshot_drift.ts",
     "regress:update": "tsx scripts/regression-check.ts --update-snapshots",
     "smoke:legacy-project-migration": "tsx scripts/smoke-legacy-project-migration.ts",
     "debug:m5": "tsx scripts/debug-m5-bb7ab.ts",

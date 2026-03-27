@@ -1961,6 +1961,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 if (!n || n.isRest) continue;
                 const s = (n as any)?.isSuspension;
                 if (!s || typeof s.fromAbsBeat !== 'number') continue;
+                // Auto-detected: only substitute bass (voice 4). Manual: any voice.
+                if (!s.manual && ((n as any).voice ?? 1) !== 4) continue;
                 if (Math.abs(s.fromAbsBeat - event.absBeat) >= SUSP_EPS) continue;
                 if (typeof s.resolvedMidi === 'number') {
                     suspResolutions.push({
@@ -1985,16 +1987,6 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 return Math.abs(s.fromAbsBeat - event.absBeat) >= SUSP_EPS;
             });
             if (suspResolutions.length) harmonicNotesNoSuspAtThisBeat.push(...suspResolutions);
-
-            // Guard: suspension-onset substitution replaces actually-sounding notes
-            // with their future resolutions. This "anticipates" the resolution harmony
-            // and distorts both the roman label and figured-bass figures at the
-            // onset beat.  Revert the substitution unconditionally so the analysis
-            // reflects what actually sounds.
-            if (suspResolutions.length) {
-                harmonicNotesNoSuspAtThisBeat.length = 0;
-                harmonicNotesNoSuspAtThisBeat.push(...fallbackHarmonicNotes);
-            }
 
             const analysisNotes = (harmonicNotesNoSuspAtThisBeat.length >= 2)
                 ? harmonicNotesNoSuspAtThisBeat
@@ -2621,8 +2613,29 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     return Math.abs(s.fromAbsBeat - event.absBeat) < 1e-6;
                 });
 
-                if (suspNotes.length) {
-                    const suspInfos = suspNotes
+                // Deduplicate: if multiple suspNotes come from the same voice at the same onset,
+                // keep only the one with the most specific type (classic > generic 'susp'/'app').
+                const deduped: any[] = [];
+                const CLASSIC_SET = new Set(['4-3', '6-5', '7-6', '7-8', '8-7', '9-8', '2-3']);
+                const seenVoices = new Map<number, any>();
+                for (const sn of suspNotes) {
+                    const v = (sn as any).voice ?? 0;
+                    const existing = seenVoices.get(v);
+                    if (!existing) {
+                        seenVoices.set(v, sn);
+                    } else {
+                        // Prefer the one with classic type
+                        const curType = String((sn as any).isSuspension?.type ?? '');
+                        const exType = String((existing as any).isSuspension?.type ?? '');
+                        if (CLASSIC_SET.has(curType) && !CLASSIC_SET.has(exType)) {
+                            seenVoices.set(v, sn);
+                        }
+                    }
+                }
+                const dedupedSuspNotes = Array.from(seenVoices.values());
+
+                if (dedupedSuspNotes.length) {
+                    const suspInfos = dedupedSuspNotes
                         .map((sn: any) => ({
                             sn,
                             s: (sn as any)?.isSuspension,
@@ -2845,7 +2858,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         }
                     } else {
                         try {
-                            const fullFigures = computeFiguredBassFromNotes((fullNotes || []) as any, FIGURED_BASS_UI_OPTIONS).figures;
+                            // Use analysisNotes (which has suspension→resolution substitutions)
+                            // so figured bass reflects the target harmony, not the suspended notes.
+                            const figSource = (analysisNotes && analysisNotes.length >= 2) ? analysisNotes : (fullNotes || []);
+                            const fullFigures = computeFiguredBassFromNotes((figSource || []) as any, FIGURED_BASS_UI_OPTIONS).figures;
                             if (fullFigures?.length) figures = fullFigures;
                             figures = (figures || []).map(normalizeFigureString);
                         } catch (_) {
