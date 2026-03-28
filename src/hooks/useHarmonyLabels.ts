@@ -550,16 +550,30 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     _effectiveCtxs,
                 );
                 for (const cr of chromResults) {
-                    // Don't duplicate with existing contexts at same measure
-                    const already = _effectiveCtxs.some(c =>
-                        c.measureIndex != null && c.measureIndex === cr.startMeasure);
-                    if (already) continue;
+                    // Compute absBeat range for the modulation region
+                    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                    const regionStartAbs = cr.startMeasure * beatsPerMeasure;
+                    const regionEndAbs = (cr.endMeasure + 1) * beatsPerMeasure;
+
+                    // Remove any inferred (cadential) contexts WITHIN the modulation region
+                    // that would otherwise override the chromatic detection
+                    for (let ci = _effectiveCtxs.length - 1; ci >= 0; ci--) {
+                        const c = _effectiveCtxs[ci];
+                        if (c.source !== 'inferred') continue; // keep manual contexts
+                        const cAbs = analysisContextAbsBeat(c);
+                        if (cAbs >= regionStartAbs && cAbs < regionEndAbs) {
+                            _effectiveCtxs.splice(ci, 1);
+                        }
+                    }
+
+                    // Add modulation context
                     _effectiveCtxs.push({
                         measureIndex: cr.startMeasure,
                         newTonic: cr.newTonicName,
                         newIsMinor: cr.newIsMinor,
                         source: 'inferred',
                     });
+
                     // Return to home key after region ends
                     const returnMeasure = cr.endMeasure + 1;
                     const returnAlready = _effectiveCtxs.some(c =>
