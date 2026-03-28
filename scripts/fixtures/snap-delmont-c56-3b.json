@@ -1,5 +1,13 @@
 {
-  "schemaVersion": 1,
+  "name": "Delmont C56 3b (snapshot)",
+  "keySignatureRoot": "G",
+  "keyTonic": "E",
+  "isMinorMode": true,
+  "timeSignature": {
+    "numerator": 4,
+    "denominator": 4
+  },
+  "analysisContexts": [],
   "notes": [
     {
       "id": "4fb8a0e0-4d5b-4688-8023-2fe26785a290",
@@ -681,67 +689,86 @@
       "voice": 4
     }
   ],
-  "staffSystemMode": "grandstaff",
-  "keySignatureRoot": "G",
-  "projectTitle": "",
-  "titleFontSize": 18,
-  "titleFontFamily": "serif",
-  "timeSignature": {
-    "numerator": 4,
-    "denominator": 4
-  },
-  "timeSignatureChanges": [],
-  "isMinorMode": true,
-  "autoLeadingToneInMinor": true,
-  "keyChangeMode": "none",
-  "modalTonicOverride": "",
-  "analysisContexts": [],
-  "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
-  "harmonyOverrides": [],
-  "ornamentOverrides": [
+  "expects": [
     {
-      "noteId": "3adb32d3-5f15-4b58-9ab0-3fa222c36cba",
-      "type": "structural"
+      "absBeat": 0,
+      "roman": "i",
+      "figuresInclude": [
+        "9"
+      ]
     },
     {
-      "noteId": "36ee5ee7-f759-49a1-a9f0-4d8f5834bb23",
-      "type": "structural"
+      "absBeat": 2,
+      "roman": "V",
+      "figuresInclude": [
+        "9",
+        "7"
+      ]
     },
     {
-      "noteId": "e98c886e-bea6-432b-a45b-f1f418e86d46",
-      "type": "structural"
+      "absBeat": 3,
+      "roman": "V",
+      "figuresInclude": [
+        "9",
+        "7"
+      ]
     },
     {
-      "noteId": "9c111c27-1077-46b6-8205-6f637a65757f",
-      "type": "appoggiatura"
+      "absBeat": 3.5,
+      "roman": "V",
+      "figuresInclude": [
+        "9",
+        "7"
+      ]
     },
     {
-      "noteId": "be58bdb7-1f0d-4aa2-8310-1d1265f29495",
-      "type": "structural"
+      "absBeat": 4,
+      "roman": "i"
     },
     {
-      "noteId": "a9ed1d88-b9e9-4208-8d6a-ab1cedc3986e",
-      "type": "escape"
+      "absBeat": 5,
+      "roman": "i"
+    },
+    {
+      "absBeat": 5.5,
+      "roman": "i"
+    },
+    {
+      "absBeat": 6,
+      "roman": "iv",
+      "figuresInclude": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 7,
+      "roman": "V",
+      "figuresInclude": [
+        "♭9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 7.5,
+      "roman": "vi",
+      "figuresInclude": [
+        "3",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "I",
+      "figuresInclude": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "I",
+      "figuresInclude": [
+        "9"
+      ]
     }
-  ],
-  "bpm": 120,
-  "isBpmActive": false,
-  "isMetronomeOn": false,
-  "metronomeUnit": "quarter",
-  "toolbarGroupOrder": [
-    "insert",
-    "voices",
-    "playback",
-    "bpm",
-    "time",
-    "measures",
-    "accidentals",
-    "notations",
-    "analysis",
-    "key",
-    "more",
-    "voiceInstrument"
   ]
 }
