@@ -1,4 +1,7 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [],
   "schemaVersion": 1,
   "notes": [
     {
@@ -2532,11 +2535,11 @@
     },
     {
       "id": "1c085606-10e8-466d-860b-ad28bb4b5395",
-      "pitch": "B",
-      "octave": 2,
-      "position": -8,
-      "midi": 46,
-      "noteIndex": 10,
+      "pitch": "D",
+      "octave": 3,
+      "position": -6,
+      "midi": 49,
+      "noteIndex": 1,
       "clef": "bass",
       "explicitAccidental": null,
       "accidental": "flat",
@@ -3421,15 +3424,7 @@
     }
   ],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [
-    {
-      "absBeat": 24,
-      "roman": "I",
-      "symbol": "",
-      "figures": []
-    },
     {
       "absBeat": 26,
       "roman": "V",
@@ -3439,7 +3434,6 @@
       ]
     }
   ],
-  "ornamentOverrides": [],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
