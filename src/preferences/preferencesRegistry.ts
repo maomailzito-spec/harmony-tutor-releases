@@ -23,6 +23,7 @@ import {
   STATISTICAL_BIAS_THRESHOLD_KEY,
   ENABLE_LEARNED_ORNAMENTS_KEY,
   TONICIZATION_COMPACT_KEY,
+  CHROMATIC_MODULATION_KEY,
   CADENTIAL_PATTERN_RECOGNITION_KEY,
   RULE_SUGGESTIONS_KEY,
 } from '../storage/storageKeys';
@@ -54,7 +55,8 @@ export type PreferenceId =
   | 'debug.showHarmonyDebug'
   | 'analysis.tonicizationCompact'
   | 'analysis.cadentialPatterns'
-  | 'analysis.ruleSuggestions';
+  | 'analysis.ruleSuggestions'
+  | 'analysis.chromaticModulation';
 
 export type PreferenceDef<T> = {
   id: PreferenceId;
@@ -469,6 +471,16 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     kind: 'json',
     parse: (raw) => { try { return raw ? JSON.parse(raw) : {}; } catch { return {}; } },
     serialize: (value: Record<string, string>) => JSON.stringify(value),
+  },
+  'analysis.chromaticModulation': {
+    id: 'analysis.chromaticModulation',
+    section: 'Analysis',
+    label: 'Modulazione cromatica (sperimentale)',
+    storageKey: CHROMATIC_MODULATION_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
   },
 };
 

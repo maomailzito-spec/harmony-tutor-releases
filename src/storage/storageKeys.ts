@@ -28,6 +28,7 @@ export const ANALYSIS_STATISTICAL_CORRECTION_KEY = 'harmony-tutor.analysis.stati
 export const STATISTICAL_BIAS_THRESHOLD_KEY = 'harmony-tutor.analysis.statisticalBiasThreshold.v1' as const;
 export const ENABLE_LEARNED_ORNAMENTS_KEY = 'harmony-tutor.analysis.learnedOrnaments.v1' as const;
 export const TONICIZATION_COMPACT_KEY = 'harmony-tutor.analysis.tonicizationCompact.v1' as const;
+export const CHROMATIC_MODULATION_KEY = 'harmony-tutor.analysis.chromaticModulation.v1' as const;
 
 // Export / print
 export const EXPORT_INCLUDE_TITLE_KEY = 'harmony-tutor.export.includeTitle.v1' as const;

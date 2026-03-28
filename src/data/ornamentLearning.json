@@ -1,16 +1,16 @@
 {
   "version": 1,
   "extractedAt": "2026-03-28",
-  "totalFiles": 175,
-  "totalSamples": 959,
+  "totalFiles": 173,
+  "totalSamples": 954,
   "typeCounts": {
     "neighbor": 90,
     "suspension": 101,
     "anticipation": 28,
-    "appoggiatura": 266,
-    "passing": 363,
-    "escape": 64,
-    "cambiata": 47
+    "appoggiatura": 265,
+    "passing": 359,
+    "escape": 63,
+    "cambiata": 48
   },
   "patterns": {
     "short_weak_step-down_step-down": {
@@ -72,16 +72,16 @@
       "_dominant": "appoggiatura",
       "_probability": 0.682
     },
-    "short_weak_step-up_skip-down": {
-      "escape": 22,
-      "_total": 22,
-      "_dominant": "escape",
-      "_probability": 1
-    },
     "medium_moderate_step-down_step-down": {
       "passing": 21,
       "_total": 21,
       "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_step-up_skip-down": {
+      "escape": 21,
+      "_total": 21,
+      "_dominant": "escape",
       "_probability": 1
     },
     "short_weak_step-up_step-down": {
@@ -191,14 +191,6 @@
       "_dominant": "appoggiatura",
       "_probability": 0.4
     },
-    "medium_strong_step-up_step-up": {
-      "appoggiatura": 6,
-      "suspension": 1,
-      "passing": 1,
-      "_total": 8,
-      "_dominant": "appoggiatura",
-      "_probability": 0.75
-    },
     "medium_strong_unison_step-up": {
       "suspension": 7,
       "_total": 7,
@@ -218,6 +210,14 @@
       "passing": 1,
       "_total": 7,
       "_dominant": "neighbor",
+      "_probability": 0.714
+    },
+    "medium_strong_step-up_step-up": {
+      "appoggiatura": 5,
+      "suspension": 1,
+      "passing": 1,
+      "_total": 7,
+      "_dominant": "appoggiatura",
       "_probability": 0.714
     },
     "short_weak_step-down_skip-up": {
@@ -319,13 +319,6 @@
       "_total": 5,
       "_dominant": "appoggiatura",
       "_probability": 1
-    },
-    "short_weak_skip-down_leap-up": {
-      "passing": 4,
-      "neighbor": 1,
-      "_total": 5,
-      "_dominant": "passing",
-      "_probability": 0.8
     },
     "medium_strong_step-down_step-up": {
       "appoggiatura": 3,
@@ -454,16 +447,9 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "short_weak_step-down_skip-down": {
+    "short_weak_skip-down_leap-up": {
       "passing": 2,
-      "escape": 1,
-      "_total": 3,
-      "_dominant": "passing",
-      "_probability": 0.667
-    },
-    "short_weak_skip-down_step-down": {
-      "passing": 2,
-      "appoggiatura": 1,
+      "neighbor": 1,
       "_total": 3,
       "_dominant": "passing",
       "_probability": 0.667
@@ -529,6 +515,20 @@
       "_total": 2,
       "_dominant": "appoggiatura",
       "_probability": 1
+    },
+    "short_weak_step-down_skip-down": {
+      "passing": 1,
+      "escape": 1,
+      "_total": 2,
+      "_dominant": "passing",
+      "_probability": 0.5
+    },
+    "short_weak_skip-down_step-down": {
+      "passing": 1,
+      "appoggiatura": 1,
+      "_total": 2,
+      "_dominant": "passing",
+      "_probability": 0.5
     },
     "long_strong_step-up_step-down": {
       "appoggiatura": 2,
@@ -597,6 +597,13 @@
       "_total": 2,
       "_dominant": "escape",
       "_probability": 1
+    },
+    "long_strong_step-up_skip-down": {
+      "escape": 1,
+      "cambiata": 1,
+      "_total": 2,
+      "_dominant": "escape",
+      "_probability": 0.5
     },
     "very-short_weak_step-down_skip-down": {
       "escape": 2,
@@ -856,12 +863,6 @@
       "_dominant": "escape",
       "_probability": 1
     },
-    "long_strong_step-up_skip-down": {
-      "escape": 1,
-      "_total": 1,
-      "_dominant": "escape",
-      "_probability": 1
-    },
     "short_weak_step-down_leap-down": {
       "escape": 1,
       "_total": 1,
@@ -976,12 +977,6 @@
       "_dominant": "neighbor",
       "_probability": 1
     },
-    "short_weak_step-up_skip-down_v1_unk_same": {
-      "escape": 8,
-      "_total": 8,
-      "_dominant": "escape",
-      "_probability": 1
-    },
     "short_weak_step-down_step-down_v1_cons_same": {
       "passing": 7,
       "_total": 7,
@@ -1011,6 +1006,12 @@
       "suspension": 7,
       "_total": 7,
       "_dominant": "suspension",
+      "_probability": 1
+    },
+    "short_weak_step-up_skip-down_v1_unk_same": {
+      "escape": 7,
+      "_total": 7,
+      "_dominant": "escape",
       "_probability": 1
     },
     "short_weak_step-up_step-down_v1_unk_same": {
@@ -1265,13 +1266,6 @@
       "_dominant": "suspension",
       "_probability": 1
     },
-    "short_weak_step-down_skip-down_v1_unk_same": {
-      "passing": 2,
-      "escape": 1,
-      "_total": 3,
-      "_dominant": "passing",
-      "_probability": 0.667
-    },
     "medium_strong_skip-up_step-down_v2_cons_same": {
       "appoggiatura": 2,
       "cambiata": 1,
@@ -1284,13 +1278,6 @@
       "passing": 2,
       "_total": 3,
       "_dominant": "passing",
-      "_probability": 0.667
-    },
-    "medium_strong_step-up_step-up_v1_diss_shorter": {
-      "appoggiatura": 2,
-      "suspension": 1,
-      "_total": 3,
-      "_dominant": "appoggiatura",
       "_probability": 0.667
     },
     "medium_strong_step-up_step-down_v1_cons_shorter": {
@@ -1779,23 +1766,12 @@
       "_dominant": "passing",
       "_probability": 1
     },
-    "short_weak_skip-down_leap-up_v3_unk_same": {
-      "passing": 2,
+    "short_weak_step-down_skip-down_v1_unk_same": {
+      "passing": 1,
+      "escape": 1,
       "_total": 2,
       "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_skip-down_leap-up_v1_unk_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_skip-down_step-down_v1_unk_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
+      "_probability": 0.5
     },
     "short_weak_step-down_step-up_v1_cons_same": {
       "appoggiatura": 1,
@@ -1815,6 +1791,13 @@
       "_total": 2,
       "_dominant": "appoggiatura",
       "_probability": 1
+    },
+    "medium_strong_step-up_step-up_v1_diss_shorter": {
+      "appoggiatura": 1,
+      "suspension": 1,
+      "_total": 2,
+      "_dominant": "appoggiatura",
+      "_probability": 0.5
     },
     "medium_strong_unison_step-down_v2_diss_same": {
       "appoggiatura": 1,
@@ -2235,6 +2218,24 @@
       "appoggiatura": 1,
       "_total": 1,
       "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_weak_skip-down_leap-up_v3_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_skip-down_leap-up_v1_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_skip-down_step-down_v1_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
       "_probability": 1
     },
     "medium_strong_step-down_step-down_v1_unk_same": {
@@ -3309,6 +3310,12 @@
       "escape": 1,
       "_total": 1,
       "_dominant": "escape",
+      "_probability": 1
+    },
+    "long_strong_step-up_skip-down_v3_cons_same": {
+      "cambiata": 1,
+      "_total": 1,
+      "_dominant": "cambiata",
       "_probability": 1
     },
     "long_strong_step-down_step-down_v1_cons_same": {
@@ -21254,138 +21261,6 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Delamot C30 3a.htp",
-      "noteId": "36e5c7c7-1c71-4d46-912a-9b67e5a5f351",
-      "type": "passing",
-      "patternKey": "short_weak_skip-down_leap-up",
-      "detailedKey": "short_weak_skip-down_leap-up_v3_unk_same",
-      "pitch": "B3",
-      "midi": 58,
-      "voice": 3,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": -4,
-      "exitInterval": 5,
-      "entryBucket": "skip-down",
-      "exitBucket": "leap-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamot C30 3a.htp",
-      "noteId": "1b3711f4-1cd7-43d2-b9eb-c24530860660",
-      "type": "passing",
-      "patternKey": "short_weak_skip-down_leap-up",
-      "detailedKey": "short_weak_skip-down_leap-up_v1_unk_same",
-      "pitch": "B4",
-      "midi": 70,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": -4,
-      "exitInterval": 5,
-      "entryBucket": "skip-down",
-      "exitBucket": "leap-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamot C30 3a.htp",
-      "noteId": "e2bca67c-0cc0-4e92-b10c-693131f210ee",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_skip-down",
-      "detailedKey": "short_weak_step-down_skip-down_v1_unk_same",
-      "pitch": "E5",
-      "midi": 75,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3.3333333333333335,
-      "measureIndex": 2,
-      "beatStrength": "weak",
-      "entryInterval": -2,
-      "exitInterval": -3,
-      "entryBucket": "step-down",
-      "exitBucket": "skip-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamot C30 3a.htp",
-      "noteId": "26f390e6-338b-4b09-b2b1-babc598820d6",
-      "type": "passing",
-      "patternKey": "short_weak_skip-down_step-down",
-      "detailedKey": "short_weak_skip-down_step-down_v1_unk_same",
-      "pitch": "C5",
-      "midi": 72,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3.6666666666666665,
-      "measureIndex": 2,
-      "beatStrength": "weak",
-      "entryInterval": -3,
-      "exitInterval": -2,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delmont C56 3b.htp",
-      "noteId": "9c111c27-1077-46b6-8205-6f637a65757f",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_step-up_step-up",
-      "detailedKey": "medium_strong_step-up_step-up_v1_diss_shorter",
-      "pitch": "D5",
-      "midi": 75,
-      "voice": 1,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": 2,
-      "exitInterval": 1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delmont C56 3b.htp",
-      "noteId": "a9ed1d88-b9e9-4208-8d6a-ab1cedc3986e",
-      "type": "escape",
-      "patternKey": "short_weak_step-up_skip-down",
-      "detailedKey": "short_weak_step-up_skip-down_v1_unk_same",
-      "pitch": "B4",
-      "midi": 71,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": 2,
-      "exitInterval": -3,
-      "entryBucket": "step-up",
-      "exitBucket": "skip-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
       "file": "Dubois 145 p 216.htp",
       "noteId": "4ab3ecfd-2f3f-4b5a-881b-2365adaec18c",
       "type": "appoggiatura",
@@ -22198,6 +22073,28 @@
       "durationRatio": 1,
       "durationRatioCategory": "same",
       "isDissonantVsBass": null
+    },
+    {
+      "file": "Dubois n2 p74.htp",
+      "noteId": "ee60ddca-e448-44fb-9e3a-45ddec26e27d",
+      "type": "cambiata",
+      "patternKey": "long_strong_step-up_skip-down",
+      "detailedKey": "long_strong_step-up_skip-down_v3_cons_same",
+      "pitch": "F4",
+      "midi": 65,
+      "voice": 3,
+      "duration": "half",
+      "durationCategory": "long",
+      "beat": 1,
+      "measureIndex": 31,
+      "beatStrength": "strong",
+      "entryInterval": 1,
+      "exitInterval": -3,
+      "entryBucket": "step-up",
+      "exitBucket": "skip-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": false
     },
     {
       "file": "Dubois n3 p12.htp",

@@ -13,6 +13,7 @@ import { usePreference } from '../preferences/usePreference';
 import { evaluateCadentialPatterns, type ChordEvent, pcToNoteName, noteNameToPc, qualityFamily, getScalePcs } from '../utils/cadentialPatterns';
 import { CADENTIAL_PATTERN_RECOGNITION_KEY } from '../storage/storageKeys';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
+import { detectChromaticModulations } from '../utils/chromaticModulationDetector';
 import { getBigramProbability, type StyleProfile } from '../engine/choralStyleProfile';
 import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS, DURATION_VALUES } from '../constants';
 import { suggestNextChord } from '../engine/progressionSuggester';
@@ -89,6 +90,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
     } = params;
 
     const [compactTonicization] = usePreference<boolean>('analysis.tonicizationCompact');
+    const [_chromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
 
     const minSpanBeats = Number(harmonyLabelMinSpanBeats) || 0;
 
@@ -538,6 +540,41 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             }
         } catch { /* cadential recognition failed gracefully */ }
+
+        // ─── Chromatic Window Modulation Detection (experimental) ───
+        try {
+            if (_chromaticModulationEnabled) {
+                const chromResults = detectChromaticModulations(
+                    notes, currentTonic, isMinorMode,
+                    timeSignature, timeSignatureChanges,
+                    _effectiveCtxs,
+                );
+                for (const cr of chromResults) {
+                    // Don't duplicate with existing contexts at same measure
+                    const already = _effectiveCtxs.some(c =>
+                        c.measureIndex != null && c.measureIndex === cr.startMeasure);
+                    if (already) continue;
+                    _effectiveCtxs.push({
+                        measureIndex: cr.startMeasure,
+                        newTonic: cr.newTonicName,
+                        newIsMinor: cr.newIsMinor,
+                        source: 'inferred',
+                    });
+                    // Return to home key after region ends
+                    const returnMeasure = cr.endMeasure + 1;
+                    const returnAlready = _effectiveCtxs.some(c =>
+                        c.measureIndex != null && Math.abs(c.measureIndex - returnMeasure) <= 1);
+                    if (!returnAlready) {
+                        _effectiveCtxs.push({
+                            measureIndex: returnMeasure,
+                            newTonic: currentTonic,
+                            newIsMinor: isMinorMode,
+                            source: 'inferred',
+                        });
+                    }
+                }
+            }
+        } catch { /* chromatic modulation detection failed gracefully */ }
 
         const ctxAtAbsBeat = (absBeat: number) => _effectiveCtxs
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
@@ -3159,7 +3196,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
 
         return labelsBySystem;
-    }, [analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
+    }, [_chromaticModulationEnabled, analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, notes, ornOverrideMap, ornOverrideRecord, timeSignature, timeSignatureChanges]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
