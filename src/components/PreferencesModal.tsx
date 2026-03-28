@@ -114,6 +114,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [statisticalBiasThreshold, setStatisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
   const [enableLearnedOrnaments, setEnableLearnedOrnaments] = usePreference<boolean>('analysis.enableLearnedOrnaments');
   const [tonicizationCompact, setTonicizationCompact] = usePreference<boolean>('analysis.tonicizationCompact');
+  const [chromaticModulation, setChromaticModulation] = usePreference<boolean>('analysis.chromaticModulation');
   const [cadentialPatterns, setCadentialPatterns] = usePreference<boolean>('analysis.cadentialPatterns');
 
   const analysisProfileSelectionValue = useMemo(() => {
@@ -568,6 +569,21 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     <div className="text-sm font-semibold text-slate-100">Riconoscimento pattern cadenzali</div>
                     <div className="text-xs text-slate-400">
                       Rileva automaticamente cadenze (ii–V–I, IV–V–I, ecc.) e inietta tonicizzazioni temporanee verso la tonalità target.
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!chromaticModulation}
+                    onChange={(e) => setChromaticModulation(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Modulazione cromatica (sperimentale)</div>
+                    <div className="text-xs text-slate-400">
+                      Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico su finestre di ≥ 3 misure consecutive.
                     </div>
                   </div>
                 </label>
