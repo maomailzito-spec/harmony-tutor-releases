@@ -1501,10 +1501,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
                 // Scale stagger when 3+ accidentals share the same onset
                 const staggerPx = withAcc.length >= 3 ? BASE_STAGGER_PX + 4 : BASE_STAGGER_PX;
-                // Sort by position ascending (soprano = lowest position number = first).
-                // Higher notes (larger position) get pushed further left so their
-                // accidental doesn't overlap the lower note's accidental.
-                const sorted = withAcc.slice().sort((a, b) => Number(a.position) - Number(b.position));
+                // Sort by position DESCENDING (alto/lower note = highest position = first).
+                // The HIGHER pitched note's accidental glyph extends downward and can
+                // overlap the LOWER note's notehead (e.g. Cb5 flat lands on Gb4 head).
+                // So the higher note (= lowest position number) gets pushed further left.
+                const sorted = withAcc.slice().sort((a, b) => Number(b.position) - Number(a.position));
                 for (let i = 0; i < sorted.length; i++) {
                   accidentalStaggerById.set(sorted[i].id, i * staggerPx);
                 }
@@ -1956,8 +1957,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                         // Only apply custom stagger for ≤2 accidentals; for 3+, VF default is better
                         else if (onsetAccCount <= 2 && (extra || inset) && typeof (acc as any).getXShift === 'function' && typeof (acc as any).setXShift === 'function') {
                           const cur = (acc as any).getXShift() ?? 0;
+                          // When multiple accidentals share an onset, the stagger separates them —
+                          // do NOT apply inset (pull-closer) which would undo the stagger and
+                          // push accidentals onto neighboring noteheads (e.g. Cb5 flat onto Gb4 head).
+                          const effectiveInset = onsetAccCount >= 2 ? 0 : inset;
                           // extra pushes left; inset pulls back right.
-                          (acc as any).setXShift(cur + extra - inset);
+                          (acc as any).setXShift(cur + extra - effectiveInset);
                         }
                       } catch {
                         // ignore

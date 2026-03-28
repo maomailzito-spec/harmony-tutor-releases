@@ -6845,12 +6845,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const toggleForwardIds = new Set<string>();
                     const toggleBackwardIds = new Set<string>();
 
+                    // Spelling-aware MIDI: calculateNoteBeats can mis-derive
+                    // MIDI for enharmonics (e.g. Cb5 → 83 instead of 71).
+                    // Recompute from letter+accidental+octave like effectiveMidiForTie.
+                    const _tieMidi = (n: any): number => {
+                        try {
+                            const letter = String(n.pitch || '').charAt(0).toUpperCase();
+                            const bp: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                            const base = bp[letter];
+                            if (base == null || !Number.isFinite(n.octave)) return Number(n.midi) || 0;
+                            const acc = String(n.accidental || '');
+                            const off = acc === 'flat' ? -1 : acc === 'sharp' ? 1
+                                : acc === 'double-flat' ? -2 : acc === 'double-sharp' ? 2 : 0;
+                            let m = (Number(n.octave) + 1) * 12 + base + off;
+                            if (letter === 'C' && off < 0) m = m; // Cb5 → 71 ✓
+                            if (letter === 'B' && off > 0 && base + off >= 12) m += 12;
+                            return m;
+                        } catch { return Number(n.midi) || 0; }
+                    };
+
                     for (const sel of selected) {
                         const idx = notesWithBeats.findIndex(x => x.id === sel.id);
                         if (idx < 0) continue;
 
                         const voice = (notesWithBeats[idx] as any).voice;
-                        const midi = (notesWithBeats[idx] as any).midi;
+                        const midi = _tieMidi(notesWithBeats[idx]);
 
                         // Backward first: look for previous same-voice same-pitch note.
                         // Musical convention: selecting a note and pressing L ties it
@@ -6859,7 +6878,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         for (let i = idx - 1; i >= 0; i--) {
                             if ((notesWithBeats[i] as any).voice === voice) { prev = notesWithBeats[i]; break; }
                         }
-                        if (prev && !prev.isRest && prev.midi === midi) {
+                        if (prev && !prev.isRest && _tieMidi(prev) === midi) {
                             toggleBackwardIds.add(prev.id);
                             continue;
                         }
@@ -6869,7 +6888,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         for (let i = idx + 1; i < notesWithBeats.length; i++) {
                             if ((notesWithBeats[i] as any).voice === voice) { next = notesWithBeats[i]; break; }
                         }
-                        if (next && !next.isRest && next.midi === midi) {
+                        if (next && !next.isRest && _tieMidi(next) === midi) {
                             toggleForwardIds.add(sel.id);
                         }
                     }
@@ -7174,6 +7193,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const selected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
         if (selected.length === 0) return;
 
+        // Spelling-aware MIDI (same helper as L-key tie toggle)
+        const _tieMidi = (n: any): number => {
+            try {
+                const letter = String(n.pitch || '').charAt(0).toUpperCase();
+                const bp: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                const base = bp[letter];
+                if (base == null || !Number.isFinite(n.octave)) return Number(n.midi) || 0;
+                const acc = String(n.accidental || '');
+                const off = acc === 'flat' ? -1 : acc === 'sharp' ? 1
+                    : acc === 'double-flat' ? -2 : acc === 'double-sharp' ? 2 : 0;
+                let m = (Number(n.octave) + 1) * 12 + base + off;
+                if (letter === 'B' && off > 0 && base + off >= 12) m += 12;
+                return m;
+            } catch { return Number(n.midi) || 0; }
+        };
+
         setRawNotes(prev => prev.map(n => {
             if (!selectedNoteIds.has(n.id)) return n;
 
@@ -7185,7 +7220,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             for (let i = idx + 1; i < notesWithBeats.length; i++) {
                 if (notesWithBeats[i].voice === voice) { next = notesWithBeats[i]; break; }
             }
-            if (!next || next.isRest || next.midi !== notesWithBeats[idx].midi) return n;
+            if (!next || next.isRest || _tieMidi(next) !== _tieMidi(notesWithBeats[idx])) return n;
 
             if ((n as any).isTiedToNext) {
                 const { isTiedToNext, ...rest } = n as any;
