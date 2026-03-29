@@ -545,8 +545,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         try {
             if (_chromaticModulationEnabled) {
                 const chromResults = detectChromaticModulations(
-                    notes, currentTonic, isMinorMode,
-                    timeSignature, timeSignatureChanges,
+                    analyzedNotes, currentTonic, isMinorMode,
+                    timeSignature, undefined,
                     _effectiveCtxs,
                 );
                 for (const cr of chromResults) {
@@ -3210,7 +3210,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
 
         return labelsBySystem;
-    }, [_chromaticModulationEnabled, analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, notes, ornOverrideMap, ornOverrideRecord, timeSignature, timeSignatureChanges]);
+    }, [_chromaticModulationEnabled, analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
