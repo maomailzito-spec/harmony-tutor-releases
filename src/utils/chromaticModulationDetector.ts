@@ -50,7 +50,7 @@ function allKeyCandidates(): { name: string; pc: number; isMinor: boolean; pcs: 
 
 const MIN_WINDOW_MEASURES = 3;
 const FIT_THRESHOLD = 0.92;
-const HOME_GAP = 0.20;
+const HOME_GAP = 0.15;
 
 // ── main ─────────────────────────────────────────────────────────────
 
@@ -80,7 +80,9 @@ export function detectChromaticModulations(
   if (real.length < 12) return [];
 
   const tonicPc = noteNameToPc(currentTonic);
-  const homePcs = getExtendedScalePcs(tonicPc, isMinorMode);
+  // Use NATURAL scale (7 pcs) for homeFit — the extended scale (10 pcs for minor)
+  // is too permissive and masks parallel major/minor modulations.
+  const homePcs = new Set(getScalePcs(tonicPc, isMinorMode));
   const keys = allKeyCandidates();
 
   // Group pitch-classes by measure
@@ -131,7 +133,8 @@ export function detectChromaticModulations(
     for (const k of keys) {
       if (k.pc === tonicPc && k.isMinor === isMinorMode) continue;
       const fit = pcArr.filter(pc => k.pcs.has(pc)).length / pcCount;
-      if (fit > bestFit) {
+      if (fit > bestFit || (fit === bestFit && k.pc === tonicPc)) {
+        // When fit is tied, prefer parallel major/minor (same tonic pc)
         bestFit = fit;
         bestKeyPc = k.pc;
         bestKeyMinor = k.isMinor;
