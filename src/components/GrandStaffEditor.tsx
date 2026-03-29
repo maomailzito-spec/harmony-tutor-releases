@@ -9,7 +9,7 @@ declare global {
         };
     }
 }
-import React, { useState, useCallback, useMemo, useEffect, useRef, startTransition } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType } from '../types';
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
@@ -2389,18 +2389,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return { fromNoteId: from.id, toNoteId: to.id, voice: v1 as Voice };
     }, [notes, selectedNoteIds]);
     
+    // Defer notes for analysis — during rapid editing, analysis runs at lower
+    // priority so the UI stays responsive. Layout falls back to un-analyzed
+    // notes while analysis catches up.
+    const deferredNotes = useDeferredValue(notes);
+
     // Synchronous analysis — correctness over performance.
     const analysisResult = useMemo(() => {
         if (!isAnalysisEnabled) {
-            return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
+            return { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
         try {
-            return applyHarmonyRules(notes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides);
+            return applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides);
         } catch (e) {
             console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
-            return { analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
+            return { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
-    }, [notes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides]);
+    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // NOTE: inferred contexts can be helpful for experimentation, but they can also
@@ -2596,7 +2601,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const layoutData = useMemo(() => {
         // New deterministic tick-based layout:
-        const notesToLayout = analyzedNotes;
+        // Use immediate `notes` (not deferred analyzedNotes) so the layout
+        // updates instantly when a note is inserted.
+        const notesToLayout = notes;
         const keySigWidth = keySignature.count * 14;
         const timeSigWidthWithPadding = timeSignature ? 55 : 0;
         const startOffset = START_X + keySigWidth + timeSigWidthWithPadding;
@@ -2843,7 +2850,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ignore logging errors
         }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
-    }, [analyzedNotes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines]);
+    }, [notes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines]);
 
     // Compute current playhead measure for choral panel insertion.
     const playheadMeasureForChoral = useMemo(() => {
