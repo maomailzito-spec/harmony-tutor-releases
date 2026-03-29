@@ -4,7 +4,7 @@
  * Step 1: pure state ownership, zero logic.
  * GrandStaffEditor destructures the return value.
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 /* ── Types ── */
 export type MetronomeUnit = 'quarter' | 'eighth' | 'dotted-quarter';
@@ -20,7 +20,12 @@ export interface LoopRange {
 }
 
 /* ── Hook ── */
-export function usePlayback() {
+export interface UsePlaybackParams {
+    /** DOM ref allo <input> BPM — per focus/blur/select. */
+    bpmInputRef: React.RefObject<HTMLInputElement | null>;
+}
+
+export function usePlayback({ bpmInputRef }: UsePlaybackParams) {
     // ── Playback core ──
     const [isPlaying, setIsPlaying] = useState(false);
     const [bpm, setBpm] = useState(120);
@@ -57,12 +62,130 @@ export function usePlayback() {
     // ── BPM input widget ──
     const [bpmInputString, setBpmInputString] = useState('');
 
+    // ── Metronome flash timeout refs ──
+    const metronomeFlashStartTimeoutRef = useRef<number | null>(null);
+    const metronomeFlashTimeoutRef = useRef<number | null>(null);
+
     // ── Sync effects ──
     useEffect(() => { isLoopingRef.current = isLooping; }, [isLooping]);
     useEffect(() => { loopRangeRef.current = loopRange; }, [loopRange]);
     useEffect(() => { isMetronomeOnRef.current = isMetronomeOn; }, [isMetronomeOn]);
     useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
     useEffect(() => { isBpmActiveRef.current = isBpmActive; }, [isBpmActive]);
+
+    // ── stopMetronomeInternal ──
+    const stopMetronomeInternal = useCallback(() => {
+        if (metronomeIntervalRef.current) {
+            window.clearTimeout(metronomeIntervalRef.current);
+            metronomeIntervalRef.current = null;
+        }
+        if (metronomeFlashStartTimeoutRef.current) {
+            window.clearTimeout(metronomeFlashStartTimeoutRef.current);
+            metronomeFlashStartTimeoutRef.current = null;
+        }
+        if (metronomeFlashTimeoutRef.current) {
+            window.clearTimeout(metronomeFlashTimeoutRef.current);
+            metronomeFlashTimeoutRef.current = null;
+        }
+        setMetronomeFlash(null);
+    }, []);
+
+    // ── BPM commit helper ──
+    const commitBpmFromString = useCallback((value: string) => {
+        const trimmed = (value ?? '').trim();
+        if (!trimmed) return;
+        const parsed = Number.parseInt(trimmed, 10);
+        if (!Number.isFinite(parsed)) return;
+        const clamped = Math.max(20, Math.min(300, parsed));
+        setBpm(clamped);
+        setBpmInputString(String(clamped));
+    }, []);
+
+    // ── activateBpmEdit ──
+    const activateBpmEdit = useCallback(() => {
+        isBpmActiveRef.current = true;
+        setIsBpmActive(true);
+        setBpmInputString(String(bpm));
+        window.requestAnimationFrame(() => {
+            bpmInputRef.current?.focus();
+            bpmInputRef.current?.select();
+        });
+    }, [bpm, bpmInputRef]);
+
+    // ── BPM handlers ──
+    const handleBpmFocus = useCallback(() => {
+        isBpmActiveRef.current = true;
+        setIsBpmActive(true);
+        setBpmInputString(prev => (prev ? prev : String(bpm)));
+    }, [bpm]);
+
+    const handleBpmKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+        e.stopPropagation();
+        const key = e.key;
+
+        const applyDelta = (delta: number) => {
+            const base = Number.parseInt((bpmInputString || String(bpm)).trim(), 10);
+            const current = Number.isFinite(base) ? base : bpm;
+            const next = Math.max(20, Math.min(300, current + delta));
+            setBpm(next);
+            setBpmInputString(String(next));
+        };
+
+        if (key === 'ArrowUp') { e.preventDefault(); applyDelta(e.shiftKey ? 10 : 1); return; }
+        if (key === 'ArrowDown') { e.preventDefault(); applyDelta(e.shiftKey ? -10 : -1); return; }
+        if (key === 'Enter') { e.preventDefault(); commitBpmFromString(bpmInputString || String(bpm)); setIsBpmActive(false); return; }
+        if (key === 'Escape') { e.preventDefault(); setBpmInputString(String(bpm)); setIsBpmActive(false); return; }
+        if (key === 'Backspace') { e.preventDefault(); setBpmInputString(s => (s ? s.slice(0, -1) : '')); return; }
+        if (key === 'Delete') { e.preventDefault(); setBpmInputString(''); return; }
+        if (/^[0-9]$/.test(key)) {
+            e.preventDefault();
+            setBpmInputString(s => {
+                const next = `${(s ?? '').replace(/\s+/g, '')}${key}`;
+                return next.slice(0, 3);
+            });
+            return;
+        }
+    }, [bpm, bpmInputString, commitBpmFromString]);
+
+    const handleBpmInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const onlyDigits = (e.target.value ?? '').replace(/\D+/g, '').slice(0, 3);
+        setBpmInputString(onlyDigits);
+    }, []);
+
+    const handleBpmInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        const applyDelta = (delta: number) => {
+            const base = Number.parseInt((bpmInputString || String(bpm)).trim(), 10);
+            const current = Number.isFinite(base) ? base : bpm;
+            const next = Math.max(20, Math.min(300, current + delta));
+            setBpm(next);
+            setBpmInputString(String(next));
+        };
+        if (e.key === 'ArrowUp') { e.preventDefault(); applyDelta(e.shiftKey ? 10 : 1); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); applyDelta(e.shiftKey ? -10 : -1); return; }
+        if (e.key === 'Enter') { e.preventDefault(); commitBpmFromString(bpmInputString || String(bpm)); bpmInputRef.current?.blur(); return; }
+        if (e.key === 'Escape') { e.preventDefault(); setBpmInputString(String(bpm)); bpmInputRef.current?.blur(); return; }
+    }, [bpm, bpmInputString, bpmInputRef, commitBpmFromString]);
+
+    const handleBpmBlur = useCallback(() => {
+        isBpmActiveRef.current = false;
+        commitBpmFromString(bpmInputString || String(bpm));
+        setIsBpmActive(false);
+    }, [bpm, bpmInputString, commitBpmFromString]);
+
+    // ── toggleMetronome ──
+    const toggleMetronome = useCallback(() => {
+        setIsMetronomeOn(prev => {
+            const next = !prev;
+            if (!next) {
+                metronomeSuppressedRef.current = false;
+                metronomeLinkedToPlaybackRef.current = false;
+            } else {
+                metronomeSuppressedRef.current = false;
+            }
+            return next;
+        });
+    }, []);
 
     return {
         // playback core
@@ -93,6 +216,19 @@ export function usePlayback() {
         loopRangeRef,
         // BPM input
         bpmInputString, setBpmInputString,
+        // metronome flash refs
+        metronomeFlashStartTimeoutRef,
+        metronomeFlashTimeoutRef,
+        // logic
+        stopMetronomeInternal,
+        commitBpmFromString,
+        activateBpmEdit,
+        handleBpmFocus,
+        handleBpmKeyDown,
+        handleBpmInputChange,
+        handleBpmInputKeyDown,
+        handleBpmBlur,
+        toggleMetronome,
     } as const;
 }
 
