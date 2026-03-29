@@ -1185,6 +1185,59 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             }
 
+            // ── Post-pass: simplify extended tonicization regions ──
+            // When ≥ 4 consecutive beats share the same /target or =target label,
+            // convert to extended modulation convention:
+            //   entry: target=localI, inside: localRoman, exit: localI=target
+            try {
+                const sortedEntries = [...autoRomanDisplayByAbsBeat.entries()]
+                    .sort((a, b) => a[0] - b[0]);
+                if (sortedEntries.length >= 4) {
+                    // Group consecutive entries by target degree
+                    const getTarget = (disp: string): string | null => {
+                        const m1 = disp.match(/\/([ivIV]+[°øo]?)$/);
+                        if (m1) return m1[1];
+                        const m2 = disp.match(/=([ivIV]+[°øo]?)$/);
+                        if (m2) return m2[1];
+                        const m3 = disp.match(/^([ivIV]+[°øo]?)=/);
+                        if (m3) return m3[1];
+                        return null;
+                    };
+                    let runStart = 0;
+                    let runTarget: string | null = null;
+                    const flushRegion = (start: number, end: number, target: string) => {
+                        const len = end - start + 1;
+                        if (len < 4) return;
+                        for (let ri = start; ri <= end; ri++) {
+                            const [abQ, disp] = sortedEntries[ri];
+                            // Extract the local roman (strip /target and =target)
+                            const localR = disp.replace(/[/=][ivIV]+[°øo]?$/, '').replace(/^[ivIV]+[°øo]?=/, '');
+                            if (ri === start) {
+                                // Entry: target=localR
+                                autoRomanDisplayByAbsBeat.set(abQ, `${target}=${localR}`);
+                            } else if (ri === end) {
+                                // Exit: localR=target
+                                autoRomanDisplayByAbsBeat.set(abQ, `${localR}=${target}`);
+                            } else {
+                                // Inside: simple local roman
+                                autoRomanDisplayByAbsBeat.set(abQ, localR);
+                            }
+                        }
+                    };
+                    for (let ei = 0; ei < sortedEntries.length; ei++) {
+                        const target = getTarget(sortedEntries[ei][1]);
+                        if (target && target === runTarget) {
+                            // Continue run
+                        } else {
+                            if (runTarget) flushRegion(runStart, ei - 1, runTarget);
+                            runStart = ei;
+                            runTarget = target;
+                        }
+                    }
+                    if (runTarget) flushRegion(runStart, sortedEntries.length - 1, runTarget);
+                }
+            } catch { /* ignore */ }
+
 
         } catch { /* ignore */ }
 
