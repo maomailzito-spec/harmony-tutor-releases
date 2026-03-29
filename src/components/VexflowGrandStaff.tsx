@@ -576,18 +576,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   };
   const downRef = useRef<DownState | null>(null);
 
-  // ── Debounced VexFlow rendering ──
-  // Accumulate rapid prop changes (e.g. note insertions) and only
-  // re-render after 120ms of inactivity to keep the UI responsive.
-  const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   useEffect(() => {
-    // Cancel any pending render
-    if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
-
-    renderTimerRef.current = setTimeout(() => {
-      renderTimerRef.current = null;
-
     if (!containerRef.current) return;
     containerRef.current.innerHTML = '';
     const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
@@ -3097,11 +3086,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       noteHitPointsRef.current = [];
       onNoteHitPoints?.([]);
     }
-    }, 120); // debounce delay in ms
-
-    return () => {
-      if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
-    };
   }, [notes, timeSignature, keySignature, barlines, width, height, staffMode, selectedNoteIds, ghostNote]);
 
   // Attach pointer handlers ONCE to the persistent container. The SVG is frequently
