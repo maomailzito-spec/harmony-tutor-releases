@@ -124,14 +124,16 @@ const DURATION_OPTIONS = [
 
 const INLINE_DURATION_SUFFIXES: Record<string, string> = {
   ':w': 'whole',
+  ':dh': 'dotted-half',
   ':h': 'half',
+  ':dq': 'dotted-quarter',
   ':q': 'quarter',
   ':e': 'eighth',
   ':s': 'sixteenth',
 };
 
 const DURATION_BEATS: Record<string, number> = {
-  'whole': 4, 'half': 2, 'quarter': 1, 'eighth': 0.5, 'sixteenth': 0.25,
+  'whole': 4, 'dotted-half': 3, 'half': 2, 'dotted-quarter': 1.5, 'quarter': 1, 'eighth': 0.5, 'sixteenth': 0.25,
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -596,8 +598,8 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     if (sopranoFromScore.length === 0) return;
     try {
       // Rebase to 0 when continuing from a later measure.
-      const constraints: SopranoConstraint[] = sopranoFromScore
-        .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+      const filtered = sopranoFromScore.filter(n => (n.measureIndex ?? 0) >= insertMeasure);
+      const constraints: SopranoConstraint[] = filtered
         .map(n => ({
           midi: n.midi,
           measure: (n.measureIndex ?? 0) - insertMeasure,
@@ -605,8 +607,34 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
         }));
       const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
       const autoProgression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
-      // Build text representation
-      const text = autoProgression.map(c => c.roman).join(' - ');
+
+      // Build text representation with per-chord duration from melody note lengths.
+      // Compute each chord's duration from the gap to the next chord (or end of measure).
+      const beatsSuffix = (beats: number): string => {
+        if (Math.abs(beats - 4) < 0.01) return ':w';
+        if (Math.abs(beats - 3) < 0.01) return ':dh'; // dotted half
+        if (Math.abs(beats - 2) < 0.01) return ':h';
+        if (Math.abs(beats - 1.5) < 0.01) return ':dq'; // dotted quarter
+        if (Math.abs(beats - 1) < 0.01) return ':q';
+        if (Math.abs(beats - 0.5) < 0.01) return ':e';
+        if (Math.abs(beats - 0.25) < 0.01) return ':s';
+        return ':q'; // fallback
+      };
+      const text = autoProgression.map((c, idx) => {
+        const absBeat = c.measure * beatsPerMeasure + (c.beat - 1);
+        let durBeats = 1; // default quarter
+        if (idx < autoProgression.length - 1) {
+          const nextAbsBeat = autoProgression[idx + 1].measure * beatsPerMeasure + (autoProgression[idx + 1].beat - 1);
+          durBeats = nextAbsBeat - absBeat;
+        } else {
+          // Last chord: fill to end of measure
+          const endOfMeasure = (c.measure + 1) * beatsPerMeasure;
+          durBeats = endOfMeasure - absBeat;
+        }
+        if (durBeats <= 0) durBeats = 1;
+        return c.roman + beatsSuffix(durBeats);
+      }).join(' - ');
+
       setProgressionText(text);
       setGeneratedNotes(null);
       setViolations([]);
