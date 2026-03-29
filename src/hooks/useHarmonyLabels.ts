@@ -3276,9 +3276,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const local = stripTarget(disp) || disp;
                             lbl.romanDisplay = local;
                         } else {
-                            // Gap label (e.g. vii°/V): strip suffix → simple local roman
-                            const local = stripTarget(disp) || disp;
-                            lbl.romanDisplay = local;
+                            // Gap label (e.g. vii°/V): leave as-is — stripping the
+                            // suffix would give a roman in the wrong key context.
                         }
                     }
                     runStart = -1;
