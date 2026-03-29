@@ -1795,7 +1795,8 @@ export function voicingToStaffNotes(
   duration: string,
   tones: ScaleDegreeNote[],
   inversion: number,
-  keySignature: KeySignature
+  keySignature: KeySignature,
+  beatsPerMeasure: number = 4
 ): StaffNote[] {
   const voiceMap: { midi: number; voice: Voice; clef: 'treble' | 'bass'; tonePick: ScaleDegreeNote }[] = [
     { midi: voicing.soprano, voice: 1, clef: 'treble', tonePick: findToneForMidi(voicing.soprano, tones) },
@@ -1836,7 +1837,7 @@ export function voicingToStaffNotes(
     // Compute tick position
     const beatsPerQuarter = 1; // quarter-note base
     const durationBeats = DURATION_VALUES[duration as keyof typeof DURATION_VALUES] ?? 1;
-    const startTick = ((measure * 4) + (beat - 1)) * TICKS_PER_QUARTER; // assumes 4/4 for now
+    const startTick = ((measure * beatsPerMeasure) + (beat - 1)) * TICKS_PER_QUARTER;
     const durationTicks = durationBeats * TICKS_PER_QUARTER;
 
     const note: StaffNote = {
@@ -2213,7 +2214,7 @@ export function realizeChorale(
     }
 
     // Generate StaffNotes
-    const notes = voicingToStaffNotes(voicing, chord.measure, chord.beat, durationName, tones, inv, displayKeySignature);
+    const notes = voicingToStaffNotes(voicing, chord.measure, chord.beat, durationName, tones, inv, displayKeySignature, beatsPerMeasure);
     allNotes.push(...notes);
 
     prevPrevVoicing = prevVoicing;
