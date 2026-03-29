@@ -3273,7 +3273,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             lbl.romanDisplay = `${local}=${runTarget}`;
                         } else if (thisTarget === runTarget) {
                             // Inside (matching): strip target suffix → simple local roman
-                            const local = stripTarget(disp) || disp;
+                            let local = stripTarget(disp) || disp;
+                            // A bare roman equal to the target (e.g. "iii" in a /iii region)
+                            // is the local tonic — display as i/I (depending on target case)
+                            if (local === runTarget) {
+                                const isMinorTarget = runTarget === runTarget.toLowerCase();
+                                local = isMinorTarget ? 'i' : 'I';
+                            }
                             lbl.romanDisplay = local;
                         } else {
                             // Gap label (e.g. vii°/V): leave as-is — stripping the
