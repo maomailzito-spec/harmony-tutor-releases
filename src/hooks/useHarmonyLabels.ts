@@ -3265,20 +3265,18 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const lbl = sysLabels[ri];
                         const disp = String(lbl.romanDisplay || lbl.roman || '');
                         const thisTarget = getTarget(disp, runTarget);
-                        // Rewrite labels that reference the target
-                        if (thisTarget === runTarget || ri === runStart || ri === endIdx) {
+                        if (ri === runStart) {
+                            // Entry: keep as-is (e.g. V/iii stays V/iii — it's the preparation dominant)
+                        } else if (ri === endIdx) {
+                            // Exit: localRoman=target (e.g. i=iii)
                             const local = stripTarget(disp) || disp;
-                            if (ri === runStart) {
-                                lbl.romanDisplay = `${runTarget}=${local}`;
-                            } else if (ri === endIdx) {
-                                lbl.romanDisplay = `${local}=${runTarget}`;
-                            } else {
-                                lbl.romanDisplay = local;
-                            }
-                        }
-                        // Gap labels (e.g. vii°/V) keep their display as-is but strip the /suffix
-                        // since we're inside an extended region
-                        else {
+                            lbl.romanDisplay = `${local}=${runTarget}`;
+                        } else if (thisTarget === runTarget) {
+                            // Inside (matching): strip target suffix → simple local roman
+                            const local = stripTarget(disp) || disp;
+                            lbl.romanDisplay = local;
+                        } else {
+                            // Gap label (e.g. vii°/V): strip suffix → simple local roman
                             const local = stripTarget(disp) || disp;
                             lbl.romanDisplay = local;
                         }
