@@ -14,6 +14,7 @@ import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
+import { useNoteSelection } from '../hooks/useNoteSelection';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
@@ -243,20 +244,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [rawNotes]);
     // ...existing code...
     // Wrapper per il comando di copia
-    const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
-    const [clipboard, setClipboard] = useState<StaffNote[] | null>(null);
-    // Ref per clipboard aggiornata
-    const latestClipboardRef = useRef<StaffNote[] | null>(clipboard);
-    const pasteToSelectedVoiceRef = useRef(false);
-    const skipPlayheadRefineOnceRef = useRef(false);
-    useEffect(() => {
-        latestClipboardRef.current = clipboard;
-    }, [clipboard]);
-    // Ref per avere sempre il valore aggiornato di selectedNoteIds
-    const latestSelectedNoteIds = useRef(selectedNoteIds);
-    useEffect(() => {
-        latestSelectedNoteIds.current = selectedNoteIds;
-    }, [selectedNoteIds]);
+    const {
+        selectedNoteIds, setSelectedNoteIds, latestSelectedNoteIds,
+        clipboard, setClipboard, latestClipboardRef,
+        pasteToSelectedVoiceRef, skipPlayheadRefineOnceRef,
+        copyPasteError, setCopyPasteError,
+        pasteCaret, setPasteCaret, pasteMarker, setPasteMarker,
+        latestPasteCaretRef, setPasteCaretImmediate,
+        selectionRect, setSelectionRect,
+    } = useNoteSelection();
     // Wrapper per il comando di copia
     const handleCopy = useCallback(() => {
         const currentSelected = latestSelectedNoteIds.current;
@@ -268,7 +264,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [rawNotes, setClipboard]);
     
     
-    const [copyPasteError, setCopyPasteError] = useState<string | null>(null);
+    // copyPasteError now owned by useNoteSelection
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
     const [timeSignatureChanges, setTimeSignatureChanges] = useState<TimeSignatureChange[]>([]);
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
@@ -582,18 +578,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         if (staffSystemMode !== 'satb_ancient') lastNonSatbModeRef.current = staffSystemMode;
     }, [staffSystemMode]);
-    const [pasteCaret, setPasteCaret] = useState<{ x: number; systemIndex: number; measureIndex: number; beat: number; } | null>(null);
-    const [pasteMarker, setPasteMarker] = useState<{ systemIndex: number; measureIndex: number; beat: number; ts: number } | null>(null);
-
-    const latestPasteCaretRef = useRef<typeof pasteCaret>(pasteCaret);
-    useEffect(() => {
-        latestPasteCaretRef.current = pasteCaret;
-    }, [pasteCaret]);
-
-    const setPasteCaretImmediate = useCallback((next: typeof pasteCaret) => {
-        latestPasteCaretRef.current = next;
-        setPasteCaret(next);
-    }, []);
+    // pasteCaret, pasteMarker, setPasteCaretImmediate now owned by useNoteSelection
 
     const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const measureTextWidth = useCallback((text: string, font: string) => {
@@ -1039,7 +1024,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [bpmInputString, setBpmInputString] = useState('');
     
-    const [selectionRect, setSelectionRect] = useState<{ startX: number; startY: number; endX: number; endY: number; isVisible: boolean; systemIndex: number | null; filterVoice: Voice | null;}>({ startX: 0, startY: 0, endX: 0, endY: 0, isVisible: false, systemIndex: null, filterVoice: null });
+    // selectionRect now owned by useNoteSelection
     const dragStartPosRef = useRef<{
         clientX: number;
         clientY: number;
