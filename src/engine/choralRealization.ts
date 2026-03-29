@@ -926,7 +926,7 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
 
   // Parallel 5ths/8ves
   if (!rules.allowParallel5ths || !rules.allowParallel8ves) {
-    cost += countParallels(prevArr, currArr, rules) * 200;
+    cost += countParallels(prevArr, currArr, rules) * 5000;
   }
 
   // Hidden/direct 5ths & 8ves — ALL voice pairs, Dubois exceptions
