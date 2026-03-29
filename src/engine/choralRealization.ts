@@ -2110,15 +2110,22 @@ export function realizeChorale(
             if (s < bestScore) { bestScore = s; bestCand = cand; }
           };
           const g = greedyVoicing;
-          // Perturbations: shift tenor or alto ±12 (octave), ±1, ±2 (step)
-          for (const dt of [-12, 12, -1, 1, -2, 2]) {
+          // Perturbations: shift tenor or alto ±12 (octave), ±1–5 (steps/skips)
+          for (const dt of [-12, 12, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5]) {
             tryCandidate({ ...g, tenor: g.tenor + dt });
             tryCandidate({ ...g, alto: g.alto + dt });
+            tryCandidate({ ...g, bass: g.bass + dt });
           }
           // Swap alto and tenor pitch classes
           if (g.alto !== g.tenor) {
             const aDiff = g.alto - g.tenor;
             tryCandidate({ ...g, tenor: g.tenor + aDiff, alto: g.alto - aDiff });
+          }
+          // Combined perturbations: move two voices at once
+          for (const dt of [-12, 12, -2, -1, 1, 2]) {
+            for (const da of [-12, 12, -2, -1, 1, 2]) {
+              tryCandidate({ ...g, tenor: g.tenor + dt, alto: g.alto + da });
+            }
           }
           // Try re-running realizeNextChord with a slightly perturbed prevVoicing
           for (const dt of [-1, 1, -2, 2]) {
