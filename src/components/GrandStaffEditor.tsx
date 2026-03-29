@@ -15,6 +15,8 @@ import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useNoteSelection } from '../hooks/useNoteSelection';
+import { usePlayback } from '../hooks/usePlayback';
+import type { MetronomeUnit } from '../hooks/usePlayback';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
@@ -317,27 +319,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const measureToSystemIndexRef = useRef<Map<number, number>>(new Map());
     const noteToSystemIndexRef = useRef<Map<string, number>>(new Map());
     const [containerWidth, setContainerWidth] = useState(1000);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [bpm, setBpm] = useState(120);
-    const [isBpmActive, setIsBpmActive] = useState(false);
-    const isBpmActiveRef = useRef(isBpmActive);
+    const {
+        isPlaying, setIsPlaying, bpm, setBpm,
+        isBpmActive, setIsBpmActive, isBpmActiveRef,
+        playingNoteIds, setPlayingNoteIds,
+        playheadPosition, setPlayheadPosition,
+        playbackCursorAbsBeatRef, playbackTimeoutsRef,
+        playbackStartBeatRef, audioPlaybackStartTimeRef,
+        isMetronomeOn, setIsMetronomeOn,
+        metronomeUnit, setMetronomeUnit,
+        metronomeFlash, setMetronomeFlash,
+        metronomeIntervalRef, metronomeBeatRef, metronomeNextWhenRef,
+        metronomeSuppressedRef, metronomeLinkedToPlaybackRef,
+        isMetronomeOnRef, isPlayingRef,
+        isLooping, setIsLooping, loopRange, setLoopRange,
+        isLoopingRef, loopRangeRef,
+        bpmInputString, setBpmInputString,
+    } = usePlayback();
     const bpmControlRef = useRef<HTMLDivElement>(null);
     const bpmInputRef = useRef<HTMLInputElement>(null);
-    const [playingNoteIds, setPlayingNoteIds] = useState<string[]>([]);
-    const [playheadPosition, setPlayheadPosition] = useState<{ x: number, systemIndex: number } | null>(null);
     const playheadPositionRef = useRef<{ x: number; systemIndex: number } | null>(null);
     useEffect(() => { playheadPositionRef.current = playheadPosition; }, [playheadPosition]);
-    const playbackCursorAbsBeatRef = useRef<number | null>(null);
-    const playbackTimeoutsRef = useRef<number[]>([]);
-    const playbackStartBeatRef = useRef<number>(0);
-    const audioPlaybackStartTimeRef = useRef<number>(0);
     const animationFrameRef = useRef<number | null>(null);
-    const [isMetronomeOn, setIsMetronomeOn] = useState(false);
-    type MetronomeUnit = 'quarter' | 'eighth' | 'dotted-quarter';
-    const [metronomeUnit, setMetronomeUnit] = useState<MetronomeUnit>('quarter');
-    const [metronomeFlash, setMetronomeFlash] = useState<'strong' | 'weak' | null>(null);
-    const [isLooping, setIsLooping] = useState(false);
-    const [loopRange, setLoopRange] = useState<{ startBeat: number, endBeat: number } | null>(null);
     const [ghostNote, setGhostNote] = useState<(StaffNote & { systemIndex: number }) | null>(null);
 
     const project = useMemo(() => ({
@@ -710,23 +713,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
     }, [isMoreMenuOpen]);
     
-    const isLoopingRef = useRef(isLooping);
-    const loopRangeRef = useRef(loopRange);
-    const metronomeIntervalRef = useRef<number | null>(null);
+    // isLoopingRef, loopRangeRef, metronome refs, isMetronomeOnRef, isPlayingRef now in usePlayback
     const metronomeFlashStartTimeoutRef = useRef<number | null>(null);
     const metronomeFlashTimeoutRef = useRef<number | null>(null);
-    const metronomeBeatRef = useRef(0);
-    const metronomeNextWhenRef = useRef<number>(0);
-    const metronomeSuppressedRef = useRef(false);
-    const metronomeLinkedToPlaybackRef = useRef(false);
-    const isMetronomeOnRef = useRef(isMetronomeOn);
-    const isPlayingRef = useRef(isPlaying);
     const soloVoicesRef = useRef(soloVoices);
     const voiceInstrumentsRef = useRef(voiceInstruments);
 
-    useEffect(() => { isLoopingRef.current = isLooping; }, [isLooping]);
-    useEffect(() => { loopRangeRef.current = loopRange; }, [loopRange]);
-    useEffect(() => { isMetronomeOnRef.current = isMetronomeOn; }, [isMetronomeOn]);
+    // isLooping/loopRange/isMetronomeOn sync effects now in usePlayback
 
     useEffect(() => {
         if (!timeSignatureChanges || timeSignatureChanges.length === 0) return;
@@ -769,7 +762,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             });
         });
     }, [timeSignatureChanges, timeSignature, setRawNotes]);
-    useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+    // isPlayingRef sync now in usePlayback
     useEffect(() => { soloVoicesRef.current = soloVoices; }, [soloVoices]);
     useEffect(() => { voiceInstrumentsRef.current = voiceInstruments; }, [voiceInstruments]);
 
@@ -792,7 +785,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         if (isDuplet && !canUseDuplet) setIsDuplet(false);
     }, [canUseDuplet, isDuplet]);
-    useEffect(() => { isBpmActiveRef.current = isBpmActive; }, [isBpmActive]);
+    // isBpmActiveRef sync now in usePlayback
 
     useEffect(() => {
         setMinMeasureCountDraft(String(minMeasureCount));
@@ -1013,7 +1006,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
       };
 
-    const [bpmInputString, setBpmInputString] = useState('');
+    // bpmInputString now owned by usePlayback
     
     // selectionRect now owned by useNoteSelection
     const dragStartPosRef = useRef<{
