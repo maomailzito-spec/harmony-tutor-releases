@@ -3223,56 +3223,101 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         labelsBySystem.forEach(systemLabels => systemLabels.sort((a, b) => a.x - b.x));
 
         // ── Post-pass: simplify extended tonicization regions in final labels ──
-        // When ≥ 4 consecutive labels reference the same /target or =target,
+        // When ≥ 4 labels within a window mostly reference the same /target or =target,
         // convert to extended modulation convention:
         //   entry: target=localRoman, inside: localRoman, exit: localRoman=target
+        // Also treats bare roman equal to target (e.g. "iii" counts as targeting "iii")
+        // and allows up to 1 gap label within a run.
         try {
             const targetRe = /[/=]([ivIV]+[°øo♭♯#]?(?:\d*)?)$/;
             const prefixRe = /^([ivIV]+[°øo♭♯#]?(?:\d*)?)=/;
-            const getTarget = (label: string): string | null => {
+            const bareRomanRe = /^([ivIV]+[°øo♭♯#]?(?:\d*)?)$/;
+            const getTarget = (label: string, runningTarget?: string | null): string | null => {
                 const m1 = label.match(targetRe);
                 if (m1) return m1[1];
                 const m2 = label.match(prefixRe);
                 if (m2) return m2[1];
+                // Bare roman that matches the running target (e.g. "iii" in a /iii region)
+                if (runningTarget) {
+                    const m3 = label.match(bareRomanRe);
+                    if (m3 && m3[1] === runningTarget) return runningTarget;
+                }
                 return null;
             };
             const stripTarget = (label: string): string => {
                 return label.replace(targetRe, '').replace(prefixRe, '');
             };
             for (const sysLabels of labelsBySystem) {
+                // Two-pass: first identify candidate regions, then rewrite.
+                // Allow up to 1 consecutive "gap" label that doesn't match the target.
+                const MAX_GAP = 1;
                 let runStart = -1;
                 let runTarget: string | null = null;
-                const flushRun = (end: number) => {
-                    if (runStart < 0 || !runTarget) return;
-                    const len = end - runStart + 1;
-                    if (len < 4) { runStart = -1; runTarget = null; return; }
-                    for (let ri = runStart; ri <= end; ri++) {
+                let gapCount = 0;
+                let lastMatchIdx = -1;
+
+                const flushRun = (endIdx: number) => {
+                    // endIdx is the last MATCHING index (not the gap)
+                    if (runStart < 0 || !runTarget || endIdx < 0) return;
+                    const len = endIdx - runStart + 1;
+                    if (len < 4) { runStart = -1; runTarget = null; gapCount = 0; lastMatchIdx = -1; return; }
+                    for (let ri = runStart; ri <= endIdx; ri++) {
                         const lbl = sysLabels[ri];
                         const disp = String(lbl.romanDisplay || lbl.roman || '');
-                        const local = stripTarget(disp) || disp;
-                        if (ri === runStart) {
-                            lbl.romanDisplay = `${runTarget}=${local}`;
-                        } else if (ri === end) {
-                            lbl.romanDisplay = `${local}=${runTarget}`;
-                        } else {
+                        const thisTarget = getTarget(disp, runTarget);
+                        // Rewrite labels that reference the target
+                        if (thisTarget === runTarget || ri === runStart || ri === endIdx) {
+                            const local = stripTarget(disp) || disp;
+                            if (ri === runStart) {
+                                lbl.romanDisplay = `${runTarget}=${local}`;
+                            } else if (ri === endIdx) {
+                                lbl.romanDisplay = `${local}=${runTarget}`;
+                            } else {
+                                lbl.romanDisplay = local;
+                            }
+                        }
+                        // Gap labels (e.g. vii°/V) keep their display as-is but strip the /suffix
+                        // since we're inside an extended region
+                        else {
+                            const local = stripTarget(disp) || disp;
                             lbl.romanDisplay = local;
                         }
                     }
                     runStart = -1;
                     runTarget = null;
+                    gapCount = 0;
+                    lastMatchIdx = -1;
                 };
+
                 for (let li = 0; li < sysLabels.length; li++) {
                     const disp = String(sysLabels[li].romanDisplay || sysLabels[li].roman || '');
-                    const target = getTarget(disp);
+                    const target = getTarget(disp, runTarget);
+
                     if (target && target === runTarget) {
-                        // continue run
+                        gapCount = 0;
+                        lastMatchIdx = li;
+                    } else if (runTarget && gapCount < MAX_GAP) {
+                        // Allow gap
+                        gapCount++;
                     } else {
-                        flushRun(li - 1);
-                        runStart = li;
-                        runTarget = target;
+                        // End current run and start new one
+                        flushRun(lastMatchIdx);
+                        // Try to start a new run from this label
+                        const freshTarget = getTarget(disp, null);
+                        if (freshTarget) {
+                            runStart = li;
+                            runTarget = freshTarget;
+                            gapCount = 0;
+                            lastMatchIdx = li;
+                        } else {
+                            runStart = -1;
+                            runTarget = null;
+                            gapCount = 0;
+                            lastMatchIdx = -1;
+                        }
                     }
                 }
-                flushRun(sysLabels.length - 1);
+                flushRun(lastMatchIdx);
             }
         } catch { /* ignore */ }
 
