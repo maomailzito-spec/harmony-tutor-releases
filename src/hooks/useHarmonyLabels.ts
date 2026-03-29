@@ -976,7 +976,21 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     if (compactTonicization) {
                                         autoRomanDisplayByAbsBeat.set(base[s].q, _firstDisplayedForK ? `${localR}/${degLabel}` : localR);
                                     } else {
-                                        const display = (s === j) ? `${localR}=${degLabel}` : `${localR}/${degLabel}`;
+                                        const spanLen = lastIdx - firstIdx + 1;
+                                        let display: string;
+                                        if (spanLen >= 4) {
+                                            // Extended modulation: entry=parent→child, inside=local, exit=child→parent
+                                            if (s === firstIdx) {
+                                                display = `${degLabel}=${localR}`;
+                                            } else if (s === lastIdx) {
+                                                display = `${localR}=${degLabel}`;
+                                            } else {
+                                                display = localR;
+                                            }
+                                        } else {
+                                            // Short tonicization: arrival=localR=degLabel, others=localR/degLabel
+                                            display = (s === j) ? `${localR}=${degLabel}` : `${localR}/${degLabel}`;
+                                        }
                                         autoRomanDisplayByAbsBeat.set(base[s].q, display);
                                     }
                                     _firstDisplayedForK = false;
