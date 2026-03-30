@@ -709,6 +709,23 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
                 const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, { ornamentOverrides: ornOverrideRecord });
+                // Compute root PC for fallback resolution matching (V/x → X where quality differs).
+                const rootPc = (() => {
+                    try {
+                        const pcs = new Set((ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
+                        if (pcs.size < 3) return null;
+                        const arr = Array.from(pcs);
+                        for (const pc of arr) {
+                            const maj = new Set([pc, (pc + 4) % 12, (pc + 7) % 12]);
+                            const min = new Set([pc, (pc + 3) % 12, (pc + 7) % 12]);
+                            const dim = new Set([pc, (pc + 3) % 12, (pc + 6) % 12]);
+                            const aug = new Set([pc, (pc + 4) % 12, (pc + 8) % 12]);
+                            const matches = (s: Set<number>) => arr.every(x => s.has(x));
+                            if (matches(maj) || matches(min) || matches(dim) || matches(aug)) return pc;
+                        }
+                        return null;
+                    } catch { return null; }
+                })();
                 return {
                     ev,
                     absBeat,
@@ -716,6 +733,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     ctxTonic,
                     ctxIsMinor,
                     roman: String(r?.roman || ''),
+                    rootPc,
                 };
             }).filter(x => Number.isFinite(x.absBeat));
 
@@ -1116,10 +1134,39 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 try {
                     const bk = base[k];
                     if (bk && Number.isFinite(bk.q) && !overrideByAbsBeat.has(bk.q)) {
-                        const localTonicRoman = tonicizedIsMinor ? 'i' : 'I';
-                        // Only show when the global roman differs (otherwise it's noisy).
-                        if (String(bk.roman || '') && String(bk.roman || '') !== localTonicRoman) {
-                            autoRomanDisplayByAbsBeat.set(bk.q, `${localTonicRoman}=${targetRoman}`);
+                        // When the resolution was found via rootPC fallback (quality mismatch),
+                        // determine the actual quality from the chord and display the correct
+                        // global roman numeral (e.g. III instead of i=iii for a major triad
+                        // on the iii degree).
+                        const resolvedByExactRoman = String(bk.roman || '') === targetRoman;
+                        if (resolvedByExactRoman) {
+                            const localTonicRoman = tonicizedIsMinor ? 'i' : 'I';
+                            // Only show when the global roman differs (otherwise it's noisy).
+                            if (String(bk.roman || '') && String(bk.roman || '') !== localTonicRoman) {
+                                autoRomanDisplayByAbsBeat.set(bk.q, `${localTonicRoman}=${targetRoman}`);
+                            }
+                        } else {
+                            // Quality mismatch: show the target degree with the actual quality.
+                            // e.g. V/iii → C# Maj → display "III" (uppercase = major)
+                            const chordIsMajor = (() => {
+                                try {
+                                    const rpc = bk.rootPc;
+                                    if (rpc == null) return null;
+                                    const pcs = new Set((bk.ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
+                                    const majThird = (rpc + 4) % 12;
+                                    const minThird = (rpc + 3) % 12;
+                                    if (pcs.has(majThird)) return true;
+                                    if (pcs.has(minThird)) return false;
+                                    return null;
+                                } catch { return null; }
+                            })();
+                            const baseTarget = targetRoman.replace(/[°+]/g, '');
+                            const displayRoman = chordIsMajor === true
+                                ? baseTarget.toUpperCase()
+                                : chordIsMajor === false
+                                    ? baseTarget.toLowerCase()
+                                    : baseTarget.toUpperCase();
+                            autoRomanDisplayByAbsBeat.set(bk.q, displayRoman);
                         }
                     }
                 } catch { /* ignore */ }
