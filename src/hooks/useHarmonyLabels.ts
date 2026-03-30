@@ -1171,6 +1171,31 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                 } catch { /* ignore */ }
 
+                // Propagate protection to subsequent beats in the same measure that share
+                // the same PC set as the resolution chord. This suppresses spurious labels
+                // (e.g. V) on weak beats caused by bass arpeggiation under a held chord.
+                try {
+                    const bk = base[k];
+                    if (bk) {
+                        const resPcs = new Set((bk.ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
+                        if (resPcs.size >= 2) {
+                            const resDisplay = autoRomanDisplayByAbsBeat.get(bk.q);
+                            for (let t = k + 1; t < base.length; t++) {
+                                const bt = base[t];
+                                if ((bt.absBeat - bk.absBeat) >= beatsPerMeasure - 1e-6) break;
+                                const btPcs = new Set((bt.ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
+                                // Check if btPcs is a subset of resPcs (same harmony, possibly fewer voices)
+                                let isSubset = btPcs.size > 0;
+                                for (const pc of btPcs) { if (!resPcs.has(pc)) { isSubset = false; break; } }
+                                if (isSubset) {
+                                    protectedAbsBeats.add(bt.q);
+                                    if (resDisplay) autoRomanDisplayByAbsBeat.set(bt.q, resDisplay);
+                                }
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
+
                 // Look BACK within 2 measures for a chord that is iv in the tonicized key.
                 // If found, display it as a pivot: globalRoman=iv/target.
                 for (let i = j - 1; i >= 0; i--) {
