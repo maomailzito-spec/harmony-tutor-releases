@@ -6636,6 +6636,18 @@
   ],
   "expects": [
     {
+      "absBeat": 1,
+      "roman": "V"
+    },
+    {
+      "absBeat": 1.5,
+      "roman": "V"
+    },
+    {
+      "absBeat": 2,
+      "roman": "I"
+    },
+    {
       "absBeat": 3,
       "roman": "I"
     },
@@ -6707,6 +6719,18 @@
       "roman": "V"
     },
     {
+      "absBeat": 11,
+      "roman": "V"
+    },
+    {
+      "absBeat": 11.5,
+      "roman": "IV"
+    },
+    {
+      "absBeat": 12,
+      "roman": "iii"
+    },
+    {
       "absBeat": 13,
       "roman": "vi",
       "figuresInclude": [
@@ -6771,6 +6795,18 @@
     {
       "absBeat": 19,
       "roman": "V"
+    },
+    {
+      "absBeat": 21,
+      "roman": "V"
+    },
+    {
+      "absBeat": 21.5,
+      "roman": "V"
+    },
+    {
+      "absBeat": 22,
+      "roman": "I"
     },
     {
       "absBeat": 23,
@@ -6848,6 +6884,18 @@
       "figuresInclude": [
         "3"
       ]
+    },
+    {
+      "absBeat": 31,
+      "roman": "V"
+    },
+    {
+      "absBeat": 31.5,
+      "roman": "IV"
+    },
+    {
+      "absBeat": 32,
+      "roman": "iii"
     },
     {
       "absBeat": 33,
@@ -7010,6 +7058,10 @@
       ]
     },
     {
+      "absBeat": 48,
+      "roman": "I"
+    },
+    {
       "absBeat": 49,
       "roman": "vi",
       "figuresInclude": [
@@ -7069,6 +7121,18 @@
     },
     {
       "absBeat": 54,
+      "roman": "V"
+    },
+    {
+      "absBeat": 55,
+      "roman": "ii"
+    },
+    {
+      "absBeat": 55.5,
+      "roman": "ii"
+    },
+    {
+      "absBeat": 56,
       "roman": "V"
     },
     {
@@ -7154,7 +7218,8 @@
       "absBeat": 63,
       "roman": "iii",
       "figuresInclude": [
-        "3"
+        "6",
+        "4"
       ]
     },
     {

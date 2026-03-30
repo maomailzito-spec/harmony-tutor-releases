@@ -2575,25 +2575,10 @@
     },
     {
       "absBeat": 19.333333,
-      "roman": "It+",
-      "figuresInclude": [
-        "6"
-      ]
-    },
-    {
-      "absBeat": 19.333333,
       "roman": "Ger+",
       "figuresInclude": [
         "6",
         "5"
-      ]
-    },
-    {
-      "absBeat": 19.666667,
-      "roman": "Fr+",
-      "figuresInclude": [
-        "♯4",
-        "3"
       ]
     },
     {

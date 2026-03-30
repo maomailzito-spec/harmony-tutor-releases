@@ -1771,6 +1771,10 @@
     {
       "absBeat": 44,
       "roman": "V/vi"
+    },
+    {
+      "absBeat": 112,
+      "roman": "I"
     }
   ]
 }

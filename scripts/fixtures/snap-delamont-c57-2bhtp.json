@@ -757,20 +757,9 @@
     },
     {
       "absBeat": 3.333333,
-      "roman": "V"
-    },
-    {
-      "absBeat": 3.333333,
       "roman": "IV",
       "figuresInclude": [
         "7"
-      ]
-    },
-    {
-      "absBeat": 4,
-      "roman": "I",
-      "figuresInclude": [
-        "3"
       ]
     },
     {
@@ -792,13 +781,6 @@
       "roman": "vi",
       "figuresInclude": [
         "4"
-      ]
-    },
-    {
-      "absBeat": 6.666667,
-      "roman": "♭VI",
-      "figuresInclude": [
-        "2"
       ]
     },
     {

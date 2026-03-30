@@ -548,9 +548,30 @@ const main = () => {
       (fx as any).harmonyOverrides || [],
     );
 
-    const timeline = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
+    const rawTimeline = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
 
-    const findEvent = (absBeat: number) => timeline.find((ev) => approxEq(ev.absBeat, absBeat));
+    // Merge float-duplicate events (e.g. 3.333333335 vs 3.333333340).
+    // Keep the event with the most notes at each beat.
+    const timeline: typeof rawTimeline = [];
+    for (const ev of rawTimeline) {
+      const idx = timeline.findIndex(t => Math.abs(t.absBeat - ev.absBeat) < 1e-4);
+      if (idx === -1) {
+        timeline.push(ev);
+      } else if ((ev.notes || []).length > (timeline[idx].notes || []).length) {
+        timeline[idx] = ev;
+      }
+    }
+
+    const findEvent = (absBeat: number) => {
+      // When floating-point duplicates exist (e.g. 3.333333335 vs 3.333333340),
+      // prefer the event with the most sounding notes.
+      const matches = timeline.filter((ev) => approxEq(ev.absBeat, absBeat));
+      if (matches.length === 0) return undefined;
+      if (matches.length === 1) return matches[0];
+      return matches.reduce((best, ev) =>
+        ((ev.notes || []).length > (best.notes || []).length) ? ev : best
+      , matches[0]);
+    };
 
     for (const exp of fx.expects) {
       const ev = findEvent(exp.absBeat);
@@ -827,14 +848,45 @@ const updateSnapshots = () => {
       (fx as any).ornamentOverrides || [],
       (fx as any).harmonyOverrides || [],
     );
-    const timeline = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
+    const rawTl = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
+    // Merge float-duplicate events (same dedup as checker)
+    const timeline: typeof rawTl = [];
+    for (const ev of rawTl) {
+      const idx = timeline.findIndex(t => Math.abs(t.absBeat - ev.absBeat) < 1e-4);
+      if (idx === -1) {
+        timeline.push(ev);
+      } else if ((ev.notes || []).length > (timeline[idx].notes || []).length) {
+        timeline[idx] = ev;
+      }
+    }
     const newExpects: typeof fx.expects = [];
     for (const ev of timeline) {
       const ab = Math.round(Number(ev.absBeat) * 1e6) / 1e6;
       if (!Number.isFinite(ab)) continue;
-      const ra = getRomanAnalysis(substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat) as any, fx.keyTonic, fx.isMinorMode);
-      const roman = ra?.roman ?? '';
-      const figures = ra?.figures ?? [];
+      const substNotes = substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat);
+      const bassPc = (() => {
+        let lowest: any = null;
+        for (const n of (substNotes || [])) {
+          if (!n || n.isRest) continue;
+          const m = Number(n.midi);
+          if (!Number.isFinite(m)) continue;
+          if (!lowest || m < lowest.midi) lowest = { midi: m, pc: ((m % 12) + 12) % 12 };
+        }
+        return lowest?.pc ?? null;
+      })();
+      const stateless = applyStatelessRules({
+        analysisNotesForNaming: substNotes as any,
+        analysisNotes: substNotes as any,
+        fullNotes: ev.notes as any,
+        contextTonic: fx.keyTonic,
+        contextIsMinor: fx.isMinorMode,
+        bassPc,
+        absBeat: ab,
+        autoOverrideByAbsBeat: new Map(),
+        overrideByAbsBeat: new Map(),
+      });
+      const roman = stateless.roman;
+      const figures = stateless.figures;
       if (!roman) continue;
       const entry: any = { absBeat: ab, roman };
       if (figures.length > 0 && !(figures.length === 1 && figures[0] === '5')) {
@@ -842,18 +894,32 @@ const updateSnapshots = () => {
       }
       newExpects.push(entry);
     }
-    if (newExpects.length === 0) continue;
-    fx.expects = newExpects;
+    // Deduplicate by absBeat (within epsilon) — keep entry with roman + most figures
+    const deduped: typeof newExpects = [];
+    for (const e of newExpects) {
+      const idx = deduped.findIndex(d => Math.abs(d.absBeat - e.absBeat) < 1e-4);
+      if (idx === -1) {
+        deduped.push(e);
+      } else {
+        const prev = deduped[idx];
+        const prevScore = (prev.roman ? 1 : 0) + (prev.figuresInclude || []).length;
+        const eScore = (e.roman ? 1 : 0) + (e.figuresInclude || []).length;
+        if (eScore > prevScore) deduped[idx] = e;
+      }
+    }
+    const finalExpects = deduped;
+    if (finalExpects.length === 0) continue;
+    fx.expects = finalExpects;
     // Write back — find the file
     const files = fs.readdirSync(fixturesDir).filter(f => f.endsWith('.json')).sort();
     for (const f of files) {
       const full = path.join(fixturesDir, f);
       const obj = JSON.parse(fs.readFileSync(full, 'utf8'));
       if (obj.name === fx.name) {
-        obj.expects = newExpects;
+        obj.expects = finalExpects;
         fs.writeFileSync(full, JSON.stringify(obj, null, 2) + '\n');
         updated++;
-        console.log(`UPDATED  ${fx.name} (${newExpects.length} expects)`);
+        console.log(`UPDATED  ${fx.name} (${finalExpects.length} expects)`);
         break;
       }
     }

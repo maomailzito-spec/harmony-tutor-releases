@@ -1857,6 +1857,34 @@
         "5",
         "4"
       ]
+    },
+    {
+      "absBeat": 38,
+      "roman": "IV"
+    },
+    {
+      "absBeat": 39,
+      "roman": "iii"
+    },
+    {
+      "absBeat": 44,
+      "roman": "iii"
+    },
+    {
+      "absBeat": 46,
+      "roman": "I"
+    },
+    {
+      "absBeat": 48,
+      "roman": "ii"
+    },
+    {
+      "absBeat": 50,
+      "roman": "IV"
+    },
+    {
+      "absBeat": 52,
+      "roman": "V"
     }
   ]
 }

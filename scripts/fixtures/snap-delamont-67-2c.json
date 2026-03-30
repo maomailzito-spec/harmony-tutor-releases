@@ -635,20 +635,6 @@
       ]
     },
     {
-      "absBeat": 3.333333,
-      "roman": "V/ii",
-      "figuresInclude": [
-        "7"
-      ]
-    },
-    {
-      "absBeat": 3.666667,
-      "roman": "V/ii",
-      "figuresInclude": [
-        "7"
-      ]
-    },
-    {
       "absBeat": 3.666667,
       "roman": "V/ii",
       "figuresInclude": [
@@ -689,20 +675,6 @@
     },
     {
       "absBeat": 7.333333,
-      "roman": "V",
-      "figuresInclude": [
-        "7"
-      ]
-    },
-    {
-      "absBeat": 7.333333,
-      "roman": "V",
-      "figuresInclude": [
-        "7"
-      ]
-    },
-    {
-      "absBeat": 7.666667,
       "roman": "V",
       "figuresInclude": [
         "7"

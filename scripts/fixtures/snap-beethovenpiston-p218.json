@@ -1492,6 +1492,10 @@
   ],
   "expects": [
     {
+      "absBeat": 2,
+      "roman": "iii"
+    },
+    {
       "absBeat": 3,
       "roman": "I"
     },
@@ -1561,6 +1565,10 @@
       "figuresInclude": [
         "3"
       ]
+    },
+    {
+      "absBeat": 14,
+      "roman": "iii"
     },
     {
       "absBeat": 15,

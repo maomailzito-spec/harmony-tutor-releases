@@ -1543,6 +1543,10 @@
   ],
   "expects": [
     {
+      "absBeat": 0,
+      "roman": "iii"
+    },
+    {
       "absBeat": 1,
       "roman": "I",
       "figuresInclude": [
@@ -1569,6 +1573,7 @@
       "absBeat": 5,
       "roman": "V",
       "figuresInclude": [
+        "5",
         "4"
       ]
     },

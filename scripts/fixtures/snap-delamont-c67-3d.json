@@ -1163,9 +1163,10 @@
     },
     {
       "absBeat": 7.5,
-      "roman": "V°",
+      "roman": "vii°/ii",
       "figuresInclude": [
-        "3"
+        "4",
+        "♭3"
       ]
     },
     {

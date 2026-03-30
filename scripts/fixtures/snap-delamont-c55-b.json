@@ -1235,7 +1235,12 @@
     },
     {
       "absBeat": 9,
-      "roman": "IV"
+      "roman": "ii°",
+      "figuresInclude": [
+        "6",
+        "5",
+        "♭3"
+      ]
     },
     {
       "absBeat": 10,

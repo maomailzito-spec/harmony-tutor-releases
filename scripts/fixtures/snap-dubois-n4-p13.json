@@ -6092,6 +6092,10 @@
   ],
   "expects": [
     {
+      "absBeat": 0,
+      "roman": "i"
+    },
+    {
       "absBeat": 2,
       "roman": "i"
     },

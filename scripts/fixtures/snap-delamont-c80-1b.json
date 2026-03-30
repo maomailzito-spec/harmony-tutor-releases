@@ -1860,13 +1860,6 @@
     },
     {
       "absBeat": 7.333333,
-      "roman": "vii°/iii",
-      "figuresInclude": [
-        "6"
-      ]
-    },
-    {
-      "absBeat": 7.333333,
       "roman": "vii°/V",
       "figuresInclude": [
         "6",
@@ -1954,13 +1947,6 @@
       "absBeat": 15.333333,
       "roman": "♭II",
       "figuresInclude": [
-        "♭♭5"
-      ]
-    },
-    {
-      "absBeat": 15.333333,
-      "roman": "♭II",
-      "figuresInclude": [
         "♭♭5",
         "3"
       ]
@@ -2016,14 +2002,6 @@
       "roman": "ii",
       "figuresInclude": [
         "9",
-        "7",
-        "♭3"
-      ]
-    },
-    {
-      "absBeat": 21.333333,
-      "roman": "ii",
-      "figuresInclude": [
         "7",
         "♭3"
       ]

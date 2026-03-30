@@ -1999,36 +1999,11 @@
       ]
     },
     {
-      "absBeat": 13.333333,
-      "roman": "♭VI",
-      "figuresInclude": [
-        "♭7",
-        "♭3"
-      ]
-    },
-    {
       "absBeat": 13.666667,
       "roman": "♭VI",
       "figuresInclude": [
         "♭6",
         "♭3"
-      ]
-    },
-    {
-      "absBeat": 13.666667,
-      "roman": "♭VI",
-      "figuresInclude": [
-        "♭6",
-        "♭3"
-      ]
-    },
-    {
-      "absBeat": 14,
-      "roman": "V/♭VI",
-      "figuresInclude": [
-        "6",
-        "4",
-        "3"
       ]
     },
     {

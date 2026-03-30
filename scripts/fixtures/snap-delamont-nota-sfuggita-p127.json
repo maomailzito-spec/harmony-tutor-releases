@@ -3544,14 +3544,6 @@
       ]
     },
     {
-      "absBeat": 28,
-      "roman": "I",
-      "figuresInclude": [
-        "7",
-        "5"
-      ]
-    },
-    {
       "absBeat": 30,
       "roman": "I",
       "figuresInclude": [
@@ -3600,10 +3592,6 @@
       "roman": "I"
     },
     {
-      "absBeat": 35.333333,
-      "roman": "I"
-    },
-    {
       "absBeat": 36,
       "roman": "I"
     },
@@ -3635,7 +3623,8 @@
       "absBeat": 46,
       "roman": "V",
       "figuresInclude": [
-        "6"
+        "6",
+        "5"
       ]
     },
     {
