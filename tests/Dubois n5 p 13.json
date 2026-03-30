@@ -1,4 +1,7 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [],
   "schemaVersion": 1,
   "notes": [
     {
@@ -293,7 +296,8 @@
       "beat": 3,
       "startTick": 4800,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "403ab8a3-9a32-4140-9d05-a4d1bed5703c",
@@ -4842,10 +4846,7 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,

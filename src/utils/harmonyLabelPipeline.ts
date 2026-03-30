@@ -640,6 +640,12 @@ export function computeLookaheadTonicizationOverrides(opts: {
             const targetRoman = String(m[2] || '').trim();
             if (!targetRoman) continue;
 
+            // Skip if this beat is already protected as a resolution target of a
+            // preceding V/x — its base roman (e.g. V/vi) is a stale analysis that
+            // will be overridden by the autoRomanDisplayByAbsBeat (e.g. III).
+            const bjQ0 = Number(bj.q);
+            if (Number.isFinite(bjQ0) && protectedAbsBeats.has(bjQ0)) continue;
+
             let k = -1;
             for (let t = j + 1; t < base.length; t++) {
                 if ((base[t].absBeat - bj.absBeat) > maxLookaheadBeats + 1e-6) break;
