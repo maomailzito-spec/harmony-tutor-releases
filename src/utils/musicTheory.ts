@@ -1777,7 +1777,7 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
         // Do not invent a diminished quality unless the diminished 5th is actually present.
         // This prevents wrong labels like vii° on non-diminished sonorities.
         try {
-            const isDimFamily = candidate.type === BuiltInChords.Diminished || candidate.type === BuiltInChords.Minor7b5;
+            const isDimFamily = candidate.type === BuiltInChords.Diminished || candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7;
             if (isDimFamily && candidate.matchType === 'no_fifth') {
                 score -= 40;
             }
@@ -1965,7 +1965,7 @@ export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: 
 
         // Spelling-first guardrail (see identifyChord): avoid diminished-family guesses when 5th is missing.
         try {
-            const isDimFamily = candidate.type === BuiltInChords.Diminished || candidate.type === BuiltInChords.Minor7b5;
+            const isDimFamily = candidate.type === BuiltInChords.Diminished || candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7;
             if (isDimFamily && candidate.matchType === 'no_fifth') {
                 score -= 40;
             }

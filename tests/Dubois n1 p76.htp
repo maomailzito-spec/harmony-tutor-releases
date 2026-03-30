@@ -1,4 +1,7 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [],
   "schemaVersion": 1,
   "notes": [
     {
@@ -2716,11 +2719,11 @@
       "pitch": "F",
       "octave": 4,
       "position": 3,
-      "midi": 66,
-      "noteIndex": 6,
+      "midi": 65,
+      "noteIndex": 5,
       "clef": "treble",
-      "explicitAccidental": null,
-      "accidental": "sharp",
+      "explicitAccidental": "natural",
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -2730,7 +2733,8 @@
       "beat": 1,
       "startTick": 38400,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "userAccidental": "natural"
     },
     {
       "id": "94f763a3-37b7-487a-bfcb-e3276cd7f5af",
@@ -5123,10 +5127,7 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [],
   "bpm": 100,
   "isBpmActive": false,
   "isMetronomeOn": false,
