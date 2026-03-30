@@ -5,6 +5,8 @@
  * GrandStaffEditor destructures the return value.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
+import type { TimeSignature, TimeSignatureChange } from '../types';
+import type { AudioService } from '../services/AudioService';
 
 /* ── Types ── */
 export type MetronomeUnit = 'quarter' | 'eighth' | 'dotted-quarter';
@@ -23,9 +25,19 @@ export interface LoopRange {
 export interface UsePlaybackParams {
     /** DOM ref allo <input> BPM — per focus/blur/select. */
     bpmInputRef: React.RefObject<HTMLInputElement | null>;
+    /** Audio service singleton (from props). */
+    audioService: AudioService;
+    /** Whether the audio context is ready. */
+    isAudioReady: boolean;
+    /** Current time signature. */
+    timeSignature: TimeSignature;
+    /** Time signature changes list. */
+    timeSignatureChanges: TimeSignatureChange[];
+    /** Ref to the animation frame ID (owned by GSE for cancelAnimationFrame). */
+    animationFrameRef: React.MutableRefObject<number | null>;
 }
 
-export function usePlayback({ bpmInputRef }: UsePlaybackParams) {
+export function usePlayback({ bpmInputRef, audioService, isAudioReady, timeSignature, timeSignatureChanges, animationFrameRef }: UsePlaybackParams) {
     // ── Playback core ──
     const [isPlaying, setIsPlaying] = useState(false);
     const [bpm, setBpm] = useState(120);
@@ -187,6 +199,145 @@ export function usePlayback({ bpmInputRef }: UsePlaybackParams) {
         });
     }, []);
 
+    // ── startMetronomeScheduler ──
+    const startMetronomeScheduler = useCallback(async (opts?: { anchorWhenSec?: number; anchorAbsBeat?: number }) => {
+        if (!isMetronomeOnRef.current) return;
+
+        stopMetronomeInternal();
+
+        const safeBpm = Math.max(20, Math.min(300, bpm || 120));
+        const getTimeSignatureAtAbsBeatLocal = (absBeat: number): TimeSignature => {
+            const baseBeats = timeSignature.numerator * (4 / timeSignature.denominator);
+            const toAbsBeat = (c: any) => {
+                const ab = Number(c?.absBeat);
+                if (Number.isFinite(ab)) return ab;
+                const m = Number(c?.measureIndex) || 0;
+                return m * Math.max(1, baseBeats || 4);
+            };
+            const sorted = (timeSignatureChanges || []).slice().sort((a, b) => toAbsBeat(a) - toAbsBeat(b));
+            let active: TimeSignature = timeSignature;
+            for (const c of sorted) {
+                const at = toAbsBeat(c);
+                if (Number.isFinite(at) && at <= absBeat + 1e-6) {
+                    if (Number.isFinite(c.numerator) && Number.isFinite(c.denominator) && c.numerator > 0 && c.denominator > 0) {
+                        active = { numerator: c.numerator, denominator: c.denominator };
+                    }
+                } else {
+                    break;
+                }
+            }
+            return active;
+        };
+        const beatDurationSec = 60 / safeBpm;
+        const unitBeats = metronomeUnit === 'eighth' ? 0.5 : (metronomeUnit === 'dotted-quarter' ? 1.5 : 1);
+        const unitDurationSec = beatDurationSec * unitBeats;
+
+        if (isAudioReady) {
+            await audioService.ensureAudioIsReady();
+        }
+
+        const audioCtx = audioService.audioContext;
+        if (!audioCtx) return;
+
+        const nowSec = audioCtx.currentTime;
+        const anchorWhenSec = (opts?.anchorWhenSec ?? nowSec);
+        const anchorAbsBeat = (opts?.anchorAbsBeat ?? 0);
+
+        const unitsSinceAnchor = Math.max(0, Math.ceil((nowSec - anchorWhenSec) / Math.max(1e-9, unitDurationSec)));
+        metronomeBeatRef.current = Math.round((anchorAbsBeat + unitsSinceAnchor * unitBeats) * 1e6) / 1e6;
+        metronomeNextWhenRef.current = anchorWhenSec + unitsSinceAnchor * unitDurationSec;
+
+        const isDownbeat = (absBeat: number) => {
+            if (!Number.isFinite(absBeat)) return false;
+            const ts = getTimeSignatureAtAbsBeatLocal(absBeat);
+            const beatsPerMeasureRaw = (ts?.numerator ?? 4) * (4 / (ts?.denominator ?? 4));
+            const beatsPerMeasure = Math.max(1, Number.isFinite(beatsPerMeasureRaw) ? beatsPerMeasureRaw : 4);
+            const mod = ((absBeat % beatsPerMeasure) + beatsPerMeasure) % beatsPerMeasure;
+            return (mod < 1e-6) || (Math.abs(beatsPerMeasure - mod) < 1e-6);
+        };
+
+        const scheduleNext = () => {
+            if (!isMetronomeOnRef.current) return;
+            const ctx = audioService.audioContext;
+            if (!ctx) return;
+
+            const absBeat = metronomeBeatRef.current;
+            const when = metronomeNextWhenRef.current;
+            const strong = isDownbeat(absBeat);
+
+            void audioService.playClick(strong, when);
+
+            const flashDelayMs = Math.max(0, (when - ctx.currentTime) * 1000);
+            if (metronomeFlashStartTimeoutRef.current) window.clearTimeout(metronomeFlashStartTimeoutRef.current);
+            metronomeFlashStartTimeoutRef.current = window.setTimeout(() => {
+                setMetronomeFlash(strong ? 'strong' : 'weak');
+                if (metronomeFlashTimeoutRef.current) window.clearTimeout(metronomeFlashTimeoutRef.current);
+                metronomeFlashTimeoutRef.current = window.setTimeout(() => {
+                    setMetronomeFlash(null);
+                }, 90);
+            }, flashDelayMs);
+
+            metronomeBeatRef.current = Math.round((absBeat + unitBeats) * 1e6) / 1e6;
+            metronomeNextWhenRef.current = when + unitDurationSec;
+
+            const nextDelayMs = Math.max(0, (metronomeNextWhenRef.current - ctx.currentTime - 0.03) * 1000);
+            metronomeIntervalRef.current = window.setTimeout(scheduleNext, nextDelayMs);
+        };
+
+        const firstDelayMs = Math.max(0, (metronomeNextWhenRef.current - nowSec - 0.03) * 1000);
+        metronomeIntervalRef.current = window.setTimeout(scheduleNext, firstDelayMs);
+    }, [audioService, bpm, isAudioReady, metronomeUnit, stopMetronomeInternal, timeSignature, timeSignatureChanges]);
+
+    // ── Metronome toggle effect ──
+    useEffect(() => {
+        if (!isMetronomeOn) {
+            metronomeSuppressedRef.current = false;
+            metronomeLinkedToPlaybackRef.current = false;
+            stopMetronomeInternal();
+            return;
+        }
+
+        if (metronomeSuppressedRef.current) {
+            stopMetronomeInternal();
+            return;
+        }
+
+        if (isPlayingRef.current && audioPlaybackStartTimeRef.current > 0) {
+            metronomeLinkedToPlaybackRef.current = true;
+            void startMetronomeScheduler({
+                anchorWhenSec: audioPlaybackStartTimeRef.current,
+                anchorAbsBeat: playbackStartBeatRef.current,
+            });
+            return;
+        }
+
+        metronomeLinkedToPlaybackRef.current = false;
+        void startMetronomeScheduler({ anchorWhenSec: audioService.audioContext?.currentTime, anchorAbsBeat: 0 });
+
+        return () => {
+            stopMetronomeInternal();
+        };
+    }, [audioService, isMetronomeOn, startMetronomeScheduler, stopMetronomeInternal]);
+
+    // ── stopPlayback ──
+    const stopPlayback = useCallback(() => {
+        playbackTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
+        playbackTimeoutsRef.current = [];
+        if (animationFrameRef.current) {
+            window.cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
+        audioService.stopAllSounds?.();
+        setPlayingNoteIds([]);
+        setIsPlaying(false);
+
+        if (metronomeLinkedToPlaybackRef.current) {
+            metronomeLinkedToPlaybackRef.current = false;
+            metronomeSuppressedRef.current = true;
+            stopMetronomeInternal();
+        }
+    }, [audioService, animationFrameRef, stopMetronomeInternal]);
+
     return {
         // playback core
         isPlaying, setIsPlaying,
@@ -229,6 +380,8 @@ export function usePlayback({ bpmInputRef }: UsePlaybackParams) {
         handleBpmInputKeyDown,
         handleBpmBlur,
         toggleMetronome,
+        startMetronomeScheduler,
+        stopPlayback,
     } as const;
 }
 

@@ -321,6 +321,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [containerWidth, setContainerWidth] = useState(1000);
     const bpmControlRef = useRef<HTMLDivElement>(null);
     const bpmInputRef = useRef<HTMLInputElement>(null);
+    const animationFrameRef = useRef<number | null>(null);
     const {
         isPlaying, setIsPlaying, bpm, setBpm,
         isBpmActive, setIsBpmActive, isBpmActiveRef,
@@ -341,10 +342,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         stopMetronomeInternal, commitBpmFromString, activateBpmEdit,
         handleBpmFocus, handleBpmKeyDown, handleBpmInputChange,
         handleBpmInputKeyDown, handleBpmBlur, toggleMetronome,
-    } = usePlayback({ bpmInputRef });
+        startMetronomeScheduler, stopPlayback,
+    } = usePlayback({ bpmInputRef, audioService, isAudioReady, timeSignature, timeSignatureChanges, animationFrameRef });
     const playheadPositionRef = useRef<{ x: number; systemIndex: number } | null>(null);
     useEffect(() => { playheadPositionRef.current = playheadPosition; }, [playheadPosition]);
-    const animationFrameRef = useRef<number | null>(null);
     const [ghostNote, setGhostNote] = useState<(StaffNote & { systemIndex: number }) | null>(null);
 
     const project = useMemo(() => ({
@@ -847,136 +848,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setMeasuresPerLineDraft(String(next));
     }, [measuresPerLine, measuresPerLineDraft]);
 
-    // stopMetronomeInternal now in usePlayback
-
-    const startMetronomeScheduler = useCallback(async (opts?: { anchorWhenSec?: number; anchorAbsBeat?: number }) => {
-        if (!isMetronomeOnRef.current) return;
-
-        // Restart cleanly whenever we (re)start.
-        stopMetronomeInternal();
-
-        const safeBpm = Math.max(20, Math.min(300, bpm || 120));
-        const getTimeSignatureAtAbsBeatLocal = (absBeat: number): TimeSignature => {
-            const baseBeats = timeSignature.numerator * (4 / timeSignature.denominator);
-            const toAbsBeat = (c: any) => {
-                const ab = Number(c?.absBeat);
-                if (Number.isFinite(ab)) return ab;
-                const m = Number(c?.measureIndex) || 0;
-                return m * Math.max(1, baseBeats || 4);
-            };
-            const sorted = (timeSignatureChanges || []).slice().sort((a, b) => toAbsBeat(a) - toAbsBeat(b));
-            let active: TimeSignature = timeSignature;
-            for (const c of sorted) {
-                const at = toAbsBeat(c);
-                if (Number.isFinite(at) && at <= absBeat + 1e-6) {
-                    if (Number.isFinite(c.numerator) && Number.isFinite(c.denominator) && c.numerator > 0 && c.denominator > 0) {
-                        active = { numerator: c.numerator, denominator: c.denominator };
-                    }
-                } else {
-                    break;
-                }
-            }
-            return active;
-        };
-        const beatDurationSec = 60 / safeBpm; // quarter note = 1 beat
-        const unitBeats = metronomeUnit === 'eighth' ? 0.5 : (metronomeUnit === 'dotted-quarter' ? 1.5 : 1);
-        const unitDurationSec = beatDurationSec * unitBeats;
-
-        if (isAudioReady) {
-            await audioService.ensureAudioIsReady();
-        }
-
-        const audioCtx = audioService.audioContext;
-        if (!audioCtx) return;
-
-        const nowSec = audioCtx.currentTime;
-        const anchorWhenSec = (opts?.anchorWhenSec ?? nowSec);
-        const anchorAbsBeat = (opts?.anchorAbsBeat ?? 0);
-
-        // If we are already past the anchor, jump to the next metronome-unit boundary.
-        const unitsSinceAnchor = Math.max(0, Math.ceil((nowSec - anchorWhenSec) / Math.max(1e-9, unitDurationSec)));
-        metronomeBeatRef.current = Math.round((anchorAbsBeat + unitsSinceAnchor * unitBeats) * 1e6) / 1e6;
-        metronomeNextWhenRef.current = anchorWhenSec + unitsSinceAnchor * unitDurationSec;
-
-        const isDownbeat = (absBeat: number) => {
-            if (!Number.isFinite(absBeat)) return false;
-            const ts = getTimeSignatureAtAbsBeatLocal(absBeat);
-            const beatsPerMeasureRaw = (ts?.numerator ?? 4) * (4 / (ts?.denominator ?? 4));
-            const beatsPerMeasure = Math.max(1, Number.isFinite(beatsPerMeasureRaw) ? beatsPerMeasureRaw : 4);
-            const mod = ((absBeat % beatsPerMeasure) + beatsPerMeasure) % beatsPerMeasure;
-            return (mod < 1e-6) || (Math.abs(beatsPerMeasure - mod) < 1e-6);
-        };
-
-        const scheduleNext = () => {
-            if (!isMetronomeOnRef.current) return;
-            const ctx = audioService.audioContext;
-            if (!ctx) return;
-
-            const absBeat = metronomeBeatRef.current;
-            const when = metronomeNextWhenRef.current;
-            const strong = isDownbeat(absBeat);
-
-            // Click sound
-            void audioService.playClick(strong, when);
-
-            // UI flash (as close as we can to the audio click)
-            const flashDelayMs = Math.max(0, (when - ctx.currentTime) * 1000);
-            if (metronomeFlashStartTimeoutRef.current) window.clearTimeout(metronomeFlashStartTimeoutRef.current);
-            metronomeFlashStartTimeoutRef.current = window.setTimeout(() => {
-                setMetronomeFlash(strong ? 'strong' : 'weak');
-                if (metronomeFlashTimeoutRef.current) window.clearTimeout(metronomeFlashTimeoutRef.current);
-                metronomeFlashTimeoutRef.current = window.setTimeout(() => {
-                    setMetronomeFlash(null);
-                }, 90);
-            }, flashDelayMs);
-
-            metronomeBeatRef.current = Math.round((absBeat + unitBeats) * 1e6) / 1e6;
-            metronomeNextWhenRef.current = when + unitDurationSec;
-
-            const nextDelayMs = Math.max(0, (metronomeNextWhenRef.current - ctx.currentTime - 0.03) * 1000);
-            metronomeIntervalRef.current = window.setTimeout(scheduleNext, nextDelayMs);
-        };
-
-        // Start scheduling a bit ahead so the first click lands exactly on anchor.
-        const firstDelayMs = Math.max(0, (metronomeNextWhenRef.current - nowSec - 0.03) * 1000);
-        metronomeIntervalRef.current = window.setTimeout(scheduleNext, firstDelayMs);
-    }, [audioService, bpm, isAudioReady, metronomeUnit, stopMetronomeInternal, timeSignature, timeSignatureChanges]);
-
-    useEffect(() => {
-        if (!isMetronomeOn) {
-            metronomeSuppressedRef.current = false;
-            metronomeLinkedToPlaybackRef.current = false;
-            stopMetronomeInternal();
-            return;
-        }
-
-        // If we stopped a play-synced metronome at end/stop playback, keep it silent
-        // until the next Play (or until user toggles it off/on).
-        if (metronomeSuppressedRef.current) {
-            stopMetronomeInternal();
-            return;
-        }
-
-        // If playback is running, keep metronome locked to the playback grid.
-        if (isPlayingRef.current && audioPlaybackStartTimeRef.current > 0) {
-            metronomeLinkedToPlaybackRef.current = true;
-            void startMetronomeScheduler({
-                anchorWhenSec: audioPlaybackStartTimeRef.current,
-                anchorAbsBeat: playbackStartBeatRef.current,
-            });
-            return;
-        }
-
-        metronomeLinkedToPlaybackRef.current = false;
-
-        // Start free-running metronome (anchor = now).
-        void startMetronomeScheduler({ anchorWhenSec: audioService.audioContext?.currentTime, anchorAbsBeat: 0 });
-
-        return () => {
-            stopMetronomeInternal();
-        };
-    }, [audioService, isMetronomeOn, startMetronomeScheduler, stopMetronomeInternal]);
-
+    // stopMetronomeInternal, startMetronomeScheduler, metronome toggle effect now in usePlayback
 
     const handleActivateMidi = async () => {
         if (navigator.requestMIDIAccess) {
@@ -3206,25 +3078,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         await playNoteSound(note, durationSec);
     }, [playNoteSound, selectedMidiOutput, sendMidiNote]);
 
-    const stopPlayback = useCallback(() => {
-        playbackTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
-        playbackTimeoutsRef.current = [];
-        if (animationFrameRef.current) {
-            window.cancelAnimationFrame(animationFrameRef.current);
-            animationFrameRef.current = null;
-        }
-        audioService.stopAllSounds?.();
-        setPlayingNoteIds([]);
-        setIsPlaying(false);
-
-        // If the metronome was started as part of playback, stop it at end/stop.
-        // Keep the toggle ON but suppress clicks until next Play.
-        if (metronomeLinkedToPlaybackRef.current) {
-            metronomeLinkedToPlaybackRef.current = false;
-            metronomeSuppressedRef.current = true;
-            stopMetronomeInternal();
-        }
-    }, [audioService, stopMetronomeInternal]);
+    // stopPlayback now in usePlayback
 
     const getPlayheadPosForAbsBeat = useCallback((absBeat: number): { x: number; systemIndex: number } | null => {
         if (!layoutData) return null;
