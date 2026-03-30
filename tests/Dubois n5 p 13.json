@@ -2049,13 +2049,13 @@
       "voice": 2
     },
     {
-      "id": "ab78c884-dabe-45e3-ab3c-0a22efc01a7a",
+      "id": "2c073e52-9213-4f2d-98fb-ad6db32c71a2",
       "pitch": "E",
       "octave": 4,
       "position": 2,
       "midi": 65,
       "noteIndex": 5,
-      "clef": "treble",
+      "clef": "bass",
       "explicitAccidental": "sharp",
       "accidental": "sharp",
       "userAccidental": "sharp",

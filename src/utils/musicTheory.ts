@@ -3731,10 +3731,30 @@ export function normalizeNotePitchFieldsWithKey(note: any, keySignature: any): a
         // If MIDI is present, treat it as the source of truth for pitch class.
         const midi = Number(note.midi);
         if (Number.isFinite(midi)) {
+            // Re-derive accidental if missing — ensures serialized notes always
+            // carry the accidental field even after a round-trip through load→save.
+            let accidental = note.accidental;
+            if (accidental === undefined || accidental === null) {
+                const letter = String(note.pitch || '').toUpperCase().charAt(0);
+                if (letter) {
+                    const BASE_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                    const basePc = BASE_PC[letter];
+                    if (basePc !== undefined) {
+                        const diff = mod12Local(midi - basePc);
+                        if (diff === 0) accidental = 'natural';
+                        else if (diff === 1) accidental = 'sharp';
+                        else if (diff === 11) accidental = 'flat';
+                        else if (diff === 2) accidental = 'double-sharp';
+                        else if (diff === 10) accidental = 'double-flat';
+                        else accidental = 'natural';
+                    }
+                }
+            }
             return {
                 ...note,
                 midi,
                 noteIndex: mod12Local(midi),
+                ...(accidental !== undefined && accidental !== null ? { accidental } : {}),
             };
         }
 
