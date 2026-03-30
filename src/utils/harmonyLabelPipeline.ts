@@ -649,6 +649,28 @@ export function computeLookaheadTonicizationOverrides(opts: {
                 }
             }
 
+            // Fallback: if no exact roman match, find the next chord whose root PC
+            // matches the expected resolution degree. This catches quality mismatches
+            // such as V/iii → III (major instead of minor) in modulating sequences.
+            if (k < 0) {
+                try {
+                    const _tonicPc = noteNameToChromaticIndex(String(bj.ctxTonic || 'C'));
+                    const _degIdx = degreeIndexFromRoman(targetRoman);
+                    if (_tonicPc != null && _tonicPc >= 0 && _degIdx != null) {
+                        const _ints = scaleIntervalsForContext(!!bj.ctxIsMinor);
+                        const _expectedPc = (((_tonicPc + (_ints[_degIdx] ?? 0)) % 12) + 12) % 12;
+                        for (let t = j + 1; t < base.length; t++) {
+                            if ((base[t].absBeat - bj.absBeat) > maxLookaheadBeats + 1e-6) break;
+                            const rpc = base[t].rootPc;
+                            if (rpc != null && Number.isFinite(rpc) && (((rpc % 12) + 12) % 12) === _expectedPc) {
+                                k = t;
+                                break;
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
+            }
+
             // Even if we cannot find an explicit `targetRoman` event nearby, an explicit V/x label
             // is already strong evidence of tonicization. We still use it to relabel the immediate
             // predominant(s) before V/x in the tonicized key.
@@ -673,8 +695,37 @@ export function computeLookaheadTonicizationOverrides(opts: {
             try {
                 const bk = (k >= 0) ? base[k] : null;
                 if (bk && Number.isFinite(bk.q) && !overrideByAbsBeat.has(bk.q)) {
-                    // Intentionally do not add a tonicization tag on the resolution chord.
-                    // It tends to clutter the editor and is redundant with nearby V/x labels.
+                    // When the resolution chord's base roman differs from the expected
+                    // target (e.g. base says V/vi but the target of V/iii should be III),
+                    // override its display to the target degree so the sequence reads
+                    // correctly: V/iii → III, not V/iii → V/vi.
+                    const bkRoman = String(bk.roman || '').trim();
+                    if (bkRoman && bkRoman !== targetRoman) {
+                        // Compute the correct roman in the local key for the target chord.
+                        const targetDisplay = String(getRomanAnalysis(
+                            structuralNotes(bk.notes || []), String(bj.ctxTonic || 'C'), !!bj.ctxIsMinor,
+                        )?.roman || '').trim();
+                        if (targetDisplay && !targetDisplay.includes('/')) {
+                            autoRomanDisplayByAbsBeat.set(Number(bk.q), targetDisplay);
+                        } else {
+                            // Fallback: if the local-key analysis still produces a slash chord,
+                            // use the target roman directly (with correct case for the actual quality).
+                            // E.g. V/iii resolves to C# Major → display 'III' (uppercase = major).
+                            const bkCands = identifyChordCandidates(structuralNotes(bk.notes || []));
+                            const bkBest = Array.isArray(bkCands) ? bkCands[0] : null;
+                            const isMajQuality = bkBest && /Major|^Maj/i.test(String(bkBest.type || ''));
+                            const isMinQuality = bkBest && /Minor|^Min/i.test(String(bkBest.type || ''));
+                            if (isMajQuality && targetRoman === targetRoman.toLowerCase()) {
+                                // Target was lowercase (minor) but chord is major → uppercase
+                                autoRomanDisplayByAbsBeat.set(Number(bk.q), targetRoman.toUpperCase());
+                            } else if (isMinQuality && targetRoman === targetRoman.toUpperCase()) {
+                                // Target was uppercase (major) but chord is minor → lowercase
+                                autoRomanDisplayByAbsBeat.set(Number(bk.q), targetRoman.toLowerCase());
+                            } else {
+                                autoRomanDisplayByAbsBeat.set(Number(bk.q), targetRoman);
+                            }
+                        }
+                    }
                 }
             } catch {
                 // ignore
@@ -790,6 +841,8 @@ export function computeLookaheadTonicizationOverrides(opts: {
                 if (!Number.isFinite(bjQ)) continue;
                 if (overrideByAbsBeat.has(bjQ)) continue;
                 if (autoOverrideByAbsBeat.has(bjQ)) continue;
+                // Don't re-label a chord that is the resolution target of a preceding V/x.
+                if (protectedAbsBeats.has(bjQ)) continue;
 
                 const tonicPc = noteNameToChromaticIndex(String(bj.ctxTonic || 'C'));
                 if (!(tonicPc >= 0)) continue;
