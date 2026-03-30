@@ -1,20 +1,4 @@
 {
-  "repeatBarlines": {},
-  "voltaBrackets": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "96f6f9e0-c53d-4a8d-9d68-f01632bc9be1",
-      "type": "neighbor"
-    },
-    {
-      "noteId": "cba33f9f-7200-4a99-b183-ea915395c401",
-      "type": "structural"
-    },
-    {
-      "noteId": "437d933e-2699-4305-a4d1-afc2e89af242",
-      "type": "structural"
-    }
-  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -3519,7 +3503,23 @@
   "modalTonicOverride": "",
   "analysisContexts": [],
   "doubleBarlineMeasures": [],
+  "repeatBarlines": {},
+  "voltaBrackets": [],
   "harmonyOverrides": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "96f6f9e0-c53d-4a8d-9d68-f01632bc9be1",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "cba33f9f-7200-4a99-b183-ea915395c401",
+      "type": "structural"
+    },
+    {
+      "noteId": "437d933e-2699-4305-a4d1-afc2e89af242",
+      "type": "structural"
+    }
+  ],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,

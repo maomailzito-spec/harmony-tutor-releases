@@ -2236,10 +2236,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides]);
 
     const effectiveAnalysisContexts = useMemo(() => {
-        // NOTE: inferred contexts can be helpful for experimentation, but they can also
-        // mis-fire on short tonicizations (e.g. V/iii) and distort Roman labels.
-        // For stability/pedagogy, only apply user-authored contexts here.
-        return (analysisContexts || []) as any[];
+        // Merge user-authored contexts with engine-inferred modulations.
+        // User contexts take precedence (listed first → latest wins in sort).
+        const inferred = (analysisResult as any)?.inferredAnalysisContexts || [];
+        return [...(analysisContexts || []), ...inferred] as any[];
     }, [analysisResult, analysisContexts]);
 
     const { analyzedNotes, connections: errorConnections, violations } = analysisResult;
@@ -2955,7 +2955,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Timeline-based harmony labels per system (roman+figures and symbol)
     // ADAPTER LAYER — harmony analysis overlay data (extracted to useHarmonyLabels hook)
     const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, sequenceMatches } = useHarmonyLabels({
-        layoutData, timeSignature, timeSignatureChanges, analysisContexts, harmonyOverrides,
+        layoutData, timeSignature, timeSignatureChanges, analysisContexts: effectiveAnalysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled,
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
         harmonyLabelMinSpanBeats: Number(harmonyLabelMinSpanBeats) || 0,
