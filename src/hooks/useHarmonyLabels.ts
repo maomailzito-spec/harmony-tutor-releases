@@ -1050,6 +1050,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const targetRoman = String(m[2] || '').trim();
                 if (!targetRoman) continue;
 
+                // Skip if this beat is already protected as a resolution target of a
+                // preceding V/x — its base roman (e.g. V/vi) is a stale analysis that
+                // will be overridden by the autoRomanDisplayByAbsBeat (e.g. III).
+                const bjQ0 = Number(bj.q);
+                if (Number.isFinite(bjQ0) && protectedAbsBeats.has(bjQ0)) continue;
+
                 // Find an arrival chord labeled exactly as the target within 2 measures.
                 let k = -1;
                 for (let t = j + 1; t < base.length; t++) {
@@ -1059,6 +1065,29 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         break;
                     }
                 }
+
+                // Fallback: if no exact roman match, find the next chord whose root PC
+                // matches the expected resolution degree. This catches quality mismatches
+                // such as V/iii → III (major instead of minor) in modulating sequences.
+                if (k < 0) {
+                    try {
+                        const _tonicPc = noteNameToChromaticIndex(String(bj.ctxTonic || 'C'));
+                        const _degIdx = degreeIndexFromRoman(targetRoman);
+                        if (_tonicPc != null && _tonicPc >= 0 && _degIdx != null) {
+                            const _ints = scaleIntervalsForContext(!!bj.ctxIsMinor);
+                            const _expectedPc = (((_tonicPc + (_ints[_degIdx] ?? 0)) % 12) + 12) % 12;
+                            for (let t = j + 1; t < base.length; t++) {
+                                if ((base[t].absBeat - bj.absBeat) > maxLookaheadBeats + 1e-6) break;
+                                const rpc = base[t].rootPc;
+                                if (rpc != null && Number.isFinite(rpc) && (((rpc % 12) + 12) % 12) === _expectedPc) {
+                                    k = t;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch { /* ignore */ }
+                }
+
                 if (k < 0) continue;
 
                 // Protect the resolution chord from being reinterpreted by later tonicizations.
