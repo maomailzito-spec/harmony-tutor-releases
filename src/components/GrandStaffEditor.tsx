@@ -2238,7 +2238,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
         // User contexts take precedence (listed first → latest wins in sort).
-        const inferred = (analysisResult as any)?.inferredAnalysisContexts || [];
+        // Filter out low-confidence inferred contexts (score undefined or < 12).
+        const inferred = ((analysisResult as any)?.inferredAnalysisContexts || [])
+            .filter((c: any) => typeof c.score === 'number' && c.score >= 12);
         return [...(analysisContexts || []), ...inferred] as any[];
     }, [analysisResult, analysisContexts]);
 

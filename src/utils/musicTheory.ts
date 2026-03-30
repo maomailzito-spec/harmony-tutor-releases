@@ -7384,17 +7384,24 @@ export function applyHarmonyRules(
             })();
 
             const pcToKeyName = (pc: number): string => {
+                // Standard key tonics (major+minor) — prefer these spellings
+                // over theoretical enharmonics like D#, G#, A# which are not
+                // real key signatures.
+                const STANDARD_KEY_BY_PC: Record<number, string> = {
+                    0: 'C', 1: 'Db', 2: 'D', 3: 'Eb', 4: 'E', 5: 'F',
+                    6: 'F#', 7: 'G', 8: 'Ab', 9: 'A', 10: 'Bb', 11: 'B',
+                };
+                const stdName = STANDARD_KEY_BY_PC[mod12(pc)];
+                if (stdName) return stdName;
+
                 const names = (ALL_NOTE_SPELLINGS as any)[mod12(pc)] as string[] | undefined;
                 if (!Array.isArray(names) || names.length === 0) return 'C';
                 if (preferFlats) {
                     const flat = names.find(n => String(n).includes('b'));
-                    if (flat) {
-                        return flat;
-                    }
+                    if (flat) return flat;
                 } else {
                     const sharp = names.find(n => String(n).includes('#'));
                     if (sharp) {
-                        // Avoid theoretical extreme key spellings as inferred tonal centers.
                         if (sharp === 'B#') return 'C';
                         if (sharp === 'E#') return 'F';
                         return sharp;
