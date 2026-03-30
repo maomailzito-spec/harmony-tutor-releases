@@ -297,7 +297,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const justInsertedNoteRef = useRef<string | null>(null);
     const [isTriplet, setIsTriplet] = useState(false);
     const [isDuplet, setIsDuplet] = useState(false);
-    const [isSwing, setIsSwing] = useState(false);
     const [tupletNoteCount, setTupletNoteCount] = useState(0);
     const [tripletBaseDuration, setTripletBaseDuration] = useState<NoteDuration | null>(null);
     const [activeAccidental, setActiveAccidental] = useState<AccidentalType | null>(null);
@@ -344,6 +343,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         handleBpmFocus, handleBpmKeyDown, handleBpmInputChange,
         handleBpmInputKeyDown, handleBpmBlur, toggleMetronome,
         startMetronomeScheduler, stopPlayback,
+        isSwing, setIsSwing,
+        midiOutputs, setMidiOutputs,
+        selectedMidiOutput, setSelectedMidiOutput,
+        isMidiMenuOpen, setIsMidiMenuOpen,
+        handleActivateMidi,
     } = usePlayback({ bpmInputRef, audioService, isAudioReady, timeSignature, timeSignatureChanges, animationFrameRef });
     const playheadPositionRef = useRef<{ x: number; systemIndex: number } | null>(null);
     useEffect(() => { playheadPositionRef.current = playheadPosition; }, [playheadPosition]);
@@ -566,9 +570,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return parts[parts.length - 1] || currentProjectFilePath;
     }, [currentProjectFilePath]);
 
-    const [midiOutputs, setMidiOutputs] = useState<any[]>([]);
-    const [selectedMidiOutput, setSelectedMidiOutput] = useState<any | null>(null);
-    const [isMidiMenuOpen, setIsMidiMenuOpen] = useState(false);
+    // midiOutputs, selectedMidiOutput, isMidiMenuOpen now in usePlayback
 
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
     const moreMenuRef = useRef<HTMLDivElement | null>(null);
@@ -851,22 +853,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // stopMetronomeInternal, startMetronomeScheduler, metronome toggle effect now in usePlayback
 
-    const handleActivateMidi = async () => {
-        if (navigator.requestMIDIAccess) {
-          try {
-            const midiAccess = await navigator.requestMIDIAccess();
-            const outputs = Array.from(midiAccess.outputs.values());
-            setMidiOutputs(outputs);
-            if (outputs.length > 0 && !selectedMidiOutput) {
-              setSelectedMidiOutput(outputs[0]);
-            }
-          } catch (error) {
-            // Removed debug log
-          }
-        } else {
-          // Removed debug log
-        }
-      };
+    // handleActivateMidi now in usePlayback
 
     // bpmInputString now owned by usePlayback
     

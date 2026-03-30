@@ -38,6 +38,27 @@ export interface UsePlaybackParams {
 }
 
 export function usePlayback({ bpmInputRef, audioService, isAudioReady, timeSignature, timeSignatureChanges, animationFrameRef }: UsePlaybackParams) {
+    // ── Swing ──
+    const [isSwing, setIsSwing] = useState(false);
+
+    // ── MIDI ──
+    const [midiOutputs, setMidiOutputs] = useState<any[]>([]);
+    const [selectedMidiOutput, setSelectedMidiOutput] = useState<any | null>(null);
+    const [isMidiMenuOpen, setIsMidiMenuOpen] = useState(false);
+
+    const handleActivateMidi = useCallback(async () => {
+        if (navigator.requestMIDIAccess) {
+            try {
+                const midiAccess = await navigator.requestMIDIAccess();
+                const outputs = Array.from(midiAccess.outputs.values());
+                setMidiOutputs(outputs);
+                if (outputs.length > 0 && !selectedMidiOutput) {
+                    setSelectedMidiOutput(outputs[0]);
+                }
+            } catch { /* MIDI not available */ }
+        }
+    }, [selectedMidiOutput]);
+
     // ── Playback core ──
     const [isPlaying, setIsPlaying] = useState(false);
     const [bpm, setBpm] = useState(120);
@@ -339,6 +360,13 @@ export function usePlayback({ bpmInputRef, audioService, isAudioReady, timeSigna
     }, [audioService, animationFrameRef, stopMetronomeInternal]);
 
     return {
+        // swing
+        isSwing, setIsSwing,
+        // MIDI
+        midiOutputs, setMidiOutputs,
+        selectedMidiOutput, setSelectedMidiOutput,
+        isMidiMenuOpen, setIsMidiMenuOpen,
+        handleActivateMidi,
         // playback core
         isPlaying, setIsPlaying,
         bpm, setBpm,
