@@ -12265,13 +12265,17 @@ export function applyHarmonyRules(
                                 const fromNum = (bassPitchLetter && suspPitch) ? diatonicNum(suspPitch, suspOct, bassPitchLetter, bassOctave) : 0;
                                 const toNum = (bassPitchLetter && resPitch) ? diatonicNum(resPitch, resOct, bassPitchLetter, bassOctave) : 0;
                                 if (fromNum > 0 && toNum > 0) {
-                                    s.fromNum = fromNum;
-                                    s.toNum = toNum;
+                                    // Reduce compound intervals (e.g. 11→4, 10→3, 9→9 stays for 9-8)
+                                    const reduceCompound = (n: number): number => n > 8 ? ((n - 1) % 7) + 1 : n;
+                                    const fromSimple = reduceCompound(fromNum);
+                                    const toSimple = reduceCompound(toNum);
+                                    s.fromNum = fromSimple;
+                                    s.toNum = toSimple;
                                     const classicTypes: Record<string, string> = {
                                         '4-3': '4-3', '6-5': '6-5', '7-6': '7-6',
                                         '7-8': '7-8', '8-7': '8-7', '9-8': '9-8', '2-3': '2-3',
                                     };
-                                    const typeKey = `${fromNum}-${toNum}`;
+                                    const typeKey = `${fromSimple}-${toSimple}`;
                                     if (classicTypes[typeKey]) {
                                         s.type = classicTypes[typeKey];
                                     }
