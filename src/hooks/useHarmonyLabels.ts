@@ -1068,6 +1068,15 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const targetRoman = String(m[2] || '').trim();
                 if (!targetRoman) continue;
 
+                // V/X on a very weak sub-beat (e.g. beat 3.5 in 4/4) is usually
+                // a passing sonority, not a real secondary dominant. Skip pivot
+                // generation for these to avoid spurious i=X labels.
+                const bjBeatInMeasure = Number(bj.beat);
+                if (Number.isFinite(bjBeatInMeasure)) {
+                    const frac = ((bjBeatInMeasure % 1) + 1) % 1;
+                    if (frac > 0.01 && frac < 0.99) continue; // sub-beat like .5, .25, .75
+                }
+
                 // Skip if this beat is already protected as a resolution target of a
                 // preceding V/x — its base roman (e.g. V/vi) is a stale analysis that
                 // will be overridden by the autoRomanDisplayByAbsBeat (e.g. III).
