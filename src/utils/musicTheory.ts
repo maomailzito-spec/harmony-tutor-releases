@@ -7431,6 +7431,30 @@ export function applyHarmonyRules(
                 return natural || names[0];
             };
 
+            // Spelling-aware variant: when the chord notes provide an explicit
+            // letter for the root PC, prefer that spelling over the standard map.
+            // This avoids interpreting G#-B#-D# as "Ab" just because PC 8 maps
+            // to Ab in STANDARD_KEY_BY_PC.
+            const pcToKeyNameFromNotes = (pc: number, chordNotes: StaffNote[]): string => {
+                const p = mod12(pc);
+                // Look for a note in the chord that matches this PC and has a clear letter+accidental.
+                for (const n of (chordNotes || [])) {
+                    if (!n || (n as any).isRest) continue;
+                    const nPc = mod12(pitchClassOf(n));
+                    if (nPc !== p) continue;
+                    // Build name from pitch + accidental
+                    const letter = String((n as any).pitch || '').charAt(0).toUpperCase();
+                    if (!letter) continue;
+                    const acc = (n as any).userAccidental ?? (n as any).explicitAccidental ?? (n as any).accidental ?? null;
+                    const suffix = acc === 'sharp' ? '#' : acc === 'flat' ? 'b' : acc === 'double-sharp' ? '##' : acc === 'double-flat' ? 'bb' : '';
+                    const name = `${letter}${suffix}`;
+                    // Validate: the spelled name must map to the correct PC
+                    const idx = noteNameToIndex[name];
+                    if (idx !== undefined && mod12(idx) === p) return name;
+                }
+                return pcToKeyName(p);
+            };
+
             const diatonicSetForKey = (tonicName: string, minorMode: boolean): Set<number> => {
                 const idx = noteNameToIndex[String(tonicName || '')];
                 const tonicPcX = Number.isFinite(idx) ? mod12(idx) : 0;
@@ -7835,7 +7859,7 @@ export function applyHarmonyRules(
                     if (!pcs.length) continue;
 
                     for (const tonicPc of pcs) {
-                        const tonic = pcToKeyName(tonicPc);
+                        const tonic = pcToKeyNameFromNotes(tonicPc, b.notes || []);
                         const bRom = String(_gRA(b.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
                         if (bRom !== 'i') continue;
 
@@ -7989,7 +8013,7 @@ export function applyHarmonyRules(
                 let bestCand: TonicCand | null = null;
 
                 for (const tonicPc of candTonicPcs) {
-                    const tonic = pcToKeyName(tonicPc);
+                    const tonic = pcToKeyNameFromNotes(tonicPc, b.notes || []);
 
                     // Determine minor/major by whether we see I/i at the boundary OR very soon after.
                     const bRomanMaj = String(_gRA(b.notes || [], tonic, false)?.roman || '').replace(/\s+/g, '');
@@ -8530,7 +8554,9 @@ export function applyHarmonyRules(
 
                     let best: WindowBest | null = null;
                     for (let pc = 0; pc < 12; pc++) {
-                        const tonic = pcToKeyName(pc);
+                        // For the brute-force window scan, use the chord notes at the scan point as spelling hint.
+                        const windowNotes = (window as any[]).flatMap((ev: any) => ev?.notes || []);
+                        const tonic = pcToKeyNameFromNotes(pc, windowNotes);
                         for (const isMinorCand of [false, true]) {
                             const out = countNonDiatonicPcsInEvents(window as any, tonic, isMinorCand);
                             const spell = countSpellingMismatchesInEvents(window as any, tonic, isMinorCand);
