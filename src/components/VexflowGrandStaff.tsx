@@ -370,15 +370,16 @@ const computeMeasureAccidentalGlyphs = (
       // Prefer user-entered accidental (can include double-sharp/flat) over derived MIDI.
       const userAcc = normalizeAccidentalType((n as any).userAccidental);
       const explicitAcc = normalizeAccidentalType((n as any).explicitAccidental);
-      const autoAcc = normalizeAccidentalType((n as any).accidental);
-
-      const actual: AccidentalType =
-        userAcc
-        ?? explicitAcc
-        ?? autoAcc
-        ?? (Number.isFinite((n as any).noteIndex)
+      // Always derive from MIDI/noteIndex -- the legacy `accidental` field can be
+      // stale ('natural' on a flat note) in older files and localStorage drafts.
+      const derivedAcc: AccidentalType =
+        Number.isFinite((n as any).noteIndex)
           ? accidentalFromPcForLetter(Number((n as any).noteIndex), letter)
-          : accidentalFromMidiForLetter(Number((n as any).midi), letter, octave));
+          : Number.isFinite((n as any).midi)
+            ? accidentalFromMidiForLetter(Number((n as any).midi), letter, octave)
+            : 'natural';
+
+      const actual: AccidentalType = userAcc ?? explicitAcc ?? derivedAcc;
       const prev = getState(clef, letter, octave);
 
       if (actual !== prev) {

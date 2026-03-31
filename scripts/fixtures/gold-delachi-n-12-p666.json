@@ -1,5 +1,13 @@
 {
-  "schemaVersion": 1,
+  "name": "delachi-n-12-p666 (gold)",
+  "keySignatureRoot": "A",
+  "keyTonic": "A",
+  "isMinorMode": false,
+  "timeSignature": {
+    "numerator": 4,
+    "denominator": 4
+  },
+  "analysisContexts": [],
   "notes": [
     {
       "id": "6abc9dcd-0872-4f28-88b6-df33f753deb5",
@@ -73,7 +81,7 @@
       "noteIndex": 9,
       "clef": "bass",
       "explicitAccidental": null,
-      "accidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -157,7 +165,7 @@
       "noteIndex": 2,
       "clef": "bass",
       "explicitAccidental": null,
-      "accidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -242,7 +250,7 @@
       "noteIndex": 2,
       "clef": "bass",
       "explicitAccidental": null,
-      "accidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -2497,7 +2505,10 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 3840,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp",
+      "userAccidental": "sharp",
+      "explicitAccidental": "sharp"
     },
     {
       "id": "233eb848-fb17-4a57-a4bc-2c51691996e0",
@@ -2521,42 +2532,189 @@
       "voice": 4
     }
   ],
-  "staffSystemMode": "grandstaff",
-  "keySignatureRoot": "A",
-  "projectTitle": "",
-  "titleFontSize": 18,
-  "titleFontFamily": "serif",
-  "timeSignature": {
-    "numerator": 4,
-    "denominator": 4
-  },
-  "timeSignatureChanges": [],
-  "isMinorMode": false,
-  "autoLeadingToneInMinor": true,
-  "keyChangeMode": "none",
-  "modalTonicOverride": "",
-  "analysisContexts": [],
-  "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
   "ornamentOverrides": [],
-  "bpm": 120,
-  "isBpmActive": false,
-  "isMetronomeOn": false,
-  "metronomeUnit": "quarter",
-  "toolbarGroupOrder": [
-    "insert",
-    "voices",
-    "playback",
-    "bpm",
-    "time",
-    "measures",
-    "accidentals",
-    "notations",
-    "analysis",
-    "key",
-    "more",
-    "voiceInstrument"
+  "doubleBarlineMeasures": [],
+  "expects": [
+    {
+      "absBeat": 0,
+      "roman": "I"
+    },
+    {
+      "absBeat": 2,
+      "roman": "IV"
+    },
+    {
+      "absBeat": 4,
+      "roman": "vii°",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "I",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "V"
+    },
+    {
+      "absBeat": 10,
+      "roman": "I",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "vii°",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 14,
+      "roman": "I"
+    },
+    {
+      "absBeat": 16,
+      "roman": "ii",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 18,
+      "roman": "V"
+    },
+    {
+      "absBeat": 20,
+      "roman": "I",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 22,
+      "roman": "ii",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 24,
+      "roman": "I",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 26,
+      "roman": "V"
+    },
+    {
+      "absBeat": 28,
+      "roman": "I"
+    },
+    {
+      "absBeat": 30,
+      "roman": "I"
+    },
+    {
+      "absBeat": 32,
+      "roman": "IV",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 34,
+      "roman": "I",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 36,
+      "roman": "ii",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 38,
+      "roman": "V"
+    },
+    {
+      "absBeat": 40,
+      "roman": "I",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 42,
+      "roman": "vi"
+    },
+    {
+      "absBeat": 44,
+      "roman": "ii"
+    },
+    {
+      "absBeat": 46,
+      "roman": "V"
+    },
+    {
+      "absBeat": 48,
+      "roman": "I",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 50,
+      "roman": "V",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 52,
+      "roman": "I"
+    },
+    {
+      "absBeat": 54,
+      "roman": "IV",
+      "figuresInclude": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 56,
+      "roman": "I",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 58,
+      "roman": "V"
+    },
+    {
+      "absBeat": 60,
+      "roman": "I",
+      "figuresInclude": [
+        "3"
+      ]
+    }
   ]
 }
