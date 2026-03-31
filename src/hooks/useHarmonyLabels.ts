@@ -2049,7 +2049,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // treat them as structural chord tones.
                     try {
                         const s = (n as any)?.isSuspension;
-                        if (s && typeof s.fromAbsBeat === 'number') {
+                        if (s && typeof s.fromAbsBeat === 'number' && String(s.type) !== 'app') {
                             if (Math.abs((s.fromAbsBeat as number) - Number(event.absBeat)) < 1e-3) {
                                 lastStructural.delete(v);
                             } else {
