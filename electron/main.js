@@ -179,9 +179,28 @@ const DEV_BUILD_TAG = 'restore-2026-01-23';
 const SHOW_BUILD_TAG_DIALOG = String(process.env.ELECTRON_SHOW_BUILD_TAG_DIALOG || '') === '1';
 
 function getAppFlavor() {
+  // In production builds, read from package.json appFlavor field (set by electron-builder extraMetadata).
+  // In dev, use APP_FLAVOR env var.
   const raw = String(process.env.APP_FLAVOR || '').toLowerCase();
   if (raw === 'grandstaff') return 'grandstaff';
   if (raw === 'guitar') return 'guitar';
+  if (raw) return 'united';
+  // Fallback: check package.json via multiple paths (asar vs dev)
+  const tryPaths = [
+    path.join(app.getAppPath(), 'package.json'),
+    path.join(__dirname, '..', 'package.json'),
+    path.join(__dirname, 'package.json'),
+  ];
+  for (const p of tryPaths) {
+    try {
+      const pkg = JSON.parse(require('fs').readFileSync(p, 'utf8'));
+      const pf = String(pkg.appFlavor || '').toLowerCase();
+      console.log('[FLAVOR]', pf || 'united');
+      if (pf === 'grandstaff') return 'grandstaff';
+      if (pf === 'guitar') return 'guitar';
+      if (pf) return 'united';
+    } catch (e) { /* try next */ }
+  }
   return 'united';
 }
 

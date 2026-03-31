@@ -14,6 +14,7 @@ files:
 
 extraMetadata:
   main: electron/main.js
+  appFlavor: grandstaff
 
 mac:
   category: public.app-category.music
