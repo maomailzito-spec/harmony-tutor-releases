@@ -28,10 +28,8 @@
     "smoke:legacy-project-migration": "tsx scripts/smoke-legacy-project-migration.ts",
     "debug:m5": "tsx scripts/debug-m5-bb7ab.ts",
     "debug:measure": "tsx scripts/debug-measure-events.ts",
-    "debug:case": "tsx scripts/debug-new-case.ts"
-    ,
-    "debug:parallels": "tsx scripts/audit-parallels.ts"
-    ,
+    "debug:case": "tsx scripts/debug-new-case.ts",
+    "debug:parallels": "tsx scripts/audit-parallels.ts",
     "debug:suspects": "tsx scripts/audit-analysis-suspects.ts"
   },
   "dependencies": {
@@ -57,11 +55,12 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
+    "knip": "^6.1.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
+    "tsx": "^4.19.2",
     "typescript": "^5.2.2",
     "vite": "^5.2.0",
-    "wait-on": "^9.0.3",
-    "tsx": "^4.19.2"
+    "wait-on": "^9.0.3"
   }
 }

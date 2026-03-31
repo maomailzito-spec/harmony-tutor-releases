@@ -12236,14 +12236,34 @@ export function applyHarmonyRules(
                                 if (bassMidi === null || bm < bassMidi) bassMidi = bm;
                             }
                             if (bassMidi !== null && Number.isFinite(suspMidi) && Number.isFinite(resMidi)) {
-                                const diatonicInterval = (interval: number): number => {
-                                    // Simple diatonic interval number from semitone distance
-                                    const semis = Math.abs(interval);
-                                    const table = [1, 2, 2, 3, 3, 4, 4, 5, 6, 6, 7, 7, 8];
-                                    return semis <= 12 ? table[semis] : (((semis - 1) % 12) + 1);
+                                // Compute figured-bass interval using diatonic letter names,
+                                // not semitones — semitone-to-interval tables fail for compounds.
+                                const LETTERS = 'CDEFGAB';
+                                const diatonicNum = (notePitch: string, noteOct: number, bassPitch: string, bassOct: number): number => {
+                                    const top = LETTERS.indexOf(notePitch.charAt(0).toUpperCase());
+                                    const bot = LETTERS.indexOf(bassPitch.charAt(0).toUpperCase());
+                                    if (top < 0 || bot < 0) return 0;
+                                    return (top - bot + (noteOct - bassOct) * 7) + 1;
                                 };
-                                const fromNum = diatonicInterval(suspMidi - bassMidi);
-                                const toNum = diatonicInterval(resMidi - bassMidi);
+                                const bassPitchLetter = String(((() => {
+                                    // Find bass note pitch/octave
+                                    for (const bn of analyzedNotes) {
+                                        if ((bn as any).midi === bassMidi) return bn;
+                                    }
+                                    return null;
+                                })() as any)?.pitch ?? '');
+                                const bassOctave = Number(((() => {
+                                    for (const bn of analyzedNotes) {
+                                        if ((bn as any).midi === bassMidi) return bn;
+                                    }
+                                    return null;
+                                })() as any)?.octave ?? 0);
+                                const suspPitch = String((n as any).pitch ?? '');
+                                const suspOct = Number((n as any).octave ?? 0);
+                                const resPitch = String((bestNext as any).pitch ?? '');
+                                const resOct = Number((bestNext as any).octave ?? 0);
+                                const fromNum = (bassPitchLetter && suspPitch) ? diatonicNum(suspPitch, suspOct, bassPitchLetter, bassOctave) : 0;
+                                const toNum = (bassPitchLetter && resPitch) ? diatonicNum(resPitch, resOct, bassPitchLetter, bassOctave) : 0;
                                 if (fromNum > 0 && toNum > 0) {
                                     s.fromNum = fromNum;
                                     s.toNum = toNum;
