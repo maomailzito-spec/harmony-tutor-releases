@@ -1557,6 +1557,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (ovByCk && ovByCk !== 'structural') return true;
                     }
                 }
+                // User explicitly marked as structural → always keep as chord tone
+                if (n.ornamentOverride === 'structural') return false;
+                const ovById2 = ornOverrideMap.size > 0 ? (ornOverrideMap.get(n.id) ?? null) : null;
+                if (ovById2 === 'structural') return false;
+
                 const v = (n?.voice ?? 1) as number;
                 if (v === 4) {
                     // By default keep the bass in the structural snapshot (it stabilizes labels).
@@ -2271,6 +2276,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const analysisNotes = (harmonicNotesNoSuspAtThisBeat.length >= 2)
                 ? harmonicNotesNoSuspAtThisBeat
                 : harmonicNotes;
+
 
             // For naming (roman + chord symbol), treat consonant "neighbor/anticipation" notes on
             // strong beats as chord tones. This avoids cases where a true chord tone gets tagged as
