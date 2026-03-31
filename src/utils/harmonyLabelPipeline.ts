@@ -845,9 +845,9 @@ export function computeLookaheadTonicizationOverrides(opts: {
 
                 // Skip sub-beats (e.g. beat 3.5 in 4/4): passing sonorities
                 // should not trigger tonicization pivot labels.
-                const bjBeat = Number(bj.beat);
-                if (Number.isFinite(bjBeat)) {
-                    const frac = ((bjBeat % 1) + 1) % 1;
+                const bjAbsBeat = Number(bj.absBeat);
+                if (Number.isFinite(bjAbsBeat)) {
+                    const frac = ((bjAbsBeat % 1) + 1) % 1;
                     if (frac > 0.01 && frac < 0.99) continue;
                 }
 
