@@ -63,13 +63,15 @@ export function getActiveNotesTimeline(
         return val;
     };
     // Trova tutti i punti temporali in cui succede qualcosa (INIZIO o FINE nota)
+    // Quantize to avoid float duplicates (e.g. 3.333333335 vs 3.333333340)
+    const qBeat = (v: number): number => Math.round(v * 1e6) / 1e6;
     const scanPointsSet = new Set<number>();
         notes.forEach(n => { 
         if (n.isRest) return;
         const m = n.measureIndex ?? 0;
         const b = n.beat ?? 1;
-        const start = (measureStartAbsBeat[m] ?? 0) + (b - 1);
-        const end = start + getDuration(n);
+        const start = qBeat((measureStartAbsBeat[m] ?? 0) + (b - 1));
+        const end = qBeat(start + getDuration(n));
         scanPointsSet.add(start);
         scanPointsSet.add(end);
     });
@@ -80,12 +82,12 @@ export function getActiveNotesTimeline(
             if (n.isRest) return false;
             const m = n.measureIndex ?? 0;
             const b = n.beat ?? 1;
-            const start = (measureStartAbsBeat[m] ?? 0) + (b - 1);
+            const start = qBeat((measureStartAbsBeat[m] ?? 0) + (b - 1));
             const dur = getDuration(n);
             return start <= absBeat && absBeat < (start + dur - 1e-6);
         });
         const measureIndex = findMeasureIndexForAbsBeat(absBeat);
-        const beat = (absBeat - (measureStartAbsBeat[measureIndex] ?? 0)) + 1;
+        const beat = qBeat((absBeat - (measureStartAbsBeat[measureIndex] ?? 0)) + 1);
         return { absBeat, measureIndex, beat, notes: activeNotes };
     });
 }
