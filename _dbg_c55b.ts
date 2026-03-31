@@ -11,7 +11,7 @@ const notes = calculateNoteBeats(d.notes, ts, d.timeSignatureChanges || []);
 const result = applyHarmonyRules(notes, ks, tonic, minor, d.analysisContexts || [], ts, [], [], []);
 const analyzed = result.analyzedNotes || [];
 
-for (let mi = 0; mi < 4; mi++) {
+for (let mi = 0; mi < 6; mi++) {
     const mN = analyzed.filter((n: any) => n.measureIndex === mi && !n.isRest);
     const beats = [...new Set(mN.map((n: any) => n.beat))].sort((a: number, b: number) => a - b);
     for (const b of beats) {

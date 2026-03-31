@@ -2089,7 +2089,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     const _interval = ((_appoggPc - _bassPc) + 12) % 12;
                                     // 0=unison, 3/4=3rd, 7=5th, 8/9=6th, 10/11=7th
                                     const _chordIntervals = new Set([0, 3, 4, 7, 8, 9, 10, 11]);
-                                    if (_chordIntervals.has(_interval)) {
+                                    // Skip guard when the appoggiatura IS the bass note itself:
+                                    // interval with self is always 0 (unison), which would incorrectly
+                                    // prevent substitution. Bass appoggiaturas must still be substituted.
+                                    const _isBassNote = _bassN === n || (Number(_bassN.midi) === Number(n.midi));
+                                    if (!_isBassNote && _chordIntervals.has(_interval)) {
                                         // Appoggiatura is consonant/standard with bass — treat as structural
                                         lastStructural.set(v, { ...n, isAppoggiatura: false });
                                         continue;
