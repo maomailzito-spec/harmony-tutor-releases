@@ -1255,8 +1255,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const needsIdx = !Number.isFinite(curIdx) || (((curIdx % 12) + 12) % 12) !== noteIndex;
                 const needsMidi = !Number.isFinite(curMidi) || curMidi !== midi;
 
-                if (!needsIdx && !needsMidi) return n;
-                return { ...n, noteIndex, midi };
+                // Also heal stale `accidental` field — legacy files may have 'natural'
+                // for notes that should be 'flat' or 'sharp' per the key signature,
+                // or may be missing the field entirely (undefined).
+                const expectedAcc: AccidentalType = delta === 0 ? 'natural' : delta === 1 ? 'sharp' : delta === -1 ? 'flat' : delta === 2 ? 'double-sharp' : delta === -2 ? 'double-flat' : 'natural';
+                const curAcc = (n as any).accidental;
+                const needsAcc = curAcc !== expectedAcc;
+
+                if (!needsIdx && !needsMidi && !needsAcc) return n;
+                return { ...n, noteIndex, midi, accidental: expectedAcc };
             } catch {
                 return n;
             }
@@ -3926,9 +3933,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // When a note becomes selected via pointer click, audition it.
         const didSelect = next.has(noteId);
         if (didSelect && n && !n.isRest) {
-            void playNote(n, 0.6);
+            // Use normalizedRawNotes for correct MIDI (handles stale fields in legacy files).
+            const normalized = (normalizedRawNotes || []).find((nn: any) => nn.id === noteId) ?? n;
+            void playNote(normalized, 0.6);
         }
-    }, [getPlayheadPosForAbsBeat, playNote, rawNotes, selectedNoteIds, timeSignature, tool, violations]);
+    }, [getPlayheadPosForAbsBeat, normalizedRawNotes, playNote, rawNotes, selectedNoteIds, timeSignature, tool, violations]);
 
     const pasteClipboardAt = useCallback((targetMeasureIndex: number, targetBeat: number) => {
         const dataToPaste = latestClipboardRef.current;
