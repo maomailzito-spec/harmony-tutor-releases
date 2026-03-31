@@ -38,3 +38,6 @@ ultima-versione--sabato-13_12_25-ore-16,19.zip
 
 # Generated layout audit dumps (debug)
 layout-audit-*.json
+
+# Electron-builder output
+release/

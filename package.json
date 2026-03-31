@@ -1,7 +1,9 @@
 {
   "name": "harmony-tutor-locale",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Desktop app for harmonic analysis — Grand Staff editor with figured bass, Roman numerals, and voice leading.",
+  "author": "Harmony Tutor",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -23,6 +25,10 @@
     "electron:dev": "node scripts/electron-dev-orchestrator.js",
     "electron:dev:enh": "cross-env VITE_ENHARMONIC_WARNINGS=1 npm run electron:dev",
     "electron:prod": "npm run build && cross-env NODE_ENV=production electron .",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
     "regress": "tsx scripts/regression-check.ts",
     "regress:update": "tsx scripts/regression-check.ts --update-snapshots",
     "smoke:legacy-project-migration": "tsx scripts/smoke-legacy-project-migration.ts",
