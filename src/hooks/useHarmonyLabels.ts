@@ -1071,9 +1071,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // V/X on a very weak sub-beat (e.g. beat 3.5 in 4/4) is usually
                 // a passing sonority, not a real secondary dominant. Skip pivot
                 // generation for these to avoid spurious i=X labels.
-                const bjBeatInMeasure = Number(bj.beat);
-                if (Number.isFinite(bjBeatInMeasure)) {
-                    const frac = ((bjBeatInMeasure % 1) + 1) % 1;
+                const bjAbsBeat = Number(bj.absBeat);
+                if (Number.isFinite(bjAbsBeat)) {
+                    const frac = ((bjAbsBeat % 1) + 1) % 1;
                     if (frac > 0.01 && frac < 0.99) continue; // sub-beat like .5, .25, .75
                 }
 
