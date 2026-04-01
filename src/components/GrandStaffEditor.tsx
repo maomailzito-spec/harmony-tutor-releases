@@ -3837,7 +3837,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // INSERT UX FIX: clicking a rest in insert mode should overwrite it
         // by running insertion rather than toggling selection.
         const isModifier = !!((e as any).shiftKey || (e as any).ctrlKey || (e as any).altKey);
-        const isCmdHeld = !!(e as any).metaKey;
+        const isCmdHeld = !!((e as any).metaKey || (e as any).ctrlKey);
         if (tool === 'insert' && n?.isRest && !isModifier && !isCmdHeld) {
             try {
                 const target = (e as any).target as Element | null;
@@ -4890,8 +4890,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Prevent the container click handler from immediately clearing selection after a staff click.
         e?.stopPropagation?.();
 
-        // ⌘ (Cmd) required to insert notes — plain clicks only deselect.
-        if (!e?.metaKey) {
+        // ⌘/Ctrl required to insert notes — plain clicks only deselect.
+        if (!(e?.metaKey || e?.ctrlKey)) {
             setSelectedNoteIds(new Set());
             return;
         }
