@@ -1,0 +1,1789 @@
+# HARMONY TUTOR — Analisi Completa dell'Applicazione
+
+**Versione documento:** Marzo 2026
+**Versione app:** Beta pre-commerciale (v0.9)
+**Stack:** React + TypeScript + Vite + Electron + VexFlow
+**Destinatari:** Insegnanti di armonia tonale, studenti conservatorio, musicisti autodidatti
+
+---
+
+## 1. PANORAMICA GENERALE
+
+### 1.1 Identità e Missione
+
+**Harmony Tutor** è un editor musicale SATB (Soprano, Alto, Tenore, Basso) specializzato in **analisi armonica automatica in tempo reale**. È concepito come il "correttore intelligente di armonia tonale e scrittura a più voci" — uno strumento didattico che aiuta studenti e insegnanti a verificare e migliorare gli esercizi di armonia nel contesto della tradizione tonale classica.
+
+**Slogan ufficiale:** "Il correttore intelligente di armonia tonale e scrittura a più voci"
+
+**Target utente primario:**
+- Studenti di conservatorio (corso di armonia tonale, 1°-2° anno)
+- Insegnanti privati di musica / insegnanti conservatorio
+- Musicisti autodidatti interessati a teoria armonica applicata
+
+**Referenza di mercato:** Harmony Practice (software canadese-italiano, non più mantenuto). Harmony Tutor è considerato superiore sia graficamente che come motore analitico.
+
+### 1.2 Filosofia Progettuale
+
+1. **Spelling-First:** L'analisi armonica si basa sui **nomi delle note** (spelling), non solo sui numeri MIDI. Questo permette:
+   - Corretta distinzione di intervalli enarmonici (A#≠Bb dal punto di vista teorico)
+   - Riconoscimento affidabile di accordi eccedenti (It6, Fr6, Ger6) che dipendono dall'ortografia
+   - Preservazione della logica tonale nelle alterazioni cromatiche
+
+2. **Correzione educativa:** ogni regola violata presenta:
+   - Badge colorato con codice regola (es. "R-01:", "R-05:")
+   - Descrizione multi-riga espandibile
+   - Consiglio pratico per la correzione
+
+3. **Linguaggio accademico italiano:** Tutta la terminologia musicale segue lo standard italiano conservatoriale (accordi napoletani, seste aumentate, sospensioni, tonicizzazioni, ecc.).
+
+4. **Nessuna dipendenza alternativa di rendering:** Utilizzo esclusivo di **VexFlow** per il disegno musicale (nessun MuseScore plugin, nessun SVG custom oltre VexFlow).
+
+### 1.3 Stato Attuale e Roadmap
+
+| Metrica | Valore |
+|---|---|
+| Completezza funzionale | ~90% |
+| Build status | Buildable (npm run build) |
+| Electron app | Avviabile (`npm run electron:dev`) |
+| Test regression | 44/44 test passing |
+| Corpus analisi | 216 file (213 analizzati) |
+| Stato commerciale | Beta, no installer, release target: aprile 2026 |
+
+**Non ancora implementato (rimandabile):**
+- Windows testing/packaging
+- MusicXML importer (solo export per ora)
+- Feature Guitar/Scale/Chord/Interval nel flavor `grandstaff`
+- Modal switch (modo attivo in UI)
+- Refactor architetturale GrandStaffEditor (pianificato post-beta)
+
+---
+
+## 2. STACK TECNOLOGICO DETTAGLIATO
+
+| Componente | Tecnologia | Note |
+|---|---|---|
+| **Frontend** | React 18 + TypeScript | Vite dev server, HMR abilitato |
+| **Desktop** | Electron (main + preload + renderer) | IPC tipizzato tramite `window.electronAPI` |
+| **Build tool** | Vite | Bundler per ottimizzazione produzione |
+| **Styling** | Tailwind CSS 3 | Classi utility, dark mode nativo |
+| **Rendering musicale** | **VexFlow 4.x** | Esclusivo — SVG per staves, notes, beaming |
+| **Audio playback** | Web Audio API + FluidR3 GM soundfont | 12 strumenti per voce, sampioni MP3 |
+| **MIDI I/O** | Web MIDI API | Canali separati per voce (1–4) |
+| **Persistenza** | localStorage + file .json/.htp | Formato nativo JSON con schema di progetto |
+| **Validazione dati** | TypeScript strict mode | Tipi condivisi in `src/types.ts` |
+
+### 2.1 Versione Electron
+
+- **Framework:** Electron 27+ (versione stabile)
+- **Main process:** `electron/main.js` (gestione menu, IPC, file I/O)
+- **Preload:** `electron/preload.js` (API bridge sicuro)
+- **Renderer:** React app compilata dentro Chromium
+- **Sicurezza:** Context isolation, sandbox abilitato, niente fs/path nel renderer
+
+### 2.2 Versione Web (futuro)
+
+Attualmente non esposta al web pubblico. Architettura supporta facile adattamento a Vite + SSR (rimandato post-beta).
+
+---
+
+## 3. ARCHITETTURA COMPONENTI CHIAVE
+
+### 3.1 Mappa Visiva dell'Interfaccia
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    MENU PRINCIPALE (Electron)                   │
+│    File | Edit | View | Tools | Corali | Help                 │
+└────────────────────────────────────────────────────────────────┘
+┌──────────────────┬─────────────────────────────────────┬────────┐
+│                  │                                     │        │
+│   TOOLBAR CTRL   │       EDITOR PRINCIPALE (GRAND      │ ANALISI│
+│                  │           STAFF / VexFlow)          │ PANEL  │
+│  • Voce (V)      │                                     │        │
+│  • Durate (1-7)  │  ┌─────────────────────────────┐   │ Errori │
+│  • Alteraz. (#nb)│  │ SOPRANO    [nota] [nota]    │   │ Warning│
+│  • Note/Pausa(R) │  ├─────────────────────────────┤   │Eccezioni
+│  • Punto (.)     │  │ ALTO       [nota] [nota]    │   │        │
+│  • Legatura (T)  │  ├─────────────────────────────┤   │ Filtri │
+│  • Tonalità      │  │ TENORE     [nota] [nota]    │   │ Search │
+│  • Tempo/BPM     │  ├─────────────────────────────┤   │        │
+│  • Play/Stop     │  │ BASSO      [nota] [nota]    │   │Sequenze│
+│  • MIDI Out      │  │                             │   │(se att)│
+│  • Metro         │  │ [Misura 1] [Misura 2] ...   │   │        │
+│                  │  │                             │   │        │
+│                  │  │ [Analisi armonica sotto]    │   │        │
+│                  │  │ I | IV | V | I  ...         │   │        │
+│                  │  └─────────────────────────────┘   │        │
+│                  │                                     │        │
+└──────────────────┴─────────────────────────────────────┴────────┘
+```
+
+### 3.2 Componenti Principali React
+
+| Componente | File | Responsabilità |
+|---|---|---|
+| **GrandStaffEditor** | `src/components/GrandStaffEditor.tsx` | "God component" principale — gestisce stato note, selezione, playback, undo/redo, IPC menu. ~8600 righe |
+| **VexflowGrandStaff** | `src/components/VexflowGrandStaff.tsx` | Rendering SVG pentagramma + note tramite VexFlow |
+| **HarmonyAnalysisPanel** | `src/components/HarmonyAnalysisPanel.tsx` | Pannello laterale analisi armonica, filtri, ricerca regole |
+| **GrandStaffToolbar** | `src/components/GrandStaffToolbar.tsx` | Toolbar controlli (voce, durate, alterazioni, tonalità, tempo) |
+| **PlaybackControls** | `src/components/PlaybackControls.tsx` | Play, stop, loop, progress bar, selezione beat |
+| **KeySelector** | `src/components/KeySelector.tsx` | Selezione tonalità (12 maggiori + 12 minori) |
+| **TimeSignatureControl** | `src/components/TimeSignatureControl.tsx` | Selettore metro (2/4, 3/4, 4/4, 6/8, ecc.) |
+| **ChordControls** | `src/components/ChordControls.tsx` | (Rimandato — feature futura) |
+| **PreferencesModal** | `src/components/PreferencesModal.tsx` | Impostazioni generali (tema, verbosità, profilo analisi) |
+| **RomanProgressionEditor** | `src/components/RomanProgressionEditor.tsx` | UI per inserimento progressioni roman numerali + realizzatore corali |
+| **App** | `src/App.tsx` | Router modi (scales, chords, intervals, editor, grandStaff) + gestione errori menu |
+
+### 3.3 Hook Custom Principali
+
+| Hook | File | Funzione |
+|---|---|---|
+| **useHarmonyLabels** | `src/hooks/useHarmonyLabels.ts` | Calcolo numeri romani + basso figurato (R0–R14 pipeline). ~5000 righe |
+| **useNoteEditor** | `src/hooks/useNoteEditor.ts` | Gestione inserimento note (click, ghost note, validazioni) |
+| **usePlayback** | `src/hooks/usePlayback.ts` | Riproduzione audio (Web Audio API, sincronizzazione timeline) |
+| **useNoteSelection** | `src/hooks/useNoteSelection.ts` | Selezione note (marquee, single-click, filtro per voce) |
+| **useGrandStaffMidi** | `src/hooks/useGrandStaffMidi.ts` | MIDI input/output, mappatura voce→canale |
+| **usePreference** | `src/preferences/usePreference.ts` | Gestione preferenze utente (localStorage) |
+
+---
+
+## 4. VALORE NOTE E DURATE COMPLETE
+
+### 4.1 Durate Disponibili
+
+Tutte le durate seguono lo standard della notazione occidentale moderna:
+
+| Etichetta interna | Nome italiano | Emoji | Durazioni beat (base 4/4) | Scorciatoia |
+|---|---|---|---|---|
+| `whole` | Semibreve | 𝅝𝅥 | 4 beat | `1` |
+| `half` | Minima | 𝅗𝅥 | 2 beat | `2` |
+| `quarter` | Semiminima (Quarto) | ♩ | 1 beat | `3` |
+| `eighth` | Croma (Ottavo) | ♪ | 0.5 beat | `4` |
+| `sixteenth` | Semicroma (Sedicesimo) | 𝅘𝅥𝅮 | 0.25 beat | `5` |
+| `thirty-second` | Biscroma (Trentaduesimo) | 𝅘𝅥𝅯 | 0.125 beat | `6` |
+| `sixty-fourth` | Semibiscroma (Sessantaquattresimo) | 𝅘𝅥𝅰 | 0.0625 beat | `7` |
+
+### 4.2 Pause Corrispondenti
+
+Per ogni durata nota esiste una pausa di pari valore:
+
+| Nota | Pausa | Durata |
+|---|---|---|
+| Semibreve | ◻️ (intera) | 4 beat |
+| Minima | 𝄽 (mezza) | 2 beat |
+| Semiminima | 𝄾 (quarto) | 1 beat |
+| Croma | 𝄿 (ottavo) | 0.5 beat |
+| Semicroma | 𝅀 (sedicesimo) | 0.25 beat |
+| Biscroma | 𝅁 (trentaduesimo) | 0.125 beat |
+| Semibiscroma | 𝅂 (sessantaquattresimo) | 0.0625 beat |
+
+**Note implementative:**
+- Le pause **non ricevono modificatori di alterazione** (no "alterazioni fantasma" dopo cancellazioni)
+- Il toggle `R` commuta tra modalità **nota** e modalità **pausa** (la durata si mantiene)
+- Dotted notes (`isDotted=true`) moltiplicano la durata per 1.5
+- Terzine (`isTriplet=true`) moltiplicano per 2/3
+- Duine (`isDuplet=true`) moltiplicano per 3/2
+- **Legature:** il toggle `T` attiva/disattiva la legatura sulla nota corrente (visiva + comportamento condotta)
+
+### 4.3 Selezione Durate in UI
+
+**Toolbar principale:**
+- Pulsanti numerici: **1** (semibreve) → **7** (semibiscroma)
+- Visualizzazione live: la durata selezionata appare come icona nella toolbar
+
+**Durante inserimento:**
+- **Ghost note** (anteprima) mostra la durata corrente con la giusta alterazione
+- Cambio durata non cancella la nota — solo aggiorna il valore temporale
+
+---
+
+## 5. ALTERAZIONI COMPLETE
+
+### 5.1 Tipi di Alterazione
+
+| Codice | Nome italiano | Simbolo | Effetto semitoni | Scorciatoia |
+|---|---|---|---|---|
+| `sharp` | Diesis | ♯ | +1 | `#` |
+| `flat` | Bemolle | ♭ | -1 | `b` |
+| `natural` | Bequadro | ♮ | 0 (annulla alterazione) | `n` |
+| `double-sharp` | Doppio diesis | 𝄪 | +2 | `##` (raro da UI) |
+| `double-flat` | Doppio bemolle | 𝄫 | -2 | `bb` (raro da UI) |
+
+### 5.2 Applicazione e Rimozione
+
+**Applicazione:**
+- Sulla nota selezionata o durante inserimento: premere `#` (diesis), `b` (bemolle), `n` (bequadro)
+- Il campo `explicitAccidental` della nota viene impostato
+- La ghost note in inserimento mostra l'alterazione **spostata a sinistra** per evitare sovrapposizioni con la testa
+
+**Rimozione:**
+- Premere `n` (bequadro) per rimuovere qualsiasi alterazione e tornare alla nota naturale
+- La note viene "ripulita" del campo `explicitAccidental`
+
+### 5.3 Normalizzazione Enarmonica
+
+**Principio fondamentale:**
+- La normalizzazione (E# → F, C## → D) **deve avvenire DOPO il matching degli accordi eccedenti**, non prima
+- L'ortografia originale (spelling) è preservata fino all'ultimo step della pipeline di analisi
+- Questo permette al riconoscitore di accordi eccedenti (It6, Fr6, Ger6) di operare sui dati originali
+
+**Implementazione:**
+```typescript
+// SBAGLIATO (normalizza troppo presto):
+normalizeEnharmonic(note) // E# → F
+identifyChord([notes_normalized])  // perde info sesta eccedente
+
+// GIUSTO (normalizza ultimo):
+identifyChord([notes_spelled_originali]) // riconosce It6 correttamente
+normalizeEnharmonic(result.root)     // solo dopo matching
+```
+
+---
+
+## 6. VOCI SATB E PENTAGRAMMI
+
+### 6.1 Grand Staff (Pentagramma Doppio)
+
+**Configurazione standard:**
+- **Chiave di violino (Treble clef):** Soprano + Alto
+- **Chiave di basso (Bass clef):** Tenore + Basso
+
+**Linee ledger:**
+- Soprano: Do5 (top staff linea superiore) fino a La3 (estensione bassa rara)
+- Alto: Fa4 (sotto Do5) fino a La3
+- Tenore: Do4 (top bass staff) fino a La2
+- Basso: Do3 (sotto sol2) fino a La1
+
+### 6.2 Registri Vocali Standard
+
+| Voce | Range comodo | Range esteso | Note pratiche |
+|---|---|---|---|
+| **Soprano (S)** | Do4 – Fa5 | Si3 – La5 | Voce più acuta, massimo Do6 in casi rari |
+| **Alto (A)** | Fa3 – Do5 | Mi3 – Re5 | Voce di mezzo-soprano, spesso confusa con soprano |
+| **Tenore (T)** | La2 – Mi4 | La2 – La4 | Voce maschile, nota di passaggio La2 tollerata |
+| **Basso (B)** | Mi2 – Si3 | Re2 – Do4 | Voce più grave, base armonica |
+
+**Regola R-RANGE:** Warning se una nota esce dal range comodo.
+
+### 6.3 Gestione Voci in Editor
+
+**Selezione voce corrente:**
+- Scorciatoia: `V` (cicla B → T → A → S → B)
+- Toolbar: pulsante "Voce" con icona e nome
+- Click su nota esistente: aggiorna voce corrente a quella della nota
+
+**Inserimento per voce:**
+- Ogni voce ha una timeline indipendente
+- Note inserite vanno nella voce corrente
+- Undo/redo mantiene la coerenza per voce
+
+### 6.4 Gambi (Stems) e Raggruppamento
+
+**Regole di gambo:**
+- **Soprano/Alto:** gambi solitamente su (in alto)
+- **Tenore/Basso:** gambi solitamente giù (in basso)
+- Eccezione in posizioni congiunte (es. 2 note su stessa linea): uno su, uno giù per chiarezza
+
+**Raggruppamento in accordo:**
+- Note simultanee (stesso beat) in voci diverse formano un **accordo verticale**
+- VexFlow raggruppa automaticamente con beam quando appropriato
+- Legature visive collegano note della stessa voce su beat consecutivi
+
+### 6.5 Modalità di Pentagramma (Staff System Mode)
+
+L'app supporta **tre modalità di visualizzazione** selezionabili liberamente, persistite per progetto. La modalità si cambia dalla toolbar (menu layout) o con la scorciatoia `Alt/Option + L` (cicla in sequenza).
+
+---
+
+#### **1. Grand Staff** — *modalità predefinita*
+Due pentagrammi collegati da stanghetta sinistra (accolatura):
+- **Pentagramma superiore:** chiave di violino → voci Soprano (gambi su) + Alto (gambi giù)
+- **Pentagramma inferiore:** chiave di basso → voci Tenore (gambi su) + Basso (gambi giù)
+
+Ideale per: esercizi SATB classici, corali, armonia a quattro voci in parti late o strette.
+
+---
+
+#### **2. Treble Only** — *pentagramma singolo in chiave di violino*
+Un solo pentagramma in chiave di violino. Tutte le voci (anche Tenore e Basso) vengono scritte e visualizzate su questo unico rigo.
+
+- Usato per: melodia con armonia compressa, analisi di pezzi su pentagramma unico, esercizi di armonia in chiave di violino senza basso separato, voicing chitarristici
+- L'analisi armonica continua a funzionare normalmente su tutte le voci
+- La chiave di basso non viene visualizzata, ma le note delle voci gravi restano presenti nel dato musicale
+
+---
+
+#### **3. SATB Ancient** — *quattro righi separati*
+Quattro pentagrammi indipendenti, uno per voce, secondo la notazione antica (open score):
+- Rigo 1: Soprano (chiave di soprano o violino)
+- Rigo 2: Alto (chiave di contralto o violino)
+- Rigo 3: Tenore (chiave di tenore o violino ottavante)
+- Rigo 4: Basso (chiave di basso)
+
+Ideale per: edizioni filologiche, studio di partiture antiche, didattica avanzata.
+
+---
+
+| Modalità | Righi | Chiavi | Uso tipico |
+|---|---|---|---|
+| **Grand Staff** | 2 | Violino + Basso | Armonia SATB classica |
+| **Treble Only** | 1 | Solo Violino | Melodia, analisi compatta, chitarra |
+| **SATB Ancient** | 4 | S/A/T/B separate | Partitura aperta, stile antico |
+
+> **Nota:** il cambio di modalità è **non distruttivo** — le note, le voci, il ritmo e l'analisi armonica non vengono modificati. Si tratta di una scelta puramente visiva/di layout.
+
+---
+
+## 7. TONALITÀ COMPLETE
+
+### 7.1 Tonalità Maggiori (12)
+
+| Tonalità | Armatura | Diesis/Bemolle | Accordo I | Accordo V |
+|---|---|---|---|---|
+| **Do maggiore (C)** | 0 (naturale) | nessuno | Do–Mi–Sol | Sol–Si–Re |
+| **Sol maggiore (G)** | 1 diesis (F#) | F# | Sol–Si–Re | Re–F#–La |
+| **Re maggiore (D)** | 2 diesis (F#, C#) | F#, C# | Re–F#–La | La–C#–Mi |
+| **La maggiore (A)** | 3 diesis | F#, C#, G# | La–C#–Mi | Mi–G#–Si |
+| **Mi maggiore (E)** | 4 diesis | F#, C#, G#, D# | Mi–G#–Si | Si–D#–F# |
+| **Si maggiore (B)** | 5 diesis | F#, C#, G#, D#, A# | Si–D#–F# | F#–A#–C# |
+| **Fa# maggiore (F#)** | 6 diesis | F#, C#, G#, D#, A#, E# | F#–A#–C# | C#–E#–G# |
+| **Do# maggiore (C#)** | 7 diesis | F#, C#, G#, D#, A#, E#, B# | C#–E#–G# | G#–B#–D# |
+| **Fa maggiore (F)** | 1 bemolle (Bb) | Bb | Fa–La–Do | Do–Mi–Sol |
+| **Si♭ maggiore (Bb)** | 2 bemolli | Bb, Eb | Sib–Re–Fa | Fa–La–Do |
+| **Mi♭ maggiore (Eb)** | 3 bemolli | Bb, Eb, Ab | Mib–Sol–Sib | Sib–Re–Fa |
+| **La♭ maggiore (Ab)** | 4 bemolli | Bb, Eb, Ab, Db | Lab–Do–Mib | Mib–Sol–Sib |
+
+### 7.2 Tonalità Minori (12)
+
+| Tonalità | Relativa maggiore | Armatura | Accordo i | Accordo V |
+|---|---|---|---|---|
+| **La minore (A)** | Do maggiore | 0 (naturale) | La–Do–Mi | Mi–Sol–Si |
+| **Mi minore (E)** | Sol maggiore | 1 diesis (F#) | Mi–Sol–Si | Si–Re–F# |
+| **Si minore (B)** | Re maggiore | 2 diesis | Si–Re–F# | F#–La–C# |
+| **F# minore** | La maggiore | 3 diesis | F#–La–C# | C#–E–G# |
+| **C# minore** | Mi maggiore | 4 diesis | C#–E–G# | G#–Si–D# |
+| **G# minore** | Si maggiore | 5 diesis | G#–Si–D# | D#–F#–A# |
+| **D# minore** | Fa# maggiore | 6 diesis | D#–F#–A# | A#–C#–E# |
+| **A# minore** | Do# maggiore | 7 diesis | A#–C#–E# | E#–G#–B# |
+| **Re minore (D)** | Fa maggiore | 1 bemolle (Bb) | Re–Fa–La | La–Do–Mi |
+| **Sol minore (G)** | Si♭ maggiore | 2 bemolli | Sol–Sib–Re | Re–Fa–La |
+| **Do minore (C)** | Mi♭ maggiore | 3 bemolli | Do–Mib–Sol | Sol–Sib–Re |
+| **Fa minore (F)** | La♭ maggiore | 4 bemolli | Fa–Lab–Do | Do–Mib–Sol |
+
+### 7.3 Selezione Tonalità in UI
+
+**Componente:** `KeySelector.tsx`
+
+**Interfaccia:**
+- Dropdown tonalità con elenco 12 mag + 12 min
+- Display attuale: tonica + modo (es. "C maior" / "a minore")
+- Tasto rapido: no shortcut predefinito, accesso via menu View
+
+**Cambio tonalità:**
+- Aggiorna l'armatura di chiave di tutto il brano
+- Ricalcola i numeri romani per tutte le misure
+- Nota: il cambio è **globale** fino a una modulazione (se segnata)
+
+### 7.4 Tonalità Relative Minori
+
+L'app calcola automaticamente la relativa minore di ogni tonalità maggiore:
+
+```
+Do maggiore (C) ← → La minore (a)    [relativa minore 3 semitoni sotto]
+Sol maggiore (G) ← → Mi minore (e)
+...ecc.
+```
+
+**Inversamente:** data una tonalità minore, la relativa maggiore è sempre 3 semitoni sopra la tonica.
+
+### 7.5 Modalità Minore Attiva
+
+**Campo:** `minorScaleMode` nel progetto
+
+Tre opzioni:
+- **`natural`** (Aeolian): scala minore naturale (vi–vii°–i pattern)
+- **`harmonic`** (Harmonic minor): VII# per dominante V-i (sensibile)
+- **`melodic`** (Melodic minor): VI#+VII# in salita, VI–VII♭ in discesa (raro in analisi armonica)
+
+**Impatto analisi:**
+- La selezione influenza il riconoscimento del grado VII (VII° vs VII#)
+- Dominante secondaria V/x in minore segue la modalità attiva
+
+### 7.6 Modulazioni
+
+**Supporto modulazioni:**
+- **Riconoscimento automatico:** cadential patterns (V→I, ii→V→I) su 12 toniche candidate
+- **Marcatura manuale:** campo `analysisContext` per forzare cambio tonale a misura specifica
+- **Lookahead tonicizzazioni:** fino a 2 misure in anticipo per rilevare V/x → x
+
+**Reso visivo:**
+- Numeri romani adattati alla tonalità locale
+- Dominanti secondarie etichettate (es. "V/V", "V7/IV")
+- Cadenze evidenziate con connessione tratteggiata
+
+---
+
+## 8. METRO E TEMPO
+
+### 8.1 Metri Disponibili
+
+L'applicazione supporta qualsiasi metro, ma ha preset rapidi per i più comuni:
+
+| Metro | Nome italiano | Numeratore | Denominatore | Uso tipico |
+|---|---|---|---|---|
+| **2/4** | Due quarti | 2 | 4 | Musica binaria, danze (marce) |
+| **2/2** | Alla breve | 2 | 2 | Largo, processionale |
+| **3/4** | Tre quarti | 3 | 4 | Valzer, minuetto, più frequente |
+| **3/8** | Tre ottavi | 3 | 8 | Danza veloce, scherzo |
+| **4/4** | Quattro quarti | 4 | 4 | Comune, standard **DEFAULT** |
+| **6/8** | Sei ottavi | 6 | 8 | Danza, giga, molto frequente |
+| **5/4** | Cinque quarti | 5 | 4 | Moderno, asimmetrico (raro in classico) |
+| **7/8** | Sette ottavi | 7 | 8 | Asimmetrico (raro) |
+| **12/8** | Dodici ottavi | 12 | 8 | Lento, arioso |
+
+**Personalizzazione:**
+- Componente `TimeSignatureControl.tsx` permette inserire qualunque metro (es. 11/16)
+- Il metro non deve necessariamente essere "standard" — supportati metri irregolari
+
+### 8.2 Battute (Misure)
+
+**Operazioni su battute:**
+
+| Azione | Come si esegue | Descrizione |
+|---|---|---|
+| Aggiungi battuta | Pulsante in toolbar | Aggiunge una misura vuota alla fine |
+| Imposta numero misure | Campo numerico in toolbar | Accoda o tronca misure fino al numero specificato |
+| Elimina battuta | Playhead sulla misura → `T` (apre pannello tonicizzazioni) → "Cancella misura" | Rimuove la misura corrente |
+
+**Vincoli:**
+- Ogni misura rispetta la durata del metro (es. 4/4 = massimo 4 beat totali)
+- Overflowing note oltre il limite metro sono tagliati (warning visual)
+- Minimum misure per progetto: 1 (non permette progetto completamente vuoto)
+
+### 8.3 BPM (Tempo)
+
+**Controllo BPM:**
+
+| Campo | Intervallo | Default | Descrizione |
+|---|---|---|---|
+| `bpm` | 20–480 | 120 | Battiti per minuto |
+| `isBpmActive` | boolean | false | Abilita/disabilita metronomo |
+
+**Impatto:**
+- BPM influenza la **riproduzione audio** (velocity di playback)
+- Non influenza il **disegno visivo** delle note
+- Il metronomo (se attivo) riproduce click a questo tempo
+
+**Scorciatoia:**
+- `K` per accendere/spegnere metronomo
+
+### 8.4 Tempo Signature Changes
+
+**Supporto cambi di metro a metà brano:**
+
+Struttura dati:
+```typescript
+interface TimeSignatureChange {
+  measureIndex: number;           // quale misura (0-based)
+  numerator: number;              // nuovo numeratore
+  denominator: number;            // nuovo denominatore
+  absBeat?: number;               // (auto-calcolato)
+}
+```
+
+**Implementazione:**
+- Ogni `TimeSignatureChange` registra il nuovo metro a una misura specifica
+- La timeline calcola automaticamente i beat di ogni misura in base al metro attivo
+- L'analisi armonica adatta i pattern cadenziali al nuovo metro
+
+---
+
+## 9. PLAYBACK E AUDIO
+
+### 9.1 Architettura Audio
+
+**Componente:** `src/services/AudioService.ts`
+
+```
+┌─────────────────────────────────────┐
+│  Web Audio API (AudioContext)       │
+├─────────────────────────────────────┤
+│  GainNode (volume)                  │
+│  BufferSource (sample playback)     │
+└─────────────────────────────────────┘
+           ↓
+    [FluidR3 GM soundfont]
+    (12 strumenti per voce)
+           ↓
+    [Speaker / Headphones]
+```
+
+### 9.2 Strumenti (Timbri) per Voce
+
+Ogni voce può essere assegnata uno strumento MIDI diverso:
+
+| Voce | Strumento default | Alternati disponibili |
+|---|---|---|
+| **Soprano (S)** | Soprano Sax | Flauto, Clarinetto, Violino, Tromba |
+| **Alto (A)** | Alto Sax | Trombone, Corno francese, Viola, Sassofono contralto |
+| **Tenore (T)** | Tenore Sax | Trombone, Clarinetto basso, Violoncello, Sassofono tenore |
+| **Basso (B)** | Contrabbasso acustico | Tuba, Violoncello, Fagotto, Contrabbasso |
+
+**Fallback:** se un sample non carica, il sistema cerca prima locale (`./sounds/piano/`) poi CDN remoto (Gleitz MIDI.js).
+
+### 9.3 Playback Controls
+
+**Componente:** `PlaybackControls.tsx`
+
+| Controllo | Icona | Scorciatoia | Azione |
+|---|---|---|---|
+| **Play** | ▶ | `Space` | Avvia playback da battuta corrente |
+| **Stop** | ⏹ | `Space` (nuovamente) | Ferma playback, torna a inizio |
+| **Loop** | 🔄 | `Shift+Space` | Toggle loop misura corrente |
+| **Progress bar** | ─────●────── | Click on bar | Salta a beat specifico |
+| **Speed** | Slider (0.5x–2x) | `+` / `-` | Modifica velocità playback |
+
+### 9.4 MIDI I/O
+
+**Supporto MIDI esterno:**
+
+**Input (MIDI keyboard):**
+- Riconosce tasti premuti in tempo reale
+- Mappa canale MIDI → voce SATB (default: canale 1→S, 2→A, 3→T, 4→B)
+- Nota: non registra automaticamente (prevent accidentale registrazione). Scorciatoia esplicita per enable.
+
+**Output (MIDI Out):**
+- Toolbar: dropdown "MIDI Out" con lista dispositivi connessi
+- Scelta "Audio Interno" riproduce via Web Audio API (non via MIDI esterno)
+- Il playback invia notazioni MIDI complete (note-on, note-off, velocity, cc7 volume)
+
+**Implementazione:** `src/hooks/useGrandStaffMidi.ts`
+
+---
+
+## 10. ANALISI ARMONICA — IL CUORE DELL'APP
+
+### 10.1 Pipeline di Analisi Completa (8 Blocchi)
+
+L'analisi trasforma un `StaffNote[]` grezzo in etichette armoniche visualizzate sotto il pentagramma tramite una **pipeline in 8 blocchi sequenziali**.
+
+#### **Blocco 1: Input (Raw)**
+- **Source:** `GrandStaffEditor.tsx` → `StaffNote[]` (stato React undoable)
+- **Operazione:** `calculateNoteBeats()` assegna `measureIndex` + `beat` a ogni nota
+- **Output:** `StaffNote[]` con timeline definita, `analysisContexts` (lista delle tonalità attive)
+
+#### **Blocco 2: VexFlow Rendering**
+- **Source:** `VexflowGrandStaff.tsx` `useEffect`
+- **Operazione:** crea `Renderer` SVG, disegna staves, note, beam, legature
+- **Output:** `layoutData` (mappa coordinate x per ogni beat, per posizionamento etichette)
+
+#### **Blocco 3: Timeline & Ornament Detector (2 pass)**
+- **Source:** `musicTheory.ts` → `getActiveNotesTimeline()`, `applyHarmonyRules()`
+- **Operazione:**
+  - Scansione **ogni punto temporale** (inizio/fine nota)
+  - Raggruppamento note simultanee in **fette verticali**
+  - **1° pass:** pattern ovvi (passaggio, volta, appoggiatura, anticipazione, sfuggita, sospensione)
+  - **2° pass:** `isConsonantToHarmony()` — filtra note ornamentali, usa solo note "armoniche" per accordo
+- **Output:** `analyzedNotes[]` (flag ornamento), `violations[]` (iniziale)
+
+#### **Blocco 4: Identificazione Accordo**
+- **Source:** `musicTheory.ts` → `identifyChordCandidates()`
+- **Operazione:**
+  - Analisi basata su **spelling** (nomi note, non solo MIDI)
+  - Calcola pile di terze (`collectIntervalsAboveBass()`)
+  - Restituisce candidati ordinati per plausibilità
+- **Output:** `{ root, quality, inversion, score }[]` ordinati per score
+
+#### **Blocco 5: Calcolo Numeri Romani**
+- **Source:** `useHarmonyLabels.ts` → `getRomanAnalysis()`
+- **Operazione:**
+  - Per ogni fetta: identificazione accordo nel contesto tonalità attiva
+  - Gestisce: dominanti secondarie (V/x, vii°/x), accordi incompleti, bassi senza radice, sospensioni
+  - **R0–R14 pipeline** (14 step di disambiguazione, ultimo step usa corpus bigram)
+- **Output:** `{ roman, figures, root }`
+
+#### **Blocco 5a: Cadential Patterns (Opzionale)**
+- **Source:** `cadentialPatterns.ts` → `evaluateCadentialPatterns()`
+- **Operazione:**
+  - Finestra scorrevole formule cadenziali (V→I, ii→V→I, vii°→I, ecc.)
+  - Testata su 12 toniche candidate
+- **Output:** `CadentialMatch[]` → contesti temporanei (se enabled)
+
+#### **Blocco 5b: Lookahead Tonicizzazioni (Opzionale)**
+- **Source:** `harmonyLabelPipeline.ts` → `computeLookaheadTonicizationOverrides()`
+- **Operazione:** guarda 2 misure avanti per rilevare tonicizzazioni (V/x → x)
+- **Output:** `autoRomanDisplayByAbsBeat` (pivot labels visuali)
+
+#### **Blocco 6: Regole SATB**
+- **Source:** `musicTheory.ts` → `applyHarmonyRules()`
+- **Operazione:** applica R-01…R-17 + regole estese. Produce `RuleViolation[]` con severità error/warning/exception
+- **Output:** `RuleViolation[]` (violazioni caricate in panel UI)
+
+#### **Blocco 7: Sequence Detection (Opzionale)**
+- **Source:** `sequenceDetector.ts` → `detectVoiceLeadingSequences()`
+- **Operazione:**
+  - Costruisce snapshot intervallari tick-per-tick
+  - Matcha modelli + copie trasposte
+  - Riconosce sequenze imitate (imitazioni armoniche)
+- **Output:** `sequenceRoman`, `sequenceRomanFunctional` (etichette aggiuntive)
+
+#### **Blocco 8: Label Rendering (UI)**
+- **Source:** `GrandStaffEditor.tsx` + `HarmonyAnalysisPanel.tsx`
+- **Operazione:** priorità visualizzazione accordi:
+  ```
+  romanDisplay
+    ?? sequenceRomanFunctional  (se sequenza detected)
+    ?? seqRoman                 (se sequence matching)
+    ?? roman                    (default)
+  ```
+- **Output:** etichette under staff + panel analisys violations
+
+---
+
+### 10.2 Accordi Riconosciuti Completo
+
+#### **Triadi (3 note)**
+
+| Tipo | Qualità | Intervalli | Esempio (C) | Simboli accettati |
+|---|---|---|---|---|
+| Maggiore | Major | 1–3–5 | C–E–G | C, Cmaj, C∆ |
+| Minore | Minor | 1–b3–5 | C–Eb–G | Cm, Cmin, C− |
+| Diminuita | Diminished | 1–b3–b5 | C–Eb–Gb | C°, Cdim, C− |
+| Aumentata | Augmented | 1–3–#5 | C–E–G# | C+, Caug, C∆5 |
+
+#### **Accordi di Settima (4 note)**
+
+| Tipo | Qualità | Intervalli | Esempio (C) | Sigle |
+|---|---|---|---|---|
+| Dominante 7 | Dominant 7 | 1–3–5–b7 | C–E–G–Bb | V7, G7 (in C) |
+| Maggiore 7 | Major 7 | 1–3–5–7 | C–E–G–B | Cmaj7, CM7, C∆7 |
+| Minore 7 | Minor 7 | 1–b3–5–b7 | C–Eb–G–Bb | Cm7, Cmin7 |
+| Minore-Maggiore 7 | Minor-Major 7 | 1–b3–5–7 | C–Eb–G–B | CmM7, Cm(maj7) |
+| Diminuito 7 | Diminished 7 | 1–b3–b5–bb7 | C–Eb–Gb–Bbb(=A) | C°7, Cdim7 |
+| Semidiminuito | Half-Diminished 7 | 1–b3–b5–b7 | C–Eb–Gb–Bb | Cø7, Cm7b5 |
+
+#### **Seste**
+
+| Tipo | Intervalli | Esempio | Sigle |
+|---|---|---|---|
+| Maggiore 6 | 1–3–5–6 | C–E–G–A | C6, CM6 |
+| Minore 6 | 1–b3–5–6 | C–Eb–G–A | Cm6, Cmin6 |
+| Sesta aumentata italiana | b3–1–#4 sopra basso | It6: Eb–C–F# | It+6, I+6 |
+| Sesta aumentata francese | b3–1–2–#4 sopra basso | Fr6: Eb–C–D–F# | Fr+6, F+6 |
+| Sesta aumentata tedesca | b3–1–5–#4 sopra basso | Ger6: Eb–C–G–F# | Ger+6, G+6 |
+
+#### **None (5 note)**
+
+| Tipo | Intervalli | Esempio | Sigle |
+|---|---|---|---|
+| Dominante b9 | 1–3–5–b7–b9 | C–E–G–Bb–Db | G7b9 (in C), C7b9 |
+| Dominante #9 | 1–3–5–b7–#9 | C–E–G–Bb–D# | G7#9 (in C), C7#9 |
+| Major 9 | 1–3–5–7–9 | C–E–G–B–D | Cmaj9, CM9, C∆9 |
+| Minor 9 | 1–b3–5–b7–9 | C–Eb–G–Bb–D | Cm9, Cmin9 |
+| Dominant 9 | 1–3–5–b7–9 | C–E–G–Bb–D | C9, G9 (in C) |
+
+#### **Rivolti**
+
+Tutti gli accordi sopra listati supportano **inversioni:**
+
+| Rivolto | Nome | Figura | Esempio (C major) | Simbolo |
+|---|---|---|---|---|
+| Fondamentale | Root position | 5/3 | C–E–G (C al basso) | I (senza numeri) |
+| Primo rivolto | First inversion | 6 | E–G–C (E al basso) | I6 |
+| Secondo rivolto | Second inversion | 6/4 | G–C–E (G al basso) | I6/4, I64 |
+| Terzo rivolto | Third inversion | 6/4/2 | Bb–C–E–G (Bb al basso di C7) | V6/4/2, V42 |
+
+---
+
+### 10.3 Funzioni Armoniche Tonali
+
+#### **Gradi Diatonici (I–VII)**
+
+In tonalità maggiore:
+```
+I (Tonica)
+II (Sopratonica)
+III (Mediante)
+IV (Sottodominante)
+V (Dominante)
+VI (Sopradominante)
+VII (Sensibile)
+```
+
+In tonalità minore (con relativa maggiore):
+```
+i (tonica)
+ii° (sopratonica diminuita)
+III (mediante relativa)
+iv (sottodominante)
+v (dominante)
+VI (sopradominante relativa)
+VII# (sensibile naturale o alterata)
+```
+
+#### **Dominanti Secondarie**
+
+Formato: `V/x` o `V7/x` dove `x` è il grado target.
+
+Esempi in Do maggiore:
+- `V/V` = Re–F#–La (dominante di Sol, che è la dominante principale)
+- `V/IV` = Sol–Si–Re (dominante di Fa)
+- `V/ii` = Mi–G#–Si (dominante di ii)
+- `vii°/V` = F#°7 (sensibile di Sol)
+
+#### **Accordi di Prestito Modale (Modal Interchange)**
+
+Accordi presi da tonalità parallela (stesso tonica, modo diverso):
+
+Esempi in Do maggiore (con Do minore):
+- `iv` = Fa–Lab–Do (sottodominante minore da Do minore)
+- `VI` = Lab–Do–Mib (sopradominante minore)
+- `bII` = Dob–Mib–Solb (accordo napoletano, da Dob, relativa minore di Lab)
+- `bVII` = Sib–Re–Fa (accordo di settima di dominante, da Dob minore)
+
+#### **Modulazioni Vere**
+
+Cambio permanente di tonalità segnato esplicitamente. Sintassi in "Roman Progression Editor":
+
+```
+I IV V I →G:  [cambio a Sol maggiore]
+I IV V I
+```
+
+---
+
+### 10.4 Ornamenti e Note Non Accordali Riconosciuti
+
+#### **Tipo: Passaggio (Passing Note)**
+
+| Caratteristica | Valore |
+|---|---|
+| Posizione ritmca | Tempo debole (non beat 1) |
+| Movimento melodico | Grado congiunto (scala) |
+| Funzione | Connessione tra due note armoniche |
+| Codice UI | (nessun marker, o invisibile) |
+| **Marker compact** | Nessuno (non mostrato) |
+
+**Riconoscimento:**
+```
+Accordo A (beat 1: Do–E–G)
+  └─ passaggio (beat 2: Re) [nota Di tra Do e Mi]
+Accordo A (beat 3: Do–E–G)
+```
+
+#### **Tipo: Nota di Volta (Neighbor Note)**
+
+| Caratteristica | Valore |
+|---|---|
+| Posizione ritmica | Tempo debole |
+| Movimento melodico | Su, poi giù (o giù, poi su) da nota reale |
+| Funzione | Abbellimento di una nota reale |
+| **Marker compact** | **v** (visibile sulla nota) |
+| Notazione musica | Piccola nota, spesso (ma non sempre) appoggiata |
+
+**Riconoscimento:**
+```
+C–E–G (Do è nota reale)
+  └─ Do, Re (up), Do (down) = volta su Mi
+```
+
+#### **Tipo: Anticipazione (Anticipation)**
+
+| Caratteristica | Valore |
+|---|---|
+| Posizione ritmica | Tempo debole, fine misura precedente |
+| Movimento melodico | Per grado (usualmente) verso nota dell'accordo seguente |
+| Funzione | "Anticipa" nota dell'accordo successivo |
+| **Marker compact** | **a** (visibile sulla nota) |
+| Durata | Breve (croma, semicroma) |
+
+**Riconoscimento:**
+```
+Accordo A (beat 3: Do–E–G)
+  └─ anticipazione (beat 4): Mi (nota dell'accordo B che viene)
+Accordo B (beat 1: Mi–G#–Si)
+```
+
+#### **Tipo: Appoggiatura (Appoggiatura)**
+
+| Caratteristica | Valore |
+|---|---|
+| Posizione ritmica | Tempo forte (enfasi ritmica) |
+| Movimento melodico | Salto verso nota ornamentale, risoluzione per grado giù |
+| Funzione | Dissonanza accentuata che risolve |
+| **Marker compact** | (nessuno — trattata come dissonanza accordale) |
+| Durata | Variabile (1/4, 1/8, anche breve) |
+| Notazione | Spesso piccola nota con sbarra (in stile moderno, nota regolare) |
+
+**Riconoscimento:**
+```
+Do–E–G (beat 1)
+  └─ appoggiatura Fa (beat 1, forte) → risolve Mi (beat 2)
+Do–E–G (beat 2)
+```
+
+#### **Tipo: Nota di Sfuggita (Escape Note)**
+
+| Caratteristica | Valore |
+|---|---|
+| Posizione ritmica | Tempo debole |
+| Movimento melodico | Salto dalla nota reale, conclude per grado |
+| Funzione | Ornamento asimmetrico (salto + grado) |
+| **Marker compact** | (nessuno) |
+| Notazione | Raramente scritta esplicitamente in forma antica |
+
+**Riconoscimento:**
+```
+Do (nota reale)
+  └─ sfuggita Fa (salto), risolve Mi (grado)
+Do seguente
+```
+
+#### **Tipo: Sospensione/Ritardo (Suspension)**
+
+| Caratteristica | Valore |
+|---|---|
+| Posizione ritmica | Stessa nota su due accordi (preparazione, dissonanza, risoluzione) |
+| Movimento melodico | Nessuno (nota ferma) per preparazione, discesa per risoluzione |
+| Funzione | Dissonanza ritardata con risoluzione obbligatoria |
+| **Marker compact** | **S** (in verde se riconosciuta, con connessione) |
+| Tipi | 2-1, 4-3, 7-6, 9-8 (numero dissonanza – numero risoluzione) |
+| Esempi | 4-3: Fa sopra Do (dissonanza), risolve Mi |
+
+**Riconoscimento:**
+```
+Accordo A beat 1 (Do–Fa–G, con Fa sospensione da accordo precedente)
+  [Fa preparato nell'accordo precedente]
+  [Fa è dissonanza in Do–Fa–G]
+Accordo A beat 2 (Do–E–G)
+  [Fa risolve E]
+```
+
+#### **Marker Compatti in UI**
+
+Sulla pentagramma appaiono piccoli marcatori:
+- **v** = Nota di volta (neighbor)
+- **a** = Anticipazione
+- **S** (verde) = Sospensione riconosciuta correttamente
+
+---
+
+### 10.5 Errori e Regole Armoniche Controllate
+
+Tutte le regole sono implementate in `applyHarmonyRules()` del file `musicTheory.ts`.
+
+#### **ERRORI (Severity: error) — Badge rosso**
+
+| RuleId | Nome | Descrizione breve |
+|---|---|---|
+| **R-01** | Ottave/unisoni paralleli | Due voci mantengono ottava/unisono in moto retto per 2+ accordi |
+| **R-02** | Quinte parallele | Due voci mantengono quinta giusta in moto retto per 2+ accordi |
+| **R-02c** | Quinte consecutive (moto contrario) | Due quinte perfette consecutive, anche in moto contrario |
+| **R-04** | Incrocio di voci grave | Una voce scende sotto la voce immediatamente inferiore, o sale sopra quella superiore |
+| **R-06** | Risoluzione errata intervallo aumentato/diminuito | Salto di 4° eccedente o 5° diminuita non risolve correttamente per grado |
+| **R-07** | Sensibile non risolve | VII grado in accordo V/vii° non sale di semitono a I (error nelle voci esterne) |
+| **R-09** | Falsa relazione cromatica | Nota in una voce, alterazione cromatica in voce diversa nell'accordo successivo |
+| **R-10** | Raddoppio sensibile | Sensibile (VII) raddoppiata, genera problemi di risoluzione |
+| **R-10-7TH** | Raddoppio settima accordo | Settima raddoppiata, genera ottave parallele nella risoluzione |
+| **R-10-DIM5** | Raddoppio quinta diminuita | Quinta diminuita raddoppiata in accordi vii° |
+| **R-12** | Settima non risolve | Settima dell'accordo non scende di grado nell'accordo successivo |
+
+#### **WARNING (Severity: warning) — Badge arancione**
+
+| RuleId | Nome | Descrizione breve |
+|---|---|---|
+| **R-05** | Quinte/ottave nascoste (dirette) | Voci estreme raggiungono quinta/ottava per salto del soprano (senza moto obliquo/contrario) |
+| **R-08** | Spaziatura eccessiva S-A / A-T | Intervallo tra soprano-alto o alto-tenore > ottava |
+| **R-10-64** | Raddoppio atipico in 6/4 | Nel 6/4 cadenzale, raddoppio non sulla quinta (basso) |
+| **R-10-3RD** | Preferenza raddoppio terza | Triadi stato fondamentale raddoppiano terza invece di fondamentale |
+| **R-10-6** | Preferenza raddoppio in primo rivolto | Primo rivolto raddoppia nota al basso (terza) quando fondamentale sarebbe migliore |
+| **R-13** | Moto parallelo tutte voci | Tutte e quattro le voci si muovono nella stessa direzione |
+| **R-14** | Moto simile voci estreme | Soprano e basso in moto simile |
+| **R-15** | Salti ampi voce interna | Alto/Tenore salta > sesta |
+| **R-16** | Sincope armonica (regola stanghetta) | Stesso accordo tempo debole (beat 4) + tempo forte (beat 1 misura seguente) senza cambio |
+| **R-17a** | Salto 7ª/9ª melodica | Due salti stessa direzione sommano 7ª/9ª |
+| **R-17b** | 7ª/9ª in due salti senza grado | Due salti di terza+ non separati da grado congiunto |
+| **R-17c** | Tritono delineato | Successione tritono (4ª eccedente) su 2+ movimenti stessa direzione |
+| **R-CHORD-COMPLETE** | Accordo incompleto | Mancanza terza (anche in shell voicings) o settima (se accordo di 7ª) |
+| **R-RANGE** | Nota fuori registro | Nota oltre range tipico SATB per quella voce |
+| **R-SPACING-TB** | Spaziatura T-B eccessiva | Tenore e basso distano > 2 ottave + quinta |
+| **R-N-RES** | Napoletana risoluzione attesa | Accordo napoletano (bII) non risolve su V |
+| **R-AUG6-RES** | Sesta aumentata risoluzione attesa | It6/Fr6/Ger6 non risolvono su V |
+| **R-CAD64** | 6/4 cadenzale risoluzione attesa | I6/4 non risolve su V come atteso in cadenza |
+
+#### **ECCEZIONI (Severity: exception) — Badge verde**
+
+| RuleId | Nome | Descrizione breve |
+|---|---|---|
+| **EXC-M03** | Finta quinta parallela (moto contrario) | Due quinte, una è settima della dominante (tollerata) |
+| **EXC-M04** | Quinta minore → V (minore) | Progressione vi → V in tonalità minore tollera (tollerata) |
+| **EXC-Hidden-Stepwise** | Nascosta soprano per grado | Soprano procede per grado → nascoste tollerate |
+| **EXC-Hidden-BassStep** | Nascosta basso per grado | Basso per grado + soprano salta piccolo → tollerato |
+| **EXC-OBL-PERF** | Moto obliquo (una voce ferma) | Ottava/quinta raggiunte per moto obliquo → tollerato |
+| **EXC-S02** | Incrocio Alto/Tenore tollerato | Alto e tenore si incrociano (interno, meno grave) |
+| **EXC-Unison-Lower** | Unisono voci basse (moto contrario/obliquo) | Tenore-basso in unisono per moto non retto |
+| **EXC-LT-Transfer** | Sensibile trasferita | Risoluzione sensibile "raccolta" da altra voce |
+| **EXC-LT-Chromatic** | Sensibile linea cromatica | Sensibile in discesa cromatica (eccezione rara) |
+| **EXC-7m01** | Settima libera (trasferita) | Risoluzione settima in altra voce |
+| **EXC-7-FREE** | Settima minore risolta liberamente | Settima minore risoluzione non obbligatoria |
+| **EXC-7-TRANSFERRED-RES** | Risoluzione trasferita | Settima risolve in voce diversa |
+| **S-strict** | Sospensione riconosciuta | Marker informatico: sospensione corretta |
+| **CAD-PAC** | Cadenza autentica perfetta | Marker cadenza V→I |
+| **CAD-IAC** | Cadenza autentica imperfetta | Marker cadenza V→I (ma primo rivolto tonica) |
+| **CAD-HC** | Semicadenza | Marker cadenza terminata su V |
+| **CAD-PLAG** | Cadenza plagale | Marker cadenza IV→I |
+
+---
+
+### 10.6 Pannello di Analisi (UI)
+
+**Componente:** `HarmonyAnalysisPanel.tsx`
+
+#### **Layout:**
+
+```
+┌─────────────────────────────────┐
+│  Filtri severity:               │
+│  ☑ Error   ☑ Warning  ☑ Exception│
+│  ☑ Chromatic                    │
+├─────────────────────────────────┤
+│  Ricerca rule:                  │
+│  [________ search ________]     │
+├─────────────────────────────────┤
+│  Violazioni (lista):            │
+│                                 │
+│ ▼ R-01: Ottave parallele        │
+│   ↳ Beat 4–5 (S–B)             │
+│   ↳ [Dettaglio espandibile...]  │
+│   ↳ Consiglio: Modifica S...    │
+│                                 │
+│ ▼ R-05: Nascoste (S–B)         │
+│   ↳ Beat 1–2 soprano salta      │
+│   ↳ [Dettaglio espandibile...]  │
+│                                 │
+│ ✓ CAD-PAC: Cadenza autentica   │
+│   ↳ Beat 3–4 V→I                │
+│                                 │
+├─────────────────────────────────┤
+│ Sequenze (se abilitate):        │
+│ [sequence matching results]     │
+└─────────────────────────────────┘
+```
+
+#### **Interazioni:**
+
+1. **Filtro Severity:** checkbox per mostrare/nascondere categorie
+2. **Filtro Chromatic:** toggle separato per mostrare solo accordi alterati
+3. **Ricerca RuleId:** campo testo per cercare regole (es. "R-0", "CAD")
+4. **Click su violazione:** scroll automatico, highlight noter coinvolte
+5. **Expand dettaglio:** click su "▼" per leggere descrizione completa
+6. **Disabilita singola regola:** checkbox per silenziare specifico ruleId (persiste in localStorage)
+
+#### **Colori Badge:**
+
+- 🔴 **error:** rosso (#ef4444)
+- 🟠 **warning:** arancione (#f97316)
+- 🟢 **exception:** verde (#22c55e)
+- 🟣 **violet:** viola (future chromatic advanced)
+
+---
+
+### 10.7 Override Manuale Etichette
+
+**Meccanismo:** quando il motore di analisi non riconosce l'accordo correttamente, l'utente può forzare manualmente l'etichetta.
+
+**Interfaccia:**
+- Click destro su etichetta accord sotto staff → "Override harmony label"
+- Dialog: inserisci roman numeral desiderato (es. "IV6/5")
+- Salva → etichetta è fissata per quel beat
+
+**Persistenza:**
+- Stored in `harmonyOverrides` del progetto (mappa `{ absBeat: desiredRoman }`)
+- Applica anche nell'export/import
+
+**Impatto analisi:**
+- Le regole SATB continuano a girare su accordo **riconosciuto** (non override)
+- Se desideri anche l'override per le regole, devi aggiustare note manualmente
+
+---
+
+### 10.8 Profili di Analisi
+
+**Opzione (future):** diversi profili di "severità" analisi
+
+Esempi:
+- **Accademico (default):** rigore massimo, tutti i warning
+- **Permissivo:** solo error, pochi warning
+- **Giallo avanzato:** levare alcuni warning, aggiungere chromatic analysis
+
+**Implementazione:** rimandato post-beta.
+
+---
+
+## 11. IMPORT / EXPORT
+
+### 11.1 Formati Supportati
+
+#### **IMPORT:**
+
+| Formato | Tipo file | Stato | Descrizione |
+|---|---|---|---|
+| **Nativo HTP** | `.htp` o `.json` | ✅ Implementato | Formato propietario JSON con schema |
+| **MIDI** | `.mid`, `.midi` | ✅ Implementato | Converte MIDI → StaffNote[], senza analisi |
+| **MusicXML** | `.xml`, `.musicxml` | ❌ No (rimandato) | Parsare da export MuseScore/Finale |
+
+#### **EXPORT:**
+
+| Formato | Tipo file | Stato | Descrizione |
+|---|---|---|---|
+| **Nativo HTP** | `.htp` | ✅ Implementato | Completo (note + analisi + metadati) |
+| **MusicXML** | `.xml` | ✅ Implementato | Partwise format 4.0, compatibile MuseScore/Finale |
+| **MIDI** | `.mid` | ✅ Implementato | Note + velocity + CC7 (volume per voce) |
+| **PDF** | `.pdf` | ✅ Implementato | Rendering print (no overlay interattivi) |
+| **PNG** | `.png` | ✅ Implementato | Screenshot pentagramma (singola pagina o tiling) |
+
+### 11.2 Struttura Formato Nativo (.htp / .json)
+
+```json
+{
+  "projectVersion": "1.0",
+  "projectTitle": "Esercizio Armonia 1",
+  "titleFontSize": 24,
+  "titleFontFamily": "Georgia",
+
+  "staffSystemMode": "grandstaff",
+  "keySignatureRoot": "G",
+  "isMinorMode": false,
+  "minorScaleMode": "natural",
+
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "timeSignatureChanges": [
+    { "measureIndex": 8, "numerator": 3, "denominator": 4 }
+  ],
+  "bpm": 120,
+  "isBpmActive": false,
+
+  "notes": [
+    {
+      "id": "uuid-1",
+      "voice": "soprano",
+      "pitch": "G",
+      "octave": 4,
+      "accidental": "natural",
+      "duration": "quarter",
+      "isDotted": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "measureIndex": 1,
+      "beat": 1,
+      "isRest": false,
+      "durationTicks": 250,
+      "midi": 67
+    },
+    ...
+  ],
+
+  "analysisContexts": [
+    { "measureIndex": 0, "tonicPc": 7, "isMinor": false }
+  ],
+
+  "harmonyOverrides": {
+    "0": "I",
+    "1": "IV",
+    "2": "V"
+  },
+
+  "toolbarGroupOrder": ["voiceControl", "durationControl", "accidentalControl", ...],
+  "engravingMode": "enhanced",
+  "doubleBarlineMeasures": [8, 16],
+  "measuresPerLine": 4,
+  "minMeasureCount": 1
+}
+```
+
+### 11.3 MIDI Import
+
+**Processo:**
+1. Selezione file MIDI via dialog Electron
+2. Parser (`midiParser.ts`) converte MIDI events → `StaffNote[]`
+3. **Assignment alla voce:** algoritmo automatico basato su MIDI pitch (soprano alto range → S, ecc.)
+4. Caricamento in editor (sostituisce progetto corrente con avvertimento)
+
+**Limitazioni:**
+- Nessuna informazione di "voce" nel MIDI standard
+- Algoritmo euristico può assegnare voci non ideali
+- User deve manualmente riassegnare voci se necessario
+
+### 11.4 MusicXML Export
+
+**Componente:** `exportMusicXML.ts`
+
+**Formato:** MusicXML 4.0 partwise
+
+**Contenuti:**
+- Tutte le note con pitch, durata, alterazione
+- Armatura di chiave
+- Metro
+- Titolo
+- Numeri romani (come **testo beneath staff** in formato `<direction><words>`)
+- Legature, beam (da VexFlow layout)
+
+**Compatibilità:**
+- MuseScore 3/4 (lettura + display completo)
+- Finale 2019+
+- Sibelius 2020+
+
+**Note:**
+- I numeri romani sono "testo commentario", non voci MIDI per Finale/Sibelius
+- Per rieditare in MuseScore, import il file, leggi gli accordi dalla descrizione
+
+### 11.5 PDF Export
+
+**Processo:**
+1. Click "Esporta PDF"
+2. Dialog permette di scegliere: orientamento, scala%, inclusione titolo
+3. Rendering "pulito": no overlay (numeri romani, playhead, selezione)
+4. Stampa via Electron `printToPDF`
+
+### 11.6 PNG Export
+
+**Processo:**
+1. Click "Esporta PNG"
+2. Rendering current view (con zoom/scala corrente)
+3. Se brano > 1 pagina: opzione "tiling" (tante PNG per pagina)
+
+---
+
+## 12. SCORCIATOIE DA TASTIERA COMPLETE
+
+### 12.1 Scorciatoie Globali (App-wide)
+
+| Scorciatoia | Azione | Contesto | Note |
+|---|---|---|---|
+| `Cmd+N` (Mac) / `Ctrl+N` (Win/Linux) | Nuovo progetto | Sempre | Avvertimento se progetto modificato |
+| `Cmd+O` / `Ctrl+O` | Apri progetto | Sempre | File dialog, sostituisce corrente |
+| `Cmd+S` / `Ctrl+S` | Salva | Sempre | Overwrite file corrente (o first save dialog) |
+| `Cmd+Shift+S` / `Ctrl+Shift+S` | Salva con nome | Sempre | Choose file path |
+| `Cmd+W` / `Ctrl+W` | Chiudi | Sempre | Non esce app, solo chiude finestra progetto |
+| `Cmd+I` / `Ctrl+I` | Importa MIDI | GrandStaff | Dialogo selezione file |
+| `Cmd+Shift+E` / `Ctrl+Shift+E` | Esporta MIDI | GrandStaff | Dialogo salva file |
+| `Cmd+Z` / `Ctrl+Z` | Annulla | GrandStaff | Undo stack fino a 100 azioni |
+| `Cmd+Shift+Z` / `Ctrl+Shift+Y` | Ripeti | GrandStaff | Redo stack |
+
+### 12.2 Scorciatoie Editor (Grand Staff)
+
+#### **Playback:**
+
+| Scorciatoia | Azione | Effetto |
+|---|---|---|
+| `Space` | Play / Stop | Avvia playback da battuta corrente, o ferma |
+| `Shift+Space` | Loop misura | Toggle loop battuta corrente |
+| `Enter` / `Return` | Torna inizio | Salta a misura 1, beat 1 |
+| `K` | Toggle metronomo | Accende/spegne click |
+
+#### **Inserimento Note:**
+
+| Scorciatoia | Azione | Effetto |
+|---|---|---|
+| `1` | Semibreve | Seleziona durata whole (4 beat) |
+| `2` | Minima | Seleziona durata half (2 beat) |
+| `3` | Semiminima | Seleziona durata quarter (1 beat) |
+| `4` | Croma | Seleziona durata eighth (0.5 beat) |
+| `5` | Semicroma | Seleziona durata sixteenth (0.25 beat) |
+| `6` | Biscroma | Seleziona durata thirty-second (0.125 beat) |
+| `7` | Semibiscroma | Seleziona durata sixty-fourth (0.0625 beat) |
+| `#` | Diesis | Applica alterazione diesis alla nota inserita/selezionata |
+| `b` | Bemolle | Applica alterazione bemolle |
+| `n` | Bequadro | Rimuove alterazione (natural) |
+| `.` | Punto | Toggle dotted note (×1.5 durata) |
+| `R` | Nota / Pausa | Commuta tra inserimento nota e inserimento pausa |
+| `T` | Legatura | Toggle legatura sulla nota corrente |
+| `V` | Cicla voce | Cicla voce B → T → A → S → B |
+
+#### **Selezione e Modifica:**
+
+| Scorciatoia | Azione | Effetto |
+|---|---|---|
+| Click nota | Seleziona | Attualizza voce corrente, evidenzia nota |
+| `Shift+Click` | Multi-selezione | Aggiunge nota alla selezione |
+| `Alt/Option+S` | Solo voce corrente | Toggle marquee select filtro per voce (ATT) |
+| `Alt/Option+Click` | Cicla candidati | Se note vicine, cicla tra quali selezionare |
+| `Backspace` / `Delete` | Cancella | Rimuove note selezionate |
+| `Shift+↑` | Sù ottava | Trasporta nota selezionata +12 semitoni |
+| `Shift+↓` | Giù ottava | Trasporta nota selezionata -12 semitoni |
+| `↑` | Sù semitono | Trasporta nota +1 semitono |
+| `↓` | Giù semitono | Trasporta nota -1 semitono |
+
+#### **Layout e View:**
+
+| Scorciatoia | Azione | Effetto |
+|---|---|---|
+| `Alt/Option+L` | Cicla layout | Alterna Grand Staff ↔ SATB Ancient ↔ Treble Only |
+| `Alt/Option+T` | Toolbar drag mode | Toggle riordino toolbar via drag |
+| `Alt/Option+H` | Overlay analisi | Toggle visualizzazione overlay harmonic labels |
+| `Ctrl++` (o `Cmd++`) | Zoom in | Aumenta zoom editor |
+| `Ctrl+-` (o `Cmd+-`) | Zoom out | Diminuisce zoom editor |
+| `Ctrl+0` (o `Cmd+0`) | Reset zoom | Torna zoom 100% |
+
+#### **Navigazione Battute:**
+
+| Scorciatoia | Azione | Effetto |
+|---|---|---|
+| Click numero battuta | Salta misura | Seleziona misura e muove playhead |
+| `Ctrl+G` (o `Cmd+G`) | Go to measure | Dialog "vai a misura X" |
+
+---
+
+## 13. MENU DELL'APPLICAZIONE
+
+**Nota:** Menu costruito tramite Electron `Menu.buildFromTemplate()` in `electron/main.js`.
+
+### 13.1 Menu "File"
+
+```
+┌─ File ────────────────────┐
+│ Nuovo                Cmd+N │
+│ Apri...              Cmd+O │
+│ Apri recente >            │
+│ ├─ [lista 10 file recenti]│
+│ ├─ Cancella recenti        │
+│ Salva                Cmd+S │
+│ Salva con nome... Cmd+Shift+S│
+│ Importa MIDI         Cmd+I │
+│ ├─ Esporta MIDI      Cmd+Shift+E│
+│ ├─ Esporta MusicXML       │
+│ ├─ Esporta PDF             │
+│ ├─ Esporta PNG             │
+│ ─────────────────────────  │
+│ Stampa...            Cmd+P │
+│ Chiudi               Cmd+W │
+│ Esci                 Cmd+Q │
+└────────────────────────────┘
+```
+
+### 13.2 Menu "Edit"
+
+```
+┌─ Edit ────────────────────┐
+│ Annulla              Cmd+Z │
+│ Ripeti            Cmd+Shift+Z│
+│ ─────────────────────────  │
+│ Taglia               Cmd+X │
+│ Copia                Cmd+C │
+│ Incolla              Cmd+V │
+│ Cancella             Delete │
+│ ─────────────────────────  │
+│ Seleziona tutto      Cmd+A │
+│ Solo voce corrente Alt+S   │
+│ ─────────────────────────  │
+│ Preferenze         Cmd+,   │
+└────────────────────────────┘
+```
+
+### 13.3 Menu "View"
+
+```
+┌─ Vista ────────────────────┐
+│ Grand Staff               │
+│ SATB (4 righi antichi)    │
+│ Solo treble (guitar mode) │
+│ ─────────────────────────  │
+│ ☑ Numeri misure           │
+│ ☑ Colori voci             │
+│ ☑ Analisi armonica (toggle)│
+│ ☑ Quick insert bar        │
+│ ─────────────────────────  │
+│ Zoom in              Ctrl+ │
+│ Zoom out             Ctrl- │
+│ Reset zoom           Ctrl0 │
+│ ─────────────────────────  │
+│ Riordina toolbar (drag)    │
+│ Engraving mode: [select]   │
+│ ├─ Legacy                  │
+│ ├─ Enhanced (default)      │
+└────────────────────────────┘
+```
+
+### 13.4 Menu "Tools" (Strumenti)
+
+```
+┌─ Strumenti ─────────────┐
+│ Realizzatore corali...   │
+│ Sequenze armoniche       │
+│ ─────────────────────────│
+│ Collision audit          │
+│ ─────────────────────────│
+│ MIDI Input/Output        │
+└──────────────────────────┘
+```
+
+### 13.5 Menu "Corali" (Choral Realization)
+
+```
+┌─ Corali ────────────────────┐
+│ Inserisci progressione...    │
+│ Realizza SATB                │
+│ ─────────────────────────    │
+│ 📚 Carica da repertorio       │
+│ 🎓 Apprendi da questo file    │
+│ ─────────────────────────    │
+│ Profilo analisi:             │
+│ ├─ Accademico (default)      │
+│ ├─ Permissivo                │
+│ └─ Avanzato                  │
+└──────────────────────────────┘
+```
+
+### 13.6 Menu "Help"
+
+```
+┌─ Help ────────────────┐
+│ Guida in linea (futuro)│
+│ Scorciatoie tastiera   │
+│ ─────────────────────  │
+│ Versione              │
+│ Check for updates     │
+└───────────────────────┘
+```
+
+---
+
+## 14. PREFERENZE E IMPOSTAZIONI
+
+### 14.1 Registro Preferenze
+
+**File:** `src/preferences/preferencesRegistry.ts`
+
+Ogni preferenza è salvata in **localStorage** con chiave versionata:
+
+```typescript
+type PreferencesRegistry = {
+  'ui.theme': 'dark' | 'light';               // default: 'dark'
+  'ui.zoom': number;                          // default: 1.0
+  'ui.showMeasureNumbers': boolean;           // default: true
+  'ui.showVoiceColors': boolean;              // default: true
+  'ui.showQuickInsertBar': boolean;           // default: true
+  'ui.selectedToolbarGroups': string[];       // default: [...]
+  'staffSystem.mode': 'grandstaff' | 'satb_ancient' | 'treble_only'; // persisted per progetto
+  'engraving.mode': 'legacy' | 'enhanced';    // default: 'enhanced'
+  'playback.bpmActive': boolean;              // default: false
+  'playback.metronomeEnabled': boolean;       // default: false
+  'analysis.cadentialPatterns.v1': boolean;   // default: true
+  'analysis.sequencesEnabled.v1': boolean;    // default: false
+  'analysis.labelMinSpanBeats.v1': number;    // default: 0.5
+  'analysis.filters.v1': {                    // default: mostra tutto
+    showError: boolean;
+    showWarning: boolean;
+    showException: boolean;
+    showChromatic: boolean;
+    disabledRuleIds: Record<string, boolean>; // { 'R-01': true } per silenziare
+  };
+  'analysis.ruleSuggestions': Record<string, string>; // override custom suggestions
+};
+```
+
+### 14.2 Impostazioni in UI
+
+**Componente:** `PreferencesModal.tsx`
+
+**Tab 1: Tema**
+- Dark mode (default)
+- Light mode
+
+**Tab 2: Analisi**
+- Toggle cadential patterns recognition
+- Toggle sequence detection
+- Min span beats per accordo (per evitare label troppo fitte)
+- Profilo stilistico (corpus) selezionabile
+
+**Tab 3: Engraving**
+- Legacy vs Enhanced rendering
+- Collision audit toggle
+
+**Tab 4: Avanzate**
+- Enable debug mode (console logging)
+- Clear cache
+- Export/import preferenze
+
+---
+
+## 15. FUNZIONALITÀ AVANZATE
+
+### 15.1 Realizzatore Corali Automatico
+
+**Componente:** `RomanProgressionEditor.tsx` + `choralRealization.ts`
+
+**Funzione:** Dato una progressione di numeri romani, genera automaticamente le 4 voci SATB rispettando:
+- Regole di voice-leading (minimal motion, contrary/obliqué preferred)
+- Regole SATB (no parallel 5ths, voice crossing, ecc.)
+- Constraint soprano/basso (opzionale)
+- Stile corpus (bigram preferences)
+
+**Algoritmo:** Beam-search con ampiezza 8 (esplora 8 ipotesi migliori ad ogni step).
+
+**Input UI:**
+```
+Roman Progression Editor
+
+Inserisci progressione:
+[I] [IV] [V7] [I] | →G: [I] [V] [I]
+
+☑ Vincolo soprano: [---melody---]
+☑ Vincolo basso:   [---melody---]
+
+Realizza ▶
+```
+
+**Output:** StaffNote[] per S, A, T, B (sostituisce editor corrente con opzione undo).
+
+### 15.2 Progressione Suggester
+
+**Feature rimandato post-beta**
+
+Basato su corpus bigram/trigram (in `progressionStats.json`):
+- Dato un accordo, suggerisce successioni più probabili
+- Ranking per frequenza nel corpus
+- Audio playback per anteprima
+
+### 15.4 Modal Interchange Detector
+
+**File:** `src/utils/modalInterchange.ts`
+
+Riconoscimento automatico accordi di prestito modale:
+- Esempio: in Do maggiore, riconosce `iv` (Fa–Lab–Do) da Do minore
+- Label speciale: `iv` (minuscolo/corsivo) per distinguere da `IV` diatonico
+
+### 15.5 Chromatic Modulation Detector
+
+**File:** `src/utils/chromaticModulationDetector.ts`
+
+Rilevamento modulazioni per semitono ascendente/discendente:
+- Esempio: in Do maggiore, rilevamento cambio a Do#/Reb maggiore
+- Label speciale con transizione evidenziata
+
+### 15.6 Sequence Detection (Imitation Patterns)
+
+**File:** `src/utils/sequenceDetector.ts`
+
+Riconoscimento pattern melodici ricorrenti (sequenze imitate):
+- Snapshot intervallare tick-per-tick
+- Matching con pattern precedenti, trasposizioni automatiche
+- Output: `sequenceRoman`, `sequenceRomanFunctional` per override labels
+
+---
+
+## 16. PUNTI DI FORZA UNICI
+
+### 16.1 Superioritá rispetto a "Harmony Practice"
+
+| Aspetto | Harmony Practice | Harmony Tutor |
+|---|---|---|
+| **Interfaccia** | Datata (anni 90–2000) | Modern dark UI (Tailwind) |
+| **Rendering musicale** | Custom (fragile) | VexFlow (robusto) |
+| **Motor analisi** | Pattern matching base | 14-step pipeline, spelling-first |
+| **Regole coperte** | ~30 regole semplici | 40+ regole articolate con eccezioni |
+| **Corpus imparante** | Statico | 216 file, bigram/trigram dinamici |
+| **Modal interchange** | No | Sì (riconoscimento automatico) |
+| **Cadential patterns** | No | Sì (lookahead 2 misure) |
+| **MusicXML export** | No | Sì (4.0 standard) |
+| **Piattaforma** | Windows-only (legacy) | Cross-platform (Electron) |
+| **Manutenzione** | Abbandonato (2010+) | In sviluppo attivo (2026) |
+
+### 16.2 Vantaggi Architetturali
+
+1. **Spelling-First:** Distingue correttamente enarmonie. Riconosce accordi eccedenti (It6, Fr6, Ger6) tramite ortografia.
+
+2. **14-Step R0–R14 pipeline:** Disambiguazione progressiva accordi. Ultimo step usa corpus per sciogliere ambiguità frequenti.
+
+3. **Eccezioni articolate:** Ogni regola violata ha contesto-dipendenti attenuanti (sequenze imitate, moto obliquo, ecc.).
+
+4. **Corpus interattivo:** L'app **impara** dalle correzioni utente e dai file caricati. Statistiche bigram/trigram si aggiornano.
+
+5. **Electron cross-platform:** Packag unico (build 1 volta, deploy su Mac/Windows/Linux).
+
+6. **TypeScript strict:** Nessun tipo `any` implicito. Errori catturati in compilazione, non runtime.
+
+7. **Zero dipendenze di rendering alternative:** VexFlow esclusivo → nessun conflitto, manutenzione semplificata.
+
+---
+
+## 17. ROADMAP COMMERCIALE (Beta → Release)
+
+### 17.1 Pre-Beta (Urgente, entro aprile 2026)
+
+- ✅ Completamento pipeline analisi armonica
+- ✅ Copertura regole SATB ~95%
+- ✅ Export MusicXML, PDF, PNG
+- ✅ Import MIDI
+- ⏳ **Fix aug6 matchers** (risoluzione gradi cromatici)
+- ⏳ **Regola falsa relazione verticale** (nuovo ruleId)
+
+### 17.2 Beta (aprile 2026)
+
+- ✅ Regression suite 44/44 passing
+- ✅ GrandStaff flavor solo, feature-complete
+- ⏳ Testing Windows (non Mac/Linux)
+- ⏳ Installer (nsis per Windows)
+- ⏳ Pagina web semplice + video demo
+
+### 17.3 Release (maggio 2026)
+
+- ✅ Installer Windows/Mac/Linux
+- ✅ Pagina vendita (Gumroad o LemonSqueezy)
+- ✅ Prezzi: 49€ studente / 79€ docente / 200€+ istituto
+- ✅ Outreach docenti conservatorio
+- ✅ Contatto creatori YT (Francesco Villa, Marco Zanoni)
+
+### 17.4 Post-Release (H2 2026)
+
+- 🔜 MusicXML importer (Audiveris/MuseScore conversion)
+- 🔜 Modal switch feature (modo attivo → Roman numeral adattato)
+- 🔜 Flavor Guitar, Scale, Chord, Interval (separato da GrandStaff)
+- 🔜 Refactor GrandStaffEditor (Electron bridge, localStorage centralization)
+- 🔜 Drag-to-resize misure
+- 🔜 Plugin MuseScore (se richiesto)
+
+---
+
+## 18. DEBUGGING E TROUBLESHOOTING
+
+### 18.1 Debug Beat Specifico
+
+Per analizzare il calcolo di un beat specifico:
+
+```javascript
+// Console Electron (Cmd+Option+I → tab Console)
+window._HT_DEBUG_BEAT = 44    // numero del beat problematico
+
+// Ricarica: Cmd+R
+// Output: [HT-DEBUG] beat 44 con 17 step (R0–R13, D1–D2)
+// Trova step dove roman cambia da corretto a sbagliato
+
+delete window._HT_DEBUG_BEAT   // disattiva
+```
+
+### 18.2 Calcolo absBeat
+
+Formula:
+```
+absBeat = (measureIndex - 1) × beatPerMeasure + beat
+
+Esempio:
+Misura 11, battito 4, tempo 4/4
+→ (11-1) × 4 + 4 = 40 + 4 = 44
+```
+
+### 18.3 Toggle Cadential Patterns
+
+```javascript
+localStorage.setItem('harmony-tutor.analysis.cadentialPatterns.v1', 'false')  // off
+localStorage.removeItem('harmony-tutor.analysis.cadentialPatterns.v1')       // on (default)
+```
+
+### 18.4 Diagnostica Bug Note Stantie
+
+Se una nota rimane attiva per più accordi (bug):
+1. Rimuovi note una voce alla volta dall'accordo precedente
+2. Finché il numero romano non si corregge
+3. Annota: `[brano] m[misura] b[beat] — voce [S/A/T/B] stantia`
+
+---
+
+## 19. CORPUS E DATI DI APPRENDIMENTO
+
+### 19.1 Stato Corpus (Marzo 2026)
+
+| Metrica | Valore |
+|---|---|
+| File totali | 216 |
+| File analizzati | 213 (99%) |
+| Transizioni raw (bigrammi) | 6.338 |
+| Trigram base keys | 623 |
+| Campioni ornamento | 497 |
+| File in stile profilo | 180 |
+| Top bigram | V5→I5: 95 occorrenze |
+| Test regression | 44/44 passing |
+
+### 19.2 Compositori nel Corpus
+
+- **Bach:** ~25 cantate + corali
+- **Dubois:** ~20 (fonte primaria, libro soluzioni)
+- **Pedron:** 7 esercizi
+- **Schinelli:** 5
+- **Ornamenti/ritardi:** ~30 piccoli brani
+- **Progressioni manuali:** ~15
+- **Vivaldi Gloria, Piston, Michel Baron, ecc.:** sparsi
+
+### 19.3 Distribuzione Ornamenti (497 campioni)
+
+- **Passaggio (passing):** 53.5%
+- **Appoggiatura (appoggiatura):** 21.7%
+- **Sospensione (suspension):** 12.8%
+- **Volta (neighbor):** 6.8%
+- **Anticipazione (anticipation):** 3.3%
+- **Sfuggita (escape):** 1.9%
+
+### 19.4 Ciclo di Aggiornamento Corpus
+
+1. **Crea/modifica esercizio** → salva in `tests/`
+2. **Correzioni manuali** → esercizio entra in "fonte di verità"
+3. **`npm run rebuild-corpus`** → ricalcola:
+   - `progressionStats.json` (bigram/trigram)
+   - `ornamentPatterns.json` (campioni ornamento)
+   - `defaultStyleProfile.json` (profilo realizzatore)
+4. **`npm run build`** → bundle
+5. **Riavvia app** + tab Corali → "📚 Carica da repertorio"
+
+---
+
+## 20. COMANDI ESSENZIALI CLI
+
+```bash
+# AVVIO SVILUPPO
+npm run dev:grandstaff        # React dev server (GrandStaff flavor)
+npm run dev:guitar            # React dev server (Guitar flavor)
+npm run electron:dev          # Electron app in dev mode
+
+# BUILD PRODUZIONE
+npm run build                 # Bundle React + copy to dist/
+npm run electron:build        # Build Electron app
+npm run package               # Crea installer (platform-specific)
+
+# TESTING
+npm run regress               # Regression suite (44 test)
+npm run rebuild-corpus        # Ricalcola corpus statistics
+
+# GIT
+git log --oneline -30         # Visualizza ultimi 30 commit
+git reset --hard CODICE       # Ripristina a checkpoint specifico
+git add . && git commit -m "msg" # Commit tutto
+
+# PULIZIA
+npm run clean                 # Rimuovi dist/ + build artifacts
+npm ci                        # Reinstalla dipendenze esatte
+```
+
+---
+
+## 21. ARCHITETTURA FILE SORGENTE
+
+```
+harmony-tutor-locale/
+├── src/
+│   ├── types.ts                          # Tipi condivisi (StaffNote, RuleViolation, ecc.)
+│   ├── constants.ts                      # Costanti (durate, note, scale, chords)
+│   ├── flavor.ts                         # Flavors (united, grandstaff, guitar)
+│   ├── storage/
+│   │   ├── localStorage.ts
+│   │   ├── storageKeys.ts
+│   │   └── projectSchema.ts
+│   ├── preferences/
+│   │   ├── preferencesRegistry.ts
+│   │   └── usePreference.ts              # Hook preferenze
+│   ├── components/
+│   │   ├── App.tsx                       # Router principale
+│   │   ├── GrandStaffEditor.tsx          # God component editor (8600+ righe)
+│   │   ├── VexflowGrandStaff.tsx         # Rendering VexFlow
+│   │   ├── HarmonyAnalysisPanel.tsx      # Pannello analisi
+│   │   ├── GrandStaffToolbar.tsx         # Toolbar
+│   │   ├── PlaybackControls.tsx
+│   │   ├── KeySelector.tsx
+│   │   ├── TimeSignatureControl.tsx
+│   │   ├── PreferencesModal.tsx
+│   │   ├── RomanProgressionEditor.tsx
+│   │   └── [altri componenti]
+│   ├── hooks/
+│   │   ├── useHarmonyLabels.ts           # Calcolo numeri romani (5000+ righe)
+│   │   ├── useNoteEditor.ts
+│   │   ├── usePlayback.ts
+│   │   ├── useNoteSelection.ts
+│   │   ├── useGrandStaffMidi.ts
+│   │   └── usePreference.ts
+│   ├── utils/
+│   │   ├── musicTheory.ts                # Core analisi (12000+ righe)
+│   │   ├── harmonyLabelPipeline.ts
+│   │   ├── cadentialPatterns.ts
+│   │   ├── sequenceDetector.ts
+│   │   ├── chromaticModulationDetector.ts
+│   │   ├── modalInterchange.ts
+│   │   ├── analysisProfiles.ts
+│   │   ├── ruleTexts.ts                  # Testi educativi regole
+│   │   ├── harmonyPostRules.ts
+│   │   ├── computeHarmonyLabelsBySystem.ts
+│   │   ├── midiParser.ts
+│   │   ├── midiWriter.ts
+│   │   └── [altri]
+│   ├── engine/
+│   │   ├── choralRealization.ts          # Realizzatore corali
+│   │   ├── choralStyleProfile.ts
+│   │   └── progressionSuggester.ts
+│   ├── exporters/
+│   │   └── exportMusicXML.ts
+│   ├── importers/
+│   │   └── musicxml/
+│   │       └── importMusicXML.ts
+│   ├── services/
+│   │   ├── AudioService.ts               # Web Audio API
+│   │   └── electronBridge.ts
+│   ├── controllers/
+│   │   └── MenuEditController.ts
+│   ├── contracts/
+│   │   ├── menuActionRuntime.ts
+│   │   └── menuActionTargets.ts
+│   ├── data/
+│   │   ├── constants.ts
+│   │   ├── ornamentPatterns.json
+│   │   ├── progressionStats.json
+│   │   └── defaultStyleProfile.json
+│   └── App.tsx, main.tsx
+├── electron/
+│   ├── main.js                           # Process principale Electron
+│   ├── preload.js                        # Bridge sicuro → window.electronAPI
+│   └── [resources]
+├── shared/
+│   ├── menuActionRegistry.ts             # Registry azioni menu (tipizzato)
+│   ├── ipcChannels.ts                    # Costanti IPC
+│   └── [tipi shared]
+├── tests/                                # Corpus regression (216 file .json/.htp)
+│   ├── bach-*.json
+│   ├── dubois-*.json
+│   └── [...]
+├── docs/
+│   ├── HARMONY_TUTOR_BRIEFING.md
+│   ├── project-directives.md
+│   ├── capabilities.md
+│   ├── Grandstaff-v1-Commercial-Checklist.md
+│   └── [questa analisi]
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── tailwind.config.ts
+└── [config files]
+```
+
+---
+
+## 22. CONCLUSIONE
+
+**Harmony Tutor** è un'applicazione software **professionale per l'educazione musicale**, basata su un motore di analisi armonica articolato e "spelling-first" che lo rende superiore a soluzioni legacy (Harmony Practice) e concorrenti contemporanei.
+
+**Punti salienti:**
+- ✅ 90% di completezza funzionale
+- ✅ Architettura robusta (TypeScript, Electron, VexFlow)
+- ✅ 14-step pipeline di analisi armonica con corpus interattivo
+- ✅ 40+ regole SATB con eccezioni articolate
+- ✅ Support import/export (MIDI, MusicXML, PDF, PNG)
+- ✅ Cross-platform (Mac, Windows, Linux)
+- ✅ Pronto per commercializzazione (beta aprile 2026, release maggio 2026)
+
+Il documento fornisce la base completa per:
+- **Manuale utente:** dettagli su ogni feature, shortcut, menu
+- **Materiale marketing:** punti di forza unici, roadmap pubblica
+- **Documentazione sviluppo:** architettura, pipeline analisi, regole
+
+---
+
+**Fine Analisi Completa**
+Documento generato: Marzo 2026
+Per informazioni: Erminio (Mauri), Milano
+

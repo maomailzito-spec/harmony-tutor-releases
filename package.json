@@ -1,5 +1,5 @@
 {
-  "name": "harmony-tutor-locale",
+  "name": "harmony-tutor",
   "private": true,
   "version": "1.0.0",
   "description": "Desktop app for harmonic analysis — Grand Staff editor with figured bass, Roman numerals, and voice leading.",
