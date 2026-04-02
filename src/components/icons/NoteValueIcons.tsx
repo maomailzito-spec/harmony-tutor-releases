@@ -167,9 +167,10 @@ export const SharpIcon: React.FC<IconProps> = ({ className }) => (
 );
 
 export const DoubleSharpIcon: React.FC<IconProps> = ({ className }) => (
-  <svg className={className ?? "h-8 w-8"} viewBox="0 0 32 32">
-        <text x="16" y="18" fontSize="24" textAnchor="middle" dominantBaseline="central" fill="currentColor">𝄪</text>
-    </svg>
+  <svg className={className ?? "h-8 w-8"} viewBox="0 0 32 32" fill="currentColor" stroke="none">
+    {/* Double-sharp: X with flared tips and pinched center */}
+    <path d="M8.5 5.5 L13.5 5.5 L16 13 L18.5 5.5 L23.5 5.5 L23.5 13.5 L19 16 L23.5 18.5 L23.5 26.5 L18.5 26.5 L16 19 L13.5 26.5 L8.5 26.5 L8.5 18.5 L13 16 L8.5 13.5 Z" />
+  </svg>
 );
 
 export const FlatIcon: React.FC<IconProps> = ({ className }) => (
