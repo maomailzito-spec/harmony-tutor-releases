@@ -39,7 +39,7 @@ export function expandMeasureOrder(
     const bar = repeatBarlines[cursor];
 
     if (bar === 'repeat-begin') {
-      repeatStart = cursor;
+      repeatStart = cursor + 1;
       cursor++;
     } else if (bar === 'repeat-end') {
       if (!usedRepeatEnds.has(cursor)) {
