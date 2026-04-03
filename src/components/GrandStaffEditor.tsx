@@ -5779,6 +5779,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         try {
             const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
             const curAbsBeat = playbackCursorAbsBeatRef.current ?? 0;
+            // Guard: if layout is not ready, skip silently.
+            if (!layoutDataRef.current?.positionedNotes) return;
             const measureIndex = Math.floor(curAbsBeat / beatsPerMeasure);
             const beatInMeasure = Math.round(((curAbsBeat - measureIndex * beatsPerMeasure) + 1) * 1e6) / 1e6;
             const measureStartTick = Math.round(measureIndex * beatsPerMeasure * TICKS_PER_QUARTER);

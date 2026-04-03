@@ -21,6 +21,10 @@ export function useMidiStepInput({ onNoteOn }: UseMidiStepInputArgs) {
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const activate = useCallback(async () => {
+    // Clean up any previous connection first.
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+
     if (!navigator.requestMIDIAccess) return;
     try {
       const midiAccess = await navigator.requestMIDIAccess();
@@ -37,7 +41,9 @@ export function useMidiStepInput({ onNoteOn }: UseMidiStepInputArgs) {
         const [status, note, velocity] = data;
         // noteOn: 0x90-0x9F with velocity > 0
         if ((status & 0xf0) === 0x90 && velocity > 0 && note >= 0 && note <= 127) {
-          onNoteOnRef.current(note);
+          // Dispatch via rAF to avoid calling React state setters from a
+          // non-React event (MIDI message) in the middle of a render cycle.
+          requestAnimationFrame(() => onNoteOnRef.current(note));
         }
       };
 
@@ -49,10 +55,24 @@ export function useMidiStepInput({ onNoteOn }: UseMidiStepInputArgs) {
       setDeviceName(inputs[0].name ?? 'MIDI Device');
       setEnabled(true);
 
+      // Re-attach listeners when devices reconnect.
+      const onStateChange = () => {
+        const currentInputs = Array.from(midiAccess.inputs.values());
+        for (const input of currentInputs) {
+          input.removeEventListener('midimessage', handleMessage as EventListener);
+          input.addEventListener('midimessage', handleMessage as EventListener);
+        }
+        if (currentInputs.length > 0) {
+          setDeviceName(currentInputs[0].name ?? 'MIDI Device');
+        }
+      };
+      midiAccess.addEventListener('statechange', onStateChange);
+
       cleanupRef.current = () => {
         for (const input of inputs) {
           input.removeEventListener('midimessage', handleMessage as EventListener);
         }
+        midiAccess.removeEventListener('statechange', onStateChange);
       };
     } catch {
       // MIDI not available
