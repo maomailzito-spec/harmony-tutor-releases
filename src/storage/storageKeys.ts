@@ -75,4 +75,7 @@ export const STORAGE_KEYS = {
         TONICIZATION_COMPACT_KEY,
         CADENTIAL_PATTERN_RECOGNITION_KEY,
         RULE_SUGGESTIONS_KEY,
+        MIDI_EXPORT_TYPE_KEY: 'harmony-tutor.midiExportType.v1',
 } as const;
+
+export const MIDI_EXPORT_TYPE_KEY = STORAGE_KEYS.MIDI_EXPORT_TYPE_KEY;

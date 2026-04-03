@@ -26,6 +26,7 @@ import {
   CHROMATIC_MODULATION_KEY,
   CADENTIAL_PATTERN_RECOGNITION_KEY,
   RULE_SUGGESTIONS_KEY,
+  MIDI_EXPORT_TYPE_KEY,
 } from '../storage/storageKeys';
 
 export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'Export' | 'Debug';
@@ -56,7 +57,8 @@ export type PreferenceId =
   | 'analysis.tonicizationCompact'
   | 'analysis.cadentialPatterns'
   | 'analysis.ruleSuggestions'
-  | 'analysis.chromaticModulation';
+  | 'analysis.chromaticModulation'
+  | 'midi.exportType';
 
 export type PreferenceDef<T> = {
   id: PreferenceId;
@@ -481,6 +483,21 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     kind: 'boolean',
     parse: (raw) => parseBool(raw, false),
     serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+  'midi.exportType': {
+    id: 'midi.exportType',
+    section: 'MIDI',
+    label: 'Formato export MIDI',
+    description: 'Type 1 (multi-traccia): una traccia per voce — compatibile con MuseScore/Finale/Sibelius. Type 0 (traccia singola): tutte le voci in una traccia — massima compatibilità.',
+    storageKey: MIDI_EXPORT_TYPE_KEY,
+    defaultValue: 1,
+    kind: 'select',
+    options: [
+      { value: 1, label: 'Type 1 — Multi-traccia (una per voce)' },
+      { value: 0, label: 'Type 0 — Traccia singola' },
+    ],
+    parse: (raw) => { const v = Number(raw); return v === 0 ? 0 : 1; },
+    serialize: (value: number) => String(value),
   },
 };
 
