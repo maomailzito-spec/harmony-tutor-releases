@@ -39,6 +39,7 @@ import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
 import { handleGrandStaffProjectIOMenuAction, buildGrandStaffProjectSnapshot } from '../controllers/grandStaffProjectIOAdapter';
 import { useGrandStaffMidi } from '../hooks/useGrandStaffMidi';
+import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
@@ -381,6 +382,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const { exportMidi, importMidi } = useGrandStaffMidi({
         project,
         setProject,
+    });
+
+    // ── MIDI step-input hook ──
+    const insertNoteFromMidiRef = useRef<(midi: number) => void>(() => {});
+    const midiStepInput = useMidiStepInput({
+        onNoteOn: (midi) => insertNoteFromMidiRef.current(midi),
     });
 
     // Render-time note hit points from VexFlow, per system.
@@ -5691,6 +5698,95 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Bridge for rest-click overwrite behavior (see handleNoteClick).
     staffClickForInsertRef.current = handleBackgroundClick as any;
 
+    // ── MIDI step-input: insert a note at the current playhead position ──
+    const insertNoteFromMidi = useCallback((midiNumber: number) => {
+        try {
+            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+            const curAbsBeat = playbackCursorAbsBeatRef.current ?? 0;
+            const measureIndex = Math.floor(curAbsBeat / beatsPerMeasure);
+            const beatInMeasure = Math.round(((curAbsBeat - measureIndex * beatsPerMeasure) + 1) * 1e6) / 1e6;
+            const measureStartTick = Math.round(measureIndex * beatsPerMeasure * TICKS_PER_QUARTER);
+            const startTick = Math.round(curAbsBeat * TICKS_PER_QUARTER);
+
+            let durBeatsBase = DURATION_VALUES[selectedInsertion.duration] ?? 1;
+            if (selectedInsertion.isDotted) durBeatsBase *= 1.5;
+            durBeatsBase *= tupletFactor;
+            const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
+
+            const targetClef = clefForVoice(selectedVoice);
+            const props = getNotePropertiesFromMidi(midiNumber, keySignature, targetClef, activeAccidentalRef.current ?? null);
+            if (!props || !Number.isFinite(props.midi)) return;
+
+            const newNote: StaffNote = {
+                id: crypto.randomUUID(),
+                ...props,
+                duration: selectedInsertion.duration,
+                isRest: false,
+                isTriplet,
+                isDuplet,
+                isDotted: selectedInsertion.isDotted ?? false,
+                measureIndex,
+                beat: beatInMeasure,
+                startTick,
+                durationTicks,
+                clef: targetClef,
+                voice: selectedVoice,
+            };
+
+            const overlapEps = TICKS_PER_QUARTER * 0.001;
+            const endTick = startTick + durationTicks;
+
+            setRawNotes(prev => {
+                const filtered = prev.filter(n => {
+                    if (n.measureIndex !== measureIndex) return true;
+                    if ((n.voice as any) !== (selectedVoice as any)) return true;
+                    const nStart = typeof (n as any).startTick === 'number' && isFinite((n as any).startTick)
+                        ? (n as any).startTick as number
+                        : (measureStartTick + Math.round(((n.beat ?? 1) - 1) * TICKS_PER_QUARTER));
+                    let nDur = typeof (n as any).durationTicks === 'number' && (n as any).durationTicks > 0
+                        ? (n as any).durationTicks as number
+                        : Math.round((DURATION_VALUES[(n as any).duration] ?? 1) * TICKS_PER_QUARTER);
+                    if (n.isDotted) nDur = Math.round(nDur * 1.5);
+                    const nEnd = nStart + nDur;
+                    return !(nStart < (endTick - overlapEps) && startTick < (nEnd - overlapEps));
+                });
+                return [...filtered, newNote].sort((a, b) => {
+                    if ((a.measureIndex ?? 0) !== (b.measureIndex ?? 0)) return (a.measureIndex ?? 0) - (b.measureIndex ?? 0);
+                    if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
+                    return (a.voice ?? 1) - (b.voice ?? 1);
+                });
+            });
+            setSelectedNoteIds(new Set([newNote.id]));
+            void playNote(newNote);
+
+            // Advance playhead
+            const nextAbsBeat = (startTick + durationTicks) / TICKS_PER_QUARTER;
+            playbackCursorAbsBeatRef.current = nextAbsBeat;
+            const nextPos = getPlayheadPosForAbsBeat(nextAbsBeat);
+            if (nextPos) {
+                setPlayheadPosition(nextPos);
+                const mIdx = Math.floor(nextAbsBeat / beatsPerMeasure);
+                const bIdx = Math.round(((nextAbsBeat - mIdx * beatsPerMeasure) + 1) * 1e6) / 1e6;
+                setPasteCaret({ x: nextPos.x, systemIndex: nextPos.systemIndex, measureIndex: mIdx, beat: bIdx });
+            }
+
+            // Auto-disarm one-shot accidental
+            if (activeAccidentalRef.current && accidentalOneShotRef.current) {
+                accidentalOneShotRef.current = false;
+                activeAccidentalRef.current = null;
+                setActiveAccidental(null);
+            }
+        } catch { /* ignore */ }
+    }, [
+        timeSignature, selectedInsertion, selectedVoice, keySignature,
+        isTriplet, isDuplet, tupletFactor, clefForVoice, playNote,
+        getPlayheadPosForAbsBeat, setRawNotes, setSelectedNoteIds,
+        setPlayheadPosition, setPasteCaret,
+    ]);
+
+    // Keep the MIDI step-input ref in sync with the latest callback.
+    insertNoteFromMidiRef.current = insertNoteFromMidi;
+
     const handleBackgroundMouseDown = useCallback((e: MouseEvent, svg: SVGSVGElement, systemIndex: number) => {
         if (tool !== 'insert') return;
 
@@ -6866,6 +6962,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setSelectedMidiOutput={setSelectedMidiOutput}
                 midiOutputs={midiOutputs}
                 handleActivateMidi={handleActivateMidi}
+                midiStepInputEnabled={midiStepInput.enabled}
+                midiStepInputDeviceName={midiStepInput.deviceName}
+                onToggleMidiStepInput={midiStepInput.toggle}
                 toolbarGroupOrder={toolbarGroupOrder}
                 reorderToolbarGroups={reorderToolbarGroups}
                 isToolbarCustomizeOpen={isToolbarCustomizeOpen}

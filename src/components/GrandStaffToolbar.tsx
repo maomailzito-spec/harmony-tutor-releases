@@ -185,6 +185,10 @@ type GrandStaffToolbarProps = {
     midiOutputs: any[];
     handleActivateMidi: () => Promise<void>;
 
+    midiStepInputEnabled: boolean;
+    midiStepInputDeviceName: string | null;
+    onToggleMidiStepInput: () => void;
+
     toolbarGroupOrder: ToolbarGroupId[];
     reorderToolbarGroups: (dragId: ToolbarGroupId, overId: ToolbarGroupId) => void;
     isToolbarCustomizeOpen: boolean;
@@ -325,6 +329,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         setSelectedMidiOutput,
         midiOutputs,
         handleActivateMidi,
+        midiStepInputEnabled,
+        midiStepInputDeviceName,
+        onToggleMidiStepInput,
         toolbarGroupOrder,
         reorderToolbarGroups,
         isToolbarCustomizeOpen,
@@ -953,6 +960,21 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                         );
                                     })
                                 )}
+                            </div>
+                        )}
+                        {/* MIDI Step Input toggle */}
+                        <div className="my-2 h-px bg-slate-700" />
+                        <button
+                            onClick={onToggleMidiStepInput}
+                            className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${midiStepInputEnabled ? 'bg-emerald-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
+                            title={midiStepInputEnabled && midiStepInputDeviceName ? `Input: ${midiStepInputDeviceName}` : 'MIDI Step Input'}
+                        >
+                            <span>🎹 Step Input</span>
+                            {midiStepInputEnabled && <span className="text-[11px]">✓</span>}
+                        </button>
+                        {midiStepInputEnabled && midiStepInputDeviceName && (
+                            <div className="px-2 py-0.5 text-[10px] text-emerald-300 truncate">
+                                {midiStepInputDeviceName}
                             </div>
                         )}
                     </div>
