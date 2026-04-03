@@ -55,5 +55,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   guitarLibrary: {
     load: () => ipcRenderer.invoke(IPC_CHANNELS.GUITAR_LIBRARY_LOAD),
     save: (library) => ipcRenderer.invoke(IPC_CHANNELS.GUITAR_LIBRARY_SAVE, library)
-  }
+  },
+  trial: {
+    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_TRIAL_INFO),
+  },
 });

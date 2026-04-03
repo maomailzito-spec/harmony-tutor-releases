@@ -50,6 +50,15 @@ declare global {
         load: () => Promise<any>;
         save: (library: any) => Promise<any>;
       };
+      trial?: {
+        getInfo: () => Promise<{
+          installed: boolean;
+          installDate?: string;
+          daysElapsed?: number;
+          daysRemaining?: number;
+          expired?: boolean;
+        }>;
+      };
     };
   }
 }

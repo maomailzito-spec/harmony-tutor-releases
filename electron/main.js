@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { checkTrial, getTrialInfo } = require('./licensing/trialManager');
 
 // -----------------------------------------------------------------------------
 // Stdio hardening (macOS / dev): when Electron is launched without an attached
@@ -1303,9 +1304,62 @@ ipcMain.handle(IPC_CHANNELS.GUITAR_LIBRARY_SAVE, async (_event, library) => {
   }
 });
 
-app.whenReady().then(() => {
+// ── Trial info IPC ──
+ipcMain.handle(IPC_CHANNELS.GET_TRIAL_INFO, async () => {
+  try {
+    return getTrialInfo();
+  } catch {
+    return { installed: false };
+  }
+});
+
+app.whenReady().then(async () => {
+  // ── Trial / License gate ──
+  const trial = checkTrial();
+
+  if (trial.status === 'expired') {
+    await dialog.showMessageBox({
+      type: 'warning',
+      title: 'Trial Scaduto',
+      message: 'Il periodo di prova di 10 giorni è terminato.',
+      detail: 'Per continuare a usare Harmony Tutor, acquista una licenza su harmonytutor.com.',
+      buttons: ['Acquista Licenza', 'Chiudi'],
+      defaultId: 0,
+    }).then((result) => {
+      if (result.response === 0) {
+        require('electron').shell.openExternal('https://harmonytutor.com/buy');
+      }
+    });
+    app.quit();
+    return;
+  }
+
+  if (trial.status === 'clock-tamper') {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Errore di Sistema',
+      message: 'Rilevata una modifica all\'orologio di sistema.',
+      detail: 'Ripristina la data e l\'ora corrette per continuare.',
+      buttons: ['OK'],
+    });
+    app.quit();
+    return;
+  }
+
+  // trial.status === 'active' or 'licensed' — proceed normally.
+  if (trial.status === 'active' && typeof trial.daysRemaining === 'number') {
+    safeStdioWrite(process.stdout, `[Trial] ${trial.daysRemaining} giorni rimanenti`);
+  }
+
   loadRecentFiles();
   createWindow();
+
+  // Show trial banner in title bar
+  if (trial.status === 'active' && mainWindow) {
+    const suffix = ` — Trial (${trial.daysRemaining} giorni rimanenti)`;
+    const currentTitle = mainWindow.getTitle();
+    mainWindow.setTitle(currentTitle + suffix);
+  }
 
   // If launched with a project path (Windows/Linux), open it.
   try {
