@@ -40,6 +40,7 @@ import { loadStyleProfile } from '../engine/choralStyleProfile';
 import { handleGrandStaffProjectIOMenuAction, buildGrandStaffProjectSnapshot } from '../controllers/grandStaffProjectIOAdapter';
 import { useGrandStaffMidi } from '../hooks/useGrandStaffMidi';
 import { useMidiStepInput } from '../hooks/useMidiStepInput';
+import { expandMeasureOrder } from '../utils/expandMeasureOrder';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
@@ -279,6 +280,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
     const [ornamentOverrides, setOrnamentOverrides] = useState<OrnamentOverride[]>([]);
     const [repeatBarlines, setRepeatBarlines] = useState<Record<number, 'repeat-begin' | 'repeat-end' | 'repeat-both'>>({});
+    const repeatBarlinesRef = useRef(repeatBarlines);
+    repeatBarlinesRef.current = repeatBarlines;
     const [voltaBrackets, setVoltaBrackets] = useState<VoltaBracket[]>([]);
     const [tool, setTool] = useState<Tool>('insert');
     const [selectedInsertion, setSelectedInsertion] = useState<InsertionElement>({ type: 'note', duration: 'quarter', isDotted: false });
@@ -3375,6 +3378,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             allItems.push(...voiceItems);
+        }
+
+        // ── Repeat expansion ──
+        // If there are repeat barlines, duplicate items for repeated measures
+        // with shifted absStartBeat so playback replays the correct sections.
+        const curRepeatBarlines = repeatBarlinesRef.current;
+        if (curRepeatBarlines && Object.keys(curRepeatBarlines).length > 0) {
+            const maxMeasure = allItems.reduce((mx, it) => Math.max(mx, it.note.measureIndex ?? 0), 0);
+            const measureOrder = expandMeasureOrder(maxMeasure + 1, curRepeatBarlines);
+
+            // Only apply if the expanded order differs from linear (i.e. has actual repeats).
+            if (measureOrder.length > maxMeasure + 1) {
+                // Index original items by measure.
+                const itemsByMeasure = new Map<number, PlaybackItem[]>();
+                for (const it of allItems) {
+                    const mi = it.note.measureIndex ?? 0;
+                    if (!itemsByMeasure.has(mi)) itemsByMeasure.set(mi, []);
+                    itemsByMeasure.get(mi)!.push(it);
+                }
+
+                // Rebuild allItems with shifted beats.
+                const expandedItems: PlaybackItem[] = [];
+                let cumulativeBeat = 0;
+
+                for (const origMeasureIdx of measureOrder) {
+                    const bpmForMeasure = bpmAtMeasure(origMeasureIdx);
+                    const origMeasureStart = measureStartBeat(origMeasureIdx);
+                    const items = itemsByMeasure.get(origMeasureIdx);
+                    if (items) {
+                        for (const it of items) {
+                            const beatOffsetInMeasure = it.absStartBeat - origMeasureStart;
+                            expandedItems.push({
+                                ...it,
+                                absStartBeat: cumulativeBeat + beatOffsetInMeasure,
+                            });
+                        }
+                    }
+                    cumulativeBeat += bpmForMeasure;
+                }
+
+                // Replace allItems content.
+                allItems.length = 0;
+                allItems.push(...expandedItems);
+            }
         }
 
         // Group items by start beat (rounded to avoid float key drift with tuplets).
