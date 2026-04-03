@@ -79,7 +79,7 @@ function inferClefFromMidi(midi: number): 'treble' | 'bass' {
 
 export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [midiExportType] = usePreference<number>('midi.exportType');
+  const [midiExportType] = usePreference<string>('midi.exportType');
 
   const pickMidiFile = useCallback(async (): Promise<File | null> => {
     if (typeof document === 'undefined') return null;
@@ -111,7 +111,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       notes: project.notes || [],
       timeSignature: project.timeSignature,
       bpm: project.bpm ?? 120,
-      midiType: midiExportType as 0 | 1,
+      midiType: (midiExportType === '0' ? 0 : 1) as 0 | 1,
     });
 
     const base64 = bytesToBase64(midiBytes);

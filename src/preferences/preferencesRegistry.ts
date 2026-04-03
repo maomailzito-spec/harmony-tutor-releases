@@ -490,14 +490,14 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Formato export MIDI',
     description: 'Type 1 (multi-traccia): una traccia per voce — compatibile con MuseScore/Finale/Sibelius. Type 0 (traccia singola): tutte le voci in una traccia — massima compatibilità.',
     storageKey: MIDI_EXPORT_TYPE_KEY,
-    defaultValue: 1,
-    kind: 'select',
+    defaultValue: '1',
+    kind: 'enum',
     options: [
-      { value: 1, label: 'Type 1 — Multi-traccia (una per voce)' },
-      { value: 0, label: 'Type 0 — Traccia singola' },
+      { value: '1', label: 'Type 1 — Multi-traccia (una per voce)' },
+      { value: '0', label: 'Type 0 — Traccia singola' },
     ],
-    parse: (raw) => { const v = Number(raw); return v === 0 ? 0 : 1; },
-    serialize: (value: number) => String(value),
+    parse: (raw) => (raw === '0' ? '0' : '1'),
+    serialize: (value: string) => value,
   },
 };
 
