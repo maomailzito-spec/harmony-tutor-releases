@@ -1314,8 +1314,9 @@ ipcMain.handle(IPC_CHANNELS.GET_TRIAL_INFO, async () => {
 });
 
 app.whenReady().then(async () => {
-  // ── Trial / License gate ──
-  const trial = checkTrial();
+  // ── Trial / License gate (skip in dev mode) ──
+  const isDev = !app.isPackaged;
+  const trial = isDev ? { status: 'licensed' } : checkTrial();
 
   if (trial.status === 'expired') {
     await dialog.showMessageBox({
