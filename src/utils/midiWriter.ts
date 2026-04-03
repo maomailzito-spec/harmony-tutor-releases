@@ -92,44 +92,81 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
   const timeSignature = project.timeSignature || { numerator: 4, denominator: 4 };
   const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
 
-  const events: MidiEvent[] = [];
-
-  events.push({ tick: 0, order: 0, bytes: tempoMetaEventBpm(project.bpm ?? 120) });
-  events.push({ tick: 0, order: 1, bytes: timeSignatureMetaEvent(timeSignature) });
-
+  // ── Group notes by voice ──
+  const voiceNames = ['Soprano', 'Alto', 'Tenore', 'Basso'];
+  const notesByVoice = new Map<number, StaffNote[]>();
   for (const note of notes) {
-    const tick = noteTick(note, beatsPerMeasure);
-    const dur = noteDurationTicks(note);
-    const ch = Math.max(0, Math.min(15, ((note.voice ?? 1) - 1)));
-    const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
-    const velOn = 88;
-    events.push({ tick, order: 2, bytes: [0x90 | ch, midi, velOn] });
-    events.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
+    const v = note.voice ?? 1;
+    if (!notesByVoice.has(v)) notesByVoice.set(v, []);
+    notesByVoice.get(v)!.push(note);
   }
 
-  events.sort((a, b) => (a.tick - b.tick) || (a.order - b.order));
+  // Sorted voice numbers (1-based) for deterministic track order
+  const voiceNums = Array.from(notesByVoice.keys()).sort((a, b) => a - b);
 
-  const trackData: number[] = [];
-  let lastTick = 0;
-  for (const ev of events) {
-    const delta = ev.tick - lastTick;
-    trackData.push(...encodeVlq(delta));
-    trackData.push(...ev.bytes);
-    lastTick = ev.tick;
+  // ── Track 0: conductor (tempo + time signature, no notes) ──
+  function buildConductorTrack(): number[] {
+    const events: MidiEvent[] = [];
+    events.push({ tick: 0, order: 0, bytes: tempoMetaEventBpm(project.bpm ?? 120) });
+    events.push({ tick: 0, order: 1, bytes: timeSignatureMetaEvent(timeSignature) });
+    return eventsToTrackData(events);
   }
 
-  trackData.push(0x00, 0xff, 0x2f, 0x00);
+  // ── Track N: one per voice ──
+  function buildVoiceTrack(voiceNum: number, voiceNotes: StaffNote[]): number[] {
+    const ch = Math.max(0, Math.min(15, voiceNum - 1));
+    const events: MidiEvent[] = [];
+
+    // Track name meta event
+    const name = voiceNames[voiceNum - 1] ?? `Voice ${voiceNum}`;
+    const nameBytes = Array.from(new TextEncoder().encode(name));
+    events.push({ tick: 0, order: 0, bytes: [0xff, 0x03, ...encodeVlq(nameBytes.length), ...nameBytes] });
+
+    for (const note of voiceNotes) {
+      const tick = noteTick(note, beatsPerMeasure);
+      const dur = noteDurationTicks(note);
+      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
+      const velOn = 88;
+      events.push({ tick, order: 2, bytes: [0x90 | ch, midi, velOn] });
+      events.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
+    }
+
+    return eventsToTrackData(events);
+  }
+
+  function eventsToTrackData(events: MidiEvent[]): number[] {
+    events.sort((a, b) => (a.tick - b.tick) || (a.order - b.order));
+    const data: number[] = [];
+    let lastTick = 0;
+    for (const ev of events) {
+      const delta = ev.tick - lastTick;
+      data.push(...encodeVlq(delta));
+      data.push(...ev.bytes);
+      lastTick = ev.tick;
+    }
+    data.push(0x00, 0xff, 0x2f, 0x00); // End of track
+    return data;
+  }
+
+  // ── Assemble MIDI type 1 ──
+  const tracks: number[][] = [buildConductorTrack()];
+  for (const v of voiceNums) {
+    tracks.push(buildVoiceTrack(v, notesByVoice.get(v)!));
+  }
 
   const bytes: number[] = [];
-  bytes.push(...[0x4d, 0x54, 0x68, 0x64]);
+  // MThd
+  bytes.push(...[0x4d, 0x54, 0x68, 0x64]); // "MThd"
   bytes.push(...writeU32(6));
-  bytes.push(...writeU16(0));
-  bytes.push(...writeU16(1));
+  bytes.push(...writeU16(1));                // Type 1 (multi-track)
+  bytes.push(...writeU16(tracks.length));    // Number of tracks
   bytes.push(...writeU16(DEFAULT_TPQ));
 
-  bytes.push(...[0x4d, 0x54, 0x72, 0x6b]);
-  bytes.push(...writeU32(trackData.length));
-  bytes.push(...trackData);
+  for (const trackData of tracks) {
+    bytes.push(...[0x4d, 0x54, 0x72, 0x6b]); // "MTrk"
+    bytes.push(...writeU32(trackData.length));
+    bytes.push(...trackData);
+  }
 
   return new Uint8Array(bytes);
 }
