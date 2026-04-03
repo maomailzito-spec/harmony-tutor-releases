@@ -299,6 +299,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *  When true, changing duration from toolbar/hotkey will NOT retroactively
      *  modify the selected note — it only updates the insertion state. */
     const justInsertedNoteRef = useRef<string | null>(null);
+    /** Maps expanded playback beats → visual (original) beats for repeat expansion. null = identity. */
+    const playbackBeatToVisualBeatRef = useRef<((expandedBeat: number) => number) | null>(null);
     const [isTriplet, setIsTriplet] = useState(false);
     const [isDuplet, setIsDuplet] = useState(false);
     const [tupletNoteCount, setTupletNoteCount] = useState(0);
@@ -3185,7 +3187,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             const curAbsBeat = b0 + ((ctx.currentTime - t0) / beatDurationSec);
-            const pos = getPlayheadPosForAbsBeat(curAbsBeat);
+            const visualBeat = playbackBeatToVisualBeatRef.current
+                ? playbackBeatToVisualBeatRef.current(curAbsBeat)
+                : curAbsBeat;
+            const pos = getPlayheadPosForAbsBeat(visualBeat);
             if (pos) setPlayheadPosition(pos);
 
             animationFrameRef.current = window.requestAnimationFrame(tick);
@@ -3398,13 +3403,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     itemsByMeasure.get(mi)!.push(it);
                 }
 
-                // Rebuild allItems with shifted beats.
+                // Rebuild allItems with shifted beats + build beat mapping table.
                 const expandedItems: PlaybackItem[] = [];
+                const beatMapSegments: Array<{ expandedStart: number; origStart: number; length: number }> = [];
                 let cumulativeBeat = 0;
 
                 for (const origMeasureIdx of measureOrder) {
                     const bpmForMeasure = bpmAtMeasure(origMeasureIdx);
                     const origMeasureStart = measureStartBeat(origMeasureIdx);
+
+                    beatMapSegments.push({
+                        expandedStart: cumulativeBeat,
+                        origStart: origMeasureStart,
+                        length: bpmForMeasure,
+                    });
+
                     const items = itemsByMeasure.get(origMeasureIdx);
                     if (items) {
                         for (const it of items) {
@@ -3421,7 +3434,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // Replace allItems content.
                 allItems.length = 0;
                 allItems.push(...expandedItems);
+
+                // Build mapping function: expanded beat → visual (original) beat.
+                playbackBeatToVisualBeatRef.current = (expandedBeat: number) => {
+                    for (let i = beatMapSegments.length - 1; i >= 0; i--) {
+                        const seg = beatMapSegments[i];
+                        if (expandedBeat >= seg.expandedStart - 1e-6) {
+                            const offset = expandedBeat - seg.expandedStart;
+                            return seg.origStart + Math.min(offset, seg.length);
+                        }
+                    }
+                    return expandedBeat;
+                };
+            } else {
+                playbackBeatToVisualBeatRef.current = null;
             }
+        } else {
+            playbackBeatToVisualBeatRef.current = null;
         }
 
         // Group items by start beat (rounded to avoid float key drift with tuplets).
@@ -3564,7 +3593,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
 
         const endMs = (maxEndAbsBeat - startAbsBeat) * beatDurationSec * 1000;
-        playbackTimeoutsRef.current.push(window.setTimeout(() => stopPlayback(), Math.max(0, (startMs - performance.now()) + endMs + 200)));
+        playbackTimeoutsRef.current.push(window.setTimeout(() => { playbackBeatToVisualBeatRef.current = null; stopPlayback(); }, Math.max(0, (startMs - performance.now()) + endMs + 200)));
     }, [audioService, bpm, getPlayheadPosForAbsBeat, isAudioReady, isSwing, midiToName, normalizedRawNotes, rawNotes, selectedMidiOutput, sendMidiNote, startMetronomeScheduler, stopPlayback, timeSignature, playbackTransposeSemitones]);
 
     const togglePlayback = useCallback(() => {
