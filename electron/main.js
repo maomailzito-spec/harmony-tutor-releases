@@ -1322,12 +1322,12 @@ app.whenReady().then(async () => {
       type: 'warning',
       title: 'Trial Scaduto',
       message: 'Il periodo di prova di 10 giorni è terminato.',
-      detail: 'Per continuare a usare Harmony Tutor, acquista una licenza su harmonytutor.com.',
+      detail: 'Per continuare a usare Harmony Tutor, acquista una licenza su harmonytutor.it.',
       buttons: ['Acquista Licenza', 'Chiudi'],
       defaultId: 0,
     }).then((result) => {
       if (result.response === 0) {
-        require('electron').shell.openExternal('https://harmonytutor.com/buy');
+        require('electron').shell.openExternal('https://harmonytutor.it/buy');
       }
     });
     app.quit();
