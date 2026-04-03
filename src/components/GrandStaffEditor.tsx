@@ -93,7 +93,7 @@ const VF_SATB_TENOR_Y = 240;
 const VF_SATB_BASS_Y = 340;
 // Extra bottom space in SATB mode so very low bass notes (e.g. C below the staff)
 // remain fully visible and insertable. This must not affect pitch mapping.
-const VF_SATB_BASS_EXTRA_BOTTOM_PX = 100;
+const VF_SATB_BASS_EXTRA_BOTTOM_PX = 140;
 const VF_SATB_SYSTEM_HEIGHT = VF_SATB_BASS_Y + (4 * VF_LINE_SPACING) + VF_SATB_BASS_EXTRA_BOTTOM_PX;
 
 // Match VexFlow's grand staff span (see VexflowGrandStaff).

@@ -10651,16 +10651,16 @@ export function applyHarmonyRules(
                         // Sugli altri gradi: solo con Soprano per 2ª min. discendente
                         if (_isTonicOrDom) {
                             _dubSev = 'exception';
-                            _dubDesc = 'Quinta nascosta verso I/V con Soprano per grado congiunto (ammessa — Dubois)';
-                            _dubSugg = 'Eccezione classica (Dubois): quinta nascosta ammessa sul I e V grado quando il Soprano procede per grado congiunto.';
+                            _dubDesc = 'Quinta nascosta verso I/V con Soprano per grado congiunto (ammessa — regola classica)';
+                            _dubSugg = 'Eccezione classica: quinta nascosta ammessa sul I e V grado quando il Soprano procede per grado congiunto.';
                         } else if (sopDir < 0 && sopSemi === 1) {
                             _dubSev = 'exception';
-                            _dubDesc = 'Quinta nascosta con Soprano per 2ª min. discendente (ammessa — Dubois)';
-                            _dubSugg = 'Dubois: sugli altri gradi, la quinta nascosta tra parti estreme è ammessa se il Soprano scende di seconda minore.';
+                            _dubDesc = 'Quinta nascosta con Soprano per 2ª min. discendente (ammessa — regola classica)';
+                            _dubSugg = 'Nella prassi classica, sugli altri gradi la quinta nascosta tra parti estreme è ammessa se il Soprano scende di seconda minore.';
                         } else {
                             _dubSev = 'warning';
                             _dubDesc = 'Quinta nascosta tra voci estreme — Soprano per grado ma non verso I/V grado';
-                            _dubSugg = 'Dubois: la quinta nascosta tra parti estreme con Soprano per grado congiunto è ammessa solo verso il I e il V grado; sugli altri gradi solo con Soprano per 2ª min. discendente.';
+                            _dubSugg = 'Nella prassi classica, la quinta nascosta tra parti estreme con Soprano per grado congiunto è ammessa solo verso il I e il V grado; sugli altri gradi solo con Soprano per 2ª min. discendente.';
                         }
                     } else {
                         // Ottava nascosta S+B — Dubois:
@@ -10668,12 +10668,12 @@ export function applyHarmonyRules(
                         // Tollerata con riserva con Soprano per 2ª magg. disc. verso gradi tonali
                         if (sopSemi === 1 && _isTonalDeg) {
                             _dubSev = 'exception';
-                            _dubDesc = 'Ottava nascosta con Soprano per 2ª min. verso grado tonale (ammessa — Dubois)';
-                            _dubSugg = 'Dubois: l\'ottava nascosta tra parti estreme è ammessa quando il Soprano procede per seconda minore verso un grado tonale (I, IV, V).';
+                            _dubDesc = 'Ottava nascosta con Soprano per 2ª min. verso grado tonale (ammessa — regola classica)';
+                            _dubSugg = 'Nella prassi classica, l\'ottava nascosta tra parti estreme è ammessa quando il Soprano procede per seconda minore verso un grado tonale (I, IV, V).';
                         } else if (sopDir < 0 && sopSemi === 2 && _isTonalDeg) {
                             _dubSev = 'warning';
-                            _dubDesc = 'Ottava nascosta con Soprano per 2ª magg. disc. verso grado tonale (tollerata con riserva — Dubois)';
-                            _dubSugg = 'Dubois: l\'ottava nascosta con Soprano per 2ª maggiore discendente è tollerata con riserva sui gradi tonali, particolarmente in conclusione di frase.';
+                            _dubDesc = 'Ottava nascosta con Soprano per 2ª magg. disc. verso grado tonale (tollerata con riserva)';
+                            _dubSugg = 'Nella prassi classica, l\'ottava nascosta con Soprano per 2ª maggiore discendente è tollerata con riserva sui gradi tonali, particolarmente in conclusione di frase.';
                         } else if (sopSemi === 2 && _isTonalDeg) {
                             _dubSev = 'warning';
                             _dubDesc = 'Ottava nascosta con Soprano per 2ª magg. verso grado tonale (non ammessa)';
@@ -10681,7 +10681,7 @@ export function applyHarmonyRules(
                         } else {
                             _dubSev = 'warning';
                             _dubDesc = 'Ottava nascosta tra voci estreme — non verso grado tonale';
-                            _dubSugg = 'Dubois: l\'ottava nascosta tra parti estreme è ammessa solo verso i gradi tonali (I, IV, V) con il Soprano per seconda minore.';
+                            _dubSugg = 'Nella prassi classica, l\'ottava nascosta tra parti estreme è ammessa solo verso i gradi tonali (I, IV, V) con il Soprano per seconda minore.';
                         }
                     }
 
@@ -10836,8 +10836,8 @@ export function applyHarmonyRules(
                     addViolation({
                         ruleId: 'EXC-Hidden-Stepwise',
                         severity: 'exception',
-                        description: 'Quinta nascosta S\u2013A con nota comune ai due accordi (ammessa \u2014 Dubois)',
-                        suggestion: 'Dubois: la quinta nascosta tra parti interne \u00E8 ammessa su tutti i gradi, anche per salto, se una delle due note che formano la 5\u00AA \u00E8 comune ai due accordi.',
+                        description: 'Quinta nascosta S\u2013A con nota comune ai due accordi (ammessa)',
+                        suggestion: 'Nella prassi classica, la quinta nascosta tra parti interne \u00E8 ammessa su tutti i gradi, anche per salto, se una delle due note che formano la 5\u00AA \u00E8 comune ai due accordi.',
                         noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                     });
                     connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
@@ -10848,9 +10848,9 @@ export function applyHarmonyRules(
                         ruleId: 'EXC-Hidden-Stepwise',
                         severity: 'exception',
                         description: isOct
-                            ? 'Ottava nascosta S–A con Soprano per grado congiunto (ammessa — Dubois)'
-                            : 'Quinta nascosta S–A con Soprano per grado congiunto (ammessa — Dubois)',
-                        suggestion: 'Dubois: tra parti interne, la quinta/ottava nascosta è ammessa su tutti i gradi se la voce più acuta procede per grado congiunto.',
+                            ? 'Ottava nascosta S–A con Soprano per grado congiunto (ammessa — regola classica)'
+                            : 'Quinta nascosta S–A con Soprano per grado congiunto (ammessa — regola classica)',
+                        suggestion: 'Nella prassi classica, tra parti interne la quinta/ottava nascosta è ammessa su tutti i gradi se la voce più acuta procede per grado congiunto.',
                         noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                     });
                     connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: 'exception', ruleId: 'EXC-Hidden-Stepwise' });
@@ -10864,9 +10864,9 @@ export function applyHarmonyRules(
                             ruleId: _sevSA === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05',
                             severity: _sevSA,
                             description: _isTonalSA
-                                ? 'Quinta nascosta S–A con Alto per grado, su grado tonale (ammessa — Dubois)'
+                                ? 'Quinta nascosta S–A con Alto per grado, su grado tonale (ammessa — regola classica)'
                                 : 'Quinta nascosta S–A con Alto per grado ma non su grado tonale',
-                            suggestion: 'Dubois: la quinta nascosta con la voce inferiore per grado è ammessa solo sui gradi tonali (I, IV, V).',
+                            suggestion: 'Nella prassi classica, la quinta nascosta con la voce inferiore per grado è ammessa solo sui gradi tonali (I, IV, V).',
                             noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                         });
                         connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: _sevSA === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05' });
@@ -10878,9 +10878,9 @@ export function applyHarmonyRules(
                             ruleId: 'R-05',
                             severity: _sevSA,
                             description: _altoDir > 0
-                                ? 'Ottava nascosta S–A con Alto per grado ascendente (tollerata con riserva — Dubois)'
-                                : 'Ottava nascosta S–A con Alto per grado discendente (non ammessa — Dubois)',
-                            suggestion: 'Dubois: l\'ottava nascosta con la voce inferiore per grado è tollerata con riserva solo salendo.',
+                                ? 'Ottava nascosta S–A con Alto per grado ascendente (tollerata con riserva)'
+                                : 'Ottava nascosta S–A con Alto per grado discendente (non ammessa)',
+                            suggestion: 'Nella prassi classica, l\'ottava nascosta con la voce inferiore per grado è tollerata con riserva solo salendo.',
                             noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                         });
                         connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: 'R-05' });
@@ -10895,11 +10895,11 @@ export function applyHarmonyRules(
                             ruleId: 'R-05',
                             severity: _sevSA,
                             description: isOct
-                                ? (inSequence ? 'Ottave nascoste S–A in progressione imitata' : 'Ottava nascosta S–A per salto in entrambe le voci (proibita — Dubois)')
+                                ? (inSequence ? 'Ottave nascoste S–A in progressione imitata' : 'Ottava nascosta S–A per salto in entrambe le voci (proibita)')
                                 : (inSequence ? 'Quinte nascoste S–A in progressione imitata' : 'Quinta nascosta S–A per salto senza nota comune'),
                             suggestion: isOct
-                                ? 'Dubois: l\'ottava nascosta è proibita quando entrambe le voci procedono per salto.'
-                                : 'Dubois: la quinta nascosta per salto è ammessa solo se una delle note è comune ai due accordi.',
+                                ? 'Nella prassi classica, l\'ottava nascosta è proibita quando entrambe le voci procedono per salto.'
+                                : 'Nella prassi classica, la quinta nascosta per salto è ammessa solo se una delle note è comune ai due accordi.',
                             noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                         });
                         connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: 'R-05' });
@@ -10981,28 +10981,28 @@ export function applyHarmonyRules(
                 if (_is5 && _commonNote) {
                     // Dubois rule 3: common note overrides all conditions for 5ths (inner voices)
                     _sev = 'exception';
-                    _desc = `Quinta nascosta ${_pairLabel} con nota comune ai due accordi (ammessa \u2014 Dubois)`;
-                    _sugg = 'Dubois: la quinta nascosta tra parti interne \u00E8 ammessa su tutti i gradi, anche per salto, se una delle note che formano la 5\u00AA \u00E8 comune ai due accordi.';
+                    _desc = `Quinta nascosta ${_pairLabel} con nota comune ai due accordi (ammessa)`;
+                    _sugg = 'Nella prassi classica, la quinta nascosta tra parti interne \u00E8 ammessa su tutti i gradi, anche per salto, se una delle note che formano la 5\u00AA \u00E8 comune ai due accordi.';
                 } else if (_hiStep) {
                     // Dubois: voce più acuta per grado → ammessa su tutti i gradi
                     _sev = 'exception';
                     _desc = _is8
-                        ? `Ottava nascosta ${_pairLabel} con ${pair.nameHi} per grado congiunto (ammessa — Dubois)`
-                        : `Quinta nascosta ${_pairLabel} con ${pair.nameHi} per grado congiunto (ammessa — Dubois)`;
-                    _sugg = 'Dubois: tra parti interne, ammessa su tutti i gradi se la voce più acuta procede per grado congiunto.';
+                        ? `Ottava nascosta ${_pairLabel} con ${pair.nameHi} per grado congiunto (ammessa — regola classica)`
+                        : `Quinta nascosta ${_pairLabel} con ${pair.nameHi} per grado congiunto (ammessa — regola classica)`;
+                    _sugg = 'Nella prassi classica, tra parti interne ammessa su tutti i gradi se la voce più acuta procede per grado congiunto.';
                 } else if (_loStep) {
                     if (_is5) {
                         _sev = _isTonal ? 'exception' : 'warning';
                         _desc = _isTonal
-                            ? `Quinta nascosta ${_pairLabel} con ${pair.nameLo} per grado, su grado tonale (ammessa — Dubois)`
+                            ? `Quinta nascosta ${_pairLabel} con ${pair.nameLo} per grado, su grado tonale (ammessa — regola classica)`
                             : `Quinta nascosta ${_pairLabel} con ${pair.nameLo} per grado ma non su grado tonale`;
-                        _sugg = 'Dubois: con la voce inferiore per grado, la quinta nascosta è ammessa solo sui gradi tonali (I, IV, V).';
+                        _sugg = 'Nella prassi classica, con la voce inferiore per grado la quinta nascosta è ammessa solo sui gradi tonali (I, IV, V).';
                     } else {
                         _sev = 'warning';
                         _desc = _loDir > 0
-                            ? `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado ascendente (tollerata con riserva — Dubois)`
-                            : `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado discendente (evitare — tra parti interne tollerata, cfr. Piston)`;
-                        _sugg = 'Tra parti interne, l\'ottava nascosta con la voce inferiore per grado è tollerata con più libertà (Piston, Bach).';
+                            ? `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado ascendente (tollerata con riserva)`
+                            : `Ottava nascosta ${_pairLabel} con ${pair.nameLo} per grado discendente (evitare — tra parti interne tollerata)`;
+                        _sugg = 'Tra parti interne, l\'ottava nascosta con la voce inferiore per grado è tollerata con più libertà (prassi classica).';
                     }
                 } else {
                     // Both leap
@@ -11010,14 +11010,14 @@ export function applyHarmonyRules(
                         _sev = _inSeq ? 'exception' : 'warning';
                         _desc = _inSeq
                             ? `Ottava nascosta ${_pairLabel} per salto in progressione imitata (tollerata)`
-                            : `Ottava nascosta ${_pairLabel} per salto in entrambe le voci (evitare — tra parti interne tollerata, cfr. Piston/Bach)`;
-                        _sugg = 'Tra parti interne, l\'ottava nascosta per salto è più tollerata che tra voci estreme (Piston, Bach).';
+                            : `Ottava nascosta ${_pairLabel} per salto in entrambe le voci (evitare — tra parti interne tollerata)`;
+                        _sugg = 'Tra parti interne, l\'ottava nascosta per salto è più tollerata che tra voci estreme (prassi classica).';
                     } else {
                         _sev = _inSeq ? 'exception' : 'warning';
                         _desc = _inSeq
                             ? `Quinta nascosta ${_pairLabel} in progressione imitata (tollerata)`
                             : `Quinta nascosta ${_pairLabel} per salto senza nota comune`;
-                        _sugg = 'Dubois: la quinta nascosta per salto è ammessa solo se una delle note è comune ai due accordi.';
+                        _sugg = 'Nella prassi classica, la quinta nascosta per salto è ammessa solo se una delle note è comune ai due accordi.';
                     }
                 }
 
@@ -11491,7 +11491,7 @@ export function applyHarmonyRules(
             ruleId: 'R-16',
             severity: 'warning',
             description: 'Sincope armonica (accordo sul debole che “entra” sul battere successivo)',
-            suggestion: 'Secondo la “regola della stanghetta” (Piston), in stile corale/classico è preferibile che il cambio armonico cada sul 1°. Nota: in musica moderna/jazz può essere una scelta ritmica intenzionale e tollerata.',
+            suggestion: 'Secondo la “regola della stanghetta” (regola classica), in stile corale/classico è preferibile che il cambio armonico cada sul 1°. Nota: in musica moderna/jazz può essere una scelta ritmica intenzionale e tollerata.',
             noteIds,
         });
 

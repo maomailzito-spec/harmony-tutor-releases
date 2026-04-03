@@ -430,7 +430,7 @@ export const RULE_TEXTS: Record<string, RuleText> = {
         'Quinte parallele tollerate (Sesta Tedesca / Cromatismi).\n'
         + 'Successione di quinte parallele ammessa per ragioni di colore o rinforzo armonico in due contesti specifici:',
         'Ambito Classico (Quinte di Mozart): generate dalla risoluzione diretta della Sesta Tedesca (♭VI) sull\'accordo di Dominante (V). La tensione della sesta eccedente giustifica il movimento parallelo all\'orecchio.',
-        'Ambito Moderno (Delamont): definite "quinte orchestrali", sono ammesse in movimenti cromatici su vari gradi per dare spessore alla massa sonora.',
+        'Ambito Moderno (prassi moderna): definite "quinte orchestrali", sono ammesse in movimenti cromatici su vari gradi per dare spessore alla massa sonora.',
         'Condizioni d\'uso:\n• Devono essere collocate preferibilmente nelle voci inferiori.\n• Vanno evitate nelle successioni diatoniche standard (es. V–IV o I–ii), dove produrrebbero un suono rigido e sgradevole.',
         '⚠️ Nota Tecnica: Nello stile rigoroso (Bach), si evita il caso di Mozart inserendo una quarta e sesta cadenzale (I⁶₄) prima del V.',
       ].join('\n'),
