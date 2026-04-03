@@ -85,9 +85,12 @@ export type MidiWriterProject = {
   notes: StaffNote[];
   timeSignature: TimeSignature;
   bpm?: number;
+  /** 0 = single track (all voices merged), 1 = multi-track (one per voice). Default: 1 */
+  midiType?: 0 | 1;
 };
 
 export function buildMidiFile(project: MidiWriterProject): Uint8Array {
+  const midiType = project.midiType ?? 1;
   const notes = (project.notes || []).filter(n => n && !n.isRest && Number.isFinite(n.midi));
   const timeSignature = project.timeSignature || { numerator: 4, denominator: 4 };
   const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -148,17 +151,36 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
     return data;
   }
 
-  // ── Assemble MIDI type 1 ──
-  const tracks: number[][] = [buildConductorTrack()];
-  for (const v of voiceNums) {
-    tracks.push(buildVoiceTrack(v, notesByVoice.get(v)!));
+  // ── Assemble MIDI ──
+  let tracks: number[][];
+
+  if (midiType === 0) {
+    // Type 0: single track, all voices merged
+    const allEvents: MidiEvent[] = [];
+    allEvents.push({ tick: 0, order: 0, bytes: tempoMetaEventBpm(project.bpm ?? 120) });
+    allEvents.push({ tick: 0, order: 1, bytes: timeSignatureMetaEvent(timeSignature) });
+    for (const note of notes) {
+      const tick = noteTick(note, beatsPerMeasure);
+      const dur = noteDurationTicks(note);
+      const ch = Math.max(0, Math.min(15, (note.voice ?? 1) - 1));
+      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
+      allEvents.push({ tick, order: 2, bytes: [0x90 | ch, midi, 88] });
+      allEvents.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
+    }
+    tracks = [eventsToTrackData(allEvents)];
+  } else {
+    // Type 1: multi-track (conductor + one per voice)
+    tracks = [buildConductorTrack()];
+    for (const v of voiceNums) {
+      tracks.push(buildVoiceTrack(v, notesByVoice.get(v)!));
+    }
   }
 
   const bytes: number[] = [];
   // MThd
   bytes.push(...[0x4d, 0x54, 0x68, 0x64]); // "MThd"
   bytes.push(...writeU32(6));
-  bytes.push(...writeU16(1));                // Type 1 (multi-track)
+  bytes.push(...writeU16(midiType));         // Type 0 or 1
   bytes.push(...writeU16(tracks.length));    // Number of tracks
   bytes.push(...writeU16(DEFAULT_TPQ));
 
