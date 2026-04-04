@@ -20,7 +20,7 @@ const { encrypt, decrypt } = require('./licenseCrypto');
 
 // ── Configuration ──
 // Replace with your actual Cloudflare Worker URL before production build.
-const LICENSE_SERVER_URL = 'https://harmony-tutor-license.workers.dev';
+const LICENSE_SERVER_URL = 'https://harmony-tutor-license.maomail-zito.workers.dev';
 const VALIDATE_INTERVAL_DAYS = 7;
 const OFFLINE_GRACE_DAYS = 30;
 const LICENSE_FILE = 'license.enc';
