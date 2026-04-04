@@ -777,23 +777,23 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           drawSingle(x + 1, 1);
           drawSingle(x + 5, 1);
         } else if (bar.style === 'repeat-end') {
-          // :|  thin + dots + thick
-          drawSingle(x - 12, 1);
-          drawDots(x - 6);
+          // :|  dots + thin + thick  (dots towards the music, on the left)
+          drawDots(x - 14);
+          drawSingle(x - 7, 1);
           drawSingle(x - 1, 3);
         } else if (bar.style === 'repeat-begin') {
-          // |:  thick + dots + thin
+          // |:  thick + thin + dots  (dots towards the music, on the right)
           drawSingle(x + 1, 3);
-          drawDots(x + 7);
-          drawSingle(x + 12, 1);
+          drawSingle(x + 7, 1);
+          drawDots(x + 14);
         } else if (bar.style === 'repeat-both') {
-          // :|:  thin + dots + thick | thick + dots + thin
-          drawSingle(x - 12, 1);
-          drawDots(x - 6);
+          // :|:  dots + thin + thick | thick + thin + dots
+          drawDots(x - 14);
+          drawSingle(x - 7, 1);
           drawSingle(x - 1, 3);
           drawSingle(x + 1, 3);
-          drawDots(x + 7);
-          drawSingle(x + 12, 1);
+          drawSingle(x + 7, 1);
+          drawDots(x + 14);
         } else {
           drawSingle(x, 1);
         }

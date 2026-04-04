@@ -2637,7 +2637,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                 const isLastInSystem = idx === sys.measureIndices.length - 1;
                 const svgStaffEnd = containerWidth - STAFF_MARGIN;
-                const barStyle = m === finalMeasureIndex ? 'final' : (repeatBarlines[m] || (doubleSet.has(m) ? 'double' : 'single'));
+                const barStyle = repeatBarlines[m] || (m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single'));
                 let barXLocal = (curX - curXStart + START_X) + measureWidth;
                 if (isLastInSystem) {
                     // IMPORTANT:
@@ -8722,8 +8722,13 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     onToggleRepeatBarline={(measureIndex, type) => {
                         setRepeatBarlines(prev => {
                             const next = { ...prev };
-                            if (next[measureIndex] === type) delete next[measureIndex];
-                            else next[measureIndex] = type;
+                            // repeat-begin: the barline appears at the LEFT edge of the target
+                            // measure, which is the RIGHT edge of (measureIndex - 1).
+                            // repeat-end: barline at the RIGHT edge of the target measure.
+                            // repeat-both: barline at the RIGHT edge (ends here, begins next).
+                            const targetM = type === 'repeat-begin' ? Math.max(0, measureIndex - 1) : measureIndex;
+                            if (next[targetM] === type) delete next[targetM];
+                            else next[targetM] = type;
                             return next;
                         });
                     }}
