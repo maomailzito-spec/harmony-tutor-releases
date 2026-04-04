@@ -55,8 +55,8 @@ async function handleActivate({ licenseKey, instanceName }, env) {
 
   const res = await fetch(`${LEMON_API}/activate`, {
     method: 'POST',
-    headers: lemonHeaders(env),
-    body: JSON.stringify({
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
       license_key: licenseKey,
       instance_name: instanceName || 'Harmony Tutor',
     }),
@@ -74,10 +74,10 @@ async function handleActivate({ licenseKey, instanceName }, env) {
   return json({
     valid: true,
     activated: true,
-    instanceId: data.activated?.id || data.instance?.id || null,
+    instanceId: data.instance?.id || null,
     licenseKey: data.license_key?.key || licenseKey,
-    customerName: data.meta?.customer_name || null,
-    customerEmail: data.meta?.customer_email || null,
+    customerName: data.license_key?.customer_name || data.meta?.customer_name || null,
+    customerEmail: data.license_key?.customer_email || data.meta?.customer_email || null,
     expiresAt: data.license_key?.expires_at || null,
   }, 200, env);
 }
@@ -85,13 +85,13 @@ async function handleActivate({ licenseKey, instanceName }, env) {
 async function handleValidate({ licenseKey, instanceId }, env) {
   if (!licenseKey) return json({ error: 'Missing licenseKey' }, 400, env);
 
+  const body = { license_key: licenseKey };
+  if (instanceId) body.instance_id = instanceId;
+
   const res = await fetch(`${LEMON_API}/validate`, {
     method: 'POST',
-    headers: lemonHeaders(env),
-    body: JSON.stringify({
-      license_key: licenseKey,
-      instance_id: instanceId || undefined,
-    }),
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(body),
   });
 
   const data = await res.json();
@@ -117,8 +117,8 @@ async function handleDeactivate({ licenseKey, instanceId }, env) {
 
   const res = await fetch(`${LEMON_API}/deactivate`, {
     method: 'POST',
-    headers: lemonHeaders(env),
-    body: JSON.stringify({
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
       license_key: licenseKey,
       instance_id: instanceId,
     }),
