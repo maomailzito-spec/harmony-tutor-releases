@@ -59,4 +59,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   trial: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_TRIAL_INFO),
   },
+  license: {
+    activate: (key) => ipcRenderer.invoke(IPC_CHANNELS.ACTIVATE_LICENSE, key),
+    deactivate: () => ipcRenderer.invoke(IPC_CHANNELS.DEACTIVATE_LICENSE),
+    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LICENSE_INFO),
+  },
 });

@@ -17,6 +17,10 @@ export const IPC_CHANNELS: Readonly<{
   GUITAR_LIBRARY_SAVE: 'guitar-library-save';
 
   GET_TRIAL_INFO: 'get-trial-info';
+
+  ACTIVATE_LICENSE: 'activate-license';
+  DEACTIVATE_LICENSE: 'deactivate-license';
+  GET_LICENSE_INFO: 'get-license-info';
 }>;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

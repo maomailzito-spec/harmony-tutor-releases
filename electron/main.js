@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { checkTrial, getTrialInfo } = require('./licensing/trialManager');
+const { activateLicense, checkLicense, deactivateLicense, getLicenseInfo } = require('./licensing/licenseManager');
 
 // -----------------------------------------------------------------------------
 // Stdio hardening (macOS / dev): when Electron is launched without an attached
@@ -911,6 +912,113 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
   }
 });
 
+// ── License Activation Dialog (loop until activated or cancelled) ──
+async function showLicenseActivationDialog(extraMessage) {
+  const { shell } = require('electron');
+
+  while (true) {
+    const msg = extraMessage
+      ? `${extraMessage}\n\nIl periodo di prova è terminato. Inserisci la tua chiave di licenza per continuare.`
+      : 'Il periodo di prova di 10 giorni è terminato.\nInserisci la tua chiave di licenza per continuare.';
+
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: 'Attivazione Licenza — Harmony Tutor',
+      message: msg,
+      detail: 'Se non hai ancora una licenza, puoi acquistarla su harmonytutor.it',
+      buttons: ['Inserisci Chiave', 'Acquista Licenza', 'Chiudi'],
+      defaultId: 0,
+      cancelId: 2,
+    });
+
+    if (result.response === 1) {
+      // Open purchase page
+      shell.openExternal('https://harmonytutor.it/buy');
+      continue; // loop back to ask for key
+    }
+
+    if (result.response === 2) {
+      return null; // user wants to quit
+    }
+
+    // Ask for the license key via a simple prompt window
+    const key = await showKeyInputDialog();
+    if (!key) continue; // user cancelled key input
+
+    // Try to activate
+    const activation = await activateLicense(key.trim());
+    if (activation.success) {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'Licenza Attivata',
+        message: 'Licenza attivata con successo!',
+        detail: activation.data.customerName
+          ? `Benvenuto, ${activation.data.customerName}!`
+          : 'Harmony Tutor è ora sbloccato.',
+        buttons: ['OK'],
+      });
+      return activation.data;
+    }
+
+    // Activation failed — show error and loop
+    extraMessage = `Errore: ${activation.error}`;
+  }
+}
+
+async function showKeyInputDialog() {
+  return new Promise((resolve) => {
+    const inputWin = new BrowserWindow({
+      width: 480,
+      height: 200,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      alwaysOnTop: true,
+      title: 'Inserisci Chiave di Licenza',
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
+    });
+
+    const html = `<!DOCTYPE html>
+<html><head><style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; background: #1e1e2f; color: #e0e0e0; margin: 0; }
+  h3 { margin: 0 0 12px; font-size: 14px; }
+  input { width: 100%; padding: 8px; font-size: 13px; border: 1px solid #555; border-radius: 4px; background: #2a2a3d; color: #fff; box-sizing: border-box; }
+  .btns { margin-top: 14px; display: flex; gap: 8px; justify-content: flex-end; }
+  button { padding: 6px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  .ok { background: #4f8cff; color: #fff; } .ok:hover { background: #3a7ae8; }
+  .cancel { background: #555; color: #ccc; } .cancel:hover { background: #666; }
+</style></head><body>
+  <h3>Inserisci la chiave di licenza</h3>
+  <input id="key" placeholder="HT-XXXX-XXXX-XXXX-XXXX" autofocus />
+  <div class="btns">
+    <button class="cancel" onclick="window.close()">Annulla</button>
+    <button class="ok" onclick="submit()">Attiva</button>
+  </div>
+  <script>
+    function submit() {
+      const v = document.getElementById('key').value;
+      document.title = 'KEY:' + v;
+      window.close();
+    }
+    document.getElementById('key').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  </script>
+</body></html>`;
+
+    inputWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    inputWin.setMenuBarVisibility(false);
+
+    let licenseKey = null;
+    inputWin.on('page-title-updated', (_e, title) => {
+      if (title.startsWith('KEY:')) {
+        licenseKey = title.slice(4);
+      }
+    });
+    inputWin.on('closed', () => {
+      resolve(licenseKey || null);
+    });
+  });
+}
+
 function createWindow() {
   const isDev = String(process.env.NODE_ENV || '').toLowerCase() === 'development';
   const titleSuffix = isDev ? ` (dev:${DEV_BUILD_TAG})` : '';
@@ -1313,26 +1421,56 @@ ipcMain.handle(IPC_CHANNELS.GET_TRIAL_INFO, async () => {
   }
 });
 
+// ── License IPC ──
+ipcMain.handle(IPC_CHANNELS.ACTIVATE_LICENSE, async (_event, licenseKey) => {
+  try {
+    return await activateLicense(licenseKey);
+  } catch (err) {
+    return { success: false, error: String(err && err.message ? err.message : err) };
+  }
+});
+
+ipcMain.handle(IPC_CHANNELS.DEACTIVATE_LICENSE, async () => {
+  try {
+    return await deactivateLicense();
+  } catch (err) {
+    return { success: false, error: String(err && err.message ? err.message : err) };
+  }
+});
+
+ipcMain.handle(IPC_CHANNELS.GET_LICENSE_INFO, async () => {
+  try {
+    return getLicenseInfo();
+  } catch {
+    return { licensed: false };
+  }
+});
+
 app.whenReady().then(async () => {
   // ── Trial / License gate (skip in dev mode) ──
   const isDev = !app.isPackaged;
   const trial = isDev ? { status: 'licensed' } : checkTrial();
 
+  let licenseStatus = null; // will be set if trial expired
+
   if (trial.status === 'expired') {
-    await dialog.showMessageBox({
-      type: 'warning',
-      title: 'Trial Scaduto',
-      message: 'Il periodo di prova di 10 giorni è terminato.',
-      detail: 'Per continuare a usare Harmony Tutor, acquista una licenza su harmonytutor.it.',
-      buttons: ['Acquista Licenza', 'Chiudi'],
-      defaultId: 0,
-    }).then((result) => {
-      if (result.response === 0) {
-        require('electron').shell.openExternal('https://harmonytutor.it/buy');
+    // Trial expired — check if user has a valid license
+    licenseStatus = await checkLicense();
+
+    if (licenseStatus.status === 'no-license' || licenseStatus.status === 'invalid' || licenseStatus.status === 'grace-expired') {
+      // Show activation dialog
+      const activationResult = await showLicenseActivationDialog(
+        licenseStatus.status === 'grace-expired'
+          ? 'Il periodo di grazia offline è scaduto. Connettiti a internet o inserisci una nuova licenza.'
+          : undefined
+      );
+      if (!activationResult) {
+        app.quit();
+        return;
       }
-    });
-    app.quit();
-    return;
+      licenseStatus = { status: 'licensed', customerName: activationResult.customerName };
+    }
+    // grace-period or licensed — proceed
   }
 
   if (trial.status === 'clock-tamper') {
@@ -1355,11 +1493,17 @@ app.whenReady().then(async () => {
   loadRecentFiles();
   createWindow();
 
-  // Show trial banner in title bar
-  if (trial.status === 'active' && mainWindow) {
-    const suffix = ` — Trial (${trial.daysRemaining} giorni rimanenti)`;
-    const currentTitle = mainWindow.getTitle();
-    mainWindow.setTitle(currentTitle + suffix);
+  // Show trial/license banner in title bar
+  if (mainWindow) {
+    if (licenseStatus && licenseStatus.status === 'licensed') {
+      const name = licenseStatus.customerName ? ` — ${licenseStatus.customerName}` : ' — Licensed';
+      mainWindow.setTitle(mainWindow.getTitle() + name);
+    } else if (licenseStatus && licenseStatus.status === 'grace-period') {
+      mainWindow.setTitle(mainWindow.getTitle() + ` — Offline (${licenseStatus.daysRemaining}gg)`);
+    } else if (trial.status === 'active') {
+      const suffix = ` — Trial (${trial.daysRemaining} giorni rimanenti)`;
+      mainWindow.setTitle(mainWindow.getTitle() + suffix);
+    }
   }
 
   // If launched with a project path (Windows/Linux), open it.

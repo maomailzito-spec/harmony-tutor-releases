@@ -22,6 +22,10 @@ const IPC_CHANNELS = Object.freeze({
   GUITAR_LIBRARY_SAVE: 'guitar-library-save',
 
   GET_TRIAL_INFO: 'get-trial-info',
+
+  ACTIVATE_LICENSE: 'activate-license',
+  DEACTIVATE_LICENSE: 'deactivate-license',
+  GET_LICENSE_INFO: 'get-license-info',
 });
 
 module.exports = {

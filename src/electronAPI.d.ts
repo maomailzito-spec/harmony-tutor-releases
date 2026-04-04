@@ -59,6 +59,29 @@ declare global {
           expired?: boolean;
         }>;
       };
+      license?: {
+        activate: (key: string) => Promise<{
+          success: boolean;
+          error?: string;
+          data?: {
+            licenseKey: string;
+            instanceId: string;
+            customerName?: string;
+            customerEmail?: string;
+            activatedAt: string;
+            expiresAt?: string;
+          };
+        }>;
+        deactivate: () => Promise<{ success: boolean; error?: string }>;
+        getInfo: () => Promise<{
+          licensed: boolean;
+          licenseKey?: string;
+          customerName?: string;
+          customerEmail?: string;
+          activatedAt?: string;
+          expiresAt?: string;
+        }>;
+      };
     };
   }
 }
