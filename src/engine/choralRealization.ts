@@ -801,11 +801,11 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
   if (soprano - alto > 12) cost += 300;
   if (alto - tenor > 12) cost += 300;
 
-  // Unison
+  // Unison — strongly penalized in chorale style (voices should be independent)
   const allM = [bass, tenor, alto, soprano];
   for (let i = 0; i < 4; i++) {
     for (let j = i + 1; j < 4; j++) {
-      if (allM[i] === allM[j]) cost += 40;
+      if (allM[i] === allM[j]) cost += 500;
     }
   }
 
@@ -1666,19 +1666,21 @@ function countParallels(prevMidis: number[], currMidis: number[], rules: ChoralR
       const dir_i = Math.sign(currMidis[i] - prevMidis[i]);
       const dir_j = Math.sign(currMidis[j] - prevMidis[j]);
 
+      // Unison→Octave or Octave→Unison: always forbidden (same as parallel 8ves)
+      if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0) {
+        // This covers: unison→octave, octave→unison, parallel octaves, parallel unisons
+        count++;
+        continue;
+      }
+
       // Consecutive P5→P5 or P8→P8 by contrary motion (R-02c / R-01c)
-      // These are forbidden just like parallel (same-direction) P5/P8.
       if (dir_i !== dir_j) {
         if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) count++;
-        if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0
-            && prevMidis[i] !== prevMidis[j]) count++;
         continue;
       }
 
       // Same direction — parallel 5th
       if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) count++;
-      // Same direction — parallel 8ve
-      if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0 && prevMidis[i] !== prevMidis[j]) count++;
     }
   }
   return count;
@@ -1730,22 +1732,26 @@ export function detectViolations(
       const dir_i = Math.sign(currArr[i] - prevArr[i]);
       const dir_j = Math.sign(currArr[j] - prevArr[j]);
 
-      // Consecutive P5→P5 or P8→P8 by contrary motion (R-02c / R-01c)
+      // Unison→Octave or Octave→Unison: always a violation (consecutive 8ves)
+      if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0) {
+        const isUnison = prevArr[i] === prevArr[j] || currArr[i] === currArr[j];
+        violations.push({ type: 'parallel-8ve', description: isUnison
+          ? `Unison↔Octave: ${voiceLabels[i]}-${voiceLabels[j]}`
+          : `Parallel 8ves: ${voiceLabels[i]}-${voiceLabels[j]}`,
+          measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
+        continue;
+      }
+
+      // Consecutive P5→P5 by contrary motion (R-02c)
       if (dir_i !== dir_j) {
         if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) {
           violations.push({ type: 'parallel-5th', description: `Consecutive 5ths by contrary motion: ${voiceLabels[i]}-${voiceLabels[j]}`, measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
-        }
-        if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0 && prevArr[i] !== prevArr[j]) {
-          violations.push({ type: 'parallel-8ve', description: `Consecutive 8ves by contrary motion: ${voiceLabels[i]}-${voiceLabels[j]}`, measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
         }
         continue;
       }
 
       if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) {
         violations.push({ type: 'parallel-5th', description: `Parallel 5ths: ${voiceLabels[i]}-${voiceLabels[j]}`, measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
-      }
-      if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0 && prevArr[i] !== prevArr[j]) {
-        violations.push({ type: 'parallel-8ve', description: `Parallel 8ves: ${voiceLabels[i]}-${voiceLabels[j]}`, measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
       }
     }
   }
