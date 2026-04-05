@@ -204,10 +204,20 @@ function parseProgressionString(
       currentBeat = 1;
     }
 
+    // Parse the roman numeral to extract inversion info.
+    // If the user typed an explicit inversion (e.g. "V6", "ii6/5", "I64"),
+    // preserve it in the chord entry so the generator respects it.
+    // We detect explicit inversion by checking if parseRoman gives non-zero inv,
+    // OR if the roman string contains figured bass digits after the numeral.
+    const parsedForInv = parseRoman(roman);
+    // Any non-zero inversion from the parser means the user wrote something explicit
+    const hasExplicitInversion = parsedForInv.inversion !== 0;
+
     result.push({
       roman,
       beat: currentBeat,
       measure,
+      ...(hasExplicitInversion ? { inversion: parsedForInv.inversion } : {}),
       ...(chordDuration ? { duration: chordDuration } : {}),
       ...(pendingModulation ? { modulateTo: pendingModulation } : {}),
     });
