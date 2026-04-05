@@ -2163,11 +2163,18 @@ export function realizeChorale(
     if (!voicing) continue;
 
     // ── Hard crossing guard: reject voicing with voice crossing ──
-    // If the generated voicing has crossing, try to fix by swapping voices
+    // If the generated voicing has crossing, try to fix by swapping upper voices
+    // but preserve the bass note (it must match the requested inversion).
     if (voicing.bass > voicing.tenor || voicing.tenor > voicing.alto || voicing.alto > voicing.soprano) {
-      // Sort MIDI values and reassign: lowest→bass, next→tenor, next→alto, highest→soprano
-      const sorted = [voicing.bass, voicing.tenor, voicing.alto, voicing.soprano].sort((a, b) => a - b);
-      voicing = { bass: sorted[0], tenor: sorted[1], alto: sorted[2], soprano: sorted[3] };
+      const requiredBassMidi = voicing.bass;
+      const upper = [voicing.tenor, voicing.alto, voicing.soprano].sort((a, b) => a - b);
+      // Only fix if all upper voices are above or equal to bass after sorting
+      if (upper[0] >= requiredBassMidi) {
+        voicing = { bass: requiredBassMidi, tenor: upper[0], alto: upper[1], soprano: upper[2] };
+      } else {
+        // Cannot fix crossing without breaking inversion — skip this voicing
+        continue;
+      }
     }
 
     // ── Last-chord retry: if the final chord has violations, try alternatives ──
@@ -2179,6 +2186,8 @@ export function realizeChorale(
         // Chord-tone PCs for last chord — perturbations must stay on these
         const lastChordPcSet = new Set(tones.map(t => toneToMidiPc(t)));
         const isLastChordTone = (midi: number) => lastChordPcSet.has(((midi % 12) + 12) % 12);
+        // Required bass pitch class (from inversion)
+        const requiredBassPc = toneToMidiPc(tones[inv % tones.length]);
         const tryLast = (cand: SATBVoicing) => {
           if (cand.bass > cand.tenor || cand.tenor > cand.alto || cand.alto > cand.soprano) return;
           if (cand.soprano < VOICE_RANGES.soprano.min || cand.soprano > VOICE_RANGES.soprano.max) return;
@@ -2187,6 +2196,8 @@ export function realizeChorale(
           if (cand.bass < VOICE_RANGES.bass.min || cand.bass > VOICE_RANGES.bass.max) return;
           // All voices must be chord tones
           if (!isLastChordTone(cand.bass) || !isLastChordTone(cand.tenor) || !isLastChordTone(cand.alto) || !isLastChordTone(cand.soprano)) return;
+          // Bass must match the inversion's required pitch class
+          if (((cand.bass % 12) + 12) % 12 !== requiredBassPc) return;
           const s = scoreVoicing({ curr: cand, prev: prevVoicing!, prevPrev: prevPrevVoicing, rules, tonicPc: tonicPcVal, tones, ...styleCtx });
           if (s < bestS) { bestS = s; bestV = cand; }
         };
