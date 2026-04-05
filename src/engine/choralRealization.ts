@@ -2030,38 +2030,34 @@ export function realizeChorale(
         if (nextParsed.degree === 4 && nextParsed.secondaryTarget == null) inv = 2;
       }
 
-      // ── Bass-line smoothness: prefer 1st inversion for stepwise bass ──
-      // When two consecutive chords in root position have bass notes a 3rd apart,
-      // using 1st inversion on the second chord creates stepwise bass motion.
-      // This is a core chorale-style technique for avoiding leaps in the bass.
+      // ── Bass-line smoothness: auto-select inversion for minimal bass leap ──
+      // When no inversion is specified, compare root-position bass vs 1st-inversion
+      // bass distances from the actual previous bass MIDI. If 1st inversion gives
+      // significantly closer bass motion, auto-select it.
+      // Skip: 7th chords (their inversions have harmonic meaning), secondary dominants,
+      // and degree V/I on strong beats (root position reinforces tonal stability).
       if (inv === 0 && prevVoicing && i > 0 && !parsed.hasSeventh && parsed.secondaryTarget == null) {
-        const prevChord = sortedProg[i - 1];
-        const prevParsed = parseRoman(prevChord.roman);
-        const prevBassToneIdx = (prevChord.inversion ?? prevParsed.inversion) % Math.max(1, getChordTones(prevParsed, scale, tonic, isMinor).length);
-        const prevBassPc = toneToMidiPc(getChordTones(prevParsed, scale, tonic, isMinor)[prevBassToneIdx]);
-        const currTones = getChordTones(parsed, scale, tonic, isMinor);
-        const rootBassPc = toneToMidiPc(currTones[0]);
-        const firstInvBassPc = currTones.length > 1 ? toneToMidiPc(currTones[1]) : rootBassPc;
-
-        // Distance from prev bass to root-pos bass vs 1st-inv bass (mod 12, as semitone intervals)
-        const distRoot = Math.min(Math.abs(rootBassPc - prevBassPc), 12 - Math.abs(rootBassPc - prevBassPc));
-        const distFirst = Math.min(Math.abs(firstInvBassPc - prevBassPc), 12 - Math.abs(firstInvBassPc - prevBassPc));
-
-        // If 1st inversion puts bass closer (stepwise ≤2 semitones) and root pos would leap (>2)
-        if (distFirst <= 2 && distRoot > 2) {
-          inv = 1;
-        }
-        // Also: if next chord exists and 1st inv creates a passing bass between prev and next
-        if (inv === 0 && i + 1 < sortedProg.length) {
-          const nextChord = sortedProg[i + 1];
-          const nextParsed2 = parseRoman(nextChord.roman);
-          const nextBassToneIdx = (nextChord.inversion ?? nextParsed2.inversion) % Math.max(1, getChordTones(nextParsed2, scale, tonic, isMinor).length);
-          const nextBassPc = toneToMidiPc(getChordTones(nextParsed2, scale, tonic, isMinor)[nextBassToneIdx]);
-          const distNext = Math.min(Math.abs(firstInvBassPc - nextBassPc), 12 - Math.abs(firstInvBassPc - nextBassPc));
-          const distNextRoot = Math.min(Math.abs(rootBassPc - nextBassPc), 12 - Math.abs(rootBassPc - nextBassPc));
-          // If 1st inv bass is between prev and next (passing tone) and root would leap
-          if (distFirst <= 2 && distNext <= 2 && (distRoot > 2 || distNextRoot > 2)) {
-            inv = 1;
+        const isStrongBeat = chord.beat === 1;
+        const isTonicOrDom = parsed.degree === 0 || parsed.degree === 4;
+        // Don't auto-invert I or V on beat 1 (tonal pillars)
+        if (!(isStrongBeat && isTonicOrDom)) {
+          const currTones = getChordTones(parsed, scale, tonic, isMinor);
+          if (currTones.length >= 2) {
+            const rootCands = pitchesInRange(currTones[0], VOICE_RANGES.bass);
+            const firstCands = pitchesInRange(currTones[1], VOICE_RANGES.bass);
+            if (rootCands.length > 0 && firstCands.length > 0) {
+              // Find closest bass candidate to prevVoicing.bass for each inversion
+              const closestTo = (cands: number[], target: number) =>
+                cands.reduce((best, c) => Math.abs(c - target) < Math.abs(best - target) ? c : best, cands[0]);
+              const bestRoot = closestTo(rootCands, prevVoicing.bass);
+              const bestFirst = closestTo(firstCands, prevVoicing.bass);
+              const distRoot = Math.abs(bestRoot - prevVoicing.bass);
+              const distFirst = Math.abs(bestFirst - prevVoicing.bass);
+              // Use 1st inversion if it's closer AND root would leap ≥3 semitones
+              if (distRoot >= 3 && distFirst < distRoot) {
+                inv = 1;
+              }
+            }
           }
         }
       }
