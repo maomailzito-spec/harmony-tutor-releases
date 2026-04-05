@@ -2140,6 +2140,11 @@ export function realizeChorale(
 
     // ── Cadence enforcement ──
     const isLast = (i === sortedProg.length - 1);
+    // Last chord: force root position unless user explicitly specified an inversion.
+    // A final chord in inversion sounds unstable and is non-standard in chorale style.
+    if (isLast && chord.inversion == null) {
+      inv = 0;
+    }
     // PAC: last chord is I in root position → soprano should be on tonic
     if (isLast && parsed.degree === 0 && inv === 0 && fixedSoprano == null) {
       // Find tonic MIDI in soprano range closest to previous soprano
@@ -2367,8 +2372,9 @@ export function realizeChorale(
 
         // ── Strategy 1: try current chord with different inversion ──
         // If the inversion was auto-selected (not user-specified), try root pos and 1st inv
+        // Never change inversion of the last chord (must stay in root position)
         const userSpecifiedInv = chord.inversion != null;
-        if (!userSpecifiedInv) {
+        if (!userSpecifiedInv && !isLast) {
           const inversionsToTry = [0, 1];
           for (const altInv of inversionsToTry) {
             if (altInv === inv) continue; // skip current inversion
