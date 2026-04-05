@@ -877,11 +877,13 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
     } else if (dist === 2) {
       cost -= 3;  // whole step
     } else if (dist <= 4) {
-      cost += dist * 3;  // m3/M3 skip
+      cost += dist * 4;  // m3/M3 skip (was *3)
     } else if (dist <= 7) {
-      cost += 15 + (dist - 4) * 5;  // P4/P5 leap
+      cost += 25 + (dist - 4) * 10;  // P4/P5 leap (was 15 + *5)
+    } else if (dist <= 12) {
+      cost += 60 + (dist - 7) * 15;  // m6..P8 leap (was 30 + *8)
     } else {
-      cost += 30 + (dist - 7) * 8;  // m6+ leap
+      cost += 150 + (dist - 12) * 20;  // >P8 leap
     }
     // Forbidden melodic intervals
     if (dist === 6) cost += 120;  // tritone

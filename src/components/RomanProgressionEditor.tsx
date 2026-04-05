@@ -328,7 +328,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const [autoSevenths, setAutoSevenths] = useState(true);
 
   // Style profile (adaptive learning)
-  const [useStyleProfile, setUseStyleProfile] = useState(false);
+  const [useStyleProfile, setUseStyleProfile] = useState(true);
   const [styleProfile, setStyleProfile] = useState<StyleProfile | null>(() => loadStyleProfile());
   const [learnFeedback, setLearnFeedback] = useState<string | null>(null);
 
