@@ -2114,6 +2114,8 @@ export function realizeChorale(
           // Chord-tone PCs for the current chord — perturbations must stay on these
           const chordPcSet = new Set(tones.map(t => toneToMidiPc(t)));
           const isChordTone = (midi: number) => chordPcSet.has(((midi % 12) + 12) % 12);
+          // Required bass pitch class (from inversion)
+          const reqBassPc = toneToMidiPc(tones[inv % tones.length]);
           const tryCandidate = (cand: SATBVoicing) => {
             // Basic validity: within SATB ranges and ordering
             if (cand.bass > cand.tenor || cand.tenor > cand.alto || cand.alto > cand.soprano) return;
@@ -2123,6 +2125,8 @@ export function realizeChorale(
             if (cand.bass < VOICE_RANGES.bass.min || cand.bass > VOICE_RANGES.bass.max) return;
             // All voices must be chord tones
             if (!isChordTone(cand.bass) || !isChordTone(cand.tenor) || !isChordTone(cand.alto) || !isChordTone(cand.soprano)) return;
+            // Bass must match the inversion's required pitch class
+            if (((cand.bass % 12) + 12) % 12 !== reqBassPc) return;
             const s = scoreCandidate(cand);
             if (s < bestScore) { bestScore = s; bestCand = cand; }
           };
