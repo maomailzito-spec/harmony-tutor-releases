@@ -2359,71 +2359,134 @@ export function realizeChorale(
       const hasHardViolation = violations.some(v =>
         v.type === 'parallel-5th' || v.type === 'parallel-8ve' || v.type === 'hidden-5th' || v.type === 'hidden-8ve'
       );
-      if (hasHardViolation && prevPrevVoicing && i >= 2) {
-        // Retrieve previous chord info for re-generation
-        const prevChordEntry = sortedProg[i - 1];
-        const prevParsedBT = parseRoman(prevChordEntry.roman);
-        const prevInvBT = prevChordEntry.inversion ?? prevParsedBT.inversion;
-        const prevTonesBT = getChordTones(prevParsedBT, scale, tonic, isMinor);
-        const prevFixSopBT = sopranoMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
-        const prevFixBasBT = bassMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
-        const ppSeventhPc = prevTonesBT.length >= 4 ? toneToMidiPc(prevTonesBT[3]) : null;
-
+      if (hasHardViolation) {
         let bestBackV = voicing;
         let bestBackPrevV = prevVoicing;
         let bestBackViols = violations.length;
+        let bestBackUsedDiffInv = false;
 
-        // Try perturbations of prevPrevVoicing → re-generate prevVoicing → re-generate voicing
-        const perturbations = [-1, 1, -2, 2, -3, 3, -12, 12];
-        for (const voice of ['tenor', 'alto', 'soprano'] as const) {
-          for (const dt of perturbations) {
-            const ppPerturbed = { ...prevPrevVoicing, [voice]: prevPrevVoicing[voice] + dt };
-            if (ppPerturbed[voice] < VOICE_RANGES[voice].min || ppPerturbed[voice] > VOICE_RANGES[voice].max) continue;
-            if (ppPerturbed.bass > ppPerturbed.tenor || ppPerturbed.tenor > ppPerturbed.alto || ppPerturbed.alto > ppPerturbed.soprano) continue;
-
-            const altPrev = realizeNextChord(prevTonesBT, prevInvBT, ppPerturbed, rules, prevFixSopBT, prevFixBasBT, tonicPcVal, ppSeventhPc ?? undefined, false, styleCtx);
-            if (!altPrev) continue;
-
-            const altCurr = realizeNextChord(tones, inv, altPrev, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
+        // ── Strategy 1: try current chord with different inversion ──
+        // If the inversion was auto-selected (not user-specified), try root pos and 1st inv
+        const userSpecifiedInv = chord.inversion != null;
+        if (!userSpecifiedInv) {
+          const inversionsToTry = [0, 1];
+          for (const altInv of inversionsToTry) {
+            if (altInv === inv) continue; // skip current inversion
+            const altTones = getChordTones(parsed, scale, tonic, isMinor);
+            const altCurr = realizeNextChord(altTones, altInv, prevVoicing, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
             if (!altCurr) continue;
-
-            const viols1 = detectViolations(ppPerturbed, altPrev, prevChordEntry.measure, prevChordEntry.beat, rules);
-            const viols2 = detectViolations(altPrev, altCurr, chord.measure, chord.beat, rules);
-            const totalViols = viols1.length + viols2.length;
-
-            if (totalViols < bestBackViols) {
-              bestBackViols = totalViols;
-              bestBackPrevV = altPrev;
+            const altViols = detectViolations(prevVoicing, altCurr, chord.measure, chord.beat, rules);
+            if (altViols.length < bestBackViols) {
+              bestBackViols = altViols.length;
               bestBackV = altCurr;
+              bestBackPrevV = prevVoicing;
+              bestBackUsedDiffInv = true;
             }
-            if (totalViols === 0) break;
+            if (bestBackViols === 0) break;
           }
-          if (bestBackViols === 0) break;
+        }
+
+        // ── Strategy 2: try previous chord with different inversion ──
+        if (bestBackViols > 0 && i >= 1) {
+          const prevChordEntry = sortedProg[i - 1];
+          const prevUserInv = prevChordEntry.inversion != null;
+          if (!prevUserInv) {
+            const prevParsedBT = parseRoman(prevChordEntry.roman);
+            const prevTonesBT = getChordTones(prevParsedBT, scale, tonic, isMinor);
+            const prevFixSopBT = sopranoMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
+            const prevFixBasBT = bassMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
+            const ppSeventhPc = prevTonesBT.length >= 4 ? toneToMidiPc(prevTonesBT[3]) : null;
+            const prevSource = prevPrevVoicing ?? prevVoicing; // best available
+            for (const altPrevInv of [0, 1]) {
+              const altPrev = prevPrevVoicing
+                ? realizeNextChord(prevTonesBT, altPrevInv, prevPrevVoicing, rules, prevFixSopBT, prevFixBasBT, tonicPcVal, ppSeventhPc ?? undefined, false, styleCtx)
+                : realizeFirstChord(prevTonesBT, altPrevInv, rules, prevFixSopBT, prevFixBasBT, tonicPcVal, undefined, styleCtx);
+              if (!altPrev) continue;
+              const altCurr = realizeNextChord(tones, inv, altPrev, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
+              if (!altCurr) continue;
+              const viols1 = prevPrevVoicing ? detectViolations(prevPrevVoicing, altPrev, prevChordEntry.measure, prevChordEntry.beat, rules) : [];
+              const viols2 = detectViolations(altPrev, altCurr, chord.measure, chord.beat, rules);
+              const totalViols = viols1.length + viols2.length;
+              if (totalViols < bestBackViols) {
+                bestBackViols = totalViols;
+                bestBackPrevV = altPrev;
+                bestBackV = altCurr;
+                bestBackUsedDiffInv = false; // we changed prev, not just curr inv
+              }
+              if (totalViols === 0) break;
+            }
+          }
+        }
+
+        // ── Strategy 3: perturb prevPrev voices → re-gen prev → re-gen curr ──
+        if (bestBackViols > 0 && prevPrevVoicing && i >= 2) {
+          const prevChordEntry = sortedProg[i - 1];
+          const prevParsedBT = parseRoman(prevChordEntry.roman);
+          const prevInvBT = prevChordEntry.inversion ?? prevParsedBT.inversion;
+          const prevTonesBT = getChordTones(prevParsedBT, scale, tonic, isMinor);
+          const prevFixSopBT = sopranoMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
+          const prevFixBasBT = bassMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
+          const ppSeventhPc = prevTonesBT.length >= 4 ? toneToMidiPc(prevTonesBT[3]) : null;
+
+          const perturbations = [-1, 1, -2, 2, -3, 3, -12, 12];
+          for (const voice of ['tenor', 'alto', 'soprano'] as const) {
+            for (const dt of perturbations) {
+              const ppPerturbed = { ...prevPrevVoicing, [voice]: prevPrevVoicing[voice] + dt };
+              if (ppPerturbed[voice] < VOICE_RANGES[voice].min || ppPerturbed[voice] > VOICE_RANGES[voice].max) continue;
+              if (ppPerturbed.bass > ppPerturbed.tenor || ppPerturbed.tenor > ppPerturbed.alto || ppPerturbed.alto > ppPerturbed.soprano) continue;
+
+              const altPrev = realizeNextChord(prevTonesBT, prevInvBT, ppPerturbed, rules, prevFixSopBT, prevFixBasBT, tonicPcVal, ppSeventhPc ?? undefined, false, styleCtx);
+              if (!altPrev) continue;
+
+              const altCurr = realizeNextChord(tones, inv, altPrev, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
+              if (!altCurr) continue;
+
+              const viols1 = detectViolations(ppPerturbed, altPrev, prevChordEntry.measure, prevChordEntry.beat, rules);
+              const viols2 = detectViolations(altPrev, altCurr, chord.measure, chord.beat, rules);
+              const totalViols = viols1.length + viols2.length;
+
+              if (totalViols < bestBackViols) {
+                bestBackViols = totalViols;
+                bestBackPrevV = altPrev;
+                bestBackV = altCurr;
+              }
+              if (totalViols === 0) break;
+            }
+            if (bestBackViols === 0) break;
+          }
         }
 
         if (bestBackViols < violations.length) {
-          // Apply backtracking: replace previous chord's notes
-          // Remove all notes added for the previous chord (they are the last 4 notes in allNotes)
-          if (prevChordNoteStart >= 0) {
-            allNotes.length = prevChordNoteStart;
-          }
-          // Remove violations for prev chord
-          for (let vi = allViolations.length - 1; vi >= 0; vi--) {
-            const v = allViolations[vi];
-            if (v.measure === prevChordEntry.measure && v.beat === prevChordEntry.beat) {
-              allViolations.splice(vi, 1);
+          // Strategy 1 only changes the current chord — no need to touch allNotes
+          if (bestBackPrevV === prevVoicing) {
+            voicing = bestBackV;
+          } else {
+            // Strategies 2 & 3 changed the previous chord too — replace its notes
+            if (prevChordNoteStart >= 0) {
+              allNotes.length = prevChordNoteStart;
             }
+            const prevChordEntry = sortedProg[i - 1];
+            // Remove old violations for prev chord
+            for (let vi = allViolations.length - 1; vi >= 0; vi--) {
+              const v = allViolations[vi];
+              if (v.measure === prevChordEntry.measure && v.beat === prevChordEntry.beat) {
+                allViolations.splice(vi, 1);
+              }
+            }
+            // Re-add previous chord's notes
+            const prevParsedBT = parseRoman(prevChordEntry.roman);
+            const prevInvBT = prevChordEntry.inversion ?? prevParsedBT.inversion;
+            const prevTonesBT = getChordTones(prevParsedBT, scale, tonic, isMinor);
+            const prevDurName = beatsToDuration(
+              chord.beat > prevChordEntry.beat && chord.measure === prevChordEntry.measure
+                ? chord.beat - prevChordEntry.beat
+                : beatsPerMeasure - prevChordEntry.beat + 1
+            );
+            const prevNotes = voicingToStaffNotes(bestBackPrevV, prevChordEntry.measure, prevChordEntry.beat, prevDurName, prevTonesBT, prevInvBT, displayKeySignature, beatsPerMeasure);
+            allNotes.push(...prevNotes);
+            prevVoicing = bestBackPrevV;
+            voicing = bestBackV;
           }
-          // Re-add previous chord's notes
-          const prevDurName = beatsToDuration(
-            chord.beat > prevChordEntry.beat && chord.measure === prevChordEntry.measure
-              ? chord.beat - prevChordEntry.beat
-              : beatsPerMeasure - prevChordEntry.beat + 1
-          );
-          const prevNotes = voicingToStaffNotes(bestBackPrevV, prevChordEntry.measure, prevChordEntry.beat, prevDurName, prevTonesBT, prevInvBT, displayKeySignature, beatsPerMeasure);
-          allNotes.push(...prevNotes);
-          prevVoicing = bestBackPrevV;
-          voicing = bestBackV;
         }
       }
 
