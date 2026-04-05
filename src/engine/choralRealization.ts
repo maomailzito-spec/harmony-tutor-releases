@@ -836,7 +836,7 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
   // With only 2 PCs the analysis engine may misidentify the chord (e.g. F-A = ii6 vs IV).
   {
     const distinctPcs = new Set(allM.map(m => ((m % 12) + 12) % 12));
-    if (distinctPcs.size <= 2) cost += 200; // incomplete: missing 5th — avoid unless forced
+    if (distinctPcs.size <= 2) cost += 80; // incomplete: missing 5th — discourage but allow if necessary
   }
 
   // ── HORIZONTAL RULES (only with prev) ──
@@ -2282,6 +2282,25 @@ export function realizeChorale(
             if (alt) tryCandidate(alt);
           }
           voicing = bestCand;
+        }
+      }
+
+      // ── Auto-inversion optimization: if user didn't specify inversion and
+      //    the current voicing has a high cost, try alternative inversions.
+      //    E.g. IV root with awkward leaps → try IV6 for smoother lines.
+      if (voicing && chord.inversion == null && !isLast && prevVoicing) {
+        const currCost = scoreVoicing({ curr: voicing, prev: prevVoicing, prevPrev: prevPrevVoicing, rules, tonicPc: tonicPcVal, tones, ...styleCtx });
+        const inversionsToTry = tones.length === 3 ? [0, 1] : [0, 1, 2];
+        for (const altInv of inversionsToTry) {
+          if (altInv === inv) continue;
+          const altV = realizeNextChord(tones, altInv, prevVoicing, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, false, styleCtx);
+          if (!altV) continue;
+          const altCost = scoreVoicing({ curr: altV, prev: prevVoicing, prevPrev: prevPrevVoicing, rules, tonicPc: tonicPcVal, tones, ...styleCtx });
+          // Only switch if the alternative is meaningfully better (threshold avoids trivial swaps)
+          if (altCost < currCost - 30) {
+            voicing = altV;
+            inv = altInv;
+          }
         }
       }
     }
