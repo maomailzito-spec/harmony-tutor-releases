@@ -1064,10 +1064,26 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
       }
 
       // 7th/9th traversed in two movements without a step
-      // (both sub-intervals > 2 semitones, total = 7th/9th)
       if ((absTotal === 10 || absTotal === 11 || absTotal >= 13)
           && a01 > 2 && a12 > 2) {
-        cost += 100;  // one of the two should be a 2nd
+        cost += 100;
+      }
+
+      // Zig-zag penalty: direction reversal after a leap should be compensated
+      // by a small step, not another leap in the opposite direction.
+      // A leap followed by a leap in the opposite direction sounds "jerky".
+      if (d01 !== 0 && d12 !== 0 && Math.sign(d01) !== Math.sign(d12)) {
+        // Both are leaps (>2 semitones) in opposite directions
+        if (a01 > 4 && a12 > 4) {
+          cost += vi === 3 ? 40 : 20; // soprano zig-zag penalized more
+        } else if (a01 > 2 && a12 > 2) {
+          cost += vi === 3 ? 15 : 8;
+        }
+      }
+
+      // Soprano melodic continuity bonus: continuing in the same direction by step
+      if (vi === 3 && d01 !== 0 && d12 !== 0 && Math.sign(d01) === Math.sign(d12) && a12 <= 2) {
+        cost -= 10; // stepwise continuation is musically smooth
       }
     }
   }
@@ -2335,7 +2351,96 @@ export function realizeChorale(
     // Detect violations (horizontal: between consecutive chords)
     if (prevVoicing) {
       const violations = detectViolations(prevVoicing, voicing, chord.measure, chord.beat, rules);
-      allViolations.push(...violations);
+
+      // ── Backtracking: if this chord has hard violations (P5/P8/hidden),
+      //    try perturbing the PREVIOUS chord's voicing and re-generating this one.
+      //    This mimics a human going "hmm, I'll change the previous chord a bit".
+      const hasHardViolation = violations.some(v =>
+        v.type === 'parallel-5th' || v.type === 'parallel-8ve' || v.type === 'hidden-5th' || v.type === 'hidden-8ve'
+      );
+      if (hasHardViolation && prevPrevVoicing && i >= 2) {
+        // Retrieve previous chord info for re-generation
+        const prevChordEntry = sortedProg[i - 1];
+        const prevParsedBT = parseRoman(prevChordEntry.roman);
+        const prevInvBT = prevChordEntry.inversion ?? prevParsedBT.inversion;
+        const prevTonesBT = getChordTones(prevParsedBT, scale, tonic, isMinor);
+        const prevFixSopBT = sopranoMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
+        const prevFixBasBT = bassMap.get(`${prevChordEntry.measure}:${prevChordEntry.beat}`);
+        const ppSeventhPc = prevTonesBT.length >= 4 ? toneToMidiPc(prevTonesBT[3]) : null;
+
+        let bestBackV = voicing;
+        let bestBackPrevV = prevVoicing;
+        let bestBackViols = violations.length;
+
+        // Try perturbations of prevPrevVoicing → re-generate prevVoicing → re-generate voicing
+        const perturbations = [-1, 1, -2, 2, -3, 3, -12, 12];
+        for (const voice of ['tenor', 'alto', 'soprano'] as const) {
+          for (const dt of perturbations) {
+            const ppPerturbed = { ...prevPrevVoicing, [voice]: prevPrevVoicing[voice] + dt };
+            if (ppPerturbed[voice] < VOICE_RANGES[voice].min || ppPerturbed[voice] > VOICE_RANGES[voice].max) continue;
+            if (ppPerturbed.bass > ppPerturbed.tenor || ppPerturbed.tenor > ppPerturbed.alto || ppPerturbed.alto > ppPerturbed.soprano) continue;
+
+            // Re-generate previous chord from perturbed prevPrev
+            const altPrev = realizeNextChord(prevTonesBT, prevInvBT, ppPerturbed, rules, prevFixSopBT, prevFixBasBT, tonicPcVal, ppSeventhPc ?? undefined, false, styleCtx);
+            if (!altPrev) continue;
+
+            // Re-generate current chord from altPrev
+            const altCurr = realizeNextChord(tones, inv, altPrev, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
+            if (!altCurr) continue;
+
+            // Check violations of both transitions
+            const viols1 = detectViolations(ppPerturbed, altPrev, prevChordEntry.measure, prevChordEntry.beat, rules);
+            const viols2 = detectViolations(altPrev, altCurr, chord.measure, chord.beat, rules);
+            const totalViols = viols1.length + viols2.length;
+
+            if (totalViols < bestBackViols) {
+              bestBackViols = totalViols;
+              bestBackPrevV = altPrev;
+              bestBackV = altCurr;
+            }
+            if (totalViols === 0) break; // perfect — stop searching
+          }
+          if (bestBackViols === 0) break;
+        }
+
+        if (bestBackViols < violations.length) {
+          // Apply backtracking: update previous voicing and current voicing
+          // Replace previous chord's notes in allNotes
+          const prevChordBeat = prevChordEntry.beat;
+          const prevChordMeasure = prevChordEntry.measure;
+          // Remove old notes for prev chord position
+          const prevNoteCount = allNotes.filter(n => n.measure === prevChordMeasure && n.beat === prevChordBeat).length;
+          if (prevNoteCount > 0) {
+            // Remove from the end (most recently added block for that position)
+            let removed = 0;
+            for (let ni = allNotes.length - 1; ni >= 0 && removed < prevNoteCount; ni--) {
+              if (allNotes[ni].measure === prevChordMeasure && allNotes[ni].beat === prevChordBeat) {
+                allNotes.splice(ni, 1);
+                removed++;
+              }
+            }
+          }
+          // Also remove violations for prev chord
+          for (let vi = allViolations.length - 1; vi >= 0; vi--) {
+            if (allViolations[vi].measure === prevChordMeasure && allViolations[vi].beat === prevChordBeat) {
+              allViolations.splice(vi, 1);
+            }
+          }
+          // Re-add previous chord's notes and violations
+          const prevDurName = beatsToDuration(chord.beat - prevChordBeat > 0 ? chord.beat - prevChordBeat : beatsPerMeasure - prevChordBeat + 1);
+          const prevNotes = voicingToStaffNotes(bestBackPrevV, prevChordMeasure, prevChordBeat, prevDurName, prevTonesBT, prevInvBT, displayKeySignature, beatsPerMeasure);
+          // Insert before the current chord's notes would be added
+          allNotes.push(...prevNotes);
+          // Re-detect violations for ppPerturbed → altPrev
+          // (we skip this since bestBackViols already accounts for them)
+          prevVoicing = bestBackPrevV;
+          voicing = bestBackV;
+        }
+      }
+
+      // Now push the (possibly updated) violations
+      const finalViolations = detectViolations(prevVoicing, voicing, chord.measure, chord.beat, rules);
+      allViolations.push(...finalViolations);
     }
 
     // Detect vertical violations (spacing, crossing, range) for EVERY chord including the first
