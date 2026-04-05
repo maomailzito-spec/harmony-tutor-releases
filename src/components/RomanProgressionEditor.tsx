@@ -207,14 +207,15 @@ function parseProgressionString(
     // Parse the roman numeral to extract inversion info.
     // If the user typed an explicit inversion (e.g. "V6", "ii6/5", "I64"),
     // preserve it in the chord entry so the generator respects it.
-    // We detect explicit inversion by checking if parseRoman gives non-zero inv,
-    // OR if the roman string contains figured bass digits after the numeral.
+    // Special: trailing "5" (e.g. "V5", "I5") = explicit root position.
     const parsedForInv = parseRoman(roman);
-    // Any non-zero inversion from the parser means the user wrote something explicit
-    const hasExplicitInversion = parsedForInv.inversion !== 0;
+    // Detect explicit root-position marker: trailing "5" or "53" after the numeral
+    // (but not "65" which is 1st-inv 7th, not "6/5" either — those are handled by parser)
+    const explicitRootPos = /^(#?b?[IViv]+[°oø+]?(?:7|maj7|M7)?)5(?:3)?$/.test(roman);
+    const hasExplicitInversion = parsedForInv.inversion !== 0 || explicitRootPos;
 
     result.push({
-      roman,
+      roman: explicitRootPos ? roman.replace(/5(?:3)?$/, '') : roman,
       beat: currentBeat,
       measure,
       ...(hasExplicitInversion ? { inversion: parsedForInv.inversion } : {}),
@@ -448,7 +449,9 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       const chords = parseProgressionString(progressionText, localTs, selectedDuration);
       return chords.map(c => {
         const p = parseRoman(c.roman);
-        return { roman: c.roman, quality: p.quality, degree: p.degree, inv: p.inversion, m: c.measure, b: c.beat, dur: c.duration || 'auto' };
+        // Show "5" suffix in preview when user explicitly locked root position
+        const displayRoman = (c.inversion === 0 && p.inversion === 0) ? c.roman + '5' : c.roman;
+        return { roman: displayRoman, quality: p.quality, degree: p.degree, inv: c.inversion ?? p.inversion, m: c.measure, b: c.beat, dur: c.duration || 'auto' };
       });
     } catch {
       return [];
