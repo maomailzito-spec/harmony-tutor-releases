@@ -683,7 +683,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               const DEGREES_MAJ = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'viio'];
               const DEGREES_MIN = ['i', 'iio', 'III', 'iv', 'V', 'VI', 'VII'];
               const degrees = localMinor ? DEGREES_MIN : DEGREES_MAJ;
-              const INVERSIONS_TRIAD = ['6', '6/4'];
+              const INVERSIONS_TRIAD = ['5', '6', '6/4'];
               const INVERSIONS_7TH = ['6/5', '4/3', '4/2'];
 
               // Flip quality: IV→iv, ii→II, etc.
