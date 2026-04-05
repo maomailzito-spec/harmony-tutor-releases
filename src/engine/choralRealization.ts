@@ -832,10 +832,11 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
   }
 
   // Incomplete voicing penalty: prefer complete chords (all chord tones present)
-  // A triad with only 2 distinct PCs means the 5th is missing — mild penalty
+  // A triad with only 2 distinct PCs means the 5th is missing — significant penalty.
+  // With only 2 PCs the analysis engine may misidentify the chord (e.g. F-A = ii6 vs IV).
   {
     const distinctPcs = new Set(allM.map(m => ((m % 12) + 12) % 12));
-    if (distinctPcs.size <= 2) cost += 20; // incomplete: missing 5th
+    if (distinctPcs.size <= 2) cost += 200; // incomplete: missing 5th — avoid unless forced
   }
 
   // ── HORIZONTAL RULES (only with prev) ──
