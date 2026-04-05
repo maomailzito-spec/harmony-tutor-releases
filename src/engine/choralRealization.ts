@@ -1298,30 +1298,38 @@ export function realizeFirstChord(
   for (const perm of permsFirst) {
     const midis: number[] = []; // tenor, alto, soprano
     let valid = true;
-    let lastMidi = bassMidi;
+
+    // First chord strategy: target soprano in the upper-middle of its range
+    // (around E5=76 for soprano range C4-G5), then stack tenor and alto below.
+    // This gives room for the soprano to move both up and down in subsequent chords.
+    const sopranoTargetMidi = Math.round((VOICE_RANGES.soprano.min + VOICE_RANGES.soprano.max * 2) / 3); // ~73 (C#5)
 
     for (let vi = 0; vi < 3; vi++) {
       const tone = upperTones[perm[vi]];
       const candidates = pitchesInRange(tone, voices[vi].range);
       if (candidates.length === 0) { valid = false; break; }
 
-      // Pick closest pitch above lastMidi (close position)
-      let best = candidates[0];
-      let bestDist = Infinity;
-      for (const c of candidates) {
-        if (c >= lastMidi) {
-          const dist = c - lastMidi;
-          if (dist < bestDist) {
-            bestDist = dist;
-            best = c;
-          }
-        }
-      }
-      if (bestDist === Infinity) {
-        best = candidates[candidates.length - 1];
+      let best: number;
+      if (vi === 2) {
+        // Soprano: pick candidate closest to the target (upper-middle of range)
+        best = candidates.reduce((b, c) =>
+          Math.abs(c - sopranoTargetMidi) < Math.abs(b - sopranoTargetMidi) ? c : b, candidates[0]);
+      } else if (vi === 1 && midis.length > 0) {
+        // Alto: pick closest pitch above tenor, aiming for ~middle of alto range
+        const altoTarget = Math.round((VOICE_RANGES.alto.min + VOICE_RANGES.alto.max) / 2); // ~64
+        const aboveTenor = candidates.filter(c => c >= midis[0]);
+        const pool = aboveTenor.length > 0 ? aboveTenor : candidates;
+        best = pool.reduce((b, c) =>
+          Math.abs(c - altoTarget) < Math.abs(b - altoTarget) ? c : b, pool[0]);
+      } else {
+        // Tenor: pick closest pitch above bass, aiming for ~middle of tenor range
+        const tenorTarget = Math.round((VOICE_RANGES.tenor.min + VOICE_RANGES.tenor.max) / 2); // ~57
+        const aboveBass = candidates.filter(c => c >= bassMidi);
+        const pool = aboveBass.length > 0 ? aboveBass : candidates;
+        best = pool.reduce((b, c) =>
+          Math.abs(c - tenorTarget) < Math.abs(b - tenorTarget) ? c : b, pool[0]);
       }
       midis.push(best);
-      lastMidi = best;
     }
 
     if (!valid || midis.length < 3) continue;
@@ -2133,7 +2141,41 @@ export function realizeChorale(
     // Realize voicing — with lookahead beam search
     let voicing: SATBVoicing | null;
     if (!prevVoicing) {
-      voicing = realizeFirstChord(tones, inv, rules, fixedSoprano, fixedBass, tonicPcVal, config.initialDisposition, styleCtx);
+      // ── Multi-start: try several soprano starting pitches and pick the one
+      //    that produces the lowest cost over the first 2 chords (3-step lookahead).
+      const dispositions: (string | undefined)[] = [config.initialDisposition];
+      // Add alternative dispositions only if not explicitly specified by user
+      if (!config.initialDisposition || config.initialDisposition === 'auto') {
+        dispositions.length = 0;
+        dispositions.push('auto', 'R358', 'R538', 'R835', 'R385');
+      }
+      let bestFirstVoicing: SATBVoicing | null = null;
+      let bestFirstScore = Infinity;
+      for (const disp of dispositions) {
+        const candFirst = realizeFirstChord(tones, inv, rules, fixedSoprano, fixedBass, tonicPcVal, disp, styleCtx);
+        if (!candFirst) continue;
+        // Score: vertical cost of first chord + cost of next 1-2 chords
+        let totalScore = scoreVoicing({ curr: candFirst, prev: null, rules, tonicPc: tonicPcVal, tones, ...styleCtx });
+        let prevC = candFirst;
+        for (let look = 1; look <= Math.min(2, sortedProg.length - i - 1); look++) {
+          const nextCh = sortedProg[i + look];
+          const nextP = parseRoman(nextCh.roman);
+          const nextInvL = nextCh.inversion ?? nextP.inversion;
+          const nextTonesL = getChordTones(nextP, scale, tonic, isMinor);
+          const nextFixSop = sopranoMap.get(`${nextCh.measure}:${nextCh.beat}`);
+          const nextFixBas = bassMap.get(`${nextCh.measure}:${nextCh.beat}`);
+          const sevenPc = nextTonesL.length >= 4 ? toneToMidiPc(nextTonesL[3]) : null;
+          const nextV = realizeNextChord(nextTonesL, nextInvL, prevC, rules, nextFixSop, nextFixBas, tonicPcVal, sevenPc ?? undefined, false, styleCtx);
+          if (!nextV) { totalScore += 5000; break; }
+          totalScore += scoreVoicing({ curr: nextV, prev: prevC, rules, tonicPc: tonicPcVal, tones: nextTonesL, ...styleCtx });
+          prevC = nextV;
+        }
+        if (totalScore < bestFirstScore) {
+          bestFirstScore = totalScore;
+          bestFirstVoicing = candFirst;
+        }
+      }
+      voicing = bestFirstVoicing;
     } else {
       // ── Beam search with 1-step lookahead ──
       // Generate multiple candidate voicings by trying slight perturbations,
