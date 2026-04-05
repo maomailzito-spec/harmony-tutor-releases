@@ -1129,11 +1129,13 @@ export function realizeFirstChord(
   const bassToneIndex = inversion % tones.length;
   const bassTone = tones[bassToneIndex];
 
-  // Find bass MIDI — prefer the lower end of bass range
+  // Find bass MIDI — prefer the lower-middle of bass range (typical chorale tessitura)
   const bassCandidates = pitchesInRange(bassTone, VOICE_RANGES.bass);
   if (bassCandidates.length === 0) return null;
-  // Choose a comfortable bass note (middle of range)
-  const bassMidi = fixedBass ?? bassCandidates[Math.floor(bassCandidates.length / 2)];
+  // Choose the lower candidate (index ~1/3) for a comfortable chorale bass;
+  // this avoids placing the bass too high (e.g. C4 instead of C3).
+  const bassIdx = Math.max(0, Math.floor(bassCandidates.length / 3));
+  const bassMidi = fixedBass ?? bassCandidates[bassIdx];
 
   // ── Explicit disposition path ─────────────────────────────────────────
   // If a specific voicing disposition is requested (e.g. 'R358' = Bass=Root, Tenor=3rd, Alto=5th, Soprano=8va),
