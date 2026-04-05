@@ -849,7 +849,7 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
     const bassToneIdx = (opts as any).currentInversion ?? 0;
     const is64 = bassToneIdx === 2;
     const isTonalFifth = tonicPc != null && [tonicPc, (tonicPc + 5) % 12, (tonicPc + 7) % 12].includes(fifthPc);
-    if (fifthCount >= 2 && !is64 && !isTonalFifth) cost += 15;
+    if (fifthCount >= 2 && !is64 && !isTonalFifth) cost += 45;
   }
 
   // ── HORIZONTAL RULES (only with prev) ──
