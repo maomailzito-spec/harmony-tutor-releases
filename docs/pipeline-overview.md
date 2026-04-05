@@ -5,7 +5,7 @@
 ## Diagramma Mermaid
 
 ```mermaid
-flowchart TD
+
     A["**1 · Note Input**\n_GrandStaffEditor.tsx_\nStaffNote[] con pitch, midi, voice, duration\nassegnazione beat/measure via calculateNoteBeats"]
     B["**2 · VexFlow Rendering**\n_VexflowGrandStaff.tsx_\nCrea staves SVG, note, beam, legature\ntramite Renderer → Formatter → draw()"]
     C["**3 · Timeline Verticalisation**\n_musicTheory.ts · getActiveNotesTimeline_\nScanpoint per beat: raggruppa le note\nche suonano simultaneamente in «fette verticali»"]
