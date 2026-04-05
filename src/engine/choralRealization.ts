@@ -1995,6 +1995,7 @@ export function realizeChorale(
   let prevVoicing: SATBVoicing | null = null;
   let prevPrevVoicing: SATBVoicing | null = null;
   let prevSeventhPc: number | null = null;
+  let prevChordNoteStart = -1; // index in allNotes where the previous chord's notes start
 
   // Build soprano constraint lookup map: "measure:beat" → MIDI
   const sopranoMap = new Map<string, number>();
@@ -2380,15 +2381,12 @@ export function realizeChorale(
             if (ppPerturbed[voice] < VOICE_RANGES[voice].min || ppPerturbed[voice] > VOICE_RANGES[voice].max) continue;
             if (ppPerturbed.bass > ppPerturbed.tenor || ppPerturbed.tenor > ppPerturbed.alto || ppPerturbed.alto > ppPerturbed.soprano) continue;
 
-            // Re-generate previous chord from perturbed prevPrev
             const altPrev = realizeNextChord(prevTonesBT, prevInvBT, ppPerturbed, rules, prevFixSopBT, prevFixBasBT, tonicPcVal, ppSeventhPc ?? undefined, false, styleCtx);
             if (!altPrev) continue;
 
-            // Re-generate current chord from altPrev
             const altCurr = realizeNextChord(tones, inv, altPrev, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, i === sortedProg.length - 1, styleCtx);
             if (!altCurr) continue;
 
-            // Check violations of both transitions
             const viols1 = detectViolations(ppPerturbed, altPrev, prevChordEntry.measure, prevChordEntry.beat, rules);
             const viols2 = detectViolations(altPrev, altCurr, chord.measure, chord.beat, rules);
             const totalViols = viols1.length + viols2.length;
@@ -2398,41 +2396,32 @@ export function realizeChorale(
               bestBackPrevV = altPrev;
               bestBackV = altCurr;
             }
-            if (totalViols === 0) break; // perfect — stop searching
+            if (totalViols === 0) break;
           }
           if (bestBackViols === 0) break;
         }
 
         if (bestBackViols < violations.length) {
-          // Apply backtracking: update previous voicing and current voicing
-          // Replace previous chord's notes in allNotes
-          const prevChordBeat = prevChordEntry.beat;
-          const prevChordMeasure = prevChordEntry.measure;
-          // Remove old notes for prev chord position
-          const prevNoteCount = allNotes.filter(n => n.measure === prevChordMeasure && n.beat === prevChordBeat).length;
-          if (prevNoteCount > 0) {
-            // Remove from the end (most recently added block for that position)
-            let removed = 0;
-            for (let ni = allNotes.length - 1; ni >= 0 && removed < prevNoteCount; ni--) {
-              if (allNotes[ni].measure === prevChordMeasure && allNotes[ni].beat === prevChordBeat) {
-                allNotes.splice(ni, 1);
-                removed++;
-              }
-            }
+          // Apply backtracking: replace previous chord's notes
+          // Remove all notes added for the previous chord (they are the last 4 notes in allNotes)
+          if (prevChordNoteStart >= 0) {
+            allNotes.length = prevChordNoteStart;
           }
-          // Also remove violations for prev chord
+          // Remove violations for prev chord
           for (let vi = allViolations.length - 1; vi >= 0; vi--) {
-            if (allViolations[vi].measure === prevChordMeasure && allViolations[vi].beat === prevChordBeat) {
+            const v = allViolations[vi];
+            if (v.measure === prevChordEntry.measure && v.beat === prevChordEntry.beat) {
               allViolations.splice(vi, 1);
             }
           }
-          // Re-add previous chord's notes and violations
-          const prevDurName = beatsToDuration(chord.beat - prevChordBeat > 0 ? chord.beat - prevChordBeat : beatsPerMeasure - prevChordBeat + 1);
-          const prevNotes = voicingToStaffNotes(bestBackPrevV, prevChordMeasure, prevChordBeat, prevDurName, prevTonesBT, prevInvBT, displayKeySignature, beatsPerMeasure);
-          // Insert before the current chord's notes would be added
+          // Re-add previous chord's notes
+          const prevDurName = beatsToDuration(
+            chord.beat > prevChordEntry.beat && chord.measure === prevChordEntry.measure
+              ? chord.beat - prevChordEntry.beat
+              : beatsPerMeasure - prevChordEntry.beat + 1
+          );
+          const prevNotes = voicingToStaffNotes(bestBackPrevV, prevChordEntry.measure, prevChordEntry.beat, prevDurName, prevTonesBT, prevInvBT, displayKeySignature, beatsPerMeasure);
           allNotes.push(...prevNotes);
-          // Re-detect violations for ppPerturbed → altPrev
-          // (we skip this since bestBackViols already accounts for them)
           prevVoicing = bestBackPrevV;
           voicing = bestBackV;
         }
@@ -2457,11 +2446,13 @@ export function realizeChorale(
     }
 
     // Generate StaffNotes
+    const noteStartIdx = allNotes.length; // track where this chord's notes begin
     const notes = voicingToStaffNotes(voicing, chord.measure, chord.beat, durationName, tones, inv, displayKeySignature, beatsPerMeasure);
     allNotes.push(...notes);
 
     prevPrevVoicing = prevVoicing;
     prevVoicing = voicing;
+    prevChordNoteStart = noteStartIdx; // remember for next iteration's backtracking
     // Track seventh PC for next chord's resolution check
     prevSeventhPc = tones.length >= 4 ? toneToMidiPc(tones[3]) : null;
   }
