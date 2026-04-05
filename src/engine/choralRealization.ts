@@ -2030,31 +2030,46 @@ export function realizeChorale(
         if (nextParsed.degree === 4 && nextParsed.secondaryTarget == null) inv = 2;
       }
 
-      // ── Bass-line smoothness: auto-select inversion for minimal bass leap ──
-      // When no inversion is specified, compare root-position bass vs 1st-inversion
-      // bass distances from the actual previous bass MIDI. If 1st inversion gives
-      // significantly closer bass motion, auto-select it.
-      // Skip: 7th chords (their inversions have harmonic meaning), secondary dominants,
-      // and degree V/I on strong beats (root position reinforces tonal stability).
+      // ── Bass-line smoothness: auto-select inversion using corpus stats + proximity ──
+      // Uses two signals:
+      // 1) Style profile: if the corpus shows 1st inversion is common for this degree (≥20%)
+      // 2) Bass proximity: if 1st inversion gives a closer bass note to the previous bass
+      // Skip: 7th chords, secondary dominants, I/V on beat 1 (tonal pillars).
       if (inv === 0 && prevVoicing && i > 0 && !parsed.hasSeventh && parsed.secondaryTarget == null) {
         const isStrongBeat = chord.beat === 1;
         const isTonicOrDom = parsed.degree === 0 || parsed.degree === 4;
-        // Don't auto-invert I or V on beat 1 (tonal pillars)
         if (!(isStrongBeat && isTonicOrDom)) {
           const currTones = getChordTones(parsed, scale, tonic, isMinor);
           if (currTones.length >= 2) {
             const rootCands = pitchesInRange(currTones[0], VOICE_RANGES.bass);
             const firstCands = pitchesInRange(currTones[1], VOICE_RANGES.bass);
             if (rootCands.length > 0 && firstCands.length > 0) {
-              // Find closest bass candidate to prevVoicing.bass for each inversion
               const closestTo = (cands: number[], target: number) =>
                 cands.reduce((best, c) => Math.abs(c - target) < Math.abs(best - target) ? c : best, cands[0]);
               const bestRoot = closestTo(rootCands, prevVoicing.bass);
               const bestFirst = closestTo(firstCands, prevVoicing.bass);
               const distRoot = Math.abs(bestRoot - prevVoicing.bass);
               const distFirst = Math.abs(bestFirst - prevVoicing.bass);
-              // Use 1st inversion if it's closer AND root would leap ≥3 semitones
-              if (distRoot >= 3 && distFirst < distRoot) {
+
+              // Corpus inversion rate for this degree
+              const degreeLabel = degreeToRoman(parsed.degree, isMinor);
+              const sp = config.styleProfile;
+              const invStats = sp?.inversionByDegree?.[degreeLabel];
+              const firstInvRate = invStats && invStats.total > 5
+                ? (invStats.counts[1] || 0) / invStats.total
+                : 0;
+
+              // Decision: combine proximity and corpus probability
+              // Strong signal: corpus says ≥20% first inversion AND it's closer
+              if (firstInvRate >= 0.20 && distFirst < distRoot) {
+                inv = 1;
+              }
+              // Moderate signal: corpus says ≥15% AND proximity saves ≥3 semitones
+              else if (firstInvRate >= 0.15 && distRoot >= 4 && distFirst < distRoot - 2) {
+                inv = 1;
+              }
+              // Pure proximity: no corpus data but root leaps a lot and 1st inv is much closer
+              else if (distRoot >= 5 && distFirst <= 2) {
                 inv = 1;
               }
             }
