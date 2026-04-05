@@ -839,6 +839,19 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
     if (distinctPcs.size <= 2) cost += 80; // incomplete: missing 5th — discourage but allow if necessary
   }
 
+  // Doubling preference: mildly penalize doubled 5th (prefer root or 3rd doubling)
+  // Exceptions: 6/4 chords SHOULD double the 5th (= bass), no penalty there.
+  // Also: if the 5th is a tonal note (I, IV, V of the key), doubling is fine.
+  if (tones && tones.length >= 3) {
+    const fifthPc = toneToMidiPc(tones[2]);
+    const pcs = allM.map(m => ((m % 12) + 12) % 12);
+    const fifthCount = pcs.filter(pc => pc === fifthPc).length;
+    const bassToneIdx = (opts as any).currentInversion ?? 0;
+    const is64 = bassToneIdx === 2;
+    const isTonalFifth = tonicPc != null && [tonicPc, (tonicPc + 5) % 12, (tonicPc + 7) % 12].includes(fifthPc);
+    if (fifthCount >= 2 && !is64 && !isTonalFifth) cost += 15;
+  }
+
   // ── HORIZONTAL RULES (only with prev) ──
   if (!prev) return cost;
 
