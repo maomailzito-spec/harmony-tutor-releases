@@ -1659,14 +1659,21 @@ function countParallels(prevMidis: number[], currMidis: number[], rules: ChoralR
       // At least one voice must move
       if (prevMidis[i] === currMidis[i] || prevMidis[j] === currMidis[j]) continue;
 
-      // Same direction?
       const dir_i = Math.sign(currMidis[i] - prevMidis[i]);
       const dir_j = Math.sign(currMidis[j] - prevMidis[j]);
-      if (dir_i !== dir_j) continue; // contrary/oblique motion — OK
 
-      // Parallel 5th
+      // Consecutive P5→P5 or P8→P8 by contrary motion (R-02c / R-01c)
+      // These are forbidden just like parallel (same-direction) P5/P8.
+      if (dir_i !== dir_j) {
+        if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) count++;
+        if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0
+            && prevMidis[i] !== prevMidis[j]) count++;
+        continue;
+      }
+
+      // Same direction — parallel 5th
       if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) count++;
-      // Parallel 8ve
+      // Same direction — parallel 8ve
       if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0 && prevMidis[i] !== prevMidis[j]) count++;
     }
   }
@@ -1718,7 +1725,17 @@ export function detectViolations(
 
       const dir_i = Math.sign(currArr[i] - prevArr[i]);
       const dir_j = Math.sign(currArr[j] - prevArr[j]);
-      if (dir_i !== dir_j) continue;
+
+      // Consecutive P5→P5 or P8→P8 by contrary motion (R-02c / R-01c)
+      if (dir_i !== dir_j) {
+        if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) {
+          violations.push({ type: 'parallel-5th', description: `Consecutive 5ths by contrary motion: ${voiceLabels[i]}-${voiceLabels[j]}`, measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
+        }
+        if (!rules.allowParallel8ves && prevInterval === 0 && currInterval === 0 && prevArr[i] !== prevArr[j]) {
+          violations.push({ type: 'parallel-8ve', description: `Consecutive 8ves by contrary motion: ${voiceLabels[i]}-${voiceLabels[j]}`, measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
+        }
+        continue;
+      }
 
       if (!rules.allowParallel5ths && prevInterval === 7 && currInterval === 7) {
         violations.push({ type: 'parallel-5th', description: `Parallel 5ths: ${voiceLabels[i]}-${voiceLabels[j]}`, measure, beat, voices: [voiceLabels[i], voiceLabels[j]] });
