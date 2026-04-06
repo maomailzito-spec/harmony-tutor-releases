@@ -91,7 +91,7 @@ export function getActiveNotesTimeline(
         return { absBeat, measureIndex, beat, notes: activeNotes };
     });
 }
-import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange, OrnamentOverride } from '../types';
+import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange, OrnamentOverride, SequenceMatch } from '../types';
 import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 import { ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
@@ -7157,7 +7157,7 @@ export function applyHarmonyRules(
                         if (rFull.aug6Variants.includes('3+')) varDetailLines.push('— 3+ (terza eccedente): risolve sulla 5a dell\'accordo di arrivo.');
                         addViolation({
                             ruleId: 'CHROM-AUG6-VAR',
-                            severity: 'chromatic',
+                            severity: 'warning',
                             description: `♭II ${aRoman} — Sesta aumentata con ${desc}\n`
                                 + `Rilevato accordo di sesta aumentata contenente note con intervallo eccedente o più che eccedente rispetto alla fondamentale. `
                                 + `Queste note non appartengono alla struttura tradizionale delle seste aumentate (Italiana, Francese, Tedesca) ma svolgono una funzione cromatica precisa: ciascuna agisce come sensibile individuale, tendendo a risolvere per semitono ascendente su una nota specifica dell'accordo di destinazione.\n\n`
@@ -9816,8 +9816,7 @@ export function applyHarmonyRules(
                             noteIds: [(n1 as any).id, (n2 as any).id],
                             severity: 'error',
                         });
-                        corrections.push({
-                            message: msg,
+                        connections.push({
                             type: 'vertical',
                             noteId1: (n1 as any).id,
                             noteId2: (n2 as any).id,
@@ -11861,7 +11860,7 @@ export function applyHarmonyRules(
                                 const _durTrit0 = (n0 as any).durationTicks ?? 960;
                                 const _durTrit1 = (n1 as any).durationTicks ?? 960;
                                 const _isShortTrit = _durTrit0 <= 480 || _durTrit1 <= 480;  // croma = 480 ticks
-                                const _tritSev: HarmonyViolation['severity'] = _isShortTrit ? 'error' : 'warning';
+                                const _tritSev: RuleViolation['severity'] = _isShortTrit ? 'error' : 'warning';
 
                                 addViolation({
                                     ruleId: 'R-17c',
