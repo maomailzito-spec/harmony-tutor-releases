@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 const { checkTrial, getTrialInfo } = require('./licensing/trialManager');
 const { activateLicense, checkLicense, deactivateLicense, getLicenseInfo } = require('./licensing/licenseManager');
 
@@ -1514,6 +1515,35 @@ app.whenReady().then(async () => {
       else pendingOpenFilePath = fp;
     }
   } catch { /* ignore */ }
+
+  // ── Auto-update (production only) ──
+  if (app.isPackaged) {
+    autoUpdater.logger = require('electron-log');
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('update-available', (info) => {
+      safeStdioWrite(process.stdout, `[AutoUpdate] Update available: v${info.version}`);
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Aggiornamento disponibile',
+        message: `Harmony Tutor v${info.version} è stato scaricato.`,
+        detail: 'L\'aggiornamento verrà installato alla prossima chiusura dell\'app.',
+        buttons: ['OK', 'Riavvia ora'],
+      }).then(({ response }) => {
+        if (response === 1) autoUpdater.quitAndInstall();
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      safeStdioWrite(process.stderr, `[AutoUpdate] Error: ${err.message}`);
+    });
+
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -66,3 +66,9 @@ linux:
   artifactName: "${productName}-${version}-linux.${ext}"
 
 asar: true
+
+publish:
+  provider: github
+  owner: maomailzito-spec
+  repo: harmony-tutor-releases
+  private: true
