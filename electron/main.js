@@ -934,7 +934,7 @@ async function showLicenseActivationDialog(extraMessage) {
 
     if (result.response === 1) {
       // Open purchase page
-      shell.openExternal('https://harmonytutor.it/buy');
+      shell.openExternal('https://harmonytutor.lemonsqueezy.com/checkout/buy/a5930998-3037-4c81-9990-2ebe269c7911');
       continue; // loop back to ask for key
     }
 
