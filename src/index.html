@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guitar Pentatonic Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        overscroll-behavior-x: none;
+      }
+      @keyframes pulse-glow-strong {
+        0% { filter: drop-shadow(0 0 0px rgba(255, 255, 255, 0)); }
+        50% { filter: drop-shadow(0 0 15px rgba(255, 255, 255, 1)); }
+        100% { filter: drop-shadow(0 0 0px rgba(255, 255, 255, 0)); }
+      }
+      @keyframes pulse-glow-faint {
+        0% { filter: drop-shadow(0 0 0px rgba(255, 255, 255, 0)); }
+        50% { filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.7)); }
+        100% { filter: drop-shadow(0 0 0px rgba(255, 255, 255, 0)); }
+      }
+      @keyframes pulse-glow-staff {
+        0% { filter: drop-shadow(0 0 0px rgba(103, 232, 249, 0)); }
+        50% { filter: drop-shadow(0 0 25px rgba(103, 232, 249, 1)) drop-shadow(0 0 15px rgba(255, 255, 255, 1)); }
+        100% { filter: drop-shadow(0 0 0px rgba(103, 232, 249, 0)); }
+      }
+      .note-glow-strong {
+        animation: pulse-glow-strong 1.5s ease-out;
+      }
+      .note-glow-faint {
+        animation: pulse-glow-faint 1.5s ease-out;
+      }
+      .note-glow-staff {
+        animation: pulse-glow-staff 1.5s ease-out;
+      }
+      @keyframes blink {
+        50% { opacity: 0; }
+      }
+      .paste-caret {
+        animation: blink 1s step-end infinite;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body style="background: #ffe6a7; color: #222;" class="antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,110 @@
+
+
+
+
+
+
+Ripristinato GrandStaffEditor.tsx a una versione compilante (il refactor precedente aveva spezzato la sintassi).
+Rimosso la dichiarazione locale di window.electronAPI (ora usa quella centralizzata in electronAPI.d.ts, evitando conflitti di signature).
+Aggiunto il contratto menu condiviso (MenuAction) + normalizzazione runtime (normalizeMenuActionPayload) prima di eseguire l’handler.
+Inserito uno switch esaustivo su tutte le action (dispatchMenuAction con MENU_ACTIONS), così se aggiungi una nuova action in registry TypeScript ti obbliga ad aggiornarlo.
+Aggiunte le action mancanti nel legacy handler: set-title-font-family e set-select-only-voice.
+Verifica: npm run build passa.
+
+
+Ripristinato GrandStaffEditor.tsx a una versione compilante (il refactor precedente aveva spezzato la sintassi).
+Rimosso la dichiarazione locale di window.electronAPI (ora usa quella centralizzata in electronAPI.d.ts, evitando conflitti di signature).
+Aggiunto il contratto menu condiviso (MenuAction) + normalizzazione runtime (normalizeMenuActionPayload) prima di eseguire l’handler.
+Inserito uno switch esaustivo su tutte le action (dispatchMenuAction con MENU_ACTIONS), così se aggiungi una nuova action in registry TypeScript ti obbliga ad aggiornarlo.
+Aggiunte le action mancanti nel legacy handler: set-title-font-family e set-select-only-voice.
+Verifica: npm run build passa.
+
+
+
+Ripristino “Spiega/Confidenza” completato: il click sulle etichette roman/sigla ora apre il modal in GrandStaffEditor.tsx usando HarmonyLabelExplainModal.tsx.
+Rumore diagnostica ridotto: esclusioni aggiunte in settings.json + exclude in tsconfig.app.json.
+Pulizia backup: le cartelle di history/backup che generavano gli errori sono state eliminate (ma risultano come molte “D …” perché in questa repo erano tracciate, e gitignore da solo non basta a “un-trackare” roba già committata).
+Quindi: la “ristrutturazione” architetturale (es. split del monolite, contratti bridge/menu-action, ecc.) non è ancora iniziata in modo ordinato; al momento hai un working tree molto “mosso” con tante modifiche/cancellazioni.
+
+
+
+
+
+
+
+Renderer consolidato: in App.tsx e GrandStaffEditor.tsx ho rimosso le doppie normalizzazioni (normalizeMenuActionPayload) e i check ridondanti (isMenuAction). Ora il flusso è “end-to-end”: main → preload (validate+normalize) → renderer (dispatch diretto).
+Falsi errori TS dai vecchi snapshot: ho escluso _split/** dal progetto TS in tsconfig.app.json e dal tsserver/VS Code in settings.json. Questo evita diagnostiche su recovered/vscode-history dentro i repo annidati.
+Nuovi file aggiunti a Git: docs, shared, ecc. sono ora tracciati e ho già fatto git add -A (tutto staged, pronto per un commit). Build ok (npm run build).
+
+
+
+
+Normalizzazione in preload prima di inviare setMenuState al main: preload.js
+Tipi renderer aggiornati a usare MenuState condiviso: electronAPI.d.ts
+Wrapper unico e sicuro per accedere a window.electronAPI: electronBridge.ts
+Refactor dei callsite principali a usare il wrapper:
+App.tsx
+GrandStaffEditor.tsx
+useMenuStateSync.ts
+Build ok (npm run build).
+
+Commit: 94d73db electron: type and normalize renderer bridge
+
+
+
+
+Aggiunta l’azione menu end-to-end Importa MusicXML…: main.js, menuActionRegistry.js, menuActionRuntime.ts, menuActionTargets.ts.
+Implementato parser MVP MusicXML (DOMParser) in importMusicXML.ts: note/rest, accordi (<chord/>), <backup>/<forward>, durate in tick, dot, tuplets 3:2 e 2:3, legature start/stop.
+Collegato l’import al renderer in GrandStaffEditor.tsx (reset stato + caricamento note/tempo/tonalità iniziale + titolo da MusicXML o filename).
+Sistemato il bug: le azioni accodate da App (pendingMenuAction) ora vengono anche eseguite, non solo “consumate”, sempre in GrandStaffEditor.tsx.
+Allineato il tipo StaffNote aggiungendo userAccidental in types.ts (serve anche al flusso esistente).
+Uso: dal menu nativo File → Importa MusicXML… (se non sei in Grand Staff, passa lì e importa).
+Vuoi che aggiunga anche supporto a cambi di tonalità lungo il brano (oggi importo solo la prima key, mentre i cambi non sono ancora rappresentati nel modello di rendering)?
+
+
+
+
+
+@workspace Dobbiamo sincronizzarci sullo stato attuale del progetto "Harmony Tutor" dopo un importante refactoring. Ecco un riepilogo delle modifiche strutturali e delle funzionalità implementate.
+
+**1. Architettura & Contratti IPC (Fase di "Hardening")**
+*   **Pulizia Cronologia:** La cronologia Git è stata ripulita da file di backup (`recovered/`, `ultima-versione...`). `.gitignore` è stato aggiornato.
+*   **Contratti IPC Stabili:** È stato introdotto un **Registry Unico** per i canali IPC (`ipcChannels.js` + `ipcChannels.d.ts`).
+    *   `main.js` e `preload.js` ora usano `IPC_CHANNELS.*` per tutti gli handler, eliminando le "stringhe magiche".
+    *   **Hardening:** `preload.js` ora valida e normalizza i payload di `menu-action` prima di inviarli al renderer.
+    *   **Wrapper Sicuro:** È stato creato un wrapper `electronBridge.ts` per accedere a `window.electronAPI` in modo tipizzato e sicuro, eliminando i `(window as any)`.
+*   **Renderer Consolidato:** `App.tsx` e `GrandStaffEditor.tsx` sono stati aggiornati per usare il nuovo `electronBridge`, eliminando le doppie normalizzazioni.
+
+**2. Refactoring Monolite (`GrandStaffEditor.tsx`)**
+*   La **pipeline delle etichette armoniche** è stata estratta da `GrandStaffEditor.tsx`.
+*   **Nuovi File:**
+    *   `src/utils/computeHarmonyLabelsBySystem.ts`: Contiene la logica estratta per produrre le `HarmonyLabelPoint`.
+    *   `src/utils/harmonyLabelPipeline.ts`: Contiene funzioni di supporto per la pipeline (quantizzazione, filtri, snapshot, ecc.).
+*   `GrandStaffEditor.tsx` ora importa e usa `computeHarmonyLabelsBySystem` nel suo `useMemo` per `harmonyLabelsBySystem`.
+
+**3. Funzionalità Implementate di Recente**
+*   **Import MusicXML (MVP):**
+    *   L'azione `'import-midi'` è stata sostituita/integrata da `'import-musicxml'`.
+    *   È stato implementato un parser MVP in `importMusicXML.ts` (basato su `DOMParser`) che gestisce note, pause, accordi, durate, legature e **cambi di tonalità a metà brano**.
+    *   Il renderer in `GrandStaffEditor.tsx` ora gestisce il caricamento dei dati da MusicXML, resettando lo stato e impostando note, tempo, chiave e titolo.
+*   **Pannello "Spiegazione Label Armonica":**
+    *   Cliccando su un numero romano/sigla, si apre un modal (`HarmonyLabelExplainModal.tsx`) che mostra i dettagli dell'analisi (confidenza, motivi euristici, note considerate, pitch classes).
+    *   Questo pannello è stato reso più "didattico" e user-friendly.
+*   **Pannello Preferenze (Struttura):**
+    *   È stata creata la UI per il Pannello Preferenze, diviso in 4 tab (Editor, MIDI, Font/Render, Analisi).
+    *   I toggle "Accademico/Jazz" e "Severo/Essenziale" sono stati collegati alla logica di analisi.
+*   **Legature di Valore (Ties):**
+    *   L'editor ora supporta pienamente le legature di valore, sia per la notazione che per l'analisi.
+*   **Analisi Enarmonica ("Spelling-First"):**
+    *   Il motore in `musicTheory.ts` è stato potenziato per basare l'identificazione degli accordi (specialmente i diminuiti) sulla "pila di terze" (Spelling) invece che solo sul MIDI, risolvendo le ambiguità enarmoniche.
+    *   È stata introdotta una regola `R-ENHARMONIC` per segnalare "cattiva ortografia" musicale (es. Re# invece di Mib in Do minore).
+
+**Stato Attuale:** Il progetto è in una fase stabile dopo un intenso refactoring. Le prossime attività si concentreranno sul completamento del Pannello Preferenze e sull'estrazione di ulteriore logica dal monolite `GrandStaffEditor.tsx`.
+
+
+
+
+
+
+
+

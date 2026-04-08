@@ -1,0 +1,17 @@
+{
+  "name": "Cmaj7/B renders conventional 4/2 (not 4/6/9)",
+  "keySignatureRoot": "C",
+  "keyTonic": "C",
+  "isMinorMode": false,
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "analysisContexts": [],
+  "notes": [
+    { "id": "b-b2", "pitch": "B", "octave": 2, "position": -8, "midi": 47, "noteIndex": 11, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 4 },
+    { "id": "t-c4", "pitch": "C", "octave": 4, "position": 0, "midi": 60, "noteIndex": 0, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 3 },
+    { "id": "a-e4", "pitch": "E", "octave": 4, "position": 2, "midi": 64, "noteIndex": 4, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 2 },
+    { "id": "s-g4", "pitch": "G", "octave": 4, "position": 4, "midi": 67, "noteIndex": 7, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 1 }
+  ],
+  "expects": [
+    { "absBeat": 0, "figuresInclude": ["4", "2"] }
+  ]
+}

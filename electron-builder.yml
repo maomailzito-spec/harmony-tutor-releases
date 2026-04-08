@@ -1,0 +1,74 @@
+appId: com.harmonytutor.grandstaff
+productName: Harmony Tutor
+copyright: Copyright © 2026 Harmony Tutor
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - shared/**/*
+  - package.json
+
+extraMetadata:
+  main: electron/main.js
+  appFlavor: grandstaff
+
+mac:
+  category: public.app-category.music
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  identity: "ERMINIO ZITO (6VGJA5UP2N)"
+
+afterSign: build/notarize.js
+
+fileAssociations:
+  - ext: htp
+    name: Harmony Tutor Project
+    role: Editor
+    mimeType: application/x-harmony-tutor
+
+dmg:
+  artifactName: "${productName}-${version}-mac.${ext}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "${productName}-${version}-win.${ext}"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Audio
+  artifactName: "${productName}-${version}-linux.${ext}"
+
+asar: true
+
+publish:
+  provider: github
+  owner: maomailzito-spec
+  repo: harmony-tutor-releases
+  private: true

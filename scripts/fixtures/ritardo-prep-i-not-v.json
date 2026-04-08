@@ -1,0 +1,24 @@
+{
+  "name": "Ritardo: preparation should be I5 (not V5)",
+  "keySignatureRoot": "Bb",
+  "keyTonic": "Bb",
+  "isMinorMode": false,
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "analysisContexts": [],
+  "notes": [
+    { "id": "s-d5", "pitch": "D", "octave": 5, "position": 8, "midi": 74, "noteIndex": 2, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 1, "isTiedToNext": true },
+    { "id": "a-bb4", "pitch": "B", "octave": 4, "position": 6, "midi": 70, "noteIndex": 10, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 2 },
+    { "id": "t-f4", "pitch": "F", "octave": 4, "position": 3, "midi": 65, "noteIndex": 5, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 3 },
+    { "id": "b-bb2", "pitch": "B", "octave": 2, "position": -8, "midi": 46, "noteIndex": 10, "clef": "bass", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 4 },
+    { "id": "b-bb3", "pitch": "B", "octave": 3, "position": -1, "midi": 58, "noteIndex": 10, "clef": "bass", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 3, "voice": 4 },
+
+    { "id": "s-d5-2", "pitch": "D", "octave": 5, "position": 8, "midi": 74, "noteIndex": 2, "clef": "treble", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "voice": 1 },
+    { "id": "a-a4", "pitch": "A", "octave": 4, "position": 5, "midi": 69, "noteIndex": 9, "clef": "treble", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "voice": 2 },
+    { "id": "t-f4-2", "pitch": "F", "octave": 4, "position": 3, "midi": 65, "noteIndex": 5, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "voice": 3 },
+    { "id": "b-f3", "pitch": "F", "octave": 3, "position": -4, "midi": 53, "noteIndex": 5, "clef": "bass", "explicitAccidental": null, "duration": "whole", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 1, "voice": 4 },
+    { "id": "s-c5", "pitch": "C", "octave": 5, "position": 7, "midi": 72, "noteIndex": 0, "clef": "treble", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 1, "beat": 3, "voice": 1 }
+  ],
+  "expects": [
+    { "absBeat": 0, "roman": "I" }
+  ]
+}

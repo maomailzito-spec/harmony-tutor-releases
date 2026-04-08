@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local debug scratch
+.tmp-debug/
+
+# Backups / local history exports (do not commit)
+recovered/
+**/recovered/
+**/vscode-history/
+**/vscode-localhistory-export/
+
+# Legacy manual snapshot (do not commit)
+ultima-versione--sabato-13_12_25-ore-16,19/
+ultima-versione--sabato-13_12_25-ore-16,19.zip
+
+# Generated layout audit dumps (debug)
+layout-audit-*.json
+
+# Electron-builder output
+release/

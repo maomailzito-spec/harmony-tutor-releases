@@ -1,0 +1,15 @@
+il loop non esiste, (già cancellato)
+Non esiste  Shift+Space` | Loop misura | Toggle loop battuta corrente |(cancellato
+Navoigazione battute non esiste
+
+
+
+**Feature rimandato post-beta**
+
+Basato su corpus bigram/trigram (in `progressionStats.json`):
+- Dato un accordo, suggerisce successioni più probabili -già presente
+- Ranking per frequenza nel corpus- già presente 
+- Audio playback per anteprima -non implementato
+
+Credo manchi nell'elenco la tab "Spiegazione etichetta armonica" 
+Cliccando sul roman si apre la tab e descrive tutto quello che è relativo a quel punto d'inserimento: note, accordo, fondamentale, abs, note midi, valori, ecc...

@@ -1,0 +1,17 @@
+{
+  "name": "Ger+ recognized in C major",
+  "keySignatureRoot": "C",
+  "keyTonic": "C",
+  "isMinorMode": false,
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "analysisContexts": [],
+  "notes": [
+    { "id": "b", "pitch": "A", "octave": 2, "position": -9, "midi": 44, "noteIndex": 8, "clef": "bass", "explicitAccidental": "flat", "accidental": "flat", "userAccidental": "flat", "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 4 },
+    { "id": "t", "pitch": "C", "octave": 3, "position": -7, "midi": 48, "noteIndex": 0, "clef": "bass", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 3 },
+    { "id": "a", "pitch": "E", "octave": 3, "position": -5, "midi": 51, "noteIndex": 3, "clef": "bass", "explicitAccidental": "flat", "accidental": "flat", "userAccidental": "flat", "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 2 },
+    { "id": "s", "pitch": "F", "octave": 3, "position": -4, "midi": 54, "noteIndex": 6, "clef": "bass", "explicitAccidental": "sharp", "accidental": "sharp", "userAccidental": "sharp", "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 1 }
+  ],
+  "expects": [
+    { "absBeat": 0, "roman": "Ger+" }
+  ]
+}

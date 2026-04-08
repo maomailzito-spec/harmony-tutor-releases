@@ -1,0 +1,14 @@
+
+
+Il segreto delle musiche orecchiabili è la simmetria, lo dimostra la matematica
+
+
+
+
+"Il nostro obiettivo era costruire un ponte matematico chiaro tra l'algebra astratta e l'esperienza dell'ascolto musicale", dice Olga Ibragimova, dottoranda in Meccanica computazionale presso la facoltà di Ingegneria di Waterloo. "Quando pensiamo alle melodie come a forme che possiamo trasformare, diventa chiaro che i compositori utilizzano intuitivamente questo tipo di simmetrie da secoli".
+
+I ricercatori hanno tradotto le melodie in una forma analizzabile matematicamente, assegnando un numero da 1 a 12 a ciascuna nota di un’ottava. Hanno quindi applicato la teoria dei gruppi, branca della matematica che studia la simmetria, per analizzare due tipi principali di simmetria: la struttura tonale, che riguarda le note stesse, e la struttura posizionale, che riguarda il loro ordine. Hanno inoltre studiato come le melodie cambiano in caso di trasformazioni come la trasposizione, che sposta la melodia verso una tonalità più alta o più bassa, e l'inversione, che la ribalta in modo speculare.
+
+In questo modo, il team ha sviluppato formule che mostrano come sia possibile trasformare una melodia, mantenendo intatta la sua struttura di base oppure rimodellandola intenzionalmente in modi prevedibili. “Ci ha sorpreso quanto nettamente la matematica separi la struttura tonale da quella posizionale”, osserva Chrystopher Nehaniv, professore di Ingegneria dei sistemi all’Università di Waterloo. “Questa dualità ci aiuta a identificare schemi che non sono evidenti né all’orecchio né osservando uno spartito”.
+
+L'analisi ha rivelato relazioni simmetriche in molte melodie che aiutano a spiegare il loro successo. La matematica, concludono gli autori della ricerca, non sostituisce l’ispirazione artistica, ma offre una chiave per comprendere (e forse progettare) brani capaci di restare impressi fin dal primo ascolto.

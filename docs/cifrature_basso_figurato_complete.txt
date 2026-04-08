@@ -1,0 +1,32 @@
+Categoria,Tipo,Posizione,Cifratura,Note
+Triadi,Triade,Stato fondamentale,5/3 (omessa),
+Triadi,Triade,1° rivolto,6 (6/3),
+Triadi,Triade,2° rivolto,6/4,
+Settime,Accordo di 7ª,Stato fondamentale,7 (7/5/3),
+Settime,Accordo di 7ª,1° rivolto,6/5,
+Settime,Accordo di 7ª,2° rivolto,4/3,
+Settime,Accordo di 7ª,3° rivolto,4/2 (2),
+None,Accordo di 9ª,Stato fondamentale,9/7,spesso indicato come 9
+None,Accordo di 9ª,1° rivolto,7/5,
+None,Accordo di 9ª,2° rivolto,5/3,
+None,Accordo di 9ª,3° rivolto,6/4/2,
+None,Accordo di 9ª,4° rivolto,6/4/3,
+Undicesime,Accordo di 11ª,Forma completa,11/9/7,raro completo
+Undicesime,Accordo di 11ª,Forma ridotta,11/7,uso pratico
+Tredicesime,Accordo di 13ª,Forma completa,13/11/9/7,raro completo
+Tredicesime,Accordo di 13ª,Forma ridotta,13/7,uso pratico
+Diminuiti,Triade diminuita,Stato fondamentale,5/3,
+Diminuiti,Triade diminuita,1° rivolto,6,
+Diminuiti,Triade diminuita,2° rivolto,6/4,
+Diminuiti,Settima diminuita,Stato fondamentale,7,
+Diminuiti,Settima diminuita,1° rivolto,6/5,
+Diminuiti,Settima diminuita,2° rivolto,4/3,
+Diminuiti,Settima diminuita,3° rivolto,4/2,
+Accordi speciali,Sesta napoletana,—,6,♭II⁶
+Accordi speciali,Sesta aumentata italiana,—,♯6 – ♭3,
+Accordi speciali,Sesta aumentata francese,—,♯6 – ♭3 – 2,
+Accordi speciali,Sesta aumentata tedesca,—,♯6 – ♭3 – ♭5,
+Ritardi,Ritardo,4–3,4–3,
+Ritardi,Ritardo,7–6,7–6,
+Ritardi,Ritardo,9–8,9–8,
+Ritardi,Ritardo,2–3,2–3,

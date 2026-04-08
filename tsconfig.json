@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "exclude": [
+    "**/recovered/**",
+    "**/vscode-history/**",
+    "**/vscode-localhistory-export/**",
+    "**/_split/**",
+    "**/dist/**",
+    "**/node_modules/**"
+  ]
+}

@@ -1,0 +1,143 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { AudioService } from './services/AudioService';
+import ScalesVisualizer from './components/ScalesVisualizer';
+import ChordVisualizer from './components/ChordVisualizer';
+import IntervalsVisualizer from './components/IntervalsVisualizer';
+import MainEditor from './components/MainEditor';
+import GrandStaffEditor from './components/GrandStaffEditor';
+import { getAppFlavor, isModeEnabled } from './flavor';
+import { MENU_ACTIONS } from './contracts/menuActionRuntime';
+import { getMenuActionTarget } from './contracts/menuActionTargets';
+import { electronBridge } from './services/electronBridge';
+import type { MenuAction, MenuActionPayloadMap } from '../shared/menuActionRegistry';
+
+type AppMode = 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff';
+
+const App: React.FC = () => {
+    const flavor = getAppFlavor();
+    const defaultMode: AppMode = (flavor === 'guitar') ? 'editor' : 'grandStaff';
+    const [mode, setMode] = useState<AppMode>(defaultMode);
+    const [pendingMenuAction, setPendingMenuAction] = useState<{
+        action: MenuAction;
+        payload: MenuActionPayloadMap[MenuAction];
+        nonce: number;
+    } | null>(null);
+
+    const [menuErrorToast, setMenuErrorToast] = useState<{ code: string; message: string; ts: number } | null>(null);
+    
+    // --- AUDIO STATE ---
+    const audioServiceRef = useRef(new AudioService());
+    const [isAudioReady, setIsAudioReady] = useState(false);
+
+    useEffect(() => {
+        const audioService = audioServiceRef.current;
+        audioService.init().then(() => {
+            setIsAudioReady(true);
+        }).catch(() => {
+            // errore silenziato
+        });
+    }, []);
+
+    // Native menu integration (Electron): allow switching app mode from "Vista".
+    useEffect(() => {
+        const remove = electronBridge.onMenuAction((action, payload) => {
+            try {
+                if (action !== MENU_ACTIONS.SET_APP_MODE) return;
+                const next = payload?.mode;
+                if (!next) return;
+                if (!isModeEnabled(flavor, next)) return;
+                setMode(next as AppMode);
+            } catch {
+                // ignore
+            }
+        });
+        return () => remove();
+    }, [flavor]);
+
+    // Native menu integration (Electron): surface menu errors and allow Import/Export MIDI to
+    // work even if the user is not currently on the GrandStaff view.
+    useEffect(() => {
+        if (!isModeEnabled(flavor, 'grandStaff')) return;
+
+        const removeErr = electronBridge.onMenuError((code: string, message: string) => {
+            const next = { code: String(code || 'errore'), message: String(message || ''), ts: Date.now() };
+            setMenuErrorToast(next);
+            // Auto-dismiss (non-invasive). Keep last error visible briefly.
+            window.setTimeout(() => {
+                setMenuErrorToast((cur) => (cur && cur.ts === next.ts) ? null : cur);
+            }, 6500);
+        });
+
+        const remove = electronBridge.onMenuAction((action, payload) => {
+            try {
+                // If the action targets GrandStaff but we're not there, switch and queue it.
+                if (getMenuActionTarget(action) !== 'grandStaff') return;
+                if (mode === 'grandStaff') return;
+                setMode('grandStaff');
+                setPendingMenuAction({ action, payload: payload as any, nonce: Date.now() });
+            } catch {
+                // ignore
+            }
+        });
+
+        return () => {
+            removeErr();
+            remove();
+        };
+    }, [mode, flavor]);
+    
+    return (
+        <div className="h-screen overflow-hidden flex flex-col bg-gray-900 font-sans text-gray-100">
+            {menuErrorToast ? (
+                <div className="fixed top-3 right-3 z-50 max-w-[min(520px,calc(100vw-24px))] rounded-md border border-red-700/50 bg-red-950/80 px-3 py-2 text-sm shadow-lg backdrop-blur">
+                    <div className="font-semibold text-red-100">{menuErrorToast.code}</div>
+                    {menuErrorToast.message ? (
+                        <div className="mt-0.5 text-red-100/90 break-words">{menuErrorToast.message}</div>
+                    ) : null}
+                </div>
+            ) : null}
+            <div className="w-full px-2 lg:px-4 flex flex-col flex-grow min-h-0 overflow-hidden">
+
+                <div className={mode === 'scales' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
+                    <ScalesVisualizer 
+                        audioService={audioServiceRef.current}
+                        isAudioReady={isAudioReady}
+                        isActive={mode === 'scales'}
+                    />
+                </div>
+                <div className={mode === 'chords' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
+                    <ChordVisualizer 
+                        audioService={audioServiceRef.current}
+                        isAudioReady={isAudioReady}
+                        isActive={mode === 'chords'}
+                    />
+                </div>
+                <div className={mode === 'intervals' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
+                    <IntervalsVisualizer
+                        audioService={audioServiceRef.current}
+                        isAudioReady={isAudioReady}
+                        isActive={mode === 'intervals'}
+                    />
+                </div>
+                <div className={mode === 'editor' ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
+                    <MainEditor
+                        isActive={mode === 'editor'}
+                    />
+                </div>
+                <div className={(mode === 'grandStaff' && isModeEnabled(flavor, 'grandStaff')) ? 'flex flex-col flex-grow min-h-0 overflow-hidden' : 'hidden'}>
+                    <GrandStaffEditor
+                        isActive={mode === 'grandStaff'}
+                        audioService={audioServiceRef.current}
+                        isAudioReady={isAudioReady}
+                        pendingMenuAction={pendingMenuAction}
+                        onConsumePendingMenuAction={(nonce) => {
+                            setPendingMenuAction(prev => (prev && prev.nonce === nonce) ? null : prev);
+                        }}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default App;
