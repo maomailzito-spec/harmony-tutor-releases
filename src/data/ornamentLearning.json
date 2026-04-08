@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "extractedAt": "2026-04-07",
+  "extractedAt": "2026-04-08",
   "totalFiles": 183,
   "totalSamples": 994,
   "typeCounts": {
@@ -22829,7 +22829,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Esempio seasta ecccesente.htp",
+      "file": "Esempio sesta eccedente.htp",
       "noteId": "f7303356-05eb-4850-a2aa-11e220b77126",
       "type": "neighbor",
       "patternKey": "medium_moderate_step-up_step-down",

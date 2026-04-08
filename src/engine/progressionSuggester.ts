@@ -29,6 +29,8 @@ interface ProgressionStats {
   bigramsBase: BigramMap;
   trigramsBase: BigramMap;
   unigramsBase: { [chord: string]: number };
+  bigramsStrong?: BigramMap;
+  bigramsWeak?: BigramMap;
 }
 
 // ── Static corpus ────────────────────────────────────────────────────────
@@ -98,11 +100,13 @@ function stripFigures(label: string): string {
  *
  * @param recentChords  Array of 1-2 recent chord labels (newest last)
  * @param maxResults    Maximum number of suggestions (default 6)
+ * @param beatStrength  Optional: 'strong' | 'weak' to weight metric-aware stats
  * @returns Sorted array of suggestions with probabilities
  */
 export function suggestNextChord(
   recentChords: string[],
   maxResults = 6,
+  beatStrength?: 'strong' | 'weak',
 ): ChordSuggestion[] {
   if (recentChords.length === 0) return [];
 
@@ -131,6 +135,19 @@ export function suggestNextChord(
   if (biTargets) {
     for (const [chord, count] of Object.entries(biTargets)) {
       candidates[chord] = (candidates[chord] || 0) + count;
+    }
+  }
+
+  // Add metric-aware bigram bonus (weight 1.5x)
+  if (beatStrength) {
+    const metricMap = beatStrength === 'strong' ? stats.bigramsStrong : stats.bigramsWeak;
+    if (metricMap) {
+      const metricTargets = metricMap[last];
+      if (metricTargets) {
+        for (const [chord, count] of Object.entries(metricTargets)) {
+          candidates[chord] = (candidates[chord] || 0) + count * 1.5;
+        }
+      }
     }
   }
 

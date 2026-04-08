@@ -29,6 +29,9 @@ const bigramsBase: BigramMap = {};   // without inversions (root only)
 const trigramsBase: TrigramMap = {}; // without inversions
 const unigramCounts: Record<string, number> = {};
 const unigramCountsBase: Record<string, number> = {};
+// Metric-aware bigrams: separate counts for strong/weak beats
+const bigramsStrong: BigramMap = {};  // target chord lands on strong beat
+const bigramsWeak: BigramMap = {};    // target chord lands on weak beat
 let totalTransitions = 0;
 
 /** Strip figured-bass digits from roman label to get the base chord.
@@ -98,8 +101,11 @@ for (const filePath of files) {
 
     // Extract roman numeral for each chord event
     const progression: string[] = [];
+    const progressionBeats: number[] = [];
     for (const key of filteredKeys) {
       const chordNotes = beatMap.get(key)!;
+      const [_keyMi, _keyBt] = key.split(':').map(Number);
+      const beatNum = _keyBt; // 1-based beat within measure
       // Filter out ornamental tones
       const structural = chordNotes.filter((n: any) =>
         !n.isPassing && !n.isNeighbor && !n.isAppoggiatura &&
@@ -129,33 +135,51 @@ for (const filePath of files) {
             }
           }
           progression.push(label);
+          progressionBeats.push(beatNum);
         }
       } catch {
         // skip
       }
     }
 
+    // Build progression with metric position
+    interface ChordEvent { label: string; beat: number; }
+    const progressionWithBeat: ChordEvent[] = [];
+    for (let pi = 0; pi < progression.length; pi++) {
+      progressionWithBeat.push({ label: progression[pi], beat: progressionBeats[pi] });
+    }
+
     // Deduplicate consecutive repeats (held chords across beats)
-    const deduped: string[] = [];
-    for (const chord of progression) {
-      if (deduped.length === 0 || deduped[deduped.length - 1] !== chord) {
-        deduped.push(chord);
+    const deduped: ChordEvent[] = [];
+    for (const ev of progressionWithBeat) {
+      if (deduped.length === 0 || deduped[deduped.length - 1].label !== ev.label) {
+        deduped.push(ev);
       }
     }
 
-    console.log(`  ${path.basename(filePath)}: ${deduped.length} chords → ${deduped.slice(0, 8).join(' → ')}…`);
+    console.log(`  ${path.basename(filePath)}: ${deduped.length} chords → ${deduped.slice(0, 8).map(e => e.label).join(' → ')}…`);
+
+    // Determine strong beats for this time signature
+    const numBeats = Number(ts.numerator || ts.top || 4);
+    function isStrongBeat(beat: number): boolean {
+      if (numBeats === 2) return beat === 1;             // 2/4: beat 1
+      if (numBeats === 3) return beat === 1;             // 3/4: beat 1
+      if (numBeats === 4) return beat === 1 || beat === 3; // 4/4: beats 1,3
+      if (numBeats === 6) return beat === 1 || beat === 4; // 6/8: beats 1,4
+      return beat === 1; // fallback
+    }
 
     // Count unigrams
-    for (const chord of deduped) {
-      unigramCounts[chord] = (unigramCounts[chord] || 0) + 1;
-      const base = stripFigures(chord);
+    for (const ev of deduped) {
+      unigramCounts[ev.label] = (unigramCounts[ev.label] || 0) + 1;
+      const base = stripFigures(ev.label);
       unigramCountsBase[base] = (unigramCountsBase[base] || 0) + 1;
     }
 
-    // Count bigrams (full + base)
+    // Count bigrams (full + base + metric)
     for (let i = 0; i < deduped.length - 1; i++) {
-      const from = deduped[i];
-      const to = deduped[i + 1];
+      const from = deduped[i].label;
+      const to = deduped[i + 1].label;
       if (!bigrams[from]) bigrams[from] = {};
       bigrams[from][to] = (bigrams[from][to] || 0) + 1;
       const fromB = stripFigures(from);
@@ -163,15 +187,20 @@ for (const filePath of files) {
       if (!bigramsBase[fromB]) bigramsBase[fromB] = {};
       bigramsBase[fromB][toB] = (bigramsBase[fromB][toB] || 0) + 1;
       totalTransitions++;
+      // Metric-aware: classify by target chord's beat position
+      const targetBeat = deduped[i + 1].beat;
+      const metricMap = isStrongBeat(targetBeat) ? bigramsStrong : bigramsWeak;
+      if (!metricMap[fromB]) metricMap[fromB] = {};
+      metricMap[fromB][toB] = (metricMap[fromB][toB] || 0) + 1;
     }
 
     // Count trigrams (full + base)
     for (let i = 0; i < deduped.length - 2; i++) {
-      const ctx = `${deduped[i]}|${deduped[i + 1]}`;
-      const to = deduped[i + 2];
+      const ctx = `${deduped[i].label}|${deduped[i + 1].label}`;
+      const to = deduped[i + 2].label;
       if (!trigrams[ctx]) trigrams[ctx] = {};
       trigrams[ctx][to] = (trigrams[ctx][to] || 0) + 1;
-      const ctxB = `${stripFigures(deduped[i])}|${stripFigures(deduped[i + 1])}`;
+      const ctxB = `${stripFigures(deduped[i].label)}|${stripFigures(deduped[i + 1].label)}`;
       const toB = stripFigures(to);
       if (!trigramsBase[ctxB]) trigramsBase[ctxB] = {};
       trigramsBase[ctxB][toB] = (trigramsBase[ctxB][toB] || 0) + 1;
@@ -195,6 +224,8 @@ const stats = {
   bigramsBase,
   trigrams,
   trigramsBase,
+  bigramsStrong,
+  bigramsWeak,
 };
 
 const outDir = path.join(__dirname, '..', 'src', 'data');

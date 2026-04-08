@@ -777,7 +777,18 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               const tokens = progressionText.trim().split(/\s*[-,]\s*/).filter(Boolean);
               if (tokens.length === 0) return null;
               const recent = tokens.slice(-2);
-              const suggestions: ChordSuggestion[] = suggestNextChord(recent, 6);
+              // Determine metric position for the next chord
+              const numBeats = localTs.numerator;
+              const hRhythm = harmonicRhythmBeats || numBeats; // default: 1 chord per measure
+              const nextBeatIndex = tokens.length; // 0-based index of next chord
+              const nextBeatInMeasure = ((nextBeatIndex * hRhythm) % numBeats) + 1;
+              const isStrong = (numBeats === 4 && (nextBeatInMeasure === 1 || nextBeatInMeasure === 3))
+                || (numBeats === 3 && nextBeatInMeasure === 1)
+                || (numBeats === 2 && nextBeatInMeasure === 1)
+                || (numBeats === 6 && (nextBeatInMeasure === 1 || nextBeatInMeasure === 4))
+                || nextBeatInMeasure === 1;
+              const beatStrength: 'strong' | 'weak' = isStrong ? 'strong' : 'weak';
+              const suggestions: ChordSuggestion[] = suggestNextChord(recent, 6, beatStrength);
               if (suggestions.length === 0) return null;
               return (
                 <div className="mt-1 flex flex-wrap items-center gap-1">
