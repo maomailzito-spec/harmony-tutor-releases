@@ -28,7 +28,7 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   identity: "ERMINIO ZITO (6VGJA5UP2N)"
 
-# afterSign: build/notarize.js  # re-enable when Apple notarization is working
+afterSign: build/notarize.js
 
 fileAssociations:
   - ext: htp

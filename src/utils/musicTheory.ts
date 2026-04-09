@@ -7157,7 +7157,7 @@ export function applyHarmonyRules(
                         if (rFull.aug6Variants.includes('3+')) varDetailLines.push('— 3+ (terza eccedente): risolve sulla 5a dell\'accordo di arrivo.');
                         addViolation({
                             ruleId: 'CHROM-AUG6-VAR',
-                            severity: 'warning',
+                            severity: 'chromatic',
                             description: `♭II ${aRoman} — Sesta aumentata con ${desc}\n`
                                 + `Rilevato accordo di sesta aumentata contenente note con intervallo eccedente o più che eccedente rispetto alla fondamentale. `
                                 + `Queste note non appartengono alla struttura tradizionale delle seste aumentate (Italiana, Francese, Tedesca) ma svolgono una funzione cromatica precisa: ciascuna agisce come sensibile individuale, tendendo a risolvere per semitono ascendente su una nota specifica dell'accordo di destinazione.\n\n`

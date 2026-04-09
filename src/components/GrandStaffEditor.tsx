@@ -3007,16 +3007,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return [];
         };
 
-        const getLevel = (v: any): 'error' | 'warning' | 'exception' => {
+        const getLevel = (v: any): 'error' | 'warning' | 'exception' | 'chromatic' => {
             const s = (v?.severity || v?.level || v?.type || '').toString().toLowerCase();
+            if (s.includes('chromatic')) return 'chromatic';
             if (s.includes('exception') || s.includes('green')) return 'exception';
             if (s.includes('warn') || s.includes('yellow')) return 'warning';
             return 'error';
         };
 
         try {
-            const rank: Record<'error' | 'warning' | 'exception', number> = {
+            const rank: Record<'error' | 'warning' | 'exception' | 'chromatic', number> = {
                 error: 3,
+                chromatic: 2,
                 exception: 2,
                 warning: 1,
             };
@@ -8323,8 +8325,8 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                         return bestOf(a, b) || 'error';
                                                                     };
 
-                                                                    const connectionStroke = (level: 'error' | 'warning' | 'exception') =>
-                                                                        level === 'warning' ? '#f59e0b' : level === 'exception' ? '#22c55e' : '#ef4444';
+                                                                    const connectionStroke = (level: 'error' | 'warning' | 'exception' | 'chromatic') =>
+                                                                        level === 'warning' ? '#f59e0b' : level === 'exception' ? '#22c55e' : level === 'chromatic' ? '#8B5CF6' : '#ef4444';
 
                                                                     return systemConnections.map((c, idx) => {
                                                                         const hp1 = hitPointById.get(c.noteId1);
