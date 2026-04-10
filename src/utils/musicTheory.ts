@@ -4856,8 +4856,10 @@ export function applyHarmonyRules(
                 // Skip ornament detection if user has a harmony override at this beat
                 if (_isHarmOverrideBeat(cur)) continue;
                 // If already classified as another ornament (neighbor/appoggiatura/etc.),
-                // do not override with a generic passing-note label.
-                if ((cur as any).isNeighbor || (cur as any).isAnticipation || (cur as any).isAppoggiatura || (cur as any).isEscape) continue;
+                // do not override with a generic passing-note label — UNLESS the held-harmony
+                // path below determines it's actually a passing note over a sustained chord.
+                const alreadyOrnament = !!((cur as any).isNeighbor || (cur as any).isAnticipation || (cur as any).isAppoggiatura || (cur as any).isEscape);
+                if (alreadyOrnament && !(cur as any).isAppoggiatura) continue;
                 // If any of the triplet notes participate in a suspension, skip passing detection here
                 if ((prev as any).isSuspension || (cur as any).isSuspension || (next as any).isSuspension) continue;
 
@@ -4875,10 +4877,66 @@ export function applyHarmonyRules(
 
                 // For passing notes (esp. with 8ths/16ths), the typical case is an off-beat note.
                 // Use "not on an integer beat" as a robust proxy across meters.
+                // Exception: on metrically WEAK integer beats (e.g. beat 2/4 in 4/4), allow
+                // passing detection when the underlying harmony hasn't changed — i.e. the
+                // pitch-class signature of the event (excluding the current note) is the same
+                // as the previous event. This mirrors the hold-line suppression logic in
+                // computeHarmonyLabelsBySystem and catches passing tones over sustained chords.
                 const noteBeat = (cur.beat ?? (curEv ? curEv.beat : 1)) as number;
-                if (isStructuralBeat(noteBeat)) continue;
+                if (isStructuralBeat(noteBeat)) {
+                    // Check if this is a weak beat in the meter (not beat 1, not beat 3 in 4/4).
+                    const isMetricallyStrong =
+                        Math.abs(noteBeat - 1) < 1e-6 ||
+                        (Math.abs(beatsPerMeasure - 4) < 1e-6 && Math.abs(noteBeat - 3) < 1e-6);
+                    if (isMetricallyStrong) continue;
+
+                    // Compute pc-signature of curEv excluding the current note.
+                    const curPcsSelf = mod12(cur.midi ?? 0);
+                    const prevPcs = [...new Set((prevEv.notes || [])
+                        .filter((n: any) => n && !n.isRest && Number.isFinite(n.midi))
+                        .map((n: any) => mod12(n.midi)))].sort((a, b) => a - b).join('-');
+                    const curPcsExcl = [...new Set((curEv.notes || [])
+                        .filter((n: any) => n && !n.isRest && Number.isFinite(n.midi) && mod12(n.midi) !== curPcsSelf)
+                        .map((n: any) => mod12(n.midi)))].sort((a, b) => a - b).join('-');
+
+                    // If harmony unchanged (same signature), this note passes over a held chord.
+                    if (!prevPcs || !curPcsExcl || prevPcs !== curPcsExcl) continue;
+
+                    // The current note's pitch class must NOT be part of the previous
+                    // event's structural harmony — otherwise it's a real chord tone (e.g.
+                    // the 5th of V arriving on beat 2 over a sustained V chord).
+                    const prevStructPcs = structuralPitchClasses(prevEv);
+                    if (prevStructPcs.includes(curPcsSelf)) continue;
+
+                    // Additional guard: note must be no longer than neighbors.
+                    const durWP = getDuration(prev), durWC = getDuration(cur), durWN = getDuration(next);
+                    if (!(durWC <= durWP && durWC <= durWN)) continue;
+
+                    // The current note must be SHORTER than at least one other voice in the
+                    // event. If all voices have the same duration (e.g. all quarters in a
+                    // chorale), this note is not obviously ornamental.
+                    const otherDurs = (curEv.notes || [])
+                        .filter((n: any) => n && !n.isRest && n.id !== cur.id && Number.isFinite(getDuration(n)))
+                        .map((n: any) => getDuration(n));
+                    const hasShorterThanOther = otherDurs.some((d: number) => durWC < d);
+                    if (!hasShorterThanOther) continue;
+
+                    // Restrict to the top voice (soprano, v=1): inner voices on weak beats
+                    // more often carry legitimate harmonic movement.
+                    if (v !== 1) continue;
+
+                    // Mark as passing directly — the held-chord context is unambiguous.
+                    cur.isPassing = true;
+                    (cur as any).ornamentMark = 'P';
+                    // Clear any prior appoggiatura classification that the earlier loop set.
+                    if ((cur as any).isAppoggiatura) (cur as any).isAppoggiatura = false;
+                    continue;
+                }
 
                 // harmonic membership: prev and next consonant, cur dissonant
+                // If the note was already classified as appoggiatura and the held-harmony
+                // path above didn't override it, preserve the appoggiatura classification.
+                if (alreadyOrnament) continue;
                 const prevConsonant = isNoteInStructuralHarmony(prev, prevEv);
                 const nextConsonant = isNoteInStructuralHarmony(next, nextEv);
                 const curConsonant = isNoteInStructuralHarmony(cur, curEv);
