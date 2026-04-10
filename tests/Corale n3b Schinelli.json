@@ -1,4 +1,7 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [],
   "schemaVersion": 1,
   "notes": [
     {
@@ -2731,11 +2734,10 @@
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
-  "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
+  "doubleBarlineMeasures": [
+    12
+  ],
   "harmonyOverrides": [],
-  "ornamentOverrides": [],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
