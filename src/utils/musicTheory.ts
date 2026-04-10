@@ -2574,10 +2574,14 @@ function calculateRomanNumeral(
         // Under suspensions the 3rd can be delayed, so a real dominant 7th can appear as a
         // "no_third" match. Allow secondary-dominant detection when we still have a strong
         // dominant shell (P5 + m7) to avoid labeling it as a diatonic triad degree.
+        // However, if a minor 3rd IS present, the chord is minor 7th (e.g. ii7), not dominant.
         const hasDominantShell = (() => {
             try {
                 const ints = (chordInfo as any)?.intervals;
-                return !!(ints?.has?.(7) && ints?.has?.(10));
+                if (!ints?.has?.(7) || !ints?.has?.(10)) return false;
+                // Reject if a minor 3rd is explicitly present — that's min7, not dom7.
+                if (ints?.has?.(3)) return false;
+                return true;
             } catch {
                 return false;
             }
