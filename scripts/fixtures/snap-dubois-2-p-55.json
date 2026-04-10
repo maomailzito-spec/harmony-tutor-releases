@@ -1613,12 +1613,7 @@
     },
     {
       "absBeat": 9,
-      "roman": "V/vi",
-      "figuresInclude": [
-        "6",
-        "4",
-        "3"
-      ]
+      "roman": "vii°"
     },
     {
       "absBeat": 9.5,
@@ -1723,12 +1718,7 @@
     },
     {
       "absBeat": 21,
-      "roman": "V/ii",
-      "figuresInclude": [
-        "6",
-        "4",
-        "3"
-      ]
+      "roman": "iii"
     },
     {
       "absBeat": 21.5,

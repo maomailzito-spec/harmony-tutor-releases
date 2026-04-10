@@ -1273,13 +1273,16 @@
     },
     {
       "absBeat": 6,
-      "roman": "I"
+      "roman": "I",
+      "figuresInclude": [
+        "6"
+      ]
     },
     {
       "absBeat": 7,
-      "roman": "vi",
+      "roman": "V/ii",
       "figuresInclude": [
-        "6",
+        "7",
         "5"
       ]
     },

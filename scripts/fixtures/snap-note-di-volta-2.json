@@ -380,7 +380,11 @@
     },
     {
       "absBeat": 2,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "4"
+      ]
     },
     {
       "absBeat": 3,

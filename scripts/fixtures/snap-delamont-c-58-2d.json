@@ -603,9 +603,9 @@
   "expects": [
     {
       "absBeat": 0,
-      "roman": "i",
+      "roman": "III",
       "figuresInclude": [
-        "6"
+        "7"
       ]
     },
     {
@@ -631,7 +631,8 @@
       "roman": "i",
       "figuresInclude": [
         "5",
-        "4"
+        "4",
+        "2"
       ]
     },
     {
@@ -651,9 +652,9 @@
     },
     {
       "absBeat": 8,
-      "roman": "i",
+      "roman": "III",
       "figuresInclude": [
-        "6"
+        "7"
       ]
     },
     {

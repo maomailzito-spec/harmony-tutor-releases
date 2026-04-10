@@ -729,7 +729,7 @@
       ]
     },
     {
-      "absBeat": 8,
+      "absBeat": 9,
       "roman": "iv",
       "figuresInclude": [
         "5",
@@ -737,18 +737,18 @@
       ]
     },
     {
-      "absBeat": 9,
+      "absBeat": 10,
       "roman": "V",
       "figuresInclude": [
         "7"
       ]
     },
     {
-      "absBeat": 10,
+      "absBeat": 12,
       "roman": "I"
     },
     {
-      "absBeat": 12,
+      "absBeat": 15,
       "roman": "I"
     }
   ]

@@ -1254,14 +1254,8 @@
       "absBeat": 5.5,
       "roman": "I",
       "figuresInclude": [
-        "7"
-      ]
-    },
-    {
-      "absBeat": 5.75,
-      "roman": "I",
-      "figuresInclude": [
-        "7"
+        "4",
+        "3"
       ]
     },
     {

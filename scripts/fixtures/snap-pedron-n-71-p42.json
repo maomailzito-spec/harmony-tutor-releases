@@ -1553,12 +1553,19 @@
   ],
   "expects": [
     {
+      "absBeat": 0,
+      "roman": "I"
+    },
+    {
       "absBeat": 2,
       "roman": "I"
     },
     {
       "absBeat": 4,
-      "roman": "I"
+      "roman": "V",
+      "figuresInclude": [
+        "6"
+      ]
     },
     {
       "absBeat": 6,
@@ -1646,11 +1653,7 @@
     },
     {
       "absBeat": 28,
-      "roman": "vii°/IV",
-      "figuresInclude": [
-        "4",
-        "2"
-      ]
+      "roman": "I"
     },
     {
       "absBeat": 30,

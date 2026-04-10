@@ -297,7 +297,11 @@
     },
     {
       "absBeat": 0.5,
-      "roman": "I"
+      "roman": "I",
+      "figuresInclude": [
+        "7",
+        "5"
+      ]
     },
     {
       "absBeat": 1,

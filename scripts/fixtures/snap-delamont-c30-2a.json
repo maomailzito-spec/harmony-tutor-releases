@@ -930,19 +930,11 @@
     },
     {
       "absBeat": 7,
-      "roman": "V",
-      "figuresInclude": [
-        "7",
-        "5"
-      ]
+      "roman": "V"
     },
     {
       "absBeat": 7.5,
-      "roman": "V",
-      "figuresInclude": [
-        "7",
-        "5"
-      ]
+      "roman": "V"
     },
     {
       "absBeat": 8,
@@ -963,8 +955,7 @@
       "absBeat": 11,
       "roman": "I",
       "figuresInclude": [
-        "6",
-        "5"
+        "6"
       ]
     },
     {

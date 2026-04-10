@@ -2917,16 +2917,15 @@
       "absBeat": 5,
       "roman": "ii",
       "figuresInclude": [
-        "6",
-        "5"
+        "6"
       ]
     },
     {
       "absBeat": 6,
-      "roman": "vii°",
+      "roman": "V/vi",
       "figuresInclude": [
-        "4",
-        "3"
+        "7",
+        "5"
       ]
     },
     {

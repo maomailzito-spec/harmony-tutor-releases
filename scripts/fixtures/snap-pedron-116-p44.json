@@ -2625,11 +2625,11 @@
     },
     {
       "absBeat": 6,
-      "roman": "ii",
+      "roman": "Fr+",
       "figuresInclude": [
-        "5",
-        "4",
-        "2"
+        "6",
+        "5x",
+        "3+"
       ]
     },
     {
@@ -2749,16 +2749,18 @@
     },
     {
       "absBeat": 22,
-      "roman": "III",
+      "roman": "iv",
       "figuresInclude": [
-        "5",
         "4",
         "2"
       ]
     },
     {
       "absBeat": 23,
-      "roman": "III"
+      "roman": "III",
+      "figuresInclude": [
+        "3"
+      ]
     },
     {
       "absBeat": 24,
@@ -2856,10 +2858,10 @@
     },
     {
       "absBeat": 35,
-      "roman": "ii°",
+      "roman": "V",
       "figuresInclude": [
-        "4",
-        "3"
+        "7",
+        "5"
       ]
     },
     {

@@ -1118,13 +1118,6 @@
       ]
     },
     {
-      "absBeat": 7.333334,
-      "roman": "vi",
-      "figuresInclude": [
-        "6"
-      ]
-    },
-    {
       "absBeat": 8,
       "roman": "ii",
       "figuresInclude": [
@@ -1150,13 +1143,6 @@
       ]
     },
     {
-      "absBeat": 9.333334,
-      "roman": "iv",
-      "figuresInclude": [
-        "6"
-      ]
-    },
-    {
       "absBeat": 10,
       "roman": "I",
       "figuresInclude": [
@@ -1166,7 +1152,10 @@
     },
     {
       "absBeat": 10.5,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "4"
+      ]
     },
     {
       "absBeat": 11,
@@ -1204,11 +1193,18 @@
     },
     {
       "absBeat": 14,
-      "roman": "I"
+      "roman": "IV",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
     },
     {
       "absBeat": 14.5,
-      "roman": "I"
+      "roman": "I",
+      "figuresInclude": [
+        "4"
+      ]
     },
     {
       "absBeat": 15,

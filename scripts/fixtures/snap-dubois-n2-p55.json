@@ -1543,6 +1543,10 @@
   ],
   "expects": [
     {
+      "absBeat": 0,
+      "roman": "iii"
+    },
+    {
       "absBeat": 1,
       "roman": "I",
       "figuresInclude": [
@@ -1567,10 +1571,10 @@
     },
     {
       "absBeat": 5,
-      "roman": "V/V",
+      "roman": "V",
       "figuresInclude": [
-        "4",
-        "3"
+        "5",
+        "4"
       ]
     },
     {
@@ -1609,12 +1613,7 @@
     },
     {
       "absBeat": 9,
-      "roman": "V/vi",
-      "figuresInclude": [
-        "6",
-        "4",
-        "3"
-      ]
+      "roman": "vii°"
     },
     {
       "absBeat": 9.5,
@@ -1719,12 +1718,7 @@
     },
     {
       "absBeat": 21,
-      "roman": "V/ii",
-      "figuresInclude": [
-        "6",
-        "4",
-        "3"
-      ]
+      "roman": "iii"
     },
     {
       "absBeat": 21.5,

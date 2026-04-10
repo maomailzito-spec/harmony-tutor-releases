@@ -5205,6 +5205,10 @@
       "roman": "V"
     },
     {
+      "absBeat": 15,
+      "roman": "V"
+    },
+    {
       "absBeat": 17,
       "roman": "vii°/V",
       "figuresInclude": [
@@ -5304,6 +5308,10 @@
       ]
     },
     {
+      "absBeat": 31,
+      "roman": "IV"
+    },
+    {
       "absBeat": 32,
       "roman": "♭III",
       "figuresInclude": [
@@ -5394,6 +5402,10 @@
       "roman": "V"
     },
     {
+      "absBeat": 47,
+      "roman": "V"
+    },
+    {
       "absBeat": 48,
       "roman": "♭VI"
     },
@@ -5412,6 +5424,10 @@
         "5",
         "♭3"
       ]
+    },
+    {
+      "absBeat": 51,
+      "roman": "I"
     },
     {
       "absBeat": 52,

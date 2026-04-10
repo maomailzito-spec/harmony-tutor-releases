@@ -758,7 +758,11 @@
     },
     {
       "absBeat": 0.5,
-      "roman": "i"
+      "roman": "III",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
     },
     {
       "absBeat": 1,
@@ -820,7 +824,7 @@
       "absBeat": 6,
       "roman": "IV",
       "figuresInclude": [
-        "7"
+        "3"
       ]
     },
     {
@@ -840,7 +844,7 @@
     },
     {
       "absBeat": 7.5,
-      "roman": "V",
+      "roman": "vii+",
       "figuresInclude": [
         "7"
       ]
