@@ -5462,11 +5462,65 @@ export function applyHarmonyRules(
                     // Consonant-neighbor override is only safe when the note is NOT clearly a chord tone
                     // of a confident harmonic candidate at this event. Otherwise we can end up tagging
                     // real harmonic tones (e.g. delayed 3rds in dominants) as ornaments, distorting Roman.
+                    //
+                    // Alternative path: when the note's PC is foreign to the previous event's harmony
+                    // (not a structural pitch class of the previous chord), the neighbor is valid even
+                    // if other voices move — the note is clearly non-harmonic in the prevailing key.
+                    // Alternative path: when the harmony has NOT changed between prev and cur
+                    // (the pitch-class signature of curEv, excluding the current note, equals
+                    // prevEv's signature), the note passes over a sustained chord and is
+                    // ornamental — even if chord-ID incidentally includes it.
+                    const heldHarmonyNeighbor = (() => {
+                        try {
+                            if (!prevEv || !curEv) return false;
+                            const curPc = mod12((cur as any).midi ?? 0);
+                            // Collect pitch classes sounding at the prev note's beat,
+                            // including sustained notes (beat <= prevBeat < beat + dur).
+                            const prevBeat = (prev as any).beat ?? prevEv.beat ?? 1;
+                            const soundingAtPrev = (prevEv.notes || []).filter((n: any) => {
+                                if (!n || n.isRest || !Number.isFinite(n.midi)) return false;
+                                if ((n as any).isPassing || (n as any).isNeighbor || (n as any).isEscape) return false;
+                                const nb = (n as any).beat ?? prevEv.beat ?? 1;
+                                return Math.abs(nb - prevBeat) < 0.1;
+                            });
+                            const prevPcsSig = [...new Set(soundingAtPrev.map((n: any) => mod12(n.midi)))].sort((a, b) => a - b).join('-');
+
+                            // For curEv: collect all notes sounding except the current note.
+                            // Notes sound at curBeat if they started at or before curBeat
+                            // and their duration extends past it (or they start at curBeat).
+                            // Since we only have the event's notes array (not a full timeline),
+                            // include all non-ornamental notes in the event except cur.
+                            const curPcsExcl = [...new Set((curEv.notes || [])
+                                .filter((n: any) => n && !n.isRest && Number.isFinite(n.midi))
+                                .filter((n: any) => n.id !== cur.id)
+                                .filter((n: any) => !(n as any).isPassing && !(n as any).isNeighbor && !(n as any).isEscape)
+                                .map((n: any) => mod12(n.midi))
+                            )].sort((a, b) => a - b).join('-');
+                            return !!(prevPcsSig && curPcsExcl && prevPcsSig === curPcsExcl);
+                        } catch { return false; }
+                    })();
+                    // Third path: the returning note (next = same pitch as prev) is a chord tone
+                    // of the previous event's harmony. This means curNote departs from a stable
+                    // chord tone and returns to it — a textbook neighbor regardless of what
+                    // chord-ID says about the instantaneous verticality.
+                    const returnsToPrevChordTone = (() => {
+                        try {
+                            if (!prev || !prevEv) return false;
+                            // prev must be a chord tone of prevEv
+                            if (!isChordToneOfConfidentCandidateExcludingSelf(prev, prevEv)) return false;
+                            // cur must NOT be a chord tone of prevEv — otherwise it's harmonic movement
+                            if (isChordToneOfConfidentCandidateExcludingSelf(cur, prevEv)) return false;
+                            // cur must be strictly shorter than both prev and next (ornamental by duration)
+                            const dP = getDuration(prev), dC = getDuration(cur), dN = getDuration(next);
+                            if (!(dC < dP && dC < dN)) return false;
+                            return true;
+                        } catch { return false; }
+                    })();
                     const allowConsonantNeighbor =
                         shortNeighbor &&
                         isWeakBeat(cur, curEv) &&
-                        stableOtherVoices &&
-                        !isChordToneOfConfidentCandidate(cur, curEv);
+                        (stableOtherVoices || heldHarmonyNeighbor || returnsToPrevChordTone) &&
+                        (!isChordToneOfConfidentCandidate(cur, curEv) || heldHarmonyNeighbor || returnsToPrevChordTone);
                     const treatAsNeighbor = (!curCon) || allowConsonantNeighbor;
 
                     if (treatAsNeighbor && returnsSame && stepIn && oppositeDir && shortNeighbor) {
