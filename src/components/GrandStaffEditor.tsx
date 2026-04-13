@@ -8484,10 +8484,11 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                     y={y}
                                                                                     textAnchor="middle"
                                                                                     dominantBaseline="middle"
-                                                                                    fontSize={10}
-                                                                                    fontWeight={500}
-                                                                                    fill="black"
-                                                                                    opacity={0.7}
+                                                                                    fontSize={11}
+                                                                                    fontWeight={600}
+                                                                                    fontStyle="italic"
+                                                                                    fill="#1e40af"
+                                                                                    opacity={0.85}
                                                                                 >
                                                                                     {text}
                                                                                 </text>
