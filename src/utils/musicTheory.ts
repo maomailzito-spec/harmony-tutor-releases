@@ -498,6 +498,46 @@ const spelledSimpleIntervalFromRoot = (root: any, other: any): { diatonicNumber:
     }
 };
 
+// Spelling-based root bonus for augmented triads (symmetric: all rotations match by pitch-class).
+// Uses spelled intervals to find which candidate forms a stack of major thirds (M3 + A5).
+const augSpellingRootBonus = (root: StaffNote, chordNotes: StaffNote[]): number | null => {
+    try {
+        const notes = (chordNotes || []).filter(n => n && !n.isRest);
+        if (notes.length < 3) return null;
+
+        // Expected augmented triad structure above the root: M3, A5.
+        const expected = [
+            { diatonicNumber: 3, semitones: 4, quality: 'M' },
+            { diatonicNumber: 5, semitones: 8, quality: 'A' },
+        ];
+
+        const found = new Set<number>();
+        let mismatches = 0;
+        for (const other of notes) {
+            if (!other || other === root) continue;
+            const it = spelledSimpleIntervalFromRoot(root as any, other as any);
+            if (!it) continue;
+            const idx = expected.findIndex(e => e.diatonicNumber === it.diatonicNumber && e.semitones === it.semitones && e.quality === it.quality);
+            if (idx >= 0) {
+                found.add(idx);
+            } else {
+                const collides = expected.some(e => e.diatonicNumber === it.diatonicNumber);
+                if (collides) mismatches += 1;
+            }
+        }
+
+        if (found.size === 0 && mismatches === 0) return null;
+
+        let score = 0;
+        score += found.size * 7;
+        if (found.size === 2) score += 25;
+        score -= mismatches * 3;
+        return score;
+    } catch {
+        return null;
+    }
+};
+
 const dim7SpellingRootBonus = (root: StaffNote, chordNotes: StaffNote[]): number | null => {
     try {
         const notes = (chordNotes || []).filter(n => n && !n.isRest);
@@ -1800,10 +1840,11 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
         // sonorities like fully diminished 7ths: in those cases "root=bass" is arbitrary
         // and leads to unstable/unnatural functional readings.
         const isSymmetricDim7 = candidate.type === BuiltInChords.Diminished7;
+        const isSymmetricAug = candidate.type === BuiltInChords.Augmented;
         // Important: if an exact 7th-chord interpretation exists (e.g. Dm7/F),
         // do not let an added-sixth chord (e.g. F6) win just because its root equals the bass.
         const allowBassRootBonus = !hasExactSeventhCandidate || !isSixthChord(candidate.type) || isSeventhLike(candidate.type);
-        if (!isSymmetricDim7 && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
+        if (!isSymmetricDim7 && !isSymmetricAug && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
 
         // For fully diminished 7ths, prefer a spelling-consistent root (chain of thirds)
         // when the user provided explicit spelling; otherwise fall back to a deterministic root.
@@ -1814,6 +1855,17 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
             } else {
                 const minPc = Math.min(...uniquePitches);
                 if (candidate.root.noteIndex === minPc) score += 3;
+            }
+        }
+        // For augmented triads (symmetric: all 3 rotations match), use spelling
+        // to disambiguate the root (M3 + A5 stack).
+        if (isSymmetricAug) {
+            const bonus = augSpellingRootBonus(candidate.root, uniqueNotes);
+            if (bonus != null) {
+                score += bonus;
+            } else {
+                // Fallback: prefer bass note as root when no spelling is available
+                if (bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
             }
         }
         candidate.score = score;
@@ -1973,8 +2025,9 @@ export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: 
             }
         } catch { /* ignore */ }
         const isSymmetricDim7 = candidate.type === BuiltInChords.Diminished7;
+        const isSymmetricAug = candidate.type === BuiltInChords.Augmented;
         const allowBassRootBonus = !hasExactSeventhCandidate || !isSixthChord(candidate.type) || isSeventhLike(candidate.type);
-        if (!isSymmetricDim7 && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
+        if (!isSymmetricDim7 && !isSymmetricAug && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
         if (isSymmetricDim7) {
             const bonus = dim7SpellingRootBonus(candidate.root, uniqueNotes);
             if (bonus != null) {
@@ -1982,6 +2035,14 @@ export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: 
             } else {
                 const minPc = Math.min(...uniquePitches);
                 if (candidate.root.noteIndex === minPc) score += 3;
+            }
+        }
+        if (isSymmetricAug) {
+            const bonus = augSpellingRootBonus(candidate.root, uniqueNotes);
+            if (bonus != null) {
+                score += bonus;
+            } else {
+                if (bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
             }
         }
         candidate.score = score;
@@ -3054,7 +3115,9 @@ export function getRomanAnalysis(
                     ]),
                 };
                 const roman = calculateRomanNumeral(triadInfo as any, keyInfo);
-                if (roman) return { roman, figures: figuresL2 };
+                // Skip early return for augmented triads — they are symmetric
+                // and need spelling-based disambiguation in the main path.
+                if (roman && triadType !== BuiltInChords.Augmented) return { roman, figures: figuresL2 };
             }
         }
     } catch { /* ignore */ }
