@@ -84,6 +84,8 @@ export interface CadentialMatch {
   endBeat: number;
   /** True for deceptive cadences — no tonal-context change. */
   deceptive?: boolean;
+  /** absBeat of the cadential 6/4 chord (I6/4 over dominant bass), if present. */
+  cadential64Beat?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -455,6 +457,16 @@ export function evaluateCadentialPatterns(
               if (arrivalDiatonic && !isRelativeKey && !dominantHasChromaticEvidence) continue;
             }
 
+            // Detect which slot (if any) is a cadential 6/4
+            let cad64Beat: number | undefined;
+            for (let si = 0; si < len; si++) {
+              const slot = formula.slots[si];
+              if (slot.bassInterval !== undefined && slot.intervalFromTonic === 0) {
+                cad64Beat = window[si].absBeat;
+                break;
+              }
+            }
+
             matches.push({
               targetTonicPc: candidateTonic,
               targetIsMinor: isMinorTarget,
@@ -463,6 +475,7 @@ export function evaluateCadentialPatterns(
               startBeat:     window[0].absBeat,
               endBeat:       window[len - 1].absBeat,
               deceptive:     !!(formula as any).deceptive,
+              cadential64Beat: cad64Beat,
             });
           }
         }

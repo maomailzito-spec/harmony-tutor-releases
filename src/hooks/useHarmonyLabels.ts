@@ -297,6 +297,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // ─── Cadential Pattern Recognition (Fase 1) ───
         let _effectiveCtxs: AnalysisContext[] = [...(analysisContexts || [])];
         const _pivotCandidates = new Map<number, {tonic: string, isMinor: boolean}>();
+        // Cadential 6/4 beats: relabel I6/4 → V at these beats (populated by cadential pattern recognizer)
+        const _cadential64Beats = new Set<number>();
         try {
             const _cadEnabled = typeof localStorage !== 'undefined'
                 && localStorage.getItem(CADENTIAL_PATTERN_RECOGNITION_KEY) !== '0';
@@ -372,6 +374,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (resEv != null) {
                         const _homeScale = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
                         if (_homeScale.has(resEv.rootPc)) {
+                            // Exception 0: relative major/minor shares the entire
+                            // diatonic collection — chromatic evidence is impossible.
+                            const _isRelativeKey = (
+                                (isMinorMode && !m.targetIsMinor && m.targetTonicPc === ((noteNameToPc(currentTonic) + 3) % 12)) ||
+                                (!isMinorMode && m.targetIsMinor && m.targetTonicPc === ((noteNameToPc(currentTonic) + 9) % 12))
+                            );
                             // Exception 1: active context differs from home
                             const _ctxAtCadence = _effectiveCtxs
                                 .filter(c => analysisContextAbsBeat(c) <= m.endBeat + 1e-6)
@@ -380,6 +388,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const _cadIsMinor = _ctxAtCadence ? _ctxAtCadence.newIsMinor : isMinorMode;
                             if (_cadTonic !== currentTonic || _cadIsMinor !== isMinorMode) {
                                 // Context differs from home → allow
+                            } else if (_isRelativeKey && m.confidence >= 85) {
+                                // Exception 0: relative major/minor — chromatic
+                                // evidence is impossible (shared diatonic set).
+                                // Allow if confidence is high enough (cadential 6/4 pattern).
                             } else if (m.confidence >= 85) {
                                 // Exception 2: high-confidence cadence — check for chromatic evidence
                                 // AND verify the music doesn't immediately return to the home key
@@ -425,6 +437,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     return active.newTonic !== currentTonic || active.newIsMinor !== isMinorMode;
                 };
                 for (const m of _cadMatches) {
+                    // Collect cadential 6/4 beats for label relabeling
+                    if (m.cadential64Beat != null) {
+                        _cadential64Beats.add(m.cadential64Beat);
+                    }
                     // ── Overlap guard: skip cadences whose startBeat falls
                     // inside the span of a higher-confidence cadence.
                     // This prevents a spurious low-confidence deceptive
@@ -3375,6 +3391,21 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             // Anchor label to the current timeline event's beat (not just the note's attack)
             const x = getXForAbsBeat(event.absBeat, system);
+
+            // ── Cadential 6/4 relabel: I6/4 over dominant bass → V with figures 6/4 ──
+            // The cadential pattern recognizer has confirmed this beat is a cadential 6/4.
+            // Relabel the Roman numeral from I (or equivalent) to V, and set figures to 6/4.
+            try {
+                if (_cadential64Beats.has(event.absBeat) && roman) {
+                    const cleanRoman = roman.replace(/[0-9/]/g, '').replace(/[°+ø]/g, '');
+                    const isTonicDegree = /^(I|i)$/i.test(cleanRoman) || /^(III|iii)$/i.test(cleanRoman);
+                    if (isTonicDegree) {
+                        roman = contextIsMinor ? 'V' : 'V';
+                        figures = ['6', '4'];
+                        _dt('Rcad64:relabel', roman);
+                    }
+                }
+            } catch { /* ignore */ }
 
             // ─────────────────────────────────────────────────────────────────
 
