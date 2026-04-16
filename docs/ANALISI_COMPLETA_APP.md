@@ -55,7 +55,6 @@
 - Refactor architetturale GrandStaffEditor in corso (9 hook estratti: useHarmonyLabels, useNoteEditor, usePlayback, useNoteSelection, useGrandStaffMidi, useEditorZoom, useHarmonyExplain, useMidiStepInput, useUndoableState)
 
 **Non ancora implementato (rimandabile):**
-- Windows testing (configurazione packaging presente ma non testata)
 - Feature Guitar/Scale/Chord/Interval nel flavor `grandstaff`
 
 ---
@@ -1791,7 +1790,7 @@ harmony-tutor-locale/
 - ✅ Import/export completo (MIDI, MusicXML, PDF, PNG)
 - ✅ Doppia nomenclatura: numeri romani + sigle moderne
 - ✅ Generatore di corali a 4 voci
-- ✅ Cross-platform (Mac primario, config Windows/Linux presente)
+- ✅ Cross-platform: Mac (primario) + Windows (testato, build disponibile)
 - ✅ Refactor in corso: 9 hook estratti dal monolite
 
 Il documento fornisce la base completa per:
