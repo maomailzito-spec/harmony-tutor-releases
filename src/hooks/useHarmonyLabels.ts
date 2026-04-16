@@ -363,9 +363,46 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (resEv && /dominant\s*7/i.test(resEv.quality)) return false;
                     // Reject cadences resolving to a diatonic degree of the home key:
                     // this is a secondary dominant (V/x → x), not a modulation.
+                    // EXCEPTIONS:
+                    // 1. If the active tonic at the cadence is already different
+                    //    from the home key (e.g. user override), allow the cadence.
+                    // 2. High-confidence cadences (long formulas like ii→I6/4→V→I)
+                    //    with chromatic evidence in the chord window are likely
+                    //    real modulations, not simple tonicizations.
                     if (resEv != null) {
                         const _homeScale = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
-                        if (_homeScale.has(resEv.rootPc)) return false;
+                        if (_homeScale.has(resEv.rootPc)) {
+                            // Exception 1: active context differs from home
+                            const _ctxAtCadence = _effectiveCtxs
+                                .filter(c => analysisContextAbsBeat(c) <= m.endBeat + 1e-6)
+                                .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
+                            const _cadTonic = _ctxAtCadence ? _ctxAtCadence.newTonic : currentTonic;
+                            const _cadIsMinor = _ctxAtCadence ? _ctxAtCadence.newIsMinor : isMinorMode;
+                            if (_cadTonic !== currentTonic || _cadIsMinor !== isMinorMode) {
+                                // Context differs from home → allow
+                            } else if (m.confidence >= 85) {
+                                // Exception 2: high-confidence cadence — check for chromatic evidence
+                                // AND verify the music doesn't immediately return to the home key
+                                // (which would indicate a tonicization, not a modulation).
+                                const cadenceEvts = _chEvts.filter(e =>
+                                    e.absBeat >= m.startBeat - 1e-6 && e.absBeat <= m.endBeat + 1e-6);
+                                const hasChromatic = cadenceEvts.some(e =>
+                                    (e.notePcs || []).some((pc: number) => !_homeScale.has(pc)));
+                                if (!hasChromatic) return false;
+                                // Check post-cadence: if the next 2 events are all diatonic
+                                // in the home key, it's a tonicization (immediate return).
+                                const postEvts = _chEvts.filter(e =>
+                                    e.absBeat > m.endBeat + 1e-6 && e.absBeat <= m.endBeat + beatsPerMeasure + 1e-6);
+                                if (postEvts.length >= 2) {
+                                    const allDiatonicHome = postEvts.every(e =>
+                                        (e.notePcs || []).every((pc: number) => _homeScale.has(pc)));
+                                    if (allDiatonicHome) return false;
+                                }
+                                // Has chromatic evidence + high confidence + doesn't snap back → allow
+                            } else {
+                                return false;
+                            }
+                        }
                     }
                     return true;
                 });
@@ -373,6 +410,20 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     (analysisContexts || []).filter((c: any) => c.source !== 'inferred')
                         .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
                 );
+                // Helper: is a manual context active at `beat` that sets a
+                // different tonic than the home key?  If so, we must NOT
+                // inject an inferred return-to-home at that beat.
+                const _manualContextActiveAt = (beat: number): boolean => {
+                    const manuals = (analysisContexts || [])
+                        .filter((c: any) => c.source !== 'inferred')
+                        .filter(c => analysisContextAbsBeat(c) <= beat + 1e-6)
+                        .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a));
+                    if (!manuals.length) return false;
+                    const active = manuals[0];
+                    // The manual context is "active" and non-home if its tonic
+                    // differs from the global key.
+                    return active.newTonic !== currentTonic || active.newIsMinor !== isMinorMode;
+                };
                 for (const m of _cadMatches) {
                     // ── Overlap guard: skip cadences whose startBeat falls
                     // inside the span of a higher-confidence cadence.
@@ -415,7 +466,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     _pivotCandidates.set(nextAfterDec.absBeat,
                                         { tonic: _decTonic, isMinor: _decMinor });
                                 }
-                                if (!_manualBeats.has(nextAfterDec.absBeat)) {
+                                if (!_manualBeats.has(nextAfterDec.absBeat) && !_manualContextActiveAt(nextAfterDec.absBeat)) {
                                     _effectiveCtxs.push({
                                         absBeat: nextAfterDec.absBeat,
                                         newTonic: currentTonic,
@@ -458,7 +509,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     && other.startBeat <= returnBeat + 1e-6
                                     && other.endBeat >= returnBeat - 1e-6,
                             );
-                            if (!coveredByNext && !_manualBeats.has(returnBeat)) {
+                            if (!coveredByNext && !_manualBeats.has(returnBeat) && !_manualContextActiveAt(returnBeat)) {
                                 _effectiveCtxs.push({
                                     absBeat: returnBeat,
                                     newTonic: currentTonic,
@@ -527,7 +578,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             _pivotCandidates.set(_nextAfterRes.absBeat,
                                 { tonic: pcToNoteName(targetPc), isMinor: targetIsMinor });
                         }
-                        if (!_manualBeats.has(_nextAfterRes.absBeat)) {
+                        if (!_manualBeats.has(_nextAfterRes.absBeat) && !_manualContextActiveAt(_nextAfterRes.absBeat)) {
                             _effectiveCtxs.push({
                                 absBeat: _nextAfterRes.absBeat,
                                 newTonic: currentTonic,
@@ -2344,7 +2395,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Guard: if a tonicization context would reassign the home key's
             // tonic triad (I/i) or dominant 7th (V7/V9), fall back to the global key.
             // These chords are too structurally important to be relabeled.
-            if (applicableContext && (contextTonic !== currentTonic || contextIsMinor !== isMinorMode)) {
+            // EXCEPTION: manual contexts (user overrides) are always respected.
+            if (applicableContext && (contextTonic !== currentTonic || contextIsMinor !== isMinorMode)
+                && (applicableContext as any).source !== undefined && (applicableContext as any).source !== 'manual') {
                 const _gR = getRomanAnalysis(analysisNotes as any, currentTonic, isMinorMode, { ornamentOverrides: ornOverrideRecord });
                 const _gRoman = String(_gR?.roman || '');
                 if (/^(I|i)(6|64)?$/.test(_gRoman)) {

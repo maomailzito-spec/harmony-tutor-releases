@@ -7903,6 +7903,17 @@ export function applyHarmonyRules(
                     const ctxAtB = getContextAtAbsBeatInferred(b.absBeat);
                     if (String(ctxAtB.tonic || '') === String(keyTonic || '')) return false;
 
+                    // Block return-to-home if a manual context with a non-home
+                    // tonic is still active at this beat.
+                    const activeManual = (analysisContexts || [])
+                        .filter(c => (c as any).source !== 'inferred')
+                        .filter(c => ctxAbsBeat(c) <= b.absBeat + 1e-6)
+                        .sort((x, y) => ctxAbsBeat(y) - ctxAbsBeat(x))[0];
+                    if (activeManual
+                        && (activeManual.newTonic !== keyTonic || activeManual.newIsMinor !== isMinor)) {
+                        return false;
+                    }
+
                     // Require a tight cadence window.
                     if ((b.absBeat - a.absBeat) > 2.01) return false;
 
@@ -8511,6 +8522,22 @@ export function applyHarmonyRules(
                 // Skip if a user context already starts here.
                 const hasManualCtxHere = (analysisContexts || []).some(c => Math.abs(ctxAbsBeat(c) - b.absBeat) < 1e-6);
                 if (hasManualCtxHere) continue;
+
+                // Skip if a manual context is active at this beat and sets a
+                // different tonic than the home key.  An inferred return-to-home
+                // must never override an explicit user modulation override.
+                const isReturnToGlobalInference = String(inferredTonic || '') === String(keyTonic || '')
+                    && !!inferredIsMinor === !!isMinor;
+                if (isReturnToGlobalInference) {
+                    const activeManual = (analysisContexts || [])
+                        .filter(c => (c as any).source !== 'inferred')
+                        .filter(c => ctxAbsBeat(c) <= b.absBeat + 1e-6)
+                        .sort((x, y) => ctxAbsBeat(y) - ctxAbsBeat(x))[0];
+                    if (activeManual
+                        && (activeManual.newTonic !== keyTonic || activeManual.newIsMinor !== isMinor)) {
+                        continue;
+                    }
+                }
 
                 // (Diatonic-fit checks already performed in bestCand selection)
 
@@ -10376,17 +10403,24 @@ export function applyHarmonyRules(
                         // arrInterval: 0 = I, 9 = vi (major), 8 = vi (minor)
                         const isTonicChord = arrInterval === 0;
                         const isVI = ctx.isMinor ? arrInterval === 8 : arrInterval === 9;
-                        if (!isTonicChord && !isVI) {
-                            // Non-cadential destination: leading tone is free
+                        if (!isTonicChord) {
+                            // Non-I destination: leading tone is free.
+                            // V→vi (deceptive cadence) is NOT V→I, so the
+                            // leading tone has no obligation to resolve to tonic.
                             const stepDown = (n1.midi ?? 0) - (n2.midi ?? 0);
-                            const descr = (stepDown >= 1 && stepDown <= 2)
-                                ? 'Risoluzione libera della sensibile (discesa per grado congiunto)'
-                                : 'Risoluzione libera della sensibile';
+                            const descr = isVI
+                                ? 'Risoluzione libera della sensibile (cadenza d\'inganno)'
+                                : (stepDown >= 1 && stepDown <= 2)
+                                    ? 'Risoluzione libera della sensibile (discesa per grado congiunto)'
+                                    : 'Risoluzione libera della sensibile';
+                            const suggestion = isVI
+                                ? 'V→vi: la cadenza d\'inganno non è V→I, la sensibile non ha obbligo di risoluzione sulla tonica.'
+                                : 'L\'accordo di destinazione non è I: la sensibile è melodicamente libera in contesto non cadenzale.';
                             addViolation({
                                 ruleId: 'EXC-LT-FREE',
                                 severity: 'exception',
                                 description: descr,
-                                suggestion: 'L\'accordo di destinazione non è I né vi: la sensibile è melodicamente libera in contesto non cadenzale.',
+                                suggestion,
                                 noteIds: [n1.id, n2.id],
                             });
                             handledLeadingToneIds.add(n1.id);
