@@ -45,16 +45,18 @@
 | Completezza funzionale | ~90% |
 | Build status | Buildable (npm run build) |
 | Electron app | Avviabile (`npm run electron:dev`) |
-| Test regression | 44/44 test passing |
-| Corpus analisi | 216 file (213 analizzati) |
-| Stato commerciale | Beta, no installer, release target: aprile 2026 |
+| Test regression | 241 OK / 3 FAIL (pre-esistenti) |
+| Corpus analisi | ~356 file (test .htp + .json) |
+| Stato commerciale | Beta, release target: aprile 2026 |
+
+**Implementato di recente:**
+- MusicXML import/export funzionante
+- Modal switch (override tonica modale in UI)
+- Refactor architetturale GrandStaffEditor in corso (9 hook estratti: useHarmonyLabels, useNoteEditor, usePlayback, useNoteSelection, useGrandStaffMidi, useEditorZoom, useHarmonyExplain, useMidiStepInput, useUndoableState)
 
 **Non ancora implementato (rimandabile):**
-- Windows testing/packaging
-- MusicXML importer (solo export per ora)
+- Windows testing (configurazione packaging presente ma non testata)
 - Feature Guitar/Scale/Chord/Interval nel flavor `grandstaff`
-- Modal switch (modo attivo in UI)
-- Refactor architetturale GrandStaffEditor (pianificato post-beta)
 
 ---
 
@@ -74,7 +76,7 @@
 
 ### 2.1 Versione Electron
 
-- **Framework:** Electron 27+ (versione stabile)
+- **Framework:** Electron 39 (versione stabile)
 - **Main process:** `electron/main.js` (gestione menu, IPC, file I/O)
 - **Preload:** `electron/preload.js` (API bridge sicuro)
 - **Renderer:** React app compilata dentro Chromium
@@ -122,7 +124,7 @@ Attualmente non esposta al web pubblico. Architettura supporta facile adattament
 
 | Componente | File | Responsabilità |
 |---|---|---|
-| **GrandStaffEditor** | `src/components/GrandStaffEditor.tsx` | "God component" principale — gestisce stato note, selezione, playback, undo/redo, IPC menu. ~8600 righe |
+| **GrandStaffEditor** | `src/components/GrandStaffEditor.tsx` | Componente principale — gestisce stato note, selezione, IPC menu. ~8800 righe (in fase di split verso hook dedicati) |
 | **VexflowGrandStaff** | `src/components/VexflowGrandStaff.tsx` | Rendering SVG pentagramma + note tramite VexFlow |
 | **HarmonyAnalysisPanel** | `src/components/HarmonyAnalysisPanel.tsx` | Pannello laterale analisi armonica, filtri, ricerca regole |
 | **GrandStaffToolbar** | `src/components/GrandStaffToolbar.tsx` | Toolbar controlli (voce, durate, alterazioni, tonalità, tempo) |
@@ -138,11 +140,15 @@ Attualmente non esposta al web pubblico. Architettura supporta facile adattament
 
 | Hook | File | Funzione |
 |---|---|---|
-| **useHarmonyLabels** | `src/hooks/useHarmonyLabels.ts` | Calcolo numeri romani + basso figurato (R0–R14 pipeline). ~5000 righe |
-| **useNoteEditor** | `src/hooks/useNoteEditor.ts` | Gestione inserimento note (click, ghost note, validazioni) |
-| **usePlayback** | `src/hooks/usePlayback.ts` | Riproduzione audio (Web Audio API, sincronizzazione timeline) |
+| **useHarmonyLabels** | `src/hooks/useHarmonyLabels.ts` | Calcolo numeri romani + basso figurato, cadential patterns, lookahead, context management. ~5000 righe |
+| **useNoteEditor** | `src/hooks/useNoteEditor.ts` | Operazioni editing su note selezionate (applyEdit, accidentali, dotted, durata) |
+| **usePlayback** | `src/hooks/usePlayback.ts` | Riproduzione audio (Web Audio API, sincronizzazione timeline, metronomo) |
 | **useNoteSelection** | `src/hooks/useNoteSelection.ts` | Selezione note (marquee, single-click, filtro per voce) |
 | **useGrandStaffMidi** | `src/hooks/useGrandStaffMidi.ts` | MIDI input/output, mappatura voce→canale |
+| **useEditorZoom** | `src/hooks/useEditorZoom.ts` | Gestione zoom (pinch, scroll, toolbar) |
+| **useHarmonyExplain** | `src/hooks/useHarmonyExplain.ts` | Logica modale spiegazione accordo (click su label) |
+| **useMidiStepInput** | `src/hooks/useMidiStepInput.ts` | Input note step-by-step da tastiera MIDI |
+| **useUndoableState** | `src/hooks/useUndoableState.ts` | Wrapper undo/redo per stato React |
 | **usePreference** | `src/preferences/usePreference.ts` | Gestione preferenze utente (localStorage) |
 
 ---
@@ -533,80 +539,84 @@ Ogni voce può essere assegnata uno strumento MIDI diverso:
 
 ## 10. ANALISI ARMONICA — IL CUORE DELL'APP
 
-### 10.1 Pipeline di Analisi Completa (8 Blocchi)
+### 10.1 Pipeline di Analisi Completa (9 Blocchi)
 
-L'analisi trasforma un `StaffNote[]` grezzo in etichette armoniche visualizzate sotto il pentagramma tramite una **pipeline in 8 blocchi sequenziali**.
+L'analisi trasforma un `StaffNote[]` grezzo in etichette armoniche visualizzate sotto il pentagramma tramite una **pipeline in 9 blocchi**. I primi blocchi (1–4) operano nell'**engine** (`musicTheory.ts` → `applyHarmonyRules`), i successivi (5–8) nel **hook** (`useHarmonyLabels.ts`), l'ultimo (9) nel rendering React.
 
 #### **Blocco 1: Input (Raw)**
 - **Source:** `GrandStaffEditor.tsx` → `StaffNote[]` (stato React undoable)
 - **Operazione:** `calculateNoteBeats()` assegna `measureIndex` + `beat` a ogni nota
 - **Output:** `StaffNote[]` con timeline definita, `analysisContexts` (lista delle tonalità attive)
 
-#### **Blocco 2: VexFlow Rendering**
+#### **Blocco 2: VexFlow Rendering** *(parallelo)*
 - **Source:** `VexflowGrandStaff.tsx` `useEffect`
 - **Operazione:** crea `Renderer` SVG, disegna staves, note, beam, legature
 - **Output:** `layoutData` (mappa coordinate x per ogni beat, per posizionamento etichette)
 
-#### **Blocco 3: Timeline & Ornament Detector (2 pass)**
-- **Source:** `musicTheory.ts` → `getActiveNotesTimeline()`, `applyHarmonyRules()`
+#### **Blocco 3: Engine — Timeline, Ornamenti e Regole SATB**
+- **Source:** `musicTheory.ts` → `applyHarmonyRules()` (punto di ingresso unico)
+- **Operazione** (sotto-fasi interne ad `applyHarmonyRules`):
+  1. **Timeline:** `getActiveNotesTimeline()` scansiona ogni punto temporale, raggruppa note simultanee in fette verticali
+  2. **Ornament Detector — 1° pass:** pattern contestuali (passaggio, volta, appoggiatura, anticipazione, sfuggita, sospensione) identificati per posizione metrica e contorno melodico
+  3. **Ornament Detector — 2° pass:** `isConsonantToHarmony()` valuta consonanza delle note ambigue rispetto all'accordo, usando solo le note già classificate come strutturali al 1° pass
+  4. **Regole SATB:** applica R-01…R-18 + regole estese (R-AUG6-RES, R-CAD64, R-CHORD-COMPLETE, R-N-RES, R-RANGE, R-SPACING-TB) + 20 eccezioni (EXC-*). Produce `RuleViolation[]` con severità error/warning/exception
+  5. **Inferenza modulazioni:** rileva cadenze V→I su toniche candidate, genera `inferredAnalysisContexts` con back-propagation e return-to-home
+- **Output:** `analyzedNotes[]` (flag ornamento), `violations[]`, `inferredAnalysisContexts[]`, `autoHarmonyLabelOverrides[]`
+- **Nota:** L'output dell'engine viene calcolato nel `useMemo` di `GrandStaffEditor.tsx` e passato al hook `useHarmonyLabels`
+
+#### **Blocco 4: Identificazione Accordo + Numeri Romani**
+- **Source:** `musicTheory.ts` → `getRomanAnalysis()` (chiamata dal hook `useHarmonyLabels.ts`)
+- **Operazione** (sotto-fasi interne a `getRomanAnalysis`):
+  1. `identifyChordCandidates()`: analisi basata su **spelling** (nomi note, non solo MIDI), calcola pile di terze (`collectIntervalsAboveBass()`), restituisce candidati `{ root, quality, inversion, score }[]` ordinati per plausibilità
+  2. `calculateRomanFromChordInfo()`: traduce il candidato migliore in grado romano rispetto alla tonalità del contesto corrente (`analysisContext`). Gestisce dominanti secondarie (V/x, vii°/x), accordi incompleti, bassi senza radice, sospensioni
+  3. **Corpus bias** (ultimo step): `progressionStats.json` disambigua tra candidati con score ravvicinato tramite bigram statistici
+- **Output:** `{ roman, figures, aug6Variants }` per ogni fetta verticale
+- **Nota:** `getRomanAnalysis` è definita in `musicTheory.ts` ma viene **chiamata** per ogni evento della timeline dal hook `useHarmonyLabels.ts`, con la tonalità attiva determinata da `effectiveAnalysisContexts` (manuali + inferiti)
+
+#### **Blocco 5: Cadential Patterns** *(opzionale)*
+- **Source:** `cadentialPatterns.ts` → `evaluateCadentialPatterns()`, chiamata nel hook `useHarmonyLabels.ts`
 - **Operazione:**
-  - Scansione **ogni punto temporale** (inizio/fine nota)
-  - Raggruppamento note simultanee in **fette verticali**
-  - **1° pass:** pattern ovvi (passaggio, volta, appoggiatura, anticipazione, sfuggita, sospensione)
-  - **2° pass:** `isConsonantToHarmony()` — filtra note ornamentali, usa solo note "armoniche" per accordo
-- **Output:** `analyzedNotes[]` (flag ornamento), `violations[]` (iniziale)
+  - Finestra scorrevole di formule cadenziali (V→I, ii→V→I, I6/4→V→I, vii°→I, ecc.) con confidence 55–95
+  - Testata su 12 toniche candidate (maggiore e minore)
+  - Genera contesti temporanei di tonicizzazione/modulazione con return-to-home automatico
+  - Filtro anti-falsi-positivi: rigetta cadenze su gradi diatonici (tranne alta confidence + evidenza cromatica + permanenza nella nuova tonalità)
+- **Output:** `_effectiveCtxs[]` aggiornato con contesti inferiti (tonicizzazioni cadenziali)
 
-#### **Blocco 4: Identificazione Accordo**
-- **Source:** `musicTheory.ts` → `identifyChordCandidates()`
+#### **Blocco 6: Lookahead Tonicizzazioni** *(opzionale)*
+- **Source:** `harmonyLabelPipeline.ts` → `computeLookaheadTonicizationOverrides()`, chiamata nel hook
 - **Operazione:**
-  - Analisi basata su **spelling** (nomi note, non solo MIDI)
-  - Calcola pile di terze (`collectIntervalsAboveBass()`)
-  - Restituisce candidati ordinati per plausibilità
-- **Output:** `{ root, quality, inversion, score }[]` ordinati per score
+  - Lookback: quando il contesto cambia, guarda fino a 2 beat indietro per rietichettare gli accordi pre-modulazione nella nuova tonalità (es. bVII → V in F)
+  - Lookahead: cerca V/x nella timeline e verifica che il bersaglio x appaia entro 2 misure
+  - Pivot labels: genera etichette doppie (es. `vi=IV`) ai confini di modulazione
+- **Output:** `autoRomanDisplayByAbsBeat` (pivot labels visuali), `autoOverrideByAbsBeat`
 
-#### **Blocco 5: Calcolo Numeri Romani**
-- **Source:** `useHarmonyLabels.ts` → `getRomanAnalysis()`
-- **Operazione:**
-  - Per ogni fetta: identificazione accordo nel contesto tonalità attiva
-  - Gestisce: dominanti secondarie (V/x, vii°/x), accordi incompleti, bassi senza radice, sospensioni
-  - **R0–R14 pipeline** (14 step di disambiguazione, ultimo step usa corpus bigram)
-- **Output:** `{ roman, figures, root }`
-
-#### **Blocco 5a: Cadential Patterns (Opzionale)**
-- **Source:** `cadentialPatterns.ts` → `evaluateCadentialPatterns()`
-- **Operazione:**
-  - Finestra scorrevole formule cadenziali (V→I, ii→V→I, vii°→I, ecc.)
-  - Testata su 12 toniche candidate
-- **Output:** `CadentialMatch[]` → contesti temporanei (se enabled)
-
-#### **Blocco 5b: Lookahead Tonicizzazioni (Opzionale)**
-- **Source:** `harmonyLabelPipeline.ts` → `computeLookaheadTonicizationOverrides()`
-- **Operazione:** guarda 2 misure avanti per rilevare tonicizzazioni (V/x → x)
-- **Output:** `autoRomanDisplayByAbsBeat` (pivot labels visuali)
-
-#### **Blocco 6: Regole SATB**
-- **Source:** `musicTheory.ts` → `applyHarmonyRules()`
-- **Operazione:** applica R-01…R-17 + regole estese. Produce `RuleViolation[]` con severità error/warning/exception
-- **Output:** `RuleViolation[]` (violazioni caricate in panel UI)
-
-#### **Blocco 7: Sequence Detection (Opzionale)**
-- **Source:** `sequenceDetector.ts` → `detectVoiceLeadingSequences()`
+#### **Blocco 7: Sequence Detection** *(opzionale)*
+- **Source:** `sequenceDetector.ts` → `detectVoiceLeadingSequences()`, chiamata nel hook
 - **Operazione:**
   - Costruisce snapshot intervallari tick-per-tick
   - Matcha modelli + copie trasposte
   - Riconosce sequenze imitate (imitazioni armoniche)
+  - Può generare contesti modulanti per-ripetizione
 - **Output:** `sequenceRoman`, `sequenceRomanFunctional` (etichette aggiuntive)
 
-#### **Blocco 8: Label Rendering (UI)**
+#### **Blocco 8: Harmony Overrides + Label Assembly**
+- **Source:** `useHarmonyLabels.ts` (loop principale di assemblaggio)
+- **Operazione:**
+  - Applica override utente (click destro → forza etichetta) dopo tutto il resto
+  - Applica override engine (`autoHarmonyLabelOverrides` da `applyHarmonyRules`)
+  - Assembla label finale con priorità: `userOverride > autoRomanDisplay > sequenceRomanFunctional > roman`
+  - Filtro bass-driven stability: evita di rietichettare se il basso non cambia
+  - Guard anti-relabel: impedisce che contesti inferiti rietichettino I/i e V7 della tonalità globale (skip per contesti manuali)
+- **Output:** `harmonyLabelsBySystemSequenced[]` (label finali per sistema)
+
+#### **Blocco 9: Label Rendering (UI)**
 - **Source:** `GrandStaffEditor.tsx` + `HarmonyAnalysisPanel.tsx`
-- **Operazione:** priorità visualizzazione accordi:
-  ```
-  romanDisplay
-    ?? sequenceRomanFunctional  (se sequenza detected)
-    ?? seqRoman                 (se sequence matching)
-    ?? roman                    (default)
-  ```
-- **Output:** etichette under staff + panel analisys violations
+- **Operazione:**
+  - Posiziona etichette sotto il pentagramma usando `layoutData` (coordinate x dal VexFlow rendering)
+  - Disegna: numero romano + figured bass + eventuale sigla moderna + marker cadenzale/ornamentale
+  - Visualizza badge violazioni nel pannello warnings con link alle note coinvolte
+  - Applica filtri di visualizzazione (toggle utente: roman, symbol, measure numbers)
+- **Output:** etichette under staff + panel analysis violations
 
 ---
 
@@ -1671,7 +1681,7 @@ harmony-tutor-locale/
 │   │   └── usePreference.ts              # Hook preferenze
 │   ├── components/
 │   │   ├── App.tsx                       # Router principale
-│   │   ├── GrandStaffEditor.tsx          # God component editor (8600+ righe)
+│   │   ├── GrandStaffEditor.tsx          # Componente principale editor (~8800 righe, in fase di split)
 │   │   ├── VexflowGrandStaff.tsx         # Rendering VexFlow
 │   │   ├── HarmonyAnalysisPanel.tsx      # Pannello analisi
 │   │   ├── GrandStaffToolbar.tsx         # Toolbar
@@ -1680,14 +1690,22 @@ harmony-tutor-locale/
 │   │   ├── TimeSignatureControl.tsx
 │   │   ├── PreferencesModal.tsx
 │   │   ├── RomanProgressionEditor.tsx
+│   │   ├── HarmonyLabelExplainModal.tsx  # Modale spiegazione accordo
+│   │   ├── HarmonyOverrideContextMenu.tsx # Menu override etichette
+│   │   ├── ModulationContextMenu.tsx     # Menu modulazioni
+│   │   ├── MainEditor.tsx               # Wrapper editor principale
+│   │   ├── icons/                       # Componenti icone SVG (12+)
 │   │   └── [altri componenti]
 │   ├── hooks/
-│   │   ├── useHarmonyLabels.ts           # Calcolo numeri romani (5000+ righe)
-│   │   ├── useNoteEditor.ts
-│   │   ├── usePlayback.ts
-│   │   ├── useNoteSelection.ts
-│   │   ├── useGrandStaffMidi.ts
-│   │   └── usePreference.ts
+│   │   ├── useHarmonyLabels.ts           # Calcolo numeri romani (~5000 righe)
+│   │   ├── useNoteEditor.ts              # Editing note (applyEdit, accidentali, dotted)
+│   │   ├── usePlayback.ts                # Riproduzione audio + metronomo
+│   │   ├── useNoteSelection.ts           # Selezione note (marquee, filtro voce)
+│   │   ├── useGrandStaffMidi.ts          # MIDI I/O
+│   │   ├── useEditorZoom.ts              # Gestione zoom
+│   │   ├── useHarmonyExplain.ts          # Modale spiegazione accordo
+│   │   ├── useMidiStepInput.ts           # Input step-by-step MIDI
+│   │   └── useUndoableState.ts           # Wrapper undo/redo
 │   ├── utils/
 │   │   ├── musicTheory.ts                # Core analisi (12000+ righe)
 │   │   ├── harmonyLabelPipeline.ts
@@ -1714,16 +1732,24 @@ harmony-tutor-locale/
 │   ├── services/
 │   │   ├── AudioService.ts               # Web Audio API
 │   │   └── electronBridge.ts
+│   ├── storage/
+│   │   ├── localStorage.ts              # Wrapper localStorage tipizzato
+│   │   ├── localStorageMigrations.ts     # Migrazioni schema storage
+│   │   ├── projectSchema.ts             # Schema progetto .htp/.json
+│   │   └── storageKeys.ts               # Chiavi localStorage centralizzate
 │   ├── controllers/
-│   │   └── MenuEditController.ts
+│   │   ├── MenuEditController.ts
+│   │   ├── grandStaffProjectIOAdapter.ts  # Adapter I/O progetto
+│   │   └── useMenuStateSync.ts           # Sync stato menu Electron
 │   ├── contracts/
 │   │   ├── menuActionRuntime.ts
 │   │   └── menuActionTargets.ts
 │   ├── data/
 │   │   ├── constants.ts
-│   │   ├── ornamentPatterns.json
-│   │   ├── progressionStats.json
-│   │   └── defaultStyleProfile.json
+│   │   ├── ornamentPatterns.ts            # Pattern ornamentali (TypeScript)
+│   │   ├── ornamentLearning.json         # Dati apprendimento ornamenti
+│   │   ├── progressionStats.json         # Corpus bigram statistici
+│   │   └── guitarVoicings.ts             # Voicing chitarra
 │   └── App.tsx, main.tsx
 ├── electron/
 │   ├── main.js                           # Process principale Electron
@@ -1731,9 +1757,10 @@ harmony-tutor-locale/
 │   └── [resources]
 ├── shared/
 │   ├── menuActionRegistry.ts             # Registry azioni menu (tipizzato)
+│   ├── menuStateRegistry.ts              # Registry stato menu
 │   ├── ipcChannels.ts                    # Costanti IPC
 │   └── [tipi shared]
-├── tests/                                # Corpus regression (216 file .json/.htp)
+├── tests/                                # Corpus regression (~356 file .json/.htp)
 │   ├── bach-*.json
 │   ├── dubois-*.json
 │   └── [...]
@@ -1757,13 +1784,15 @@ harmony-tutor-locale/
 **Harmony Tutor** è un'applicazione software **professionale per l'educazione musicale**, basata su un motore di analisi armonica articolato e "spelling-first" che lo rende superiore a soluzioni legacy (Harmony Practice) e concorrenti contemporanei.
 
 **Punti salienti:**
-- ✅ 90% di completezza funzionale
-- ✅ Architettura robusta (TypeScript, Electron, VexFlow)
-- ✅ 14-step pipeline di analisi armonica con corpus interattivo
-- ✅ 40+ regole SATB con eccezioni articolate
-- ✅ Support import/export (MIDI, MusicXML, PDF, PNG)
-- ✅ Cross-platform (Mac, Windows, Linux)
-- ✅ Pronto per commercializzazione (beta aprile 2026, release maggio 2026)
+- ✅ ~95% di completezza funzionale
+- ✅ Architettura robusta (TypeScript, Electron 39, VexFlow 4)
+- ✅ Pipeline di analisi armonica a 9 blocchi con corpus interattivo
+- ✅ 26 regole SATB + 20 eccezioni documentate (47 codici distinti)
+- ✅ Import/export completo (MIDI, MusicXML, PDF, PNG)
+- ✅ Doppia nomenclatura: numeri romani + sigle moderne
+- ✅ Generatore di corali a 4 voci
+- ✅ Cross-platform (Mac primario, config Windows/Linux presente)
+- ✅ Refactor in corso: 9 hook estratti dal monolite
 
 Il documento fornisce la base completa per:
 - **Manuale utente:** dettagli su ogni feature, shortcut, menu
@@ -1773,7 +1802,7 @@ Il documento fornisce la base completa per:
 ---
 
 **Fine Analisi Completa**
-Documento generato: Marzo 2026
+Documento generato: Marzo 2026 — Ultimo aggiornamento: Aprile 2026
 Per informazioni: Erminio (Mauri), Milano
 
 
