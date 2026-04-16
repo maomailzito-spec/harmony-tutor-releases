@@ -54,8 +54,8 @@
 - Modal switch (override tonica modale in UI)
 - Refactor architetturale GrandStaffEditor in corso (9 hook estratti: useHarmonyLabels, useNoteEditor, usePlayback, useNoteSelection, useGrandStaffMidi, useEditorZoom, useHarmonyExplain, useMidiStepInput, useUndoableState)
 
-**Non ancora implementato (rimandabile):**
-- Feature Guitar/Scale/Chord/Interval nel flavor `grandstaff`
+**Fuori scope (app separata in sviluppo):**
+- Feature Guitar/Scale/Chord/Interval — previste come app standalone, non integrate in Harmony Tutor
 
 ---
 
