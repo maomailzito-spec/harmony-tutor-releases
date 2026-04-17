@@ -83,6 +83,9 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
                         }));
         }
 
+        return { ...(args.projectExtrasRef.current || {}), ...baseProject };
+}
+
 export type ApplyGrandStaffProjectIOCommandArgs = {
 	projectExtrasRef: { current: Record<string, unknown> };
 
