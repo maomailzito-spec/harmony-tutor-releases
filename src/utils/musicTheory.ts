@@ -7423,10 +7423,17 @@ export function applyHarmonyRules(
 
             const aS = a.byVoice.get(1);
             const bS = b.byVoice.get(1);
+            // Append local tonality when it differs from home key
+            const _localCtx = getContextAtAbsBeat(b.absBeat);
+            let _descr = description;
+            if (_localCtx.tonic !== keyTonic || _localCtx.isMinor !== isMinor) {
+                const _mode = _localCtx.isMinor ? 'minore' : 'maggiore';
+                _descr = description + ` · in ${_localCtx.tonic} ${_mode}`;
+            }
             addViolation({
                 ruleId,
                 severity: 'exception',
-                description,
+                description: _descr,
                 suggestion,
                 noteIds: withEndpoints([aS?.id, bS?.id].filter(Boolean) as string[], aBass.id, bBass.id),
             });
