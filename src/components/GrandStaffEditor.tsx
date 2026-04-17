@@ -6432,6 +6432,51 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
+            // Alt/Option+M: switch staff layout from the playhead onward.
+            // Notes BEFORE the playhead receive a clefOverride = their current
+            // rendered clef (so they stay fixed in the previous layout), then
+            // staffLayoutMode flips. New notes from the playhead onward will
+            // be drawn with the new layout.
+            if (!isMod && e.altKey && e.code === 'KeyM') {
+                e.preventDefault();
+                e.stopPropagation();
+                const ph = playheadPositionRef.current;
+                const ld: any = layoutDataRef.current;
+                const starts = ld?.measureStartAbsBeat as number[] | undefined;
+                const beatsArr = ld?.measureBeatsPerMeasure as number[] | undefined;
+                // Determine cutoff absBeat from playhead's current measure.
+                let cutoffAbsBeat = 0;
+                try {
+                    if (ph && ld?.systemsParams) {
+                        const sysParams = ld.systemsParams[ph.systemIndex];
+                        if (sysParams) {
+                            let bestIdx = 0;
+                            let bestDist = Infinity;
+                            for (let i = 0; i < (sysParams.startMeasuresX || []).length; i++) {
+                                const x = sysParams.startMeasuresX[i] ?? 0;
+                                const dist = Math.abs(x - ph.x);
+                                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+                            }
+                            const m = sysParams.measureIndices[bestIdx] ?? 0;
+                            cutoffAbsBeat = (starts && starts[m] != null) ? Number(starts[m]) : m * (timeSignature.numerator * (4 / timeSignature.denominator));
+                        }
+                    }
+                } catch { /* ignore */ }
+
+                setRawNotes(prev => prev.map(n => {
+                    const baseBeats = (beatsArr && beatsArr[n.measureIndex ?? 0]) || (timeSignature.numerator * (4 / timeSignature.denominator));
+                    const mStart = (starts && starts[n.measureIndex ?? 0] != null) ? Number(starts[n.measureIndex ?? 0]) : (n.measureIndex ?? 0) * baseBeats;
+                    const noteAbs = mStart + ((n.beat ?? 1) - 1);
+                    if (noteAbs >= cutoffAbsBeat - 1e-6) return n;
+                    // Fix past notes on their current clef (if not already fixed)
+                    if ((n as any).clefOverride) return n;
+                    const currentClef = clefForVoice(n.voice);
+                    return { ...n, clefOverride: currentClef };
+                }));
+                setStaffLayoutMode(prev => prev === 'parti_late' ? 'parti_strette' : 'parti_late');
+                return;
+            }
+
             // Space: always toggle playback (avoid requiring focus on the Play button)
             if (!isMod && (key === ' ' || key === 'spacebar')) {
                 e.preventDefault();

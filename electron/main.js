@@ -424,6 +424,7 @@ function createMenu() {
         '',
         'GRAND STAFF (Editor)',
         '• Alt/Option+L  Cicla layout righi (grandstaff ↔ SATB antiche ↔ treble-only)',
+        '• Alt/Option+M  Cambia parti late/strette da playhead in avanti (fissa il passato)',
         '• Alt/Option+T  Mostra/nascondi toolbar',
         '• Space  Play/stop',
         '• ArrowLeft/ArrowRight  Sposta playhead (Shift = passo più fine)',
