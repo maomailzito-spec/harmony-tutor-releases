@@ -4990,7 +4990,7 @@ export function applyHarmonyRules(
 
                     // Mark as passing directly — the held-chord context is unambiguous.
                     cur.isPassing = true;
-                    (cur as any).ornamentMark = 'P';
+                    (cur as any).ornamentMark = 'p';
                     // Clear any prior appoggiatura classification that the earlier loop set.
                     if ((cur as any).isAppoggiatura) (cur as any).isAppoggiatura = false;
                     continue;
@@ -5069,7 +5069,7 @@ export function applyHarmonyRules(
                 if (curIsChordToneOfOwnEvent && !isShortNonHarmonic) continue;
                 if (prevConsonant && nextConsonant && (((!curConsonant) && !curInPrevOrNext) || isShortNonHarmonic)) {
                     cur.isPassing = true;
-                    (cur as any).ornamentMark = 'P';
+                    (cur as any).ornamentMark = 'p';
                     // Passing-note classification should dominate over ornament heuristics.
                     // Clear any ornament flags and remove ORN-* panel entries that reference this note.
                     try {
@@ -5782,13 +5782,14 @@ export function applyHarmonyRules(
                             if (_interval === 10 || _interval === 11) {
                                 _passing7th = true;
                                 (cur as any).isPassing = true;
-                                (cur as any).ornamentMark = 'P';
+                                (cur as any).ornamentMark = 'p';
                             }
                         }
                     }
 
                     if (!_passing7th && (unknownIn || leapIn || stepIn || prepared) && stepOut) {
                         (cur as any).isAppoggiatura = true;
+                        (cur as any).ornamentMark = 'a';
                         // Store resolution note info so downstream chord-ID can
                         // substitute the ornament with its resolution pitch.
                         if (next && Number.isFinite(next.midi)) {
@@ -6032,7 +6033,7 @@ export function applyHarmonyRules(
                     // Same-direction stepwise motion under a held upper chord -> passing (bass)
                     if (!isChordToneAgainstAnchor) {
                         (cur as any).isPassing = true;
-                        (cur as any).ornamentMark = 'P';
+                        (cur as any).ornamentMark = 'p';
                     }
                     // No analysis-panel entry; this is a label-stability aid.
                     continue;
@@ -6978,9 +6979,11 @@ export function applyHarmonyRules(
                     resolvedAccidental: (resolved as any).accidental ?? '',
                 };
                 (prep as any).isSuspension = suspPayload;
+                (prep as any).ornamentMark = 'r';
                 try {
                     if (S && S.id && prep.id && S.id !== prep.id) {
                         (S as any).isSuspension = suspPayload;
+                        (S as any).ornamentMark = 'r';
                     }
                 } catch { /* ignore */ }
                 // Clear any passing/ornament flags on involved notes
@@ -7068,6 +7071,7 @@ export function applyHarmonyRules(
                         // (A) Re-articulation of the suspended pitch: treat as suspension continuation.
                         if (nPc === suspensionPc && ndur <= 1.01) {
                             (n as any).isSuspension = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum, continuation: true };
+                            (n as any).ornamentMark = 'r';
                             if ((n as any).isPassing) (n as any).isPassing = false;
                             clearOrn(n as any);
                             continue;
@@ -12355,7 +12359,7 @@ export function applyHarmonyRules(
                     const _threshold = _isOnBeat ? 2 : 3;
                     if (_soundingAtBeat.length >= _threshold) continue;
                 }
-                if (dom === 'passing') { an.isPassing = true; an.ornamentMark = 'P'; }
+                if (dom === 'passing') { an.isPassing = true; an.ornamentMark = 'p'; }
                 else if (dom === 'neighbor') { an.isNeighbor = true; an.ornamentMark = 'v'; }
                 else if (dom === 'appoggiatura') { an.isAppoggiatura = true; an.ornamentMark = 'a'; }
                 else if (dom === 'anticipation') { an.isAnticipation = true; an.ornamentMark = 'ant'; }
@@ -12402,12 +12406,12 @@ export function applyHarmonyRules(
                 anyN.isCambiata = false;
                 anyN.isSuspension = undefined;
                 anyN.ornamentMark = undefined;
-                if (ov === 'passing') { anyN.isPassing = true; anyN.ornamentMark = 'P'; }
+                if (ov === 'passing') { anyN.isPassing = true; anyN.ornamentMark = 'p'; }
                 else if (ov === 'neighbor') { anyN.isNeighbor = true; anyN.ornamentMark = 'v'; }
                 else if (ov === 'appoggiatura') { anyN.isAppoggiatura = true; anyN.isSuspension = { type: 'app', manual: true }; anyN.ornamentMark = 'a'; }
                 else if (ov === 'anticipation') { anyN.isAnticipation = true; anyN.ornamentMark = 'ant'; }
                 else if (ov === 'escape') { anyN.isEscape = true; anyN.ornamentMark = 's'; }
-                else if (ov === 'cambiata') { anyN.isCambiata = true; anyN.ornamentMark = 'C'; }
+                else if (ov === 'cambiata') { anyN.isCambiata = true; anyN.ornamentMark = 'c'; }
                 else if (ov === 'suspension') { anyN.isSuspension = { type: 'susp', manual: true }; anyN.ornamentMark = 'r'; }
                 else if (ov === 'ornamental') { /* no flags, no mark — ornamentOverride alone excludes from analysis */ }
                 anyN.ornamentOverride = ov;

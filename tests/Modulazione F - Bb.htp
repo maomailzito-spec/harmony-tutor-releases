@@ -607,7 +607,13 @@
   "autoLeadingToneInMinor": true,
   "keyChangeMode": "none",
   "modalTonicOverride": "",
-  "analysisContexts": [],
+  "analysisContexts": [
+    {
+      "absBeat": 10,
+      "newTonic": "Bb",
+      "newIsMinor": false
+    }
+  ],
   "doubleBarlineMeasures": [],
   "repeatBarlines": {},
   "voltaBrackets": [],
