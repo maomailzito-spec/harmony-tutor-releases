@@ -392,9 +392,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 // Exception 0: relative major/minor — chromatic
                                 // evidence is impossible (shared diatonic set).
                                 // Allow if confidence is high enough (cadential 6/4 pattern).
-                            } else if (m.confidence >= 85) {
-                                // Exception 2: high-confidence cadence — check for chromatic evidence
-                                // AND verify the music doesn't immediately return to the home key
+                            } else if (m.confidence >= 70) {
+                                // Exception 2: cadence with sufficient confidence —
+                                // require chromatic evidence AND verify the music
+                                // doesn't immediately return to the home key
                                 // (which would indicate a tonicization, not a modulation).
                                 const cadenceEvts = _chEvts.filter(e =>
                                     e.absBeat >= m.startBeat - 1e-6 && e.absBeat <= m.endBeat + 1e-6);
