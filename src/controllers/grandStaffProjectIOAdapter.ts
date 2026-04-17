@@ -38,6 +38,10 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	isMetronomeOn: boolean;
 	metronomeUnit: any;
         computedLabelsRef?: { current: any[] | null };
+};
+
+export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
+	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
 	const baseProject: any = {
 		schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
 		notes: (args.latestRawNotes.current || []).map((n: any) => normalizeNotePitchFieldsWithKey(n as any, saveKeySig)),
