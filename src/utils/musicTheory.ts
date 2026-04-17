@@ -6979,11 +6979,9 @@ export function applyHarmonyRules(
                     resolvedAccidental: (resolved as any).accidental ?? '',
                 };
                 (prep as any).isSuspension = suspPayload;
-                (prep as any).ornamentMark = 'r';
                 try {
                     if (S && S.id && prep.id && S.id !== prep.id) {
                         (S as any).isSuspension = suspPayload;
-                        (S as any).ornamentMark = 'r';
                     }
                 } catch { /* ignore */ }
                 // Clear any passing/ornament flags on involved notes
@@ -7027,6 +7025,8 @@ export function applyHarmonyRules(
                     clearOrn(prep as any);
                     clearOrn(S as any);
                     clearOrn(resolved as any);
+                    // Mark the suspended note (S) with 'r' so the letter is rendered
+                    if (S) (S as any).ornamentMark = 'r';
                 } catch { /* ignore */ }
 
                 // If the suspended pitch is re-articulated between the suspension onset and the
@@ -7071,9 +7071,9 @@ export function applyHarmonyRules(
                         // (A) Re-articulation of the suspended pitch: treat as suspension continuation.
                         if (nPc === suspensionPc && ndur <= 1.01) {
                             (n as any).isSuspension = { type: displayType || 'susp', fromAbsBeat: b.absBeat, resolvedById: resolved.id, fromNum, toNum, continuation: true };
-                            (n as any).ornamentMark = 'r';
                             if ((n as any).isPassing) (n as any).isPassing = false;
                             clearOrn(n as any);
+                            (n as any).ornamentMark = 'r';
                             continue;
                         }
 
