@@ -675,16 +675,16 @@
     },
     {
       "absBeat": 10,
-      "roman": "♭VII",
-      "romanDisplay": "♭VII",
+      "roman": "IV",
+      "romanDisplay": "IV",
       "figures": [
         "5"
       ]
     },
     {
       "absBeat": 12,
-      "roman": "IV",
-      "romanDisplay": "IV",
+      "roman": "I",
+      "romanDisplay": "I",
       "figures": [
         "5"
       ]

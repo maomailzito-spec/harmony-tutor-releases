@@ -526,7 +526,18 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     && other.startBeat <= returnBeat + 1e-6
                                     && other.endBeat >= returnBeat - 1e-6,
                             );
-                            if (!coveredByNext && !_manualBeats.has(returnBeat) && !_manualContextActiveAt(returnBeat)) {
+                            // ── Don't return if music has migrated to target key ──
+                            // If post-cadence events (a) stay entirely diatonic
+                            // in the target key AND (b) contain at least one
+                            // chromatic note foreign to the home key, the music
+                            // has modulated — don't snap back.
+                            const _homeScaleRet = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
+                            const postCadEvts = _chEvts.filter(e => e.absBeat >= returnBeat - 1e-6);
+                            const musicHasMigrated = postCadEvts.length >= 2
+                                && postCadEvts.every(e => (e.notePcs || []).every(pc => _tgtScale.has(pc)))
+                                && postCadEvts.some(e => (e.notePcs || []).some(pc => !_homeScaleRet.has(pc)));
+                            if (!coveredByNext && !_manualBeats.has(returnBeat) && !_manualContextActiveAt(returnBeat)
+                                && !musicHasMigrated) {
                                 _effectiveCtxs.push({
                                     absBeat: returnBeat,
                                     newTonic: currentTonic,
