@@ -459,14 +459,44 @@ function createMenu() {
         '• Debug harmony labels (pcs) (toggle dal menu)',
       ].join('\n');
 
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
+      const shortcutsWin = new BrowserWindow({
+        width: 720,
+        height: 640,
         title: 'Scorciatoie',
-        message: 'Scorciatoie da tastiera e funzioni rapide',
-        detail,
-        buttons: ['OK'],
-        defaultId: 0,
+        parent: mainWindow,
+        modal: false,
+        resizable: true,
+        minimizable: false,
+        maximizable: false,
+        webPreferences: { nodeIntegration: false, contextIsolation: true },
       });
+      shortcutsWin.setMenuBarVisibility(false);
+      const htmlBody = detail
+        .split('\n')
+        .map(line => {
+          if (line === '') return '<div style="height:8px"></div>';
+          if (!line.startsWith('•') && !line.startsWith('⌥') && line === line.toUpperCase())
+            return `<h3 style="margin:12px 0 6px 0;font-size:13px;color:#94a3b8;letter-spacing:0.04em">${line}</h3>`;
+          return `<div style="margin:2px 0">${line}</div>`;
+        })
+        .join('');
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Scorciatoie</title><style>
+        body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f172a;color:#e2e8f0;font-size:13px}
+        .wrap{padding:16px 20px 60px 20px}
+        h2{margin:0 0 12px 0;font-size:16px}
+        .footer{position:fixed;bottom:0;left:0;right:0;padding:10px 20px;background:#0f172a;border-top:1px solid #1e293b;text-align:right}
+        button{background:#3b82f6;color:#fff;border:0;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer}
+        button:hover{background:#2563eb}
+      </style></head><body>
+        <div class="wrap"><h2>Scorciatoie da tastiera e funzioni rapide</h2>${htmlBody}</div>
+        <div class="footer"><button onclick="window.close()">Chiudi</button></div>
+        <script>
+          document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' || (e.key === 'w' && (e.metaKey || e.ctrlKey))) window.close();
+          });
+        </script>
+      </body></html>`;
+      shortcutsWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
     } catch (err) {
       console.warn('[MAIN] Failed to show shortcuts dialog:', err);
     }
