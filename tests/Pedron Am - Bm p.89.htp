@@ -430,5 +430,45 @@
     "2": "acoustic_grand_piano-mp3",
     "3": "acoustic_grand_piano-mp3",
     "4": "acoustic_grand_piano-mp3"
-  }
+  },
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 2,
+      "roman": "V/ii°",
+      "romanDisplay": "V/ii°",
+      "figures": [
+        "♯4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "V/vii°",
+      "romanDisplay": "V/vii°",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": []
+    }
+  ]
 }

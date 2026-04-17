@@ -1328,5 +1328,131 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 0.25,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 0.5,
+      "roman": "V/ii°",
+      "romanDisplay": "V/ii°",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 0.75,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 1,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 1.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 2,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 2.25,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 2.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 2.75,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 3.5,
+      "roman": "II",
+      "romanDisplay": "II",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 4.25,
+      "roman": "i+",
+      "romanDisplay": "i+",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 4.5,
+      "roman": "V/ii°",
+      "romanDisplay": "V/ii°",
+      "figures": [
+        "3"
+      ]
+    }
   ]
 }

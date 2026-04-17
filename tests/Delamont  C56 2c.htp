@@ -428,5 +428,52 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "vi°",
+      "romanDisplay": "vi°",
+      "figures": [
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "II",
+      "romanDisplay": "II",
+      "figures": [
+        "9",
+        "7"
+      ]
+    }
   ]
 }

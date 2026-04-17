@@ -19381,5 +19381,2949 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 2,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 5,
+      "roman": "v",
+      "romanDisplay": "v",
+      "figures": []
+    },
+    {
+      "absBeat": 8.75,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": []
+    },
+    {
+      "absBeat": 9,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 9.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "4"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 10.5,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 11,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 12.5,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "4"
+      ]
+    },
+    {
+      "absBeat": 13,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 13.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": []
+    },
+    {
+      "absBeat": 14,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 16.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 17,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 17.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 18,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 18.5,
+      "roman": "VI°",
+      "romanDisplay": "VI°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 19,
+      "roman": "V+",
+      "romanDisplay": "V+",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 19.5,
+      "roman": "III°",
+      "romanDisplay": "III°",
+      "figures": [
+        "♭♭♭♭6",
+        "♯4"
+      ]
+    },
+    {
+      "absBeat": 20,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 20.5,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 21,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 21.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 22,
+      "roman": "III°",
+      "romanDisplay": "III°",
+      "figures": [
+        "4",
+        "♯2"
+      ]
+    },
+    {
+      "absBeat": 22.25,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 22.5,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3",
+        "♭♭2"
+      ]
+    },
+    {
+      "absBeat": 22.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 23,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 23.25,
+      "roman": "i°",
+      "romanDisplay": "i°",
+      "figures": [
+        "7",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 23.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 23.75,
+      "roman": "III°",
+      "romanDisplay": "III°",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 24,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 24.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 25,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 25.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 26,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 26.5,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "♯4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 27,
+      "roman": "i+",
+      "romanDisplay": "i+",
+      "figures": [
+        "♯5",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 27.5,
+      "roman": "VI°",
+      "romanDisplay": "VI°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 28,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 28.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "5",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 29,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 29.5,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 30,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 30.25,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 30.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 30.75,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 31,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 31.25,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 31.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 31.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 32,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 32.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 33,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": []
+    },
+    {
+      "absBeat": 33.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 34,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 34.5,
+      "roman": "VI°",
+      "romanDisplay": "VI°",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 35,
+      "roman": "V+",
+      "romanDisplay": "V+",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 35.5,
+      "roman": "III°",
+      "romanDisplay": "III°",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 36,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 36.5,
+      "roman": "♯IV",
+      "romanDisplay": "♯IV",
+      "figures": [
+        "4"
+      ]
+    },
+    {
+      "absBeat": 37,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 37.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 38,
+      "roman": "vii°/V",
+      "romanDisplay": "vii°/V",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 38.25,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 38.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 38.75,
+      "roman": "vii°/V",
+      "romanDisplay": "vii°/V",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 39,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 39.25,
+      "roman": "i°",
+      "romanDisplay": "i°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 39.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 39.75,
+      "roman": "III°",
+      "romanDisplay": "III°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 40,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 40.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 41,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 41.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 42,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 42.5,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "4",
+        "♯2"
+      ]
+    },
+    {
+      "absBeat": 43,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 43.5,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 44,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 44.25,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 44.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 44.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 45,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 45.5,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 45.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 46,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 46.5,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "4",
+        "3",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 46.75,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 47,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 47.25,
+      "roman": "iv°",
+      "romanDisplay": "iv°",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 47.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 47.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 48,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 49,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 49.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 50,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 50.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 51,
+      "roman": "V+",
+      "romanDisplay": "V+",
+      "figures": [
+        "♯5",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 51.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 52,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 52.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 53,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 53.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 54,
+      "roman": "♯IV",
+      "romanDisplay": "♯IV",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 54.25,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 54.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 54.75,
+      "roman": "♯IV",
+      "romanDisplay": "♯IV",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 55.75,
+      "roman": "♯IV",
+      "romanDisplay": "♯IV",
+      "figures": [
+        "6",
+        "♯4"
+      ]
+    },
+    {
+      "absBeat": 56,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 56.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 57,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 57.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 58,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 58.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "♭9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 59,
+      "roman": "i+",
+      "romanDisplay": "i+",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 59.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 60,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 60.25,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 60.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 61,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 61.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 62,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 62.25,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 62.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 62.75,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 63,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 63.25,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 63.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 63.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 64,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 64.25,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 64.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 64.75,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 65,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 65.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "5",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 65.5,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 65.75,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 66,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 66.25,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 66.5,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 66.75,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 67,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 67.5,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 67.75,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": []
+    },
+    {
+      "absBeat": 68,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 68.25,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 68.5,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 68.75,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 69,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 69.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 69.75,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 70,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 70.25,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 70.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 70.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 71.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 71.75,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 72,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": []
+    },
+    {
+      "absBeat": 72.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 72.5,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 72.75,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 73,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 73.5,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "6",
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 74,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 74.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 74.75,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 75,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 75.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 76,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 76.5,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 77,
+      "roman": "i+",
+      "romanDisplay": "i+",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 77.5,
+      "roman": "VI°",
+      "romanDisplay": "VI°",
+      "figures": []
+    },
+    {
+      "absBeat": 78,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 78.5,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": []
+    },
+    {
+      "absBeat": 79,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 79.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 80,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 80.25,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": []
+    },
+    {
+      "absBeat": 80.75,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 81,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 81.25,
+      "roman": "iv°",
+      "romanDisplay": "iv°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 81.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 81.75,
+      "roman": "VI°",
+      "romanDisplay": "VI°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 82,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 82.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 83,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 83.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 84,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": []
+    },
+    {
+      "absBeat": 84.5,
+      "roman": "vii°/V",
+      "romanDisplay": "vii°/V",
+      "figures": [
+        "♯4",
+        "♯2"
+      ]
+    },
+    {
+      "absBeat": 85,
+      "roman": "V+",
+      "romanDisplay": "V+",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 85.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "♯4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 86,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 86.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 87,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 87.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 88,
+      "roman": "♯iv",
+      "romanDisplay": "♯iv",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 88.75,
+      "roman": "♯iv",
+      "romanDisplay": "♯iv",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 89,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 89.25,
+      "roman": "i°",
+      "romanDisplay": "i°",
+      "figures": [
+        "7",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 89.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 89.75,
+      "roman": "III°",
+      "romanDisplay": "III°",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 90,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 90.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 91,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 91.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 92,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 92.5,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "♯4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 93,
+      "roman": "i+",
+      "romanDisplay": "i+",
+      "figures": [
+        "♯5",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 93.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 94,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 94.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "5",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 95,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 95.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 96,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 96.25,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": []
+    },
+    {
+      "absBeat": 96.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 96.75,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 97,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 97.25,
+      "roman": "iv°",
+      "romanDisplay": "iv°",
+      "figures": [
+        "4",
+        "♯2"
+      ]
+    },
+    {
+      "absBeat": 97.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 97.75,
+      "roman": "VI°",
+      "romanDisplay": "VI°",
+      "figures": [
+        "6",
+        "♯4"
+      ]
+    },
+    {
+      "absBeat": 98,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 98.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 99,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": []
+    },
+    {
+      "absBeat": 99.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 100,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 100.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "♭9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 101,
+      "roman": "V+",
+      "romanDisplay": "V+",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 101.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 102,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 102.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "5",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 103,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 103.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 104,
+      "roman": "♯iv",
+      "romanDisplay": "♯iv",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 104.75,
+      "roman": "♯iv",
+      "romanDisplay": "♯iv",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 105,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": []
+    },
+    {
+      "absBeat": 105.25,
+      "roman": "i°",
+      "romanDisplay": "i°",
+      "figures": [
+        "♯4",
+        "♯2"
+      ]
+    },
+    {
+      "absBeat": 105.5,
+      "roman": "VII",
+      "romanDisplay": "VII",
+      "figures": []
+    },
+    {
+      "absBeat": 105.75,
+      "roman": "III°",
+      "romanDisplay": "III°",
+      "figures": [
+        "6",
+        "♯4"
+      ]
+    },
+    {
+      "absBeat": 106,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 106.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 107,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 107.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 108,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 108.5,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 109,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 109.5,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "5",
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 110,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 110.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 111,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 111.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 112,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 112.25,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": []
+    },
+    {
+      "absBeat": 112.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 112.75,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 113,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 113.25,
+      "roman": "iv°",
+      "romanDisplay": "iv°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 113.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 113.75,
+      "roman": "VI°",
+      "romanDisplay": "VI°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 114,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 114.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 115,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 115.5,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 116,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 116.5,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "4",
+        "3",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 116.75,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 117,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 117.25,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 117.5,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 117.75,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 118,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 118.25,
+      "roman": "V/ii°",
+      "romanDisplay": "V/ii°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 118.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "4",
+        "3",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 118.75,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 119,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 119.25,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 119.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 119.75,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 120,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 120.25,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 120.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "5",
+        "3",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 120.75,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 121.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 121.5,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 121.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 122,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 122.25,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 122.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 122.75,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 123,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 123.25,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 123.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 123.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 124,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 124.5,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": []
+    },
+    {
+      "absBeat": 124.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "5",
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 125,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 125.5,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 125.75,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "4"
+      ]
+    },
+    {
+      "absBeat": 126,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 126.5,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": []
+    },
+    {
+      "absBeat": 127,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": []
+    },
+    {
+      "absBeat": 127.25,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 127.75,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": []
+    },
+    {
+      "absBeat": 128,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 128.25,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "7",
+        "♯3"
+      ]
+    },
+    {
+      "absBeat": 128.5,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 128.75,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 129,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 129.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 129.75,
+      "roman": "♭VII",
+      "romanDisplay": "♭VII",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 130,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 130.5,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 130.75,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 131,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 131.25,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 131.75,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": []
+    },
+    {
+      "absBeat": 132,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 132.25,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 132.5,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 132.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 133,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 133.25,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 133.5,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 133.75,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 134,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": []
+    },
+    {
+      "absBeat": 134.25,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5",
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 134.5,
+      "roman": "V/iv",
+      "romanDisplay": "V/iv",
+      "figures": []
+    },
+    {
+      "absBeat": 135,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 135.25,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 135.5,
+      "roman": "iv°",
+      "romanDisplay": "iv°",
+      "figures": [
+        "4",
+        "♯2"
+      ]
+    },
+    {
+      "absBeat": 135.75,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 136,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 136.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 136.5,
+      "roman": "vii°",
+      "romanDisplay": "vii°",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 136.75,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 137,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 137.25,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 137.5,
+      "roman": "vii°/V",
+      "romanDisplay": "vii°/V",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 137.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 138,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 138.25,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 138.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 138.75,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 139,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 139.25,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 139.5,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 139.75,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 140,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 140.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "5",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 140.5,
+      "roman": "vii",
+      "romanDisplay": "vii",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 140.75,
+      "roman": "VI",
+      "romanDisplay": "VI",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 141,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 141.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 141.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 143.5,
+      "roman": "vii°/vii°",
+      "romanDisplay": "vii°/vii°",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 143.75,
+      "roman": "vii°/ii°",
+      "romanDisplay": "vii°/ii°",
+      "figures": [
+        "6",
+        "♯4"
+      ]
+    },
+    {
+      "absBeat": 144,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 144.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 144.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 144.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 145,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 145.25,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 145.5,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 145.75,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 146,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": []
+    },
+    {
+      "absBeat": 146.75,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": []
+    },
+    {
+      "absBeat": 147,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 147.5,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": []
+    },
+    {
+      "absBeat": 147.75,
+      "roman": "III",
+      "romanDisplay": "III",
+      "figures": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 148,
+      "roman": "V/ii°",
+      "romanDisplay": "V/ii°",
+      "figures": []
+    }
   ]
 }

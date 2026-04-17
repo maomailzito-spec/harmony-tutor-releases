@@ -1126,5 +1126,162 @@
     "analysis",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 3,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 3.5,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 5,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 5.5,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 7,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "V/vi",
+      "romanDisplay": "V/vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 8.5,
+      "roman": "V/vi",
+      "romanDisplay": "V/vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 9,
+      "roman": "V/vi",
+      "romanDisplay": "V/vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 9.5,
+      "roman": "V/vi",
+      "romanDisplay": "V/vi",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 11,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 12,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 13,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 13.5,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 14,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 15,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 15.75,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 16,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": []
+    }
   ]
 }

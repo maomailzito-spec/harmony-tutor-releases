@@ -234,5 +234,28 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": []
+    },
+    {
+      "absBeat": 2,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    }
   ]
 }

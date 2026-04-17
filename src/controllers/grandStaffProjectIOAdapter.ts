@@ -37,10 +37,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	isBpmActive: boolean;
 	isMetronomeOn: boolean;
 	metronomeUnit: any;
-};
-
-export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
-	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
+        computedLabelsRef?: { current: any[] | null };
 	const baseProject: any = {
 		schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
 		notes: (args.latestRawNotes.current || []).map((n: any) => normalizeNotePitchFieldsWithKey(n as any, saveKeySig)),
@@ -69,8 +66,18 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		toolbarGroupOrder: args.toolbarGroupOrder,
 	};
 
-	return { ...(args.projectExtrasRef.current || {}), ...baseProject };
-}
+        // Persist final computed harmony labels for corpus accuracy
+        if (args.computedLabelsRef?.current) {
+                const flatLabels = (args.computedLabelsRef.current as any[][]).flat();
+                baseProject.computedLabels = flatLabels
+                        .filter((l: any) => l && l.roman && !l.hiddenMarker)
+                        .map((l: any) => ({
+                                absBeat: l.absBeat,
+                                roman: l.roman,
+                                romanDisplay: l.romanDisplay || l.roman,
+                                figures: l.figures || [],
+                        }));
+        }
 
 export type ApplyGrandStaffProjectIOCommandArgs = {
 	projectExtrasRef: { current: Record<string, unknown> };

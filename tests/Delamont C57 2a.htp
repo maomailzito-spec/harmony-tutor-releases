@@ -1016,5 +1016,131 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "♭II",
+      "romanDisplay": "♭II",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "Ger+",
+      "romanDisplay": "Ger+",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 7,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 7.5,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 9,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "♯9",
+        "♭7"
+      ]
+    },
+    {
+      "absBeat": 9.5,
+      "roman": "V/IV",
+      "romanDisplay": "V/IV",
+      "figures": [
+        "♭7"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 11,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "♭9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "7",
+        "5"
+      ]
+    }
   ]
 }

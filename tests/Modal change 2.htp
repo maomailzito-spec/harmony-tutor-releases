@@ -550,5 +550,53 @@
     "analysis",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": []
+    },
+    {
+      "absBeat": 2,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": []
+    },
+    {
+      "absBeat": 4,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "♭VI",
+      "romanDisplay": "♭VI",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "♭VII",
+      "romanDisplay": "♭VII",
+      "figures": [
+        "♭6"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "6"
+      ]
+    }
   ]
 }

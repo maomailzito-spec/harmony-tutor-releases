@@ -713,5 +713,93 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "9",
+        "♭7"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "♭9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 5,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 5.5,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "2"
+      ]
+    },
+    {
+      "absBeat": 6.5,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 7,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": []
+    },
+    {
+      "absBeat": 7.5,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": []
+    }
   ]
 }

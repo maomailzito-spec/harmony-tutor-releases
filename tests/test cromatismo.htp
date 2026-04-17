@@ -655,5 +655,53 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "N",
+      "romanDisplay": "N",
+      "figures": []
+    },
+    {
+      "absBeat": 2,
+      "roman": "♭iii",
+      "romanDisplay": "♭iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "♭VI",
+      "romanDisplay": "♭VI",
+      "figures": []
+    },
+    {
+      "absBeat": 6,
+      "roman": "N",
+      "romanDisplay": "N",
+      "figures": []
+    },
+    {
+      "absBeat": 8,
+      "roman": "♭iii",
+      "romanDisplay": "♭iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "♭VI",
+      "romanDisplay": "♭VI",
+      "figures": []
+    },
+    {
+      "absBeat": 12,
+      "roman": "N",
+      "romanDisplay": "N",
+      "figures": []
+    }
   ]
 }

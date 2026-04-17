@@ -924,5 +924,144 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 2.5,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "9"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "vii°/IV",
+      "romanDisplay": "vii°/IV",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 3.5,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "♭VII",
+      "romanDisplay": "♭VII",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "Fr+",
+      "romanDisplay": "Fr+",
+      "figures": [
+        "4",
+        "3"
+      ]
+    },
+    {
+      "absBeat": 6.5,
+      "roman": "V/vi",
+      "romanDisplay": "V/vi",
+      "figures": [
+        "♯4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 7,
+      "roman": "V/vi",
+      "romanDisplay": "V/vi",
+      "figures": [
+        "9",
+        "♯5"
+      ]
+    },
+    {
+      "absBeat": 7.5,
+      "roman": "V/vi",
+      "romanDisplay": "V/vi",
+      "figures": [
+        "7"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 9,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": []
+    },
+    {
+      "absBeat": 9.5,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "4",
+        "2"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 11,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 11.5,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": []
+    }
   ]
 }

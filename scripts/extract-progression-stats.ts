@@ -55,6 +55,43 @@ for (const filePath of files) {
     const notes = proj.notes || [];
     if (notes.length === 0) continue;
 
+    // ── Fast path: use pre-computed labels if available ──
+    // computedLabels contain the final displayed roman numerals (after
+    // cadential 6/4, lookahead, pivots, sequences, overrides).
+    if (Array.isArray(proj.computedLabels) && proj.computedLabels.length >= 2) {
+      const progression: string[] = [];
+      const progressionBeats: number[] = [];
+      const ts = proj.timeSignature || { top: 4, bottom: 4 };
+      const denom = Number(ts.denominator || ts.bottom || 4);
+      const beatsPerMeasure = Number(ts.numerator || ts.top || 4) * (4 / denom);
+      for (const cl of proj.computedLabels) {
+        const rd = cl.romanDisplay || cl.roman;
+        if (!rd || rd === '?') continue;
+        let label = rd;
+        if (Array.isArray(cl.figures) && cl.figures.length > 0) {
+          label += cl.figures.join('');
+        }
+        progression.push(label);
+        const beat1 = ((cl.absBeat % beatsPerMeasure) | 0) + 1;
+        progressionBeats.push(beat1);
+      }
+      // Record bigrams / trigrams / unigrams
+      for (let pi = 0; pi < progression.length; pi++) {
+        const r = progression[pi];
+        unigrams[r] = (unigrams[r] || 0) + 1;
+        if (pi > 0) {
+          const bg = `${progression[pi - 1]}→${r}`;
+          bigrams[bg] = (bigrams[bg] || 0) + 1;
+        }
+        if (pi > 1) {
+          const tg = `${progression[pi - 2]}→${progression[pi - 1]}→${r}`;
+          trigrams[tg] = (trigrams[tg] || 0) + 1;
+        }
+      }
+      fileCount++;
+      continue;
+    }
+
     const tonic = String(proj.keySignatureRoot || 'C');
     const isMinor = Boolean(proj.isMinorMode);
     const ts = proj.timeSignature || { top: 4, bottom: 4 };

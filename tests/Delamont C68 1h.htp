@@ -529,5 +529,70 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "V/V",
+      "romanDisplay": "V/V",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "vii°/V",
+      "romanDisplay": "vii°/V",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "II",
+      "romanDisplay": "II",
+      "figures": [
+        "9",
+        "7"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "II",
+      "romanDisplay": "II",
+      "figures": [
+        "9",
+        "7"
+      ]
+    }
   ]
 }

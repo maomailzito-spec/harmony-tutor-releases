@@ -131,6 +131,50 @@ function main() {
         continue;
       }
 
+      // ── Fast path: use pre-computed labels if available ──
+      if (Array.isArray(data.computedLabels) && data.computedLabels.length >= 2) {
+        const rawLabels: string[] = [];
+        const baseLabels: string[] = [];
+        for (const cl of data.computedLabels) {
+          const rd = cl.romanDisplay || cl.roman;
+          if (!rd || rd === '?') continue;
+          let label = rd;
+          if (Array.isArray(cl.figures) && cl.figures.length > 0) {
+            label += cl.figures.join('');
+          }
+          rawLabels.push(label);
+          baseLabels.push(stripFigures(label));
+        }
+        if (rawLabels.length >= 2) {
+          filesAnalyzed++;
+          for (const ch of rawLabels) unigrams[ch] = (unigrams[ch] || 0) + 1;
+          for (let i = 0; i < rawLabels.length - 1; i++) {
+            const from = rawLabels[i], to = rawLabels[i + 1];
+            if (!bigrams[from]) bigrams[from] = {};
+            bigrams[from][to] = (bigrams[from][to] || 0) + 1;
+            totalTransitions++;
+          }
+          for (let i = 0; i < rawLabels.length - 2; i++) {
+            const key = `${rawLabels[i]}|${rawLabels[i + 1]}`, to = rawLabels[i + 2];
+            if (!trigrams[key]) trigrams[key] = {};
+            trigrams[key][to] = (trigrams[key][to] || 0) + 1;
+          }
+          for (const ch of baseLabels) unigramsBase[ch] = (unigramsBase[ch] || 0) + 1;
+          for (let i = 0; i < baseLabels.length - 1; i++) {
+            const from = baseLabels[i], to = baseLabels[i + 1];
+            if (!bigramsBase[from]) bigramsBase[from] = {};
+            bigramsBase[from][to] = (bigramsBase[from][to] || 0) + 1;
+          }
+          for (let i = 0; i < baseLabels.length - 2; i++) {
+            const key = `${baseLabels[i]}|${baseLabels[i + 1]}`, to = baseLabels[i + 2];
+            if (!trigramsBase[key]) trigramsBase[key] = {};
+            trigramsBase[key][to] = (trigramsBase[key][to] || 0) + 1;
+          }
+          console.log(`  ✓ ${fileName}  (${rawLabels.length} events, computed)`);
+          continue;
+        }
+      }
+
       // Extract key info
       const keySignatureRoot: string = data.keySignatureRoot || data.keyTonic || 'C';
       const isMinorMode: boolean = !!data.isMinorMode;

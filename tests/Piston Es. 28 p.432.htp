@@ -546,5 +546,79 @@
     "analysis",
     "key",
     "more"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 1,
+      "roman": "Ger+",
+      "romanDisplay": "Ger+",
+      "figures": [
+        "♯6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "V/♭III",
+      "romanDisplay": "V/♭III",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "7",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "vii°/vi",
+      "romanDisplay": "vii°/vi",
+      "figures": [
+        "6",
+        "5"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "vii°/vi",
+      "romanDisplay": "vii°/vi",
+      "figures": [
+        "7",
+        "5"
+      ]
+    }
   ]
 }

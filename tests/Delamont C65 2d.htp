@@ -571,5 +571,100 @@
     "key",
     "more",
     "voiceInstrument"
+  ],
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "3"
+      ]
+    },
+    {
+      "absBeat": 1,
+      "roman": "♭II",
+      "romanDisplay": "♭II",
+      "figures": [
+        "4",
+        "♭2"
+      ]
+    },
+    {
+      "absBeat": 1.25,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "♭6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 1.5,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "4"
+      ]
+    },
+    {
+      "absBeat": 1.75,
+      "roman": "V/♭VII",
+      "romanDisplay": "V/♭VII",
+      "figures": [
+        "4",
+        "♯2"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 2.5,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 2.75,
+      "roman": "iii",
+      "romanDisplay": "iii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 3,
+      "roman": "V/ii",
+      "romanDisplay": "V/ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 3.5,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "9",
+        "♭7"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "7",
+        "5"
+      ]
+    }
   ]
 }
