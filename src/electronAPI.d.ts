@@ -82,6 +82,18 @@ declare global {
           expiresAt?: string;
         }>;
       };
+
+      /** Auto-update download progress listener */
+      onUpdateProgress?: (
+        handler: (data: {
+          percent: number;
+          status: 'downloading' | 'ready' | 'error';
+          bytesPerSecond?: number;
+          transferred?: number;
+          total?: number;
+          error?: string;
+        }) => void
+      ) => (() => void) | void;
     };
   }
 }
