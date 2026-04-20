@@ -6,6 +6,7 @@ declare global {
             onMenuAction: (handler: (action: string, payload: any) => void) => (() => void) | void;
             saveFile: (content: string, targetPath?: string) => Promise<any>;
             addRecentFile: (filePath: string) => Promise<any>;
+            onUpdateProgress?: (handler: (data: { percent: number; status: string; error?: string }) => void) => (() => void) | void;
         };
     }
 }
@@ -422,7 +423,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // - parti_strette: S/A/T on treble, B on bass
     const [staffLayoutMode, setStaffLayoutMode] = useState<StaffLayoutMode>('parti_late');
 
-    const clefForVoice = useCallback((voice: number | undefined | null, clefOverride?: 'treble' | 'bass'): ClefType => {
+    // Per-position layout mode changes (Option+M toggle from playhead position).
+    // Each entry marks "from this absBeat onward, use this mode".
+    const [layoutModeChanges, setLayoutModeChanges] = useState<Array<{absBeat: number, mode: StaffLayoutMode}>>([]);
+
+    /** Resolve the effective layout mode at a given position, considering per-beat overrides. */
+    const effectiveLayoutMode = useCallback((measureIndex?: number | null, beat?: number | null): StaffLayoutMode => {
+        if (layoutModeChanges.length === 0) return staffLayoutMode;
+        if (measureIndex == null) return staffLayoutMode;
+        // Approximate absBeat: measureIndex * beatsPerMeasure + (beat - 1).
+        // Uses timeSignature for accuracy; falls back to 4 beats/measure.
+        const bpm = timeSignature ? timeSignature.numerator * (4 / timeSignature.denominator) : 4;
+        const noteAbsBeat = measureIndex * bpm + ((beat ?? 1) - 1);
+        let effective = staffLayoutMode;
+        for (const ch of layoutModeChanges) {
+            if (ch.absBeat <= noteAbsBeat + 1e-6) effective = ch.mode;
+        }
+        return effective;
+    }, [staffLayoutMode, layoutModeChanges, timeSignature]);
+
+    const clefForVoice = useCallback((voice: number | undefined | null, clefOverride?: 'treble' | 'bass', measureIndex?: number | null, beat?: number | null): ClefType => {
         if (clefOverride) return clefOverride;
         if (staffSystemMode === 'treble_only') return 'treble';
         const v = voice ?? 1;
@@ -432,9 +452,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (v === 3) return 'tenor';
             return 'bass';
         }
-        if (staffLayoutMode === 'parti_strette') return v === 4 ? 'bass' : 'treble';
+        const mode = effectiveLayoutMode(measureIndex, beat);
+        if (mode === 'parti_strette') return v === 4 ? 'bass' : 'treble';
         return (v === 3 || v === 4) ? 'bass' : 'treble';
-    }, [staffLayoutMode, staffSystemMode]);
+    }, [effectiveLayoutMode, staffSystemMode]);
 
     const playbackTransposeSemitones = staffSystemMode === 'treble_only' ? -12 : 0;
 
@@ -2257,6 +2278,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
         // User contexts take precedence (listed first → latest wins in sort).
+        // Gate: if the "Inferisci contesti" toggle is OFF, skip inferred contexts entirely.
+        const _inferEnabled = typeof localStorage !== 'undefined'
+            && localStorage.getItem('harmony-tutor.analysis.enableInferredContexts.v2') !== '0';
+        if (!_inferEnabled) return [...(analysisContexts || [])] as any[];
         // Filter out low-confidence inferred contexts (score undefined or < 12).
         const inferred = ((analysisResult as any)?.inferredAnalysisContexts || [])
             .filter((c: any) => typeof c.score === 'number' && c.score >= 12);
@@ -6431,6 +6456,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
+            // Alt/Option+M: toggle parti strette/late from playhead beat onward.
+            // Inserts (or removes) a layout-mode change at the current playhead position.
+            if (!isMod && e.altKey && e.code === 'KeyM') {
+                e.preventDefault();
+                e.stopPropagation();
+                // Compute absBeat from pasteCaret (beat-level) or playhead (measure-level fallback)
+                const mIdx = pasteCaret?.measureIndex ?? playheadMeasureForChoral;
+                const beat = pasteCaret?.beat ?? 1;
+                const msa = layoutData?.measureStartAbsBeat;
+                const absBeat = msa ? (msa[mIdx] ?? 0) + (beat - 1) : mIdx * 4 + (beat - 1);
+                setLayoutModeChanges(prev => {
+                    const existing = prev.find(c => Math.abs(c.absBeat - absBeat) < 0.01);
+                    if (existing) {
+                        // Remove the change at this beat (revert to previous context)
+                        return prev.filter(c => Math.abs(c.absBeat - absBeat) >= 0.01);
+                    }
+                    // Determine the currently effective mode BEFORE this beat
+                    let currentAtBeat = staffLayoutMode;
+                    for (const ch of prev) {
+                        if (ch.absBeat <= absBeat + 1e-6) currentAtBeat = ch.mode;
+                    }
+                    const toggled: StaffLayoutMode = currentAtBeat === 'parti_late' ? 'parti_strette' : 'parti_late';
+                    return [...prev, { absBeat, mode: toggled }].sort((a, b) => a.absBeat - b.absBeat);
+                });
+                return;
+            }
+
             // Space: always toggle playback (avoid requiring focus on the Play button)
             if (!isMod && (key === ' ' || key === 'spacebar')) {
                 e.preventDefault();
@@ -7033,7 +7085,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setStaffSystemMode={setStaffSystemMode}
                 lastNonSatbModeRef={lastNonSatbModeRef}
                 staffLayoutMode={staffLayoutMode}
-                setStaffLayoutMode={setStaffLayoutMode}
+                setStaffLayoutMode={(v) => {
+                    const next = typeof v === 'function' ? v(staffLayoutMode) : v;
+                    setStaffLayoutMode(next);
+                    setLayoutModeChanges([]);
+                }}
                 canvasFormat={canvasFormat}
                 setCanvasFormat={setCanvasFormat}
                 isMidiMenuOpen={isMidiMenuOpen}
@@ -7164,7 +7220,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // We keep the stored MIDI pitch intact and only adjust rendering-related fields.
                         const systemNotesForRender = systemNotes.map((n) => {
                             // Render-only staff mapping by voice (allows toggling layouts without mutating stored notes).
-                            const mappedClef: ClefType = clefForVoice(n.voice, (n as any).clefOverride);
+                            const mappedClef: ClefType = clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat);
 
                             if (n.isRest) return { ...n, clef: mappedClef };
 

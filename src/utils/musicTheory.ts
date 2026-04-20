@@ -8401,6 +8401,53 @@ export function applyHarmonyRules(
                     // Key-change inference must *improve* diatonic fit, otherwise it becomes a
                     // re-labeling machine on fully diatonic material (e.g. I6 read as V6/IV).
                     // Allow weaker improvements only when there's an explicit dominant pull.
+
+                    // Related-key persistence: for diatonic tonics (C→G, C→Am), the short-window
+                    // improvement is ~0 because the scales overlap. Allow inference when:
+                    // (a) there's a strong V→I cadence at a barline,
+                    // (b) the candidate tonic is confirmed in root position,
+                    // (c) an extended window (4 measures) shows persistent material in the new key
+                    //     that fits at least as well as the old key.
+                    const allowRelatedKeyPersistence = (() => {
+                        try {
+                            if (!tonicIsDiatonicInCurrent) return false; // only for related keys
+                            if (!isStrictCadenceBoundary) return false;
+                            if (!rootMotionIsDomToTonic) return false;
+                            if (!bLooksLikeTonic) return false;
+                            if (!bIsTonicRootPos) return false;
+                            // Extended window: check next 4 measures
+                            const extWindowLen = beatsPerMeasLocal * 4;
+                            const extWindow = (chordEvents || []).filter(ev =>
+                                ev.absBeat >= b.absBeat - 1e-6 && ev.absBeat < (b.absBeat + extWindowLen - 1e-6));
+                            if (extWindow.length < 4) return false; // need enough material
+                            const extFitCurrent = countNonDiatonicPcsInEvents(extWindow as any, ctxAtB0.tonic, ctxAtB0.isMinor);
+                            const extFitCandidate = countNonDiatonicPcsInEvents(extWindow as any, tonic, isMinorCand);
+                            // The new key must fit strictly better (not just equal) to avoid
+                            // treating ordinary secondary dominants (V/IV→IV) as modulations.
+                            if (extFitCandidate >= extFitCurrent) return false;
+                            // Additionally, require chromatic evidence: at least one pitch class
+                            // in the extended window that is diatonic to the new key but NOT to the old.
+                            // This is the "differentiating PC" (e.g. F# in G when coming from C).
+                            const oldDiatonic = diatonicSetForKey(ctxAtB0.tonic, ctxAtB0.isMinor);
+                            const newDiatonic = diatonicSetForKey(tonic, isMinorCand);
+                            let hasDifferentiatingPc = false;
+                            for (const ev of extWindow) {
+                                for (const n of (ev.notes || []) as any[]) {
+                                    if (!n || (n as any).isRest) continue;
+                                    const pc = mod12(pitchClassOf(n as any));
+                                    if (newDiatonic.has(pc) && !oldDiatonic.has(pc)) {
+                                        hasDifferentiatingPc = true;
+                                        break;
+                                    }
+                                }
+                                if (hasDifferentiatingPc) break;
+                            }
+                            return hasDifferentiatingPc;
+                        } catch {
+                            return false;
+                        }
+                    })();
+
                     const ok = requireStricter
                         ? (candidateOut <= 1 && improvement > 2)
                         : (
@@ -8416,6 +8463,8 @@ export function applyHarmonyRules(
                                                                         || allowRemoteRootPosCadence
                                                                         // Entry on V with immediate I/i confirmation.
                                                                         || allowBoundaryDomToTonicSoon
+                                                                        // Related-key persistence (C→G, C→Am) with extended window confirmation.
+                                                                        || allowRelatedKeyPersistence
                                   )
                                               : (improvement >= 2 || allowIntraContextBarlineCadence)
                           );
@@ -8929,6 +8978,7 @@ export function applyHarmonyRules(
                             absBeat,
                             newTonic: tonicName,
                             newIsMinor: false,
+                            score: 14,
                         } as AnalysisContext);
                     }
                 }

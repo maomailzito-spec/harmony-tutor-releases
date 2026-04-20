@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "extractedAt": "2026-04-08",
-  "totalFiles": 183,
-  "totalSamples": 994,
+  "extractedAt": "2026-04-19",
+  "totalFiles": 185,
+  "totalSamples": 996,
   "typeCounts": {
     "neighbor": 99,
-    "suspension": 108,
+    "suspension": 109,
     "anticipation": 28,
     "appoggiatura": 276,
     "passing": 372,
     "escape": 63,
-    "cambiata": 48
+    "cambiata": 49
   },
   "patterns": {
     "short_weak_step-down_step-down": {
@@ -37,8 +37,8 @@
       "_probability": 0.791
     },
     "long_strong_unison_step-down": {
-      "suspension": 40,
-      "_total": 40,
+      "suspension": 41,
+      "_total": 41,
       "_dominant": "suspension",
       "_probability": 1
     },
@@ -880,6 +880,12 @@
       "anticipation": 1,
       "_total": 1,
       "_dominant": "anticipation",
+      "_probability": 1
+    },
+    "long_strong_unison_none": {
+      "cambiata": 1,
+      "_total": 1,
+      "_dominant": "cambiata",
       "_probability": 1
     },
     "medium_moderate_step-down_unison": {
@@ -2034,6 +2040,12 @@
       "cambiata": 2,
       "_total": 2,
       "_dominant": "cambiata",
+      "_probability": 1
+    },
+    "long_strong_unison_step-down_v1_cons_same": {
+      "suspension": 2,
+      "_total": 2,
+      "_dominant": "suspension",
       "_probability": 1
     },
     "long_moderate_step-up_skip-down_v1_unk_longer": {
@@ -3374,6 +3386,12 @@
       "_dominant": "neighbor",
       "_probability": 1
     },
+    "long_strong_unison_none_v2_cons_longer": {
+      "cambiata": 1,
+      "_total": 1,
+      "_dominant": "cambiata",
+      "_probability": 1
+    },
     "very-short_weak_step-up_step-down_v1_unk_shorter": {
       "neighbor": 1,
       "_total": 1,
@@ -3546,12 +3564,6 @@
       "appoggiatura": 1,
       "_total": 1,
       "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "long_strong_unison_step-down_v1_cons_same": {
-      "suspension": 1,
-      "_total": 1,
-      "_dominant": "suspension",
       "_probability": 1
     }
   },
@@ -21839,6 +21851,28 @@
       "isDissonantVsBass": null
     },
     {
+      "file": "Demo Video.htp",
+      "noteId": "aca8e31b-97eb-4996-9998-dedc7f10d6bb",
+      "type": "suspension",
+      "patternKey": "long_strong_unison_step-down",
+      "detailedKey": "long_strong_unison_step-down_v1_cons_same",
+      "pitch": "C5",
+      "midi": 72,
+      "voice": 1,
+      "duration": "half",
+      "durationCategory": "long",
+      "beat": 1,
+      "measureIndex": 6,
+      "beatStrength": "strong",
+      "entryInterval": 0,
+      "exitInterval": -1,
+      "entryBucket": "unison",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": false
+    },
+    {
       "file": "Dubois Note sfuggite p.214.htp",
       "noteId": "45e73366-f342-424e-b3a7-5c7003261678",
       "type": "escape",
@@ -22849,6 +22883,28 @@
       "durationRatio": 1,
       "durationRatioCategory": "same",
       "isDissonantVsBass": true
+    },
+    {
+      "file": "Modulazione Ab - E.htp",
+      "noteId": "3abbc724-a71d-4953-b60d-b8c771b9008d",
+      "type": "cambiata",
+      "patternKey": "long_strong_unison_none",
+      "detailedKey": "long_strong_unison_none_v2_cons_longer",
+      "pitch": "B4",
+      "midi": 71,
+      "voice": 2,
+      "duration": "whole",
+      "durationCategory": "long",
+      "beat": 1,
+      "measureIndex": 2,
+      "beatStrength": "strong",
+      "entryInterval": 0,
+      "exitInterval": null,
+      "entryBucket": "unison",
+      "exitBucket": "none",
+      "durationRatio": 2,
+      "durationRatioCategory": "longer",
+      "isDissonantVsBass": false
     },
     {
       "file": "Note di volta 2.json",

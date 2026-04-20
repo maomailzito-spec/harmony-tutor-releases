@@ -352,7 +352,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
 
     const toolbarGroups: Record<ToolbarGroupId, React.ReactNode> = {
         playback: (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
                 <button
                     onClick={togglePlayback}
                     className={`p-2 rounded-full transition-colors ${isPlaying ? 'text-yellow-400 hover:bg-yellow-400/20' : 'text-green-400 hover:bg-green-400/20'}`}
@@ -366,7 +366,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             </div>
         ),
         bpm: (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
                 <div
                     ref={bpmControlRef}
                     tabIndex={0}
@@ -389,11 +389,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             onKeyDown={handleBpmInputKeyDown}
                             onBlur={handleBpmBlur}
                             inputMode="numeric"
-                            className="text-lg font-bold w-12 text-center bg-transparent outline-none"
+                            className="text-sm font-bold w-10 text-center bg-transparent outline-none"
                             aria-label="BPM"
                         />
                     ) : (
-                        <span className="text-lg font-bold w-12 text-center">{bpm}</span>
+                        <span className="text-sm font-bold w-10 text-center">{bpm}</span>
                     )}
                 </div>
                 <button
@@ -425,13 +425,13 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             </div>
         ),
         key: (
-            <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-sm text-slate-400">Tonalità:</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-slate-400">Ton:</span>
                 <select
                     id="key-signature-select"
                     value={keySignatureRoot}
                     onChange={e => handleKeySignatureRootChange(e.target.value)}
-                    className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-[111px]"
+                    className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-[90px]"
                 >
                     <optgroup label="Diesis (♯)">{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                     <optgroup label="Bemolli (♭)">{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
@@ -492,14 +492,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             </div>
         ),
         time: (
-            <div className="flex items-center gap-3">
-                <span className="text-sm text-slate-400">Tempo:</span>
+            <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-400">Tempo:</span>
                 {timeSignatureControl}
             </div>
         ),
         measures: (
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-400">Misure:</span>
+            <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-400">Mis:</span>
                 <div className="flex items-center">
                     <input
                         value={minMeasureCountDraft}
@@ -535,8 +535,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         </button>
                     </div>
                 </div>
-                <div className="w-px h-6 bg-slate-600 mx-2"></div>
-                <div className="flex items-center gap-2">
+                <div className="w-px h-5 bg-slate-600 mx-1"></div>
+                <div className="flex items-center gap-1">
                     <span className="text-xs text-slate-400">per riga</span>
                     <div className="flex items-center">
                         <input
@@ -1027,9 +1027,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     ref={toolbarHoverRef}
                     onMouseMove={handleToolbarMouseMove}
                     onMouseLeave={() => setToolbarHoverTip(null)}
-                    className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg"
+                    className="sticky top-0 z-50 px-2 py-1 bg-slate-800 border-b border-slate-700 rounded-lg"
                 >
-                    <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
+                    <div className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1">
                         {visibleGroupIds.map((id, idx) => (
                             <React.Fragment key={id}>
                                 <div
@@ -1066,7 +1066,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                     )}
                                     {toolbarGroups[id]}
                                 </div>
-                                {idx < visibleGroupIds.length - 1 && <div className="h-6 w-px bg-slate-600"></div>}
+                                {idx < visibleGroupIds.length - 1 && <div className="h-5 w-px bg-slate-600/50"></div>}
                             </React.Fragment>
                         ))}
                     </div>
@@ -1083,9 +1083,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             )}
 
             {!isToolbarVisible && showQuickInsertBar && (
-                <div className="sticky top-0 z-50 p-2 bg-slate-800 border-b border-slate-700 rounded-lg">
-                    <div className="flex flex-row items-center flex-wrap gap-x-6 gap-y-2">
-                        <div className="flex items-center gap-3">
+                <div className="sticky top-0 z-50 px-2 py-1 bg-slate-800 border-b border-slate-700 rounded-lg">
+                    <div className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1">
+                        <div className="flex items-center gap-2">
                             {toolbarGroups.voices}
                             {toolbarGroups.insert}
                             {toolbarGroups.accidentals}

@@ -5,6 +5,7 @@ import ChordVisualizer from './components/ChordVisualizer';
 import IntervalsVisualizer from './components/IntervalsVisualizer';
 import MainEditor from './components/MainEditor';
 import GrandStaffEditor from './components/GrandStaffEditor';
+import UpdateProgressBar from './components/UpdateProgressBar';
 import { getAppFlavor, isModeEnabled } from './flavor';
 import { MENU_ACTIONS } from './contracts/menuActionRuntime';
 import { getMenuActionTarget } from './contracts/menuActionTargets';
@@ -136,6 +137,7 @@ const App: React.FC = () => {
                     />
                 </div>
             </div>
+            <UpdateProgressBar />
         </div>
     );
 };

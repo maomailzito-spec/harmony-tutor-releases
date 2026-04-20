@@ -1519,27 +1519,64 @@ app.whenReady().then(async () => {
   // ── Auto-update (production only) ──
   if (app.isPackaged) {
     autoUpdater.logger = require('electron-log');
-    autoUpdater.autoDownload = true;
+    autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
 
     autoUpdater.on('update-available', (info) => {
       safeStdioWrite(process.stdout, `[AutoUpdate] Update available: v${info.version}`);
-    });
-
-    autoUpdater.on('update-downloaded', (info) => {
       dialog.showMessageBox(mainWindow, {
         type: 'info',
         title: 'Aggiornamento disponibile',
-        message: `Harmony Tutor v${info.version} è stato scaricato.`,
-        detail: 'L\'aggiornamento verrà installato alla prossima chiusura dell\'app.',
-        buttons: ['OK', 'Riavvia ora'],
+        message: `È disponibile Harmony Tutor v${info.version}.`,
+        detail: 'Vuoi scaricare e installare l\'aggiornamento?',
+        buttons: ['Aggiorna ora', 'Rimanda'],
+        defaultId: 0,
+        cancelId: 1,
       }).then(({ response }) => {
-        if (response === 1) autoUpdater.quitAndInstall();
+        if (response === 0) {
+          // Notify renderer that download is starting
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('UPDATE_DOWNLOAD_PROGRESS', { percent: 0, status: 'downloading' });
+          }
+          autoUpdater.downloadUpdate();
+        }
+      });
+    });
+
+    autoUpdater.on('download-progress', (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('UPDATE_DOWNLOAD_PROGRESS', {
+          percent: Math.round(progress.percent),
+          bytesPerSecond: progress.bytesPerSecond,
+          transferred: progress.transferred,
+          total: progress.total,
+          status: 'downloading',
+        });
+      }
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('UPDATE_DOWNLOAD_PROGRESS', { percent: 100, status: 'ready' });
+      }
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Aggiornamento pronto',
+        message: `Harmony Tutor v${info.version} è stato scaricato.`,
+        detail: 'Riavviare ora per completare l\'installazione?',
+        buttons: ['Riavvia ora', 'Alla prossima chiusura'],
+        defaultId: 0,
+        cancelId: 1,
+      }).then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall();
       });
     });
 
     autoUpdater.on('error', (err) => {
       safeStdioWrite(process.stderr, `[AutoUpdate] Error: ${err.message}`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('UPDATE_DOWNLOAD_PROGRESS', { percent: 0, status: 'error', error: err.message });
+      }
     });
 
     autoUpdater.checkForUpdatesAndNotify();

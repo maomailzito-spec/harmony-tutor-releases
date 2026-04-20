@@ -37,8 +37,8 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	isBpmActive: boolean;
 	isMetronomeOn: boolean;
 	metronomeUnit: any;
+        computedLabelsRef?: { current: any[] | null };
 };
-
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
 	const baseProject: any = {
@@ -68,6 +68,19 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		metronomeUnit: args.metronomeUnit,
 		toolbarGroupOrder: args.toolbarGroupOrder,
 	};
+
+	// Persist final computed harmony labels for corpus accuracy
+	if (args.computedLabelsRef?.current) {
+		const flatLabels = (args.computedLabelsRef.current as any[][]).flat();
+		baseProject.computedLabels = flatLabels
+			.filter((l: any) => l && l.roman && !l.hiddenMarker)
+			.map((l: any) => ({
+				absBeat: l.absBeat,
+				roman: l.roman,
+				romanDisplay: l.romanDisplay || l.roman,
+				figures: l.figures || [],
+			}));
+	}
 
 	return { ...(args.projectExtrasRef.current || {}), ...baseProject };
 }

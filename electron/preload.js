@@ -64,4 +64,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deactivate: () => ipcRenderer.invoke(IPC_CHANNELS.DEACTIVATE_LICENSE),
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LICENSE_INFO),
   },
+  // Auto-update progress listener
+  onUpdateProgress: (callback) => {
+    const subscription = (_event, data) => {
+      try { callback(data); } catch { /* ignore */ }
+    };
+    ipcRenderer.on('UPDATE_DOWNLOAD_PROGRESS', subscription);
+    return () => ipcRenderer.removeListener('UPDATE_DOWNLOAD_PROGRESS', subscription);
+  },
 });

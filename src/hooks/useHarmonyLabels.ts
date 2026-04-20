@@ -11,7 +11,7 @@ import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChor
 import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
 import { evaluateCadentialPatterns, type ChordEvent, pcToNoteName, noteNameToPc, qualityFamily, getScalePcs } from '../utils/cadentialPatterns';
-import { CADENTIAL_PATTERN_RECOGNITION_KEY } from '../storage/storageKeys';
+import { CADENTIAL_PATTERN_RECOGNITION_KEY, ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY } from '../storage/storageKeys';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
 import { detectChromaticModulations } from '../utils/chromaticModulationDetector';
 import { getBigramProbability, type StyleProfile } from '../engine/choralStyleProfile';
@@ -297,8 +297,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // ─── Cadential Pattern Recognition (Fase 1) ───
         let _effectiveCtxs: AnalysisContext[] = [...(analysisContexts || [])];
         const _pivotCandidates = new Map<number, {tonic: string, isMinor: boolean}>();
+        // Gate: if the "Inferisci contesti" toggle is OFF, skip all inferred context generation.
+        const _inferCtxEnabled = typeof localStorage !== 'undefined'
+            && localStorage.getItem(ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY) !== '0';
         try {
-            const _cadEnabled = typeof localStorage !== 'undefined'
+            const _cadEnabled = _inferCtxEnabled && typeof localStorage !== 'undefined'
                 && localStorage.getItem(CADENTIAL_PATTERN_RECOGNITION_KEY) !== '0';
             if (_cadEnabled && timelineForLabels.length >= 2) {
                 const _chEvts: ChordEvent[] = [];
@@ -344,6 +347,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // Post-filter: reject cadence matches whose "dominant" chord is
                 // actually a Major-7th sonority (maj7 ≠ dominant). The dominant
                 // slot is always the penultimate chord in the formula window.
+                const _homeScalePcs0 = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
                 const _cadMatches = _cadMatchesRaw.filter(m => {
                     // Find the penultimate event (the V slot)
                     const domBeat = (() => {
@@ -355,17 +359,28 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Reject cadences whose dominant is maj7
                     if (domEv && /maj.*7|major\s*7/i.test(domEv.quality)) return false;
                     // Reject cadences whose resolution is a borrowed chord (modal interchange)
+                    // UNLESS the dominant chord contains chromatic notes (notes outside the
+                    // home scale), which indicates a genuine secondary dominant targeting
+                    // a real modulation (e.g. C→Eb via Bb7→Eb, where Bb7 has Ab).
                     const resEv = _chEvts.find(e => Math.abs(e.absBeat - m.endBeat) < 0.05);
-                    if (resEv && shouldBlockTonicization(resEv.rootPc, resEv.quality, currentTonic, isMinorMode)) return false;
+                    if (resEv && shouldBlockTonicization(resEv.rootPc, resEv.quality, currentTonic, isMinorMode)) {
+                        const _domHasChromaticCad = domEv?.notePcs?.some(pc => !_homeScalePcs0.has(pc));
+                        if (!_domHasChromaticCad) return false;
+                        // else: allow — chromatic dominant is genuine evidence of modulation
+                    }
                     // Reject cadences whose resolution is a dominant 7th sonority:
                     // a dom7 chord is not a stable "I" arrival — it's a passing
                     // secondary dominant (e.g. V/V → V7 is NOT a tonicization to V).
                     if (resEv && /dominant\s*7/i.test(resEv.quality)) return false;
                     // Reject cadences resolving to a diatonic degree of the home key:
-                    // this is a secondary dominant (V/x → x), not a modulation.
-                    if (resEv != null) {
-                        const _homeScale = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
-                        if (_homeScale.has(resEv.rootPc)) return false;
+                    // this is a secondary dominant (V/x → x), not a modulation —
+                    // UNLESS the dominant contains a "differentiating PC": a note that
+                    // is diatonic in the target key but NOT in the home key.
+                    // This is the hallmark of a real modulation (e.g. F# in D7 for C→G).
+                    if (resEv != null && _homeScalePcs0.has(resEv.rootPc)) {
+                        const _tgtScale = new Set(getScalePcs(resEv.rootPc, qualityFamily(resEv.quality) !== 'major'));
+                        const _domHasDiffPc = domEv?.notePcs?.some(pc => _tgtScale.has(pc) && !_homeScalePcs0.has(pc));
+                        if (!_domHasDiffPc) return false;
                     }
                     return true;
                 });
@@ -415,7 +430,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     _pivotCandidates.set(nextAfterDec.absBeat,
                                         { tonic: _decTonic, isMinor: _decMinor });
                                 }
-                                if (!_manualBeats.has(nextAfterDec.absBeat)) {
+                                // Don't return to home if the next beat is
+                                // covered by another cadential match (which
+                                // has its own context).
+                                const decReturnBeat = nextAfterDec.absBeat;
+                                const decCoveredByNext = _cadMatches.some(
+                                    other => other !== m
+                                        && other.startBeat <= decReturnBeat + 1e-6
+                                        && other.endBeat >= decReturnBeat - 1e-6,
+                                );
+                                if (!decCoveredByNext && !_manualBeats.has(decReturnBeat)) {
                                     _effectiveCtxs.push({
                                         absBeat: nextAfterDec.absBeat,
                                         newTonic: currentTonic,
@@ -458,7 +482,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     && other.startBeat <= returnBeat + 1e-6
                                     && other.endBeat >= returnBeat - 1e-6,
                             );
-                            if (!coveredByNext && !_manualBeats.has(returnBeat)) {
+                            // Only return to home key if the next chord is NOT diatonic
+                            // to the target key — i.e. the music actually left the
+                            // modulated key. If it's still diatonic, the modulation persists.
+                            const nextIsDiatonicHome = nextEvAfterRes.notePcs?.every(pc => _homeScalePcs0.has(pc));
+                            if (!coveredByNext && !nextIsDiatonic && nextIsDiatonicHome && !_manualBeats.has(returnBeat)) {
                                 _effectiveCtxs.push({
                                     absBeat: returnBeat,
                                     newTonic: currentTonic,
@@ -500,9 +528,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // tonicization — skip.
                     if (shouldBlockTonicization(res.rootPc, res.quality, currentTonic, isMinorMode)) continue;
                     // Guard: if the resolution root is diatonic to the home key,
-                    // this is a secondary dominant (V/x → x), not a modulation.
-                    // E.g. in Bb minor: G7 → Cm is V7/ii → ii, not a tonicization to Cm.
-                    if (_homeScalePcs.has(targetPc)) continue;
+                    // this is usually a secondary dominant (V/x → x), not a modulation —
+                    // UNLESS the dominant contains a differentiating PC (diatonic in
+                    // the target key but NOT the home key), indicating a real modulation.
+                    if (_homeScalePcs.has(targetPc)) {
+                        const _dreTargetScale = new Set(getScalePcs(targetPc, targetIsMinor));
+                        const _dreHasDiffPc = dom.notePcs?.some(pc => _dreTargetScale.has(pc) && !_homeScalePcs.has(pc));
+                        if (!_dreHasDiffPc) continue;
+                    }
                     // Skip if already covered by a cadential match or manual marker
                     const alreadyCovered = _effectiveCtxs.some(c =>
                         Math.abs(analysisContextAbsBeat(c) - dom.absBeat) < 0.1
@@ -527,7 +560,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             _pivotCandidates.set(_nextAfterRes.absBeat,
                                 { tonic: pcToNoteName(targetPc), isMinor: targetIsMinor });
                         }
-                        if (!_manualBeats.has(_nextAfterRes.absBeat)) {
+                        // Only return to home key if the next chord is NOT diatonic
+                        // to the target key (= the music left the modulated key).
+                        // If the next chord IS diatonic to the target key, the modulation
+                        // persists — do not snap back to the home key.
+                        const nextIsDiatonicHome = _nextAfterRes.notePcs?.every(pc => _homeScalePcs.has(pc));
+                        if (!nextIsDiatonicD && nextIsDiatonicHome && !_manualBeats.has(_nextAfterRes.absBeat)) {
                             _effectiveCtxs.push({
                                 absBeat: _nextAfterRes.absBeat,
                                 newTonic: currentTonic,
@@ -709,6 +747,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
                 const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, { ornamentOverrides: ornOverrideRecord });
+                // DEBUG: trace context at specific absBeats
+                if (Math.abs(absBeat - 10) < 0.01 || Math.abs(absBeat - 2) < 0.01) {
+                    console.log(`[DBG-CTX] absBeat=${absBeat} ctxTonic=${ctxTonic} ctxIsMinor=${ctxIsMinor} roman=${r?.roman} ctx=`, ctx ? { ab: (ctx as any).absBeat, tonic: ctx.newTonic, score: (ctx as any).score, src: (ctx as any).source } : 'GLOBAL');
+                }
                 // Compute root PC for fallback resolution matching (V/x → X where quality differs).
                 const rootPc = (() => {
                     try {
@@ -3396,7 +3438,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             let local = stripTarget(disp) || disp;
                             // A bare roman equal to the target (e.g. "iii" in a /iii region)
                             // is the local tonic — display as i/I (depending on target case)
-                            if (local === runTarget) {
+                            // BUT: never rewrite a dominant (V, vii°) as tonic — the dominant
+                            // is a structural function, not "the target degree as local tonic".
+                            if (local === runTarget && !/^(V|vii°?)$/i.test(local)) {
                                 const isMinorTarget = runTarget === runTarget.toLowerCase();
                                 local = isMinorTarget ? 'i' : 'I';
                             }
@@ -4887,6 +4931,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const custom = ctx.label && String(ctx.label).trim() ? String(ctx.label).trim() : '';
             // markerMode='text' → show only the custom label, no tonic bracket
             if (ctx.markerMode === 'text' && custom) return custom;
+            // If the stored label already looks like a key bracket (from musicTheory.ts),
+            // use only the canonical tonicLabel to avoid duplication like "[ G maj ] [ G Maj ]".
+            if (custom && /^\[.*\]$/.test(custom)) return tonicLabel;
             return custom ? `${custom} ${tonicLabel}` : tonicLabel;
         };
 
