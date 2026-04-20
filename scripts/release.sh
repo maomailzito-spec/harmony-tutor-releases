@@ -21,7 +21,7 @@ git commit -m "release: ${TAG}"
 git tag -a "$TAG" -m "Release ${TAG}"
 
 # 3. Push commit + tag → il workflow parte automaticamente
-git push && git push origin "$TAG"
+git push -u origin HEAD && git push origin "$TAG"
 
 echo ""
 echo "✅  Tag ${TAG} pushato. Il workflow GitHub Actions ora:"
