@@ -1,7 +1,7 @@
 {
   "name": "harmony-tutor",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Desktop app for harmonic analysis — Grand Staff editor with figured bass, Roman numerals, and voice leading.",
   "author": "Harmony Tutor",
   "main": "electron/main.js",
