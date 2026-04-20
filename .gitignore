@@ -41,3 +41,4 @@ layout-audit-*.json
 
 # Electron-builder output
 release/
+_split/
