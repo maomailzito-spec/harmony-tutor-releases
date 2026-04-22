@@ -185,6 +185,7 @@ export type StaffNote = {
   isAppoggiatura?: boolean;
   isAnticipation?: boolean;
   isEscape?: boolean;
+  isCambiata?: boolean;
   isSuspension?: any;
   ornamentMark?: string;
   ornamentOverride?: OrnamentType;

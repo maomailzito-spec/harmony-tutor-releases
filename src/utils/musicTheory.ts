@@ -2122,39 +2122,40 @@ export function getChordSymbol(
     };
     const getNoteName = (noteIndex: number): string => pickFromSpellings(noteIndex, preferAccidentalForIndex(noteIndex));
 
-    // Rootless V7(♭9) heuristic (see getRomanAnalysis): if the chord's pitch-classes
-    // are a subset of the leading-tone fully diminished 7th, represent it as V7♭9
-    // even if the root is missing.
-    try {
-        if (tonicIndex !== undefined) {
-            const valid = (filteredChord || []).filter(n => n && !n.isRest);
-            const pcs = [...new Set(valid.map(pitchClassOf).map(mod12))];
-            const leadingPc = mod12(tonicIndex - 1);
-            const dominantPc = mod12(tonicIndex + 7);
-            const dim7Set = new Set<number>([
-                leadingPc,
-                mod12(leadingPc + 3),
-                mod12(leadingPc + 6),
-                mod12(leadingPc + 9),
-            ]);
-            // IMPORTANT: be strict. Subsets like {F#,A,C} occur constantly in real voice-leading
-            // and should NOT be reinterpreted as a missing-root/missing-3rd V7♭9.
-            // Only interpret as rootless V7♭9 when the full dim7 collection is present and
-            // includes the leading tone.
-            const subset = pcs.length >= 4 && pcs.every(pc => dim7Set.has(pc));
-            const hasLeading = pcs.includes(leadingPc);
-            if (subset && hasLeading) {
-                const rootName = getNoteName(dominantPc);
-                let analysisText = `${rootName}${CHORD_TYPE_TO_SYMBOL[BuiltInChords.Dominant7b9] ?? '7♭9'}`;
-
-                const bassNote = pickPreferredBassNote(valid) || valid[0];
-                if (bassNote && mod12(bassNote.noteIndex) !== dominantPc) {
-                    analysisText += `/${getNoteName(mod12(bassNote.noteIndex))}`;
-                }
-                return analysisText;
-            }
-        }
-    } catch { /* ignore */ }
+    // DISABILITATO: nell'armonia tonale ogni °7 è vii°7/X, non V7♭9.
+    // // Rootless V7(♭9) heuristic (see getRomanAnalysis): if the chord's pitch-classes
+    // // are a subset of the leading-tone fully diminished 7th, represent it as V7♭9
+    // // even if the root is missing.
+    // try {
+    //     if (tonicIndex !== undefined) {
+    //         const valid = (filteredChord || []).filter(n => n && !n.isRest);
+    //         const pcs = [...new Set(valid.map(pitchClassOf).map(mod12))];
+    //         const leadingPc = mod12(tonicIndex - 1);
+    //         const dominantPc = mod12(tonicIndex + 7);
+    //         const dim7Set = new Set<number>([
+    //             leadingPc,
+    //             mod12(leadingPc + 3),
+    //             mod12(leadingPc + 6),
+    //             mod12(leadingPc + 9),
+    //         ]);
+    //         // IMPORTANT: be strict. Subsets like {F#,A,C} occur constantly in real voice-leading
+    //         // and should NOT be reinterpreted as a missing-root/missing-3rd V7♭9.
+    //         // Only interpret as rootless V7♭9 when the full dim7 collection is present and
+    //         // includes the leading tone.
+    //         const subset = pcs.length >= 4 && pcs.every(pc => dim7Set.has(pc));
+    //         const hasLeading = pcs.includes(leadingPc);
+    //         if (subset && hasLeading) {
+    //             const rootName = getNoteName(dominantPc);
+    //             let analysisText = `${rootName}${CHORD_TYPE_TO_SYMBOL[BuiltInChords.Dominant7b9] ?? '7♭9'}`;
+// 
+    //             const bassNote = pickPreferredBassNote(valid) || valid[0];
+    //             if (bassNote && mod12(bassNote.noteIndex) !== dominantPc) {
+    //                 analysisText += `/${getNoteName(mod12(bassNote.noteIndex))}`;
+    //             }
+    //             return analysisText;
+    //         }
+    //     }
+    // } catch { /* ignore */ }
 
     const fullChord = (chord || []).filter(n => n && !n.isRest);
     const chordInfo = identifyChord(filteredChord) || identifyChord(fullChord);
@@ -2590,11 +2591,23 @@ function calculateRomanNumeral(
         // Only consider triads when we can confirm the major third is present.
         const allowTriadSecondary = isMajorTriad && hasMajorThird;
 
+        // Skip V/x for major triads whose root is on a chromatic pc with a flat-spelled root
+        // (e.g. Gb in C maj). These are better read as borrowed degrees (♭V, ♭II, …) than
+        // as secondary dominants of diatonic degrees.
+        const _rootIsChromaticFlat = (() => {
+            try {
+                if (!isMajorTriad || !hasMajorThird) return false;
+                if (diatonicPcSet.has(chordRootIndex)) return false;
+                const rAcc = String((chordInfo as any)?.root?.accidental || '');
+                return rAcc === 'flat';
+            } catch { return false; }
+        })();
+
         // For dominant-type chords, we usually require the major 3rd. Without it, many sonorities
         // (e.g. ii6/5 = D–F–A–C) can be reinterpreted as a "dominant 7#9 without 3rd".
         // However, in suspension contexts the 3rd may be delayed; in that case, accept a
         // dominant shell (P5+m7) as sufficient evidence.
-        if ((isDominantType && (hasMajorThird || hasDominantShell)) || allowTriadSecondary) {
+        if ((isDominantType && (hasMajorThird || hasDominantShell)) || (allowTriadSecondary && !_rootIsChromaticFlat)) {
             for (let i = 1; i < diatonicScaleIntervals.length; i++) {
                 const targetRootIndex = mod12(keyTonicIndex + diatonicScaleIntervals[i]);
                 const isDominantOfDegree = mod12(chordRootIndex - targetRootIndex) === 7;
@@ -2653,6 +2666,11 @@ function calculateRomanNumeral(
         const allRoman = ['I', '♭II', 'II', '♭III', 'III', 'IV', '♯IV', 'V', '♭VI', 'VI', '♭VII', 'VII'];
         const intervalFromTonic = (chordRootIndex - keyTonicIndex + 12) % 12;
         let roman = allRoman[intervalFromTonic];
+        // For pc=6 (♯IV/♭V), choose spelling based on chord root accidental.
+        if (intervalFromTonic === 6) {
+            const _rAcc = String((chordInfo as any)?.root?.accidental || '');
+            if (_rAcc === 'flat') roman = '♭V';
+        }
         if (quality === BuiltInChords.Minor || quality.startsWith('m')) roman = roman.toLowerCase();
         if (quality === BuiltInChords.Diminished || quality.includes('°') || quality.includes('b5')) roman += '°';
         if (quality === BuiltInChords.Augmented) roman += '+';
@@ -3477,6 +3495,49 @@ export function getRomanAnalysis(
     } catch { /* ignore */ }
 
     let baseRomanSymbol = calculateRomanNumeral(chordInfo, keyInfo);
+    // FIX dim7 cromatici: se il roman base è un grado dim diatonico (ii°, iii°, iv°, vi°)
+    // ma le note dell'accordo hanno spelling cromatica (es. Cb, Ab, Ebb in C maj),
+    // riscrivi come vii°/X dove X = grado della nota di risoluzione (root + 1 semitono).
+    try {
+        if (typeof baseRomanSymbol === 'string' && /^(ii|iii|iv|vi)°/i.test(baseRomanSymbol) && !baseRomanSymbol.includes('/')) {
+            // Build diatonic spellings set
+            const naturalPcByLetter: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+            const scaleIvForKey = keyInfo.isMinor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
+            const diatonicSpellings = new Set<string>();
+            for (const iv of scaleIvForKey) {
+                const pc = mod12(keyTonicIndex + iv);
+                for (const [letter, lpc] of Object.entries(naturalPcByLetter)) {
+                    if (lpc === pc) diatonicSpellings.add(`${letter}:natural`);
+                    else if (mod12(lpc - 1) === pc) diatonicSpellings.add(`${letter}:flat`);
+                    else if (mod12(lpc + 1) === pc) diatonicSpellings.add(`${letter}:sharp`);
+                }
+            }
+            const hasChromaticSpelling = (filteredChord || []).some((n: any) => {
+                const letter = String(n?.pitch || '').toUpperCase();
+                if (!letter) return false;
+                const acc = String(n?.accidental || 'natural');
+                return !diatonicSpellings.has(`${letter}:${acc}`);
+            });
+            if (hasChromaticSpelling && chordInfo?.root) {
+                const rootIdx = Number.isFinite((chordInfo.root as any).noteIndex)
+                    ? mod12((chordInfo.root as any).noteIndex)
+                    : mod12((chordInfo.root as any).midi);
+                // Target = root + 1 semitone (resolution)
+                const targetPc = mod12(rootIdx + 1);
+                const targetIvFromTonic = mod12(targetPc - keyTonicIndex);
+                const romansMaj = ['I', '♭II', 'II', '♭III', 'III', 'IV', '♭V', 'V', '♭VI', 'VI', '♭VII', 'VII'];
+                const romansMin = ['i', '♭ii', 'ii', '♭iii', 'iii', 'iv', '♭v', 'v', '♭vi', 'vi', '♭vii', 'vii'];
+                const romansArr = keyInfo.isMinor ? romansMin : romansMaj;
+                const targetRoman = romansArr[targetIvFromTonic];
+                if (targetRoman) {
+                    // Preserve any 7 suffix
+                    const has7 = /7/.test(baseRomanSymbol);
+                    baseRomanSymbol = `vii°${has7 ? '7' : ''}/${targetRoman}`;
+                }
+            }
+        }
+    } catch { /* ignore */ }
+
 
     // If the verticality is an exact diatonic triad (by pitch-class set),
     // prefer that diatonic label even if root-identification picked a different inversion.
@@ -3623,7 +3684,8 @@ export function getRomanAnalysis(
             const r0 = baseRomanSymbol.replace(/\s+/g, '');
             const low = r0.toLowerCase();
             const looksDimLt = low.startsWith('vii') && r0.includes('°');
-            if (looksDimLt) {
+            // Skip if already a secondary leading-tone (vii°/X) — don't undo our chromatic-dim fix.
+            if (looksDimLt && !r0.includes('/')) {
                 const fullInfo = identifyChord(filteredChordForFigures as any);
                 if (fullInfo && (fullInfo as any).root && (fullInfo as any).type) {
                     const fullRoman = calculateRomanNumeral(fullInfo as any, keyInfo);

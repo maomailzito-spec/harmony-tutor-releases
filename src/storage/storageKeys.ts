@@ -27,6 +27,7 @@ export const AUTO_SAVE_INTERVAL_KEY = 'harmony-tutor.editor.autoSaveInterval.v1'
 export const ANALYSIS_STATISTICAL_CORRECTION_KEY = 'harmony-tutor.analysis.statisticalCorrection.v1' as const;
 export const STATISTICAL_BIAS_THRESHOLD_KEY = 'harmony-tutor.analysis.statisticalBiasThreshold.v1' as const;
 export const ENABLE_LEARNED_ORNAMENTS_KEY = 'harmony-tutor.analysis.learnedOrnaments.v1' as const;
+export const ANALYSIS_STRICT_PASSING_NOTES_KEY = 'harmony-tutor.analysis.strictPassingNotes.v1' as const;
 export const TONICIZATION_COMPACT_KEY = 'harmony-tutor.analysis.tonicizationCompact.v1' as const;
 export const CHROMATIC_MODULATION_KEY = 'harmony-tutor.analysis.chromaticModulation.v1' as const;
 
@@ -71,6 +72,7 @@ export const STORAGE_KEYS = {
 	GUITAR_CUSTOM_SCALE_SHAPES_KEY,
 	GUITAR_CUSTOM_VOICINGS_KEY,
         ENABLE_LEARNED_ORNAMENTS_KEY,
+	ANALYSIS_STRICT_PASSING_NOTES_KEY,
         STATISTICAL_BIAS_THRESHOLD_KEY,
         TONICIZATION_COMPACT_KEY,
         CADENTIAL_PATTERN_RECOGNITION_KEY,

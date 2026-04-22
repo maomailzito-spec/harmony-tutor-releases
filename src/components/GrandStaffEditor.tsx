@@ -156,6 +156,8 @@ const OVERLAY_TREBLE_Y_SHIFT_PX = 48; // +40px vs previous
 const OVERLAY_TREBLE_VOICE2_Y_ADJUST_PX = -5;
 const OVERLAY_BASS_X_SHIFT_PX = 19;   // ~5mm
 const OVERLAY_BASS_Y_SHIFT_PX = 19;   // lowered by ~2mm vs previous tweak (empirical)
+const ORNAMENT_LABEL_FONT_SIZE_PX = 11;
+const ORNAMENT_LABEL_LEADER_STROKE = '#94a3b8';
 // Drag threshold in *client* pixels to avoid canceling clicks when the SVG is scaled.
 const DRAG_THRESHOLD_CLIENT_PX = 6;
 
@@ -1230,8 +1232,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 case 'sharp': return 1;
                 case 'flat': return -1;
                 case 'natural': return 0;
-                case 'doubleSharp': return 2;
-                case 'doubleFlat': return -2;
+                  case 'doubleSharp':
+                  case 'double-sharp':
+                      return 2;
+                  case 'doubleFlat':
+                  case 'double-flat':
+                      return -2;
                 default: return 0;
             }
         };
@@ -6419,7 +6425,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ── Ornament override shortcuts (⌥ + key) ──
             if (!isMod && e.altKey && selectedNoteIds.size > 0) {
                 const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyC: 'cambiata', KeyN: 'anticipation', KeyH: 'structural', KeyO: 'ornamental' };
-                const ornType = ornMap[e.code];
+                // Use e.code (physical key) as primary; fall back to e.key for macOS
+                // Electron builds where ⌥ may produce a dead/composed key.
+                const ornKeyCharMap: Record<string, string> = { p: 'passing', a: 'appoggiatura', v: 'neighbor', r: 'suspension', s: 'escape', c: 'cambiata', n: 'anticipation', h: 'structural', o: 'ornamental' };
+                const ornType = ornMap[e.code] ?? ornKeyCharMap[(e.key || '').toLowerCase()];
                 if (ornType) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -8512,42 +8521,109 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                         };
 
                                                                         const results: JSX.Element[] = [];
+                                                                        const displayOrnamentText = (n: any): string | null => {
+                                                                            const noteAbsBeat = (() => {
+                                                                                try {
+                                                                                    const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                                                                                    return ((n?.measureIndex ?? 0) * beatsPerMeasure) + (((n?.beat ?? 1) - 1));
+                                                                                } catch {
+                                                                                    return null;
+                                                                                }
+                                                                            })();
+                                                                            const susp = n?.isSuspension;
+                                                                            const isTrueSuspensionOnset = !!(
+                                                                                susp &&
+                                                                                String(susp.type || '') !== 'app' &&
+                                                                                !susp.continuation &&
+                                                                                typeof susp.fromAbsBeat === 'number' &&
+                                                                                typeof noteAbsBeat === 'number' &&
+                                                                                Math.abs(susp.fromAbsBeat - noteAbsBeat) < 1e-6
+                                                                            );
+                                                                            if (isTrueSuspensionOnset || n?.ornamentOverride === 'suspension') return 'R';
+                                                                            if (n?.isCambiata || n?.ornamentOverride === 'cambiata') return 'C';
+                                                                            if (n?.isAppoggiatura || n?.ornamentOverride === 'appoggiatura') return 'A';
+                                                                            if (n?.isAnticipation || n?.ornamentOverride === 'anticipation') return 'Ant';
+                                                                            if (n?.isEscape || n?.ornamentOverride === 'escape') return 'S';
+                                                                            if (n?.isPassing || n?.ornamentOverride === 'passing') return 'P';
+                                                                            if (n?.isNeighbor || n?.ornamentOverride === 'neighbor') return 'V';
+                                                                            const mark = String(n?.ornamentMark || '').trim();
+                                                                            if (!mark) return null;
+                                                                            if (mark === 'r') return 'R';
+                                                                            if (mark === 'a') return 'A';
+                                                                            if (mark === 's') return 'S';
+                                                                            if (mark === 'v') return 'V';
+                                                                            if (mark === 'ant') return 'Ant';
+                                                                            return mark;
+                                                                        };
+                                                                        const getOrnamentLabelPosition = (anchor: { x: number; y: number }, clef: ClefType, voice: Voice, text: string) => {
+                                                                            const textWidth = Math.max(12, measureTextWidth(text, `700 ${ORNAMENT_LABEL_FONT_SIZE_PX}px serif`));
+                                                                            const voiceDir = voice === 2 || voice === 4 ? -1 : 1;
+                                                                            const xOffset = (Math.max(10, Math.min(18, textWidth * 0.45)) + (text.length > 1 ? 4 : 0)) * voiceDir;
+                                                                            const yOffset = clef === 'bass' ? -20 : -18;
+
+                                                                            return {
+                                                                                x: anchor.x + xOffset,
+                                                                                y: anchor.y + yOffset,
+                                                                                lineX: anchor.x,
+                                                                                lineY: anchor.y,
+                                                                            };
+                                                                        };
                                                                         for (const n of analyzedNotes as any[]) {
                                                                             if (!n || !n.id) continue;
                                                                             if (!systemNoteIdSet.has(n.id)) continue;
-                                                                            const mark = (n as any).ornamentMark;
-                                                                            const isNeighbor = !!(n as any).isNeighbor;
-                                                                            if (!mark && !isNeighbor) continue;
-                                                                            // Currently only neighbor-tone uses the 'v' mark.
-                                                                            const text = (mark as string) || 'v';
+                                                                            const text = displayOrnamentText(n);
+                                                                            if (!text) continue;
 
                                                                             const hp = hitPointById.get(n.id);
                                                                             const pPos = notePositions.get(n.id);
                                                                             if (!hp && !pPos) continue;
                                                                             const clef = (noteClefById.get(n.id) || 'treble') as ClefType;
                                                                             const voiceNum = (noteVoiceById.get(n.id) || 1) as Voice;
-                                                                            const q = hp ? hp : applyOverlayShift(pPos as any, clef, voiceNum);
-
-                                                                            // Place slightly above-left to avoid the stem.
-                                                                            // Fine-tune: nudge 3px to the right for better alignment.
-                                                                            const x = q.x - 5;
-                                                                            const y = q.y - 12;
+                                                                            // Always keep the original note position for the leader line
+                                                                            const notePos = hp ? hp : { x: (pPos as any).x, y: (pPos as any).y };
+                                                                            let markerPos = { ...notePos };
+                                                                            // Apply per-voice offset in both grandstaff and satb_ancient, with different strengths
+                                                                            if (staffSystemMode === 'satb_ancient') {
+                                                                                if (voiceNum === 1) { markerPos = { x: notePos.x - 5, y: notePos.y + 5 }; }
+                                                                                else if (voiceNum === 2) { markerPos = { x: notePos.x + 4, y: notePos.y + 5 }; }
+                                                                                else if (voiceNum === 3) { markerPos = { x: notePos.x - 5, y: notePos.y + 5 }; }
+                                                                                else if (voiceNum === 4) { markerPos = { x: notePos.x + 4, y: notePos.y - 4 }; }
+                                                                            } else if (staffSystemMode === 'grandstaff') {
+                                                                                if (voiceNum === 1) { markerPos = { x: notePos.x - 10, y: notePos.y + 6 }; }
+                                                                                else if (voiceNum === 2) { markerPos = { x: notePos.x + 10, y: notePos.y + 6 }; }
+                                                                                else if (voiceNum === 3) { markerPos = { x: notePos.x - 10, y: notePos.y + 6 }; }
+                                                                                else if (voiceNum === 4) { markerPos = { x: notePos.x + 10, y: notePos.y - 6 }; }
+                                                                            }
+                                                                            const labelPos = getOrnamentLabelPosition(markerPos, clef, voiceNum, text);
 
                                                                             results.push(
-                                                                                <text
-                                                                                    key={`orn-${n.id}`}
-                                                                                    x={x}
-                                                                                    y={y}
-                                                                                    textAnchor="middle"
-                                                                                    dominantBaseline="middle"
-                                                                                    fontSize={11}
-                                                                                    fontWeight={600}
-                                                                                    fontStyle="italic"
-                                                                                    fill="#1e40af"
-                                                                                    opacity={0.85}
-                                                                                >
-                                                                                    {text}
-                                                                                </text>
+                                                                                <g key={`orn-${n.id}`}>
+                                                                                    <line
+                                                                                        x1={notePos.x}
+                                                                                        y1={notePos.y}
+                                                                                        x2={labelPos.x}
+                                                                                        y2={labelPos.y}
+                                                                                        stroke={ORNAMENT_LABEL_LEADER_STROKE}
+                                                                                        strokeWidth={0.75}
+                                                                                        strokeLinecap="round"
+                                                                                        opacity={0.9}
+                                                                                    />
+                                                                                    <text
+                                                                                        x={labelPos.x}
+                                                                                        y={labelPos.y}
+                                                                                        textAnchor="middle"
+                                                                                        dominantBaseline="middle"
+                                                                                        fontSize={ORNAMENT_LABEL_FONT_SIZE_PX}
+                                                                                        fontWeight={700}
+                                                                                        fill="#1e40af"
+                                                                                        stroke="#ffffff"
+                                                                                        strokeWidth={3}
+                                                                                        paintOrder="stroke"
+                                                                                        opacity={0.96}
+                                                                                    >
+                                                                                        {text}
+                                                                                    </text>
+                                                                                </g>
                                                                             );
                                                                         }
 
@@ -8710,7 +8786,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                 fill="black"
                                                                                                 opacity={0.7}
                                                                                             >
-                                                                                                p
+                                                                                                P
                                                                                             </text>
                                                                                         </g>
                                                                                     );

@@ -1,4 +1,11 @@
 {
+  "voiceInstruments": {
+    "1": "acoustic_grand_piano-mp3",
+    "2": "acoustic_grand_piano-mp3",
+    "3": "acoustic_grand_piano-mp3",
+    "4": "acoustic_grand_piano-mp3"
+  },
+  "schemaVersion": 1,
   "notes": [
     {
       "id": "02928d3a-fa86-4eaf-b094-daac33a4876b",
@@ -18,7 +25,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "12e87959-4776-463a-a1c7-a82f50ff703d",
@@ -38,7 +46,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "e1933198-9701-4341-bcdc-0bea61e533a9",
@@ -58,7 +67,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "7bbc9026-b0d6-4546-a3d1-199d98b77434",
@@ -78,7 +88,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "8a4257fa-83bf-4338-aec3-10c2bdbee916",
@@ -98,7 +109,8 @@
       "beat": 1.5,
       "startTick": 480,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "f24d7e29-d32d-4d99-a128-b3f126e8e627",
@@ -118,7 +130,8 @@
       "beat": 2,
       "startTick": 960,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "cf1703c3-8bca-4156-bff5-cbebc49aa9b3",
@@ -138,7 +151,8 @@
       "beat": 2.5,
       "startTick": 1440,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "794a4856-86ab-45a8-b3b9-4f9fc33977a3",
@@ -158,7 +172,8 @@
       "beat": 2.5,
       "startTick": 1440,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "910dad2f-cfaa-4858-b552-ce6b3b8bae7c",
@@ -178,7 +193,8 @@
       "beat": 2.5,
       "startTick": 1440,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "e182e6d5-8265-4346-b733-a9e58cd2f528",
@@ -198,7 +214,8 @@
       "beat": 2.5,
       "startTick": 1440,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "07f9bbe9-6c98-41b5-8e08-1d4138812ddf",
@@ -218,7 +235,8 @@
       "beat": 3.5,
       "startTick": 2400,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "9da3fd5b-0f1c-4e80-8fcf-3a4dc4c424f2",
@@ -238,7 +256,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "03c0e4cb-928a-4e17-a7f2-629aaf7ba369",
@@ -258,7 +277,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "bb215d85-bc19-47c6-85e9-cd48f0532289",
@@ -278,7 +298,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "4f1ccdaf-0c0a-439d-99be-b9e091b43a35",
@@ -298,7 +319,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "6af7bb65-52b5-4972-a1eb-e84b8dbacb26",
@@ -318,7 +340,8 @@
       "beat": 1.5,
       "startTick": 3360,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "b7f461b2-571f-47da-ab99-85e0b035b2f3",
@@ -338,7 +361,8 @@
       "beat": 2,
       "startTick": 3840,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "e430311c-a144-465c-92b5-8fb0992dca0f",
@@ -358,7 +382,8 @@
       "beat": 2.5,
       "startTick": 4320,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "867df014-94da-47ed-a91e-4f5548f2a32f",
@@ -378,7 +403,8 @@
       "beat": 2.5,
       "startTick": 4320,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "f2356e12-5eff-47a1-abd4-f1c2b5b34765",
@@ -398,7 +424,8 @@
       "beat": 2.5,
       "startTick": 4320,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "cda83ff0-09b9-4738-a266-fe930dde1d48",
@@ -418,7 +445,8 @@
       "beat": 2.5,
       "startTick": 4320,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "8580e0d3-2faa-4995-bfb9-d5f3169daba9",
@@ -438,7 +466,8 @@
       "beat": 3.5,
       "startTick": 5280,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "95c2d336-9756-47c1-b259-f9d164f6295b",
@@ -458,7 +487,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "d449b6d1-c7d1-470b-98d9-3bf37594d857",
@@ -478,7 +508,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "b231c619-c5a5-4806-8b0a-7bb738aab70b",
@@ -498,7 +529,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "7b5bc941-b2eb-4531-b96a-f554bec860e1",
@@ -518,7 +550,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "800c5ab1-a750-4396-98dc-dc5ff4b70445",
@@ -538,7 +571,8 @@
       "beat": 1.5,
       "startTick": 6240,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "55daf8ea-efa6-4fd7-b5fb-a3dc87484b2c",
@@ -558,7 +592,8 @@
       "beat": 2,
       "startTick": 6720,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "0f74c798-698e-4bb9-8aa7-cf64f9e24bac",
@@ -578,7 +613,8 @@
       "beat": 2.5,
       "startTick": 7200,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "09a8f69d-76e3-4dd8-a84a-fcc0ed237dc4",
@@ -598,7 +634,8 @@
       "beat": 2.5,
       "startTick": 7200,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "6d71a5ff-1c71-454d-83d7-461bb954611b",
@@ -618,7 +655,8 @@
       "beat": 2.5,
       "startTick": 7200,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "9c12c2a6-2457-4181-9584-b4de1ff3ca8b",
@@ -638,7 +676,8 @@
       "beat": 2.5,
       "startTick": 7200,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "61add7f0-2ba6-438f-ad6e-c697a80bf57a",
@@ -658,7 +697,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "e60fafdd-f8e9-4e95-aabc-4529344cd870",
@@ -678,7 +718,8 @@
       "beat": 3.5,
       "startTick": 8160,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "c2303ba1-0bee-4675-b98d-225cda75b726",
@@ -698,7 +739,8 @@
       "beat": 1,
       "startTick": 8640,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "fc05b30b-c563-4aa0-a763-d83948db3eb6",
@@ -718,7 +760,8 @@
       "beat": 1,
       "startTick": 8640,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "3de4c3c7-a228-4d6d-a89f-189dc4ef340d",
@@ -738,7 +781,8 @@
       "beat": 1,
       "startTick": 8640,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "016d54e1-079a-4b38-bd9d-b3f5246415bb",
@@ -759,7 +803,8 @@
       "startTick": 8640,
       "durationTicks": 2880,
       "voice": 4,
-      "isTiedToNext": true
+      "isTiedToNext": true,
+      "accidental": "flat"
     },
     {
       "id": "8842d854-9b02-4348-84ff-c2449334e83b",
@@ -779,7 +824,8 @@
       "beat": 2.5,
       "startTick": 10080,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "b58f0978-a55b-49a8-b4d6-4f39c6c67669",
@@ -799,7 +845,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "6bce6d6d-4678-415f-b22b-8ac146109852",
@@ -819,7 +866,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "a9e3f843-3460-43aa-9c7f-122b99a35011",
@@ -839,7 +887,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "711994a8-4231-48c0-88c2-b421828b9d15",
@@ -859,7 +908,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "b59c2ca7-5ec5-4145-bc73-c6083dc1c2cc",
@@ -879,7 +929,8 @@
       "beat": 1.5,
       "startTick": 12000,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "c4c62514-ad90-4780-9374-1cc6e2c34bb5",
@@ -899,7 +950,8 @@
       "beat": 1.5,
       "startTick": 12000,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "062c6add-bd23-422e-ae87-aaf91887ffb5",
@@ -919,7 +971,8 @@
       "beat": 1.5,
       "startTick": 12000,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "0608a694-a70f-4a6b-836d-2c8660952788",
@@ -939,7 +992,8 @@
       "beat": 2,
       "startTick": 12480,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "a4446386-7e60-47a4-8db2-806be493c5a6",
@@ -959,7 +1013,8 @@
       "beat": 2,
       "startTick": 12480,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "793f22e5-4347-4d67-9fdb-947097d9ed1d",
@@ -979,7 +1034,8 @@
       "beat": 2,
       "startTick": 12480,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "07840a1d-74a4-48a9-8b80-3849aa8aa78e",
@@ -999,7 +1055,8 @@
       "beat": 2.5,
       "startTick": 12960,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "cc7425fd-88ff-416f-8e9a-9824e752832f",
@@ -1019,7 +1076,8 @@
       "beat": 2.5,
       "startTick": 12960,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "82038b40-c802-4657-8355-372589fcd67c",
@@ -1039,7 +1097,8 @@
       "beat": 2.5,
       "startTick": 12960,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "2551a900-98a4-43d7-a252-1e34b1dec315",
@@ -1059,7 +1118,8 @@
       "beat": 2.5,
       "startTick": 12960,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "10c1ea4d-2249-4e71-baad-29f7da2d1bfb",
@@ -1079,7 +1139,8 @@
       "beat": 3.5,
       "startTick": 13920,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "56fbeacf-8bbe-4b20-8726-05814eec72b0",
@@ -1099,7 +1160,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "78024da8-ccc8-4dbf-9fe9-3c1b59084c31",
@@ -1119,7 +1181,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "08205e73-4744-4485-96cb-ec171fb514ae",
@@ -1139,7 +1202,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "a3c89586-5c0d-4caa-9dea-8d51febfe451",
@@ -1159,7 +1223,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "e34a7f65-70b5-4c6b-8dbe-f7c368a7a7cf",
@@ -1179,7 +1244,8 @@
       "beat": 1.5,
       "startTick": 14880,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "8204ca06-c814-4556-ba35-b692d8bf2a0d",
@@ -1199,7 +1265,8 @@
       "beat": 1.5,
       "startTick": 14880,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "0678845d-a4e8-4886-9a9b-8189d1747939",
@@ -1219,7 +1286,8 @@
       "beat": 1.5,
       "startTick": 14880,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "6e1c2580-8f02-4e74-b512-305fe4e6c7d6",
@@ -1239,7 +1307,8 @@
       "beat": 2,
       "startTick": 15360,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "dfd6d1ee-b2ee-451b-bcc2-c01342a9bf48",
@@ -1259,7 +1328,8 @@
       "beat": 2,
       "startTick": 15360,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "e0167826-3f0c-40e8-ac8d-f8fe7f0213d7",
@@ -1279,7 +1349,8 @@
       "beat": 2,
       "startTick": 15360,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "92e19a3f-61eb-4888-a93f-e2845abbb8cb",
@@ -1299,7 +1370,8 @@
       "beat": 2,
       "startTick": 15360,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "4be46625-7c0d-4460-b42d-0c845721c6f0",
@@ -1319,7 +1391,8 @@
       "beat": 2.5,
       "startTick": 15840,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "619989e7-3237-4a68-b04d-dd6f88f05625",
@@ -1339,7 +1412,8 @@
       "beat": 2.5,
       "startTick": 15840,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "6f9bee1b-286f-446f-9763-b97ae779f454",
@@ -1359,7 +1433,8 @@
       "beat": 2.5,
       "startTick": 15840,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "68ef4ce6-8489-448e-8193-10321fe8157e",
@@ -1379,7 +1454,8 @@
       "beat": 2.5,
       "startTick": 15840,
       "durationTicks": 720,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "b55fdfba-0fda-4499-a62f-2294982e5133",
@@ -1399,7 +1475,8 @@
       "beat": 3.25,
       "startTick": 16560,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "a3883c12-07bb-493c-a134-df0d2c3e627a",
@@ -1419,7 +1496,8 @@
       "beat": 3.5,
       "startTick": 16800,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "5fdd1819-8bce-4cfc-a025-3abc99e3177e",
@@ -1439,7 +1517,8 @@
       "beat": 3.5,
       "startTick": 16800,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "bf1be078-e147-4070-aa4b-49e56e5f5cd1",
@@ -1459,7 +1538,8 @@
       "beat": 3.75,
       "startTick": 17040,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "19776566-fd6a-4918-8069-4a160ae51999",
@@ -1479,7 +1559,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "f057bc3c-c235-4ee2-90a2-108488f51090",
@@ -1499,7 +1580,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "c168a55b-9076-4456-bf24-6f982a96b0f7",
@@ -1519,7 +1601,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "a555b0d7-19a6-42fa-aa31-85e8be20737b",
@@ -1561,7 +1644,8 @@
       "beat": 2,
       "startTick": 18240,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "104eaac3-9b78-4d3b-810b-9cd455185ed1",
@@ -1581,7 +1665,8 @@
       "beat": 2,
       "startTick": 18240,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "6e9f9550-8820-4ecc-b4c8-e750938543d8",
@@ -1601,7 +1686,8 @@
       "beat": 2.5,
       "startTick": 18720,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "52563579-abaa-48f0-81e5-0b48b6db17c2",
@@ -1621,7 +1707,8 @@
       "beat": 2.5,
       "startTick": 18720,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "9bd48d0c-1a72-4897-b933-9ef256f4e624",
@@ -1641,7 +1728,8 @@
       "beat": 2.5,
       "startTick": 18720,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "59940724-1c12-4a6a-b76e-134a1233490f",
@@ -1661,7 +1749,8 @@
       "beat": 2.5,
       "startTick": 18720,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "e1dd8a04-4520-4f6c-a0e4-dca3e8c58d2b",
@@ -1681,7 +1770,8 @@
       "beat": 3.5,
       "startTick": 19680,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "1503d317-876f-4d29-98b2-3acb80d0af91",
@@ -1701,7 +1791,8 @@
       "beat": 3.5,
       "startTick": 19680,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "93814c30-edb6-483b-8ef5-277b1d2f827a",
@@ -1721,7 +1812,8 @@
       "beat": 3.5,
       "startTick": 19680,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "4e8a08fb-64a6-4ae6-8ab3-a66202d6ab09",
@@ -1741,7 +1833,8 @@
       "beat": 3.5,
       "startTick": 19680,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "02898ce3-3af6-46d2-b0fc-bb0b5702fc20",
@@ -1761,7 +1854,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "183cae5c-c6fd-4bb3-b3ab-b859865e3422",
@@ -1781,7 +1875,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "7da87367-ad6e-4f12-92dd-3bc06a226b5c",
@@ -1801,7 +1896,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "6b571b22-5959-49b9-8dcf-a0eb61ca96ed",
@@ -1821,7 +1917,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "270cf0ae-0df6-49e6-8078-161b90b3908d",
@@ -1863,7 +1960,8 @@
       "beat": 2.5,
       "startTick": 21600,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "c0e84035-03e5-4f99-8189-31f43b80e042",
@@ -1883,7 +1981,8 @@
       "beat": 2.5,
       "startTick": 21600,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "ba5bee7b-da3c-4ec6-ac28-5e769727db12",
@@ -1903,7 +2002,8 @@
       "beat": 2.5,
       "startTick": 21600,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "d1caafa3-793d-4b32-80a4-8046b85192c4",
@@ -1924,6 +2024,7 @@
       "startTick": 23040,
       "durationTicks": 1440,
       "voice": 1,
+      "accidental": "natural",
       "isTiedToNext": true
     },
     {
@@ -1944,7 +2045,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "5a9aac61-6c72-4b84-8f0d-5e95e6f55d49",
@@ -1964,7 +2066,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "19823cdc-e049-40cd-8454-8dd4fb95d0ac",
@@ -1984,7 +2087,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "08d5b76e-d010-49a9-a7a7-6dbafe561fe5",
@@ -2004,7 +2108,8 @@
       "beat": 1.5,
       "startTick": 23520,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "db8da9ca-2b21-44e1-8a6d-f3a422f15346",
@@ -2024,7 +2129,8 @@
       "beat": 2,
       "startTick": 24000,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "5b0d6b97-fdff-4a1c-b8fd-abd58d974c61",
@@ -2044,7 +2150,8 @@
       "beat": 2.5,
       "startTick": 24480,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "e7e21d30-86c3-4d54-80e0-a71deead6e71",
@@ -2064,7 +2171,8 @@
       "beat": 2.5,
       "startTick": 24480,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "f18e1a40-a38e-4155-bb84-2c4bceff0f6e",
@@ -2084,7 +2192,8 @@
       "beat": 2.5,
       "startTick": 24480,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "59134f9d-a607-44ea-867a-6f3506a629a1",
@@ -2104,7 +2213,8 @@
       "beat": 2.5,
       "startTick": 24480,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "3eb4960e-85d9-4b9d-b589-7cb1e0038eed",
@@ -2124,7 +2234,8 @@
       "beat": 3.5,
       "startTick": 25440,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "5ebea494-de7c-4da2-8a41-178f7792a6ee",
@@ -2144,7 +2255,8 @@
       "beat": 3.5,
       "startTick": 25440,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "b6b1d3b0-9510-47c6-b708-c6062721a3c6",
@@ -2164,7 +2276,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "58502cf5-df03-4bb9-b7ed-64e866002eed",
@@ -2184,7 +2297,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "cc55dbe5-25eb-42af-8dce-2dad19f10669",
@@ -2204,7 +2318,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "c729fd72-e679-49c1-8cb4-4e6c03447fb2",
@@ -2224,7 +2339,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "4a3a636b-1f57-446b-9a32-d82cc9257406",
@@ -2244,7 +2360,8 @@
       "beat": 1.5,
       "startTick": 26400,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "85e5ffe6-7cee-4e43-a1f8-b3b4d6ac508e",
@@ -2264,7 +2381,8 @@
       "beat": 2,
       "startTick": 26880,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "f2ff9102-3ff7-403c-91ec-83cf330efe29",
@@ -2284,7 +2402,8 @@
       "beat": 2.5,
       "startTick": 27360,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "7b009d74-4488-4049-be95-dc671d890959",
@@ -2304,7 +2423,8 @@
       "beat": 2.5,
       "startTick": 27360,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "a821348d-e041-4323-952b-abdf636118a5",
@@ -2324,7 +2444,8 @@
       "beat": 2.5,
       "startTick": 27360,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "c0d938ba-7245-4b42-8498-6f6a30386c34",
@@ -2344,7 +2465,8 @@
       "beat": 2.5,
       "startTick": 27360,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "f6a9131a-142f-4790-a0a6-fbf08b6ccf31",
@@ -2364,7 +2486,8 @@
       "beat": 3.5,
       "startTick": 28320,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "df73ab0f-4d9b-41a6-8998-1f4ef604875c",
@@ -2384,7 +2507,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "3ce0b537-9f28-4703-b6e2-87d9c71347ef",
@@ -2404,7 +2528,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "fb37fb12-a3ed-42f6-8bea-9b2977ec8dff",
@@ -2424,7 +2549,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "42651843-699e-4963-a7b2-31a1e1a8c320",
@@ -2444,7 +2570,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "9efcd3db-7515-4bea-a753-96d831f681ef",
@@ -2486,7 +2613,8 @@
       "beat": 2.5,
       "startTick": 30240,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "71fbc37a-f6d8-4556-80bd-13de63f73986",
@@ -2506,7 +2634,8 @@
       "beat": 2.5,
       "startTick": 30240,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "587b8f0a-5551-4574-af14-aadc7cd984a2",
@@ -2548,7 +2677,8 @@
       "beat": 2.5,
       "startTick": 30240,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "57213c2b-cfb8-45ae-a7e6-53d908c3381a",
@@ -2590,7 +2720,8 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "94b6e1e7-e69b-4a23-8416-d6aa8b8f0713",
@@ -2610,7 +2741,8 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "a0482a93-4131-4715-8f98-346a5b0bea7f",
@@ -2630,7 +2762,8 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "24e3cb7d-8ae6-4fd6-8da7-0d404d5dc04e",
@@ -2672,7 +2805,8 @@
       "beat": 3.5,
       "startTick": 31200,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "87a783c4-6393-4294-8c00-236c9ae72b81",
@@ -2692,7 +2826,8 @@
       "beat": 3.5,
       "startTick": 31200,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "369006ea-ea03-4109-9280-80fe2d513e70",
@@ -2712,7 +2847,8 @@
       "beat": 1,
       "startTick": 31680,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "a4e6b5bc-8e02-4f64-95ce-dad4f23b6427",
@@ -2732,7 +2868,8 @@
       "beat": 1,
       "startTick": 31680,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "6e14f3c1-ac1e-4c76-a16a-a166924f21f2",
@@ -2752,7 +2889,8 @@
       "beat": 1,
       "startTick": 31680,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "20340fd4-5c05-4600-bd6c-3222814575c3",
@@ -2772,7 +2910,8 @@
       "beat": 1,
       "startTick": 31680,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "d7ebaf49-ea3b-4405-ad95-6d49ee38dc01",
@@ -2792,7 +2931,8 @@
       "beat": 1.5,
       "startTick": 32160,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "7de37c8b-478b-44e8-bcd2-fafca4abdf29",
@@ -2834,7 +2974,8 @@
       "beat": 1.5,
       "startTick": 32160,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "4f34d89d-f8b1-4988-a65d-da13d9cb0db9",
@@ -2854,7 +2995,8 @@
       "beat": 1.5,
       "startTick": 32160,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "cd162e59-f339-4b0e-8def-a63f0a1640b2",
@@ -2874,7 +3016,8 @@
       "beat": 2,
       "startTick": 32640,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "6705648d-9a74-43e1-bd09-f5038852ff8e",
@@ -2894,7 +3037,8 @@
       "beat": 2,
       "startTick": 32640,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "acf47864-f90a-4c4a-8a3f-51ab5b3bedbc",
@@ -2914,7 +3058,8 @@
       "beat": 2,
       "startTick": 32640,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "3ad8b804-50e2-4226-a9f6-66da3a4d35dd",
@@ -2934,7 +3079,8 @@
       "beat": 2,
       "startTick": 32640,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "1301a536-c0d6-4048-928c-b5b69fc3d7ca",
@@ -2954,7 +3100,8 @@
       "beat": 2.5,
       "startTick": 33120,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "d2f89fed-87fc-4fb7-bd42-226611b2dec2",
@@ -2996,7 +3143,8 @@
       "beat": 2.5,
       "startTick": 33120,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "795394c2-05f0-463c-87f9-d7bd5be6e9cb",
@@ -3016,7 +3164,8 @@
       "beat": 2.5,
       "startTick": 33120,
       "durationTicks": 720,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "836b90bc-d930-43bc-89ca-ec0b13afe529",
@@ -3036,7 +3185,8 @@
       "beat": 3.25,
       "startTick": 33840,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "30204ee9-1e81-4cd2-82e3-e373270a9998",
@@ -3056,7 +3206,8 @@
       "beat": 3.5,
       "startTick": 34080,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "aaad3d3b-bd66-430b-bddc-9bcc69b2f038",
@@ -3076,7 +3227,8 @@
       "beat": 3.75,
       "startTick": 34320,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "ae98a6e5-daac-46ca-b13a-8ed52154c8f9",
@@ -3098,7 +3250,8 @@
       "durationTicks": 1440,
       "voice": 1,
       "isTiedToNext": true,
-      "manualStemDirection": "up"
+      "manualStemDirection": "up",
+      "accidental": "natural"
     },
     {
       "id": "be40e64d-ed18-41e0-8d65-66deff5e0fc0",
@@ -3118,7 +3271,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "b0d7d04f-8e7a-4832-ac65-cbd4b55ff420",
@@ -3138,7 +3292,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "ad1656d7-3ac7-49aa-b1b0-ed61caee78c0",
@@ -3158,7 +3313,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "0eeac00d-cad6-46ba-9d7c-2e3dfaf08145",
@@ -3178,7 +3334,8 @@
       "beat": 2.5,
       "startTick": 36000,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "5355394f-61ab-46a0-b62e-e77be46dd6b7",
@@ -3199,7 +3356,8 @@
       "startTick": 36000,
       "durationTicks": 1440,
       "voice": 2,
-      "isTiedToNext": true
+      "isTiedToNext": true,
+      "accidental": "natural"
     },
     {
       "id": "24e800ff-6075-46ee-a14b-73109652ca90",
@@ -3220,7 +3378,8 @@
       "startTick": 36000,
       "durationTicks": 1440,
       "voice": 3,
-      "isTiedToNext": true
+      "isTiedToNext": true,
+      "accidental": "flat"
     },
     {
       "id": "551de923-ed25-4d2d-acc3-cb5d84da7360",
@@ -3240,7 +3399,8 @@
       "beat": 2.5,
       "startTick": 36000,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "38f6706c-3b15-4d8d-ab77-0bb86e02fcff",
@@ -3260,7 +3420,8 @@
       "beat": 3,
       "startTick": 36480,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "dbaacce1-2ec2-4657-9745-6d9a55b32d18",
@@ -3280,7 +3441,8 @@
       "beat": 3.5,
       "startTick": 36960,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "42c67d09-24e8-4e13-81df-224be463c532",
@@ -3300,7 +3462,8 @@
       "beat": 1,
       "startTick": 37440,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "79868484-e04f-4332-b8d5-fbff454576e2",
@@ -3320,7 +3483,8 @@
       "beat": 1,
       "startTick": 37440,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "079732d3-20d6-4f0b-a4b0-eb240300ec33",
@@ -3340,7 +3504,8 @@
       "beat": 1,
       "startTick": 37440,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "2ac16812-3911-4c94-91a6-defe8c453d4f",
@@ -3360,7 +3525,8 @@
       "beat": 1,
       "startTick": 37440,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "ee611845-5b1a-41bc-baae-f9f6a9c975f9",
@@ -3402,7 +3568,8 @@
       "beat": 2,
       "startTick": 38400,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "dec3df53-0cfa-431f-9ad0-bd84d02eaca9",
@@ -3422,7 +3589,8 @@
       "beat": 2.5,
       "startTick": 38880,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "9216a019-3785-443b-bc55-7b9454d98cfb",
@@ -3442,7 +3610,8 @@
       "beat": 2.5,
       "startTick": 38880,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "81a5a5aa-412e-4d8d-9f97-1ca865d8b614",
@@ -3462,7 +3631,8 @@
       "beat": 2.5,
       "startTick": 38880,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "aafe4e25-4dbb-482c-b4ed-1d82dcf4f645",
@@ -3482,7 +3652,8 @@
       "beat": 2.5,
       "startTick": 38880,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "0a3c8b62-a0ea-4b81-b691-e5f0db79b1b2",
@@ -3502,7 +3673,8 @@
       "beat": 3,
       "startTick": 39360,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "8149b4e2-36ab-4af3-bf75-ccaccea05a64",
@@ -3544,7 +3716,8 @@
       "beat": 3,
       "startTick": 39360,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "976f0711-d9f3-4b1f-b1c6-71d39e1c755f",
@@ -3564,7 +3737,8 @@
       "beat": 3,
       "startTick": 39360,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "221b8671-855b-4011-8a4d-405bba7c59cc",
@@ -3584,7 +3758,8 @@
       "beat": 3.5,
       "startTick": 39840,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "a2636ec6-123a-476f-8cc9-59ce64eba212",
@@ -3604,7 +3779,8 @@
       "beat": 3.5,
       "startTick": 39840,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "8c5063aa-b82f-42a6-8e35-50f824bf2c32",
@@ -3624,7 +3800,8 @@
       "beat": 3.5,
       "startTick": 39840,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "04b53c87-bfc4-47b2-91ae-71658eb5ced0",
@@ -3644,7 +3821,8 @@
       "beat": 3.5,
       "startTick": 39840,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "3cee7675-7a52-495c-8e41-3b3bb6445fb0",
@@ -3686,7 +3864,8 @@
       "beat": 1,
       "startTick": 40320,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "2af6dd38-1361-4575-ad81-9050151ba3f6",
@@ -3706,7 +3885,8 @@
       "beat": 1,
       "startTick": 40320,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "4d758ad1-fbc2-46a4-8c9d-034762256773",
@@ -3726,7 +3906,8 @@
       "beat": 1,
       "startTick": 40320,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "cc003d7a-217b-45ad-8028-cfdaa65d3dc9",
@@ -3768,7 +3949,8 @@
       "beat": 2.5,
       "startTick": 41760,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "bbc7ccf3-4cf9-4539-9785-61a8eb30ccf6",
@@ -3788,7 +3970,8 @@
       "beat": 2.5,
       "startTick": 41760,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "b3b3593f-9855-4eb5-9fae-51b30e014b65",
@@ -3808,7 +3991,8 @@
       "beat": 3,
       "startTick": 42240,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "da253b45-4829-4e20-974a-30e4ad92e833",
@@ -3828,7 +4012,8 @@
       "beat": 3,
       "startTick": 42240,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "a498e88e-3ae4-4475-a447-efbc83a1f207",
@@ -3848,7 +4033,8 @@
       "beat": 3,
       "startTick": 42240,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "d4bed7d7-03ce-40a7-a22e-4ee64f3685b0",
@@ -3868,7 +4054,8 @@
       "beat": 3.5,
       "startTick": 42720,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "0b325d64-059a-4850-b075-1a90fbac3852",
@@ -3888,7 +4075,8 @@
       "beat": 3.5,
       "startTick": 42720,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "0fdc921d-d12b-4879-bf57-9d6b628c035c",
@@ -3908,7 +4096,8 @@
       "beat": 3.5,
       "startTick": 42720,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "6be0799e-100c-47fd-a330-a51b12089feb",
@@ -3928,7 +4117,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "3eaa4520-d40d-4271-9e15-ef0e633dca3f",
@@ -3948,7 +4138,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "87a7835f-f3d1-487b-9a83-6e3fe032d31f",
@@ -3968,7 +4159,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "1dabb6cb-c31d-4a66-b385-ce0cfd20f30e",
@@ -3988,7 +4180,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 1440,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "70f4633c-1e23-4881-93d1-d5251bf54630",
@@ -4008,7 +4201,8 @@
       "beat": 2,
       "startTick": 44160,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "56946a13-ce34-4d1c-b211-0914e05de4c7",
@@ -4028,7 +4222,8 @@
       "beat": 2.5,
       "startTick": 44640,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "32c9df55-5e50-44e5-92d8-367707505a6f",
@@ -4048,7 +4243,8 @@
       "beat": 2.5,
       "startTick": 44640,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "da58982d-00a5-4704-b6b0-4b3b58c41a4f",
@@ -4068,7 +4264,8 @@
       "beat": 2.5,
       "startTick": 44640,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "e93d7d35-05bf-4009-aa74-6d53e5a64469",
@@ -4088,7 +4285,8 @@
       "beat": 2.5,
       "startTick": 44640,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "ee079d3d-8875-400b-aa7e-721e249d4640",
@@ -4108,7 +4306,8 @@
       "beat": 3,
       "startTick": 45120,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "1e611e0e-05a6-408f-8b17-ece7082c051c",
@@ -4128,7 +4327,8 @@
       "beat": 3,
       "startTick": 45120,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "2dfd7d0a-22bc-43bf-a6f7-8fcd50940565",
@@ -4148,7 +4348,8 @@
       "beat": 3,
       "startTick": 45120,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "132728fa-f4d7-4503-a80e-322dd68d78ff",
@@ -4168,7 +4369,8 @@
       "beat": 3.5,
       "startTick": 45600,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "b255d75e-2b63-4fd2-9955-d6d11dc47447",
@@ -4188,7 +4390,8 @@
       "beat": 3.5,
       "startTick": 45600,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "f23716f8-7da8-473b-bf74-99a1411eec63",
@@ -4208,7 +4411,8 @@
       "beat": 3.5,
       "startTick": 45600,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "d5177133-7177-4528-8258-ad887c8192f0",
@@ -4228,7 +4432,8 @@
       "beat": 3.5,
       "startTick": 45600,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "dc398bf3-8d27-4f71-95d3-4d2acfb81d36",
@@ -4249,7 +4454,8 @@
       "startTick": 46080,
       "durationTicks": 1440,
       "voice": 1,
-      "manualStemDirection": "up"
+      "manualStemDirection": "up",
+      "accidental": "natural"
     },
     {
       "id": "343f2a2d-7f8c-4ffb-a0b9-8b5b66e30def",
@@ -4269,7 +4475,8 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "f30dba19-7ad1-42ab-ab96-2c271b04303e",
@@ -4289,7 +4496,8 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "54ede8ee-9437-4664-b336-4d442b6e488a",
@@ -4309,7 +4517,8 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 720,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "6fb82d74-c655-40f7-95c6-1cb740f3c94a",
@@ -4329,7 +4538,8 @@
       "beat": 1.75,
       "startTick": 46800,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "04de7dc7-99f3-4908-8eb2-c2e8cd6e498e",
@@ -4349,7 +4559,8 @@
       "beat": 2,
       "startTick": 47040,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "ec3f4262-1e71-42c2-845d-9de558a61fd2",
@@ -4369,7 +4580,8 @@
       "beat": 2,
       "startTick": 47040,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "3533cb11-47b6-453f-8fbf-cc3aaefa7fdf",
@@ -4389,7 +4601,8 @@
       "beat": 2.25,
       "startTick": 47280,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "a5b9cba8-d65e-4b5d-816e-468416dc3f3b",
@@ -4410,7 +4623,8 @@
       "startTick": 47520,
       "durationTicks": 480,
       "voice": 1,
-      "manualStemDirection": "up"
+      "manualStemDirection": "up",
+      "accidental": "natural"
     },
     {
       "id": "4e4f9485-3df3-406a-a07b-2a9de6819ad5",
@@ -4430,7 +4644,8 @@
       "beat": 2.5,
       "startTick": 47520,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "e460896e-9984-4093-8079-4d0759241397",
@@ -4450,7 +4665,8 @@
       "beat": 2.5,
       "startTick": 47520,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "381ed7fd-b316-4c23-a451-1e46e513a17d",
@@ -4470,7 +4686,8 @@
       "beat": 2.5,
       "startTick": 47520,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "4a58c227-18e5-499a-a5ec-8448be93b8f0",
@@ -4490,7 +4707,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "e43cbb94-3f3a-40df-880b-123a76b1e1fd",
@@ -4510,7 +4728,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "c9efaff7-cf73-47de-97b2-bec351a86580",
@@ -4530,7 +4749,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "a5eb3625-58e4-4186-8667-251df3dad777",
@@ -4572,7 +4792,8 @@
       "beat": 3.5,
       "startTick": 48480,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "593a4e9e-5606-4d5b-8429-eb58ad4db040",
@@ -4594,7 +4815,8 @@
       "durationTicks": 1440,
       "voice": 1,
       "isTiedToNext": true,
-      "manualStemDirection": "up"
+      "manualStemDirection": "up",
+      "accidental": "flat"
     },
     {
       "id": "a9f537aa-4427-4f8b-b294-2b121aa7a645",
@@ -4614,7 +4836,8 @@
       "beat": 1,
       "startTick": 48960,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "e29878f7-7e3c-4bb8-a8e5-fca2ea191003",
@@ -4634,7 +4857,8 @@
       "beat": 1,
       "startTick": 48960,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "48a5031f-5719-4baa-9a18-b88af2da7c85",
@@ -4654,7 +4878,8 @@
       "beat": 1,
       "startTick": 48960,
       "durationTicks": 720,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "efc7c6cc-73e9-4a56-94f0-704d8ff57412",
@@ -4674,7 +4899,8 @@
       "beat": 1.75,
       "startTick": 49680,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "a2913b3f-56e6-4743-b6dc-555aa2cc60ac",
@@ -4694,7 +4920,8 @@
       "beat": 2,
       "startTick": 49920,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "33f28ca6-41a9-4912-a4ca-a1dc9d9f5773",
@@ -4714,7 +4941,8 @@
       "beat": 2,
       "startTick": 49920,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "20c2d93a-bdf2-4a34-9d63-e21b74598b0f",
@@ -4734,7 +4962,8 @@
       "beat": 2.25,
       "startTick": 50160,
       "durationTicks": 240,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "99b98e79-d1e2-493a-b20a-ce783a069137",
@@ -4755,7 +4984,8 @@
       "startTick": 50400,
       "durationTicks": 960,
       "voice": 1,
-      "manualStemDirection": "up"
+      "manualStemDirection": "up",
+      "accidental": "flat"
     },
     {
       "id": "e769f092-4f02-4998-95d3-9a8c169085de",
@@ -4775,7 +5005,8 @@
       "beat": 2.5,
       "startTick": 50400,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "52d9d62c-d1a5-422d-8f0f-0667fb6a2ced",
@@ -4795,7 +5026,8 @@
       "beat": 2.5,
       "startTick": 50400,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "a4f1da96-bb6c-42b9-9a08-31dfd0b69927",
@@ -4815,7 +5047,8 @@
       "beat": 2.5,
       "startTick": 50400,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "98107f6b-123e-48d8-b42d-134d872ba721",
@@ -4835,7 +5068,8 @@
       "beat": 3.5,
       "startTick": 51360,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "782450bf-0001-417e-ad1c-a94529935c83",
@@ -4855,7 +5089,8 @@
       "beat": 3.5,
       "startTick": 51360,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "8dd24555-8872-4f8c-bf56-f46a540f52dd",
@@ -4875,7 +5110,8 @@
       "beat": 3.5,
       "startTick": 51360,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "121accca-ceea-4230-b092-4ac78971f2fd",
@@ -4895,7 +5131,8 @@
       "beat": 3.5,
       "startTick": 51360,
       "durationTicks": 480,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "c50d2d79-be16-4ef2-b31d-e720b64e4154",
@@ -4915,7 +5152,8 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "7461fd07-b31b-479d-b551-7f04e0b61294",
@@ -4935,7 +5173,8 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "f4a5a93c-2624-4860-b7eb-540cf580609b",
@@ -4955,7 +5194,8 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "2b42f7da-a2f9-4b6b-9f91-15b30b3c68b8",
@@ -4976,7 +5216,8 @@
       "startTick": 51840,
       "durationTicks": 2880,
       "voice": 4,
-      "isTiedToNext": true
+      "isTiedToNext": true,
+      "accidental": "flat"
     },
     {
       "id": "6f3730d3-9231-4626-881f-69fbf20eaa84",
@@ -4996,7 +5237,8 @@
       "beat": 1.5,
       "startTick": 52320,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "35f65b40-e836-4c68-adc9-8ed75603279e",
@@ -5016,7 +5258,8 @@
       "beat": 1.5,
       "startTick": 52320,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "3e5f35ae-63b6-4ad2-b684-2676f1042f14",
@@ -5036,7 +5279,8 @@
       "beat": 1.5,
       "startTick": 52320,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "f2516753-ffe6-4e4e-beaa-99112f986c71",
@@ -5056,7 +5300,8 @@
       "beat": 2,
       "startTick": 52800,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "a5d89d9e-054d-47f1-aaf4-dc7441682ff8",
@@ -5076,7 +5321,8 @@
       "beat": 2,
       "startTick": 52800,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "b9915d95-8427-4a13-8345-16a156561704",
@@ -5096,7 +5342,8 @@
       "beat": 2,
       "startTick": 52800,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "980b23fc-2505-4ca3-aa5c-a160b27cac15",
@@ -5116,7 +5363,8 @@
       "beat": 2.5,
       "startTick": 53280,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "c9b7b9a5-e448-4dd4-baa7-33090d99ea27",
@@ -5136,7 +5384,8 @@
       "beat": 2.5,
       "startTick": 53280,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "3803a18b-e1ec-4e28-abfa-3a63a2dca38e",
@@ -5156,7 +5405,8 @@
       "beat": 2.5,
       "startTick": 53280,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "eaa6738d-7162-4ff8-9569-eccbff44a69f",
@@ -5176,7 +5426,8 @@
       "beat": 3.5,
       "startTick": 54240,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "cb9f8317-bb0f-47bb-9bfb-502f6bf459c0",
@@ -5196,7 +5447,8 @@
       "beat": 3.5,
       "startTick": 54240,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "27e30ca4-0c14-430a-aed5-990304d7986a",
@@ -5216,7 +5468,8 @@
       "beat": 3.5,
       "startTick": 54240,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "cd000f48-6525-4180-bf58-5b6ee4a093d5",
@@ -5237,7 +5490,8 @@
       "startTick": 54720,
       "durationTicks": 480,
       "voice": 1,
-      "manualStemDirection": "up"
+      "manualStemDirection": "up",
+      "accidental": "natural"
     },
     {
       "id": "4101f1a8-6931-43f6-a770-0e0526d36952",
@@ -5257,7 +5511,8 @@
       "beat": 1,
       "startTick": 54720,
       "durationTicks": 480,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "9c655f48-214e-4b60-85c1-bb064dd46c9a",
@@ -5277,7 +5532,8 @@
       "beat": 1,
       "startTick": 54720,
       "durationTicks": 480,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "f80e3dc1-9953-4a05-bb5c-ec90c043db2a",
@@ -5299,7 +5555,8 @@
       "durationTicks": 2880,
       "voice": 4,
       "isTiedToNext": true,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "flat"
     },
     {
       "id": "a90e3675-6f43-4653-94d7-0f6aaf6e1689",
@@ -5319,14 +5576,15 @@
       "beat": 1.5,
       "startTick": 55200,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "b873f07f-716e-478a-9457-fc5a1c1279b1",
       "pitch": "C",
       "octave": 5,
       "position": 7,
-      "midi": 83,
+      "midi": 71,
       "noteIndex": 11,
       "clef": "treble",
       "explicitAccidental": "flat",
@@ -5361,7 +5619,8 @@
       "beat": 1.5,
       "startTick": 55200,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "7ee39100-b4bc-4e7c-8c49-6a4275c7d946",
@@ -5381,7 +5640,8 @@
       "beat": 2,
       "startTick": 55680,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "e973d3ff-d33a-49f7-955b-0c473bc6bca8",
@@ -5401,7 +5661,8 @@
       "beat": 2.5,
       "startTick": 56160,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "3ae81010-ca29-4cf6-b26b-e1666146ea12",
@@ -5421,7 +5682,8 @@
       "beat": 2.5,
       "startTick": 56160,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "115387d8-aa26-4304-b3a2-d9fd01698081",
@@ -5441,7 +5703,8 @@
       "beat": 2.5,
       "startTick": 56160,
       "durationTicks": 1440,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "37ed9874-f813-47b1-9245-d1916d087bf1",
@@ -5461,7 +5724,8 @@
       "beat": 3.5,
       "startTick": 57120,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "bb4906d4-7f55-4e05-80a7-1355d666b9b0",
@@ -5481,7 +5745,8 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 1440,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "9e462696-c133-4b0a-bb77-5d67a2aead4a",
@@ -5502,7 +5767,8 @@
       "startTick": 57600,
       "durationTicks": 480,
       "voice": 2,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "flat"
     },
     {
       "id": "7aa349e0-f638-4e6e-abe2-98be39221b14",
@@ -5523,7 +5789,8 @@
       "startTick": 57600,
       "durationTicks": 1440,
       "voice": 3,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "flat"
     },
     {
       "id": "86a31c87-b069-4bd3-bc8a-c91719b80d8f",
@@ -5544,7 +5811,8 @@
       "startTick": 57600,
       "durationTicks": 2880,
       "voice": 4,
-      "isTiedToNext": true
+      "isTiedToNext": true,
+      "accidental": "flat"
     },
     {
       "id": "83e262c9-54b9-4f8a-8448-905826c03d26",
@@ -5565,7 +5833,8 @@
       "startTick": 58080,
       "durationTicks": 480,
       "voice": 2,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "flat"
     },
     {
       "id": "7b7086d1-2ee4-4f6d-9dca-f3bfb04f4853",
@@ -5586,7 +5855,8 @@
       "startTick": 58560,
       "durationTicks": 480,
       "voice": 2,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "natural"
     },
     {
       "id": "ff6adbf6-8938-447d-9fa7-b5b7a3ae8295",
@@ -5608,7 +5878,8 @@
       "durationTicks": 480,
       "voice": 1,
       "manualBeamGroupId": "3ccaae01-af68-4266-9b8d-7d58336b76c2",
-      "manualBeamDisabled": false
+      "manualBeamDisabled": false,
+      "accidental": "natural"
     },
     {
       "id": "7f55d958-872b-470b-9112-4009b9c3b7c3",
@@ -5629,7 +5900,8 @@
       "startTick": 59040,
       "durationTicks": 1440,
       "voice": 2,
-      "manualStemDirection": "up"
+      "manualStemDirection": "up",
+      "accidental": "natural"
     },
     {
       "id": "dc2b5af8-ae12-4feb-82ce-fcb822350cdd",
@@ -5650,7 +5922,8 @@
       "startTick": 59040,
       "durationTicks": 1440,
       "voice": 3,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "natural"
     },
     {
       "id": "a5d2e1c7-d04b-41dc-ae5c-7d91daefff19",
@@ -5672,7 +5945,8 @@
       "durationTicks": 480,
       "voice": 1,
       "manualBeamGroupId": "3ccaae01-af68-4266-9b8d-7d58336b76c2",
-      "manualBeamDisabled": false
+      "manualBeamDisabled": false,
+      "accidental": "flat"
     },
     {
       "id": "bea1e0b7-4f8b-4031-8ac6-0ee3767ec815",
@@ -5694,7 +5968,8 @@
       "durationTicks": 480,
       "voice": 1,
       "manualBeamGroupId": "3ccaae01-af68-4266-9b8d-7d58336b76c2",
-      "manualBeamDisabled": false
+      "manualBeamDisabled": false,
+      "accidental": "flat"
     },
     {
       "id": "307f7132-7558-4160-a566-44f899c0c160",
@@ -5714,7 +5989,8 @@
       "beat": 1,
       "startTick": 60480,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "7b550f30-a8b7-4b19-8160-840a1e6d5b7b",
@@ -5735,7 +6011,8 @@
       "startTick": 60480,
       "durationTicks": 480,
       "voice": 2,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "natural"
     },
     {
       "id": "0ecc545e-0cf3-4c34-98bc-b08c61f8d0ba",
@@ -5756,7 +6033,8 @@
       "startTick": 60480,
       "durationTicks": 2880,
       "voice": 3,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "flat"
     },
     {
       "id": "a5546ab5-3bda-46d0-9115-6bee366fcae9",
@@ -5776,7 +6054,8 @@
       "beat": 1,
       "startTick": 60480,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "3914b383-7153-4cd2-8487-9c6b15675999",
@@ -5797,7 +6076,8 @@
       "startTick": 60960,
       "durationTicks": 480,
       "voice": 2,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "flat"
     },
     {
       "id": "8f36f8e0-7d63-4e38-b8de-19f0624ca6d4",
@@ -5818,7 +6098,8 @@
       "startTick": 61440,
       "durationTicks": 480,
       "voice": 2,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "natural"
     },
     {
       "id": "f2f8e236-314a-42ad-b1e8-38202efd0fb7",
@@ -5838,7 +6119,8 @@
       "beat": 2.5,
       "startTick": 61920,
       "durationTicks": 1440,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     }
   ],
   "staffSystemMode": "grandstaff",
@@ -5850,11 +6132,21 @@
     "numerator": 6,
     "denominator": 8
   },
+  "timeSignatureChanges": [],
   "isMinorMode": false,
   "autoLeadingToneInMinor": true,
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
+  "doubleBarlineMeasures": [
+    0,
+    2,
+    4,
+    6,
+    11
+  ],
+  "repeatBarlines": {},
+  "voltaBrackets": [],
   "harmonyOverrides": [
     {
       "absBeat": 39,
@@ -5864,6 +6156,28 @@
         "9",
         "4"
       ]
+    }
+  ],
+  "ornamentOverrides": [
+    {
+      "noteId": "f18e1a40-a38e-4155-bb84-2c4bceff0f6e",
+      "type": "structural"
+    },
+    {
+      "noteId": "5355394f-61ab-46a0-b62e-e77be46dd6b7",
+      "type": "structural"
+    },
+    {
+      "noteId": "38f6706c-3b15-4d8d-ab77-0bb86e02fcff",
+      "type": "structural"
+    },
+    {
+      "noteId": "24e800ff-6075-46ee-a14b-73109652ca90",
+      "type": "structural"
+    },
+    {
+      "noteId": "551de923-ed25-4d2d-acc3-cb5d84da7360",
+      "type": "structural"
     }
   ],
   "bpm": 80,
@@ -5881,12 +6195,7 @@
     "notations",
     "analysis",
     "key",
-    "more"
-  ],
-  "voiceInstruments": {
-    "1": "acoustic_grand_piano-mp3",
-    "2": "acoustic_grand_piano-mp3",
-    "3": "acoustic_grand_piano-mp3",
-    "4": "acoustic_grand_piano-mp3"
-  }
+    "more",
+    "voiceInstrument"
+  ]
 }

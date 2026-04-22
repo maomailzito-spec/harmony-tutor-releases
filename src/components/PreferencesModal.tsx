@@ -113,6 +113,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [useStatisticalCorrection, setUseStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
   const [statisticalBiasThreshold, setStatisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
   const [enableLearnedOrnaments, setEnableLearnedOrnaments] = usePreference<boolean>('analysis.enableLearnedOrnaments');
+  const [strictPassingNotes, setStrictPassingNotes] = usePreference<boolean>('analysis.strictPassingNotes');
   const [tonicizationCompact, setTonicizationCompact] = usePreference<boolean>('analysis.tonicizationCompact');
   const [chromaticModulation, setChromaticModulation] = usePreference<boolean>('analysis.chromaticModulation');
   const [cadentialPatterns, setCadentialPatterns] = usePreference<boolean>('analysis.cadentialPatterns');
@@ -542,6 +543,21 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     </div>
                   </div>
                 </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={!!strictPassingNotes}
+                      onChange={(e) => setStrictPassingNotes(!!e.target.checked)}
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-100">Regola stretta note di passaggio</div>
+                      <div className="text-xs text-slate-400">
+                        Applica i guard più severi sulla durata e sul profilo ornamentale delle note di passaggio. Disattivala per tornare rapidamente a un comportamento più permissivo.
+                      </div>
+                    </div>
+                  </label>
 
                 <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input

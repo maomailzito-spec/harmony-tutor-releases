@@ -71,4 +71,4 @@ publish:
   provider: github
   owner: maomailzito-spec
   repo: harmony-tutor-releases
-  private: true
+  private: false

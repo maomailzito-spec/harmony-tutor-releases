@@ -1,4 +1,6 @@
-# HARMONY TUTOR — Analisi Completa dell'Applicazione
+In useHarmonyLabels.ts, alla riga 805, subito prima del if, aggiungi:
+typescriptconsole.log('[PIVOT]', 'beat:', bEntry.q, 'homeR:', homeR, 'rTgt:', rTgt?.roman, 'pivTonic:', pivInfo.tonic, pivInfo.isMinor);
+Solo il log, nient'altro.# HARMONY TUTOR — Analisi Completa dell'Applicazione
 
 **Versione documento:** Marzo 2026
 **Versione app:** Beta pre-commerciale (v0.9)

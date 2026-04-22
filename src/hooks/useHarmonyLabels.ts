@@ -164,6 +164,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (src.isAppoggiatura) pn.isAppoggiatura = true;
                     if (src.isAnticipation) pn.isAnticipation = true;
                     if (src.isEscape) pn.isEscape = true;
+                    if (src.isCambiata) pn.isCambiata = true;
                     if (src.ornamentOverride) pn.ornamentOverride = src.ornamentOverride;
                     if (src.ornamentMark) pn.ornamentMark = src.ornamentMark;
                     if (src.isSuspension) pn.isSuspension = src.isSuspension;
@@ -325,7 +326,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             if (!n || n.isRest) return false;
                             // Exclude ornamental notes from cadential pattern recognition
                             if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
-                            if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape) return false;
+                            if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape || n.isCambiata) return false;
                             return true;
                         });
                         const cands = identifyChordCandidates(notesForCad);
@@ -747,10 +748,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
                 const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, { ornamentOverrides: ornOverrideRecord });
-                // DEBUG: trace context at specific absBeats
-                if (Math.abs(absBeat - 10) < 0.01 || Math.abs(absBeat - 2) < 0.01) {
-                    console.log(`[DBG-CTX] absBeat=${absBeat} ctxTonic=${ctxTonic} ctxIsMinor=${ctxIsMinor} roman=${r?.roman} ctx=`, ctx ? { ab: (ctx as any).absBeat, tonic: ctx.newTonic, score: (ctx as any).score, src: (ctx as any).source } : 'GLOBAL');
-                }
+
                 // Compute root PC for fallback resolution matching (V/x → X where quality differs).
                 const rootPc = (() => {
                     try {
@@ -790,7 +788,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             }
 
             // ─── Pivot labels from cadential resolution ───
-            for (const [pivBeat, pivInfo] of _pivotCandidates) {
+    for (const [pivBeat, pivInfo] of _pivotCandidates) {
                 if (autoRomanDisplayByAbsBeat.has(pivBeat)) continue;
                 const bEntry = base.find((b: any) => Math.abs(b.q - pivBeat) < 0.1);
                 if (!bEntry?.ev?.notes?.length) continue;
@@ -801,7 +799,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 );
                 const homeR = String(bEntry.roman || '');
                 if (rTgt?.roman && homeR && rTgt.roman !== homeR) {
-                    autoRomanDisplayByAbsBeat.set(bEntry.q, `${rTgt.roman}=${homeR}`);
+                    // Non sovrascrivere se il Roman globale è già vii° (sensibile chiara: tonicizzazione già esplicita)
+                    if (!/^vii°/i.test(homeR)) {autoRomanDisplayByAbsBeat.set(bEntry.q, `${rTgt.roman}=${homeR}`);
+                    }
                 }
             }
 
@@ -959,6 +959,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 if (autoRomanDisplayByAbsBeat.has(base[s].q) || overrideByAbsBeat.has(base[s].q)) continue;
                                 if (!base[s].ev?.notes?.length) continue;
 
+                                // GUARD: non riscrivere vii°, vii°/X, ♭V, ♭II, ♭III, ♭VI, ♭VII come tonicizzazione cromatica.
+                                // Sono già funzioni armoniche esplicite (sensibili o gradi prestati).
+                                {
+                                    const _hr = String(base[s].roman || '');
+                                    if (/^vii°/i.test(_hr)) continue;
+                                    if (/^♭/.test(_hr)) continue;
+                                }
+
                                 // Only label chords that contain at least one chromatic note
                                 // relative to the global key.  Diatonic chords (e.g. I in C)
                                 // should keep their natural label — they are not evidence
@@ -1033,8 +1041,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                             }
                                         }
                                     }
-                                    if (compactTonicization) {
-                                        autoRomanDisplayByAbsBeat.set(base[s].q, _firstDisplayedForK ? `${localR}/${degLabel}` : localR);
+                                    if (compactTonicization) {autoRomanDisplayByAbsBeat.set(base[s].q, _firstDisplayedForK ? `${localR}/${degLabel}` : localR);
                                     } else {
                                         const spanLen = lastIdx - firstIdx + 1;
                                         let display: string;
@@ -1050,8 +1057,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                         } else {
                                             // Short tonicization: arrival=localR=degLabel, others=localR/degLabel
                                             display = (s === j) ? `${localR}=${degLabel}` : `${localR}/${degLabel}`;
-                                        }
-                                        autoRomanDisplayByAbsBeat.set(base[s].q, display);
+                                        }autoRomanDisplayByAbsBeat.set(base[s].q, display);
                                     }
                                     _firstDisplayedForK = false;
                                 }
@@ -1097,8 +1103,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     ? ['i','\u266DII','ii\u00B0','\u266DIII','iv','v','\u266DVI','\u266DVII','VI','vi\u00B0','VII','vii\u00B0']
                     : ['I','\u266DII','ii','\u266DIII','iii','IV','\u266EIV\u00B0','V','\u266DVI','vi','\u266DVII','vii\u00B0'];
                 const _newKeyDeg = _ctxBoundaryDegNames[_ctxBoundaryInterval] || null;
-                if (!_newKeyDeg) continue;
-                autoRomanDisplayByAbsBeat.set(base[i].q, `vi°/${_newKeyDeg}`);
+                if (!_newKeyDeg) continue;autoRomanDisplayByAbsBeat.set(base[i].q, `vi°/${_newKeyDeg}`);
             }
 
             const maxLookaheadBeats = beatsPerMeasure * 2;
@@ -1193,8 +1198,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (resolvedByExactRoman) {
                             const localTonicRoman = tonicizedIsMinor ? 'i' : 'I';
                             // Only show when the global roman differs (otherwise it's noisy).
-                            if (String(bk.roman || '') && String(bk.roman || '') !== localTonicRoman) {
-                                autoRomanDisplayByAbsBeat.set(bk.q, `${localTonicRoman}=${targetRoman}`);
+                            if (String(bk.roman || '') && String(bk.roman || '') !== localTonicRoman) {autoRomanDisplayByAbsBeat.set(bk.q, `${localTonicRoman}=${targetRoman}`);
                             }
                         } else {
                             // Quality mismatch: show the target degree with the actual quality.
@@ -1216,8 +1220,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 ? baseTarget.toUpperCase()
                                 : chordIsMajor === false
                                     ? baseTarget.toLowerCase()
-                                    : baseTarget.toUpperCase();
-                            autoRomanDisplayByAbsBeat.set(bk.q, displayRoman);
+                                    : baseTarget.toUpperCase();autoRomanDisplayByAbsBeat.set(bk.q, displayRoman);
                         }
                     }
                 } catch { /* ignore */ }
@@ -1240,7 +1243,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 for (const pc of btPcs) { if (!resPcs.has(pc)) { isSubset = false; break; } }
                                 if (isSubset) {
                                     protectedAbsBeats.add(bt.q);
-                                    if (resDisplay) autoRomanDisplayByAbsBeat.set(bt.q, resDisplay);
+
+                autoRomanDisplayByAbsBeat.set(bt.q, resDisplay);
                                 }
                             }
                         }
@@ -1268,8 +1272,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // This is often more musically informative than reading the diminished chord
                     // as vii°/V when it does not actually resolve to V.
                     if (localRoman && /^ii/i.test(localRoman) && (localRoman.includes('°') || localRoman.includes('ø'))) {
-                        // Display-only — never overwrite the structural roman.
-                        autoRomanDisplayByAbsBeat.set(bi.q, `${localRoman}/${targetRoman}`);
+                        // Display-only — never overwrite the structural roman.autoRomanDisplayByAbsBeat.set(bi.q, `${localRoman}/${targetRoman}`);
                         continue;
                     }
 
@@ -1281,8 +1284,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const _lbNotes = structuralNotes(bi.ev?.notes || [], ornOverrideMap);
                         const _lbCands = identifyChordCandidates(_lbNotes as any);
                         const _lbQ = String(_lbCands?.[0]?.type || '').toLowerCase();
-                        if (_lbQ.includes('diminish') || (_lbQ.includes('minor 7') && _lbQ.includes('5'))) {
-                            autoRomanDisplayByAbsBeat.set(bi.q, `vi°/${targetRoman}`);
+                        if (_lbQ.includes('diminish') || (_lbQ.includes('minor 7') && _lbQ.includes('5'))) {autoRomanDisplayByAbsBeat.set(bi.q, `vi°/${targetRoman}`);
                             continue;
                         }
                     }
@@ -1306,10 +1308,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Keep it short to reduce overlap; the target (/iii) is typically evident
                     // from nearby V/target and i=target labels.
                     const globalRomanHere = String(bi.roman || '').trim();
-                    if (globalRomanHere) {
-                        autoRomanDisplayByAbsBeat.set(bi.q, `${globalRomanHere}=${localRoman}`);
-                    } else {
-                        autoRomanDisplayByAbsBeat.set(bi.q, `${localRoman}/${targetRoman}`);
+                    if (globalRomanHere) {autoRomanDisplayByAbsBeat.set(bi.q, `${globalRomanHere}=${localRoman}`);
+                    } else {autoRomanDisplayByAbsBeat.set(bi.q, `${localRoman}/${targetRoman}`);
                     }
                 }
             }
@@ -1610,7 +1610,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Exception: when the engine explicitly flags a short weak-beat bass note as an
                     // ornament (passing/escape/neighbor/etc.), ignore it so it doesn't create a
                     // spurious harmony label (e.g. V4 from a bass "nota di volta").
-                    const isBassOrnFlag = !!(n.isPassing || n.isEscape || n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
+                    const isBassOrnFlag = !!(n.isPassing || n.isEscape || n.isCambiata || n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
                     if (!isBassOrnFlag) return false;
 
                     const dur = (() => {
@@ -1657,7 +1657,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // IMPORTANT: do not "rescue" weak-beat neighbors as chord tones.
                     // Otherwise a short note di volta can form a plausible triad (e.g. D–F–A)
                     // and incorrectly flip the harmony/figured bass at that scanpoint.
-                    const hasNctFlag = !!(n.isAnticipation || n.isAppoggiatura || (n.isNeighbor && isStrongBeat));
+                    const hasNctFlag = !!(n.isAnticipation || n.isAppoggiatura || n.isCambiata || (n.isNeighbor && isStrongBeat));
                     if (hasNctFlag) {
                         const fullIndex = indexByAbsBeat.get(absBeat);
                         const curEv: any = (fullIndex != null) ? (timeline as any[])[fullIndex] : null;
@@ -1694,7 +1694,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // strong pulse and real harmony changes can happen there. If the engine mis-tags a
                 // chord tone as passing/escape, keep it when it fits a confident chord candidate.
                 try {
-                    if (n.isPassing || n.isEscape) {
+                    if (n.isPassing || n.isEscape || n.isCambiata) {
                         const isStrongBeat = (() => {
                             try {
                                 const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -1739,7 +1739,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                 } catch { /* ignore */ }
 
-                if (n.isPassing || n.isEscape) return true;
+                if (n.isPassing || n.isEscape || n.isCambiata) return true;
 
                 // If a note is tagged as appoggiatura but it's actually consonant against the
                 // current bass, treat it as a chord tone (mis-tag guard).
@@ -2027,7 +2027,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             ..._rn,
                             isPassing: false, isNeighbor: false,
                             isAppoggiatura: false, isAnticipation: false,
-                            isEscape: false, isSuspension: undefined,
+                            isEscape: false, isCambiata: false, isSuspension: undefined,
                         });
                     } else {
                         // Other voices: respect only USER manual overrides
@@ -2057,7 +2057,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 ...n,
                                 isPassing: false, isNeighbor: false,
                                 isAppoggiatura: false, isAnticipation: false,
-                                isEscape: false, isSuspension: undefined,
+                                isEscape: false, isCambiata: false, isSuspension: undefined,
                             });
                         }
                     }
@@ -2105,7 +2105,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                     ...n,
                                     isPassing: false, isNeighbor: false,
                                     isAppoggiatura: false, isAnticipation: false,
-                                    isEscape: false, isSuspension: undefined,
+                                    isEscape: false, isCambiata: false, isSuspension: undefined,
                                 });
                             }
                             continue;
@@ -2336,7 +2336,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (!n || n.isRest) return n;
                         const s = n.isSuspension;
                         const isSusp = !!s && typeof s.fromAbsBeat === 'number';
-                        const isNctFlag = !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura);
+                        const isNctFlag = !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura || n.isCambiata);
 
                         if (!isNctFlag && !isSusp) return n;
 
@@ -2356,6 +2356,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             isNeighbor: false,
                             isAnticipation: false,
                             isAppoggiatura: false,
+                                isCambiata: false,
                             isSuspension: isSusp ? undefined : n.isSuspension,
                         };
                     });
@@ -2430,7 +2431,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Passing notes already have their own connection/line, so don't double-draw.
                     return (fullNotes || []).some((n: any) => {
                         if (!n || n.isRest) return false;
-                        return !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura || n.isEscape);
+                        return !!(n.isNeighbor || n.isAnticipation || n.isAppoggiatura || n.isEscape || n.isCambiata);
                     });
                 } catch {
                     return false;
@@ -2726,11 +2727,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // ignore
                 }
 
-                // R2: secDom — rescue secondary dominants from candidates
-                try {
-                    const r2 = applyR2SecDom({ roman, analysisNotesForNaming: analysisNotesForNaming as any, contextTonic, contextIsMinor });
-                    if (r2 !== roman) { roman = r2; _dt('R2:secDom', roman); }
-                } catch { /* ignore */ }
+// R2: secDom — rescue secondary dominants from candidates
+                  try {
+                      const r2 = applyR2SecDom({ roman, analysisNotesForNaming: analysisNotesForNaming as any, contextTonic, contextIsMinor });
+                      if (r2 !== roman) { roman = r2; _dt('R2:secDom', roman); }
+                  } catch { /* ignore */ }
+
 
                 const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
                 // Symbols should reflect the actual verticality (including altered tones),
@@ -3432,9 +3434,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         } else if (ri === endIdx) {
                             // Exit: localRoman=target (e.g. i=iii)
                             const local = stripTarget(disp) || disp;
-                            lbl.romanDisplay = `${local}=${runTarget}`;
+                            // Non riscrivere vii°/X — il dim7 non è una tonica locale.
+                            if (!/^vii°/i.test(disp)) {
+                                lbl.romanDisplay = `${local}=${runTarget}`;
+                            }
                         } else if (thisTarget === runTarget) {
                             // Inside (matching): strip target suffix → simple local roman
+                            // Skip vii°/X — il dim7 mantiene il suo /target esplicito.
+                            if (/^vii°/i.test(disp)) {
+                                // leave as-is
+                            } else {
                             let local = stripTarget(disp) || disp;
                             // A bare roman equal to the target (e.g. "iii" in a /iii region)
                             // is the local tonic — display as i/I (depending on target case)
@@ -3445,6 +3454,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 local = isMinorTarget ? 'i' : 'I';
                             }
                             lbl.romanDisplay = local;
+                            }
                         } else {
                             // Gap label (e.g. vii°/V): leave as-is — stripping the
                             // suffix would give a roman in the wrong key context.

@@ -23,6 +23,7 @@ import {
     isStrongPulseInMeasure,
     qAbsBeat,
 } from './harmonyLabelPipeline';
+import { applyR1bDimResolutionRescue } from './harmonyPostRules';
 
 export type HarmonyLabelPoint = {
     id: string;
@@ -1582,6 +1583,19 @@ export function computeHarmonyLabelsBySystem(opts: {
                     hasAug6Variants = true;
                 }
             }
+
+              try {
+                  const nextNotesForResolution = (eventIndex + 1 < timelineForLabels.length)
+                      ? (((timelineForLabels[eventIndex + 1] as any)?.notes || []) as any[])
+                      : [];
+                  roman = applyR1bDimResolutionRescue({
+                      roman,
+                      currentNotes: (notesForRoman || []) as any[],
+                      nextNotes: nextNotesForResolution,
+                      contextTonic,
+                      contextIsMinor,
+                  });
+              } catch { /* ignore */ }
 
             // ── Picardy third (Terza Piccarda) ──
             // In minor mode, a major triad on the global tonic at the final chord

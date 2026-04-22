@@ -22,6 +22,7 @@ import {
   ANALYSIS_STATISTICAL_CORRECTION_KEY,
   STATISTICAL_BIAS_THRESHOLD_KEY,
   ENABLE_LEARNED_ORNAMENTS_KEY,
+  ANALYSIS_STRICT_PASSING_NOTES_KEY,
   TONICIZATION_COMPACT_KEY,
   CHROMATIC_MODULATION_KEY,
   CADENTIAL_PATTERN_RECOGNITION_KEY,
@@ -52,6 +53,7 @@ export type PreferenceId =
   | 'analysis.useStatisticalCorrection'
   | 'analysis.statisticalBiasThreshold'
   | 'analysis.enableLearnedOrnaments'
+  | 'analysis.strictPassingNotes'
   | 'export.includeTitle'
   | 'debug.showHarmonyDebug'
   | 'analysis.tonicizationCompact'
@@ -415,6 +417,17 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     section: 'Analysis',
     label: 'Ornamenti appresi',
     storageKey: ENABLE_LEARNED_ORNAMENTS_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'analysis.strictPassingNotes': {
+    id: 'analysis.strictPassingNotes',
+    section: 'Analysis',
+    label: 'Regola stretta note di passaggio',
+    storageKey: ANALYSIS_STRICT_PASSING_NOTES_KEY,
     defaultValue: true,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, true),

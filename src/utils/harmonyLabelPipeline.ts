@@ -25,6 +25,16 @@ export function structuralNotes(notes: any[], overrideMap?: Map<string, string>)
             }
         }
         if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+        // If the user explicitly marked this note as structural, honour that
+        // override even when the auto-analysis set isPassing/isNeighbor/etc.
+        if (n.ornamentOverride === 'structural') return true;
+        // Also honour a structural override coming through the overrideMap.
+        if (overrideMap) {
+            const ovId = n.id ? overrideMap.get(n.id) : undefined;
+            const midi = Number(n.midi);
+            const ovComposite = Number.isFinite(midi) ? overrideMap.get(`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`) : undefined;
+            if (ovId === 'structural' || ovComposite === 'structural') return true;
+        }
         if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape || n.isCambiata) {
             // For appoggiaturas, collect the resolution pitch info so the
             // chord-ID can see the "real" pitch at this beat position.

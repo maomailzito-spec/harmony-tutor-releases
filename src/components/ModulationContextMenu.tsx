@@ -374,14 +374,13 @@ const ModulationContextMenu: React.FC<{
                 <div className="border-t border-gray-600 pt-2 mt-2">
                     <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">Marcatura ornamentale</div>
                     {([
-                        { label: 'Nota strutturale (armonica)  ⌥H', type: 'structural' },
                         { label: 'Nota di passaggio  ⌥P', type: 'passing' },
                         { label: 'Nota di volta  ⌥V', type: 'neighbor' },
                         { label: 'Appoggiatura  ⌥A', type: 'appoggiatura' },
                         { label: 'Anticipazione  ⌥N', type: 'anticipation' },
                         { label: 'Nota di sfuggita  ⌥S', type: 'escape' },
+                          { label: 'Nota cambiata  ⌥C', type: 'cambiata' },
                         { label: 'Ritardo  ⌥R', type: 'suspension' },
-                        { label: 'Ornamentale (fioritura)  ⌥O', type: 'ornamental' },
                     ] as const).map(item => (
                         <button key={item.type} onClick={() => onApplyOrnamentOverride(item.type)}
                             className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">
