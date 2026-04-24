@@ -54,8 +54,11 @@ win:
   artifactName: "${productName}-${version}-win.${ext}"
 
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
 
 linux:
   target:
