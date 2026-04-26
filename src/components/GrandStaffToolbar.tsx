@@ -61,6 +61,7 @@ type CanvasFormat = 'page' | 'landscape';
 type MetronomeUnit = 'quarter' | 'eighth' | 'dotted-quarter';
 type SelectedNotesBeamState = 'unbeamable' | 'beamed' | 'mixed' | 'unbeamed';
 import type { ToolbarGroupId } from './GrandStaffEditor';
+import { usePreference } from '../preferences/usePreference';
 
 type InsertionElement = { type: 'note' | 'rest'; duration: NoteDuration; isDotted?: boolean };
 
@@ -339,6 +340,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         showQuickInsertBar,
         showHarmonyDebug,
     } = props;
+
+    const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
 
     const durations: { duration: NoteDuration; label: string }[] = useMemo(() => ([
         { duration: 'whole', label: 'Semibreve' },
@@ -835,6 +838,13 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             title={showSymbolAnalysis ? 'Nascondi Sigle' : 'Mostra Sigle'}
                         >
                             G7
+                        </button>
+                        <button
+                            onClick={() => setChromaticModulationEnabled(!chromaticModulationEnabled)}
+                            className={`px-1.5 rounded-sm py-0.5 font-bold transition-all ${chromaticModulationEnabled ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
+                            title="Modulazione cromatica — Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico"
+                        >
+                            Cromatica
                         </button>
                     </div>
                 )}

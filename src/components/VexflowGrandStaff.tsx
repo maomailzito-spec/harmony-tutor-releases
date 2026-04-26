@@ -17,7 +17,7 @@ interface VexflowGrandStaffProps {
   selectedNoteIds?: string[];
   onStaffClick?: (x: number, y: number, e: MouseEvent) => void;
   onStaffRightClick?: (x: number, y: number, e: MouseEvent) => void;
-  onMouseMoveStaff?: (x: number, y: number) => void;
+  onMouseMoveStaff?: (x: number, y: number, modKey: boolean) => void;
   onStaffMouseDown?: (e: MouseEvent, svg: SVGSVGElement) => void;
   onBarlineRightClick?: (barlineId: string, e: MouseEvent) => void;
   ghostNote?: StaffNote | null;
@@ -3373,7 +3373,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       if (tagged && !isGhost && !(down && down.moved)) return;
 
       const { x, y } = clientToSvgCoords(svg, e);
-      moveCb(x, y);
+      moveCb(x, y, !!(e.metaKey || e.ctrlKey));
     };
 
     container.addEventListener('mousedown', onMouseDown);

@@ -5956,7 +5956,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }));
     }, [activeTab, tool, selectedVoice, marqueeSelectOnlyCurrentVoice]);
 
-    const handleMouseMove = useCallback((x: number, y: number, systemIndex: number) => {
+    const handleMouseMove = useCallback((x: number, y: number, systemIndex: number, modKey: boolean) => {
         const drag = dragStartPosRef.current;
         if (drag && drag.systemIndex === systemIndex) {
             // Convert svg deltas into client pixels for thresholding.
@@ -5987,6 +5987,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return { ...prev, endX: x, endY: y };
                 });
             }
+            setGhostNote(null);
+            return;
+        }
+
+        // Ghost note only while the insertion modifier (Cmd/Ctrl) is held.
+        if (!modKey) {
             setGhostNote(null);
             return;
         }
@@ -6916,8 +6922,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             
         };
 
+        const onKeyUp = (e: KeyboardEvent) => {
+            // Clear ghost note when the insertion modifier is released, so the
+            // preview disappears even if the mouse is idle over the staff.
+            if (e.key === 'Meta' || e.key === 'Control') {
+                setGhostNote(null);
+            }
+        };
+
         window.addEventListener('keydown', onKeyDown, { capture: true });
-        return () => window.removeEventListener('keydown', onKeyDown, { capture: true } as any);
+        window.addEventListener('keyup', onKeyUp, { capture: true });
+        return () => {
+            window.removeEventListener('keydown', onKeyDown, { capture: true } as any);
+            window.removeEventListener('keyup', onKeyUp, { capture: true } as any);
+        };
     }, [
         isActive,
         activeTab,
@@ -7531,7 +7549,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 onStaffClick={(x, y, e) => handleBackgroundClick(x, y, systemIndex, e)}
                                                                                                                                 onStaffRightClick={(x, y, e) => handleStaffRightClick(x, y, systemIndex, e)}
                                                                 onStaffMouseDown={ENABLE_MARQUEE_SELECTION ? ((e, svg) => handleBackgroundMouseDown(e, svg, systemIndex)) : undefined}
-                                onMouseMoveStaff={(x, y) => handleMouseMove(x, y, systemIndex)}
+                                onMouseMoveStaff={(x, y, modKey) => handleMouseMove(x, y, systemIndex, modKey)}
                                                                 onNoteHitPoints={(points) => {
                                                                         systemNoteHitPointsRef.current[systemIndex] = points;
                                                                 }}
