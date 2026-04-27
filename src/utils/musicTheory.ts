@@ -11819,8 +11819,20 @@ export function applyHarmonyRules(
             const n1Orn = !!(n1 as any).ornamentType;
             const n2Orn = !!(n2 as any).ornamentType;
             if (!n1Orn && !n2Orn) {
-                // 7th (m7=10, M7=11 semitones)
-                if (absSemi === 10 || absSemi === 11) {
+                // Octave-aware letter-step distance: classifies the interval by SPELLING,
+                // not by semitones. Prevents enharmonic miscount (e.g. Cb→Bb is a 2nd
+                // by spelling regardless of how its MIDI distance lands).
+                const _letterIdxR16: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+                const _l1R16 = _letterIdxR16[String((n1 as any).pitch || '')[0]] ?? -1;
+                const _l2R16 = _letterIdxR16[String((n2 as any).pitch || '')[0]] ?? -1;
+                const _o1R16 = Number((n1 as any).octave);
+                const _o2R16 = Number((n2 as any).octave);
+                const _letterStepsR16 = (_l1R16 >= 0 && _l2R16 >= 0 && Number.isFinite(_o1R16) && Number.isFinite(_o2R16))
+                    ? Math.abs((_l2R16 + 7 * _o2R16) - (_l1R16 + 7 * _o1R16))
+                    : -1;
+
+                // 7th (m7=10, M7=11 semitones) — must also be a 7th by spelling (letter distance 6)
+                if ((absSemi === 10 || absSemi === 11) && _letterStepsR16 === 6) {
                     addViolation({
                         ruleId: 'R-16',
                         severity: 'error',
@@ -11830,8 +11842,8 @@ export function applyHarmonyRules(
                     });
                     connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'error', ruleId: 'R-16' });
                 }
-                // 9th+ (≥ 13 semitones, i.e. > octave)
-                if (absSemi >= 13) {
+                // 9th+ (≥ 13 semitones, i.e. > octave) — must also span ≥8 letter steps by spelling
+                if (absSemi >= 13 && _letterStepsR16 >= 8) {
                     addViolation({
                         ruleId: 'R-16',
                         severity: 'error',

@@ -4042,25 +4042,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 return firstBassA === firstBassB;
             };
 
-            const maxM = Math.max(0, maxMeasureIndex);
-            for (let m0 = 0; m0 <= maxM - 3; m0++) {
-                const oa = onsetSigForTwoMeasures(m0);
-                const ob = onsetSigForTwoMeasures(m0 + 2);
-                const a = sigForTwoMeasures(m0);
-                const b = sigForTwoMeasures(m0 + 2);
-
-                // Skip literal repetitions: identical pitches → not a transposing sequence
-                if (isLiteralRepetition(a, b)) continue;
-
-                const onsetOK = !!oa && !!ob && onsetMatch(oa, ob);
-                const sampleOK = !!a && !!b && noteMatch(a, b);
-                if (onsetOK || sampleOK) {
-                    spans.push({ startMeasure: m0, endMeasure: m0 + 3, repeats: 2, source: 'note' });
-                    m0 += 3;
-                }
-            }
-
-            // (debug logging removed)
+            // Note-motion auto detection disabled: it duplicated the brackets emitted
+            // by detectVoiceLeadingSequences (canonical detector). The helpers above
+            // are kept defined but unused on purpose — annotated spans below still apply.
+            void onsetSigForTwoMeasures; void sigForTwoMeasures;
+            void onsetMatch; void noteMatch; void isLiteralRepetition;
+            void maxMeasureIndex;
         } catch {
             // ignore
         }
