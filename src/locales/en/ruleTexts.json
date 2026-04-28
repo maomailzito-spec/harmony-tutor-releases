@@ -1,0 +1,387 @@
+{
+  "R-01": {
+    "body": "Parallel octaves occur when two voices move in the same direction (direct motion) while maintaining an octave (or unison) interval between them across two consecutive chords.\nThis is one of the most serious errors in multi-voice writing: the two parts lose their melodic independence and merge into a single line, effectively reducing the texture from four voices to three. The polyphonic tradition considers parallel octaves a fundamental violation of voice independence.\nThe prohibition applies to any pair of voices and any type of direct motion: it is not mitigated by the voices being inner parts.\nOctaves are permitted in oblique motion (one voice stationary) and tolerated in contrary motion in certain contexts.",
+    "suggestion": "Modify the voice-leading of one of the two voices: move at least one in contrary or oblique motion relative to the other, or redistribute the chord tones to change the interval between the affected voices.",
+    "title": "Parallel octaves"
+  },
+  "R-02": {
+    "body": "Parallel fifths occur when two voices move in the same direction (direct motion) while maintaining a perfect fifth interval between them across two consecutive chords.\nLike octaves, parallel fifths compromise voice independence: the perfect fifth is such an \"open\" and consonant interval that two voices maintaining it in direct motion seem to merge, losing their melodic individuality. This is one of the most codified errors in classical harmonic theory, present in all treatises without exception.\nThe prohibition applies exclusively to the perfect fifth: the diminished fifth is not subject to the same rule (though it requires careful treatment). Fifths in contrary motion are tolerated, and those in oblique motion are permitted.",
+    "suggestion": "Modify the voice-leading of one of the two voices, moving it in contrary or oblique motion. A common solution is to change the chord doubling or choose a different distribution of notes among the parts.",
+    "title": "Parallel fifths"
+  },
+  "R-02c": {
+    "body": "Two consecutive perfect fifths are prohibited even when the voices move in opposite directions (contrary motion). The prohibition of parallel fifths extends to any succession of two perfect fifths between the same voices, regardless of the type of motion.\nContrary motion mitigates many infractions in multi-voice writing, but not this one: the succession of perfect fifth upon perfect fifth still produces a hollow harmonic effect that classical treatises condemn without exception.",
+    "suggestion": "Interpose a chord with a different interval between the two fifths, or modify the doubling to avoid the succession. Even a single fifth should be avoided if immediately followed by another fifth between the same voices.",
+    "title": "Consecutive fifths in contrary motion"
+  },
+  "R-04": {
+    "body": "Voice crossing occurs when a part descends below the part immediately below it, or rises above the part immediately above it. In SATB choir writing, voices must maintain their pitch order: Soprano above Alto, Alto above Tenor, Tenor above Bass.\nVoice crossing is considered serious because it alters the perception of individual vocal lines: the listener loses track of each part and the harmonic texture becomes confused. In academic writing, it is a voice-leading error to be systematically avoided.\nCrossing is distinguished from overlap: in crossing, the voices exchange positions for more than one beat, while overlap is momentary and tolerated in certain stylistic contexts.",
+    "suggestion": "Rearrange the pitches respecting the voice hierarchy. If the melodic line requires it, consider a different distribution of chord tones among the parts.",
+    "title": "Voice crossing",
+    "titleVariants": {
+      "Incrocio di voci grave (Basso sopra Tenore)": "Severe voice crossing (Bass above Tenor)",
+      "Incrocio di voci grave (Alto sopra Soprano)": "Severe voice crossing (Alto above Soprano)"
+    }
+  },
+  "R-06": {
+    "body": "Diminished and augmented melodic intervals are considered difficult to sing and create tension in the vocal line. For this reason, they require immediate resolution: after the leap, the voice must reverse direction and proceed by step.\nExample: after an ascending augmented fourth leap (e.g., F→B), the voice must descend by step (B→A or B→C). After a descending diminished fifth, the voice must ascend by step.\nWhen the augmented fourth (tritone) is traversed even across two movements, the last note must continue ascending by diatonic semitone or descending by step.\nA \"partial resolution\" — where the voice continues in the same direction by step instead of reversing — is considered insufficient and remains an infraction.",
+    "suggestion": "After a diminished or augmented leap, reverse the voice direction and proceed by step (major or minor second). If the melodic line does not permit this, replace the interval with a consonant leap or stepwise motion.",
+    "title": "Incorrect resolution of augmented/diminished leap",
+    "titleVariants": {
+      "Risoluzione errata di salto melodico aumentato": "Incorrect resolution of an augmented melodic leap",
+      "Risoluzione errata di salto melodico diminuito": "Incorrect resolution of a diminished melodic leap"
+    }
+  },
+  "R-07": {
+    "body": "The leading tone (scale degree VII) has a strong functional tendency to ascend by semitone to the tonic. This tendency is particularly obligatory in outer voices (Soprano and Bass) and in dominant chords (V and V7).\nWhen the leading tone does not resolve to the tonic — descending instead of ascending, or leaping to another note — the cadential effect weakens and the writing loses tonal direction.\nIn inner voices (Alto and Tenor) the rule is less rigid: in certain contexts the leading tone may descend to the fifth of the tonic chord to avoid problematic doublings or parallel octaves. However, this license should be used with awareness and not systematically.",
+    "suggestion": "Move the leading tone to the tonic by ascending semitone. In inner voices, if direct resolution creates parallels or incorrect doublings, it is acceptable to descend by third to the fifth of the tonic chord, but only as a motivated alternative solution.",
+    "title": "Incorrect leading-tone resolution",
+    "titleVariants": {
+      "Risoluzione errata della sensibile": "Incorrect leading-tone resolution",
+      "Risoluzione della sensibile (tollerata in sequenza/imitazione)": "Leading-tone resolution (tolerated in sequence/imitation)"
+    }
+  },
+  "R-09": {
+    "body": "A cross relation (false relation) occurs when a note in one voice is followed, in the next chord, by its chromatic alteration in a different voice. For example: the Soprano has an F natural, and on the next beat the Bass (or another voice) has F sharp.\nThis creates a harmonic contradiction perceptible to the ear: two different voices simultaneously assert two incompatible versions of the same note. In traditional tonal writing it is considered an error because it breaks the coherence of the tonal plan.\nThe cross relation is tolerated — and sometimes deliberately sought — in Renaissance polyphonic style and in certain late Romantic contexts, but not in standard academic harmonic writing.",
+    "suggestion": "Assign the chromatic alteration to the same voice that had the natural note, so that the chromatic semitone occurs within a single part. Alternatively, modify the harmonic progression to avoid the juxtaposition.",
+    "title": "Chromatic cross relation"
+  },
+  "R-10": {
+    "body": "The leading tone (scale degree VII) has a strong functional tendency to ascend by semitone to the tonic. Doubling it means having two voices carrying the same note with the same directional tension: both will need to ascend to the tonic, almost inevitably generating parallel octaves in the next chord.\nFor this reason, doubling the leading tone is considered a serious error, particularly in the dominant chord (V and V7) where the leading tone plays its most prominent role.\n• In sequences and imitative progressions: doubling may be tolerated when the need to maintain melodic symmetry between model and imitation overrides doubling purity.\n• In the V7 chord: the problem is aggravated by the presence of the seventh; both dissonant notes (leading tone and seventh) exert pressure on the resolution.\n• In viiø7 and vii°7 chords: the accumulated tension is already maximal; doubling the leading tone makes it worse.\n• In an inner voice (Alto or Tenor): the doubling is less serious but should still be avoided when possible.",
+    "suggestion": "Redistribute the chord tones by doubling the root or the fifth instead. If doubling the leading tone is the only available solution, ensure that the two voices do not create parallel octaves in the resolution — one may ascend to the tonic, the other may descend to the fifth.",
+    "title": "Doubled leading tone",
+    "titleVariants": {
+      "Raddoppio della sensibile": "Doubled leading tone",
+      "Raddoppio della sensibile (tollerato in sequenza/imitazione)": "Doubled leading tone (tolerated in sequence/imitation)"
+    }
+  },
+  "R-10-7TH": {
+    "body": "The seventh of a chord is a dissonance that must resolve downward by step in the next chord. Doubling it means having two voices carrying the same dissonant note: both will need to descend by step in the same direction, almost inevitably producing parallel octaves in the resolution.\nThe problem is structural: it is not possible to correctly resolve two simultaneous sevenths without violating voice-leading rules. For this reason, doubling the seventh is prohibited throughout classical harmonic writing.\n• In the V7 chord: the problem is particularly serious because the seventh is in a chord of maximum functional tension, where resolution is obligatory and decisive.\n• In viiø7 (half-diminished) chords: the seventh is a minor seventh, with slightly less tension than the V7 seventh; the problem remains significant nonetheless.\n• Type of seventh: the severity varies by type — major seventh (maximum tension), minor seventh, diminished seventh — but in all cases doubling should be avoided.",
+    "suggestion": "Eliminate the seventh doubling by distributing the chord tones so that only one voice has the seventh. In four-voice seventh chords, it is often the fifth that is omitted to make room for the seventh without doubling it."
+  },
+  "R-10-DIM5": {
+    "body": "The diminished fifth is an unstable interval with a tendency to contract toward the third (the two notes approach each other by semitone). Doubling one of the notes forming this interval creates problems similar to doubling the leading tone: the additional voice is constrained to move in the same direction as the resolution, risking parallels.\nIn the vii° chord (leading-tone chord), the diminished fifth is formed by the leading tone (which ascends) and the fourth scale degree (which descends). Doubling either of these notes adds further directional pressure in an already very tense chord.\n• When the diminished fifth is a chromatic note (accidental alteration): the context may make the doubling less problematic, but it should still be evaluated carefully.",
+    "suggestion": "Redistribute the chord tones by doubling the root instead of the diminished fifth. If the chord is vii° or vii°7, prefer doubling the third degree (the chord's third) rather than the diminished fifth."
+  },
+  "R-10-64": {
+    "body": "The second inversion of a triad (chord in 6/4 position) has the fifth of the chord in the bass. In its cadential form — the I6/4 preceding the dominant — this chord is not an independent tonic chord but a preparation for the dominant: the sixth and fourth voices must descend by step to the fifth and third of the dominant.\nThe doubling rule in the cadential 6/4 is precise: the fifth (i.e., the bass note) must be doubled, as it will remain stationary as a pedal while the other voices descend. Doubling the root or the third instead compromises the cadential function and creates voice-leading problems in the resolution.\n• Cadential 6/4: the doubling rule is strict — only the fifth (bass) should be doubled.\n• Passing 6/4: doubling is less critical because the chord serves a melodic transitional function.\n• Neighbor and pedal 6/4: the different function allows doubling to be evaluated with less strictness.",
+    "suggestion": "In the cadential 6/4, double exclusively the bass note (the chord's fifth). Ensure that in the next chord (the dominant), the sixth and fourth voices descend by step."
+  },
+  "R-10-3RD": {
+    "body": "In a root-position chord, the preferred doubling choice is the root (or secondarily the fifth). The third — especially if major — is the least suitable note to double because it most strongly characterizes the chord's quality, and its double presence can make the sound heavy and create voice-leading difficulties.\nThe rule is not absolute: in certain contexts, doubling the third is not only acceptable but recommended.\n• In imitative progressions and sequences: the need to maintain melodic symmetry prevails; doubling is tolerated.\n• In the deceptive cadence V–vi: the vi chord that follows the dominant has a third that corresponds to the tonic; doubling it is recommended to facilitate correct voice-leading and avoid parallel octaves.\n• In the Neapolitan chord (♭II): doubling the third (scale degree IV) is the preferred choice to emphasize the chord's function.\n• In first inversion: if the bass note (the chord's third) is a strong scale degree (I, IV, or V), its doubling is acceptable.\n• Minor chords: the severity of the warning is reduced — doubling the minor third is considered much more acceptable than the major third.",
+    "suggestion": "In root position, favor doubling the root. If the context requires doubling the third (deceptive cadence, Neapolitan chord, imitative sequence), verify that the voice-leading is correct and that no parallels are created in the progression."
+  },
+  "R-10-6": {
+    "body": "In first inversion (sixth chord), the chord's third is in the bass. The doubling choice in this position is more flexible than in root position, but still follows preferences.\nThe general rule is to prefer doubling the root or the fifth — not the third, which is already in the bass. Doubling the bass note in first inversion creates a redundant voicing and can make the passage heavy.\nHowever, context may justify doubling the bass note:\n• Strong scale degrees in the bass (I, IV, or V): when the chord's third in first inversion is a strong tonal degree, its doubling is permitted and sometimes preferable for harmonic stability.\n• Voice-leading: if doubling the root or fifth would create problems with parallels or spacing, doubling the third (bass) is acceptable as a motivated alternative solution.",
+    "suggestion": "In first inversion, prefer doubling the root or the fifth. If the bass note is a strong scale degree (I, IV, or V), its doubling is acceptable. Always evaluate the overall voice-leading before choosing the doubling.",
+    "title": "Doubling in a 6 chord",
+    "titleVariants": {
+      "Preferenza di raddoppio in 6: basso su grado forte": "Preferred doubling in 6: bass on a strong scale degree",
+      "Preferenza di raddoppio in 6: basso su grado forte (tollerato in sequenza/imitazione)": "Preferred doubling in 6: bass on a strong scale degree (tolerated in sequence/imitation)"
+    }
+  },
+  "R-12": {
+    "body": "The seventh of a chord is a dissonance with a precise obligation: it must resolve downward by step (second) in the next chord. This descending movement is one of the fundamental principles of voice-leading in classical tonal writing.\nWhen the seventh does not descend by step — leaps to another note, remains stationary without becoming a chord tone of the new harmony, or ascends — the dissonance remains unresolved and the passage loses tonal coherence.\nThe rule applies to all types of seventh chords (V7, ii7, IV7, vii°7, etc.) with some recognized exceptions:\n• Transferred resolution: the seventh may be \"picked up\" by another voice that resolves it by descending step.\n• Delayed resolution: the seventh may be held for one or more beats as a common tone before descending.\n• Seventh retained as a chord tone: if the seventh becomes a consonant note of the next chord (e.g., in chains of seventh chords by fifths), the resolution may be deferred to the following chord.\n• Ascending resolution: in an inner voice and under special circumstances, the seventh may resolve upward; this is an acceptable license but should be used with awareness.",
+    "suggestion": "Move the voice carrying the seventh to descend by step in the next chord. If direct resolution creates voice-leading problems, consider the recognized alternatives: transfer to another voice, delayed resolution, or ascending resolution in an inner voice as a last resort.",
+    "title": "Incorrect resolution of the chordal seventh"
+  },
+  "R-17a": {
+    "body": "When a voice makes two consecutive leaps in the same direction and their sum produces a seventh or ninth, the ear perceives the overall melodic contour as a single large dissonant leap. Even if the individual intervals may be consonant, the result is a melodic line that is difficult to sing and stylistically incorrect.\nThe problem is not in the individual note but in the contour: a voice that leaps up by a third and then again by a fifth has traced a seventh, which is a prohibited direct melodic leap. Academic writing forbids this pattern because the listener \"hears\" the large interval even when traversed in two steps.\nThis is a serious infraction (error), more severe than the R-17b variant where one of the movements is a step.\nUnlocking condition: insert a change of direction between the two leaps, or replace one of the two leaps with a step (second).",
+    "suggestion": "Insert a change of direction between the two leaps: after the first ascending leap, the voice must descend (even slightly) before ascending again. Alternatively, transform one of the two leaps into stepwise motion (major or minor second)."
+  },
+  "R-N-RES": {
+    "body": "Every non-harmonic (ornamental) note has an expected voice-leading pattern: the passing tone ascends or descends by step, the appoggiatura resolves by descending step (or more rarely ascending), the neighbor note returns to the chord tone, and so forth.\nWhen the note following the ornament does not follow this expected pattern, the ornamental function is lost and the note risks being perceived as an unresolved dissonance or an out-of-context chord tone.\nThis is not always a serious error: Bach and Common Practice period composers sometimes use unusual resolutions for expressive effects. In basic academic writing, however, it is preferable to follow standard voice-leading patterns.",
+    "suggestion": "Verify the ornament's resolution and ensure it proceeds in the expected direction for that type of non-harmonic note. If the resolution is intentionally atypical, evaluate whether the context justifies it stylistically.",
+    "title": "Atypical resolution of the Neapolitan (N)"
+  },
+  "R-AUG6-RES": {
+    "body": "Augmented sixth chords (Italian, French, German) contain an augmented sixth interval between the bass and an upper voice. This interval has a strong directional tension: the two notes forming it must expand outward, normally resolving to the dominant chord (V or cadential V6/4).\nWhen the resolution does not occur on the dominant, or the voices do not move in the expected direction, the chord loses its tensional function and the passage becomes harmonically incoherent.",
+    "suggestion": "The augmented sixth chord typically resolves to V: the bass descends by semitone (or ascends by semitone depending on the type) while the upper voice ascends by semitone. Ensure both voices move outward toward the fifth of the scale."
+  },
+  "R-CAD64": {
+    "body": "The second inversion of the tonic chord in cadential position (I6/4) is one of the most codified chords in classical harmonic theory. It is not an independent tonic chord but a preparation for the dominant: the two \"dissonances\" (the fourth and the sixth above the bass) must descend by step to the third and fifth of the dominant.\nWhen this chord does not resolve to V — or its notes do not descend in the expected direction — the cadential function is completely defeated.",
+    "suggestion": "The cadential I6/4 must resolve to V: the sixth descends to the fifth, the fourth descends to the third of the dominant. The bass remains stationary on the fifth of the scale. Ensure that the next chord is actually the dominant.",
+    "title": "Cadential 6/4 not resolved on V"
+  },
+  "R-03": {
+    "body": "Unison reached by direct motion (when both voices move in the same direction to arrive at unison) should generally be avoided, as it creates an effect similar to parallel octaves: the two voices converge, canceling each other out.\nUnison should always be avoided and tolerated only in difficult situations toward the tonic. The exception is the cadential context between Soprano and Alto on the tonic, preceded by leading tone and second degree.",
+    "suggestion": "Avoid converging two voices on unison by direct motion. If unison is necessary, reach it by contrary or oblique motion, and preferably with at least one voice proceeding by step.",
+    "title": "Arrival at unison — voices lose independence"
+  },
+  "R-05": {
+    "body": "A hidden (or direct) fifth or octave occurs when two voices move in the same direction (direct motion) to arrive at a perfect fifth or octave, even if they were not in that relationship in the previous chord. The effect is \"hidden\" because the fifths are not consecutive, but the direct movement toward them still emphasizes the perfect interval in a way that classical treatises consider objectionable, especially in the outer voices.\nHidden intervals between outer voices (Soprano and Bass) are more serious than those between inner voices. For inner voices, the problem is attenuated and often classified as a simple warning.\nRecognized exceptions: hidden intervals are permitted when the upper voice proceeds by step (second); they are permitted between inner voices on all scale degrees if the higher voice proceeds by step; they are permitted on tonal degrees if the lower voice proceeds by step; they are always permitted in oblique motion.",
+    "suggestion": "The simplest way to resolve hidden intervals is to have the upper voice proceed by step (second) instead of leap, or to move the two voices in contrary motion. In inner voices, the warning is less urgent and may be accepted if the overall voice-leading is correct.",
+    "title": "Hidden fifths/octaves",
+    "titleVariants": {
+      "Quinte nascoste (dirette) tra voci estreme": "Hidden (direct) fifths between outer voices",
+      "Ottave nascoste (dirette) tra voci estreme": "Hidden (direct) octaves between outer voices",
+      "Quinte nascoste (dirette) in cambio di posizione (stessa sonorità)": "Hidden (direct) fifths in voice exchange (same chord)",
+      "Ottave nascoste (dirette) in cambio di posizione (stessa sonorità)": "Hidden (direct) octaves in voice exchange (same chord)",
+      "Quinte nascoste (dirette) in progressione imitata (tollerate)": "Hidden (direct) fifths in imitative sequence (tolerated)",
+      "Ottave nascoste (dirette) in progressione imitata (tollerate)": "Hidden (direct) octaves in imitative sequence (tolerated)",
+      "Quinte nascoste S–A in progressione imitata": "Hidden fifths S–A in imitative sequence",
+      "Ottave nascoste S–A in progressione imitata": "Hidden octaves S–A in imitative sequence",
+      "Ottava nascosta S–A con Alto per grado ascendente (tollerata con riserva)": "Hidden octave S–A with Alto rising stepwise (tolerated with reservations)",
+      "Ottava nascosta S–A con Alto per grado discendente (non ammessa)": "Hidden octave S–A with Alto descending stepwise (not allowed)",
+      "Ottava nascosta S–A per salto in entrambe le voci (proibita)": "Hidden octave S–A by leap in both voices (forbidden)",
+      "Quinta nascosta S–A per salto senza nota comune": "Hidden fifth S–A by leap without a common tone"
+    }
+  },
+  "R-08": {
+    "body": "In four-part writing, Soprano-Alto and Alto-Tenor should not exceed an octave interval between them. This rule ensures balanced voice distribution and promotes timbral blend in the choir.\nClose spacing (within an octave between upper voices) is the norm in academic choral writing. A distance greater than an octave creates a \"hole\" in the harmonic texture, making the sound less compact.\nNote: the Bass may be at a greater distance from the Tenor (up to approximately two octaves and a fifth) without this constituting a serious infraction.",
+    "suggestion": "Redistribute the chord tones so that Soprano-Alto and Alto-Tenor do not exceed an octave. Favor close position in the upper voices.",
+    "title": "Excessive spacing between voices",
+    "titleVariants": {
+      "Spaziatura eccessiva tra Soprano e Alto (> 8va)": "Excessive spacing between Soprano and Alto (> 8ve)",
+      "Spaziatura eccessiva tra Alto e Tenore (> 8va)": "Excessive spacing between Alto and Tenor (> 8ve)"
+    }
+  },
+  "R-13": {
+    "body": "When all four voices move in the same direction simultaneously, the result is a compact harmonic block lacking internal movement. This type of voice-leading impoverishes the writing and, if prolonged, risks generating parallels or other voice-leading problems.\nFour-part writing should strive for variety of motion: the ideal is to have at least one voice in contrary or oblique motion relative to the others. Parallel motion is acceptable in brief passages, but should be the exception rather than the rule.\nSequence or imitation context may justify prolonged parallel motion as a structural necessity.",
+    "suggestion": "Move at least one voice in contrary or oblique motion relative to the others. Generally it is the Bass or the Soprano that provides contrary motion, creating the harmonic expansion and contraction typical of good voice-leading.",
+    "title": "Parallel motion in all voices",
+    "titleVariants": {
+      "Moto parallelo di tutte le voci": "Parallel motion in all voices",
+      "Moto parallelo di tutte le voci (attenuato: Soprano per grado congiunto)": "Parallel motion in all voices (attenuated: Soprano stepwise)",
+      "Moto parallelo di tutte le voci (tollerato in sequenza/imitazione)": "Parallel motion in all voices (tolerated in sequence/imitation)"
+    }
+  },
+  "R-14": {
+    "body": "A hidden (or direct) fifth or octave occurs when Soprano and Bass move in the same direction (direct motion) to arrive at a perfect fifth or octave. The effect is similar to parallels: even though the voices were not in a fifth before, the \"direct\" arrival emphasizes the perfect interval in a way that classical treatises consider objectionable in the outer voices.\nThe treatises establish precise rules: the octave by direct motion between outer parts is permitted only if the upper part proceeds by ascending or descending minor second toward one of the three tonal degrees; it is tolerated with reservation on tonal degrees if the Soprano descends by major second, mainly at phrase endings.\nThe hidden fifth is permitted toward I and V if the upper part proceeds by step; on other degrees only if the upper part proceeds by descending minor second.",
+    "suggestion": "The simplest way to avoid hidden intervals between outer voices is to have the Soprano proceed by step (second) instead of by leap, or to move Soprano and Bass in contrary motion."
+  },
+  "R-15": {
+    "body": "Inner voices (Alto and Tenor) should favor stepwise motion or small leaps (thirds, fourths). Leaps larger than a sixth are considered unnatural for choral voices and make the line difficult to sing.\nThe treatises list the following as permitted intervals: steps, thirds, perfect fourths and fifths, minor sixth, and octave (preferably ascending). Larger leaps are tolerated in the Bass part or in free style, but not in the inner voices of academic choral writing.\nA wide leap in an inner voice may be justified if it is followed by a change of direction and stepwise motion, which \"compensate\" for the leap.",
+    "suggestion": "Reduce the leap by using a different chord voicing. If the leap is unavoidable, ensure it is followed by a change of direction and stepwise motion in the same voice.",
+    "title": "Wide melodic leap in inner voices (> 6th)"
+  },
+  "R-16": {
+    "body": "The \"barline rule\" (or strong-beat rule) states that chord changes should preferably occur on strong beats of the measure. When a harmonic change occurs on a weak beat anticipating the next downbeat, it creates a harmonic syncopation that can destabilize the harmonic rhythm.\nIn basic academic writing, it is preferable for chord changes to coincide with metrically strong beats. Harmonic syncopations are a legitimate expressive resource, but require awareness and control.\nRegarding prohibited melodic intervals: leaps of a seventh (major and minor), ninth, and any interval larger than an octave are forbidden, as are all augmented intervals and the chromatic semitone in diatonic writing.",
+    "suggestion": "For harmonic syncopation: evaluate whether the chord change can be moved to the next strong beat. For melodic intervals: replace the leap with a permitted interval or with stepwise motion, possibly using a passing tone.",
+    "title": "Problematic melodic leap",
+    "titleVariants": {
+      "Salto melodico di tritono (4ª eccedente / 5ª diminuita)": "Tritone melodic leap (augmented 4th / diminished 5th)",
+      "Semitono cromatico — da evitare nella scrittura diatonica": "Chromatic semitone — to be avoided in diatonic writing",
+      "Sincope armonica (accordo sul debole che “entra” sul battere successivo)": "Harmonic syncopation (chord on the weak beat that “carries over” into the next downbeat)",
+      "Ottava discendente — preferibilmente ascendente": "Descending octave — preferably ascending",
+      "Sesta minore discendente — preferibilmente ascendente": "Descending minor sixth — preferably ascending",
+      "Seconda eccedente (♭6 ↔ ♮7 nel modo minore) — proibita": "Augmented second (♭6 ↔ ♮7 in minor mode) — forbidden"
+    }
+  },
+  "R-17b": {
+    "body": "A seventh or ninth traversed in two leaps (without either being a step) creates an un-singable melodic contour, though less serious than the R-17a variant where both movements are in the same direction.\nThe problem is the lack of a stepwise \"anchor\": the line leaps twice without ever passing through a second, making the melodic path abstract and difficult to sing. At least one of the two movements should be a second to anchor the line to the scale.\nThis is a medium-severity infraction (warning): the two leaps may both be consonant and the direction may change, but the overall result remains melodically unsatisfactory without an intervening step.",
+    "suggestion": "Replace at least one of the two leaps with a step (major or minor second). If both leaps are necessary for the harmonic voice-leading, consider rewriting the passage by changing the distribution of notes among the voices."
+  },
+  "R-17c": {
+    "body": "The tritone (augmented fourth or diminished fifth) is the most unstable interval in the tonal system. When it is \"outlined\" by two or more consecutive melodic movements — meaning the extreme points of the melodic path form a tritone — the ear perceives the unresolved tension even if the intervening notes are consonant.\nThe problem is in the overall contour: the melody has traced a \"hidden\" tritone that awaits resolution. In academic writing, this pattern should be avoided because it creates unintentional melodic instability.\nSeverity depends on context:\n• Error: tritone traversed in 2 movements in the same direction, final note short, without resolution by opposite-direction step. Maximum unresolved tension.\n• Warning: longer intermediate note (which attenuates contour perception), or resolution present but partial.\nThe unlocking condition is resolution: after the tritone, the last note must proceed by step in the direction opposite to the tritone, \"resolving\" the accumulated tension.",
+    "suggestion": "After the outlined tritone, move the voice to resolve by step in the opposite direction. If the augmented fourth is ascending, the next note must descend by step; if the diminished fifth is descending, the next note must ascend by step."
+  },
+  "R-18": {
+    "body": "Two notes with the same letter name but different accidentals (e.g., B natural and B♭) sound simultaneously in the same chord.\nThis \"simultaneous chromatic clash\" creates a strong minor-second dissonance (or enharmonic equivalent) that has no functional justification in tonal harmony. Unlike the cross relation (R-09), which occurs between consecutive chords, here the two versions of the same note coexist at the same moment.\nThe result is a confused sound: the ear cannot decide which is the \"true\" version of the note.",
+    "suggestion": "Correct one of the two notes so they have the same accidental, or verify whether one of them is an input error."
+  },
+  "R-CHORD-COMPLETE": {
+    "body": "A chord is considered complete when it contains at least one voice for each of its constituent tones (root, third, and fifth for a triad; root, third, fifth, and seventh for a seventh chord).\nIn four-voice writing, it is sometimes necessary to omit the fifth to double the root, especially in dominant seventh chords where the fifth is often sacrificed. This is acceptable and provided for in the treatises. Omitting the third, however, is almost always incorrect, because it is the third that defines the chord's quality (major or minor).\nIn seventh chords, omitting the seventh itself defeats the chord's function.",
+    "suggestion": "Check which chord tones are present and which are missing. If the third is missing, redistribute the voices to include it. The fifth may be omitted (especially in V7) in favor of doubling the root.",
+    "title": "Incomplete chord",
+    "titleVariants": {
+      "Accordo incompleto (manca la 3ª)": "Incomplete chord (third missing)",
+      "Accordo incompleto/ambiguo (manca la 3ª)": "Incomplete/ambiguous chord (third missing)",
+      "Accordo di 7ª incompleto (manca la 7ª)": "Incomplete seventh chord (seventh missing)"
+    }
+  },
+  "R-RANGE": {
+    "body": "Each SATB voice has a standard register within which to operate to ensure natural intonation and timbre. Writing outside these limits produces artificial effects or performance difficulties.\nIndicative registers (academic choral writing):\n• Soprano: C4 – G5 (comfort zone: E4 – D5)\n• Alto: G3 – E5 (comfort zone: C4 – C5)\n• Tenor: C3 – G4 (comfort zone: E3 – D4)\n• Bass: E2 – C4 (comfort zone: G2 – A3)\nNotes at the extreme limits of the register are feasible but should be used sparingly and on strong beats or long values.",
+    "suggestion": "Transpose the note to the appropriate register for the voice, possibly changing the octave or redistributing the chord tones among the parts. Avoid systematically pushing voices to the extremes of their range.",
+    "title": "Note outside the typical voice range"
+  },
+  "R-SPACING-TB": {
+    "body": "A greater distance is permitted between Tenor and Bass than between the upper voices (up to approximately two octaves and a fifth), because the low register better tolerates wide spacing. However, exceeding this limit creates excessive openness that weakens the sound and may generate harmonic instability in the low register.\nWide spacing between Tenor and Bass is characteristic of certain styles (orchestral music, organ), but in academic four-part choral writing it is preferable to stay within conventional limits.",
+    "suggestion": "Bring Tenor and Bass closer together by choosing a different chord voicing. Consider whether the Bass can move up an octave or the Tenor can move down to reduce the distance.",
+    "title": "Excessive spacing between Tenor and Bass (> 2 octaves + 5th)"
+  },
+  "EXC-M03": {
+    "body": "Consecutive octaves and fifths in contrary motion (when voices move in opposite directions while passing through the same perfect interval) are considered less serious than direct-motion parallels, and are tolerated in certain contexts.\nThis exception is recognized in classical treatises: contrary motion attenuates the \"sliding\" effect of parallels because the voices open up instead of converging. It remains a solution to avoid when possible, preferring voice-leading that entirely avoids the succession of perfect intervals.",
+    "suggestion": "While tolerated, try to avoid even contrary-motion parallels by modifying the doubling or chord voicing. Use them only when the voice-leading offers no better solutions."
+  },
+  "EXC-M04": {
+    "body": "Oblique motion occurs when one voice remains stationary while the other moves. When this produces a perfect fifth or octave, the result is permitted: since one of the two voices does not move, it does not create the \"parallel sliding\" effect typical of direct-motion parallels.\nUnison and perfect intervals reached by oblique motion are generally permitted, except for unison by direct motion which should always be avoided.",
+    "suggestion": "Oblique motion toward perfect intervals is acceptable. Just ensure that the moving voice does not create other voice-leading problems (incorrect leaps, register violations, etc.)."
+  },
+  "EXC-OBL-PERF": {
+    "body": "When a voice remains stationary on a common tone shared by two consecutive chords, reaching a perfect fifth or octave in the next chord is permitted. The pedal note (the stationary voice) ensures continuity and prevents the perception of parallel motion.\nThis is one of the classic exceptions in harmonic theory: the common tone holds the interval and neutralizes the parallel effect.",
+    "suggestion": "Valid exception. No modification needed if one of the two voices actually remains stationary on the common tone between the two chords.",
+    "title": "Subsequent fifth/octave by oblique motion",
+    "titleVariants": {
+      "Quinta successiva con moto obliquo (una voce ferma)": "Subsequent fifth by oblique motion (one voice held)",
+      "Ottava successiva con moto obliquo (una voce ferma)": "Subsequent octave by oblique motion (one voice held)"
+    }
+  },
+  "EXC-Hidden-Stepwise": {
+    "body": "A hidden fifth or octave between outer voices is tolerated when the Soprano (the upper part) moves by step (major or minor second) rather than by leap. In this case, the Soprano's melodic path is smooth and the effect of the hidden interval is attenuated.\nThe treatises establish this as a classic exception: the hidden fifth between outer parts is permitted toward I and V if the upper part proceeds by step. The hidden octave is permitted if the upper part proceeds by minor second.",
+    "suggestion": "Recognized exception. The Soprano's stepwise motion softens the hidden interval. Keep this in mind as good practice to maintain in future writing.",
+    "title": "Hidden fifth/octave allowed by stepwise motion",
+    "titleVariants": {
+      "Quinta nascosta S–A con nota comune ai due accordi (ammessa)": "Hidden fifth S–A with common tone between the two chords (allowed)",
+      "Quinta nascosta S–A con Soprano per grado congiunto (ammessa — regola classica)": "Hidden fifth S–A with Soprano stepwise (allowed — classical rule)",
+      "Ottava nascosta S–A con Soprano per grado congiunto (ammessa — regola classica)": "Hidden octave S–A with Soprano stepwise (allowed — classical rule)"
+    }
+  },
+  "EXC-Hidden-BassStep": {
+    "body": "Similarly to the Soprano exception, a hidden fifth or octave between outer voices is also tolerated when it is the Bass (the lower part) that proceeds by step.\nThe hidden fifth and octave by direct motion between an inner part and any other part are permitted on all degrees if the higher voice proceeds by step; or only on tonal degrees if the lower part proceeds by step.",
+    "suggestion": "Valid exception. The Bass's stepwise motion attenuates the hidden interval. Verify that other aspects of the voice-leading are correct.",
+    "title": "Attenuated direct fifth/octave",
+    "titleVariants": {
+      "Quinta diretta attenuata (Basso per grado; salto piccolo al Soprano)": "Attenuated direct fifth (Bass stepwise; small leap in the Soprano)",
+      "Ottava diretta attenuata (Basso per grado; salto piccolo al Soprano)": "Attenuated direct octave (Bass stepwise; small leap in the Soprano)"
+    }
+  },
+  "EXC-S02": {
+    "body": "Voice crossing between inner voices (Alto and Tenor) is considered less serious than crossing involving outer voices, and is tolerated in certain contexts when the melodic voice-leading of the individual parts requires it.\nMomentary crossing between Alto and Tenor may be acceptable if it lasts only one beat, if it is motivated by a clear melodic line in both voices, and if it does not generate other voice-leading problems (parallels, excessive spacing). It is nonetheless a solution to use sparingly and with awareness.",
+    "suggestion": "The crossing is tolerated in this context, but evaluate whether an alternative note distribution exists that avoids the crossing while maintaining good voice-leading. Always prefer solutions without crossings when possible.",
+    "title": "Alto/Tenor voice crossing (tolerated)"
+  },
+  "EXC-Unison-Lower": {
+    "body": "Unison between lower voices (Tenor and Bass) reached by contrary or oblique motion is permitted. Contrary motion (the two voices approaching from opposite directions) or oblique motion (one voice stationary, the other moving) neutralizes the problem typical of unison reached by direct motion.\nThis exception reflects traditional choral practice, where low voices occasionally converge on unison at important tonal notes.",
+    "suggestion": "Valid exception. Unison reached by contrary or oblique motion in the lower voices is acceptable.",
+    "title": "Unison reached by contrary/oblique motion in lower voices (tolerated)"
+  },
+  "EXC-Unison-Step": {
+    "body": "Unison reached by contrary or oblique motion is permitted between all voices (not just the lower ones) when at least one of the two voices proceeds by step. The smoothness of stepwise motion compensates for the convergence on unison and makes the passage sound natural.\nIn the academic tradition: unison between inner parts is tolerated by contrary or oblique motion and by step in at least one voice.",
+    "suggestion": "Valid exception. Stepwise motion in at least one of the two voices makes the unison acceptable in this context.",
+    "title": "Unison reached by contrary/oblique stepwise motion (tolerated)"
+  },
+  "EXC-Unison-Cadence": {
+    "body": "In the academic choral tradition, unison between Soprano and Alto on the tonic is tolerated in a cadence when preceded by the leading tone and second degree (for example, G♯–B arriving at A–A in A major).\nThis exception is codified in choral practice and is also found in Bach: the convergence of the two upper voices on the tonic in a cadence creates an effect of closure and sonic unity that classical theorists recognize as legitimate.",
+    "suggestion": "Recognized cadential exception. Unison on the tonic in a cadence between Soprano and Alto is acceptable when the progression justifies it.",
+    "title": "S+A unison on the tonic at cadence (leading tone + scale-degree 2 → tonic)"
+  },
+  "EXC-STYLE-5": {
+    "body": "Tolerated parallel fifths (German Sixth / Chromaticism).\nSuccession of parallel fifths permitted for reasons of color or harmonic reinforcement in two specific contexts:\nClassical context (Mozart fifths): generated by the direct resolution of the German Sixth (♭VI) to the Dominant (V). The tension of the augmented sixth justifies the parallel movement to the ear.\nModern context (modern practice): called \"orchestral fifths,\" they are permitted in chromatic movements on various degrees to add density to the sonic mass.\nConditions of use:\n• They should preferably be placed in the lower voices.\n• They should be avoided in standard diatonic successions (e.g., V–IV or I–ii), where they would produce a rigid and unpleasant sound.\n⚠️ Technical note: In strict style (Bach), the Mozart case is avoided by inserting a cadential six-four (I⁶₄) before V.",
+    "suggestion": "Recognized style fifths. In orchestral/chromatic context, parallel fifths in the lower voices are tolerated for harmonic reinforcement.",
+    "title": "Stylistic (orchestral) fifths"
+  },
+  "EXC-LT-Transfer": {
+    "body": "The leading tone does not necessarily have to resolve in the same voice where it appears: it is permitted for its resolution to the tonic to occur in another voice that \"picks up\" the tonal movement. This is called transferred resolution.\nThis exception is useful when direct resolution of the leading tone in the same voice would create voice-leading problems (parallel octaves, incorrect doublings). The tonic must, however, appear in the next chord in a different voice, usually the Soprano.\nThe leading tone may not resolve to the tonic when we have V–vi if the tonic is nonetheless in the Soprano.",
+    "suggestion": "Valid exception. The tonic is \"picked up\" by another voice, still ensuring the tonal resolution of the chord.",
+    "title": "Transferred leading-tone resolution"
+  },
+  "EXC-LT-Chromatic-Line": {
+    "body": "When the leading tone is part of a chromatic line in an inner voice (Alto or Tenor), immediate resolution to the tonic may be deferred or replaced by a chromatic movement that continues the line. The expressive force and coherence of the chromatic line takes precedence in this case over the obligation of immediate resolution.\nThis license belongs to the more elaborate style and is frequently found in Bach, where inner voices trace continuous chromatic lines that temporarily \"suspend\" the rules of resolution.",
+    "suggestion": "Recognized exception for inner voices in a chromatic context. Ensure that the chromatic line is melodically coherent and that the leading tone resolves to the tonic at a later point in the phrase.",
+    "title": "Leading tone in a chromatic line (exception)"
+  },
+  "EXC-LT-FREE": {
+    "body": "The obligation for the leading tone to resolve upward (VII → I) is suspended when the destination chord does not exert a tonic-attracting resolving function (is neither I nor vi).\nLinear priority: in non-cadential passages (e.g., VII → IV or VII → III), the leading tone is considered a mobile melodic note. If the Soprano or an inner voice follows a descending pattern, the coherence of the line takes precedence over the scale degree's tension.\nTension neutralization: the pull toward the tonic is strongest only in the V → I or vii° → I succession. In non-cadential successions, the leading tone may descend by step or leap to the fifth of the next chord to ensure harmonic completeness.\nThe leading tone is defined as \"free\" even if the destination chord contains the tonic as a chord tone (e.g., the IV chord in root position contains the tonic), provided the succession is not classifiable as a perfect or deceptive cadence.",
+    "suggestion": "Valid exception. The destination chord is neither I nor vi: the leading tone is melodically free in a non-cadential context."
+  },
+  "EXC-7-TRANSFERRED-RES": {
+    "body": "Similarly to the transferred resolution of the leading tone, the seventh of a chord may be \"picked up\" by another voice that resolves it by descending step in place of the original voice. This occurs when the voice carrying the seventh is in an awkward position to resolve directly.\nThe resolution must still occur: the resolution note (one degree below the seventh) must appear in the next chord in a different voice, thus creating the transferred resolution. The sonic result is correct, even though technically the seventh \"changes voice\" before resolving.",
+    "suggestion": "Valid exception. The seventh's resolution occurs in another voice, still ensuring the required descending stepwise movement.",
+    "title": "Exception: seventh resolution taken over by another voice (transference)"
+  },
+  "EXC-7-UP": {
+    "body": "The seventh of a chord normally resolves downward by step. In certain contexts, however, it may resolve upward: this typically occurs when the seventh is in an inner voice and the ascending resolution avoids voice-leading problems (parallels, crossings).\nThe ascending resolution of the seventh is considered an acceptable license in the academic tradition, especially in inner voices, when circumstances make the descending resolution impractical.",
+    "suggestion": "Acceptable exception, especially in an inner voice. Use this resolution only when the descending one would create more serious voice-leading problems.",
+    "title": "Exception: the seventh resolves upward"
+  },
+  "EXC-7-P4-TO7": {
+    "body": "Normally the seventh of a chord must be prepared: it must be held as a common tone from the previous chord, or reached by step. The ascending perfect fourth leap in the bass to the seventh is one of the classic exceptions to this rule, because the fourth leap is melodically natural in the bass and the harmonic context makes the seventh clearly understandable.\nThis license is recognized in the treatises as an exception to the obligatory preparation of the seventh, particularly in the bass.",
+    "suggestion": "Recognized exception for the Bass. The fourth leap to the seventh is melodically justified and tonally clear. Ensure that the seventh resolves correctly in the next chord.",
+    "title": "Exception: perfect-fourth leap to another minor seventh"
+  },
+  "EXC-7-STATIC": {
+    "body": "The seventh of a chord may \"delay\" its resolution by remaining stationary as a note of the next chord, if that note is harmonic in the new context. This is the principle of preparation and common tone: the seventh that was dissonant in the first chord becomes a consonant note in the second, and will resolve only in the third chord.\nThis mechanism underlies chains of sevenths and fifth-progressions (ii7–V7–I), where each seventh \"transforms\" into a note of the next chord before resolving.",
+    "suggestion": "Valid exception in fifth-progressions. The seventh retained as a common tone is a legitimate and frequent compositional technique in Bach and in chain chords.",
+    "title": "Exception: held seventh (reinterpreted as a consonance)"
+  },
+  "EXC-7-DELAYED": {
+    "body": "The seventh does not necessarily have to resolve on the immediately following beat: a delayed resolution is permitted, in which the seventh note is prolonged for one or more beats before descending to the resolution degree. This creates a suspension effect that increases tension and makes the resolution more expressive.\nDelayed seventh resolution is a frequent resource in elaborate style and in Bach chorales: the seventh \"waits\" for the resolution, increasing the listener's expectation.",
+    "suggestion": "Valid exception. Delayed resolution is a stylistically valued effect. Ensure that the seventh still resolves by descending step, even with a few beats of delay.",
+    "title": "Exception: delayed/ornamental seventh resolution"
+  },
+  "EXC-7m01": {
+    "body": "The seventh may be \"shifted\" by an octave within the same voice before resolving: the voice ascends or descends an octave on the same note (the seventh), and then resolves by descending step. This type of transfer is permitted and is found in compositional practice when the voice needs to reach a better position for the resolution.",
+    "suggestion": "Valid exception. The octave displacement does not exempt from resolution: the seventh must still descend by step after the transfer.",
+    "title": "Transferred seventh resolution"
+  },
+  "EXC-7-TRANSFER": {
+    "body": "The seventh of a chord may be \"handed off\" to another voice before resolution: the original voice abandons the seventh (by leaping or descending) while another voice \"picks up\" the same note and carries it to resolution. The overall effect is that the seventh resolves correctly, even though through two different voices.\nThis technique requires that the seventh note be actually present in the chord in the voice that picks it up, and that this voice then resolves it by descending step in the next chord.",
+    "suggestion": "Valid exception. Verify that the voice picking up the seventh resolves it correctly by descending step in the next chord.",
+    "title": "Exception: the seventh is transferred to another voice before resolving"
+  },
+  "EXC-7-FREE": {
+    "body": "Not all sevenths require obligatory downward resolution. In certain contexts — tonic seventh chords (Imaj7 in modern style), decorative chords, or passages where the seventh is a passing tone — the resolution obligation is attenuated or absent.\nThe engine has determined that in this specific context the seventh does not require the standard descending resolution, based on the chord type, the metrical position, or the surrounding harmonic context.",
+    "suggestion": "No correction necessary for this specific context. If you have doubts about the classification, verify the chord type and the seventh's function in the progression.",
+    "title": "Exception: no resolution available for the seventh in the destination chord"
+  },
+  "EXC-R17-Duration": {
+    "body": "When two consecutive leaps in the same direction outline a seventh or ninth interval, rule R-17 normally flags an infraction. However, there is a recognized exception: if the intermediate note (the one between the two leaps) has a longer rhythmic value than the preceding note, the perception of the overall melodic contour is attenuated, because the listener \"forgets\" the starting point before reaching the final note.\nThe long note in between psychologically breaks the continuity of the melodic contour and makes the large overall interval less perceptible as a single leap.",
+    "suggestion": "Valid exception. The longer duration of the intermediate note justifies the contour. Nonetheless, maintain this solution only when necessary, preferring more contained melodic contours when possible."
+  },
+  "ORN-NEIGH": {
+    "body": "The neighbor note is a non-harmonic note that departs by step from the chord tone and returns to it immediately. It may be upper (ascends and returns) or lower (descends and returns).\nCorrect voice-leading: the neighbor note starts from the chord tone, moves by a second (major or minor), and returns to the same chord tone. It is usually found on weak beats or on subdivisions of the beat.\nThis ornament has been correctly identified: the voice-leading follows the standard criteria for a neighbor note.",
+    "suggestion": "Correctly voiced neighbor note. No modification necessary."
+  },
+  "R-ORN-NEIGH": {
+    "body": "The detected neighbor note has atypical characteristics: it may be on a strong beat instead of a weak one, may not return exactly to the starting note, or may have an interval other than a second.\nA neighbor note on a strong beat is permitted — it is called an upper or lower appoggiatura in certain treatises — but requires greater attention: the dissonant effect is more pronounced and the resolution must be even clearer.",
+    "suggestion": "Verify that the note returns to the chord tone by step and that the rhythmic context justifies the unusual position. If the note is on a strong beat and has significant duration, it might be more correctly classified as an appoggiatura."
+  },
+  "ORN-APP": {
+    "body": "The appoggiatura is a non-harmonic note found on a strong or relatively strong beat, creating a dissonance with the underlying harmony, and resolving by step (usually descending) to the chord tone.\nThe name itself (from the Italian \"appoggiarsi,\" meaning \"to lean\") indicates its function: the voice \"leans\" on the dissonance before descending to the chord tone. This creates an expressive effect of tension and release that is particularly effective.\nThe appoggiatura has been correctly identified: it is on a strong position, is dissonant with the chord, and resolves by step in the expected direction.",
+    "suggestion": "Correctly voiced appoggiatura. No modification necessary."
+  },
+  "R-ORN-APP": {
+    "body": "The detected appoggiatura has unusual characteristics: it may be on a weak beat, resolve in an unexpected direction, or have a resolution interval other than a second.\nIn the academic tradition, the appoggiatura is strictly tied to its strong metrical position and descending stepwise resolution. An appoggiatura that resolves upward or is found on a weak beat is less typical and might be classified differently (neighbor note, passing tone).",
+    "suggestion": "Verify the metrical position and the direction of resolution. If the note is on a weak beat, consider whether it is instead a neighbor note or passing tone. If the resolution is ascending, the appoggiatura is stylistically less conventional but not necessarily incorrect."
+  },
+  "ORN-ANT": {
+    "body": "The anticipation is a non-harmonic note that \"anticipates\" a note of the next chord before that chord arrives. It is typically found on a weak beat or on a subdivision, has a short value, and coincides exactly with a note of the chord that will follow.\nUnlike the appoggiatura, the anticipation does not create tension to be resolved: it is already the \"right\" note of the next chord, just presented early. The effect is one of fluidity and forward projection toward the next chord.\nThe anticipation has been correctly identified.",
+    "suggestion": "Correctly voiced anticipation. No modification necessary."
+  },
+  "R-ORN-ANT": {
+    "body": "The detected anticipation has unusual characteristics: it is on a strong beat or has a long rhythmic value relative to the note it anticipates.\nA long or strong-beat anticipation risks being perceived as a dissonance or as a misplaced chord tone, losing its function of \"projection\" toward the next chord. In standard academic writing, anticipations are short and on weak beats.",
+    "suggestion": "If the note is long or on a strong beat, evaluate whether it is an intentional anticipation or a voice-leading problem. An effective anticipation is usually short (sixteenth, eighth note) and on a weak beat or subdivision."
+  },
+  "ORN-ESC": {
+    "body": "The escape note (échappée) is a non-harmonic note that departs by step from the chord tone and then leaps in the opposite direction to the next chord tone, instead of returning by step. It is thus the opposite of the passing tone in the direction of the final leap.\nTypical example: C (harmonic) → D (escape, ascends by step) → B (next chord tone, descends by third leap). The escape note \"escapes\" with a leap instead of resolving by step.\nIt has been correctly identified: stepwise approach to the escape note, leap in the opposite direction to the chord tone.",
+    "suggestion": "Correctly voiced escape note. No modification necessary."
+  },
+  "R-ORN-ESC": {
+    "body": "The detected escape note has atypical characteristics: it may be on a strong beat, have an excessively wide final leap, or the stepwise approach may be absent.\nThe escape note is typically on weak beats and the final leap is generally a third. On strong beats or with wider leaps, the effect becomes harsher and may be stylistically out of context in standard academic writing.",
+    "suggestion": "Verify the metrical position and the width of the final leap. If the note is on a strong beat or the leap exceeds a third, consider whether the voice-leading is stylistically justified or whether modifying the melodic line is preferable."
+  },
+  "ORN-PASS": {
+    "body": "The passing tone is a non-harmonic note that connects two consecutive chord tones by step in the same voice. It may be diatonic (within the scale) or chromatic (with an accidental).\nThe passing tone is usually found on a weak beat, has a short value, and moves between two chord tones a third apart (diatonic) or an augmented second apart (chromatic).\nIt has been correctly identified: it moves by step between two chord tones and is in an appropriate metrical position.",
+    "suggestion": "Correctly voiced passing tone. No modification necessary."
+  },
+  "CAD-PAC": {
+    "body": "The perfect authentic cadence is the most conclusive and stable cadential formula in the tonal system. It is realized with the movement V → I (or V7 → I) with both chords in root position and the tonic in the Soprano in the final chord.\nThe presence of all these conditions — root position of both chords, tonic in the Soprano, descending fifth (or ascending fourth) movement in the Bass — produces the maximum sense of closure and conclusion.\nIt is the typical cadence for the end of a period, end of a section, and end of a piece. It is the most conclusive cadential formula of the tonal tradition.",
+    "suggestion": "Informational marker — no correction necessary. The perfect authentic cadence has been correctly detected."
+  },
+  "CAD-IAC": {
+    "body": "The imperfect authentic cadence shares the V → I movement with the perfect cadence, but lacks one or more of its \"perfection\" conditions: the dominant or tonic chord may be in inversion, or the Soprano in the final chord may have the third or fifth instead of the tonic.\nThe result is a cadence that concludes but with less finality than the PAC: it creates a sense of relative closure, often used at the end of the antecedent phrase of a period, or as an internal cadence of a larger section.",
+    "suggestion": "Informational marker — no correction necessary. The imperfect authentic cadence has been correctly detected."
+  },
+  "CAD-HC": {
+    "body": "The half cadence is a cadence that concludes on V — the dominant chord — instead of resolving to the tonic. It creates a sense of suspension and expectation: the phrase stops on a point of tension that \"asks\" for continuation.\nIt is the typical cadence of the antecedent phrase in a binary period: the question (antecedent) stops on the dominant, the answer (consequent) will conclude on the tonic.\nAny chord may precede the dominant in a half cadence; the most common forms are IV–V or I–V.",
+    "suggestion": "Informational marker — no correction necessary. The half cadence has been correctly detected."
+  },
+  "CAD-PLAG": {
+    "body": "The plagal cadence is realized with the movement IV → I (subdominant → tonic). Unlike the authentic cadence, it does not pass through the dominant and therefore lacks the tension of the leading tone. The result is a softer, more relaxed conclusion, often associated with a solemn or meditative character.\nIt is common as an additional conclusion after an authentic cadence (the classic \"Amen\" of sacred music), or as an internal cadence in pieces of a tranquil character. It is considered a cadence of \"confirmation\" rather than \"resolution.\"",
+    "suggestion": "Informational marker — no correction necessary. The plagal cadence has been correctly detected."
+  },
+  "CAD-PIC": {
+    "body": "Detected conclusion on a major tonic chord (I) in a piece in a minor key. This practice, called the Picardy third, is considered regular in both the perfect cadence formula (V→I) and the plagal formula (IV→I or iv→I).\nThe use of the Picardy third transforms the character of the final resolution, conveying a greater sense of stability, solemnity, or \"light\" compared to the minor-key conclusion. It is particularly common in the Baroque and Classical periods (e.g., Bach).",
+    "suggestion": "Informational marker — no correction necessary. The major I chord replaces the minor i in the final cadence formula."
+  },
+  "EXC-Aug2-LT": {
+    "title": "Augmented second with leading tone",
+    "titleVariants": {
+      "Seconda eccedente (♭6 ↔ ♮7 nel modo minore) — proibita": "Augmented second (♭6 ↔ ♮7 in minor mode) — forbidden",
+      "Seconda eccedente verso la sensibile che risolve alla tonica (tollerata)": "Augmented second toward the leading tone resolving to the tonic (tolerated)"
+    },
+    "body": "",
+    "suggestion": ""
+  }
+}

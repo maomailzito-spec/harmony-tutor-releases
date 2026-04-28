@@ -1,0 +1,25 @@
+{
+  "rule": {
+    "R-01": "Ottave/unisoni paralleli",
+    "R-02": "Quinte parallele",
+    "R-04": "Incrocio di voci",
+    "R-05": "Quinte/ottave nascoste",
+    "R-06": "Risoluzione salti aug/dim",
+    "R-07": "Risoluzione sensibile",
+    "R-08": "Spaziatura eccessiva",
+    "R-09": "Falsa relazione cromatica",
+    "R-10": "Raddoppio sensibile",
+    "R-10-7TH": "Raddoppio 7ª",
+    "R-12": "Risoluzione della 7ª",
+    "R-13": "Moto parallelo tutte le voci",
+    "R-14": "Moto simile voci estreme",
+    "R-15": "Salti ampi voci interne",
+    "R-16": "Sincope armonica",
+    "R-17a": "Due salti → 7ª/9ª (proibito)",
+    "R-17b": "7ª/9ª senza grado congiunto",
+    "R-17c": "Successione di tritono",
+    "R-N-RES": "Risoluz. nota non armonica",
+    "R-AUG6-RES": "Risoluz. 6ª aumentata",
+    "R-CAD64": "Risoluz. accordo cadenzale 6/4"
+  }
+}

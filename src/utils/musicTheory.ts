@@ -96,7 +96,7 @@ import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERV
 import { ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
-import { getRuleText } from './ruleTexts';
+import { getRuleText, localizeViolationTitle } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
 
 /** Ornament learning — duration bucket */
@@ -4368,6 +4368,13 @@ export function applyHarmonyRules(
 
     const addViolation = (v: RuleViolation) => {
         if (!v.noteIds || v.noteIds.length === 0) return;
+        // Localize the first line (title) of the description if a translation exists
+        // in the ruleTexts registry. Dynamic titles (template literals) without a
+        // matching IT entry pass through unchanged.
+        const _localizedTitle = localizeViolationTitle(v.ruleId, v.description);
+        if (_localizedTitle !== v.description) {
+            v = { ...v, description: _localizedTitle };
+        }
         // Auto-enrich from ruleTexts registry (centralised educational texts).
         const _rt = getRuleText(v.ruleId);
         if (_rt.body && !v.description.includes('\n')) {

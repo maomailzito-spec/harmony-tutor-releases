@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { ANALYSIS_PROFILE_PRESETS, type AnalysisProfileBaseId } from '../utils/analysisProfiles';
 import { usePreference } from '../preferences/usePreference';
 import { PREFERENCE_DEFS, type PreferenceDef, type PreferenceSectionId, getPreferenceIdsBySection } from '../preferences/preferencesRegistry';
@@ -28,6 +30,8 @@ const RULE_LABELS: Record<string, string> = {
 const KNOWN_RULE_IDS = Object.keys(RULE_LABELS);
 
 function RuleSuggestionsEditor() {
+  const { t } = useTranslation('preferences');
+  const { t: tRule } = useTranslation('rules');
   const [suggestions, setSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
   const suggs = (suggestions ?? {}) as Record<string, string>;
   const [expanded, setExpanded] = React.useState(false);
@@ -45,11 +49,10 @@ function RuleSuggestionsEditor() {
       <button type="button" onClick={() => setExpanded(!expanded)}
         className="w-full text-left flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold text-slate-100">Consigli personalizzati</div>
+          <div className="text-sm font-semibold text-slate-100">{t('rule_suggestions_title', { defaultValue: 'Consigli personalizzati' })}</div>
           <div className="text-xs text-slate-400 mt-0.5">
-            Personalizza il testo &quot;Consiglio&quot; per ogni regola.
-            Le regole e le descrizioni non sono modificabili.
-            {customCount > 0 && <span className="ml-1 text-cyan-400">({customCount} personalizzati)</span>}
+            {t('rule_suggestions_hint', { defaultValue: 'Personalizza il testo "Consiglio" per ogni regola. Le regole e le descrizioni non sono modificabili.' })}
+            {customCount > 0 && <span className="ml-1 text-cyan-400">{t('rule_suggestions_count', { count: customCount, defaultValue: '({{count}} personalizzati)' })}</span>}
           </div>
         </div>
         <span className="text-slate-400 text-xs">{expanded ? '▲' : '▼'}</span>
@@ -60,12 +63,12 @@ function RuleSuggestionsEditor() {
           {KNOWN_RULE_IDS.map(ruleId => (
             <div key={ruleId} className="flex flex-col gap-0.5">
               <label className="text-xs text-slate-300 font-semibold select-none">
-                {ruleId} — {RULE_LABELS[ruleId]}
+                {ruleId} — {tRule(`rule.${ruleId}`, { defaultValue: RULE_LABELS[ruleId] })}
               </label>
               <textarea
                 className="bg-slate-800 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1 resize-none focus:border-cyan-500 focus:outline-none"
                 rows={2}
-                placeholder="(consiglio predefinito — lascia vuoto)"
+                placeholder={t('rule_suggestions_placeholder', { defaultValue: '(consiglio predefinito — lascia vuoto)' })}
                 value={suggs[ruleId] || ''}
                 onChange={(e) => handleChange(ruleId, e.target.value)}
               />
@@ -86,13 +89,27 @@ const TAB_LABEL: Record<PreferenceSectionId, string> = {
   Debug: 'Debug',
 };
 
+const TAB_TRANSLATION_KEY: Record<PreferenceSectionId, string> = {
+  Editor: 'tab_editor',
+  Analysis: 'tab_analysis',
+  Render: 'tab_render',
+  MIDI: 'tab_midi',
+  Export: 'tab_export',
+  Debug: 'tab_debug',
+};
+
 const PreferencesModal: React.FC<PreferencesModalProps> = ({
   isOpen,
   onClose,
   initialTab = 'Editor',
 }) => {
+  const { t } = useTranslation(['ui', 'preferences']);
+  const tp = (key: string | undefined, fallback: string, opts?: Record<string, unknown>) =>
+    key ? (t(`preferences:${key}`, { defaultValue: fallback, ...(opts || {}) }) as string) : fallback;
   const tabs = useMemo(() => (Object.keys(TAB_LABEL) as PreferenceSectionId[]), []);
   const [activeTab, setActiveTab] = useState<PreferenceSectionId>(initialTab);
+  const currentLanguage = i18n.language === 'en' ? 'en' : 'it';
+  const handleLanguageChange = (lng: 'en' | 'it') => { i18n.changeLanguage(lng); };
 
   const defsForTab = useMemo(() => {
     return PREFERENCE_DEFS
@@ -258,6 +275,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
   const PreferenceRow: React.FC<{ def: PreferenceDef<any> }> = ({ def }) => {
     const [val, setVal] = usePreference<any>(def.id);
+    const labelText = tp(def.i18nKey, def.label);
     if (def.kind === 'boolean') {
       return (
         <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
@@ -268,8 +286,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
             onChange={(e) => setVal(!!e.target.checked)}
           />
           <div>
-            <div className="text-sm font-semibold text-slate-100">{def.label}</div>
-            <div className="text-[11px] text-slate-400">Default: {def.defaultValue ? 'ON' : 'OFF'}</div>
+            <div className="text-sm font-semibold text-slate-100">{labelText}</div>
+            <div className="text-[11px] text-slate-400">{t('default_label')}: {def.defaultValue ? t('default_on') : t('default_off')}</div>
           </div>
         </label>
       );
@@ -277,7 +295,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
     if (def.kind === 'enum') {
       return (
         <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-          <div className="text-sm font-semibold text-slate-100">{def.label}</div>
+          <div className="text-sm font-semibold text-slate-100">{labelText}</div>
           <div className="mt-2 flex items-center gap-2">
             <select
               className="bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
@@ -285,11 +303,11 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
               onChange={(e) => setVal(String(e.target.value))}
             >
               {(def.options || []).map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+                <option key={o.value} value={o.value}>{tp(o.i18nKey, o.label)}</option>
               ))}
             </select>
           </div>
-          <div className="text-[11px] text-slate-400 mt-1">Default: {String(def.defaultValue)}</div>
+          <div className="text-[11px] text-slate-400 mt-1">{t('default_label')}: {String(def.defaultValue)}</div>
         </div>
       );
     }
@@ -299,7 +317,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
       const step = typeof def.step === 'number' ? def.step : 1;
       return (
         <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-          <div className="text-sm font-semibold text-slate-100">{def.label}</div>
+          <div className="text-sm font-semibold text-slate-100">{labelText}</div>
           <div className="mt-2 flex items-center gap-2">
             <input
               type="number"
@@ -316,7 +334,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
               </span>
             )}
           </div>
-          <div className="text-[11px] text-slate-400 mt-1">Default: {String(def.defaultValue)}</div>
+          <div className="text-[11px] text-slate-400 mt-1">{t('default_label')}: {String(def.defaultValue)}</div>
         </div>
       );
     }
@@ -348,42 +366,42 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
             }}
           >
             <div>
-              <div className="text-sm font-semibold text-slate-100">Preferenze</div>
-              <div className="text-[11px] text-slate-400">Raggruppa impostazioni non essenziali alla toolbar.</div>
+              <div className="text-sm font-semibold text-slate-100">{t('preferences_title')}</div>
+              <div className="text-[11px] text-slate-400">{t('preferences_subtitle')}</div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700"
                 onClick={resetCurrentSection}
-                title="Reset preferenze della sezione corrente"
+                title={t('reset_section_tooltip')}
                 type="button"
               >
-                Reset sezione
+                {t('reset_section')}
               </button>
               <button
                 className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700"
                 onClick={onClose}
-                title="Chiudi (Esc)"
+                title={t('close_tooltip')}
                 type="button"
               >
-                Chiudi
+                {t('close')}
               </button>
             </div>
           </div>
 
           <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-700 bg-slate-900/70">
-            {tabs.map((t) => {
-              const isActive = activeTab === t;
+            {tabs.map((tabId) => {
+              const isActive = activeTab === tabId;
               return (
                 <button
-                  key={t}
-                  onClick={() => setActiveTab(t)}
+                  key={tabId}
+                  onClick={() => setActiveTab(tabId)}
                   className={
                     'px-3 py-1 rounded-md text-xs font-semibold transition-colors ' +
                     (isActive ? 'bg-cyan-600 text-white' : 'text-slate-200 hover:bg-slate-700')
                   }
                 >
-                  {TAB_LABEL[t]}
+                  {t(TAB_TRANSLATION_KEY[tabId])}
                 </button>
               );
             })}
@@ -392,17 +410,17 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
           <div className="p-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
             {activeTab === 'Analysis' && (
               <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-100">Analisi</div>
-                <div className="text-sm text-slate-300">Opzioni dell’analisi armonica.</div>
+                <div className="text-sm font-semibold text-slate-100">{tp('section_analysis_title', 'Analisi')}</div>
+                <div className="text-sm text-slate-300">{tp('section_analysis_subtitle', 'Opzioni dell’analisi armonica.')}</div>
 
                 <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                  <div className="text-sm font-semibold text-slate-100">Profilo analisi</div>
+                  <div className="text-sm font-semibold text-slate-100">{tp('analysis_profile_title', 'Profilo analisi')}</div>
                   <div className="text-xs text-slate-400 mt-1">
-                    Un profilo è un preset (non blocca combinazioni). Se modifichi manualmente i toggle, il profilo diventa “Custom”.
+                    {tp('analysis_profile_hint', 'Un profilo è un preset (non blocca combinazioni). Se modifichi manualmente i toggle, il profilo diventa “Custom”.')}
                   </div>
 
                   <div className="mt-2 flex items-center gap-2">
-                    <label className="text-xs text-slate-300">Profilo:</label>
+                    <label className="text-xs text-slate-300">{tp('analysis_profile_select_label', 'Profilo:')}</label>
                     <select
                       className="bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
                       value={String(analysisProfileSelectionValue ?? 'academic')}
@@ -417,9 +435,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                         }
                       }}
                     >
-                      <option value="academic">{ANALYSIS_PROFILE_PRESETS.academic.label}</option>
-                      <option value="symbols">{ANALYSIS_PROFILE_PRESETS.symbols.label}</option>
-                      <option value="custom">Custom</option>
+                      <option value="academic">{tp('opt_profile_academic', ANALYSIS_PROFILE_PRESETS.academic.label)}</option>
+                      <option value="symbols">{tp('opt_profile_symbols', ANALYSIS_PROFILE_PRESETS.symbols.label)}</option>
+                      <option value="custom">{tp('analysis_profile_custom', 'Custom')}</option>
                     </select>
 
                     <button
@@ -429,10 +447,10 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                         applyAnalysisProfileBase(profileBaseId);
                       }}
                       disabled={!profileBaseId}
-                      title="Re-applica il preset del profilo base (ripristina defaults)"
+                      title={tp('analysis_profile_apply_preset_tooltip', 'Re-applica il preset del profilo base (ripristina defaults)')}
                       type="button"
                     >
-                      Applica preset
+                      {tp('analysis_profile_apply_preset', 'Applica preset')}
                     </button>
                   </div>
 
@@ -452,7 +470,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setShowRomanAnalysis(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Mostra numeri romani</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_show_roman', 'Mostra numeri romani')}</div>
                   </div>
                 </label>
 
@@ -464,7 +482,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setShowSymbolAnalysis(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Mostra sigle accordi</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_show_symbols', 'Mostra sigle accordi')}</div>
                   </div>
                 </label>
 
@@ -476,7 +494,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setSequencesEnabled(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Rileva sequenze (progressioni)</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_sequences_label', 'Rileva sequenze (progressioni)')}</div>
                   </div>
                 </label>
 
@@ -488,10 +506,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setEnableInferredContexts(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Inferisci contesti (modulazioni) automaticamente</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_enable_inferred_contexts', 'Inferisci contesti (modulazioni) automaticamente')}</div>
                     <div className="text-xs text-slate-400">
-                      Se attivo, l’app può applicare cambi di tonalità inferiti per far tornare Romani come V7 dentro una modulazione (es. sezione in Eb/Cm).
-                      Non sovrascrive i contesti manuali: se hai marker manuali, quelli restano prioritari.
+                      {tp('pref_analysis_enable_inferred_contexts_hint', 'Se attivo, l’app può applicare cambi di tonalità inferiti per far tornare Romani come V7 dentro una modulazione (es. sezione in Eb/Cm). Non sovrascrive i contesti manuali: se hai marker manuali, quelli restano prioritari.')}
                     </div>
                   </div>
                 </label>
@@ -504,27 +521,27 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setUseStatisticalCorrection(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Correzione statistica progressioni</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_statistical_correction', 'Correzione statistica progressioni')}</div>
                     <div className="text-xs text-slate-400">
-                      Usa le statistiche estratte dagli esercizi per correggere etichette romane improbabili. Richiede un corpus ampio di esercizi.
+                      {tp('pref_analysis_statistical_correction_hint', 'Usa le statistiche estratte dagli esercizi per correggere etichette romane improbabili. Richiede un corpus ampio di esercizi.')}
                     </div>
                   </div>
                 </label>
 
                 {!!useStatisticalCorrection && (
                   <div className="ml-6 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                    <div className="text-sm font-semibold text-slate-100 mb-1">Soglia bias statistico</div>
+                    <div className="text-sm font-semibold text-slate-100 mb-1">{tp('pref_analysis_statistical_bias_threshold', 'Soglia bias statistico')}</div>
                     <div className="text-xs text-slate-400 mb-2">
-                      R14 interviene quando la differenza di score tra i due migliori candidati è inferiore a questa soglia.
+                      {tp('pref_analysis_statistical_bias_threshold_hint', 'R14 interviene quando la differenza di score tra i due migliori candidati è inferiore a questa soglia.')}
                     </div>
                     <select
                       className="bg-slate-800 text-slate-100 text-sm rounded px-2 py-1 border border-slate-600"
                       value={statisticalBiasThreshold ?? 2}
                       onChange={(e) => setStatisticalBiasThreshold(Number(e.target.value))}
                     >
-                      <option value={1}>Conservativo (1)</option>
-                      <option value={2}>Moderato (2)</option>
-                      <option value={4}>Aggressivo (4)</option>
+                      <option value={1}>{tp('opt_bias_conservative', 'Conservativo (1)')}</option>
+                      <option value={2}>{tp('opt_bias_moderate', 'Moderato (2)')}</option>
+                      <option value={4}>{tp('opt_bias_aggressive', 'Aggressivo (4)')}</option>
                     </select>
                   </div>
                 )}
@@ -537,9 +554,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setEnableLearnedOrnaments(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Ornamenti appresi</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_learned_ornaments', 'Ornamenti appresi')}</div>
                     <div className="text-xs text-slate-400">
-                      Rileva automaticamente gli ornamenti basandosi sui pattern appresi dalle correzioni manuali.
+                      {tp('pref_analysis_learned_ornaments_hint', 'Rileva automaticamente gli ornamenti basandosi sui pattern appresi dalle correzioni manuali.')}
                     </div>
                   </div>
                 </label>
@@ -552,9 +569,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                       onChange={(e) => setStrictPassingNotes(!!e.target.checked)}
                     />
                     <div>
-                      <div className="text-sm font-semibold text-slate-100">Regola stretta note di passaggio</div>
+                      <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_strict_passing_notes', 'Regola stretta note di passaggio')}</div>
                       <div className="text-xs text-slate-400">
-                        Applica i guard più severi sulla durata e sul profilo ornamentale delle note di passaggio. Disattivala per tornare rapidamente a un comportamento più permissivo.
+                        {tp('pref_analysis_strict_passing_notes_hint', 'Applica i guard più severi sulla durata e sul profilo ornamentale delle note di passaggio. Disattivala per tornare rapidamente a un comportamento più permissivo.')}
                       </div>
                     </div>
                   </label>
@@ -567,9 +584,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setTonicizationCompact(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Tonicizzazioni compatte</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_tonicization_compact', 'Tonicizzazioni compatte')}</div>
                     <div className="text-xs text-slate-400">
-                      Mostra [in IV]: ii → V → I anziché ii/IV → V/IV → I/IV. Ideale per brani con valori veloci.
+                      {tp('pref_analysis_tonicization_compact_hint', 'Mostra [in IV]: ii → V → I anziché ii/IV → V/IV → I/IV. Ideale per brani con valori veloci.')}
                     </div>
                   </div>
                 </label>
@@ -582,9 +599,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setCadentialPatterns(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Riconoscimento pattern cadenzali</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_cadential_patterns', 'Riconoscimento pattern cadenzali')}</div>
                     <div className="text-xs text-slate-400">
-                      Rileva automaticamente cadenze (ii–V–I, IV–V–I, ecc.) e inietta tonicizzazioni temporanee verso la tonalità target.
+                      {tp('pref_analysis_cadential_patterns_hint', 'Rileva automaticamente cadenze (ii–V–I, IV–V–I, ecc.) e inietta tonicizzazioni temporanee verso la tonalità target.')}
                     </div>
                   </div>
                 </label>
@@ -597,32 +614,31 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     onChange={(e) => setChromaticModulation(!!e.target.checked)}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-slate-100">Modulazione cromatica (sperimentale)</div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_chromatic_modulation', 'Modulazione cromatica (sperimentale)')}</div>
                     <div className="text-xs text-slate-400">
-                      Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico su finestre di ≥ 3 misure consecutive.
+                      {tp('pref_analysis_chromatic_modulation_hint', 'Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico su finestre di ≥ 3 misure consecutive.')}
                     </div>
                   </div>
                 </label>
 
                 <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                  <div className="text-sm font-semibold text-slate-100">Filtro anti-rumore (etichette)</div>
+                  <div className="text-sm font-semibold text-slate-100">{tp('label_min_span_section_title', 'Filtro anti-rumore (etichette)')}</div>
                   <div className="text-xs text-slate-400 mt-1">
-                    Riduce l’affollamento campionando le etichette su una griglia ritmica (utile con semicrome e doppie note di passaggio).
-                    Non modifica l’analisi: è solo un filtro di visualizzazione.
+                    {tp('label_min_span_section_hint', 'Riduce l’affollamento campionando le etichette su una griglia ritmica (utile con semicrome e doppie note di passaggio). Non modifica l’analisi: è solo un filtro di visualizzazione.')}
                   </div>
 
                   <div className="mt-2 flex items-center gap-2">
-                    <label className="text-xs text-slate-300">Mostra label solo se durano almeno:</label>
+                    <label className="text-xs text-slate-300">{tp('label_min_span_select_label', 'Mostra label solo se durano almeno:')}</label>
                     <select
                       className="bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
                       value={Number(harmonyLabelMinSpanBeats ?? 0)}
                       onChange={(e) => setHarmonyLabelMinSpanBeats(Number(e.target.value) || 0)}
                     >
-                      <option value={0}>Off (tutte)</option>
-                      <option value={0.25}>1/16 (semicroma)</option>
-                      <option value={0.5}>1/8 (croma)</option>
-                      <option value={1}>1/4 (semiminima)</option>
-                      <option value={2}>1/2 (minima)</option>
+                      <option value={0}>{tp('opt_label_span_off', 'Off (tutte)')}</option>
+                      <option value={0.25}>{tp('opt_label_span_16', '1/16 (semicroma)')}</option>
+                      <option value={0.5}>{tp('opt_label_span_8', '1/8 (croma)')}</option>
+                      <option value={1}>{tp('opt_label_span_4', '1/4 (semiminima)')}</option>
+                      <option value={2}>{tp('opt_label_span_2', '1/2 (minima)')}</option>
                     </select>
                   </div>
                 </div>
@@ -635,9 +651,26 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
             {activeTab !== 'Analysis' && (
               <div className="space-y-2">
-                <div className="text-sm text-slate-300">Impostazioni {TAB_LABEL[activeTab]}.</div>
+                {activeTab === 'Editor' && (
+                  <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                    <div className="text-sm font-semibold text-slate-100">{t('language_section_title')}</div>
+                    <div className="text-xs text-slate-400 mt-1">{t('language_section_hint')}</div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <label className="text-xs text-slate-300">{t('language')}:</label>
+                      <select
+                        className="bg-slate-800 border border-slate-700 text-slate-100 text-xs rounded-md px-2 py-1"
+                        value={currentLanguage}
+                        onChange={(e) => handleLanguageChange((e.target.value === 'it' ? 'it' : 'en'))}
+                      >
+                        <option value="en">{t('language_english')}</option>
+                        <option value="it">{t('language_italian')}</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <div className="text-sm text-slate-300">{t('tab_settings_for', { tab: t(TAB_TRANSLATION_KEY[activeTab]) })}</div>
                 {defsForTab.length === 0 ? (
-                  <div className="text-xs text-slate-400">(Nessuna preferenza in questa sezione per ora.)</div>
+                  <div className="text-xs text-slate-400">{t('tab_no_preferences')}</div>
                 ) : (
                   defsForTab.map((def) => (
                     <PreferenceRow key={def.id} def={def} />
@@ -648,14 +681,14 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
           </div>
 
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-700 bg-slate-900/60">
-            <div className="text-[11px] text-slate-400">Le preferenze sono salvate localmente.</div>
+            <div className="text-[11px] text-slate-400">{t('preferences_saved_locally_note')}</div>
             <button
               className="rounded-md bg-slate-700/60 border border-slate-600 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:bg-slate-700"
               onClick={resetAll}
-              title="Reset di tutte le preferenze ai default"
+              title={t('reset_all_tooltip')}
               type="button"
             >
-              Reset tutto
+              {t('reset_all')}
             </button>
           </div>
         </div>

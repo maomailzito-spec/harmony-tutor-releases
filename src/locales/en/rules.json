@@ -1,0 +1,25 @@
+{
+  "rule": {
+    "R-01": "Parallel octaves/unisons",
+    "R-02": "Parallel fifths",
+    "R-04": "Voice crossing",
+    "R-05": "Hidden fifths/octaves",
+    "R-06": "Augmented/diminished leap resolution",
+    "R-07": "Leading-tone resolution",
+    "R-08": "Excessive spacing between voices",
+    "R-09": "Cross relation (false relation)",
+    "R-10": "Doubled leading tone",
+    "R-10-7TH": "Doubled seventh",
+    "R-12": "Seventh resolution",
+    "R-13": "Parallel motion in all voices",
+    "R-14": "Similar motion in outer voices",
+    "R-15": "Wide leaps in inner voices",
+    "R-16": "Harmonic syncopation",
+    "R-17a": "Two leaps → 7th/9th (forbidden)",
+    "R-17b": "7th/9th without stepwise approach",
+    "R-17c": "Tritone succession",
+    "R-N-RES": "Non-chord tone resolution",
+    "R-AUG6-RES": "Augmented sixth resolution",
+    "R-CAD64": "Cadential 6/4 resolution"
+  }
+}

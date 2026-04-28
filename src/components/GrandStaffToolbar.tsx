@@ -2,19 +2,19 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import type { AccidentalType, NoteDuration, StaffNote, Voice } from '../types';
 
-const VOICE_INSTRUMENT_OPTIONS = [
-    { value: 'acoustic_grand_piano', label: '🎹 Pianoforte' },
-    { value: 'church_organ', label: '⛪ Organo' },
-    { value: 'harpsichord', label: '🎵 Clavicembalo' },
-    { value: 'string_ensemble_1', label: '🎻 Archi' },
-    { value: 'choir_aahs', label: '🎤 Coro' },
-    { value: 'flute', label: '🪈 Flauto' },
-    { value: 'oboe', label: '🎼 Oboe' },
-    { value: 'clarinet', label: '🎼 Clarinetto' },
-    { value: 'trumpet', label: '🎺 Tromba' },
-    { value: 'french_horn', label: '📯 Corno' },
-    { value: 'violin', label: '🎻 Violino' },
-    { value: 'cello', label: '🎻 Violoncello' },
+const VOICE_INSTRUMENT_OPTIONS: Array<{ value: string; emoji: string; key: string }> = [
+    { value: 'acoustic_grand_piano', emoji: '🎹', key: 'piano' },
+    { value: 'church_organ',        emoji: '⛪', key: 'organ' },
+    { value: 'harpsichord',         emoji: '🎵', key: 'harpsichord' },
+    { value: 'string_ensemble_1',   emoji: '🎻', key: 'strings' },
+    { value: 'choir_aahs',          emoji: '🎤', key: 'choir' },
+    { value: 'flute',               emoji: '🪈', key: 'flute' },
+    { value: 'oboe',                emoji: '🎼', key: 'oboe' },
+    { value: 'clarinet',            emoji: '🎼', key: 'clarinet' },
+    { value: 'trumpet',             emoji: '🎺', key: 'trumpet' },
+    { value: 'french_horn',         emoji: '📯', key: 'horn' },
+    { value: 'violin',              emoji: '🎻', key: 'violin' },
+    { value: 'cello',               emoji: '🎻', key: 'cello' },
 ];
 import {
     WholeNoteIcon,
@@ -62,6 +62,7 @@ type MetronomeUnit = 'quarter' | 'eighth' | 'dotted-quarter';
 type SelectedNotesBeamState = 'unbeamable' | 'beamed' | 'mixed' | 'unbeamed';
 import type { ToolbarGroupId } from './GrandStaffEditor';
 import { usePreference } from '../preferences/usePreference';
+import { useTranslation } from 'react-i18next';
 
 type InsertionElement = { type: 'note' | 'rest'; duration: NoteDuration; isDotted?: boolean };
 
@@ -342,16 +343,22 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     } = props;
 
     const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
+    const { t } = useTranslation('ui');
+    const { t: tT } = useTranslation('toolbar');
+
+    const voiceName = useCallback((v: number): string => {
+        return tT(v === 1 ? 'voice_soprano' : v === 2 ? 'voice_alto' : v === 3 ? 'voice_tenor' : 'voice_bass');
+    }, [tT]);
 
     const durations: { duration: NoteDuration; label: string }[] = useMemo(() => ([
-        { duration: 'whole', label: 'Semibreve' },
-        { duration: 'half', label: 'Minima' },
-        { duration: 'quarter', label: 'Semiminima' },
-        { duration: 'eighth', label: 'Croma' },
-        { duration: 'sixteenth', label: 'Semicroma' },
-        { duration: 'thirty-second', label: 'Biscroma' },
-        { duration: 'sixty-fourth', label: 'Semibiscroma' },
-    ]), []);
+        { duration: 'whole', label: tT('duration_whole') },
+        { duration: 'half', label: tT('duration_half') },
+        { duration: 'quarter', label: tT('duration_quarter') },
+        { duration: 'eighth', label: tT('duration_eighth') },
+        { duration: 'sixteenth', label: tT('duration_sixteenth') },
+        { duration: 'thirty-second', label: tT('duration_thirty_second') },
+        { duration: 'sixty-fourth', label: tT('duration_sixty_fourth') },
+    ]), [tT]);
 
     const toolbarGroups: Record<ToolbarGroupId, React.ReactNode> = {
         playback: (
@@ -359,11 +366,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 <button
                     onClick={togglePlayback}
                     className={`p-2 rounded-full transition-colors ${isPlaying ? 'text-yellow-400 hover:bg-yellow-400/20' : 'text-green-400 hover:bg-green-400/20'}`}
-                    title={isPlaying ? 'Pausa (Spazio)' : 'Play (Spazio)' }
+                    title={isPlaying ? tT('playback_pause') : tT('playback_play')}
                 >
                     {isPlaying ? <PauseSolidIcon className={TOOLBAR_ICON_CLASS} /> : <PlaySolidIcon className={TOOLBAR_ICON_CLASS} />}
                 </button>
-                <button onClick={undoNotes} className="p-2 rounded-full text-gray-300 hover:bg-gray-600 transition-colors" title="Undo (Cmd/Ctrl+Z)">
+                <button onClick={undoNotes} className="p-2 rounded-full text-gray-300 hover:bg-gray-600 transition-colors" title={tT('playback_undo')}>
                     <ArrowUturnLeftIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
             </div>
@@ -409,7 +416,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     }}
                     onClick={toggleMetronome}
                     className={`relative p-2 rounded-full transition-colors ${isMetronomeOn ? 'text-cyan-400' : 'text-gray-300 hover:bg-gray-600'} ${metronomeFlash === 'strong' ? 'bg-cyan-400/50' : metronomeFlash === 'weak' ? 'bg-cyan-400/20' : ''}`}
-                    title="Metronomo (K)"
+                    title={tT('metronome_tooltip')}
                 >
                     <MetronomeIcon />
                 </button>
@@ -418,26 +425,26 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     value={metronomeUnit}
                     onChange={(e) => setMetronomeUnit(e.target.value as MetronomeUnit)}
                     className="bg-gray-700 border border-gray-600 rounded-full p-0.5 text-xs w-6 h-6 appearance-none cursor-pointer focus:ring-2 focus:ring-cyan-500"
-                    title="Unità del metronomo"
+                    title={tT('metronome_unit_tooltip')}
                     style={{ minWidth: 0, paddingRight: 0, paddingLeft: 0, textIndent: '-9999px', backgroundPosition: 'center right 2px', backgroundRepeat: 'no-repeat', backgroundSize: '1em', backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'16\' height=\'16\' fill=\'none\' stroke=\'%23ccc\' stroke-width=\'2\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M6 9l6 6 6-6\'/%3E%3C/svg%3E")' }}
                 >
-                    <option value="quarter">Quarto</option>
-                    <option value="eighth">Ottavo</option>
-                    <option value="dotted-quarter">Quarto puntato</option>
+                    <option value="quarter">{tT('metronome_unit_quarter')}</option>
+                    <option value="eighth">{tT('metronome_unit_eighth')}</option>
+                    <option value="dotted-quarter">{tT('metronome_unit_dotted_quarter')}</option>
                 </select>
             </div>
         ),
         key: (
             <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-slate-400">Ton:</span>
+                <span className="text-xs text-slate-400">{tT('key_label')}</span>
                 <select
                     id="key-signature-select"
                     value={keySignatureRoot}
                     onChange={e => handleKeySignatureRootChange(e.target.value)}
                     className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-[90px]"
                 >
-                    <optgroup label="Diesis (♯)">{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
-                    <optgroup label="Bemolli (♭)">{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
+                    <optgroup label={tT('key_optgroup_sharps')}>{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
+                    <optgroup label={tT('key_optgroup_flats')}>{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                 </select>
 
                 <label className="flex items-center gap-2 text-xs text-gray-300 select-none">
@@ -447,7 +454,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         onChange={(e) => setTransposeKeyChangeEnabled(e.target.checked)}
                         className="accent-cyan-500"
                     />
-                    Trasponi
+                    {tT('key_transpose')}
                 </label>
 
                 <label className="flex items-center gap-2 text-xs text-gray-300 select-none">
@@ -457,19 +464,19 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         onChange={(e) => setKeyChangeMode(e.target.checked ? 'modal' : 'none')}
                         className="accent-cyan-500"
                     />
-                    Modale
+                    {tT('key_modal')}
                 </label>
 
                 {keyChangeMode === 'modal' && (
                     <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400">Tonica:</span>
+                        <span className="text-xs text-slate-400">{tT('key_tonic_label')}</span>
                         <select
                             value={modalTonicOverride}
                             onChange={(e) => setModalTonicOverride(e.target.value)}
                             className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-24"
-                            title="Tonica del modo (vuoto = prima nota inserita)"
+                            title={tT('key_tonic_tooltip')}
                         >
-                            <option value="">Auto (prima nota)</option>
+                            <option value="">{tT('key_tonic_auto')}</option>
                             {modalTonicOptions.map(opt => (
                                 <option key={opt.idx} value={opt.value}>{opt.label}</option>
                             ))}
@@ -479,30 +486,30 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
 
                 <div className="relative flex p-0.5 bg-gray-900/50 rounded-md">
                     <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${isMinorMode ? '100%' : '0%'})` }}></div>
-                    <button onClick={() => setIsMinorMode(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>Mag</button>
-                    <button onClick={() => setIsMinorMode(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>min</button>
+                    <button onClick={() => setIsMinorMode(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_major')}</button>
+                    <button onClick={() => setIsMinorMode(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_minor')}</button>
                 </div>
 
-                <label className="flex items-center gap-2 text-xs text-gray-300 select-none" title="In tonalità minore: alza automaticamente il VII grado (minore armonica) se non scegli un accidentale manuale.">
+                <label className="flex items-center gap-2 text-xs text-gray-300 select-none" title={tT('key_auto_leading_tone_tooltip')}>
                     <input
                         type="checkbox"
                         checked={autoLeadingToneInMinor}
                         onChange={(e) => setAutoLeadingToneInMinor(e.target.checked)}
                         className="accent-cyan-500"
                     />
-                    Sensibile auto
+                    {tT('key_auto_leading_tone')}
                 </label>
             </div>
         ),
         time: (
             <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-400">Tempo:</span>
+                <span className="text-xs text-slate-400">{tT('time_label')}</span>
                 {timeSignatureControl}
             </div>
         ),
         measures: (
             <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-400">Mis:</span>
+                <span className="text-xs text-slate-400">{tT('measures_label')}</span>
                 <div className="flex items-center">
                     <input
                         value={minMeasureCountDraft}
@@ -517,22 +524,22 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         }}
                         inputMode="numeric"
                         className="w-14 bg-slate-700 border border-slate-600 rounded-l-md px-2 py-1 text-sm text-white"
-                        aria-label="Numero misure brano"
+                        aria-label={tT('measures_count_aria')}
                     />
                     <div className="flex flex-col">
                         <button
                             onClick={() => bumpMinMeasureCount(+1)}
                             className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-slate-600 rounded-tr-md text-[10px] text-gray-200 hover:bg-slate-600"
-                            title="Aumenta misure"
-                            aria-label="Aumenta misure"
+                            title={tT('measures_increase')}
+                            aria-label={tT('measures_increase')}
                         >
                             ▲
                         </button>
                         <button
                             onClick={() => bumpMinMeasureCount(-1)}
                             className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-t-0 border-slate-600 rounded-br-md text-[10px] text-gray-200 hover:bg-slate-600"
-                            title="Diminuisci misure"
-                            aria-label="Diminuisci misure"
+                            title={tT('measures_decrease')}
+                            aria-label={tT('measures_decrease')}
                         >
                             ▼
                         </button>
@@ -540,7 +547,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 </div>
                 <div className="w-px h-5 bg-slate-600 mx-1"></div>
                 <div className="flex items-center gap-1">
-                    <span className="text-xs text-slate-400">per riga</span>
+                    <span className="text-xs text-slate-400">{tT('measures_per_line_label')}</span>
                     <div className="flex items-center">
                         <input
                             value={measuresPerLineDraft}
@@ -555,23 +562,23 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             }}
                             inputMode="numeric"
                             className="w-12 bg-slate-700 border border-slate-600 rounded-l-md px-2 py-1 text-sm text-white"
-                            aria-label="Misure per riga"
-                            title="Misure per riga (1-12)"
+                            aria-label={tT('measures_per_line_aria')}
+                            title={tT('measures_per_line_tooltip')}
                         />
                         <div className="flex flex-col">
                             <button
                                 onClick={() => bumpMeasuresPerLine(+1)}
                                 className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-slate-600 rounded-tr-md text-[10px] text-gray-200 hover:bg-slate-600"
-                                title="Aumenta misure per riga"
-                                aria-label="Aumenta misure per riga"
+                                title={tT('measures_per_line_increase')}
+                                aria-label={tT('measures_per_line_increase')}
                             >
                                 ▲
                             </button>
                             <button
                                 onClick={() => bumpMeasuresPerLine(-1)}
                                 className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-t-0 border-slate-600 rounded-br-md text-[10px] text-gray-200 hover:bg-slate-600"
-                                title="Diminuisci misure per riga"
-                                aria-label="Diminuisci misure per riga"
+                                title={tT('measures_per_line_decrease')}
+                                aria-label={tT('measures_per_line_decrease')}
                             >
                                 ▼
                             </button>
@@ -588,7 +595,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         onClick={() => setSelectedVoice(v as Voice)}
                         onDoubleClick={(e) => { e.preventDefault(); onToggleSolo?.(v); }}
                         className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${soloVoices?.has(v) ? 'ring-2 ring-yellow-400 ' : ''}${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
-                        title={`${v === 1 ? 'Soprano' : v === 2 ? 'Alto' : v === 3 ? 'Tenore' : 'Basso'}${soloVoices?.has(v) ? ' (SOLO)' : ''} — doppio-click per solo`}
+                        title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${tT('voice_tooltip_suffix')}`}
                     >
                         {v === 1 ? 'S' : v === 2 ? 'A' : v === 3 ? 'T' : 'B'}
                     </button>
@@ -596,14 +603,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             </div>
         ),
         voiceInstrument: onChangeVoiceInstrument ? (
-            <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={`Strumento per ${selectedVoice === 1 ? 'Soprano' : selectedVoice === 2 ? 'Alto' : selectedVoice === 3 ? 'Tenore' : 'Basso'}`}>
+            <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={tT('voice_instrument_tooltip', { voice: voiceName(selectedVoice) })}>
                 <select
                     className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
                     value={voiceInstruments?.[selectedVoice] || 'acoustic_grand_piano'}
                     onChange={(e) => onChangeVoiceInstrument(selectedVoice, e.target.value)}
                 >
                     {VOICE_INSTRUMENT_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value} value={opt.value}>{opt.emoji} {tT('instrument_' + opt.key)}</option>
                     ))}
                 </select>
             </div>
@@ -613,7 +620,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 <button
                     onClick={() => { setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' })); }}
                     className={`p-1 rounded-md transition-colors ${selectedInsertion.type === 'rest' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title={selectedInsertion.type === 'note' ? 'Passa a Pausa (R)' : 'Modalità Pausa attiva — passa a Nota (R)'}
+                    title={selectedInsertion.type === 'note' ? tT('insert_switch_to_rest') : tT('insert_rest_mode_switch_to_note')}
                 >
                     {selectedInsertion.type === 'note'
                         ? <QuarterRestIcon className={TOOLBAR_ICON_CLASS} />
@@ -652,7 +659,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         setDottedFromSource(!!next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${selectedInsertion.isDotted ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Punto di valore"
+                    title={tT('insert_dotted')}
                 >
                     <DotIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -672,7 +679,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         });
                     }}
                     className={`p-1 rounded-md transition-colors ${isTriplet ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Terzina"
+                    title={tT('insert_triplet')}
                 >
                     <TripletIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -691,14 +698,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     }}
                     disabled={!canUseDuplet}
                     className={`p-1 rounded-md transition-colors ${isDuplet ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                    title={canUseDuplet ? 'Duina (2 ottavi nel tempo di 3) nei tempi composti' : 'Duina disponibile solo nei tempi composti (x/8 con numeratore multiplo di 3) e con durata ottavo selezionata'}
+                    title={canUseDuplet ? tT('insert_duplet_available') : tT('insert_duplet_disabled')}
                 >
                     <span className="text-sm font-bold leading-none">2</span>
                 </button>
                 <button
                     onClick={() => setIsSwing(s => !s)}
                     className={`p-1 rounded-md transition-colors ${isSwing ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Swing (ottavi terzinati) — solo playback"
+                    title={tT('insert_swing')}
                 >
                     <span className="text-[10px] font-bold leading-none">Sw</span>
                 </button>
@@ -706,7 +713,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     onClick={toggleDoubleBarlineAtPlayhead}
                     disabled={!playheadPosition}
                     className="p-1 rounded-md transition-colors text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-gray-600"
-                    title={playheadPosition ? 'Inserisci/Rimuovi doppia barra alla misura della playhead' : 'Imposta prima la playhead (click sullo staff)'}
+                    title={playheadPosition ? tT('insert_double_barline_active') : tT('insert_set_playhead_first')}
                 >
                     <span className="text-sm font-bold leading-none">||</span>
                 </button>
@@ -714,7 +721,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     onClick={insertMeasureAtPlayhead}
                     disabled={!playheadPosition}
                     className="p-1 rounded-md transition-colors text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-gray-600"
-                    title={playheadPosition ? 'Inserisci misura alla playhead (sposta avanti le successive)' : 'Imposta prima la playhead (click sullo staff)'}
+                    title={playheadPosition ? tT('insert_measure_at_playhead') : tT('insert_set_playhead_first')}
                 >
                     <span className="text-sm font-bold leading-none">+|</span>
                 </button>
@@ -729,7 +736,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'sharp' || activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Diesis (♯)"
+                    title={tT('accidental_sharp')}
                 >
                     <SharpIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -740,7 +747,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-sharp' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Doppio Diesis (𝄪)"
+                    title={tT('accidental_double_sharp')}
                 >
                     <DoubleSharpIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -751,7 +758,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'flat' || activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Bemolle (♭)"
+                    title={tT('accidental_flat')}
                 >
                     <FlatIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -762,7 +769,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'double-flat' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Doppio Bemolle (♭♭)"
+                    title={tT('accidental_double_flat')}
                 >
                     <DoubleFlatIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -773,7 +780,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         setActiveAccidentalAndApplyFromSource(next, 'toolbar');
                     }}
                     className={`p-1 rounded-md transition-colors ${activeAccidental === 'natural' ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                    title="Bequadro (N)"
+                    title={tT('accidental_natural')}
                 >
                     <NaturalIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -785,7 +792,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     onClick={handleToggleBeamGroup}
                     disabled={selectedNotesBeamState === 'unbeamable'}
                     className="p-1 rounded-md transition-colors text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-gray-600"
-                    title={selectedNotesBeamState === 'beamed' ? 'Separa note selezionate' : selectedNotesBeamState === 'unbeamable' ? 'Seleziona almeno 2 note per la travatura' : 'Unisci note selezionate'}
+                    title={selectedNotesBeamState === 'beamed' ? tT('notations_unbeam') : selectedNotesBeamState === 'unbeamable' ? tT('notations_beam_select_min') : tT('notations_beam')}
                 >
                     {selectedNotesBeamState === 'beamed' ? <UngroupIcon /> : <GroupIcon />}
                 </button>
@@ -793,7 +800,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     onClick={handleToggleTie}
                     disabled={selectedNoteIds.size === 0}
                     className="p-1 rounded-md text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-gray-600 transition-colors"
-                    title="Lega note"
+                    title={tT('notations_tie')}
                 >
                     <TieIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -801,7 +808,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     onClick={handleFlipStem}
                     disabled={!selectedTiePair && selectedNoteIds.size === 0}
                     className="p-1 rounded-md text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-gray-600 transition-colors"
-                    title="Inverti gambo / legatura"
+                    title={tT('notations_flip_stem')}
                 >
                     <FlipStemIcon className={TOOLBAR_ICON_CLASS} />
                 </button>
@@ -812,39 +819,39 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 <button
                     onClick={() => setActiveTab(prev => prev === 'analysis' ? 'editor' : 'analysis')}
                     className="px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all bg-cyan-600 text-white hover:bg-cyan-500"
-                    title={activeTab === 'analysis' ? 'Torna a Editor' : 'Apri Analisi'}
+                    title={activeTab === 'analysis' ? t('toolbar_back_to_editor_tooltip') : t('toolbar_open_analysis_tooltip')}
                 >
-                    {activeTab === 'analysis' ? 'Editor' : 'Analisi'}
+                    {activeTab === 'analysis' ? t('toolbar_open_editor') : t('toolbar_open_analysis')}
                 </button>
                 <button
                     onClick={() => setIsAnalysisEnabled(prev => !prev)}
                     className={`ml-1 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md transition-all ${isAnalysisEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}
-                    title={isAnalysisEnabled ? 'Disattiva Analisi' : 'Attiva Analisi'}
+                    title={isAnalysisEnabled ? t('toolbar_disable_analysis') : t('toolbar_enable_analysis')}
                 >
-                    <span>Analisi {isAnalysisEnabled ? 'On' : 'Off'}</span>
+                    <span>{isAnalysisEnabled ? t('toolbar_analysis_on') : t('toolbar_analysis_off')}</span>
                 </button>
                 {isAnalysisEnabled && (
                     <div className="flex items-center gap-1 p-0.5 bg-gray-900/50 rounded-md text-xs ml-2">
                         <button
                             onClick={() => setShowRomanAnalysis(prev => !prev)}
                             className={`w-10 rounded-sm py-0.5 font-bold transition-all ${showRomanAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
-                            title={showRomanAnalysis ? 'Nascondi Numeri Romani' : 'Mostra Numeri Romani'}
+                            title={showRomanAnalysis ? t('toolbar_hide_roman') : t('toolbar_show_roman')}
                         >
                             V7
                         </button>
                         <button
                             onClick={() => setShowSymbolAnalysis(prev => !prev)}
                             className={`w-10 rounded-sm py-0.5 font-bold transition-all ${showSymbolAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
-                            title={showSymbolAnalysis ? 'Nascondi Sigle' : 'Mostra Sigle'}
+                            title={showSymbolAnalysis ? t('toolbar_hide_symbols') : t('toolbar_show_symbols')}
                         >
                             G7
                         </button>
                         <button
                             onClick={() => setChromaticModulationEnabled(!chromaticModulationEnabled)}
                             className={`px-1.5 rounded-sm py-0.5 font-bold transition-all ${chromaticModulationEnabled ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
-                            title="Modulazione cromatica — Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico"
+                            title={t('toolbar_chromatic_tooltip')}
                         >
-                            Cromatica
+                            {tT('analysis_chromatic_label')}
                         </button>
                     </div>
                 )}
@@ -855,7 +862,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 <button
                     onClick={() => setIsMoreMenuOpen(o => !o)}
                     className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${isMoreMenuOpen ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
-                    title="Menu"
+                    title={tT('more_menu')}
                 >
                     ⋯
                 </button>
@@ -864,17 +871,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         <button
                             onClick={() => setStaffSystemMode('grandstaff')}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="Torna al Grand Staff (2 righi) — Alt/Option+L"
+                            title={tT('more_grand_staff_tooltip')}
                         >
-                            <span>Grand Staff (2 righi)</span>
+                            <span>{tT('more_grand_staff_label')}</span>
                             {staffSystemMode === 'grandstaff' && <span className="text-[11px]">✓</span>}
                         </button>
                         <button
                             onClick={() => setStaffSystemMode('treble_only')}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="Chiave di violino (1 rigo)"
+                            title={tT('more_treble_only_tooltip')}
                         >
-                            <span>Chiave di violino (1 rigo)</span>
+                            <span>{tT('more_treble_only_label')}</span>
                             {staffSystemMode === 'treble_only' && <span className="text-[11px]">✓</span>}
                         </button>
                         <button
@@ -884,36 +891,36 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 else setStaffSystemMode('satb_ancient');
                             }}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="SATB antiche (4 righi) — Alt/Option+L"
+                            title={tT('more_satb_ancient_tooltip')}
                         >
-                            <span>SATB antiche (4 righi)</span>
+                            <span>{tT('more_satb_ancient_label')}</span>
                             {staffSystemMode === 'satb_ancient' && <span className="text-[11px]">✓</span>}
                         </button>
                         <button
                             onClick={() => setStaffLayoutMode(prev => prev === 'parti_late' ? 'parti_strette' : 'parti_late')}
                             disabled={staffSystemMode === 'satb_ancient'}
                             className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${staffSystemMode === 'satb_ancient' ? 'text-gray-500 cursor-not-allowed' : 'text-gray-200 hover:bg-slate-700'}`}
-                            title={staffSystemMode === 'satb_ancient' ? 'Layout non applicabile in SATB (4 righi)' : 'Parti strette'}
+                            title={staffSystemMode === 'satb_ancient' ? tT('more_close_voicing_disabled_tooltip') : tT('more_close_voicing_tooltip')}
                         >
-                            <span>Parti strette</span>
+                            <span>{tT('more_close_voicing_label')}</span>
                             {staffLayoutMode === 'parti_strette' && staffSystemMode !== 'satb_ancient' && <span className="text-[11px]">✓</span>}
                         </button>
                         <div className="my-2 h-px bg-slate-700" />
-                        <div className="px-2 pb-1 text-[11px] text-slate-300">Formato</div>
+                        <div className="px-2 pb-1 text-[11px] text-slate-300">{tT('more_format_label')}</div>
                         <button
                             onClick={() => setCanvasFormat('page')}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="Page"
+                            title={tT('more_format_page')}
                         >
-                            <span>Page</span>
+                            <span>{tT('more_format_page')}</span>
                             <span className="text-[11px]">{canvasFormat === 'page' ? '●' : '○'}</span>
                         </button>
                         <button
                             onClick={() => setCanvasFormat('landscape')}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="Landscape"
+                            title={tT('more_format_landscape')}
                         >
-                            <span>Landscape</span>
+                            <span>{tT('more_format_landscape')}</span>
                             <span className="text-[11px]">{canvasFormat === 'landscape' ? '●' : '○'}</span>
                         </button>
                         <div className="my-2 h-px bg-slate-700" />
@@ -931,14 +938,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 setIsMidiMenuOpen(true);
                             }}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title="MIDI"
+                            title={tT('midi_label')}
                         >
-                            <span>MIDI</span>
+                            <span>{tT('midi_label')}</span>
                             {(isMidiMenuOpen || !!selectedMidiOutput) && <span className="text-[11px]">✓</span>}
                         </button>
                         {isMidiMenuOpen && (
                             <div className="mt-1 rounded-md bg-slate-900/40 border border-slate-700">
-                                <div className="px-2 py-1 text-[11px] text-slate-300">Seleziona uscita</div>
+                                <div className="px-2 py-1 text-[11px] text-slate-300">{tT('midi_select_output')}</div>
                                 <button
                                     onClick={() => {
                                         setSelectedMidiOutput(null);
@@ -946,11 +953,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                     }}
                                     className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${selectedMidiOutput ? 'text-gray-200 hover:bg-slate-700' : 'bg-cyan-600 text-white'}`}
                                 >
-                                    <span>Audio Interno</span>
+                                    <span>{tT('midi_internal_audio')}</span>
                                     {!selectedMidiOutput && <span className="text-[11px]">✓</span>}
                                 </button>
                                 {midiOutputs.length === 0 ? (
-                                    <div className="px-2 py-1 text-[11px] text-gray-400">Nessun dispositivo MIDI</div>
+                                    <div className="px-2 py-1 text-[11px] text-gray-400">{tT('midi_no_devices')}</div>
                                 ) : (
                                     midiOutputs.map(output => {
                                         const isSelected = selectedMidiOutput?.id === output.id;
@@ -977,9 +984,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         <button
                             onClick={onToggleMidiStepInput}
                             className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${midiStepInputEnabled ? 'bg-emerald-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
-                            title={midiStepInputEnabled && midiStepInputDeviceName ? `Input: ${midiStepInputDeviceName}` : 'MIDI Step Input'}
+                            title={midiStepInputEnabled && midiStepInputDeviceName ? tT('midi_step_input_with_device', { device: midiStepInputDeviceName }) : tT('midi_step_input')}
                         >
-                            <span>🎹 Step Input</span>
+                            <span>🎹 {tT('midi_step_input_short')}</span>
                             {midiStepInputEnabled && <span className="text-[11px]">✓</span>}
                         </button>
                         {midiStepInputEnabled && midiStepInputDeviceName && (
@@ -1069,7 +1076,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                             }}
                                             onDragEnd={() => setDraggingToolbarGroupId(null)}
                                             className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none cursor-grab px-1 text-gray-300"
-                                            title="Trascina per riordinare"
+                                            title={tT('more_drag_to_reorder')}
                                         >
                                             ⋮⋮
                                         </span>

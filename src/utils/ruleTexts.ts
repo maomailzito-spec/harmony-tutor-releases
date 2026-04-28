@@ -27,6 +27,12 @@ export interface RuleText {
 // REGISTRO
 // ────────────────────────────────────────────────────────────
 
+// --- INIZIO ESTRAZIONE TESTI ITALIANI ---
+// Copia aggiornata di tutti i testi (body, suggestion) delle regole, errori, eccezioni, ornamenti, cadenze.
+// Da usare per traduzione o revisione.
+// ATTENZIONE: questa sezione è solo per estrazione/copia, non modificare qui!
+
+// --- FINE ESTRAZIONE TESTI ITALIANI ---
 export const RULE_TEXTS: Record<string, RuleText> = {
   // ═══════════════════════════════════════════════════════════
   // 1. ERRORI DI CONDOTTA VOCALE (error)
@@ -682,7 +688,79 @@ export const RULE_TEXTS: Record<string, RuleText> = {
 // API
 // ────────────────────────────────────────────────────────────
 
-/** Ottiene body + suggestion per una regola. Fallback sicuro se la regola non è nel registro. */
+import i18n from '../i18n';
+// IT registry of titles is the source-of-truth for matching the runtime first line.
+// We import the JSON directly because matching must NOT depend on the active language.
+import itRuleTexts from '../locales/it/ruleTexts.json';
+
+type RuleEntry = {
+  body?: string;
+  suggestion?: string;
+  title?: string;
+  titleVariants?: Record<string, string>;
+};
+
+/**
+ * Ottiene body + suggestion per una regola, localizzati nella lingua corrente.
+ *
+ * Il dict italiano `RULE_TEXTS` qui sopra resta come fallback statico:
+ *   - se i18n non è inizializzato (es. test unit, esecuzione fuori React),
+ *   - se la chiave manca dal namespace `ruleTexts`,
+ *   - se la lookup ritorna stringa vuota.
+ */
 export function getRuleText(ruleId: string): RuleText {
-  return RULE_TEXTS[ruleId] ?? { body: '', suggestion: '' };
+  const fallback = RULE_TEXTS[ruleId] ?? { body: '', suggestion: '' };
+  try {
+    const bodyKey = `${ruleId}.body`;
+    const sugKey = `${ruleId}.suggestion`;
+    const bodyHit = i18n.exists(bodyKey, { ns: 'ruleTexts' });
+    const sugHit = i18n.exists(sugKey, { ns: 'ruleTexts' });
+    const body = bodyHit ? (i18n.t(bodyKey, { ns: 'ruleTexts' }) as string) : fallback.body;
+    const suggestion = sugHit ? (i18n.t(sugKey, { ns: 'ruleTexts' }) as string) : fallback.suggestion;
+    return { body: body || '', suggestion: suggestion || '' };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Localizza la prima riga di una `description` di violazione.
+ *
+ * Match in due passi (sempre contro l'IT, perché il codice produce stringhe IT):
+ *   1. titleVariants[firstLineIT] → traduce la specifica variante.
+ *   2. title === firstLineIT → traduce il titolo canonico.
+ * Se nessun match (caso dinamico con interpolazione), ritorna `description` immutata.
+ */
+export function localizeViolationTitle(ruleId: string, description: string): string {
+  if (!description) return description;
+  const itEntry = (itRuleTexts as Record<string, RuleEntry>)[ruleId];
+  if (!itEntry) return description;
+  const nlIdx = description.indexOf('\n');
+  const firstLine = nlIdx >= 0 ? description.slice(0, nlIdx) : description;
+  const rest = nlIdx >= 0 ? description.slice(nlIdx) : '';
+
+  let translated: string | null = null;
+  // Variant lookup
+  if (itEntry.titleVariants && Object.prototype.hasOwnProperty.call(itEntry.titleVariants, firstLine)) {
+    try {
+      const lng = i18n.language || 'it';
+      const localEntry = i18n.getResource(lng, 'ruleTexts', ruleId) as RuleEntry | undefined;
+      const local = localEntry?.titleVariants?.[firstLine];
+      translated = (local && typeof local === 'string' && local.length > 0) ? local : firstLine;
+    } catch {
+      translated = firstLine;
+    }
+  }
+  // Canonical title lookup
+  else if (itEntry.title && itEntry.title === firstLine) {
+    try {
+      const titleHit = i18n.exists(`${ruleId}.title`, { ns: 'ruleTexts' });
+      translated = titleHit ? (i18n.t(`${ruleId}.title`, { ns: 'ruleTexts' }) as string) : firstLine;
+    } catch {
+      translated = firstLine;
+    }
+  }
+
+  if (translated == null || translated === firstLine) return description;
+  return translated + rest;
 }

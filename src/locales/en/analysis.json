@@ -1,0 +1,45 @@
+{
+  "filters_title": "Filters",
+  "shown_count": "Shown: {{shown}}/{{total}}",
+
+  "filter_errors": "Errors ({{count}})",
+  "filter_warnings": "Warnings ({{count}})",
+  "filter_exceptions": "Exceptions ({{count}})",
+  "filter_chromatics": "Chromatics ({{count}})",
+
+  "filter_errors_tooltip": "Show/hide errors",
+  "filter_warnings_tooltip": "Show/hide warnings",
+  "filter_exceptions_tooltip": "Show/hide exceptions",
+  "filter_chromatics_tooltip": "Show/hide chromatics",
+
+  "rules_title": "Rules",
+  "rules_show_all": "All",
+  "rules_hide_all": "None",
+  "rules_show_all_tooltip": "Show all rules",
+  "rules_hide_all_tooltip": "Hide all rules",
+  "rules_search_placeholder": "Search ruleId (e.g. R-N-RES, ORN-, CAD-)",
+  "rules_none_found": "No rules found.",
+  "rule_click_hide": "Click to hide this rule",
+  "rule_click_show": "Click to show this rule",
+
+  "sequences_title": "Sequences",
+  "sequences_toggle_on": "Sequences: ON",
+  "sequences_toggle_off": "Sequences: OFF",
+  "sequences_disable_tooltip": "Disable sequence highlighting",
+  "sequences_enable_tooltip": "Enable sequence highlighting",
+  "sequences_none_found": "No sequences found.",
+  "sequences_disabled": "Sequences disabled.",
+  "sequence_measure_one": "Measure {{n}}",
+  "sequence_measure_range": "Measures {{from}}–{{to}}",
+  "sequence_summary": "{{range}} · L={{length}} · conf {{conf}}%",
+  "sequence_model_to_repeat": "Model {{model}} → {{repeat}}",
+
+  "empty_filtered_title": "No items match these filters.",
+  "empty_filtered_hint": "Try adjusting the filters.",
+  "empty_clean_title": "Nothing flagged.",
+  "empty_clean_hint": "No errors or warnings detected.",
+
+  "violation_exception": "Exception",
+  "violation_chromatic": "Chromatic",
+  "violation_suggestion_label": "Suggestion:"
+}

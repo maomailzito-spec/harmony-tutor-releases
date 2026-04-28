@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { RuleViolation, SequenceMatch } from '../types';
 import { usePreference } from '../preferences/usePreference';
 import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
@@ -40,6 +41,7 @@ const ExceptionIcon: React.FC = () => (
 
 
 const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
+    const { t } = useTranslation('analysis');
     const [filters, setFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [ruleSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
     const showError = !!filters?.showError;
@@ -182,51 +184,51 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
         <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto">
             <div className="mb-3 bg-gray-900/30 border border-gray-700/50 rounded-lg p-2">
                 <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs uppercase tracking-wide text-gray-400">Filtri</p>
-                    <p className="text-[11px] text-gray-400">Mostrati: {filtered.length}/{violations.length}</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-400">{t('filters_title')}</p>
+                    <p className="text-[11px] text-gray-400">{t('shown_count', { shown: filtered.length, total: violations.length })}</p>
                 </div>
 
                 <div className="flex items-center gap-1 mt-2">
                     <button
                         onClick={toggleShowError}
                         className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showError ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                        title="Mostra/Nascondi errori"
+                        title={t('filter_errors_tooltip')}
                     >
-                        Errori ({counts.error})
+                        {t('filter_errors', { count: counts.error })}
                     </button>
                     <button
                         onClick={toggleShowWarning}
                         className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showWarning ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                        title="Mostra/Nascondi warning"
+                        title={t('filter_warnings_tooltip')}
                     >
-                        Warning ({counts.warning})
+                        {t('filter_warnings', { count: counts.warning })}
                     </button>
                     <button
                         onClick={toggleShowException}
                         className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showException ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                        title="Mostra/Nascondi eccezioni"
+                        title={t('filter_exceptions_tooltip')}
                     >
-                        Eccezioni ({counts.exception})
+                        {t('filter_exceptions', { count: counts.exception })}
                     </button>
                     <button
                         onClick={toggleShowChromatic}
                         className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${showChromatic ? 'bg-violet-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                        title="Mostra/Nascondi cromatici"
+                        title={t('filter_chromatics_tooltip')}
                     >
-                        Cromatici ({counts.chromatic})
+                        {t('filter_chromatics', { count: counts.chromatic })}
                     </button>
                 </div>
 
                 <div className="mt-2">
                     <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs text-gray-400">Regole</p>
+                        <p className="text-xs text-gray-400">{t('rules_title')}</p>
                         <div className="flex items-center gap-1">
                             <button
                                 onClick={() => setDisabledRuleIds({})}
                                 className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600"
-                                title="Mostra tutte le regole"
+                                title={t('rules_show_all_tooltip')}
                             >
-                                Tutte
+                                {t('rules_show_all')}
                             </button>
                             <button
                                 onClick={() => {
@@ -235,9 +237,9 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                     setDisabledRuleIds(next);
                                 }}
                                 className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600"
-                                title="Nascondi tutte le regole"
+                                title={t('rules_hide_all_tooltip')}
                             >
-                                Nessuna
+                                {t('rules_hide_all')}
                             </button>
                         </div>
                     </div>
@@ -245,13 +247,13 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                     <input
                         value={ruleSearch}
                         onChange={e => setRuleSearch(e.target.value)}
-                        placeholder="Cerca ruleId (es. R-N-RES, ORN-, CAD-)"
+                        placeholder={t('rules_search_placeholder')}
                         className="mt-1 w-full bg-gray-700/60 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 placeholder:text-gray-400"
                     />
 
                     <div className="mt-2 max-h-40 overflow-y-auto pr-1">
                         {visibleRuleIds.length === 0 ? (
-                            <p className="text-xs text-gray-400">Nessuna regola trovata.</p>
+                            <p className="text-xs text-gray-400">{t('rules_none_found')}</p>
                         ) : (
                             <div className="grid grid-cols-2 gap-1">
                                 {visibleRuleIds.map(rid => {
@@ -269,7 +271,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                                 });
                                             }}
                                             className={`text-left px-2 py-1 text-[11px] rounded-md border transition-colors ${enabled ? 'bg-gray-700/40 border-gray-600 text-gray-200 hover:bg-gray-700/70' : 'bg-gray-900/40 border-gray-800 text-gray-500 hover:bg-gray-800/50'}`}
-                                            title={enabled ? 'Clicca per nascondere questa regola' : 'Clicca per mostrare questa regola'}
+                                            title={enabled ? t('rule_click_hide') : t('rule_click_show')}
                                         >
                                             {rid}
                                         </button>
@@ -284,29 +286,29 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
             {(typeof onToggleSequences === 'function' || sequences.length > 0) && (
                 <div className="mb-4">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                        <p className="text-xs uppercase tracking-wide text-gray-400">Sequenze</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-400">{t('sequences_title')}</p>
                         {typeof onToggleSequences === 'function' ? (
                             <button
                                 onClick={onToggleSequences}
                                 className={`px-2 py-0.5 text-[11px] font-semibold rounded-md border transition-colors ${sequencesEnabled ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600'}`}
-                                title={sequencesEnabled ? 'Disattiva evidenziazione sequenze' : 'Attiva evidenziazione sequenze'}
+                                title={sequencesEnabled ? t('sequences_disable_tooltip') : t('sequences_enable_tooltip')}
                             >
-                                {sequencesEnabled ? 'Sequenze: ON' : 'Sequenze: OFF'}
+                                {sequencesEnabled ? t('sequences_toggle_on') : t('sequences_toggle_off')}
                             </button>
                         ) : null}
                     </div>
 
                     {sequences.length === 0 ? (
                         <p className="text-xs text-gray-400">
-                            {sequencesEnabled ? 'Nessuna sequenza trovata.' : 'Sequenze disattivate.'}
+                            {sequencesEnabled ? t('sequences_none_found') : t('sequences_disabled')}
                         </p>
                     ) : (
                         <ul className="space-y-2">
                             {sequences.map((seq, idx) => {
                             const conf = Math.round(seq.confidence * 100);
                             const range = seq.startMeasure === seq.endMeasure
-                                ? `Misura ${seq.startMeasure + 1}`
-                                : `Misure ${seq.startMeasure + 1}–${seq.endMeasure + 1}`;
+                                ? t('sequence_measure_one', { n: seq.startMeasure + 1 })
+                                : t('sequence_measure_range', { from: seq.startMeasure + 1, to: seq.endMeasure + 1 });
                             const modelRange = (seq.modelStartMeasure != null && seq.modelEndMeasure != null)
                                 ? (seq.modelStartMeasure === seq.modelEndMeasure
                                     ? `m${seq.modelStartMeasure + 1}`
@@ -320,10 +322,10 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                             return (
                                 <li key={`seq-${idx}`} className="bg-gray-700/50 p-2 rounded-lg border border-gray-700/50">
                                     <p className="text-xs text-gray-200 font-semibold">
-                                        {range} · L={seq.lengthSteps} · conf {conf}%
+                                        {t('sequence_summary', { range, length: seq.lengthSteps, conf })}
                                     </p>
                                     {modelRange && repeatRange && (
-                                        <p className="text-[11px] text-gray-300 mt-1">Modello {modelRange} → {repeatRange}</p>
+                                        <p className="text-[11px] text-gray-300 mt-1">{t('sequence_model_to_repeat', { model: modelRange, repeat: repeatRange })}</p>
                                     )}
                                     {seq.label && (
                                         <p className="text-[11px] text-gray-400 mt-1">{seq.label}</p>
@@ -340,13 +342,13 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                     <CheckCircleIcon />
                     {hasAnyViolations ? (
                         <>
-                            <p className="mt-2 font-semibold">Nessun elemento con questi filtri.</p>
-                            <p className="text-sm">Prova a modificare i filtri.</p>
+                            <p className="mt-2 font-semibold">{t('empty_filtered_title')}</p>
+                            <p className="text-sm">{t('empty_filtered_hint')}</p>
                         </>
                     ) : (
                         <>
-                            <p className="mt-2 font-semibold">Nessuna segnalazione.</p>
-                            <p className="text-sm">Nessun errore/warning rilevato.</p>
+                            <p className="mt-2 font-semibold">{t('empty_clean_title')}</p>
+                            <p className="text-sm">{t('empty_clean_hint')}</p>
                         </>
                     )}
                 </div>
@@ -385,7 +387,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                                 </>
                                             ) : (
                                                 <>
-                                                    {isException ? 'Eccezione' : isChromatic ? 'Cromatico' : violation.ruleId}: <span className="text-white">{summaryLine}</span>
+                                                    {isException ? t('violation_exception') : isChromatic ? t('violation_chromatic') : violation.ruleId}: <span className="text-white">{summaryLine}</span>
                                                 </>
                                             )}
                                             {(detailLines || violation.suggestion) && (
@@ -400,7 +402,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                         {isSelected && (violation.suggestion || (ruleSuggestions as Record<string,string>)?.[violation.ruleId]) && (
                                             <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
                                                 {violation.suggestion && (
-                                                    <><span className="font-semibold">Consiglio:</span> {violation.suggestion}</>
+                                                    <><span className="font-semibold">{t('violation_suggestion_label')}</span> {violation.suggestion}</>
                                                 )}
                                                 {(ruleSuggestions as Record<string,string>)?.[violation.ruleId] && (
                                                     <span className="block mt-1 italic" style={{ color: '#fcd34d' }}>

@@ -1,0 +1,92 @@
+{
+  "pref_editor_staff_system_mode": "Layout righi (grandstaff / SATB / treble-only)",
+  "opt_staff_grandstaff": "Grand staff",
+  "opt_staff_satb": "SATB (chiavi antiche)",
+  "opt_staff_treble": "Treble only",
+
+  "pref_editor_toolbar_hidden": "Nascondi toolbar",
+  "pref_editor_toolbar_prefs": "Toolbar prefs (ordine)",
+  "pref_editor_show_measure_numbers": "Numeri misure",
+  "pref_editor_show_voice_colors": "Colori voci (BTAS)",
+  "pref_editor_show_quick_insert_bar": "Transport (toolbar chiusa)",
+  "pref_editor_select_only_current_voice": "Seleziona solo voce corrente (rettangolo)",
+
+  "pref_editor_auto_save_interval": "Salvataggio automatico",
+  "opt_autosave_off": "Off",
+  "opt_autosave_30s": "30 secondi",
+  "opt_autosave_1m": "1 minuto",
+  "opt_autosave_2m": "2 minuti",
+  "opt_autosave_5m": "5 minuti",
+
+  "pref_render_engraving_mode": "Engraving mode (legacy/enhanced)",
+  "opt_engraving_enhanced": "Enhanced",
+  "opt_engraving_legacy": "Legacy",
+
+  "pref_analysis_show_roman": "Mostra numeri romani",
+  "pref_analysis_show_symbols": "Mostra sigle accordi",
+
+  "pref_analysis_profile_base": "Profilo analisi (base)",
+  "opt_profile_academic": "Accademico",
+  "opt_profile_symbols": "Sigle",
+  "pref_analysis_profile_customized": "Profilo analisi: custom",
+
+  "pref_analysis_sequences_enabled": "Sequenze (ON/OFF)",
+  "pref_analysis_sequences_label": "Rileva sequenze (progressioni)",
+  "pref_analysis_enable_inferred_contexts": "Inferisci contesti (modulazioni) automaticamente",
+  "pref_analysis_enable_inferred_contexts_hint": "Se attivo, l'app può applicare cambi di tonalità inferiti per far tornare Romani come V7 dentro una modulazione (es. sezione in Eb/Cm). Non sovrascrive i contesti manuali: se hai marker manuali, quelli restano prioritari.",
+
+  "pref_analysis_label_min_span_beats": "Filtro anti-rumore: durata minima label (beats)",
+  "pref_analysis_filters": "Filtri analisi (error/warn/exception + disabled)",
+
+  "pref_analysis_statistical_correction": "Correzione statistica progressioni",
+  "pref_analysis_statistical_correction_hint": "Usa le statistiche estratte dagli esercizi per correggere etichette romane improbabili. Richiede un corpus ampio di esercizi.",
+  "pref_analysis_statistical_bias_threshold": "Soglia bias statistico",
+  "pref_analysis_statistical_bias_threshold_hint": "R14 interviene quando la differenza di score tra i due migliori candidati è inferiore a questa soglia.",
+  "opt_bias_conservative": "Conservativo (1)",
+  "opt_bias_moderate": "Moderato (2)",
+  "opt_bias_aggressive": "Aggressivo (4)",
+
+  "pref_analysis_learned_ornaments": "Ornamenti appresi",
+  "pref_analysis_learned_ornaments_hint": "Rileva automaticamente gli ornamenti basandosi sui pattern appresi dalle correzioni manuali.",
+  "pref_analysis_strict_passing_notes": "Regola stretta note di passaggio",
+  "pref_analysis_strict_passing_notes_hint": "Applica i guard più severi sulla durata e sul profilo ornamentale delle note di passaggio. Disattivala per tornare rapidamente a un comportamento più permissivo.",
+
+  "pref_analysis_tonicization_compact": "Tonicizzazioni compatte",
+  "pref_analysis_tonicization_compact_hint": "Mostra [in IV]: ii → V → I anziché ii/IV → V/IV → I/IV. Ideale per brani con valori veloci.",
+  "pref_analysis_cadential_patterns": "Riconoscimento pattern cadenzali",
+  "pref_analysis_cadential_patterns_hint": "Rileva automaticamente cadenze (ii–V–I, IV–V–I, ecc.) e inietta tonicizzazioni temporanee verso la tonalità target.",
+  "pref_analysis_chromatic_modulation": "Modulazione cromatica (sperimentale)",
+  "pref_analysis_chromatic_modulation_hint": "Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico su finestre di ≥ 3 misure consecutive.",
+  "pref_analysis_rule_suggestions": "Consigli personalizzati regole",
+
+  "pref_export_include_title": "Includi titolo in stampa/export",
+  "pref_debug_show_harmony_debug": "Debug harmony labels (pcs)",
+
+  "pref_midi_export_type": "Formato export MIDI",
+  "pref_midi_export_type_description": "Type 1 (multi-traccia): una traccia per voce — compatibile con MuseScore/Finale/Sibelius. Type 0 (traccia singola): tutte le voci in una traccia — massima compatibilità.",
+  "opt_midi_type1": "Type 1 — Multi-traccia (una per voce)",
+  "opt_midi_type0": "Type 0 — Traccia singola",
+
+  "section_analysis_title": "Analisi",
+  "section_analysis_subtitle": "Opzioni dell'analisi armonica.",
+  "analysis_profile_title": "Profilo analisi",
+  "analysis_profile_hint": "Un profilo è un preset (non blocca combinazioni). Se modifichi manualmente i toggle, il profilo diventa \"Custom\".",
+  "analysis_profile_select_label": "Profilo:",
+  "analysis_profile_custom": "Custom",
+  "analysis_profile_apply_preset": "Applica preset",
+  "analysis_profile_apply_preset_tooltip": "Re-applica il preset del profilo base (ripristina defaults)",
+
+  "label_min_span_section_title": "Filtro anti-rumore (etichette)",
+  "label_min_span_section_hint": "Riduce l'affollamento campionando le etichette su una griglia ritmica (utile con semicrome e doppie note di passaggio). Non modifica l'analisi: è solo un filtro di visualizzazione.",
+  "label_min_span_select_label": "Mostra label solo se durano almeno:",
+  "opt_label_span_off": "Off (tutte)",
+  "opt_label_span_16": "1/16 (semicroma)",
+  "opt_label_span_8": "1/8 (croma)",
+  "opt_label_span_4": "1/4 (semiminima)",
+  "opt_label_span_2": "1/2 (minima)",
+
+  "rule_suggestions_title": "Consigli personalizzati",
+  "rule_suggestions_hint": "Personalizza il testo \"Consiglio\" per ogni regola. Le regole e le descrizioni non sono modificabili.",
+  "rule_suggestions_count": "({{count}} personalizzati)",
+  "rule_suggestions_placeholder": "(consiglio predefinito — lascia vuoto)"
+}

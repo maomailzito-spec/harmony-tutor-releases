@@ -1,8 +1,10 @@
 import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { I18nextProvider } from 'react-i18next';
 import App from './App';
 import { runLocalStorageMigrations } from './storage/localStorageMigrations';
+import i18n from './i18n';
 // Optional diagnostics helper removed — avoid hard import so dev server doesn't fail
 // If you need diagnostics during development, re-add a module at ./utils/diagnosticsDump
 
@@ -17,6 +19,8 @@ runLocalStorageMigrations();
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <I18nextProvider i18n={i18n}>
+      <App />
+    </I18nextProvider>
   </React.StrictMode>
 );
