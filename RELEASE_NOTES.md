@@ -1,5 +1,12 @@
 ## Novità in questa versione
 
+### 🌐 Localizzazione inglese completa
+- Tutti i titoli delle violazioni nel pannello analisi ora tradotti in inglese (oltre 80 varianti dinamiche: coppie di voci interne S–A, A–T, A–B, T–B, ornamenti, cadenze)
+- Meccanismo `titlePrefix`+`titleSuffix` per tradurre stringhe dinamiche come "Chromatic clash: G# and G4 sound simultaneously"
+- Menu Electron (File, Edit, View, Tools, Help) completamente localizzato; si aggiorna automaticamente al cambio lingua senza riavvio
+- Generatore Corale da Roman Numerals interamente tradotto (pannello, guida sintassi, preset, messaggi)
+- Escape notes (`ORN-ESC`, `R-ORN-ESC`), cadenza plagale (`CAD-PLAG`) e raddoppio settima (`R-10-7TH`) aggiunti al dizionario
+
 ### 🔧 Fix analisi armonica
 - Corretto il riconoscimento delle modulazioni: il contesto tonale viene ora mantenuto correttamente dopo cadenze d'inganno (V→vi)
 - Il grado V non viene più erroneamente riscritto come I nelle regioni di tonicizzazione estesa
