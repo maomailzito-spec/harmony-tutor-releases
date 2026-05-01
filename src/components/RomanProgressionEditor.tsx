@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import {
@@ -60,20 +61,20 @@ export interface RomanProgressionEditorProps {
 
 // ─── Preset progressions ──────────────────────────────────────────────────
 
-const PRESETS: { label: string; chords: string; minor?: boolean }[] = [
-  { label: 'Cadenza autentica', chords: 'I - IV - V - I' },
-  { label: 'Cadenza plagale', chords: 'I - IV - I' },
-  { label: 'Progressione per quarte', chords: 'I - IV - viio - iii - vi - ii - V - I' },
-  { label: 'Passamezzo antico', chords: 'i - VII - i - V - III - VII - i - V - i', minor: true },
-  { label: 'Romanesca', chords: 'I - V - vi - III - IV - I - IV - V' },
-  { label: 'I–IV–V7–I', chords: 'I - IV - V7 - I' },
-  { label: 'ii–V–I', chords: 'ii - V7 - I' },
-  { label: 'I–vi–IV–V', chords: 'I - vi - IV - V' },
-  { label: 'I–V–vi–IV', chords: 'I - V - vi - IV' },
-  { label: 'ii–I–vi–V', chords: 'ii - I - vi - V' },
-  { label: 'IV–I–vi–V', chords: 'IV - I - vi - V' },
-  { label: 'vi–IV–I–V', chords: 'vi - IV - I - V' },
-  { label: 'i–iv–V–i (minore)', chords: 'i - iv - V - i', minor: true },
+const PRESETS: { labelKey: string; chords: string; minor?: boolean }[] = [
+  { labelKey: 'chorale_preset_authentic', chords: 'I - IV - V - I' },
+  { labelKey: 'chorale_preset_plagal', chords: 'I - IV - I' },
+  { labelKey: 'chorale_preset_fourth_prog', chords: 'I - IV - viio - iii - vi - ii - V - I' },
+  { labelKey: 'chorale_preset_passamezzo', chords: 'i - VII - i - V - III - VII - i - V - i', minor: true },
+  { labelKey: 'chorale_preset_romanesca', chords: 'I - V - vi - III - IV - I - IV - V' },
+  { labelKey: 'I–IV–V7–I', chords: 'I - IV - V7 - I' },
+  { labelKey: 'ii–V–I', chords: 'ii - V7 - I' },
+  { labelKey: 'I–vi–IV–V', chords: 'I - vi - IV - V' },
+  { labelKey: 'I–V–vi–IV', chords: 'I - V - vi - IV' },
+  { labelKey: 'ii–I–vi–V', chords: 'ii - I - vi - V' },
+  { labelKey: 'IV–I–vi–V', chords: 'IV - I - vi - V' },
+  { labelKey: 'vi–IV–I–V', chords: 'vi - IV - I - V' },
+  { labelKey: 'chorale_preset_i_iv_v_i', chords: 'i - iv - V - i', minor: true },
 ];
 
 // ─── Note-value SVG icons (viewBox 0 0 20 36) ─────────────────────────────
@@ -248,8 +249,9 @@ function formatViolation(v: ChoralViolation): string {
 
 const DraggablePanel: React.FC<{
   onClose: () => void;
+  title: string;
   children: React.ReactNode;
-}> = ({ onClose, children }) => {
+}> = ({ onClose, title, children }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -296,7 +298,7 @@ const DraggablePanel: React.FC<{
         className="flex items-center justify-between px-6 pt-4 pb-2 cursor-move select-none border-b border-slate-700/60"
         onMouseDown={onDragStart}
       >
-        <h2 className="text-white font-bold text-lg pointer-events-none">Genera Corale da Roman Numerals</h2>
+        <h2 className="text-white font-bold text-lg pointer-events-none">{title}</h2>
         <button
           onClick={onClose}
           onMouseDown={e => e.stopPropagation()}
@@ -324,6 +326,8 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   existingNotes,
   playheadMeasure,
 }) => {
+  const { t } = useTranslation('ui');
+
   const [progressionText, setProgressionText] = useState('I - IV - V7 - I');
   const [localTonic, setLocalTonic] = useState(keySignatureRoot);
   const [localMinor, setLocalMinor] = useState(isMinorMode);
@@ -545,7 +549,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setViolations(result.violations);
       setModulationContexts(result.modulationContexts ?? []);
     } catch (err: any) {
-      setError(err?.message || 'Errore durante la generazione.');
+      setError(err?.message || t('chorale_error_generation'));
       setGeneratedNotes(null);
       setViolations([]);
     }
@@ -662,11 +666,11 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const TONICS = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'];
 
   return (
-    <DraggablePanel onClose={onClose}>
+    <DraggablePanel onClose={onClose} title={t('chorale_title')}>
 
           {/* Progression input */}
           <div className="mb-4">
-            <label className="block text-xs text-gray-300 mb-1">Progressione (separata da spazi, trattini o virgole)</label>
+            <label className="block text-xs text-gray-300 mb-1">{t('chorale_progression_label')}</label>
             <input
               ref={inputRef}
               type="text"
@@ -764,7 +768,8 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                     });
                     setGeneratedNotes(null); setViolations([]); setError(null);
                   }} className={btnCls + ' text-cyan-400 hover:text-cyan-300'}
-                    title="Modulazione — inserisce →, poi digita la tonalità (es. G: Bb: f#:)">→ mod</button>
+                      title={t('chorale_mod_title')}>
+                    → mod</button>
                   <div className={sepCls} />
                   <button onClick={removeLast} className={btnCls + ' text-red-400 hover:text-red-300'}
                     title="Rimuovi ultimo accordo">⌫</button>
@@ -815,28 +820,28 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             })()}
 
             <details className="mt-1">
-              <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 select-none">Guida sintassi</summary>
+              <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 select-none">{t('chorale_syntax_guide')}</summary>
               <div className="mt-1 p-2 bg-slate-800 rounded border border-slate-700 text-[10px] text-gray-400 leading-relaxed grid grid-cols-2 gap-x-4 gap-y-0.5">
-                <div><span className="text-white font-mono">I ii IV V vi viio</span> — grado (maiuscolo=Magg, minuscolo=min)</div>
-                <div><span className="text-white font-mono">V7 ii7</span> — settima</div>
-                <div><span className="text-white font-mono">I6 I6/4 I64</span> — inversioni (1°, 2°)</div>
-                <div><span className="text-white font-mono">V6/5 V4/3 V4/2</span> — inversioni settime</div>
-                <div><span className="text-white font-mono">viio vii°</span> — diminuito</div>
-                <div><span className="text-white font-mono">III+</span> — aumentato</div>
-                <div><span className="text-white font-mono">iiø7</span> — semidiminuito</div>
-                <div><span className="text-white font-mono">V/V V7/IV viio/ii</span> — dominanti secondarie</div>
-                <div><span className="text-white font-mono">bII bVII #IV</span> — gradi cromatici (♭/♯ sulla fondamentale)</div>
-                <div><span className="text-white font-mono">It6 Fr6 Ger6</span> — seste eccedenti (It., Fr., Ted.)</div>
-                <div><span className="text-white font-mono">Vdom7 IVmaj7</span> — 7ᵃ dom. / 7ᵃ magg. esplicita</div>
-                <div><span className="text-white font-mono">→G: →Bb: →f#:</span> — modulazione (maiusc=Magg, minusc=min)</div>
-                <div><span className="text-white font-mono">|</span> — stanghetta (forza nuova misura)</div>
+                <div><span className="text-white font-mono">I ii IV V vi viio</span> — {t('chorale_syntax_degree')}</div>
+                <div><span className="text-white font-mono">V7 ii7</span> — {t('chorale_syntax_seventh')}</div>
+                <div><span className="text-white font-mono">I6 I6/4 I64</span> — {t('chorale_syntax_inversions')}</div>
+                <div><span className="text-white font-mono">V6/5 V4/3 V4/2</span> — {t('chorale_syntax_seventh_inv')}</div>
+                <div><span className="text-white font-mono">viio vii°</span> — {t('chorale_syntax_diminished')}</div>
+                <div><span className="text-white font-mono">III+</span> — {t('chorale_syntax_augmented')}</div>
+                <div><span className="text-white font-mono">iiø7</span> — {t('chorale_syntax_halfdiminished')}</div>
+                <div><span className="text-white font-mono">V/V V7/IV viio/ii</span> — {t('chorale_syntax_secondary_dom')}</div>
+                <div><span className="text-white font-mono">bII bVII #IV</span> — {t('chorale_syntax_chromatic')}</div>
+                <div><span className="text-white font-mono">It6 Fr6 Ger6</span> — {t('chorale_syntax_aug_sixth')}</div>
+                <div><span className="text-white font-mono">Vdom7 IVmaj7</span> — {t('chorale_syntax_dom7')}</div>
+                <div><span className="text-white font-mono">→G: →Bb: →f#:</span> — {t('chorale_syntax_modulation')}</div>
+                <div><span className="text-white font-mono">|</span> — {t('chorale_syntax_barline')}</div>
                 <div className="col-span-2 mt-1 border-t border-slate-700 pt-1">
-                  <span className="text-gray-300">Valori inline:</span>{' '}
-                  <span className="text-white font-mono">I:w</span>=semibreve{' '}
-                  <span className="text-white font-mono">IV:h</span>=minima{' '}
-                  <span className="text-white font-mono">V7:q</span>=semiminima{' '}
-                  <span className="text-white font-mono">ii:e</span>=croma{' '}
-                  <span className="text-white font-mono">viio:s</span>=semicroma
+                  <span className="text-gray-300">{t('chorale_syntax_inline_values')}</span>{' '}
+                  <span className="text-white font-mono">I:w</span>={t('chorale_syntax_whole')}{' '}
+                  <span className="text-white font-mono">IV:h</span>={t('chorale_syntax_half')}{' '}
+                  <span className="text-white font-mono">V7:q</span>={t('chorale_syntax_quarter')}{' '}
+                  <span className="text-white font-mono">ii:e</span>={t('chorale_syntax_eighth')}{' '}
+                  <span className="text-white font-mono">viio:s</span>={t('chorale_syntax_sixteenth')}
                 </div>
               </div>
             </details>
@@ -863,7 +868,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 <option value="">Seleziona progressione…</option>
                 <optgroup label="Cadenze e progressioni">
                   {PRESETS.map((p, i) => (
-                    <option key={`b-${i}`} value={`builtin:${i}`}>{p.label}</option>
+                    <option key={`b-${i}`} value={`builtin:${i}`}>{p.labelKey.startsWith('chorale_') ? t(p.labelKey) : p.labelKey}</option>
                   ))}
                 </optgroup>
                 {customPresets.length > 0 && (
@@ -899,7 +904,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           {/* Config row: Tonica, Modo, Metro, Valore */}
           <div className="grid grid-cols-4 gap-3 mb-4">
             <div>
-              <label className="block text-xs text-gray-300 mb-1">Tonica</label>
+              <label className="block text-xs text-gray-300 mb-1">{t('chorale_tonic_label')}</label>
               <select
                 value={localTonic}
                 onChange={e => { setLocalTonic(e.target.value); setGeneratedNotes(null); }}
@@ -909,18 +914,18 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-300 mb-1">Modo</label>
+              <label className="block text-xs text-gray-300 mb-1">{t('chorale_mode_label')}</label>
               <select
                 value={localMinor ? 'minor' : 'major'}
                 onChange={e => { setLocalMinor(e.target.value === 'minor'); setGeneratedNotes(null); }}
                 className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
               >
-                <option value="major">Maggiore</option>
-                <option value="minor">Minore</option>
+                <option value="major">{t('chorale_mode_major')}</option>
+                <option value="minor">{t('chorale_mode_minor')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-300 mb-1">Metro</label>
+              <label className="block text-xs text-gray-300 mb-1">{t('chorale_meter_label')}</label>
               <div className="flex gap-1">
                 <select
                   value={localTs.numerator}
@@ -940,7 +945,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-300 mb-1">Valore nota</label>
+              <label className="block text-xs text-gray-300 mb-1">{t('chorale_note_value_label')}</label>
               <div className="flex gap-1">
                 {DURATION_OPTIONS.map(d => (
                   <button
@@ -961,7 +966,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-300 mb-1">Disposiz. 1° acc.</label>
+              <label className="block text-xs text-gray-300 mb-1">{t('chorale_voicing_label')}</label>
               <select
                 value={initialDisposition}
                 onChange={e => { setInitialDisposition(e.target.value); setGeneratedNotes(null); }}
@@ -980,27 +985,27 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
 
           {/* Rules */}
           <div className="mb-4">
-            <label className="block text-xs text-gray-300 mb-1">Regole di voce</label>
+            <label className="block text-xs text-gray-300 mb-1">{t('chorale_voice_rules_label')}</label>
             <div className="flex flex-wrap gap-4 text-xs text-slate-200">
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={doubleRoot} onChange={() => setDoubleRoot(v => !v)} className="accent-cyan-500" />
-                Raddoppia fondamentale
+                {t('chorale_double_root')}
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={allowParallel5ths} onChange={() => setAllowParallel5ths(v => !v)} className="accent-cyan-500" />
-                Permetti 5e parallele
+                {t('chorale_allow_par5')}
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={allowParallel8ves} onChange={() => setAllowParallel8ves(v => !v)} className="accent-cyan-500" />
-                Permetti 8e parallele
+                {t('chorale_allow_par8')}
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={allowCrossing} onChange={() => setAllowCrossing(v => !v)} className="accent-cyan-500" />
-                Permetti voice crossing
+                {t('chorale_allow_crossing')}
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={autoSevenths} onChange={() => setAutoSevenths(v => !v)} className="accent-cyan-500" />
-                Auto 7ª
+                {t('chorale_auto7')}
               </label>
             </div>
           </div>
@@ -1016,7 +1021,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 disabled={sopranoFromScore.length === 0}
               />
               <span className={sopranoFromScore.length === 0 ? 'text-gray-500' : ''}>
-                Armonizza melodia esistente (soprano)
+                {t('chorale_harmonize_soprano')}
               </span>
             </label>
             {useMelody && sopranoFromScore.length > 0 && (
@@ -1042,7 +1047,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                     <button
                       onClick={handleAutoHarmonize}
                       className="px-2 py-1 text-[10px] rounded bg-amber-600 hover:bg-amber-500 text-white font-semibold whitespace-nowrap"
-                      title="Genera automaticamente la progressione di roman numerals dalla melodia"
+                      title={t('chorale_harmonize_soprano_title')}
                     >
                       ✨ Auto-armonizza
                     </button>
@@ -1055,7 +1060,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             )}
             {sopranoFromScore.length === 0 && (
               <div className="mt-1 text-[10px] text-gray-500">
-                Nessuna nota voice 1 trovata sullo staff. Inserisci prima la melodia.
+                {t('chorale_no_voice1')}
               </div>
             )}
           </div>
@@ -1071,7 +1076,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 disabled={bassFromScore.length === 0}
               />
               <span className={bassFromScore.length === 0 ? 'text-gray-500' : ''}>
-                Armonizza basso dato (bass)
+                {t('chorale_harmonize_bass')}
               </span>
             </label>
             {useBass && bassFromScore.length > 0 && (
@@ -1087,7 +1092,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             )}
             {bassFromScore.length === 0 && (
               <div className="mt-1 text-[10px] text-gray-500">
-                Nessuna nota voice 4 trovata sullo staff.
+                {t('chorale_no_voice4')}
               </div>
             )}
           </div>
@@ -1095,7 +1100,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           {/* Parsed preview */}
           {parsedPreview.length > 0 && (
             <div className="mb-4 p-2 bg-slate-800 rounded-md border border-slate-700">
-              <label className="block text-xs text-gray-400 mb-1">Anteprima ({parsedPreview.length} accordi)</label>
+              <label className="block text-xs text-gray-400 mb-1">{t('chorale_preview_label', { count: parsedPreview.length })}</label>
               <div className="flex flex-wrap gap-2 text-sm font-mono text-white">
                 {parsedPreview.map((p, i) => (
                   <span key={i} className="px-2 py-0.5 bg-slate-700 rounded" title={`${p.quality}, inv ${p.inv}, m${p.m + 1} b${p.b}, ${p.dur}`}>
@@ -1126,15 +1131,15 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           {/* Generation result summary */}
           {generatedNotes && (
             <div className="mb-3 p-2 bg-emerald-900/30 border border-emerald-700 rounded-md text-emerald-300 text-xs">
-              ✓ Generati {generatedNotes.length} note ({generatedNotes.length / 4} accordi SATB)
-              {violations.length === 0 && ' — nessuna violazione'}
+              ✓ {t('chorale_generated_summary', { notes: generatedNotes.length, chords: generatedNotes.length / 4 })}
+              {violations.length === 0 && t('chorale_no_violations')}
             </div>
           )}
 
           {/* Voice enable toggles — shown after first generation */}
           {generatedNotes && generatedNotes.length > 0 && (
             <div className="flex items-center gap-3 p-2 bg-slate-800 rounded border border-slate-700">
-              <span className="text-[10px] text-gray-400 mr-1">🎵 Genera voci:</span>
+              <span className="text-[10px] text-gray-400 mr-1">{t('chorale_generate_voices')}</span>
               {([
                 { v: 1, label: 'S', enabledCls: 'bg-cyan-600 text-white ring-1 ring-cyan-400' },
                 { v: 2, label: 'A', enabledCls: 'bg-green-600 text-white ring-1 ring-green-400' },
@@ -1152,17 +1157,17 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                         ? enabledCls
                         : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}
                   title={v === 1 && useMelody
-                    ? 'Soprano vincolato dalla melodia'
+                    ? t('chorale_soprano_locked')
                     : enabledVoices.has(v)
-                      ? `${label} abilitato — verrà rigenerato`
-                      : `${label} disabilitato — mantenuto dalla generazione precedente`}
+                      ? t('chorale_voice_enabled', { label })
+                      : t('chorale_voice_disabled', { label })}
                 >
                   {enabledVoices.has(v) ? '✓' : '✗'} {label}
                 </button>
               ))}
               {enabledVoices.size < 4 && (
                 <span className="text-[9px] text-amber-300 ml-1">
-                  Rigenera: solo le voci abilitate cambieranno
+                  {t('chorale_regen_hint')}
                 </span>
               )}
             </div>
@@ -1170,7 +1175,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
 
           {/* Inserisci dalla misura (1-indexed for UI, 0-indexed internally) */}
           <div className="flex items-center gap-2 mb-3">
-            <label className="text-xs text-gray-300">Inserisci dalla misura:</label>
+            <label className="text-xs text-gray-300">{t('chorale_insert_from_measure')}</label>
             <input
               type="number"
               min={1}
@@ -1197,7 +1202,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 disabled={!styleProfile}
               />
               <span className={!styleProfile ? 'text-gray-500' : ''}>
-                Adatta allo stile dei miei brani
+                {t('chorale_adapt_style')}
               </span>
             </label>
 
@@ -1236,7 +1241,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 disabled={!existingNotes || existingNotes.length < 8}
                 title="Analizza le note attualmente sullo staff e aggiorna il profilo stilistico"
               >
-                🎓 Apprendi da questo file
+                {t('chorale_learn_file')}
               </button>
 
               {styleProfile && (
@@ -1251,7 +1256,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                   className="px-2 py-1 text-[10px] rounded bg-red-900/60 hover:bg-red-800/80 text-red-300 whitespace-nowrap"
                   title="Cancella il profilo stilistico salvato"
                 >
-                  ✕ Resetta
+                  {t('chorale_reset')}
                 </button>
               )}
 
@@ -1273,7 +1278,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 className="px-2 py-1 text-[10px] rounded bg-indigo-700 hover:bg-indigo-600 text-white font-semibold whitespace-nowrap"
                 title="Carica il profilo stilistico pre-calcolato da 46 brani di repertorio (Bach, Dubois, ecc.)"
               >
-                📚 Carica da repertorio ({(defaultStyleProfileData as any).filesAnalyzed} brani)
+                {t('chorale_load_repertoire', { count: (defaultStyleProfileData as any).filesAnalyzed })}
               </button>
             </div>
 
@@ -1287,7 +1292,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={progressionText.trim().length === 0 && !((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))}
             >
-              Genera
+              {t('chorale_generate_btn')}
             </button>
             <button
               onClick={handleApply}
@@ -1295,13 +1300,13 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!generatedNotes || generatedNotes.length === 0}
             >
-              Applica al Grand Staff
+              {t('chorale_apply_btn')}
             </button>
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm rounded-md bg-slate-600 hover:bg-slate-500 text-white font-semibold"
             >
-              Annulla
+              {t('chorale_cancel_btn')}
             </button>
           </div>
     </DraggablePanel>

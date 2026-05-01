@@ -698,6 +698,8 @@ type RuleEntry = {
   suggestion?: string;
   title?: string;
   titleVariants?: Record<string, string>;
+  titlePrefix?: string;
+  titleSuffix?: string;
 };
 
 /**
@@ -756,6 +758,31 @@ export function localizeViolationTitle(ruleId: string, description: string): str
     try {
       const titleHit = i18n.exists(`${ruleId}.title`, { ns: 'ruleTexts' });
       translated = titleHit ? (i18n.t(`${ruleId}.title`, { ns: 'ruleTexts' }) as string) : firstLine;
+    } catch {
+      translated = firstLine;
+    }
+  }
+
+  // Prefix (+optional suffix) matching for dynamic titles (e.g. R-18 chromatic clash).
+  // Replaces the known IT prefix with the localised prefix, and optionally
+  // replaces a known IT suffix with the localised suffix, keeping the dynamic
+  // middle part (e.g. note names) intact.
+  else if (itEntry.titlePrefix && firstLine.startsWith(itEntry.titlePrefix)) {
+    try {
+      const lng = i18n.language || 'it';
+      const localEntry = i18n.getResource(lng, 'ruleTexts', ruleId) as RuleEntry | undefined;
+      const localPfx = (localEntry?.titlePrefix && localEntry.titlePrefix.length > 0)
+        ? localEntry.titlePrefix
+        : itEntry.titlePrefix;
+      let dynPart = firstLine.slice(itEntry.titlePrefix.length);
+      // Also translate a known suffix if present
+      if (itEntry.titleSuffix && dynPart.endsWith(itEntry.titleSuffix)) {
+        const localSfx = (localEntry?.titleSuffix && localEntry.titleSuffix.length > 0)
+          ? localEntry.titleSuffix
+          : itEntry.titleSuffix;
+        dynPart = dynPart.slice(0, dynPart.length - itEntry.titleSuffix.length) + localSfx;
+      }
+      translated = localPfx + dynPart;
     } catch {
       translated = firstLine;
     }

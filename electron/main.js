@@ -78,6 +78,7 @@ let showHarmonyDebugEnabled = false;
 let showVoiceColorsEnabled = false;
 let showQuickInsertBarEnabled = true;
 let engravingMode = 'enhanced';
+let currentLanguage = 'it';
 
 const EXPORT_PDF_FILTERS = [{ name: 'PDF', extensions: ['pdf'] }];
 const EXPORT_PNG_FILTERS = [{ name: 'PNG', extensions: ['png'] }];
@@ -401,6 +402,55 @@ function createMenu() {
   const flavor = getAppFlavor();
   const enableGrandStaff = flavor !== 'guitar';
   const enableGuitar = flavor !== 'grandstaff';
+
+  // ── Minimal i18n for the native menu (main process has no i18next) ──
+  const lng = (currentLanguage || 'it').slice(0, 2);
+  const _menuStrings = {
+    it: {
+      file: 'File', edit: 'Modifica', view: 'Vista', tools: 'Strumenti', help: 'Aiuto',
+      preferences: 'Preferenze…', newProject: 'Nuovo Progetto', open: 'Apri...',
+      importMidi: 'Importa MIDI...', importXml: 'Importa MusicXML...',
+      exportMidi: 'Esporta MIDI...', exportXml: 'Esporta MusicXML…',
+      exportPdf: 'Esporta PDF…', exportPng: 'Esporta PNG…',
+      print: 'Stampa', save: 'Salva', saveAs: 'Salva con nome...',
+      closeProject: 'Chiudi progetto', undo: 'Annulla', redo: 'Ripeti',
+      cut: 'Taglia', copy: 'Copia', paste: 'Incolla', selectAll: 'Seleziona tutto',
+      selectVoice: 'Seleziona solo voce corrente (rettangolo)',
+      titleFont: 'Titolo', serif: 'Serif', sansSerif: 'Sans-serif', mono: 'Monospace',
+      titleIncrease: 'Aumenta dimensione titolo', titleDecrease: 'Diminuisci dimensione titolo',
+      scales: 'Scale', chords: 'Accordi', intervals: 'Intervalli', editor: 'Editor',
+      grandStaff: 'Grand Staff', engravingMode: 'Modalità incisione',
+      reorderToolbar: 'Riordina toolbar (drag)…', transport: 'Transport (toolbar chiusa)',
+      measureNumbers: 'Numeri misure', harmonyDebug: 'Debug harmony labels (pcs)',
+      voiceColors: 'Colori voci (BTAS)',
+      generateChorale: 'Genera corale da Roman Numerals…',
+      shortcuts: 'Scorciatoie…', noRecent: 'Nessun file recente',
+      collisionEnhanced: 'Verifica collisioni (Enhanced)…', collisionLegacy: 'Verifica collisioni (Legacy)…',
+    },
+    en: {
+      file: 'File', edit: 'Edit', view: 'View', tools: 'Tools', help: 'Help',
+      preferences: 'Preferences…', newProject: 'New Project', open: 'Open...',
+      importMidi: 'Import MIDI...', importXml: 'Import MusicXML...',
+      exportMidi: 'Export MIDI...', exportXml: 'Export MusicXML…',
+      exportPdf: 'Export PDF…', exportPng: 'Export PNG…',
+      print: 'Print', save: 'Save', saveAs: 'Save As...',
+      closeProject: 'Close project', undo: 'Undo', redo: 'Redo',
+      cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
+      selectVoice: 'Select only current voice (marquee)',
+      titleFont: 'Title', serif: 'Serif', sansSerif: 'Sans-serif', mono: 'Monospace',
+      titleIncrease: 'Increase title size', titleDecrease: 'Decrease title size',
+      scales: 'Scales', chords: 'Chords', intervals: 'Intervals', editor: 'Editor',
+      grandStaff: 'Grand Staff', engravingMode: 'Engraving mode',
+      reorderToolbar: 'Reorder toolbar (drag)…', transport: 'Transport (closed toolbar)',
+      measureNumbers: 'Measure numbers', harmonyDebug: 'Debug harmony labels (pcs)',
+      voiceColors: 'Voice colors (BTAS)',
+      generateChorale: 'Generate chorale from Roman Numerals…',
+      shortcuts: 'Shortcuts…', noRecent: 'No recent files',
+      collisionEnhanced: 'Check collisions (Enhanced)…', collisionLegacy: 'Check collisions (Legacy)…',
+    },
+  };
+  const ms = _menuStrings[lng] || _menuStrings['it'];
+  const mt = (/** @type {string} */ key) => ms[key] || _menuStrings['it'][key] || key;
   const showShortcutsDialog = () => {
     try {
       if (!mainWindow) return;
@@ -478,7 +528,7 @@ function createMenu() {
         { role: 'about' },
         { type: 'separator' },
         {
-          label: 'Preferenze…',
+          label: mt('preferences'),
           accelerator: 'CmdOrCtrl+,',
           click: () => { sendAction(MENU_ACTIONS.OPEN_PREFERENCES); }
         },
@@ -487,11 +537,11 @@ function createMenu() {
       ]
     }] : []),
     {
-      label: 'File',
+      label: mt('file'),
       submenu: enableGrandStaff ? [
         {
-          label: 'Recent',
-          submenu: (recentFiles.length === 0) ? [ { label: 'Nessun file recente', enabled: false } ] : recentFiles.map(fp => ({
+          label: mt('file'),
+          submenu: (recentFiles.length === 0) ? [ { label: mt('noRecent'), enabled: false } ] : recentFiles.map(fp => ({
             label: (() => {
               try {
                 const exists = Boolean(fp && fs.existsSync(fp));
@@ -523,7 +573,7 @@ function createMenu() {
           }))
         },
         {
-          label: 'Nuovo Progetto',
+          label: mt('newProject'),
           accelerator: 'CmdOrCtrl+N',
           click: () => {
             if (mainWindow) {
@@ -534,7 +584,7 @@ function createMenu() {
         },
         { type: 'separator' },
         {
-          label: 'Apri...',
+          label: mt('open'),
           accelerator: 'CmdOrCtrl+O',
           click: async () => {
             if (!mainWindow) return;
@@ -555,7 +605,7 @@ function createMenu() {
           }
         },
         {
-          label: 'Importa MIDI...',
+          label: mt('importMidi'),
           accelerator: 'CmdOrCtrl+I',
           click: async () => {
             if (!mainWindow) return;
@@ -576,7 +626,7 @@ function createMenu() {
           }
         },
         {
-          label: 'Importa MusicXML...',
+          label: mt('importXml'),
           click: async () => {
             if (!mainWindow) return;
             const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
@@ -595,44 +645,44 @@ function createMenu() {
           }
         },
         {
-          label: 'Esporta MIDI...',
+          label: mt('exportMidi'),
           accelerator: 'CmdOrCtrl+Shift+E',
           click: () => { sendAction(MENU_ACTIONS.EXPORT_MIDI); }
         },
         {
-          label: 'Esporta MusicXML…',
+          label: mt('exportXml'),
           click: () => { sendAction(MENU_ACTIONS.EXPORT_MUSICXML); }
         },
         {
-          label: 'Esporta PDF…',
+          label: mt('exportPdf'),
           accelerator: 'CmdOrCtrl+Shift+P',
           click: () => { sendAction(MENU_ACTIONS.EXPORT_PDF); }
         },
         {
-          label: 'Esporta PNG…',
+          label: mt('exportPng'),
           accelerator: 'CmdOrCtrl+Shift+G',
           click: () => { sendAction(MENU_ACTIONS.EXPORT_PNG); }
         },
         { type: 'separator' },
         {
-          label: 'Stampa',
+          label: mt('print'),
           accelerator: 'CmdOrCtrl+P',
           click: () => { sendAction(MENU_ACTIONS.PRINT); }
         },
         { type: 'separator' },
         {
-          label: 'Salva',
+          label: mt('save'),
           accelerator: 'CmdOrCtrl+S',
           click: () => sendAction(MENU_ACTIONS.SAVE)
         },
         {
-          label: 'Salva con nome...',
+          label: mt('saveAs'),
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => sendAction(MENU_ACTIONS.SAVE_AS)
         },
         { type: 'separator' },
         {
-          label: 'Chiudi progetto',
+          label: mt('closeProject'),
           accelerator: 'CmdOrCtrl+W',
           click: () => {
             if (mainWindow) {
@@ -647,42 +697,42 @@ function createMenu() {
       ]
     },
     {
-      label: 'Modifica',
+      label: mt('edit'),
       submenu: [
         {
-          label: 'Annulla',
+          label: mt('undo'),
           accelerator: 'CmdOrCtrl+Z',
           click: () => { sendAction(MENU_ACTIONS.UNDO); }
         },
         {
-          label: 'Ripeti',
+          label: mt('redo'),
           accelerator: 'Shift+CmdOrCtrl+Z',
           click: () => { sendAction(MENU_ACTIONS.REDO); }
         },
         { type: 'separator' },
         {
-          label: 'Taglia',
+          label: mt('cut'),
           accelerator: 'CmdOrCtrl+X',
           click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'cut' }); }
         },
         {
-          label: 'Copia',
+          label: mt('copy'),
           accelerator: 'CmdOrCtrl+C',
           click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'copy' }); }
         },
         {
-          label: 'Incolla',
+          label: mt('paste'),
           accelerator: 'CmdOrCtrl+V',
           click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'paste' }); }
         },
         {
-          label: 'Seleziona tutto',
+          label: mt('selectAll'),
           accelerator: 'CmdOrCtrl+A',
           click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'selectAll' }); }
         },
         { type: 'separator' },
         {
-          label: 'Seleziona solo voce corrente (rettangolo)',
+          label: mt('selectVoice'),
           type: 'checkbox',
           accelerator: 'Alt+S',
           checked: !!selectOnlyCurrentVoiceEnabled,
@@ -693,28 +743,28 @@ function createMenu() {
         },
         { type: 'separator' },
         {
-          label: 'Titolo',
+          label: mt('titleFont'),
           submenu: [
             {
-              label: 'Serif',
+              label: mt('serif'),
               click: () => { sendAction(MENU_ACTIONS.SET_TITLE_FONT_FAMILY, { family: 'serif' }); }
             },
             {
-              label: 'Sans-serif',
+              label: mt('sansSerif'),
               click: () => { sendAction(MENU_ACTIONS.SET_TITLE_FONT_FAMILY, { family: 'sans-serif' }); }
             },
             {
-              label: 'Monospace',
+              label: mt('mono'),
               click: () => { sendAction(MENU_ACTIONS.SET_TITLE_FONT_FAMILY, { family: 'monospace' }); }
             },
             { type: 'separator' },
             {
-              label: 'Aumenta dimensione titolo',
+              label: mt('titleIncrease'),
               accelerator: 'CmdOrCtrl+]',
               click: () => { sendAction(MENU_ACTIONS.INCREASE_TITLE_FONT); }
             },
             {
-              label: 'Diminuisci dimensione titolo',
+              label: mt('titleDecrease'),
               accelerator: 'CmdOrCtrl+[',
               click: () => { sendAction(MENU_ACTIONS.DECREASE_TITLE_FONT); }
             }
@@ -723,40 +773,40 @@ function createMenu() {
       ]
     },
     {
-      label: 'Vista',
+      label: mt('view'),
       submenu: [
         {
-          label: 'Preferenze…',
+          label: mt('preferences'),
           accelerator: 'CmdOrCtrl+,',
           click: () => { sendAction(MENU_ACTIONS.OPEN_PREFERENCES); }
         },
         { type: 'separator' },
         ...(enableGuitar ? [
           {
-            label: 'Scale',
+            label: mt('scales'),
             click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'scales' }); }
           },
           {
-            label: 'Accordi',
+            label: mt('chords'),
             click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'chords' }); }
           },
           {
-            label: 'Intervalli',
+            label: mt('intervals'),
             click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'intervals' }); }
           },
           {
-            label: 'Editor',
+            label: mt('editor'),
             click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'editor' }); }
           },
         ] : []),
         ...(enableGrandStaff ? [
           {
-            label: 'Grand Staff',
+            label: mt('grandStaff'),
             click: () => { sendAction(MENU_ACTIONS.SET_APP_MODE, { mode: 'grandStaff' }); }
           },
           { type: 'separator' },
           {
-            label: 'Modalità incisione',
+            label: mt('engravingMode'),
             submenu: [
               {
                 label: 'Enhanced',
@@ -780,23 +830,23 @@ function createMenu() {
               },
               { type: 'separator' },
               {
-                label: 'Verifica collisioni (Enhanced)…',
+                label: mt('collisionEnhanced'),
                 click: () => { sendAction(MENU_ACTIONS.RUN_OVERLAP_AUDIT, { mode: 'enhanced' }); }
               },
               {
-                label: 'Verifica collisioni (Legacy)…',
+                label: mt('collisionLegacy'),
                 click: () => { sendAction(MENU_ACTIONS.RUN_OVERLAP_AUDIT, { mode: 'legacy' }); }
               }
             ]
           },
         ] : []),
         {
-          label: 'Riordina toolbar (drag)…',
+          label: mt('reorderToolbar'),
           click: () => { sendAction(MENU_ACTIONS.TOGGLE_TOOLBAR_CUSTOMIZE); }
         },
         ...(enableGrandStaff ? [
           {
-            label: 'Transport (toolbar chiusa)',
+            label: mt('transport'),
             type: 'checkbox',
             checked: !!showQuickInsertBarEnabled,
             click: (menuItem) => {
@@ -806,7 +856,7 @@ function createMenu() {
           },
           { type: 'separator' },
           {
-            label: 'Numeri misure',
+            label: mt('measureNumbers'),
             type: 'checkbox',
             checked: !!showMeasureNumbersEnabled,
             click: (menuItem) => {
@@ -815,7 +865,7 @@ function createMenu() {
             }
           },
           {
-            label: 'Debug harmony labels (pcs)',
+            label: mt('harmonyDebug'),
             type: 'checkbox',
             checked: !!showHarmonyDebugEnabled,
             click: (menuItem) => {
@@ -824,7 +874,7 @@ function createMenu() {
             }
           },
           {
-            label: 'Colori voci (BTAS)',
+            label: mt('voiceColors'),
             type: 'checkbox',
             accelerator: 'Control+C',
             checked: !!showVoiceColorsEnabled,
@@ -848,10 +898,10 @@ function createMenu() {
     }
     ,
     {
-      label: 'Strumenti',
+      label: mt('tools'),
       submenu: [
         {
-          label: 'Genera corale da Roman Numerals…',
+          label: mt('generateChorale'),
           accelerator: 'CmdOrCtrl+Shift+G',
           click: () => { sendAction(MENU_ACTIONS.GENERATE_FROM_ROMAN); }
         },
@@ -860,7 +910,7 @@ function createMenu() {
     ,
     {
       role: 'help',
-      label: 'Aiuto',
+      label: mt('help'),
       submenu: [
         {
           label: `Build: ${DEV_BUILD_TAG}${isDev ? ' (dev)' : ''}`,
@@ -868,7 +918,7 @@ function createMenu() {
         },
         { type: 'separator' },
         {
-          label: 'Scorciatoie…',
+          label: mt('shortcuts'),
           click: () => showShortcutsDialog(),
         }
       ]
@@ -905,6 +955,10 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
 
     if (state.engravingMode === 'legacy' || state.engravingMode === 'enhanced') {
       engravingMode = state.engravingMode;
+    }
+
+    if (typeof state.language === 'string' && state.language.length > 0) {
+      currentLanguage = state.language;
     }
 
     createMenu();

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { TimeSignature, HarmonyLabelOverride } from '../types';
 import { TimeSignatureControlNumber, denominatorStepFn } from './TimeSignatureControl';
 
@@ -56,6 +57,7 @@ const ModulationContextMenu: React.FC<{
     onMoveToBass?: () => void;
     onResetStaff?: () => void;
 }> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onToggleRepeatBarline, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff }) => {
+    const { t } = useTranslation('ui');
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
     const [tempLabel, setTempLabel] = useState(initialLabel || '');
@@ -229,67 +231,67 @@ const ModulationContextMenu: React.FC<{
             <div className="flex items-center justify-between gap-2">
                 <h3
                     className="text-white font-bold text-sm cursor-move select-none"
-                    title="Trascina per spostare"
+                    title={t('menu_drag_to_move')}
                     onMouseDown={beginDrag}
                 >
-                    Modulazione / tonicizzazione (Misura {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)})
+                    Modulazione / tonicizzazione ({t('menu_measure_label')} {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)})
                 </h3>
                 <button
                     onClick={onClose}
                     className="px-2 py-0.5 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors flex-shrink-0"
-                    title="Chiudi"
+                    title={t('menu_close')}
                 >
                     ✕
                 </button>
             </div>
             <div className="flex items-center gap-2">
                  <select value={tempKey} onChange={e => setTempKey(e.target.value)} className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-full">
-                    <optgroup label="Diesis (♯)">{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
-                    <optgroup label="Bemolli (♭)">{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
+                    <optgroup label={t('menu_key_sharps_group')}>{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
+                    <optgroup label={t('menu_key_flats_group')}>{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                 </select>
                 <div className="relative flex p-0.5 bg-gray-900/50 rounded-md flex-shrink-0">
                     <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${tempIsMinor ? '100%' : '0%'}) ` }}></div>
-                    <button onClick={() => setTempIsMinor(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>Mag</button>
-                    <button onClick={() => setTempIsMinor(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>min</button>
+                    <button onClick={() => setTempIsMinor(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>{t('menu_major_abbr')}</button>
+                    <button onClick={() => setTempIsMinor(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>{t('menu_minor_abbr')}</button>
                 </div>
             </div>
             <div className="flex gap-2">
-                <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Applica contesto</button>
+                <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">{t('menu_apply_context')}</button>
                 <button
                     onClick={handleInsertTextOnly}
                     className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors"
-                    title="Inserisce solo il testo come marker (senza mostrare la tonalità)"
+                    title={t('menu_insert_text_tooltip')}
                     disabled={!String(tempLabel || '').trim()}
                 >
-                    Inserisci testo
+                    {t('menu_insert_text_btn')}
                 </button>
-                <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
+                <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">{t('menu_remove')}</button>
             </div>
             <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-300">Misura</label>
+                <label className="text-xs text-gray-300">{t('menu_measure_label')}</label>
                 <button
                     onClick={() => onDeleteMeasure(menuData.measureIndex)}
                     className="px-2 py-1 text-[11px] rounded-md bg-red-800 hover:bg-red-700 font-semibold transition-colors"
                 >
-                    Cancella misura
+                    {t('menu_delete_measure_btn')}
                 </button>
-                <div className="text-[10px] text-gray-400">Elimina la misura e sposta indietro tutto ciò che segue.</div>
+                <div className="text-[10px] text-gray-400">{t('menu_delete_measure_hint')}</div>
             </div>
             {onToggleRepeatBarline && (
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-300">Ripetizione</label>
+                    <label className="text-xs text-gray-300">{t('menu_repeat_label')}</label>
                     <div className="flex gap-1">
                         <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-begin'); onClose(); }}
-                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title="Inizio ripetizione">|:</button>
+                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title={t('menu_repeat_begin_title')}>|:</button>
                         <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-end'); onClose(); }}
-                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title="Fine ripetizione">:|</button>
+                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title={t('menu_repeat_end_title')}>:|</button>
                         <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-both'); onClose(); }}
-                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title="Doppia ripetizione">:|:</button>
+                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title={t('menu_repeat_both_title')}>:|:</button>
                     </div>
                 </div>
             )}
             <div className="flex flex-col gap-2">
-                <label className="text-xs text-gray-300">Cambio di tempo (opzionale)</label>
+                <label className="text-xs text-gray-300">{t('menu_time_change_label')}</label>
                 <div className="flex items-center gap-2">
                     <TimeSignatureControlNumber value={tempNumerator} onChange={setTempNumerator} min={1} max={16} />
                     <TimeSignatureControlNumber value={tempDenominator} onChange={setTempDenominator} min={2} max={16} stepFunction={denominatorStepFn} />
@@ -297,23 +299,23 @@ const ModulationContextMenu: React.FC<{
                         onClick={() => onApplyTimeSignature(menuData.absBeat, tempNumerator, tempDenominator, menuData.measureIndex)}
                         className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
                     >
-                        Applica
+                        {t('menu_apply_context')}
                     </button>
                     <button
                         onClick={() => onRemoveTimeSignature(menuData.absBeat)}
                         className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors"
                     >
-                        Rimuovi
+                        {t('menu_time_change_remove')}
                     </button>
                 </div>
             </div>
             <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-300">Testo (opzionale)</label>
+                <label className="text-xs text-gray-300">{t('menu_text_label')}</label>
                 <input
                     value={tempLabel}
                     onChange={e => setTempLabel(e.target.value)}
                     className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
-                    placeholder="Es. Modulazione a Do Maggiore"
+                    placeholder={t('menu_text_label')}
                 />
             </div>
 
@@ -321,11 +323,11 @@ const ModulationContextMenu: React.FC<{
 
             <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs text-gray-300">Override armonia (funzionale)</label>
-                    <span className="text-[10px] text-gray-400">sostituisce Roman/figure/sigla</span>
+                    <label className="text-xs text-gray-300">{t('menu_harmony_override_label')}</label>
+                    <span className="text-[10px] text-gray-400">{t('menu_harmony_override_hint')}</span>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-300">Roman</label>
+                    <label className="text-xs text-gray-300">{t('menu_roman_label')}</label>
                     <input
                         value={roman}
                         onChange={e => setRoman(e.target.value)}
@@ -334,7 +336,7 @@ const ModulationContextMenu: React.FC<{
                     />
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-300">Figure (separate da / o spazio)</label>
+                    <label className="text-xs text-gray-300">{t('menu_figures_label')}</label>
                     <input
                         value={figuresRaw}
                         onChange={e => setFiguresRaw(e.target.value)}
@@ -343,7 +345,7 @@ const ModulationContextMenu: React.FC<{
                     />
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-300">Simbolo accordo (opzionale)</label>
+                    <label className="text-xs text-gray-300">{t('menu_chord_symbol_label')}</label>
                     <input
                         value={symbol}
                         onChange={e => setSymbol(e.target.value)}
@@ -355,16 +357,16 @@ const ModulationContextMenu: React.FC<{
                     <button
                         onClick={handleApplyHarmonyOverride}
                         className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
-                        title="Applica override armonico a questo beat"
+                        title={t('menu_apply_harmony_override_tooltip')}
                     >
-                        Applica override
+                        {t('menu_apply_harmony_override_btn')}
                     </button>
                     <button
                         onClick={() => onRemoveHarmonyOverride(menuData.absBeat)}
                         className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors"
-                        title="Rimuove l'override armonico a questo beat"
+                        title={t('menu_remove_harmony_override_tooltip')}
                     >
-                        Rimuovi override
+                        {t('menu_remove_harmony_override_btn')}
                     </button>
                 </div>
             </div>
@@ -372,25 +374,25 @@ const ModulationContextMenu: React.FC<{
             {/* ── Ornament override section ── */}
             {selectedNoteCount != null && selectedNoteCount > 0 && onApplyOrnamentOverride && (
                 <div className="border-t border-gray-600 pt-2 mt-2">
-                    <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">Marcatura ornamentale</div>
+                    <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">{t('menu_ornament_title')}</div>
                     {([
-                        { label: 'Nota di passaggio  ⌥P', type: 'passing' },
-                        { label: 'Nota di volta  ⌥V', type: 'neighbor' },
-                        { label: 'Appoggiatura  ⌥A', type: 'appoggiatura' },
-                        { label: 'Anticipazione  ⌥N', type: 'anticipation' },
-                        { label: 'Nota di sfuggita  ⌥S', type: 'escape' },
-                          { label: 'Nota cambiata  ⌥C', type: 'cambiata' },
-                        { label: 'Ritardo  ⌥R', type: 'suspension' },
+                        { labelKey: 'menu_ornament_passing', shortcut: '⌥P', type: 'passing' },
+                        { labelKey: 'menu_ornament_neighbor', shortcut: '⌥V', type: 'neighbor' },
+                        { labelKey: 'menu_ornament_appoggiatura', shortcut: '⌥A', type: 'appoggiatura' },
+                        { labelKey: 'menu_ornament_anticipation', shortcut: '⌥N', type: 'anticipation' },
+                        { labelKey: 'menu_ornament_escape', shortcut: '⌥S', type: 'escape' },
+                          { labelKey: 'menu_ornament_cambiata', shortcut: '⌥C', type: 'cambiata' },
+                        { labelKey: 'menu_ornament_suspension', shortcut: '⌥R', type: 'suspension' },
                     ] as const).map(item => (
                         <button key={item.type} onClick={() => onApplyOrnamentOverride(item.type)}
                             className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">
-                            {item.label}
+                            {t(item.labelKey)}  {item.shortcut}
                         </button>
                     ))}
                     {hasExistingOrnamentOverride && onRemoveOrnamentOverride && (
                         <button onClick={onRemoveOrnamentOverride}
                             className="block w-full text-left px-2 py-0.5 text-[11px] text-red-400 hover:bg-gray-600 rounded mt-1 transition-colors">
-                            Rimuovi marcatura
+                            {t('menu_ornament_remove')}
                         </button>
                     )}
                 </div>
@@ -399,23 +401,23 @@ const ModulationContextMenu: React.FC<{
             {/* ── Staff override section ── */}
             {(onMoveToTreble || onMoveToBass) && (
                 <div className="border-t border-gray-600 pt-2 mt-2">
-                    <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">Sposta su rigo</div>
+                    <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">{t('menu_staff_move_title')}</div>
                     {onMoveToTreble && (
                         <button onClick={onMoveToTreble}
                             className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">
-                            Rigo di violino (𝄞)  <span className="text-gray-400 ml-1">⌥↑</span>
+                            {t('menu_staff_treble')}  <span className="text-gray-400 ml-1">⎿↑</span>
                         </button>
                     )}
                     {onMoveToBass && (
                         <button onClick={onMoveToBass}
                             className="block w-full text-left px-2 py-0.5 text-[11px] hover:bg-gray-600 rounded transition-colors">
-                            Rigo di basso (𝄢)  <span className="text-gray-400 ml-1">⌥↓</span>
+                            {t('menu_staff_bass')}  <span className="text-gray-400 ml-1">⎿↓</span>
                         </button>
                     )}
                     {onResetStaff && (
                         <button onClick={onResetStaff}
                             className="block w-full text-left px-2 py-0.5 text-[11px] text-yellow-400 hover:bg-gray-600 rounded mt-1 transition-colors">
-                            Ripristina rigo predefinito
+                            {t('menu_staff_reset')}
                         </button>
                     )}
                 </div>

@@ -5,6 +5,7 @@
  * Returns { isExplainOpen, explainData, openExplain, closeExplain }.
  */
 import { useState, useCallback } from 'react';
+import i18n from '../i18n';
 import type { StaffNote, AnalysisContext, TimeSignature } from '../types';
 import type { HarmonyExplainData, HarmonyExplainConfidenceLevel } from '../components/HarmonyLabelExplainModal';
 import {
@@ -73,17 +74,46 @@ export function useHarmonyExplain(params: UseHarmonyExplainParams) {
             const symResult = getChordSymbol(labelNotes as any, keySig, ctxTonic);
 
             // ── Confidence ──
+            // Lo score raw di identifyChordCandidates() non è una percentuale 0–100:
+            // dipende dal tipo di match e dal numero di note (un exact match completo
+            // può valere ~29). Le soglie assolute non funzionano: usiamo criteri
+            // qualitativi (matchType, candidato unico, gap sul 2° candidato).
             const mainCand = candidates?.[0];
-            let confidenceLevel: HarmonyExplainConfidenceLevel = 'medium';
+            const secondCand = candidates?.[1];
+            const isOverride = Boolean((lbl as any).isOverride);
+            let confidenceLevel: HarmonyExplainConfidenceLevel = 'low';
             const confidenceReasons: string[] = [];
-            if (mainCand) {
-                const score = mainCand.score ?? 0;
-                if (score >= 80) { confidenceLevel = 'high'; confidenceReasons.push(`Punteggio alto (${score})`); }
-                else if (score >= 50) { confidenceLevel = 'medium'; confidenceReasons.push(`Punteggio medio (${score})`); }
-                else { confidenceLevel = 'low'; confidenceReasons.push(`Punteggio basso (${score})`); }
-            } else {
+            if (!mainCand) {
                 confidenceLevel = 'low';
-                confidenceReasons.push('Nessun candidato trovato');
+                confidenceReasons.push(i18n.t('confidence_no_candidate'));
+            } else if (isOverride) {
+                confidenceLevel = 'high';
+                confidenceReasons.push(i18n.t('confidence_override'));
+            } else {
+                const topScore = Number(mainCand.score ?? 0);
+                const secondScore = Number(secondCand?.score ?? 0);
+                const gap = secondCand ? topScore - secondScore : topScore;
+                const matchType = String((mainCand as any).matchType ?? '');
+                if (matchType === 'exact') {
+                    confidenceLevel = 'high';
+                    confidenceReasons.push(i18n.t('confidence_exact_match'));
+                } else if (candidates.length === 1 && topScore > 0) {
+                    confidenceLevel = 'high';
+                    confidenceReasons.push(i18n.t('confidence_unique'));
+                } else if (gap >= 10) {
+                    confidenceLevel = 'high';
+                    confidenceReasons.push(i18n.t('confidence_wide_margin'));
+                } else if (topScore >= 15 && gap >= 5) {
+                    confidenceLevel = 'medium';
+                    confidenceReasons.push(i18n.t('confidence_probable'));
+                } else {
+                    confidenceLevel = 'low';
+                    confidenceReasons.push(
+                        secondCand
+                            ? i18n.t('confidence_multiple')
+                            : i18n.t('confidence_partial')
+                    );
+                }
             }
 
             // ── PCS / removed notes ──

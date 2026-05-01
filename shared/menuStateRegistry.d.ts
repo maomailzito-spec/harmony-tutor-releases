@@ -7,6 +7,7 @@ export type MenuState = Partial<{
   showVoiceColorsEnabled: boolean;
   showQuickInsertBarEnabled: boolean;
   engravingMode: EngravingMode;
+  language: string;
 }>;
 
 export function normalizeMenuState(state: unknown): MenuState | null;

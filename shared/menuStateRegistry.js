@@ -51,6 +51,10 @@ function normalizeMenuState(state) {
     out.engravingMode = s.engravingMode;
   }
 
+  if (typeof s.language === 'string' && s.language.length > 0) {
+    out.language = s.language;
+  }
+
   return out;
 }
 
