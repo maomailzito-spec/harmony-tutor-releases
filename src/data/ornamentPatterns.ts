@@ -7,6 +7,7 @@ export const ORNAMENT_LEARNED_PATTERNS: Record<string, {
     [type: string]: string | number;
 }> = {
     "short_weak_step-up_step-down": { "neighbor": 13, "passing": 3, "appoggiatura": 2, "_total": 18, "_dominant": "neighbor", "_probability": 0.722 },
+    "very-short_weak_step-up_step-up": { "passing": 16, "neighbor": 1, "escape": 1, "anticipation": 1, "appoggiatura": 1, "_total": 20, "_dominant": "passing", "_probability": 0.8 },
     "medium_strong_unison_step-down": { "suspension": 15, "appoggiatura": 18, "neighbor": 1, "_total": 34, "_dominant": "appoggiatura", "_probability": 0.529 },
     "medium_strong_step-down_step-down": { "suspension": 2, "appoggiatura": 11, "passing": 2, "_total": 15, "_dominant": "appoggiatura", "_probability": 0.733 },
     "medium_strong_unison_step-up": { "suspension": 8, "_total": 8, "_dominant": "suspension", "_probability": 1 },
@@ -23,7 +24,6 @@ export const ORNAMENT_LEARNED_PATTERNS: Record<string, {
     "short_weak_step-down_leap-up": { "passing": 2, "escape": 1, "_total": 3, "_dominant": "passing", "_probability": 0.667 },
     "medium_weak_step-up_step-down": { "neighbor": 5, "appoggiatura": 1, "_total": 6, "_dominant": "neighbor", "_probability": 0.833 },
     "short_moderate_skip-up_step-down": { "appoggiatura": 4, "cambiata": 2, "_total": 6, "_dominant": "appoggiatura", "_probability": 0.667 },
-    "very-short_weak_step-up_step-up": { "passing": 15, "neighbor": 1, "escape": 1, "anticipation": 1, "appoggiatura": 1, "_total": 19, "_dominant": "passing", "_probability": 0.789 },
     "short_moderate_step-down_step-up": { "appoggiatura": 4, "neighbor": 3, "passing": 3, "_total": 10, "_dominant": "appoggiatura", "_probability": 0.4 },
     "short_weak_step-down_step-up": { "neighbor": 26, "passing": 1, "appoggiatura": 2, "_total": 29, "_dominant": "neighbor", "_probability": 0.897 },
     "very-short_weak_step-down_step-down": { "passing": 14, "neighbor": 1, "_total": 15, "_dominant": "passing", "_probability": 0.933 },

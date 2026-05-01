@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "extractedAt": "2026-04-19",
-  "totalFiles": 185,
-  "totalSamples": 996,
+  "extractedAt": "2026-05-01",
+  "totalFiles": 188,
+  "totalSamples": 997,
   "typeCounts": {
     "neighbor": 99,
+    "passing": 373,
     "suspension": 109,
     "anticipation": 28,
     "appoggiatura": 276,
-    "passing": 372,
     "escape": 63,
     "cambiata": 49
   },
@@ -85,14 +85,14 @@
       "_probability": 1
     },
     "very-short_weak_step-up_step-up": {
-      "passing": 15,
+      "passing": 16,
       "neighbor": 1,
       "escape": 1,
       "anticipation": 1,
       "appoggiatura": 1,
-      "_total": 19,
+      "_total": 20,
       "_dominant": "passing",
-      "_probability": 0.789
+      "_probability": 0.8
     },
     "short_weak_step-up_step-down": {
       "neighbor": 13,
@@ -1399,6 +1399,12 @@
       "_dominant": "suspension",
       "_probability": 1
     },
+    "very-short_weak_step-up_step-up_v3_unk_same": {
+      "passing": 2,
+      "_total": 2,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "medium_strong_unison_step-down_v1_cons_same": {
       "suspension": 1,
       "appoggiatura": 1,
@@ -2594,12 +2600,6 @@
       "_dominant": "escape",
       "_probability": 1
     },
-    "very-short_weak_step-up_step-up_v3_unk_same": {
-      "passing": 1,
-      "_total": 1,
-      "_dominant": "passing",
-      "_probability": 1
-    },
     "very-short_weak_skip-up_step-down_v2_unk_same": {
       "cambiata": 1,
       "_total": 1,
@@ -3591,7 +3591,29 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Beethoven:Piston p218.htp",
+      "file": "Bach cantata 71.htp",
+      "noteId": "midi-61-21600-55",
+      "type": "passing",
+      "patternKey": "very-short_weak_step-up_step-up",
+      "detailedKey": "very-short_weak_step-up_step-up_v3_unk_same",
+      "pitch": "G3",
+      "midi": 55,
+      "voice": 3,
+      "duration": "sixteenth",
+      "durationCategory": "very-short",
+      "beat": 3.5,
+      "measureIndex": 5,
+      "beatStrength": "weak",
+      "entryInterval": 1,
+      "exitInterval": 2,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Beethoven-Piston p218.htp",
       "noteId": "8a3afed2-9a8a-4264-a0b0-af59fdcf6293",
       "type": "suspension",
       "patternKey": "medium_strong_unison_step-down",
@@ -3613,7 +3635,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Beethoven:Piston p218.htp",
+      "file": "Beethoven-Piston p218.htp",
       "noteId": "80934ede-9fee-4c54-bbd0-914566935814",
       "type": "suspension",
       "patternKey": "medium_strong_step-down_step-down",
@@ -3635,7 +3657,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Beethoven:Piston p218.htp",
+      "file": "Beethoven-Piston p218.htp",
       "noteId": "8560951e-6cb4-4728-b72d-2d76ae413fe3",
       "type": "suspension",
       "patternKey": "medium_strong_unison_step-up",
@@ -3657,7 +3679,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Beethoven:Piston p218.htp",
+      "file": "Beethoven-Piston p218.htp",
       "noteId": "871abf63-e36c-41c7-9e0d-037eabd4dc38",
       "type": "anticipation",
       "patternKey": "medium_weak_none_unison",
@@ -3679,7 +3701,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Beethoven:Piston p218.htp",
+      "file": "Beethoven-Piston p218.htp",
       "noteId": "3351196f-e485-4f11-8328-b170d4085ed0",
       "type": "anticipation",
       "patternKey": "medium_weak_step-up_unison",
@@ -5153,7 +5175,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-20-7200-55",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5175,7 +5197,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-25-8160-72",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5197,7 +5219,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-46-12960-60",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5219,7 +5241,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-93-23520-72",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5241,7 +5263,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-114-28320-60",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5263,7 +5285,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-157-37920-52",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5285,7 +5307,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-158-37920-64",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -5307,7 +5329,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-163-38880-48",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5329,7 +5351,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-176-41760-60",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5351,7 +5373,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-187-43680-52",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -5373,7 +5395,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-188-43680-55",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -5395,7 +5417,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-194-44640-55",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5417,7 +5439,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-199-45600-48",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5439,7 +5461,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-204-46560-48",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -5461,7 +5483,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-206-46560-63",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-down",
@@ -5483,7 +5505,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-237-53280-47",
       "type": "neighbor",
       "patternKey": "short_weak_step-down_step-up",
@@ -5505,7 +5527,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-232-52320-50",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5527,7 +5549,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "6496c72f-c13f-42c2-8169-02a7732fb2d5",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -5549,7 +5571,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 2 <bach.htp",
+      "file": "Cantata 2 Bach.htp",
       "noteId": "midi-249-56160-62",
       "type": "neighbor",
       "patternKey": "medium_weak_step-up_step-down",
@@ -7199,7 +7221,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-48-12000-67",
       "type": "anticipation",
       "patternKey": "short_weak_step-up_unison",
@@ -7221,7 +7243,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-51-12480-67",
       "type": "appoggiatura",
       "patternKey": "short_moderate_unison_step-down",
@@ -7243,7 +7265,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-56-13440-66",
       "type": "appoggiatura",
       "patternKey": "short_strong_unison_step-down",
@@ -7265,7 +7287,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-55-13440-63",
       "type": "appoggiatura",
       "patternKey": "short_strong_step-up_step-up",
@@ -7287,7 +7309,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-61-14400-64",
       "type": "appoggiatura",
       "patternKey": "short_moderate_unison_step-down",
@@ -7309,7 +7331,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-125-27360-67",
       "type": "anticipation",
       "patternKey": "short_weak_step-up_unison",
@@ -7331,7 +7353,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-132-28800-63",
       "type": "appoggiatura",
       "patternKey": "short_strong_step-up_step-up",
@@ -7353,7 +7375,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-128-27840-67",
       "type": "appoggiatura",
       "patternKey": "short_moderate_unison_step-down",
@@ -7375,7 +7397,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-133-28800-66",
       "type": "appoggiatura",
       "patternKey": "short_strong_unison_step-down",
@@ -7397,7 +7419,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-138-29760-64",
       "type": "appoggiatura",
       "patternKey": "short_moderate_unison_step-down",
@@ -7419,7 +7441,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-158-34080-50",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -7441,7 +7463,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-180-37920-54",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -7463,7 +7485,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-198-41760-57",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7485,7 +7507,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-197-41760-54",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7507,7 +7529,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-203-42720-66",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7529,7 +7551,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-241-50400-57",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -7551,7 +7573,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-247-51360-57",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7573,7 +7595,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-246-51360-54",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7595,7 +7617,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-253-52320-64",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7617,7 +7639,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-252-52320-61",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7639,7 +7661,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-259-53280-60",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -7661,7 +7683,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-258-53280-52",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -7683,7 +7705,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-283-58080-47",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -7705,7 +7727,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-288-59040-66",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -7727,7 +7749,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-305-61920-67",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -7749,7 +7771,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Cantata 7.json",
+      "file": "Cantata 7.htp",
       "noteId": "midi-304-61920-45",
       "type": "escape",
       "patternKey": "short_weak_skip-down_step-up",
@@ -9311,7 +9333,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "4ad3dd73-660a-418e-9442-501bb0aaefae",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -9333,7 +9355,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "0b264998-4580-42d7-b9aa-bfb66affbd57",
       "type": "anticipation",
       "patternKey": "short_weak_leap-down_unison",
@@ -9355,7 +9377,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "6b509328-95e1-4a49-8387-433e7ca33189",
       "type": "appoggiatura",
       "patternKey": "short_moderate_unison_leap-down",
@@ -9377,7 +9399,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "0ddd51f8-1263-438d-863e-f5dce3f4af76",
       "type": "passing",
       "patternKey": "short_weak_step-up_unison",
@@ -9399,7 +9421,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "dd7a10e1-f3ce-4a93-8f32-38310158823e",
       "type": "passing",
       "patternKey": "short_weak_step-down_unison",
@@ -9421,7 +9443,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "3962ac15-33be-4e2a-a3ac-2300d6d23c57",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -9443,7 +9465,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "e500e425-00dd-4245-b7d0-26849e896be0",
       "type": "suspension",
       "patternKey": "short_moderate_unison_step-down",
@@ -9465,7 +9487,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Corale 3C bach:Schinelli.json",
+      "file": "Corale 3C bach-Schinelli.htp",
       "noteId": "0bc2a265-2754-4a17-9930-64dac9bd6cbc",
       "type": "appoggiatura",
       "patternKey": "short_strong_step-down_step-down",
@@ -9487,7 +9509,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "a2e91fc3-a7a9-4286-9ee7-f37b409c28cf",
       "type": "appoggiatura",
       "patternKey": "short_moderate_step-down_step-down",
@@ -9509,7 +9531,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "eb80f4d8-3003-427f-8c67-d074e92aa056",
       "type": "passing",
       "patternKey": "short_weak_step-down_unison",
@@ -9531,7 +9553,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "7a2ec98c-f854-49d6-9d73-9cc9b5604d79",
       "type": "appoggiatura",
       "patternKey": "short_strong_unison_step-down",
@@ -9553,7 +9575,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "3dc852ea-9ae1-4650-9b25-60746257d381",
       "type": "appoggiatura",
       "patternKey": "short_moderate_step-down_step-down",
@@ -9575,7 +9597,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "111d4b2b-dcf2-42f6-8f2d-e25d51341b85",
       "type": "suspension",
       "patternKey": "short_strong_unison_step-down",
@@ -9597,7 +9619,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "abe8aba1-d0cb-41f7-9d51-db81db6feb83",
       "type": "passing",
       "patternKey": "very-short_weak_step-down_step-down",
@@ -9619,7 +9641,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "fd3a72af-9c8f-478e-b8b3-cd680814725e",
       "type": "passing",
       "patternKey": "very-short_weak_step-down_step-down",
@@ -9641,7 +9663,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "01ebf23f-9634-4426-8ab0-d1f65fb0056e",
       "type": "neighbor",
       "patternKey": "very-short_weak_step-down_step-up",
@@ -9663,7 +9685,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5c Bach:Schinelli.json",
+      "file": "Corale n 5c Bach-Schinelli.htp",
       "noteId": "e761030d-10bf-41c6-89ad-7f1b9b92d8d5",
       "type": "neighbor",
       "patternKey": "very-short_weak_step-down_step-up",
@@ -9685,7 +9707,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5d Bach:Schinelli.json",
+      "file": "Corale n 5d Bach-Schinelli.json",
       "noteId": "e38ab43d-f0ae-478e-a4d5-2d2a10b237a2",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -9707,7 +9729,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5d Bach:Schinelli.json",
+      "file": "Corale n 5d Bach-Schinelli.json",
       "noteId": "32a688e8-5ea8-4336-8a31-f48688565e15",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -9729,7 +9751,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n 5d Bach:Schinelli.json",
+      "file": "Corale n 5d Bach-Schinelli.json",
       "noteId": "447fd569-4b31-486e-8cd2-cbb4c50f07b0",
       "type": "escape",
       "patternKey": "short_weak_skip-up_step-down",
@@ -9751,7 +9773,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n4c bach:Schinelli.json",
+      "file": "Corale n4c bach-Schinelli.json",
       "noteId": "91fad390-7acb-44df-88aa-4682c092f758",
       "type": "passing",
       "patternKey": "short_weak_step-down_step-down",
@@ -9773,7 +9795,7 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Corale n4c bach:Schinelli.json",
+      "file": "Corale n4c bach-Schinelli.json",
       "noteId": "d7cdebe7-573d-4d82-b87c-0bac877a242e",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -9795,7 +9817,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n4c bach:Schinelli.json",
+      "file": "Corale n4c bach-Schinelli.json",
       "noteId": "371d19b8-3a54-4196-8c74-6472a9f3535b",
       "type": "passing",
       "patternKey": "short_weak_step-up_step-up",
@@ -9817,7 +9839,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n4c bach:Schinelli.json",
+      "file": "Corale n4c bach-Schinelli.json",
       "noteId": "70b5ffff-102d-45c2-b9e2-ec440babed5a",
       "type": "suspension",
       "patternKey": "medium_weak_step-down_step-down",
@@ -9839,7 +9861,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n4c bach:Schinelli.json",
+      "file": "Corale n4c bach-Schinelli.json",
       "noteId": "58e5d10d-3e03-4cd0-93c3-2fe571117449",
       "type": "suspension",
       "patternKey": "short_strong_unison_step-down",
@@ -9861,7 +9883,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Corale n4c bach:Schinelli.json",
+      "file": "Corale n4c bach-Schinelli.json",
       "noteId": "f3594477-3826-473b-9fe0-79f3e942ac92",
       "type": "appoggiatura",
       "patternKey": "short_moderate_step-down_step-down",
@@ -9883,7 +9905,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Corale n4c bach:Schinelli.json",
+      "file": "Corale n4c bach-Schinelli.json",
       "noteId": "51a51e71-107b-406e-9a26-1fabc9e0c5ad",
       "type": "appoggiatura",
       "patternKey": "short_moderate_step-down_step-down",
@@ -10059,7 +10081,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Delachi n 2 p34:71.htp",
+      "file": "Delachi n 2 p34-71.htp",
       "noteId": "9216d697-75c3-4789-9355-ff112d1e2f2b",
       "type": "passing",
       "patternKey": "medium_moderate_step-down_step-down",
@@ -10081,7 +10103,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Delachi n 2 p36:71.htp",
+      "file": "Delachi n 2 p36-71.htp",
       "noteId": "7d75afe5-2b97-4068-a538-f042eafbf933",
       "type": "suspension",
       "patternKey": "long_strong_unison_step-down",
@@ -10103,7 +10125,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Delachi n 2 p36:71.htp",
+      "file": "Delachi n 2 p36-71.htp",
       "noteId": "dcd256fc-0d27-4d83-9cc6-731396d2643a",
       "type": "suspension",
       "patternKey": "long_strong_unison_step-down",
@@ -10125,7 +10147,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Delachi n 2 p36:71.htp",
+      "file": "Delachi n 2 p36-71.htp",
       "noteId": "f714fe5b-1bd2-4e1e-820d-f443279877c0",
       "type": "suspension",
       "patternKey": "long_strong_unison_step-down",
@@ -10147,7 +10169,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Delachi n 2 p36:71.htp",
+      "file": "Delachi n 2 p36-71.htp",
       "noteId": "00883657-6f5c-48e4-9f4a-e57199b964eb",
       "type": "suspension",
       "patternKey": "long_strong_unison_step-down",
@@ -10169,7 +10191,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Delachi n 2 p36:71.htp",
+      "file": "Delachi n 2 p36-71.htp",
       "noteId": "6bdfe801-c7bc-42d5-a531-85b78ba68711",
       "type": "suspension",
       "patternKey": "long_strong_unison_step-down",
@@ -24887,7 +24909,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "cantata 4 Bach.json",
+      "file": "cantata 4 Bach.htp",
       "noteId": "midi-30-8400-69",
       "type": "passing",
       "patternKey": "very-short_weak_step-up_step-up",
@@ -24909,7 +24931,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "cantata 4 Bach.json",
+      "file": "cantata 4 Bach.htp",
       "noteId": "midi-34-8880-69",
       "type": "passing",
       "patternKey": "very-short_weak_step-down_step-down",
@@ -24931,7 +24953,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "cantata 4 Bach.json",
+      "file": "cantata 4 Bach.htp",
       "noteId": "midi-42-9840-69",
       "type": "passing",
       "patternKey": "very-short_weak_step-down_step-up",
@@ -24953,7 +24975,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "cantata 4 Bach.json",
+      "file": "cantata 4 Bach.htp",
       "noteId": "midi-45-10080-71",
       "type": "appoggiatura",
       "patternKey": "very-short_weak_step-up_step-up",
@@ -24975,7 +24997,7 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "cantata 4 Bach.json",
+      "file": "cantata 4 Bach.htp",
       "noteId": "midi-50-10800-72",
       "type": "neighbor",
       "patternKey": "very-short_weak_step-up_step-down",
@@ -24997,7 +25019,7 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "cantata 4 Bach.json",
+      "file": "cantata 4 Bach.htp",
       "noteId": "midi-54-11280-69",
       "type": "passing",
       "patternKey": "very-short_weak_step-down_step-down",
