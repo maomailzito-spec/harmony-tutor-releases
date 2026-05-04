@@ -57,7 +57,6 @@ jobs:
       - name: Import signing certificate
         env:
           APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           echo "$APPLE_CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
           security create-keychain -p "actions" build.keychain
