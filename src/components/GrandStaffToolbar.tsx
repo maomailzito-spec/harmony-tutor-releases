@@ -198,6 +198,8 @@ type GrandStaffToolbarProps = {
 
     showQuickInsertBar: boolean;
     showHarmonyDebug: boolean;
+    chordInsertMode: boolean;
+    onToggleChordInsertMode: () => void;
 };
 
 const IconComponent: React.FC<{ type: 'note' | 'rest'; duration: NoteDuration; className?: string }> = ({ type, duration, className }) => {
@@ -340,6 +342,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         isToolbarHidden,
         showQuickInsertBar,
         showHarmonyDebug,
+        chordInsertMode,
+        onToggleChordInsertMode,
     } = props;
 
     const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
@@ -783,6 +787,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     title={tT('accidental_natural')}
                 >
                     <NaturalIcon className={TOOLBAR_ICON_CLASS} />
+                </button>
+            </div>
+        ),
+        chordInsert: (
+            <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
+                <button
+                    onClick={onToggleChordInsertMode}
+                    className={`px-2 py-1 rounded-md transition-colors text-sm font-mono ${chordInsertMode ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                    title={chordInsertMode ? 'Esci inserimento accordo (Esc)' : 'Inserisci accordo dalla sigla — es. Cmaj7, Dm7/F'}
+                >
+                    A&#9833;
                 </button>
             </div>
         ),
