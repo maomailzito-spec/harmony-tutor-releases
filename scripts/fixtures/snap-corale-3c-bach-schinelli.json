@@ -3313,7 +3313,10 @@
     },
     {
       "absBeat": 9.5,
-      "roman": "iii"
+      "roman": "iii",
+      "figuresInclude": [
+        "3"
+      ]
     },
     {
       "absBeat": 10,
@@ -3328,7 +3331,10 @@
     },
     {
       "absBeat": 11,
-      "roman": "I"
+      "roman": "I",
+      "figuresInclude": [
+        "9"
+      ]
     },
     {
       "absBeat": 11.5,

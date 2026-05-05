@@ -189,6 +189,10 @@ export type StaffNote = {
   isSuspension?: any;
   ornamentMark?: string;
   ornamentOverride?: OrnamentType;
+  /** Pitch classes of all chord tones at insertion time — used by re-voice to avoid reconstructing from potentially incomplete voicings. */
+  chordPcs?: number[];
+  /** Root note name of the chord at insertion time (e.g. 'C' for C7/E) — used by re-voice for correct enharmonic spelling. */
+  chordRootName?: string;
 };
 
 /** Manual ornament classification for a note. */

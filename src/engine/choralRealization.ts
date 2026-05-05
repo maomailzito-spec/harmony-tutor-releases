@@ -180,7 +180,7 @@ const HARMONIC_MINOR_SCALE_SEMITONES = [0, 2, 3, 5, 7, 8, 11];
 // ─── Pitch Utilities ───────────────────────────────────────────────────────
 
 /** Pitch-class (0-11) from a note name string (e.g. 'Bb' → 10, 'F#' → 6). */
-function noteNameToPc(name: string): number {
+export function noteNameToPc(name: string): number {
   const letter = name.charAt(0).toUpperCase();
   let pc = LETTER_TO_SEMI[letter] ?? 0;
   for (let i = 1; i < name.length; i++) {

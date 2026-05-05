@@ -307,6 +307,34 @@ export function calculateAccidental(noteName: string, keySignatureNotes: string[
     }
 }
 
+/**
+ * Come calculateAccidental, ma tiene conto degli accidentali già attivi nella misura.
+ * `measureAccidentals`: mappa lettera → stringa accidentale attiva ('', '#', 'b', '##', 'bb')
+ * derivata dalle note precedenti nella stessa misura.
+ */
+export function calculateAccidentalWithMeasureContext(
+    noteName: string,
+    keySignatureNotes: string[],
+    measureAccidentals: Record<string, string>
+): AccidentalType | null {
+    const noteLetter = noteName.charAt(0);
+    const noteAcc = noteName.slice(1); // '', '#', 'b', ...
+    let keyAcc = '';
+    for (const k of keySignatureNotes) {
+        if (k.charAt(0) === noteLetter) { keyAcc = k.slice(1); break; }
+    }
+    // L'accidentale "attivo" per questa lettera: misura ha la precedenza sul KS
+    const active = noteLetter in measureAccidentals ? measureAccidentals[noteLetter] : keyAcc;
+    if (noteAcc === active) return null; // già implicito, nessun segno necessario
+    // Serve un segno esplicito
+    if (noteAcc === '') return 'natural';
+    if (noteAcc === '#') return 'sharp';
+    if (noteAcc === 'b') return 'flat';
+    if (noteAcc === '##') return 'double-sharp';
+    if (noteAcc === 'bb') return 'double-flat';
+    return null;
+}
+
 
 /** Restituisce la preferenza enharmonica per una nota radice, tipo scala e qualità della chiave */
 export function getEnharmonicPreference(rootNote: string, scaleType: ScaleType, keyQuality: 'Major' | 'Minor'): boolean {
@@ -7125,6 +7153,18 @@ export function applyHarmonyRules(
                                 if ((n as any).isPassing) (n as any).isPassing = false;
                             }
                         }
+                    }
+                } catch { /* ignore */ }
+
+                // Assegna ornamentMark DOPO tutti i clearOrn (che cancellerebbero il mark).
+                // Il mark 'r' va solo sul nodo del ritardo (S = onset), NON sulla preparazione.
+                try {
+                    if (S && S.id && prep.id && S.id !== prep.id) {
+                        // Prep e S sono note distinte: mark solo su S
+                        (S as any).ornamentMark = 'r';
+                    } else {
+                        // Prep === S (nota legata): mark sulla nota stessa che è sia prep che ritardo
+                        (prep as any).ornamentMark = 'r';
                     }
                 } catch { /* ignore */ }
 

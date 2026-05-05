@@ -3201,13 +3201,6 @@
       ]
     },
     {
-      "absBeat": 14.5,
-      "roman": "V",
-      "figuresInclude": [
-        "6"
-      ]
-    },
-    {
       "absBeat": 15,
       "roman": "V",
       "figuresInclude": [
@@ -3218,7 +3211,8 @@
       "absBeat": 15.5,
       "roman": "V",
       "figuresInclude": [
-        "6"
+        "6",
+        "5"
       ]
     },
     {
@@ -3289,11 +3283,7 @@
     },
     {
       "absBeat": 31,
-      "roman": "VI",
-      "figuresInclude": [
-        "4",
-        "2"
-      ]
+      "roman": "VI"
     },
     {
       "absBeat": 32,

@@ -2139,7 +2139,11 @@
     },
     {
       "absBeat": 17,
-      "roman": "vi"
+      "roman": "I",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
     },
     {
       "absBeat": 18,
@@ -2151,10 +2155,10 @@
     },
     {
       "absBeat": 19,
-      "roman": "V/ii",
+      "roman": "vi+",
       "figuresInclude": [
-        "♯4",
-        "2"
+        "♭5",
+        "3"
       ]
     },
     {

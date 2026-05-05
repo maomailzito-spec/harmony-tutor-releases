@@ -1302,7 +1302,7 @@
   "expects": [
     {
       "absBeat": 1.5,
-      "roman": "ii°",
+      "roman": "vii°/♭III",
       "figuresInclude": [
         "4",
         "3"
@@ -1394,7 +1394,7 @@
     },
     {
       "absBeat": 9,
-      "roman": "ii°",
+      "roman": "vii°/♭III",
       "figuresInclude": [
         "7"
       ]

@@ -20,7 +20,7 @@ import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
 import { useNoteEditor } from '../hooks/useNoteEditor';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
-import { parseChordSymbol, buildChordSATBNotes } from '../utils/parseChordSymbol';
+import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, VOICING_DISPOSITIONS, type VoicingDisposition } from '../utils/parseChordSymbol';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -363,11 +363,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     } = usePlayback({ bpmInputRef, audioService, isAudioReady, timeSignature, timeSignatureChanges, animationFrameRef });
     const playheadPositionRef = useRef<{ x: number; systemIndex: number } | null>(null);
     useEffect(() => { playheadPositionRef.current = playheadPosition; }, [playheadPosition]);
-    useEffect(() => { 
-        if (chordInsertModeRef.current) {
-            console.log('[playheadPosition CHANGED]', JSON.stringify(playheadPosition), 'stack:', new Error().stack?.split('\n').slice(2,6).join('\n'));
-        }
-    }, [playheadPosition]);
     const [ghostNote, setGhostNote] = useState<(StaffNote & { systemIndex: number }) | null>(null);
 
     // Chord insert mode
@@ -958,7 +953,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 nextAbsBeat = Math.max(0, currentAbsBeat + delta * durBeats);
             }
             const nextPos = getPlayheadPosForAbsBeatRef.current?.(nextAbsBeat);
-            console.log('[advanceCaret]', { delta, fromStartTick, fromDurTicks, nextAbsBeat, nextPos });
             if (nextPos) {
                 // Aggiorna anche il cursor di playback per evitare che il useEffect su layoutData ripristini la posizione vecchia
                 playbackCursorAbsBeatRef.current = nextAbsBeat;
@@ -971,6 +965,84 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         } catch { /* ignora */ }
     }, [pasteCaret, timeSignature, selectedInsertion, setPlayheadPosition, setPasteCaret]);
+
+    // Indice ciclico nella lista delle disposizioni per il re-voice
+    const [revoiceDispIdx, setRevoiceDispIdx] = useState(0);
+    // Reset del ciclo quando la selezione cambia (nuovo accordo selezionato → riparte da 'auto')
+    const prevSelectedNoteIdsRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        const prev = prevSelectedNoteIdsRef.current;
+        const curr = selectedNoteIds;
+        const same = prev.size === curr.size && [...curr].every(id => prev.has(id));
+        if (!same) {
+            setRevoiceDispIdx(0);
+            prevSelectedNoteIdsRef.current = new Set(curr);
+        }
+    }, [selectedNoteIds]);
+
+    /** Ricalcola il voicing delle note SATB selezionate con la prossima disposizione nel ciclo. */
+    const handleRevoice = useCallback(() => {
+        if (selectedNoteIds.size === 0) return;
+        const allNotes = latestRawNotes.current as any[];
+
+        // Raggruppa le note selezionate per startTick (ogni gruppo = un accordo)
+        const tickGroups = new Map<number, any[]>();
+        for (const n of allNotes) {
+            if (!selectedNoteIds.has(n.id) || n.isRest) continue;
+            const t = Number(n.startTick ?? 0);
+            if (!tickGroups.has(t)) tickGroups.set(t, []);
+            tickGroups.get(t)!.push(n);
+        }
+        if (tickGroups.size === 0) return;
+
+        // Avanza all'indice successivo
+        const nextIdx = (revoiceDispIdx + 1) % VOICING_DISPOSITIONS.length;
+        setRevoiceDispIdx(nextIdx);
+        const disposition = VOICING_DISPOSITIONS[nextIdx] as VoicingDisposition;
+
+        // Ordina i tick per applicare voice leading progressivo
+        const sortedTicks = Array.from(tickGroups.keys()).sort((a, b) => a - b);
+
+        let prevVoicing: { soprano: number; alto: number; tenor: number; bass: number } | null = null;
+        // Recupera voicing precedente al primo tick selezionato per voice leading
+        try {
+            const firstTick = sortedTicks[0];
+            const prevNotes = allNotes.filter(n =>
+                typeof n.startTick === 'number' && n.startTick < firstTick && !n.isRest
+            );
+            if (prevNotes.length >= 4) {
+                const maxT = Math.max(...prevNotes.map((n: any) => Number(n.startTick)));
+                const atMax = prevNotes.filter((n: any) => Number(n.startTick) === maxT);
+                const byV: Record<number, number> = {};
+                atMax.forEach((n: any) => { byV[Number(n.voice ?? 0)] = Number(n.midi); });
+                if (byV[1] && byV[2] && byV[3] && byV[4]) {
+                    prevVoicing = { soprano: byV[1], alto: byV[2], tenor: byV[3], bass: byV[4] };
+                }
+            }
+        } catch { /* ignora */ }
+
+        const replacements = new Map<string, any>();
+        for (const tick of sortedTicks) {
+            const tickNote = allNotes.find((n: any) => Number(n.startTick) === tick);
+            const tickMeasure = (tickNote as any)?.measureIndex ?? 0;
+            const measureActiveAcc = buildMeasureAccidentals(allNotes as any, tickMeasure, tick, selectedNoteIds);
+
+            const newNotes = revoiceChordAtTick(allNotes as any, tick, disposition, keySignature, prevVoicing, measureActiveAcc);
+            if (newNotes) {
+                for (const n of newNotes) replacements.set((n as any).id, n);
+                const sop = newNotes.find(n => Number(n.voice) === 1);
+                const alt = newNotes.find(n => Number(n.voice) === 2);
+                const ten = newNotes.find(n => Number(n.voice) === 3);
+                const bas = newNotes.find(n => Number(n.voice) === 4);
+                if (sop && alt && ten && bas) {
+                    prevVoicing = { soprano: Number((sop as any).midi), alto: Number((alt as any).midi), tenor: Number((ten as any).midi), bass: Number((bas as any).midi) };
+                }
+            }
+        }
+
+        if (replacements.size === 0) return;
+        setRawNotes(prev => (prev || []).map(n => replacements.get((n as any).id) ?? n));
+    }, [selectedNoteIds, revoiceDispIdx, keySignature, setRawNotes]);
 
     /** Inserisce un accordo dalla sigla (es. "Cmaj7/E") alla posizione della playhead.
      * Restituisce { startTick, durTicks } per permettere al chiamante di avanzare il caret,
@@ -1025,13 +1097,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         } catch { /* ignora */ }
 
-        const notes = buildChordSATBNotes(parsed, measureIndex, beat, startTick, selectedInsertion.duration, durTicks, keySignature, prevVoicing);
+        const activeAccidentals = buildMeasureAccidentals(latestRawNotes.current as any, measureIndex, startTick);
+
+        const notes = buildChordSATBNotes(parsed, measureIndex, beat, startTick,
+            selectedInsertion.duration, durTicks, keySignature, prevVoicing, activeAccidentals);
 
         setRawNotes(prev => [...(prev || []), ...notes]);
         setChordInputText('');
         setChordInputError(false);
 
-        console.log('[chordInsert]', { symbol, startTick, durTicks, measureIndex, beat, latestRef: latestPasteCaretRef.current });
         return { startTick, durTicks };
     }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, setRawNotes]);
 
@@ -4128,7 +4202,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             const quantizedBeat = Math.round(beat * 1e6) / 1e6;
-            console.log('[click->setPasteCaret] note clicked, resetting caret to', { measureIndex: n.measureIndex, beat: quantizedBeat, noteId: n.id });
             setPasteCaret({
                 x: 0,
                 systemIndex,
@@ -6475,10 +6548,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const onKeyDown = (e: KeyboardEvent) => {
             // Important: this listener runs in capture phase.
             // Se chord insert mode è attivo, non intercettare nulla — l'input gestisce tutto.
-            if (chordInsertModeRef.current) {
-                console.log('[GLOBAL onKeyDown] BLOCKED by chordInsertMode, key=', e.key);
-                return;
-            }
+            if (chordInsertModeRef.current) return;
 
             // If BPM control is focused/active, let it handle digits/arrows.
             const activeEl = document.activeElement as HTMLElement | null;
@@ -6640,7 +6710,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // - Step is derived from the currently selected duration (capped to 1 beat).
             // - Holding Shift uses a finer half-step.
             if (!isMod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-                console.log('[GLOBAL Arrow]', e.key, 'chordInsertMode=', chordInsertModeRef.current);
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -7267,6 +7336,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 showHarmonyDebug={showHarmonyDebug}
                 chordInsertMode={chordInsertMode}
                 onToggleChordInsertMode={() => setChordInsertMode(v => !v)}
+                onRevoiceChord={handleRevoice}
+                revoiceDispIdx={revoiceDispIdx}
+                hasSelectedNotes={selectedNoteIds.size > 0}
+                selectedNotesHave7th={(() => {
+                    if (selectedNoteIds.size === 0) return false;
+                    const selNotes = (latestRawNotes.current as any[]).filter(n => selectedNoteIds.has(n.id));
+                    return selNotes.some(n => Array.isArray(n.chordPcs) && n.chordPcs.length >= 4);
+                })()}
             />
 
             <PreferencesModal
@@ -7748,7 +7825,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         value={chordInputText}
                                                                         onChange={e => { setChordInputText(e.target.value); setChordInputError(false); }}
                                                                         onKeyDown={e => {
-                                                                            e.stopPropagation();
+                                                                            // Blocca propagazione solo per i tasti che gestiamo
+                                                                            if (e.key === 'Enter' || e.key === 'Escape' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                                                                                e.stopPropagation();
+                                                                            }
+                                                                            // Normalizza enarmonie da tastiera: su layout italiano macOS
+                                                                            // Option+3 genera 'à' → lo sostituiamo con '#' nell'input.
+                                                                            // Funziona su tutti i layout/OS perché è solo una rimappatura del carattere.
+                                                                            if (e.key === 'à' || e.key === '§') {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                const el = e.target as HTMLInputElement;
+                                                                                const start = el.selectionStart ?? chordInputText.length;
+                                                                                const end = el.selectionEnd ?? start;
+                                                                                const newVal = chordInputText.slice(0, start) + '#' + chordInputText.slice(end);
+                                                                                setChordInputText(newVal);
+                                                                                setChordInputError(false);
+                                                                                // Ripristina la posizione del cursore dopo il render
+                                                                                requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 1; });
+                                                                                return;
+                                                                            }
                                                                             if (e.key === 'Enter') {
                                                                                 if (chordInputText.trim() === '') {
                                                                                     setChordInsertMode(false);
@@ -7763,7 +7859,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 setChordInputText('');
                                                                                 setChordInputError(false);
                                                                             } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-                                                                                console.log('[INPUT Arrow]', e.key, 'text=', JSON.stringify(chordInputText));
                                                                                 e.preventDefault();
                                                                                 const dir = e.key === 'ArrowRight' ? 1 : -1;
                                                                                 if (chordInputText.trim()) {

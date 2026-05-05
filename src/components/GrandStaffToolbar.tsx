@@ -200,6 +200,10 @@ type GrandStaffToolbarProps = {
     showHarmonyDebug: boolean;
     chordInsertMode: boolean;
     onToggleChordInsertMode: () => void;
+    onRevoiceChord: () => void;
+    revoiceDispIdx: number;
+    hasSelectedNotes: boolean;
+    selectedNotesHave7th: boolean;
 };
 
 const IconComponent: React.FC<{ type: 'note' | 'rest'; duration: NoteDuration; className?: string }> = ({ type, duration, className }) => {
@@ -344,6 +348,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         showHarmonyDebug,
         chordInsertMode,
         onToggleChordInsertMode,
+        onRevoiceChord,
+        revoiceDispIdx,
+        hasSelectedNotes,
+        selectedNotesHave7th,
     } = props;
 
     const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
@@ -798,6 +806,16 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     title={chordInsertMode ? 'Esci inserimento accordo (Esc)' : 'Inserisci accordo dalla sigla — es. Cmaj7, Dm7/F'}
                 >
                     A&#9833;
+                </button>
+                <button
+                    onClick={onRevoiceChord}
+                    disabled={!hasSelectedNotes}
+                    className="px-2 py-1 rounded-md transition-colors text-sm font-mono text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-gray-600"
+                    title={`Re-voice: ricalcola il voicing delle note selezionate (ciclo disposizioni)`}
+                >
+                    {selectedNotesHave7th
+                        ? ['auto','S:7','S:3','S:5','S:R','S:7','S:3'][revoiceDispIdx % 7]
+                        : ['auto','S:R','S:3','S:5','S:R','S:3','S:5'][revoiceDispIdx % 7]}
                 </button>
             </div>
         ),
