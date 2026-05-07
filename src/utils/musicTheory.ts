@@ -2131,12 +2131,17 @@ export function getChordSymbol(
         const possibleNames = ALL_NOTE_SPELLINGS[noteIndex];
         if (possibleNames.length <= 1) return possibleNames[0];
 
-        if (prefer === 'flat') return possibleNames.find(n => n.includes('b')) || possibleNames[1] || possibleNames[0];
-        if (prefer === 'sharp') return possibleNames.find(n => n.includes('#')) || possibleNames[0];
+        // Always identify what the natural name is (no accidental) — used as safe fallback.
+        const naturalName = possibleNames.find(n => !n.includes('b') && !n.includes('#'));
+        const flatName    = possibleNames.find(n => n.includes('b'));
+        const sharpName   = possibleNames.find(n => n.includes('#'));
+
+        if (prefer === 'flat')  return flatName  ?? naturalName ?? possibleNames[0];
+        if (prefer === 'sharp') return sharpName ?? naturalName ?? possibleNames[0];
 
         return keyUsesFlats
-            ? (possibleNames.find(n => n.includes('b')) || possibleNames[1] || possibleNames[0])
-            : (possibleNames.find(n => !n.includes('b')) || possibleNames[0]);
+            ? (flatName  ?? naturalName ?? possibleNames[0])
+            : (naturalName ?? possibleNames[0]);
     };
 
     const preferAccidentalForIndex = (noteIndex: number): 'flat' | 'sharp' | 'auto' => {
