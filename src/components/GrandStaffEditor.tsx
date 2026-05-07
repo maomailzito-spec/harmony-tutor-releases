@@ -11,7 +11,7 @@ declare global {
     }
 }
 import React, { useState, useCallback, useMemo, useEffect, useRef, startTransition, useDeferredValue } from 'react';
-import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType } from '../types';
+import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint } from '../types';
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
@@ -538,12 +538,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [isSvgYWithinClefStaff, staffSystemMode, vfC4YForClef, vfStaveTopYForClef]);
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
     const [harmonyOverrides, setHarmonyOverrides] = useState<HarmonyLabelOverride[]>([]);
+    const [tonicizationHints, setTonicizationHints] = useState<TonicizationHint[]>([]);
+    const [inferredContextSuppressions, setInferredContextSuppressions] = useState<number[]>([]);
     const latestHarmonyOverrides = useRef<HarmonyLabelOverride[]>([]);
     useEffect(() => { latestHarmonyOverrides.current = harmonyOverrides || []; }, [harmonyOverrides]);
     const latestOrnamentOverrides = useRef<OrnamentOverride[]>([]);
     useEffect(() => { latestOrnamentOverrides.current = ornamentOverrides || []; }, [ornamentOverrides]);
     const [harmonyOverrideMenu, setHarmonyOverrideMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
-    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number; inferredTonicAtBeat?: { tonic: string; isMinor: boolean } | null } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
     const [isSequencesEnabled, setIsSequencesEnabled] = useState(() => {
         try {
@@ -563,6 +565,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [harmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
     const [useStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
     const [statisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
+    const [enableInferredContexts] = usePreference<boolean>('analysis.enableInferredContexts');
+    const [cadentialPatternsEnabled] = usePreference<boolean>('analysis.cadentialPatterns');
     const _styleProfile = useMemo(() => loadStyleProfile(), []);
     const [showMeasureNumbers, setShowMeasureNumbers] = useState(true);
 
@@ -2067,6 +2071,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     keyChangeMode,
                     modalTonicOverride,
                     analysisContexts,
+                    tonicizationHints,
+                    inferredContextSuppressions,
                     doubleBarlineMeasures,
                     repeatBarlines,
                     voltaBrackets,
@@ -2088,6 +2094,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setHarmonyOverrides,
                     setOrnamentOverrides,
                     setAnalysisContexts,
+                    setTonicizationHints,
+                    setInferredContextSuppressions,
                     setTimeSignatureChanges,
                     setDoubleBarlineMeasures,
                     setRepeatBarlines,
@@ -2184,6 +2192,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setModalTonicOverride('');
                 setAnalysisContexts([]);
                 setHarmonyOverrides([]);
+                setTonicizationHints([]);
+                setInferredContextSuppressions([]);
                 setOrnamentOverrides([]);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
@@ -2341,6 +2351,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setHarmonyOverrides(p.harmonyOverrides || []);
                 setOrnamentOverrides(p.ornamentOverrides || []);
                 setAnalysisContexts(p.analysisContexts || []);
+                setTonicizationHints((p as any).tonicizationHints || []);
+                setInferredContextSuppressions((p as any).inferredContextSuppressions || []);
                 setDoubleBarlineMeasures(p.doubleBarlineMeasures || []);
                 setRepeatBarlines(p.repeatBarlines || {});
                 setVoltaBrackets(p.voltaBrackets || []);
@@ -2475,14 +2487,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Merge user-authored contexts with engine-inferred modulations.
         // User contexts take precedence (listed first → latest wins in sort).
         // Gate: if the "Inferisci contesti" toggle is OFF, skip inferred contexts entirely.
-        const _inferEnabled = typeof localStorage !== 'undefined'
-            && localStorage.getItem('harmony-tutor.analysis.enableInferredContexts.v2') !== '0';
-        if (!_inferEnabled) return [...(analysisContexts || [])] as any[];
+        const _inferEnabled = enableInferredContexts !== false;
+        const _suppr = new Set((inferredContextSuppressions || []).map(b => Math.round(b * 1e6) / 1e6));
+        // Helper: drop inferred contexts whose absBeat is the active inferred ctx
+        // at any suppressed beat. Manual contexts are never touched.
+        const applySuppression = (arr: any[]): any[] => {
+            if (_suppr.size === 0) return arr;
+            const inferredOnly = arr.filter(c => c.source === 'inferred')
+                .sort((a, b) => (a.absBeat ?? 0) - (b.absBeat ?? 0));
+            const suppressedBeats = new Set<number>();
+            for (const sb of _suppr) {
+                let best: any = null;
+                for (const ctx of inferredOnly) {
+                    if ((ctx.absBeat ?? 0) <= sb + 1e-6) best = ctx;
+                    else break;
+                }
+                if (best) suppressedBeats.add(Math.round((best.absBeat ?? 0) * 1e6) / 1e6);
+            }
+            return arr.filter(c => {
+                if (c.source !== 'inferred') return true;
+                return !suppressedBeats.has(Math.round((c.absBeat ?? 0) * 1e6) / 1e6);
+            });
+        };
+        if (!_inferEnabled) return applySuppression([...(analysisContexts || [])]) as any[];
         // Filter out low-confidence inferred contexts (score undefined or < 12).
         const inferred = ((analysisResult as any)?.inferredAnalysisContexts || [])
             .filter((c: any) => typeof c.score === 'number' && c.score >= 12);
-        return [...(analysisContexts || []), ...inferred] as any[];
-    }, [analysisResult, analysisContexts]);
+        return applySuppression([...(analysisContexts || []), ...inferred]) as any[];
+    }, [analysisResult, analysisContexts, inferredContextSuppressions, enableInferredContexts]);
 
     const { analyzedNotes, connections: errorConnections, violations } = analysisResult;
 
@@ -2559,6 +2591,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         return active;
     }, [timeSignature, timeSignatureChangeAbsBeat, timeSignatureChanges]);
+
+    const handleApplyTonicizationHint = (absBeat: number, tonic: string, isMinor: boolean) => {
+        const safe = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        setTonicizationHints(prev => {
+            const next = (prev || []).filter(h => Math.abs(h.absBeat - safe) > 1e-6);
+            next.push({ absBeat: safe, tonic, isMinor });
+            return next.sort((a, b) => a.absBeat - b.absBeat);
+        });
+    };
+
+    const handleRemoveTonicizationHint = (absBeat: number) => {
+        const safe = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        setTonicizationHints(prev => (prev || []).filter(h => Math.abs(h.absBeat - safe) > 1e-6));
+    };
+
+    const handleSuppressInference = (absBeat: number) => {
+        const safe = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        setInferredContextSuppressions(prev => {
+            if ((prev || []).some(b => Math.abs(b - safe) < 1e-6)) return prev;
+            return [...(prev || []), safe].sort((a, b) => a - b);
+        });
+    };
+
+    const handleUnsuppressInference = (absBeat: number) => {
+        const safe = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        setInferredContextSuppressions(prev => (prev || []).filter(b => Math.abs(b - safe) > 1e-6));
+    };
 
     const handleApplyContext = (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => {
         const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
@@ -2639,6 +2698,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!contextMenu) return null;
         return (analysisContexts || []).find(c => Math.abs(analysisContextAbsBeat(c) - contextMenu.absBeat) <= 1e-6) || null;
     }, [analysisContextAbsBeat, contextMenu, analysisContexts]);
+
+    const existingTonicizationHintForMenu = useMemo(() => {
+        if (!contextMenu) return null;
+        return (tonicizationHints || []).find(h => Math.abs(h.absBeat - contextMenu.absBeat) <= 1e-6) || null;
+    }, [contextMenu, tonicizationHints]);
+
+    const existingSuppressionForMenu = useMemo(() => {
+        if (!contextMenu) return false;
+        return (inferredContextSuppressions || []).some(b => Math.abs(b - contextMenu.absBeat) < 1e-6);
+    }, [contextMenu, inferredContextSuppressions]);
 
     const existingTimeSignatureChangeForMenu = useMemo(() => {
         if (!contextMenu) return null;
@@ -3206,6 +3275,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         styleProfile: useStatisticalCorrection ? _styleProfile : null,
         ornamentOverrides,
         autoHarmonyLabelOverrides: (analysisResult as any).autoHarmonyLabelOverrides,
+        tonicizationHints,
+        inferredContextSuppressions,
+        enableInferredContexts: enableInferredContexts !== false,
+        cadentialPatternsEnabled: cadentialPatternsEnabled !== false,
     });
 
     // Keep a ref to latest harmony labels for save-time corpus recording
@@ -6931,7 +7004,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const sysRect = sysEl.getBoundingClientRect();
                 const x = sysRect.left + playheadPosition.x;
                 const y = sysRect.top + 16;
-                setContextMenu({ x, y, absBeat, measureIndex, beat });
+
+                // Calcola la tonica inferita attiva a questo beat
+                // (contesti manuali + inferred dall'analisi result, ordinati per beat)
+                const _ctxsSorted = [...(effectiveAnalysisContexts || [])]
+                    .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
+                    .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a));
+                const _activeCtx = _ctxsSorted[0];
+                const _activeTonic = _activeCtx ? _activeCtx.newTonic : keySignatureRoot;
+                const _activeIsMinor = _activeCtx ? !!_activeCtx.newIsMinor : isMinorMode;
+                const _hasInferredChange = _activeTonic !== keySignatureRoot || _activeIsMinor !== isMinorMode;
+
+                setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: _hasInferredChange ? { tonic: _activeTonic, isMinor: _activeIsMinor } : null });
                 return;
             }
 
@@ -7372,6 +7456,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         setRawNotes(notes as any);
                         setAnalysisContexts([]);
                         setHarmonyOverrides([]);
+                        setTonicizationHints([]);
+                        setInferredContextSuppressions([]);
                         setOrnamentOverrides([]);
                     }
                 }}
@@ -8338,6 +8424,20 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     {String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')}
                 </text>
 
+                {/* Indicatore ambiguità ≈ — visibile quando ci sono letture alternative */}
+                {(lbl as any).alternatives?.length ? (
+                    <text
+                        x={romanX + measureTextWidth(String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? ''), '700 14px serif') + 2}
+                        y={romanBelowY - 6}
+                        textAnchor="start"
+                        fontSize={9}
+                        fontWeight={700}
+                        fill="#60a5fa"
+                        style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                        onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
+                    >≈</text>
+                ) : null}
+
                 {/* Figured bass numbers */}
                 {(lbl as any).figures?.length ? (
                     <g>
@@ -9135,7 +9235,14 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                 )}
             </div>
 
-            <HarmonyLabelExplainModal isOpen={isExplainOpen} onClose={closeExplain} data={explainData} />
+            <HarmonyLabelExplainModal
+                isOpen={isExplainOpen}
+                onClose={closeExplain}
+                data={explainData}
+                onApplyAlternative={(alt, absBeat) => {
+                    handleApplyTonicizationHint(absBeat, alt.impliedTonic, alt.isMinor);
+                }}
+            />
 
             {contextMenu && (
                 <ModulationContextMenu
@@ -9163,6 +9270,12 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     existingHarmonyOverride={existingHarmonyOverrideForMenu}
                     onApplyHarmonyOverride={applyHarmonyOverride}
                     onRemoveHarmonyOverride={removeHarmonyOverride}
+                    existingTonicizationHint={existingTonicizationHintForMenu}
+                    onRemoveTonicizationHint={handleRemoveTonicizationHint}
+                    inferredTonicAtBeat={contextMenu.inferredTonicAtBeat}
+                    hasSuppressedInference={existingSuppressionForMenu}
+                    onSuppressInference={handleSuppressInference}
+                    onUnsuppressInference={handleUnsuppressInference}
                     initialKey={(() => {
                         if (!existingContextForMenu) return keySignatureRoot;
                         if (!existingContextForMenu.newIsMinor) return existingContextForMenu.newTonic;

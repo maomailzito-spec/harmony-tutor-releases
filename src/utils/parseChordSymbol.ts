@@ -232,7 +232,9 @@ function notePropsFromTone(
 ): { pitch: string; octave: number; position: number; midi: number; noteIndex: number; clef: string; explicitAccidental: ReturnType<typeof calculateAccidental> } {
     const letter = tone.letter;
     const acc = tone.accidental ?? '';
-    const octave = Math.floor(midi / 12) - 1;
+    const accSemi = acc === '#' ? 1 : acc === 'b' ? -1 : acc === '##' ? 2 : acc === 'bb' ? -2 : 0;
+    const naturalMidi = midi - accSemi;
+    const octave = Math.floor(naturalMidi / 12) - 1;
     const position = LETTER_TO_DPOS[letter] + (octave - 4) * 7;
     const noteIndex = ((midi % 12) + 12) % 12;
 
@@ -253,18 +255,24 @@ function notePropsFromTone(
  */
 function semiToDegree(semi: number, allSemis: number[]): number {
     const n = ((semi % 12) + 12) % 12;
-    const hasP5 = allSemis.some(s => ((s % 12) + 12) % 12 === 7);
+    const hasP5  = allSemis.some(s => ((s % 12) + 12) % 12 === 7);
+    const hasDim5 = allSemis.some(s => ((s % 12) + 12) % 12 === 6);
+    const hasM3  = allSemis.some(s => ((s % 12) + 12) % 12 === 4);
+    const hasM2  = allSemis.some(s => ((s % 12) + 12) % 12 === 3); // m3
+    // Semitono 9 è dim7 (grado 6, es. Ab in B°7) quando l'accordo è completamente
+    // diminuito (ha m3 + d5). Altrimenti è M6/13 (grado 5, es. A in C6).
+    const isDimSeventh = hasDim5 && hasM2 && !hasM3 && !hasP5;
     switch (n) {
         case 0:  return 0; // R
-        case 1:  return 1; // b9/b2 = Db (mai #1 in accordi)
-        case 2:  return 1; // 9/M2 = D
+        case 1:  return 1; // b9/b2
+        case 2:  return 1; // 9/M2
         case 3:  return 2; // m3
         case 4:  return 2; // M3
         case 5:  return 3; // P4/11
-        case 6:  return hasP5 ? 3 : 4; // #11(F#) se c'è P5, altrimenti d5(Gb)
+        case 6:  return hasP5 ? 3 : 4; // #11 se c'è P5, altrimenti d5
         case 7:  return 4; // P5
-        case 8:  return hasP5 ? 5 : 4; // b13(Ab) se c'è P5, altrimenti #5(G#)
-        case 9:  return 5; // M6/13
+        case 8:  return hasP5 ? 5 : 4; // b13 se c'è P5, altrimenti #5
+        case 9:  return isDimSeventh ? 6 : 5; // dim7 (Ab) o M6/13 (A)
         case 10: return 6; // m7
         case 11: return 6; // M7
         default: return 0;

@@ -36,7 +36,7 @@
   "toolbar_hide_roman": "Nascondi Numeri Romani",
   "toolbar_show_symbols": "Mostra Sigle",
   "toolbar_hide_symbols": "Nascondi Sigle",
-  "toolbar_chromatic_tooltip": "Modulazione cromatica — Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico",
+  "toolbar_chromatic_tooltip": "Modulazione cromatica — Rileva modulazioni estese (≥3 misure) prive di preparazione cadenzale analizzando il contenuto cromatico. Per tonicizzazioni brevi usare insieme a Pattern cadenzali",
   "harmony_explain_title": "Spiegazione etichetta armonica",
   "active_key": "Tonalità attiva",
   "measure_beat": "Battuta {{m}}, beat {{b}}",

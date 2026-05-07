@@ -147,6 +147,7 @@ export function useHarmonyExplain(params: UseHarmonyExplainParams) {
                     symbol: String(symResult ?? ''),
                     figures: (figResult?.figures ?? []).map(String),
                     isOverride: Boolean((lbl as any).isOverride),
+                    alternatives: (lbl as any).alternatives ?? undefined,
                 },
                 notes: labelNotes,
                 debugSnapshot: {
@@ -156,12 +157,22 @@ export function useHarmonyExplain(params: UseHarmonyExplainParams) {
                     removedForFigures: debugSnap?.removedForFigures ?? [],
                     removedForRoman: debugSnap?.removedForRoman ?? [],
                 },
-                candidates: (candidates ?? []).slice(0, 8).map((c: any) => ({
-                    rootPc: c.root?.midi != null ? ((c.root.midi % 12 + 12) % 12) : null,
-                    type: String(c.type ?? ''),
-                    matchType: String(c.matchType ?? c.type ?? ''),
-                    score: Number(c.score ?? 0),
-                })),
+                candidates: (candidates ?? []).slice(0, 8).map((c: any) => {
+                    const rPitch = c.root?.pitch ?? '';
+                    const rAcc = c.root?.accidental ?? '';
+                    const rName = rAcc === 'sharp' ? rPitch + '#'
+                        : rAcc === 'flat' ? rPitch + 'b'
+                        : rAcc === 'double-sharp' ? rPitch + '##'
+                        : rAcc === 'double-flat' ? rPitch + 'bb'
+                        : rPitch;
+                    return {
+                        rootPc: c.root?.midi != null ? ((c.root.midi % 12 + 12) % 12) : null,
+                        rootName: rName || null,
+                        type: String(c.type ?? ''),
+                        matchType: String(c.matchType ?? c.type ?? ''),
+                        score: Number(c.score ?? 0),
+                    };
+                }),
                 confidence: { level: confidenceLevel, reasons: confidenceReasons },
             };
 

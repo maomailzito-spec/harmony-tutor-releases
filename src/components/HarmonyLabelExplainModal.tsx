@@ -21,6 +21,13 @@ export type HarmonyExplainData = {
         figures?: string[];
         pcsSig?: string;
         isOverride?: boolean;
+        alternatives?: Array<{
+            roman: string;
+            figures: string[];
+            symbol: string;
+            impliedTonic: string;
+            score: number;
+        }>;
     };
     notes: StaffNote[];
     debugSnapshot: {
@@ -32,6 +39,7 @@ export type HarmonyExplainData = {
     };
     candidates: Array<{
         rootPc: number | null;
+        rootName?: string | null;
         type: string;
         matchType: string;
         score: number;
@@ -78,7 +86,12 @@ function pcsToNames(pcs: number[], preferFlats: boolean): string {
     }
 }
 
-const HarmonyLabelExplainModal: React.FC<{ isOpen: boolean; onClose: () => void; data: HarmonyExplainData | null }> = ({ isOpen, onClose, data }) => {
+const HarmonyLabelExplainModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    data: HarmonyExplainData | null;
+    onApplyAlternative?: (alt: { impliedTonic: string; isMinor: boolean }, absBeat: number) => void;
+}> = ({ isOpen, onClose, data, onApplyAlternative }) => {
     const { t } = useTranslation('ui');
     useEffect(() => {
         if (!isOpen) return;
@@ -139,6 +152,9 @@ const HarmonyLabelExplainModal: React.FC<{ isOpen: boolean; onClose: () => void;
                                 <div><span className="text-slate-400">{t('roman_colon')}</span> {String(data.label.romanDisplay ?? data.label.roman ?? '') || '—'}</div>
                                 <div><span className="text-slate-400">{t('chord_symbol_colon')}</span> {String(data.label.symbol ?? '') || '—'}</div>
                                 <div><span className="text-slate-400">{t('root_colon')}</span> {(() => {
+                                    // Usa il nome reale della root (con spelling corretto) se disponibile
+                                    const directName = data.candidates?.[0]?.rootName;
+                                    if (directName) return directName;
                                     const rpc = data.candidates?.[0]?.rootPc;
                                     if (rpc == null || !Number.isFinite(rpc)) return '—';
                                     const names = preferFlats
@@ -182,6 +198,48 @@ const HarmonyLabelExplainModal: React.FC<{ isOpen: boolean; onClose: () => void;
                             })}
                         </ul>
                     </div>
+
+                    {/* Letture alternative — visibile solo quando l'engine ha trovato candidati con score ravvicinato */}
+                    {(data.label.alternatives ?? []).length ? (
+                        <div className="rounded-lg border border-blue-500/40 bg-blue-950/20 p-3">
+                            <div className="text-xs font-semibold text-blue-300 flex items-center gap-1">
+                                <span>≈</span>
+                                <span>Letture alternative</span>
+                            </div>
+                            <div className="mt-2 space-y-2">
+                                {(data.label.alternatives ?? []).map((alt, i) => (
+                                    <div key={i} className="text-[12px] text-slate-100 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        <span className="font-bold text-blue-200">{alt.roman}</span>
+                                        {alt.figures?.length ? (
+                                            <span className="text-slate-400 font-mono">{alt.figures.join(' ')}</span>
+                                        ) : null}
+                                        {alt.symbol ? (
+                                            <span className="text-slate-300">{alt.symbol}</span>
+                                        ) : null}
+                                        <span className="text-slate-500 text-[11px]">
+                                            in {alt.impliedTonic}
+                                        </span>
+                                        {onApplyAlternative ? (
+                                            <button
+                                                className="ml-auto px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-600/30 hover:bg-blue-600/60 text-blue-200 border border-blue-500/40 transition-colors"
+                                                title="Aggiunge una tonicizzazione locale a partire da questo beat. Si esaurisce automaticamente quando il contesto armonico non la supporta più."
+                                                onMouseDown={(e) => {
+                                                    e.stopPropagation();
+                                                    onApplyAlternative(
+                                                        { impliedTonic: alt.impliedTonic, isMinor: /^[a-z]/.test(alt.roman) },
+                                                        data.absBeat,
+                                                    );
+                                                    onClose();
+                                                }}
+                                            >
+                                                ≈ Tonicizza
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
 
                     <details className="rounded-lg border border-slate-700 bg-slate-950/40 p-3">
                         <summary className="cursor-pointer text-xs font-semibold text-slate-200">{t('technical_details')}</summary>

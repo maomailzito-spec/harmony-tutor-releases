@@ -25,6 +25,14 @@ import {
 } from './harmonyLabelPipeline';
 import { applyR1bDimResolutionRescue } from './harmonyPostRules';
 
+export type AlternativeLabel = {
+    roman: string;
+    figures: string[];
+    symbol: string;
+    impliedTonic: string; // es. "Bb" — la tonica in cui questo grado avrebbe senso
+    score: number;
+};
+
 export type HarmonyLabelPoint = {
     id: string;
     x: number;
@@ -40,6 +48,7 @@ export type HarmonyLabelPoint = {
     isOverride?: boolean;
     pcsSig?: string;
     isChromatic?: boolean;
+    alternatives?: AlternativeLabel[]; // candidati alternativi con score ravvicinato
 };
 
 export function computeHarmonyLabelsBySystem(opts: {
@@ -2032,6 +2041,70 @@ export function computeHarmonyLabelsBySystem(opts: {
 
         if (!roman && !symbol && !(figures && figures.length)) return;
 
+        // ── Calcola etichette alternative (letture ambigue) ──
+        // Strategia: per lo stesso accordo, compara il grado romano nella tonica
+        // corrente (contextTonic) con quello nella tonica globale (currentTonic)
+        // e con quello nella tonica "auto" (root dell'accordo = I nella propria tonalità).
+        // Questo cattura: "V in Eb" vs "bVII in C" vs "I in Bb" per un Bb maj.
+        let alternatives: AlternativeLabel[] | undefined;
+        if (roman && !overrideByAbsBeat.has(qAbs(event.absBeat)) && !isAutoOverrideHere) {
+            try {
+                const altNotes = (notesForRoman || []) as any[];
+
+                // Ottieni la root dell'accordo dal primo candidato di identifyChordCandidates.
+                const cands = identifyChordCandidates(altNotes as any);
+                const topCand = cands && (cands as any[]).length ? (cands as any[])[0] : null;
+                const rootNote = topCand?.root as any;
+                const rPitch: string = rootNote?.pitch ?? '';
+                const rAcc: string = rootNote?.accidental ?? '';
+                const rootName: string = rAcc === 'sharp' ? rPitch + '#'
+                    : rAcc === 'flat' ? rPitch + 'b'
+                    : rAcc === 'double-sharp' ? rPitch + '##'
+                    : rAcc === 'double-flat' ? rPitch + 'bb'
+                    : rPitch;
+
+                // Toniche candidate da testare (escludi quella già usata come primaria)
+                const tonicCandidates: Array<{ tonic: string; isMinor: boolean }> = [];
+
+                // 1. Tonica globale (se diversa dal contesto corrente)
+                if (currentTonic && currentTonic !== contextTonic) {
+                    tonicCandidates.push({ tonic: currentTonic, isMinor: isMinorMode });
+                }
+                // 2. Root dell'accordo come tonica auto (es. "I in Bb")
+                if (rootName && rootName !== contextTonic && rootName !== currentTonic) {
+                    tonicCandidates.push({ tonic: rootName, isMinor: false });
+                    // Prova anche come minore se la triade è minore
+                    if (topCand?.type && String(topCand.type).startsWith('m') && !String(topCand.type).startsWith('maj')) {
+                        tonicCandidates.push({ tonic: rootName, isMinor: true });
+                    }
+                }
+
+                const altResults: AlternativeLabel[] = [];
+                const seenRomans = new Set<string>([roman]);
+
+                for (const tc of tonicCandidates) {
+                    const altR = getRomanAnalysis(altNotes, tc.tonic, tc.isMinor, { minorScaleMode });
+                    const altRoman = altR?.roman ?? '';
+                    if (!altRoman || seenRomans.has(altRoman)) continue;
+                    // Filter out impossible labels: a tonic chord can never be diminished
+                    if (/^i+°|^I+°/.test(altRoman)) continue;
+                    seenRomans.add(altRoman);
+                    // Use the current context key signature for the chord symbol
+                    // so enharmonic spelling stays consistent with the home key (e.g. Eb not D#).
+                    const altSymbol = getChordSymbol(altNotes, contextKeySignature, contextTonic) ?? '';
+                    altResults.push({
+                        roman: altRoman,
+                        figures: altR?.figures ?? [],
+                        symbol: altSymbol,
+                        impliedTonic: tc.tonic,
+                        score: 0,
+                    });
+                    if (altResults.length >= 2) break; // max 2 alternative
+                }
+                if (altResults.length) alternatives = altResults;
+            } catch { /* ignore */ }
+        }
+
         const x = getXForAbsBeat(event.absBeat, system);
         labelsBySystem[systemIndex].push({
             id: `hlabel-${systemIndex}-${event.absBeat}`,
@@ -2044,6 +2117,7 @@ export function computeHarmonyLabelsBySystem(opts: {
             isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)) || isAutoOverrideHere,
             pcsSig: signatureFromNotes((fullNotes || []) as any),
             ...(hasAug6Variants ? { isChromatic: true } : {}),
+            ...(alternatives ? { alternatives } : {}),
         });
 
         void fallbackHarmonicNotes;

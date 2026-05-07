@@ -36,7 +36,7 @@
   "toolbar_hide_roman": "Hide Roman Numerals",
   "toolbar_show_symbols": "Show Chord Symbols",
   "toolbar_hide_symbols": "Hide Chord Symbols",
-  "toolbar_chromatic_tooltip": "Chromatic modulation — Detects modulations without cadential preparation by analyzing chromatic content",
+  "toolbar_chromatic_tooltip": "Chromatic modulation — Detects extended modulations (≥3 measures) without cadential preparation by analyzing chromatic content. For shorter tonicizations use together with Cadential patterns",
   "harmony_explain_title": "Harmonic label explanation",
   "active_key": "Active key",
   "measure_beat": "Measure {{m}}, beat {{b}}",

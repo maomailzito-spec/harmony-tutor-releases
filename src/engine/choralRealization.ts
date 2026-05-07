@@ -1874,7 +1874,11 @@ export function voicingToStaffNotes(
 
   for (const v of voiceMap) {
     const { letter, accidental } = v.tonePick;
-    const octave = Math.floor(v.midi / 12) - 1;
+    // L'ottava segue la LETTERA, non il suono. Cb5 = C5 abbassato (midi 71),
+    // non B4. Calcoliamo l'ottava dal midi naturale (senza accidentale).
+    const accSemi = accidental === '#' ? 1 : accidental === 'b' ? -1 : accidental === '##' ? 2 : accidental === 'bb' ? -2 : 0;
+    const naturalMidi = v.midi - accSemi;
+    const octave = Math.floor(naturalMidi / 12) - 1;
     const noteIndex = midiToNoteIndex(v.midi);
     const position = notePosition(letter, octave);
 

@@ -318,6 +318,17 @@ export type SequenceMatch = {
   modulationTonics?: string[];
 };
 
+/** Suggerimento di tonicizzazione locale inserito dall'utente (es. "tratta questo accordo come I in Bb").
+ *  Non genera un marker visivo sulla partitura. Viene trattato dall'engine esattamente come un contesto
+ *  inferito: iniettato in _effectiveCtxs con source='inferred', durata calcolata automaticamente
+ *  (si esaurisce quando il contenuto armonico non supporta più la tonica hint).
+ */
+export type TonicizationHint = {
+    absBeat: number;
+    tonic: string;
+    isMinor: boolean;
+};
+
 export type HarmonyLabelOverride = {
   // Timeline position in quarter-note units from start (can be fractional).
   absBeat: number;

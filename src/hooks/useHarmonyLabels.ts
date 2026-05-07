@@ -73,6 +73,10 @@ export interface UseHarmonyLabelsParams {
     styleProfile?: StyleProfile | null;
     ornamentOverrides?: Array<{ noteId: string; type: string }>;
     autoHarmonyLabelOverrides?: any[];
+    tonicizationHints?: import('../types').TonicizationHint[];
+    inferredContextSuppressions?: number[];
+    enableInferredContexts?: boolean;
+    cadentialPatternsEnabled?: boolean;
 }
 
 export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
@@ -87,6 +91,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         statisticalBiasThreshold,
         styleProfile,
         ornamentOverrides,
+        tonicizationHints,
+        inferredContextSuppressions,
+        enableInferredContexts,
+        cadentialPatternsEnabled,
     } = params;
 
     const [compactTonicization] = usePreference<boolean>('analysis.tonicizationCompact');
@@ -297,13 +305,43 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
         // ─── Cadential Pattern Recognition (Fase 1) ───
         let _effectiveCtxs: AnalysisContext[] = [...(analysisContexts || [])];
+        const _suppressedBeats = new Set((inferredContextSuppressions || []).map(b => Math.round(b * 1e6) / 1e6));
+        // pushInferred pushes directly so all intermediate reads of _effectiveCtxs work correctly.
+        // Suppression is applied in a single pass at the end (flushInferred).
+        const pushInferred = (ctx: AnalysisContext) => {
+            _effectiveCtxs.push(ctx);
+        };
+        // Applied after all cadential/chromatic/hint blocks: removes suppressed inferred contexts.
+        const flushInferred = () => {
+            if (_suppressedBeats.size === 0) return;
+            // Sort inferred contexts by beat to find which one is "active" at each suppressed beat
+            const inferredOnly = _effectiveCtxs
+                .filter((c: any) => c.source === 'inferred')
+                .sort((a, b) => (a.absBeat ?? 0) - (b.absBeat ?? 0));
+            const suppressedCtxBeats = new Set<number>();
+            for (const sb of _suppressedBeats) {
+                let best: AnalysisContext | null = null;
+                for (const ctx of inferredOnly) {
+                    if ((ctx.absBeat ?? 0) <= sb + 1e-6) best = ctx;
+                    else break;
+                }
+                if (best) suppressedCtxBeats.add(Math.round((best.absBeat ?? 0) * 1e6) / 1e6);
+            }
+            if (suppressedCtxBeats.size > 0) {
+                _effectiveCtxs = _effectiveCtxs.filter((c: any) => {
+                    if (c.source !== 'inferred') return true;
+                    return !suppressedCtxBeats.has(Math.round((c.absBeat ?? 0) * 1e6) / 1e6);
+                });
+            }
+        };
         const _pivotCandidates = new Map<number, {tonic: string, isMinor: boolean}>();
         // Gate: if the "Inferisci contesti" toggle is OFF, skip all inferred context generation.
-        const _inferCtxEnabled = typeof localStorage !== 'undefined'
-            && localStorage.getItem(ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY) !== '0';
+        // Use the React prop (passed from GSE via usePreference) so changes re-trigger the memo.
+        // undefined = key not set = default ON
+        const _inferCtxEnabled = enableInferredContexts !== false;
+        const _cadEnabled2 = _inferCtxEnabled && cadentialPatternsEnabled !== false;
         try {
-            const _cadEnabled = _inferCtxEnabled && typeof localStorage !== 'undefined'
-                && localStorage.getItem(CADENTIAL_PATTERN_RECOGNITION_KEY) !== '0';
+            const _cadEnabled = _cadEnabled2;
             if (_cadEnabled && timelineForLabels.length >= 2) {
                 const _chEvts: ChordEvent[] = [];
                 for (const ev of timelineForLabels) {
@@ -324,12 +362,23 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 isSuspension: undefined };
                         }).filter((n: any) => {
                             if (!n || n.isRest) return false;
-                            // Exclude ornamental notes from cadential pattern recognition
+                            // Exclude ornamental notes from cadential pattern recognition.
+                            // Check both direct field AND override map — overrides loaded from a project
+                            // file are stored separately and not merged into note objects.
                             if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                            if (n.id) {
+                                const ov = ornOverrideMap.get(n.id);
+                                if (ov && ov !== 'structural') return false;
+                            }
+                            const _midi = Number(n.midi);
+                            if (Number.isFinite(_midi)) {
+                                const ov2 = ornOverrideMap.get(`${_midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`);
+                                if (ov2 && ov2 !== 'structural') return false;
+                            }
                             if (n.isPassing || n.isNeighbor || n.isAppoggiatura || n.isAnticipation || n.isEscape || n.isCambiata) return false;
                             return true;
                         });
-                        const cands = identifyChordCandidates(notesForCad);
+                        const cands = identifyChordCandidates(notesForCad, ornOverrideRecord);
                         const top = cands?.[0];
                         if (!top?.root) continue;
                         // root can be string or object {noteIndex, midi}
@@ -338,14 +387,31 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             : (((Number((top.root as any)?.noteIndex ?? (top.root as any)?.midi ?? 0)) % 12) + 12) % 12;
                         const bassMidi = Math.min(...(notesForCad as any[]).map((n: any) => Number(n.midi)));
                         const bassPc = ((bassMidi % 12) + 12) % 12;
-                        _chEvts.push({ rootPc, quality: top.type || '', bassPc, absBeat: ev.absBeat,
-                            notePcs: [...new Set((notesForCad as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] });
+                        const _newEv = { rootPc, quality: top.type || '', bassPc, absBeat: ev.absBeat,
+                            notePcs: [...new Set((notesForCad as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] };
+                        // Dedup: collapse consecutive events that don't represent a real harmonic change.
+                        // The cadential pattern matcher slides a window over consecutive events; spurious
+                        // partial-chord events (e.g. when a soprano onset gets filtered as ornamental,
+                        // leaving only 2 of the 3 chord tones) corrupt multi-slot pattern matching.
+                        const _prev = _chEvts[_chEvts.length - 1];
+                        const _isSameChord = _prev
+                            && _prev.rootPc === _newEv.rootPc
+                            && _prev.quality === _newEv.quality
+                            && _prev.bassPc === _newEv.bassPc;
+                        const _isSubsetOfPrev = _prev
+                            && _prev.bassPc === _newEv.bassPc
+                            && _newEv.notePcs.length < _prev.notePcs.length
+                            && _newEv.notePcs.every(pc => _prev.notePcs.includes(pc));
+                        if (_isSameChord || _isSubsetOfPrev) {
+                            // skip — same chord, or a "thinner" projection of the previous chord
+                        } else {
+                            _chEvts.push(_newEv);
+                        }
                     } catch { /* skip event */ }
                 }
                 const _cadMatchesRaw = evaluateCadentialPatterns(
                     _chEvts, noteNameToPc(currentTonic), isMinorMode, { minConfidence: 70 },
-                );
-                // Post-filter: reject cadence matches whose "dominant" chord is
+                );                // Post-filter: reject cadence matches whose "dominant" chord is
                 // actually a Major-7th sonority (maj7 ≠ dominant). The dominant
                 // slot is always the penultimate chord in the formula window.
                 const _homeScalePcs0 = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
@@ -411,7 +477,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (m.deceptive) {
                             const _decTonic = pcToNoteName(m.targetTonicPc);
                             const _decMinor = m.targetIsMinor;
-                            _effectiveCtxs.push({
+                            pushInferred({
                                 absBeat: m.startBeat,
                                 newTonic: _decTonic,
                                 newIsMinor: _decMinor,
@@ -441,7 +507,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                         && other.endBeat >= decReturnBeat - 1e-6,
                                 );
                                 if (!decCoveredByNext && !_manualBeats.has(decReturnBeat)) {
-                                    _effectiveCtxs.push({
+                                    pushInferred({
                                         absBeat: nextAfterDec.absBeat,
                                         newTonic: currentTonic,
                                         newIsMinor: isMinorMode,
@@ -453,7 +519,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             continue;
                         }
                         // ── Tonicisation START: switch to target key ──
-                        _effectiveCtxs.push({
+                        pushInferred({
                             absBeat: m.startBeat,
                             newTonic: pcToNoteName(m.targetTonicPc),
                             newIsMinor: m.targetIsMinor,
@@ -488,7 +554,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             // modulated key. If it's still diatonic, the modulation persists.
                             const nextIsDiatonicHome = nextEvAfterRes.notePcs?.every(pc => _homeScalePcs0.has(pc));
                             if (!coveredByNext && !nextIsDiatonic && nextIsDiatonicHome && !_manualBeats.has(returnBeat)) {
-                                _effectiveCtxs.push({
+                                pushInferred({
                                     absBeat: returnBeat,
                                     newTonic: currentTonic,
                                     newIsMinor: isMinorMode,
@@ -543,7 +609,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         && noteNameToPc(c.newTonic) === targetPc);
                     if (alreadyCovered) continue;
                     // Inject tonicisation context covering V + resolution
-                    _effectiveCtxs.push({
+                    pushInferred({
                         absBeat: dom.absBeat,
                         newTonic: pcToNoteName(targetPc),
                         newIsMinor: targetIsMinor,
@@ -567,7 +633,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // persists — do not snap back to the home key.
                         const nextIsDiatonicHome = _nextAfterRes.notePcs?.every(pc => _homeScalePcs.has(pc));
                         if (!nextIsDiatonicD && nextIsDiatonicHome && !_manualBeats.has(_nextAfterRes.absBeat)) {
-                            _effectiveCtxs.push({
+                            pushInferred({
                                 absBeat: _nextAfterRes.absBeat,
                                 newTonic: currentTonic,
                                 newIsMinor: isMinorMode,
@@ -606,7 +672,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
 
                     // Add modulation context
-                    _effectiveCtxs.push({
+                    pushInferred({
                         measureIndex: cr.startMeasure,
                         newTonic: cr.newTonicName,
                         newIsMinor: cr.newIsMinor,
@@ -618,7 +684,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const returnAlready = _effectiveCtxs.some(c =>
                         c.measureIndex != null && Math.abs(c.measureIndex - returnMeasure) <= 1);
                     if (!returnAlready) {
-                        _effectiveCtxs.push({
+                        pushInferred({
                             measureIndex: returnMeasure,
                             newTonic: currentTonic,
                             newIsMinor: isMinorMode,
@@ -628,6 +694,80 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 }
             }
         } catch { /* chromatic modulation detection failed gracefully */ }
+
+        // ─── Tonicization Hints (user-inserted, self-exhausting) ───────────
+        // For each hint, look ahead through the timeline events to find how
+        // long the hint tonic "fits" better than the home tonic, then inject
+        // start + return contexts exactly like cadential pattern detection does.
+        try {
+            if (tonicizationHints && tonicizationHints.length > 0) {
+                const hintHomeScalePcs = new Set(getScalePcs(noteNameToPc(currentTonic), isMinorMode));
+                // Build a lightweight chord-event list from the timeline (independent of _cadEnabled)
+                const _hintEvts = timelineForLabels
+                    .filter(ev => ev?.notes?.length)
+                    .map(ev => {
+                        const pcs = (ev.notes as any[])
+                            .filter((n: any) => n && !n.isRest)
+                            .map((n: any) => ((Number(n.midi) % 12) + 12) % 12);
+                        return { absBeat: ev.absBeat, pcs };
+                    })
+                    .filter(ev => ev.pcs.length > 0);
+
+                const _hintManualBeats = new Set(
+                    (analysisContexts || []).filter((c: any) => c.source !== 'inferred')
+                        .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
+                );
+
+                for (const hint of tonicizationHints) {
+                    const hintTonicPc = noteNameToPc(hint.tonic);
+                    const hintScalePcs = new Set(getScalePcs(hintTonicPc, hint.isMinor));
+                    // Skip if hint tonic == home tonic
+                    if (hintTonicPc === noteNameToPc(currentTonic) && hint.isMinor === isMinorMode) continue;
+                    // Skip if a manual context already covers this beat
+                    if (_hintManualBeats.has(hint.absBeat)) continue;
+
+                    // Find events from hint.absBeat forward
+                    const eventsFromHint = _hintEvts.filter(ev => ev.absBeat >= hint.absBeat - 1e-6);
+                    if (!eventsFromHint.length) continue;
+
+                    // Greedy lookahead: continue while hintFit >= homeFit
+                    let lastHintBeat = hint.absBeat;
+                    for (const ev of eventsFromHint) {
+                        if (!ev.pcs.length) continue;
+                        const hintFit = ev.pcs.filter((pc: number) => hintScalePcs.has(pc)).length / ev.pcs.length;
+                        const homeFit = ev.pcs.filter((pc: number) => hintHomeScalePcs.has(pc)).length / ev.pcs.length;
+                        // Stop when home clearly dominates (gap > 0.3) and we've moved past the hint beat
+                        if (homeFit > hintFit + 0.3 && ev.absBeat > hint.absBeat + 1e-6) break;
+                        lastHintBeat = ev.absBeat;
+                    }
+
+                    // Inject tonicization start
+                    pushInferred({
+                        absBeat: hint.absBeat,
+                        newTonic: hint.tonic,
+                        newIsMinor: hint.isMinor,
+                        score: 80,
+                        source: 'inferred',
+                    });
+
+                    // Inject return-to-home at the next event after lastHintBeat
+                    const returnEv = _hintEvts.find(ev => ev.absBeat > lastHintBeat + 1e-6);
+                    if (returnEv && !_hintManualBeats.has(returnEv.absBeat)) {
+                        pushInferred({
+                            absBeat: returnEv.absBeat,
+                            newTonic: currentTonic,
+                            newIsMinor: isMinorMode,
+                            score: 0,
+                            source: 'inferred',
+                        });
+                    }
+                }
+            }
+        } catch { /* tonicization hints failed gracefully */ }
+
+        // Flush all pending inferred contexts, applying suppression filter
+        flushInferred();
+
 
         const ctxAtAbsBeat = (absBeat: number) => _effectiveCtxs
             .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
@@ -3367,6 +3507,56 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Anchor label to the current timeline event's beat (not just the note's attack)
             const x = getXForAbsBeat(event.absBeat, system);
 
+            // ── Calcola etichette alternative (letture ambigue) ──
+            // Confronta il grado romano nella tonica corrente (contextTonic) con:
+            //   1. La tonica globale (currentTonic), se diversa
+            //   2. La root dell'accordo come tonica propria ("I in Bb")
+            let alternatives: import('../utils/computeHarmonyLabelsBySystem').AlternativeLabel[] | undefined;
+            if (roman && !overrideByAbsBeat.has(qAbs(event.absBeat))) {
+                try {
+                    const altNotes = analysisNotes as any[];
+                    // Trova la root dal primo candidato
+                    const cands = identifyChordCandidates(altNotes as any);
+                    const topCand = cands && (cands as any[]).length ? (cands as any[])[0] : null;
+                    const rootNote = topCand?.root as any;
+                    const rPitch: string = rootNote?.pitch ?? '';
+                    const rAcc: string = rootNote?.accidental ?? '';
+                    const rootName: string = rAcc === 'sharp' ? rPitch + '#'
+                        : rAcc === 'flat' ? rPitch + 'b'
+                        : rAcc === 'double-sharp' ? rPitch + '##'
+                        : rAcc === 'double-flat' ? rPitch + 'bb'
+                        : rPitch;
+
+                    const tonicCandidates: Array<{ tonic: string; isMinor: boolean }> = [];
+                    if (currentTonic && currentTonic !== contextTonic) {
+                        tonicCandidates.push({ tonic: currentTonic, isMinor: isMinorMode });
+                    }
+                    if (rootName && rootName !== contextTonic && rootName !== currentTonic) {
+                        tonicCandidates.push({ tonic: rootName, isMinor: false });
+                    }
+
+                    const altResults: import('../utils/computeHarmonyLabelsBySystem').AlternativeLabel[] = [];
+                    const seenRomans = new Set<string>([roman]);
+                    for (const tc of tonicCandidates) {
+                        const altR = getRomanAnalysis(altNotes, tc.tonic, tc.isMinor, { ornamentOverrides: ornOverrideRecord });
+                        const altRoman = altR?.roman ?? '';
+                        if (!altRoman || seenRomans.has(altRoman)) continue;
+                        seenRomans.add(altRoman);
+                        const altKeySignature = getKeySignature(tc.tonic, tc.isMinor ? 'Minor' : 'Major');
+                        const altSymbol = getChordSymbol(altNotes, altKeySignature, tc.tonic) ?? '';
+                        altResults.push({
+                            roman: altRoman,
+                            figures: altR?.figures ?? [],
+                            symbol: altSymbol,
+                            impliedTonic: tc.tonic,
+                            score: 0,
+                        });
+                        if (altResults.length >= 2) break;
+                    }
+                    if (altResults.length) alternatives = altResults;
+                } catch { /* ignore */ }
+            }
+
             // ─────────────────────────────────────────────────────────────────
 
             labelsBySystem[systemIndex].push({
@@ -3380,6 +3570,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)),
                 pcsSig: signatureFromNotes((fullNotes || []) as any),
                 ...(hasAug6Variants ? { isChromatic: true } : {}),
+                ...(alternatives ? { alternatives } : {}),
             });
         });
 
@@ -3499,7 +3690,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         } catch { /* ignore */ }
 
         return labelsBySystem;
-    }, [_chromaticModulationEnabled, analysisContextAbsBeat, analysisContexts, analyzedNotes, compactTonicization, currentTonic, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature]);
+    }, [_chromaticModulationEnabled, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than

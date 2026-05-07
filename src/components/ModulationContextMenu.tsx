@@ -45,6 +45,12 @@ const ModulationContextMenu: React.FC<{
     existingHarmonyOverride: HarmonyLabelOverride | null;
     onApplyHarmonyOverride: (absBeat: number, roman: string, figures: string[], symbol: string) => void;
     onRemoveHarmonyOverride: (absBeat: number) => void;
+    existingTonicizationHint?: { tonic: string; isMinor: boolean } | null;
+    onRemoveTonicizationHint?: (absBeat: number) => void;
+    inferredTonicAtBeat?: { tonic: string; isMinor: boolean } | null;
+    hasSuppressedInference?: boolean;
+    onSuppressInference?: (absBeat: number) => void;
+    onUnsuppressInference?: (absBeat: number) => void;
     initialKey: string;
     initialIsMinor: boolean;
     initialLabel?: string;
@@ -56,7 +62,7 @@ const ModulationContextMenu: React.FC<{
     onMoveToTreble?: () => void;
     onMoveToBass?: () => void;
     onResetStaff?: () => void;
-}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onToggleRepeatBarline, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff }) => {
+}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onToggleRepeatBarline, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff, existingTonicizationHint, onRemoveTonicizationHint, inferredTonicAtBeat, hasSuppressedInference, onSuppressInference, onUnsuppressInference }) => {
     const { t } = useTranslation('ui');
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
@@ -267,6 +273,32 @@ const ModulationContextMenu: React.FC<{
                 </button>
                 <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">{t('menu_remove')}</button>
             </div>
+            {/* Soppressione inferenza — rimuovi senza aggiungere nulla */}
+            {inferredTonicAtBeat && !hasSuppressedInference && onSuppressInference && (
+                <div className="border-t border-slate-600 pt-2 mt-1">
+                    <div className="text-[10px] text-slate-400 mb-1">
+                        Modulazione inferita attiva: <span className="text-orange-300 font-semibold">{inferredTonicAtBeat.tonic} {inferredTonicAtBeat.isMinor ? 'min' : 'Maj'}</span>
+                    </div>
+                    <button
+                        onClick={() => { onSuppressInference(menuData.absBeat); onClose(); }}
+                        className="px-2 py-1 text-[11px] rounded-md bg-orange-800 hover:bg-orange-700 font-semibold transition-colors"
+                        title="Ignora questa inferenza automatica senza aggiungere nessun contesto manuale"
+                    >
+                        Rimuovi inferenza
+                    </button>
+                </div>
+            )}
+            {hasSuppressedInference && onUnsuppressInference && (
+                <div className="border-t border-slate-600 pt-2 mt-1">
+                    <div className="text-[10px] text-slate-400 mb-1">Inferenza soppressa a questo beat</div>
+                    <button
+                        onClick={() => { onUnsuppressInference(menuData.absBeat); onClose(); }}
+                        className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors"
+                    >
+                        Ripristina inferenza automatica
+                    </button>
+                </div>
+            )}
             <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-300">{t('menu_measure_label')}</label>
                 <button
@@ -370,6 +402,19 @@ const ModulationContextMenu: React.FC<{
                     </button>
                 </div>
             </div>
+
+            {/* ── Tonicization hint removal ── */}
+            {existingTonicizationHint && onRemoveTonicizationHint && (
+                <div className="border-t border-slate-600 pt-2 mt-1">
+                    <div className="text-[10px] text-slate-400 mb-1">Tonicizzazione locale attiva: <span className="text-blue-300 font-semibold">{existingTonicizationHint.tonic} {existingTonicizationHint.isMinor ? 'min' : 'Maj'}</span></div>
+                    <button
+                        onClick={() => { onRemoveTonicizationHint(menuData.absBeat); }}
+                        className="px-2 py-1 text-[11px] rounded-md bg-orange-700 hover:bg-orange-600 font-semibold transition-colors"
+                    >
+                        Rimuovi tonicizzazione
+                    </button>
+                </div>
+            )}
 
             {/* ── Ornament override section ── */}
             {selectedNoteCount != null && selectedNoteCount > 0 && onApplyOrnamentOverride && (

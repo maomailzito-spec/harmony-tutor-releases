@@ -2,6 +2,17 @@ import { DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 import type { TimeSignature, TimeSignatureChange } from '../types';
 import { getKeySignature, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
 import { extractProjectExtras, migrateProjectData, CURRENT_PROJECT_SCHEMA_VERSION } from '../storage/projectSchema';
+import { readPreference, writePreference } from '../preferences/preferencesStore';
+
+// Preferenze di analisi che vengono salvate per-file e ripristinate al caricamento.
+// Cambiano il significato dell'analisi e quindi devono seguire il file.
+const FILE_ANALYSIS_PREFS = [
+	'analysis.enableInferredContexts',
+	'analysis.cadentialPatterns',
+	'analysis.profileBaseId',
+	'analysis.chromaticModulation',
+	'analysis.sequencesEnabled',
+] as const;
 
 export type GrandStaffProjectIOCommand =
 	| { type: 'new' }
@@ -29,6 +40,8 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	modalTonicOverride: string;
 
 	analysisContexts: any[];
+	tonicizationHints?: any[];
+	inferredContextSuppressions?: any[];
 	doubleBarlineMeasures: any[];
         repeatBarlines: Record<number, string>;
         voltaBrackets: any[];
@@ -56,8 +69,8 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		autoLeadingToneInMinor: args.autoLeadingToneInMinor,
 		keyChangeMode: args.keyChangeMode,
 		modalTonicOverride: args.modalTonicOverride,
-		analysisContexts: args.analysisContexts,
-		doubleBarlineMeasures: args.doubleBarlineMeasures,
+		analysisContexts: args.analysisContexts,				tonicizationHints: args.tonicizationHints || [],
+				inferredContextSuppressions: args.inferredContextSuppressions || [],		doubleBarlineMeasures: args.doubleBarlineMeasures,
 		repeatBarlines: args.repeatBarlines,
 		voltaBrackets: args.voltaBrackets,
 		harmonyOverrides: args.latestHarmonyOverrides.current,
@@ -67,6 +80,10 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		isMetronomeOn: args.isMetronomeOn,
 		metronomeUnit: args.metronomeUnit,
 		toolbarGroupOrder: args.toolbarGroupOrder,
+		// Preferenze di analisi per-file
+		filePreferences: Object.fromEntries(
+			FILE_ANALYSIS_PREFS.map(id => [id, readPreference(id as any)])
+		),
 	};
 
 	// Persist final computed harmony labels for corpus accuracy
@@ -99,6 +116,8 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setHarmonyOverrides: (next: any) => void;
 	setOrnamentOverrides: (next: any) => void;
 	setAnalysisContexts: (next: any) => void;
+	setTonicizationHints?: (next: any) => void;
+	setInferredContextSuppressions?: (next: any) => void;
 	setTimeSignatureChanges: (next: any) => void;
 	setDoubleBarlineMeasures: (next: any) => void;
 	setRepeatBarlines: (next: any) => void;
@@ -352,6 +371,12 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (Array.isArray(loadedProject.analysisContexts)) {
 				args.setAnalysisContexts(loadedProject.analysisContexts);
 			}
+			if (Array.isArray(loadedProject.tonicizationHints)) {
+				args.setTonicizationHints?.(loadedProject.tonicizationHints);
+			}
+				if (Array.isArray(loadedProject.inferredContextSuppressions)) {
+						args.setInferredContextSuppressions?.(loadedProject.inferredContextSuppressions);
+				}
 			if (Array.isArray(loadedProject.doubleBarlineMeasures)) {
 				const cleaned = loadedProject.doubleBarlineMeasures
 					.map((m: any) => Number(m))
@@ -385,6 +410,16 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			}
 
 			args.setCurrentProjectFilePath(cmd.filePath);
+
+			// Ripristina le preferenze di analisi salvate nel file.
+			// Se il file non ha filePreferences (formato vecchio), non tocca nulla.
+			if (loadedProject.filePreferences && typeof loadedProject.filePreferences === 'object') {
+				for (const id of FILE_ANALYSIS_PREFS) {
+					if (Object.prototype.hasOwnProperty.call(loadedProject.filePreferences, id)) {
+						try { writePreference(id as any, loadedProject.filePreferences[id]); } catch { /* ignore */ }
+					}
+				}
+			}
 		} else {
 			throw new Error('Formato dati non valido.');
 		}
