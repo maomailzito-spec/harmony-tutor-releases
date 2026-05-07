@@ -98,7 +98,7 @@ import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
 import { getRuleText, localizeViolationTitle } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
-import { midiToOctave } from './spelledPitch';
+import { midiToOctave, staffNoteToSp } from './spelledPitch';
 
 /** Ornament learning — duration bucket */
 function ornDurationCategory(dur: string): string {
@@ -1972,7 +1972,7 @@ export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: 
     }[] = [];
 
     const standardCandidates = findStandardCandidates(uniqueNotes, uniquePitches);
-    standardCandidates.forEach(c => allCandidates.push({ ...c, score: 0 }));
+    standardCandidates.forEach(c => allCandidates.push({ ...c, score: 0, rootSpelled: staffNoteToSp(c.root) }));
 
     const isSeventhLike = (t: string): boolean => {
         const s = String(t || '');

@@ -1,4 +1,283 @@
 {
+  "tonicizationHints": [
+    {
+      "absBeat": 12,
+      "tonic": "F",
+      "isMinor": false
+    }
+  ],
+  "inferredContextSuppressions": [],
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "e5e97d57-4aaa-4759-be35-8469cbc3367e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "0fbea0f7-aa05-48f2-9627-7507f7152ad1",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "6dddcafb-a695-4855-b2b4-2ac799e927b4",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "e5fda929-e272-465e-a89a-da91cf93461f",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "b99d9e63-d1e9-4782-b035-ad7848793566",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "2c40109e-9bc3-4b5a-a01a-01292f987ac0",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "982374af-fac4-461d-a45e-8807ccc6e921",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "a4077cb8-f8dc-4484-97a0-fb9fc8d874af",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "852d862c-bcc5-41d5-94c7-73fefd6bba53",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "66c2e668-74f2-4c58-8ecc-4924345fdeef",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "17ad5e41-efa0-41ad-aaf8-0ebada71dc8f",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "0247b19d-5610-4797-9eb7-17a54687a8a6",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "6ed50b73-9f4e-4c0d-9b1c-e5c2e4371096",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4f14e6ea-2486-49b2-b2a7-20f14e518b4b",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "b5cf2155-7c9c-4821-940f-544c7fdc7af1",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "462ac098-37fc-4171-8294-921cbac01dc6",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "f4a6dba0-1ffe-4139-9ca8-76118e3dfe29",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "9a571a5e-32bf-476a-9d3d-d9cdfcb71094",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "f9627d0b-bac2-4684-9297-9c545320e87e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "86c71b18-6414-4a7c-ab0a-81de058a2e86",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "665aae25-f5bc-409e-a033-9128ff3ba53b",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4513644c-5a1c-4615-a91b-3560c16fcff2",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "03959487-432f-4a34-b291-9d44762166f9",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "e9a3888d-7baa-4465-ab26-99a9f9325ed0",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1fd9da2a-acff-442f-a4e9-d4b660ba71da",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "717d3031-d39b-41c2-980b-6a33aee799f2",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "c7062753-619e-4b1f-b5bc-6ac5147ed755",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "e40025dd-eba6-49de-9c23-593955536974",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "8a954d0c-d925-4d33-b42a-e09bfa9953e2",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "24383329-ab01-406f-9f56-1b0083280f7f",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "7b9a4e3a-c450-4f6f-adb8-a560bcb6217e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "062cb22b-2db1-4ad7-a322-a39b95da37a2",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "a64a727f-bd47-499f-a254-28cc65c8f76a",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "80882e6f-6068-4a29-82a5-8e3fc3f8ca7d",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1e7bfc5b-75a0-4a6a-b464-3fd3a146d501",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "a862e3cb-e9cc-4924-b7ae-8c0b332cacdd",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "747731a9-d357-4ca0-9c1b-6cc2468fd263",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "c2e5521a-1326-4ba2-8677-ff749361f563",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "e3afa6d6-adf2-415a-8e3f-4050b3a84326",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1bdb963c-43a4-4519-9b9f-c292b808157a",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "31a5bf6d-2b07-481b-b660-6911a04912eb",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1a910c75-960b-4ee4-8b61-e9eac85aac9d",
+      "type": "structural"
+    },
+    {
+      "noteId": "2153e83c-697d-4bb8-97eb-927fe4c054fa",
+      "type": "structural"
+    },
+    {
+      "noteId": "abd95274-b97c-4092-888d-87e1399d242a",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "c548e54c-8466-4de2-bd86-e0cec3993906",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "75f7144c-6a09-4cae-b95b-603289c82543",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "993dd828-3194-4254-9f1a-6bd3d50f1fe5",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "7e535e18-274a-45c8-8a3b-522504f2bf75",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1bc54842-14dc-49a9-8269-da6c37026dc9",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "8701a83f-3e69-471e-b5d5-35fc7af60809",
+      "type": "structural"
+    },
+    {
+      "noteId": "60d96bd7-158a-4584-9184-b419ff702a06",
+      "type": "structural"
+    },
+    {
+      "noteId": "20b431cb-686e-4f00-8731-24908128bec2",
+      "type": "structural"
+    },
+    {
+      "noteId": "a42cec87-e6cf-4f93-9d91-d51991a8b782",
+      "type": "structural"
+    },
+    {
+      "noteId": "b58f94f3-ea5e-4b24-b2e4-5a9eec8e5943",
+      "type": "structural"
+    },
+    {
+      "noteId": "6ed8af0e-c5d5-4cd2-bf56-70341070eb04",
+      "type": "structural"
+    },
+    {
+      "noteId": "25e72776-3d3c-4def-9b3e-050af557c186",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "82a9357a-89a2-4f0f-b45c-ca8f6a241af0",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4dea9339-3bea-4542-9376-a3752622546e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "d4a516e9-31da-48b5-b1ee-36ad0a4d2284",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "010eb392-3d8b-4f52-bcd4-1141eaded6dd",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "c0cc63fa-00c7-4071-a36d-f0769ddca22d",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "b09ceee7-52a7-417f-a19a-9b12cfcfc9df",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "029c294b-a02a-4b5b-af14-05705fcdfd26",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "75f2eae3-5db4-4e37-b1d5-179f6327c836",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "7656ec73-c2e9-48d4-ae15-f4a4d27a7c7e",
+      "type": "ornamental"
+    }
+  ],
+  "filePreferences": {
+    "analysis.enableInferredContexts": false,
+    "analysis.cadentialPatterns": true,
+    "analysis.profileBaseId": "academic",
+    "analysis.chromaticModulation": true,
+    "analysis.sequencesEnabled": true
+  },
   "schemaVersion": 1,
   "notes": [
     {
@@ -1115,7 +1394,8 @@
       "beat": 4.5,
       "startTick": 22560,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "isTiedToNext": true
     },
     {
       "id": "3ebc912d-5dd3-4dcf-875b-4e8fbc0d81f7",
@@ -1475,7 +1755,8 @@
       "beat": 4,
       "startTick": 29760,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "isTiedToNext": true
     },
     {
       "id": "29dfaef5-d7db-4fcb-99a1-c27a881d7d9d",
@@ -1842,7 +2123,8 @@
       "beat": 4.5,
       "startTick": 37920,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "isTiedToNext": true
     },
     {
       "id": "f7486f7d-efc0-48db-850c-8848c299a901",
@@ -2967,8 +3249,8 @@
       "noteIndex": 0,
       "clef": "treble",
       "explicitAccidental": null,
-      "duration": "whole",
-      "durationTicks": 3840,
+      "duration": "half",
+      "durationTicks": 2880,
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
@@ -2982,7 +3264,8 @@
         3
       ],
       "chordRootName": "Ab",
-      "accidental": "natural"
+      "accidental": "natural",
+      "isDotted": true
     },
     {
       "id": "b7250b53-658d-4831-bb87-112ac669e604",
@@ -3063,7 +3346,50 @@
       "accidental": "flat"
     },
     {
-      "id": "6c80a446-470b-4054-865b-95a06ea53c98",
+      "id": "d797b3f8-7352-442b-869c-25e07a526e33",
+      "pitch": "A",
+      "octave": 4,
+      "position": 5,
+      "midi": 68,
+      "noteIndex": 8,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 16,
+      "beat": 4,
+      "startTick": 64320,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat"
+    },
+    {
+      "id": "8310a254-5b41-4097-b124-a568ff0c7301",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 70,
+      "noteIndex": 10,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 16,
+      "beat": 4.5,
+      "startTick": 64800,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "9e4170fe-e987-4d98-8fc7-7479a34914b4",
       "pitch": "C",
       "octave": 5,
       "position": 7,
@@ -3071,22 +3397,17 @@
       "noteIndex": 0,
       "clef": "treble",
       "explicitAccidental": null,
-      "duration": "whole",
-      "durationTicks": 3840,
+      "accidental": "natural",
+      "duration": "eighth",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
+      "isDotted": false,
       "measureIndex": 17,
       "beat": 1,
       "startTick": 65280,
-      "voice": 1,
-      "chordPcs": [
-        8,
-        0,
-        4
-      ],
-      "chordRootName": "Ab",
-      "accidental": "natural"
+      "durationTicks": 480,
+      "voice": 1
     },
     {
       "id": "6f8d3da9-1d39-4ab2-993d-36624a05c66b",
@@ -3167,6 +3488,136 @@
       "accidental": "natural"
     },
     {
+      "id": "d1760056-8c78-434d-b0ac-c2e53e579496",
+      "pitch": "D",
+      "octave": 5,
+      "position": 8,
+      "midi": 73,
+      "noteIndex": 1,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 17,
+      "beat": 1.5,
+      "startTick": 65760,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat"
+    },
+    {
+      "id": "17546d69-48f4-49ed-ba74-5882007dc6e1",
+      "pitch": "C",
+      "octave": 5,
+      "position": 7,
+      "midi": 72,
+      "noteIndex": 0,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 17,
+      "beat": 2,
+      "startTick": 66240,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "4fdc3e95-8bd8-475d-9983-743f6171d0ab",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 70,
+      "noteIndex": 10,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 17,
+      "beat": 2.5,
+      "startTick": 66720,
+      "durationTicks": 480,
+      "voice": 1,
+      "isTiedToNext": true
+    },
+    {
+      "id": "4e20d914-0d5e-48ce-927b-f1996073aa48",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 70,
+      "noteIndex": 10,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 17,
+      "beat": 3,
+      "startTick": 67200,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "dfb3ea1b-61be-46a2-b5a0-7c2996d0c2c6",
+      "pitch": "A",
+      "octave": 4,
+      "position": 5,
+      "midi": 68,
+      "noteIndex": 8,
+      "clef": "treble",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 17,
+      "beat": 3.5,
+      "startTick": 67680,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat",
+      "explicitAccidental": "flat",
+      "accidental": "flat"
+    },
+    {
+      "id": "ff14ea79-e34e-485e-8081-95a6616170b5",
+      "pitch": "C",
+      "octave": 5,
+      "position": 7,
+      "midi": 72,
+      "noteIndex": 0,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 17,
+      "beat": 4,
+      "startTick": 68160,
+      "durationTicks": 960,
+      "voice": 1,
+      "isTiedToNext": true
+    },
+    {
       "id": "c292a65d-12e9-4538-be0a-d98567f5651f",
       "pitch": "C",
       "octave": 5,
@@ -3175,8 +3626,8 @@
       "noteIndex": 0,
       "clef": "treble",
       "explicitAccidental": null,
-      "duration": "whole",
-      "durationTicks": 3840,
+      "duration": "half",
+      "durationTicks": 2880,
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
@@ -3190,7 +3641,8 @@
         0
       ],
       "chordRootName": "F",
-      "accidental": "natural"
+      "accidental": "natural",
+      "isDotted": true
     },
     {
       "id": "e42f9a66-d01b-447c-9889-d4c2899885a4",
@@ -3271,7 +3723,50 @@
       "accidental": "natural"
     },
     {
-      "id": "365786aa-4d4e-472f-a9d1-7777d6e4ac1c",
+      "id": "cc6c5d0d-abf5-4180-8b52-24c08d7fd0d7",
+      "pitch": "A",
+      "octave": 4,
+      "position": 5,
+      "midi": 68,
+      "noteIndex": 8,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 18,
+      "beat": 4,
+      "startTick": 72000,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat"
+    },
+    {
+      "id": "4eac9b36-3d61-4e5a-8ba0-56e24b80726d",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 70,
+      "noteIndex": 10,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 18,
+      "beat": 4.5,
+      "startTick": 72480,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "7c092bfc-c595-43fc-bc0a-f5b0fcfcc4ab",
       "pitch": "C",
       "octave": 5,
       "position": 7,
@@ -3279,23 +3774,17 @@
       "noteIndex": 0,
       "clef": "treble",
       "explicitAccidental": null,
-      "duration": "whole",
-      "durationTicks": 3840,
+      "accidental": "natural",
+      "duration": "eighth",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
+      "isDotted": false,
       "measureIndex": 19,
       "beat": 1,
       "startTick": 72960,
-      "voice": 1,
-      "chordPcs": [
-        8,
-        0,
-        3,
-        6
-      ],
-      "chordRootName": "Ab",
-      "accidental": "natural"
+      "durationTicks": 480,
+      "voice": 1
     },
     {
       "id": "3748999d-89c1-4557-8438-72b3172adad4",
@@ -3379,7 +3868,7 @@
       "accidental": "flat"
     },
     {
-      "id": "bd0ac26d-7d1a-4b3c-becb-85e0a5040b3a",
+      "id": "e8ddcc30-61ed-4770-9fb3-b66bf0e74a35",
       "pitch": "D",
       "octave": 5,
       "position": 8,
@@ -3387,22 +3876,147 @@
       "noteIndex": 1,
       "clef": "treble",
       "explicitAccidental": "flat",
-      "duration": "whole",
-      "durationTicks": 3840,
+      "accidental": "flat",
+      "duration": "eighth",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 19,
+      "beat": 1.5,
+      "startTick": 73440,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat"
+    },
+    {
+      "id": "f2dbaef9-ac72-4f3d-875b-eeca7ad18980",
+      "pitch": "C",
+      "octave": 5,
+      "position": 7,
+      "midi": 72,
+      "noteIndex": 0,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 19,
+      "beat": 2,
+      "startTick": 73920,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "6d837517-cb1e-4a3a-9d0e-bfd077559dd2",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 70,
+      "noteIndex": 10,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 19,
+      "beat": 2.5,
+      "startTick": 74400,
+      "durationTicks": 480,
+      "voice": 1,
+      "isTiedToNext": true
+    },
+    {
+      "id": "7a4982b4-3ab9-45ad-9a94-a9d3712af3b0",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 70,
+      "noteIndex": 10,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 19,
+      "beat": 3,
+      "startTick": 74880,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "8f4a4da3-a233-4b81-bd39-92c6a01c7723",
+      "pitch": "A",
+      "octave": 4,
+      "position": 5,
+      "midi": 68,
+      "noteIndex": 8,
+      "clef": "treble",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 19,
+      "beat": 3.5,
+      "startTick": 75360,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat",
+      "explicitAccidental": "flat",
+      "accidental": "flat"
+    },
+    {
+      "id": "81338b4a-0678-410e-8408-be1ebca9288d",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": "natural",
+      "accidental": "natural",
+      "userAccidental": "natural",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 19,
+      "beat": 4,
+      "startTick": 75840,
+      "durationTicks": 960,
+      "voice": 1
+    },
+    {
+      "id": "c50f9ff5-2923-43de-aabc-e2bc8ad80f3f",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "half",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": true,
       "measureIndex": 20,
       "beat": 1,
       "startTick": 76800,
-      "voice": 1,
-      "chordPcs": [
-        1,
-        5,
-        8
-      ],
-      "chordRootName": "Db",
-      "accidental": "flat"
+      "durationTicks": 2880,
+      "voice": 1
     },
     {
       "id": "41ac5a33-4add-4db2-826d-27bae0441e64",
@@ -3483,7 +4097,7 @@
       "accidental": "flat"
     },
     {
-      "id": "287806c0-c923-4cc4-9a0e-ce597f0af968",
+      "id": "4365bca1-3f68-4a73-a9b3-170306da3967",
       "pitch": "D",
       "octave": 5,
       "position": 8,
@@ -3491,22 +4105,62 @@
       "noteIndex": 1,
       "clef": "treble",
       "explicitAccidental": "flat",
-      "duration": "whole",
-      "durationTicks": 3840,
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "eighth",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 20,
+      "beat": 4,
+      "startTick": 79680,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "081bc1d4-029b-4a6c-9909-c54fc73254f6",
+      "pitch": "E",
+      "octave": 5,
+      "position": 9,
+      "midi": 75,
+      "noteIndex": 3,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 20,
+      "beat": 4.5,
+      "startTick": 80160,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat"
+    },
+    {
+      "id": "0ea37c8f-62e3-4602-bd2a-5a7862e93777",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": "natural",
+      "accidental": "natural",
+      "userAccidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
       "measureIndex": 21,
       "beat": 1,
       "startTick": 80640,
-      "voice": 1,
-      "chordPcs": [
-        1,
-        5,
-        9
-      ],
-      "chordRootName": "Db",
-      "accidental": "flat"
+      "durationTicks": 480,
+      "voice": 1
     },
     {
       "id": "f039055a-9156-4a7d-8e53-4d2cf056cf10",
@@ -3587,7 +4241,96 @@
       "accidental": "natural"
     },
     {
-      "id": "a53e2a32-acfc-4177-9a77-6e6c9a5da715",
+      "id": "12268958-5ebe-4384-971f-6e678a9e153a",
+      "pitch": "G",
+      "octave": 5,
+      "position": 11,
+      "midi": 78,
+      "noteIndex": 6,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 21,
+      "beat": 1.5,
+      "startTick": 81120,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat"
+    },
+    {
+      "id": "387ec8bd-3eb2-4892-ab64-ad6d08353d45",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": "natural",
+      "accidental": "natural",
+      "userAccidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 21,
+      "beat": 2,
+      "startTick": 81600,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "56fa167c-1aa4-4bcb-8083-094b328d48dc",
+      "pitch": "E",
+      "octave": 5,
+      "position": 9,
+      "midi": 75,
+      "noteIndex": 3,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 21,
+      "beat": 2.5,
+      "startTick": 82080,
+      "durationTicks": 480,
+      "voice": 1,
+      "isTiedToNext": true
+    },
+    {
+      "id": "28de8db3-1cee-4ac0-b8e7-df5c512de72b",
+      "pitch": "E",
+      "octave": 5,
+      "position": 9,
+      "midi": 75,
+      "noteIndex": 3,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 21,
+      "beat": 3,
+      "startTick": 82560,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "7dd1c6d3-c9b4-49bb-9295-d41d62ce0b25",
       "pitch": "D",
       "octave": 5,
       "position": 8,
@@ -3595,22 +4338,60 @@
       "noteIndex": 1,
       "clef": "treble",
       "explicitAccidental": "flat",
-      "duration": "whole",
-      "durationTicks": 3840,
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "eighth",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 21,
+      "beat": 3.5,
+      "startTick": 83040,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "f5977540-e974-450f-b4d3-99048f0b8cef",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 21,
+      "beat": 4,
+      "startTick": 83520,
+      "durationTicks": 960,
+      "voice": 1
+    },
+    {
+      "id": "36f6589b-0704-42b0-ba61-d7fa9a474809",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "half",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": true,
       "measureIndex": 22,
       "beat": 1,
       "startTick": 84480,
-      "voice": 1,
-      "chordPcs": [
-        10,
-        1,
-        5
-      ],
-      "chordRootName": "Bb",
-      "accidental": "flat"
+      "durationTicks": 2880,
+      "voice": 1
     },
     {
       "id": "6c9f75a4-7817-467d-8886-f1ffcb9c7ea0",
@@ -3691,31 +4472,69 @@
       "accidental": "flat"
     },
     {
-      "id": "05c8c2b6-91cb-4158-9c2a-b8caea3109e3",
-      "pitch": "A",
-      "octave": 4,
-      "position": 5,
-      "midi": 68,
-      "noteIndex": 8,
+      "id": "c1519031-e3b9-4427-b3dd-c4556caf85b7",
+      "pitch": "D",
+      "octave": 5,
+      "position": 8,
+      "midi": 73,
+      "noteIndex": 1,
       "clef": "treble",
       "explicitAccidental": "flat",
-      "duration": "whole",
-      "durationTicks": 3840,
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "eighth",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 22,
+      "beat": 4,
+      "startTick": 87360,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "4b23bd86-ce4e-4023-8532-005387e7e6dd",
+      "pitch": "E",
+      "octave": 5,
+      "position": 9,
+      "midi": 75,
+      "noteIndex": 3,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 22,
+      "beat": 4.5,
+      "startTick": 87840,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "7f737511-f35d-4de4-8917-40a6328b7f26",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
       "measureIndex": 23,
       "beat": 1,
       "startTick": 88320,
-      "voice": 1,
-      "chordPcs": [
-        1,
-        5,
-        8,
-        11
-      ],
-      "chordRootName": "Db",
-      "accidental": "flat"
+      "durationTicks": 480,
+      "voice": 1
     },
     {
       "id": "bb3dcc8d-d936-4b28-88d7-2e6d95517d41",
@@ -3797,6 +4616,116 @@
       ],
       "chordRootName": "Db",
       "accidental": "flat"
+    },
+    {
+      "id": "e8a1a948-47c8-40eb-8e7e-43af91981a73",
+      "pitch": "G",
+      "octave": 5,
+      "position": 11,
+      "midi": 78,
+      "noteIndex": 6,
+      "clef": "treble",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 23,
+      "beat": 1.5,
+      "startTick": 88800,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat",
+      "explicitAccidental": "flat",
+      "accidental": "flat"
+    },
+    {
+      "id": "7d1ab24c-a5a4-446a-91f0-2bfbbc1e58e2",
+      "pitch": "F",
+      "octave": 5,
+      "position": 10,
+      "midi": 77,
+      "noteIndex": 5,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 23,
+      "beat": 2,
+      "startTick": 89280,
+      "durationTicks": 480,
+      "voice": 1
+    },
+    {
+      "id": "caabbeb0-b0de-4007-a08b-3d89fd528767",
+      "pitch": "E",
+      "octave": 5,
+      "position": 9,
+      "midi": 75,
+      "noteIndex": 3,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 23,
+      "beat": 2.5,
+      "startTick": 89760,
+      "durationTicks": 480,
+      "voice": 1,
+      "userAccidental": "flat",
+      "isTiedToNext": true
+    },
+    {
+      "id": "b83005d9-91dd-4bb7-9be0-cab5b5036213",
+      "pitch": "E",
+      "octave": 5,
+      "position": 9,
+      "midi": 75,
+      "noteIndex": 3,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 23,
+      "beat": 3,
+      "startTick": 90240,
+      "durationTicks": 960,
+      "voice": 1
+    },
+    {
+      "id": "684846c7-1acf-4738-b52a-951a524d7128",
+      "pitch": "D",
+      "octave": 5,
+      "position": 8,
+      "midi": 73,
+      "noteIndex": 1,
+      "clef": "treble",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 23,
+      "beat": 4,
+      "startTick": 91200,
+      "durationTicks": 960,
+      "voice": 1
     },
     {
       "id": "a872b4c9-e02c-4e0c-93fa-b13a4e0a3bd5",
@@ -5802,280 +6731,8 @@
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
-  "tonicizationHints": [
-    {
-      "absBeat": 12,
-      "tonic": "F",
-      "isMinor": false
-    }
-  ],
-  "inferredContextSuppressions": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "e5e97d57-4aaa-4759-be35-8469cbc3367e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "0fbea0f7-aa05-48f2-9627-7507f7152ad1",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "6dddcafb-a695-4855-b2b4-2ac799e927b4",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e5fda929-e272-465e-a89a-da91cf93461f",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b99d9e63-d1e9-4782-b035-ad7848793566",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "2c40109e-9bc3-4b5a-a01a-01292f987ac0",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "982374af-fac4-461d-a45e-8807ccc6e921",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "a4077cb8-f8dc-4484-97a0-fb9fc8d874af",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "852d862c-bcc5-41d5-94c7-73fefd6bba53",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "66c2e668-74f2-4c58-8ecc-4924345fdeef",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "17ad5e41-efa0-41ad-aaf8-0ebada71dc8f",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "0247b19d-5610-4797-9eb7-17a54687a8a6",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "6ed50b73-9f4e-4c0d-9b1c-e5c2e4371096",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4f14e6ea-2486-49b2-b2a7-20f14e518b4b",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b5cf2155-7c9c-4821-940f-544c7fdc7af1",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "462ac098-37fc-4171-8294-921cbac01dc6",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "f4a6dba0-1ffe-4139-9ca8-76118e3dfe29",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "9a571a5e-32bf-476a-9d3d-d9cdfcb71094",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "f9627d0b-bac2-4684-9297-9c545320e87e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "86c71b18-6414-4a7c-ab0a-81de058a2e86",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "665aae25-f5bc-409e-a033-9128ff3ba53b",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4513644c-5a1c-4615-a91b-3560c16fcff2",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "03959487-432f-4a34-b291-9d44762166f9",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e9a3888d-7baa-4465-ab26-99a9f9325ed0",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "1fd9da2a-acff-442f-a4e9-d4b660ba71da",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "717d3031-d39b-41c2-980b-6a33aee799f2",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c7062753-619e-4b1f-b5bc-6ac5147ed755",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e40025dd-eba6-49de-9c23-593955536974",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "8a954d0c-d925-4d33-b42a-e09bfa9953e2",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "24383329-ab01-406f-9f56-1b0083280f7f",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "7b9a4e3a-c450-4f6f-adb8-a560bcb6217e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "062cb22b-2db1-4ad7-a322-a39b95da37a2",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "a64a727f-bd47-499f-a254-28cc65c8f76a",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "80882e6f-6068-4a29-82a5-8e3fc3f8ca7d",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "1e7bfc5b-75a0-4a6a-b464-3fd3a146d501",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "a862e3cb-e9cc-4924-b7ae-8c0b332cacdd",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "747731a9-d357-4ca0-9c1b-6cc2468fd263",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c2e5521a-1326-4ba2-8677-ff749361f563",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e3afa6d6-adf2-415a-8e3f-4050b3a84326",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "1bdb963c-43a4-4519-9b9f-c292b808157a",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "31a5bf6d-2b07-481b-b660-6911a04912eb",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "1a910c75-960b-4ee4-8b61-e9eac85aac9d",
-      "type": "structural"
-    },
-    {
-      "noteId": "2153e83c-697d-4bb8-97eb-927fe4c054fa",
-      "type": "structural"
-    },
-    {
-      "noteId": "abd95274-b97c-4092-888d-87e1399d242a",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c548e54c-8466-4de2-bd86-e0cec3993906",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "75f7144c-6a09-4cae-b95b-603289c82543",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "993dd828-3194-4254-9f1a-6bd3d50f1fe5",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "7e535e18-274a-45c8-8a3b-522504f2bf75",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "1bc54842-14dc-49a9-8269-da6c37026dc9",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "8701a83f-3e69-471e-b5d5-35fc7af60809",
-      "type": "structural"
-    },
-    {
-      "noteId": "60d96bd7-158a-4584-9184-b419ff702a06",
-      "type": "structural"
-    },
-    {
-      "noteId": "20b431cb-686e-4f00-8731-24908128bec2",
-      "type": "structural"
-    },
-    {
-      "noteId": "a42cec87-e6cf-4f93-9d91-d51991a8b782",
-      "type": "structural"
-    },
-    {
-      "noteId": "b58f94f3-ea5e-4b24-b2e4-5a9eec8e5943",
-      "type": "structural"
-    },
-    {
-      "noteId": "6ed8af0e-c5d5-4cd2-bf56-70341070eb04",
-      "type": "structural"
-    },
-    {
-      "noteId": "25e72776-3d3c-4def-9b3e-050af557c186",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "82a9357a-89a2-4f0f-b45c-ca8f6a241af0",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4dea9339-3bea-4542-9376-a3752622546e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "d4a516e9-31da-48b5-b1ee-36ad0a4d2284",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "010eb392-3d8b-4f52-bcd4-1141eaded6dd",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c0cc63fa-00c7-4071-a36d-f0769ddca22d",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b09ceee7-52a7-417f-a19a-9b12cfcfc9df",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "029c294b-a02a-4b5b-af14-05705fcdfd26",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "75f2eae3-5db4-4e37-b1d5-179f6327c836",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "7656ec73-c2e9-48d4-ae15-f4a4d27a7c7e",
-      "type": "ornamental"
-    }
-  ],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -6089,17 +6746,9 @@
     "voices",
     "voiceInstrument",
     "insert",
-    "chordInsert",
     "accidentals",
     "notations",
     "analysis",
     "more"
-  ],
-  "filePreferences": {
-    "analysis.enableInferredContexts": false,
-    "analysis.cadentialPatterns": true,
-    "analysis.profileBaseId": "academic",
-    "analysis.chromaticModulation": true,
-    "analysis.sequencesEnabled": true
-  }
+  ]
 }
