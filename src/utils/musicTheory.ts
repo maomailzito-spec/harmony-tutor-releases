@@ -98,7 +98,7 @@ import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
 import { getRuleText, localizeViolationTitle } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
-import { midiToOctave, staffNoteToSp, letterIndex, spToPc } from './spelledPitch';
+import { midiToOctave, staffNoteToSp, letterIndex, spToPc, spToString } from './spelledPitch';
 
 /** Ornament learning — duration bucket */
 function ornDurationCategory(dur: string): string {
@@ -2302,7 +2302,12 @@ export function getChordSymbol(
     } catch { /* ignore */ }
 
     const chordRootPc = pitchClassOf(chordRoot);
-    const rootName = getNoteName(chordRootPc);
+    // Spelling-first: use rootSpelled (carried from identifyChordCandidates) to
+    // produce the correct enharmonic name (Bb not A#, Eb not D#, etc.).
+    const _rootSpelledSym = (chordInfo as any).rootSpelled as import('../types').SpelledPitch | undefined;
+    const rootName = _rootSpelledSym
+        ? (() => { const sp = _rootSpelledSym; const acc = sp.accidental === 0 ? '' : sp.accidental === 1 ? '#' : sp.accidental === -1 ? 'b' : sp.accidental === 2 ? '##' : 'bb'; return `${sp.letter}${acc}`; })()
+        : getNoteName(chordRootPc);
     const symbol = CHORD_TYPE_TO_SYMBOL[quality] ?? '';
 
     let analysisText = `${rootName}${symbol}`;
@@ -2342,7 +2347,11 @@ export function getChordSymbol(
     const bassNote = pickPreferredBassNote(filteredChord) || filteredChord[0];
     const bassPc = bassNote ? pitchClassOf(bassNote) : chordRootPc;
     if (bassPc !== chordRootPc) {
-        const bassName = getNoteName(bassPc);
+        // Use spelling from the bass StaffNote directly when available.
+        const _bassSp = bassNote ? staffNoteToSp(bassNote as any) : null;
+        const bassName = _bassSp && (bassNote as any).pitch
+            ? (() => { const acc = _bassSp.accidental === 0 ? '' : _bassSp.accidental === 1 ? '#' : _bassSp.accidental === -1 ? 'b' : _bassSp.accidental === 2 ? '##' : 'bb'; return `${_bassSp.letter}${acc}`; })()
+            : getNoteName(bassPc);
         analysisText += `/${bassName}`;
     }
 
