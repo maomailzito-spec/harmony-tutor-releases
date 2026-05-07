@@ -98,6 +98,7 @@ import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
 import { getRuleText, localizeViolationTitle } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
+import { midiToOctave } from './spelledPitch';
 
 /** Ornament learning — duration bucket */
 function ornDurationCategory(dur: string): string {
@@ -1106,7 +1107,7 @@ export function getNotePropertiesFromMidi(
 ): Omit<StaffNote, 'id'|'duration'|'isRest'|'isTriplet'|'groupId'|'chordId'|'measureIndex'|'beat'|'xPosition'|'voice'> {
   const soundingMidi = midi - 12;
   const noteIndex = mod12(soundingMidi);
-  const octave = Math.floor(midi / 12) - 1;
+  const octave = midiToOctave(midi);
 
   const possibleNames = ALL_NOTE_SPELLINGS[noteIndex];
   let noteName = possibleNames[0];

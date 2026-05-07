@@ -342,3 +342,8 @@ export type HarmonyLabelOverride = {
   // (i.e. prevent suppression), without overriding roman/figures/symbol.
   force?: boolean;
 };
+export interface SpelledPitch {
+  letter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G';
+  accidental: -2 | -1 | 0 | 1 | 2;  // bb=-2, b=-1, nat=0, #=1, ##=2
+  octave: number;                      // 2-6 per SATB
+}

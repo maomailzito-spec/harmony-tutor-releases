@@ -635,7 +635,7 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
         const midiNote = STRING_BASE_MIDI[stringIndex] + fret;
         if (midiNote < 21 || midiNote > 108) return null;
         const noteName = noteNamesWithFlats[midiNote % 12];
-        const octave = Math.floor(midiNote / 12) - 1;
+        const octave = Math.floor(midiNote / 12) - 1; // simple lookup
         return `${noteName}${octave}`;
     }, []);
 

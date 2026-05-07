@@ -3347,7 +3347,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const midiToName = useCallback((midi: number) => {
         const noteNamesWithFlats = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
         const n = noteNamesWithFlats[midi % 12];
-        const octave = Math.floor(midi / 12) - 1;
+        const octave = Math.floor(midi / 12) - 1; // simple lookup, no accidental context needed here
         return `${n}${octave}`;
     }, []);
 

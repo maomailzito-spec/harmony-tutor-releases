@@ -49,7 +49,7 @@ export const FLAT_MINOR_ROOTS = new Set(['D', 'G', 'C', 'F', 'A#', 'D#']); // Dm
 
 // --- NOTE SPELLINGS ---
 export const ALL_NOTE_SPELLINGS: string[][] = [
-    ['C'], ['C#', 'Db'], ['D'], ['D#', 'Eb'], ['E'], ['F'], ['F#', 'Gb'], ['G'], ['G#', 'Ab'], ['A'], ['A#', 'Bb'], ['B']
+    ['C', 'B#'], ['C#', 'Db'], ['D'], ['D#', 'Eb'], ['E', 'Fb'], ['F', 'E#'], ['F#', 'Gb'], ['G'], ['G#', 'Ab'], ['A'], ['A#', 'Bb'], ['B', 'Cb']
 ];
 export const NOTE_NAMES_BY_INDEX = ALL_NOTE_SPELLINGS;
 
