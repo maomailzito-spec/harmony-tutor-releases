@@ -98,7 +98,7 @@ import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
 import { getRuleText, localizeViolationTitle } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
-import { midiToOctave, staffNoteToSp } from './spelledPitch';
+import { midiToOctave, staffNoteToSp, letterIndex, spToPc } from './spelledPitch';
 
 /** Ornament learning — duration bucket */
 function ornDurationCategory(dur: string): string {
@@ -2028,7 +2028,7 @@ export function calculateRomanFromChordInfo(
     try {
         const keyTonicIndex = noteNameToIndex[keySignatureRoot];
         if (keyTonicIndex === undefined) return null;
-        const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode };
+        const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode, tonicLetter: keySignatureRoot };
         return calculateRomanNumeral(chordInfo, keyInfo);
     } catch (_) { return null; }
 }
@@ -2447,7 +2447,7 @@ function getVerticalFiguresFromNotes(notes: StaffNote[]): string[] {
 
 function calculateRomanNumeral(
     chordInfo: { root: StaffNote; type: string; intervals?: Set<number> },
-    keyInfo: { tonicIndex: number; isMinor: boolean; minorScaleMode?: 'off' | 'natural' | 'harmonic' }
+    keyInfo: { tonicIndex: number; isMinor: boolean; minorScaleMode?: 'off' | 'natural' | 'harmonic'; tonicLetter?: string }
 ): string {
     const { root: chordRoot, type: quality } = chordInfo;
     // Prefer explicit pitch-class (`noteIndex`) when available. This is required for
@@ -2692,13 +2692,47 @@ function calculateRomanNumeral(
 
     const degreeIndex = scaleIntervals.indexOf((chordRootIndex - keyTonicIndex + 12) % 12);
     if (degreeIndex === -1) {
-        const allRoman = ['I', '♭II', 'II', '♭III', 'III', 'IV', '♯IV', 'V', '♭VI', 'VI', '♭VII', 'VII'];
         const intervalFromTonic = (chordRootIndex - keyTonicIndex + 12) % 12;
-        let roman = allRoman[intervalFromTonic];
-        // For pc=6 (♯IV/♭V), choose spelling based on chord root accidental.
-        if (intervalFromTonic === 6) {
-            const _rAcc = String((chordInfo as any)?.root?.accidental || '');
-            if (_rAcc === 'flat') roman = '♭V';
+        let roman: string;
+
+        // Spelling-first: if rootSpelled + tonicLetter are available, derive the
+        // roman numeral from diatonic letter steps rather than semitone lookup.
+        // This correctly distinguishes Ab (♭VI) from G# (#V), Bb (♭VII) from A# (#VI), etc.
+        const _rootSpelled = (chordInfo as any).rootSpelled as import('../types').SpelledPitch | undefined;
+        const _tonicLetter = keyInfo.tonicLetter ? keyInfo.tonicLetter.replace(/[^A-Ga-g]/g, '') : null;
+        if (_rootSpelled && _tonicLetter) {
+            try {
+                const DEGREE_NAMES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+                const SCALE_SEMI_MAJOR  = [0, 2, 4, 5, 7, 9, 11];
+                const SCALE_SEMI_MINOR  = [0, 2, 3, 5, 7, 8, 10];
+                const scaleSemi = isMinorMode ? SCALE_SEMI_MINOR : SCALE_SEMI_MAJOR;
+                const rootLetterIdx  = letterIndex(_rootSpelled.letter);
+                const tonicLetterIdx = letterIndex(_tonicLetter.toUpperCase() as any);
+                const diatonicDegree = ((rootLetterIdx - tonicLetterIdx) + 7) % 7;
+                const expectedSemi   = scaleSemi[diatonicDegree];
+                const actualSemi     = spToPc(_rootSpelled);
+                const alteration     = ((actualSemi - keyTonicIndex - expectedSemi) % 12 + 12) % 12;
+                // Normalise alteration: 0=natural, 1=#, 11=♭, 2=##, 10=♭♭
+                const altNorm = alteration > 6 ? alteration - 12 : alteration;
+                const altStr  = altNorm === 0 ? '' : altNorm === -1 ? '♭' : altNorm === 1 ? '♯' : altNorm === -2 ? '♭♭' : '♯♯';
+                roman = `${altStr}${DEGREE_NAMES[diatonicDegree]}`;
+            } catch {
+                // Fallback to semitone lookup on error
+                const allRoman = ['I', '♭II', 'II', '♭III', 'III', 'IV', '♯IV', 'V', '♭VI', 'VI', '♭VII', 'VII'];
+                roman = allRoman[intervalFromTonic];
+                if (intervalFromTonic === 6) {
+                    const _rAcc = String((chordInfo as any)?.root?.accidental || '');
+                    if (_rAcc === 'flat') roman = '♭V';
+                }
+            }
+        } else {
+            const allRoman = ['I', '♭II', 'II', '♭III', 'III', 'IV', '♯IV', 'V', '♭VI', 'VI', '♭VII', 'VII'];
+            roman = allRoman[intervalFromTonic];
+            // For pc=6 (♯IV/♭V), choose spelling based on chord root accidental.
+            if (intervalFromTonic === 6) {
+                const _rAcc = String((chordInfo as any)?.root?.accidental || '');
+                if (_rAcc === 'flat') roman = '♭V';
+            }
         }
         if (quality === BuiltInChords.Minor || quality.startsWith('m')) roman = roman.toLowerCase();
         if (quality === BuiltInChords.Diminished || quality.includes('°') || quality.includes('b5')) roman += '°';
