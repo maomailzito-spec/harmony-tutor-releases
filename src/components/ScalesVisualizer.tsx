@@ -9,6 +9,7 @@ import {
   FRET_COUNT,
   // FIX: Replaced NOTE_NAMES_BY_INDEX with ALL_NOTE_SPELLINGS and added other missing imports
   ALL_NOTE_SPELLINGS,
+  CROSS_LETTER_ENHARMONICS,
   ALL_SHAPES,
   CHROMATIC_SCALE,
   SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS,
@@ -228,9 +229,9 @@ const ScalesVisualizer: React.FC<ScalesVisualizerProps> = ({ audioService, isAud
                 const names = ALL_NOTE_SPELLINGS[i];
                 if (names.length > 1) {
                      if (useFlats) {
-                        noteMap.set(i, names.find(n => n.includes('b')) || names[0]);
+                        noteMap.set(i, names.find(n => n.includes('b') && !CROSS_LETTER_ENHARMONICS.has(n)) || names[0]);
                     } else {
-                        const sharpName = names.find(n => n.includes('#'));
+                        const sharpName = names.find(n => n.includes('#') && !CROSS_LETTER_ENHARMONICS.has(n));
                         const naturalName = names.find(n => !n.includes('#') && !n.includes('b'));
                         if (naturalName) {
                             noteMap.set(i, naturalName);

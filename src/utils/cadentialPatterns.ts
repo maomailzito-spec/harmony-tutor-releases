@@ -173,6 +173,17 @@ export const CADENTIAL_FORMULAS: readonly CadentialFormula[] = [
     confidence: 80,
   },
   {
+    id: 'PAC-iidim-V-I',
+    name: 'ii° → V → I (borrowed ii° in major)',
+    slots: [
+      { intervalFromTonic: 2,  quality: 'dim' },     // ii° (borrowed from parallel minor)
+      { intervalFromTonic: 7,  quality: 'major' },   // V
+      { intervalFromTonic: 0,  quality: 'major' },   // I
+    ],
+    targetMode: 'major',
+    confidence: 82,
+  },
+  {
     id: 'HC-ii-V',
     name: 'ii → V (Half Cadence in major)',
     slots: [

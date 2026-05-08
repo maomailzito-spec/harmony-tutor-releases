@@ -22,7 +22,7 @@ import { useNoteEditor } from '../hooks/useNoteEditor';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
 import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, VOICING_DISPOSITIONS, type VoicingDisposition } from '../utils/parseChordSymbol';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
-import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
+import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
 import { exportMusicXML } from '../exporters/exportMusicXML';
 import { useEditorZoom } from '../hooks/useEditorZoom';
@@ -1149,8 +1149,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const modalTonicOptions = useMemo(() => {
         return ALL_NOTE_SPELLINGS.map((names, idx) => {
             const natural = names.find(n => !n.includes('#') && !n.includes('b'));
-            const sharp = names.find(n => n.includes('#'));
-            const flat = names.find(n => n.includes('b'));
+            const sharp = names.find(n => n.includes('#') && !CROSS_LETTER_ENHARMONICS.has(n));
+            const flat = names.find(n => n.includes('b') && !CROSS_LETTER_ENHARMONICS.has(n));
 
             const label = preferFlats
                 ? (flat ?? natural ?? sharp ?? names[0])

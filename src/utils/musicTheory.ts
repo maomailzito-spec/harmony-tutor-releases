@@ -92,7 +92,7 @@ export function getActiveNotesTimeline(
     });
 }
 import { Key, ScaleType, DisplayNote, StaffNote, KeySignature, EnharmonicMode, ScaleShape, ChordType, Voicing, AccidentalType, Voice, HarmonyAnalysisResult, HarmonyLabelOverride, ErrorConnection, RuleViolation, TimeSignature, ClefType, BuiltInChords, AnalysisContext, TimeSignatureChange, OrnamentOverride, SequenceMatch } from '../types';
-import { NOTE_NAMES, ALL_NOTE_SPELLINGS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
+import { NOTE_NAMES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, FRET_COUNT, GUITAR_TUNING, SCALE_INTERVALS as BUILT_IN_SCALE_INTERVALS, CHORD_FORMULAS, DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 import { ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
@@ -1113,18 +1113,20 @@ export function getNotePropertiesFromMidi(
   let noteName = possibleNames[0];
 
   if (possibleNames.length > 1) {
+    // Editor input: never pick cross-letter enharmonics (B#/E#/Cb/Fb).
+    // Those make the staff position jump by an octave or wrong line.
     if (preferredAccidental === 'sharp') {
-      noteName = possibleNames.find(n => n.includes('#')) || possibleNames[0];
+      noteName = possibleNames.find(n => n.includes('#') && !CROSS_LETTER_ENHARMONICS.has(n)) || possibleNames[0];
     } else if (preferredAccidental === 'flat') {
-      noteName = possibleNames.find(n => n.includes('b')) || possibleNames[0];
+      noteName = possibleNames.find(n => n.includes('b') && !CROSS_LETTER_ENHARMONICS.has(n)) || possibleNames[0];
     } else {
       // Smart enharmonic: pick the spelling that matches a key-signature accidental
       // when available; otherwise prefer sharps for raised notes in flat keys
       // (e.g. F# not Gb in Dm) and flats for lowered notes in sharp keys.
       const keySharps = ['F','C','G','D','A','E','B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
       const keyFlats  = ['B','E','A','D','G','C','F'].slice(0, keySignature.type === 'flat'  ? keySignature.count : 0);
-      const flatSpelling  = possibleNames.find(n => n.includes('b'));
-      const sharpSpelling = possibleNames.find(n => n.includes('#'));
+      const flatSpelling  = possibleNames.find(n => n.includes('b') && !CROSS_LETTER_ENHARMONICS.has(n));
+      const sharpSpelling = possibleNames.find(n => n.includes('#') && !CROSS_LETTER_ENHARMONICS.has(n));
       // Does either spelling match a key-signature note? (e.g. Bb in Dm)
       const flatInKey  = flatSpelling  && keyFlats.includes(flatSpelling.charAt(0));
       const sharpInKey = sharpSpelling && keySharps.includes(sharpSpelling.charAt(0));
@@ -1135,7 +1137,7 @@ export function getNotePropertiesFromMidi(
         noteName = flatSpelling || possibleNames[0];
       else
         // Sharp key or C major → prefer non-flat spelling
-        noteName = possibleNames.find(n => !n.includes('b')) || possibleNames[0];
+        noteName = possibleNames.find(n => !n.includes('b') && !CROSS_LETTER_ENHARMONICS.has(n)) || possibleNames[0];
     }
   }
 
@@ -1770,7 +1772,10 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
     }[] = [];
 
     const standardCandidates = findStandardCandidates(uniqueNotes, uniquePitches);
-    standardCandidates.forEach(c => allCandidates.push({ ...c, score: 0 }));
+    // Carry rootSpelled (letter+accidental) so downstream symbol generation can
+    // produce the correct enharmonic name (C# vs Db, F# vs Gb) instead of
+    // re-deriving it from the pitch class via key-signature heuristics.
+    standardCandidates.forEach(c => allCandidates.push({ ...c, score: 0, rootSpelled: staffNoteToSp(c.root) } as any));
 
     if (allCandidates.length === 0) return null;
 
@@ -2132,9 +2137,11 @@ export function getChordSymbol(
         if (possibleNames.length <= 1) return possibleNames[0];
 
         // Always identify what the natural name is (no accidental) — used as safe fallback.
+        // Exclude cross-letter enharmonics (B#/E#/Cb/Fb) from naive sharp/flat preference;
+        // those are valid only when the chord-root letter explicitly demands them.
         const naturalName = possibleNames.find(n => !n.includes('b') && !n.includes('#'));
-        const flatName    = possibleNames.find(n => n.includes('b'));
-        const sharpName   = possibleNames.find(n => n.includes('#'));
+        const flatName    = possibleNames.find(n => n.includes('b') && !CROSS_LETTER_ENHARMONICS.has(n));
+        const sharpName   = possibleNames.find(n => n.includes('#') && !CROSS_LETTER_ENHARMONICS.has(n));
 
         if (prefer === 'flat')  return flatName  ?? naturalName ?? possibleNames[0];
         if (prefer === 'sharp') return sharpName ?? naturalName ?? possibleNames[0];
@@ -3488,7 +3495,18 @@ export function getRomanAnalysis(
                     mod12(leadingPc + 9),
                 ]);
                 const subset = pcs.every(pc => dim7Set.has(pc));
-                if (subset && pcs.includes(leadingPc)) {
+                // Only label as vii°7 when the BASS is actually the leading tone.
+                // The same fully-diminished 7th set is enharmonically equivalent
+                // across all 4 inversions (e.g. B°7 = D°7 = F°7 = G#°7), and the
+                // listener's reading depends on the bass: bass=2nd→ii°7, bass=4th→iv°7
+                // (rare), bass=leadingTone→vii°7. Without this guard the block hijacks
+                // every fully-diminished progression in minor and forces vii°.
+                let bassPcLT: number | null = null;
+                try {
+                    const _bass = pickPreferredBassNote(filteredChord as any) as any;
+                    if (_bass) bassPcLT = mod12(pitchClassOf(_bass));
+                } catch { /* ignore */ }
+                if (subset && pcs.includes(leadingPc) && bassPcLT === leadingPc) {
                     return { roman: 'vii°', figures: figuresL2 };
                 }
             }
@@ -3589,11 +3607,27 @@ export function getRomanAnalysis(
                     else if (mod12(lpc + 1) === pc) diatonicSpellings.add(`${letter}:sharp`);
                 }
             }
+            // For a fully-diminished 7th chord built on a diatonic degree (ii°, iii°, iv°, vi°),
+            // the m3/d5/d7 above the root are inherently part of the chord — even when they
+            // lie outside the diatonic scale of the key. They are NOT evidence of a secondary
+            // leading-tone reinterpretation. Skip them from the chromatic-spelling check.
+            const _ownRootPc = chordInfo?.root
+                ? (Number.isFinite((chordInfo.root as any).noteIndex)
+                    ? mod12((chordInfo.root as any).noteIndex)
+                    : mod12((chordInfo.root as any).midi))
+                : null;
+            const _isFullyDim = !!(chordInfo?.type && /diminished\s*7|°7|dim7/i.test(String(chordInfo.type)));
+            const _ownChordPcs = (_isFullyDim && _ownRootPc != null)
+                ? new Set<number>([_ownRootPc, mod12(_ownRootPc + 3), mod12(_ownRootPc + 6), mod12(_ownRootPc + 9)])
+                : new Set<number>();
             const hasChromaticSpelling = (filteredChord || []).some((n: any) => {
                 const letter = String(n?.pitch || '').toUpperCase();
                 if (!letter) return false;
                 const acc = String(n?.accidental || 'natural');
-                return !diatonicSpellings.has(`${letter}:${acc}`);
+                if (diatonicSpellings.has(`${letter}:${acc}`)) return false;
+                // Skip notes that are part of the chord's own tertian structure.
+                if (_ownChordPcs.has(mod12(pitchClassOf(n)))) return false;
+                return true;
             });
             if (hasChromaticSpelling && chordInfo?.root) {
                 const rootIdx = Number.isFinite((chordInfo.root as any).noteIndex)

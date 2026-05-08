@@ -1500,7 +1500,7 @@ ipcMain.handle(IPC_CHANNELS.GET_LICENSE_INFO, async () => {
     return { licensed: false };
   }
 });
-
+app.commandLine.appendSwitch('disable-background-timer-throttling')
 app.whenReady().then(async () => {
   // ── Trial / License gate (skip in dev mode) ──
   const isDev = !app.isPackaged;

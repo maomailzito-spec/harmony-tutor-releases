@@ -2527,19 +2527,24 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Guard: if a tonicization context would reassign the home key's
             // tonic triad (I/i) or dominant 7th (V7/V9), fall back to the global key.
             // These chords are too structurally important to be relabeled.
+            // EXCEPTION: manual user overrides (source !== 'inferred') take absolute
+            // precedence — the user explicitly chose this modulation, don't second-guess it.
             if (applicableContext && (contextTonic !== currentTonic || contextIsMinor !== isMinorMode)) {
-                const _gR = getRomanAnalysis(analysisNotes as any, currentTonic, isMinorMode, { ornamentOverrides: ornOverrideRecord });
-                const _gRoman = String(_gR?.roman || '');
-                if (/^(I|i)(6|64)?$/.test(_gRoman)) {
-                    // Tonic chord — never reassign context
-                    contextTonic = currentTonic;
-                    contextIsMinor = isMinorMode;
-                } else if (/^V/.test(_gRoman) && !_gRoman.includes('/')) {
-                    const _gCands = identifyChordCandidates(analysisNotes as any);
-                    const _gQ = (_gCands?.[0]?.type || '').toLowerCase();
-                    if (_gQ.includes('dominant') && /7|9|11|13/.test(_gQ)) {
+                const _isManualCtx = (applicableContext as any).source !== 'inferred';
+                if (!_isManualCtx) {
+                    const _gR = getRomanAnalysis(analysisNotes as any, currentTonic, isMinorMode, { ornamentOverrides: ornOverrideRecord });
+                    const _gRoman = String(_gR?.roman || '');
+                    if (/^(I|i)(6|64)?$/.test(_gRoman)) {
+                        // Tonic chord — never reassign context
                         contextTonic = currentTonic;
                         contextIsMinor = isMinorMode;
+                    } else if (/^V/.test(_gRoman) && !_gRoman.includes('/')) {
+                        const _gCands = identifyChordCandidates(analysisNotes as any);
+                        const _gQ = (_gCands?.[0]?.type || '').toLowerCase();
+                        if (_gQ.includes('dominant') && /7|9|11|13/.test(_gQ)) {
+                            contextTonic = currentTonic;
+                            contextIsMinor = isMinorMode;
+                        }
                     }
                 }
             }
@@ -2854,6 +2859,60 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         hasAug6Variants = true;
                     }
                 }
+
+                // Rsemi: vii°/X by upward-semitone resolution.
+                // Per gli accordi diminuiti, la firma inequivocabile di vii°/X è la
+                // risoluzione al semitono superiore: se il chord successivo nella timeline
+                // ha root = root(corrente)+1, è vii°/X (X = grado della root successiva).
+                // Vince sempre sull'interpretazione diatonica (ii° in minore ecc.) perché
+                // il comportamento di risoluzione è semanticamente più forte della
+                // diatonicità delle note.
+                try {
+                    if (roman && /°/.test(roman)) {
+                        const currCands = identifyChordCandidates(analysisNotesForNaming || []);
+                        const currRootRaw = currCands?.[0]?.root?.noteIndex;
+                        if (typeof currRootRaw === 'number' && Number.isFinite(currRootRaw)) {
+                            const currRootPc = ((currRootRaw % 12) + 12) % 12;
+                            let nextRootPc: number | null = null;
+                            for (let j = eventIndex + 1; j < timelineFiltered.length; j++) {
+                                const ne = timelineFiltered[j];
+                                if (!ne?.notes?.length) continue;
+                                const realNotes = (ne.notes as any[]).filter((n: any) => n && !n.isRest);
+                                if (realNotes.length < 2) continue;
+                                const cands = identifyChordCandidates(realNotes);
+                                const rp = cands?.[0]?.root?.noteIndex;
+                                if (typeof rp === 'number' && Number.isFinite(rp)) {
+                                    const np = ((rp % 12) + 12) % 12;
+                                    if (np === currRootPc) continue;
+                                    nextRootPc = np;
+                                    break;
+                                }
+                            }
+                            if (nextRootPc != null && ((nextRootPc - currRootPc) + 12) % 12 === 1) {
+                                const tPc = ((noteNameToPc(contextTonic) % 12) + 12) % 12;
+                                const isHomeLT = currRootPc === ((tPc + 11) % 12) && nextRootPc === tPc;
+                                if (!isHomeLT) {
+                                    const iv = ((nextRootPc - tPc) + 12) % 12;
+                                    let targetRoman: string;
+                                    if (contextIsMinor) {
+                                        const diatonicMin: Record<number, string> = { 0: 'i', 2: 'ii°', 3: 'III', 5: 'iv', 7: 'V', 8: 'VI', 10: 'VII' };
+                                        targetRoman = diatonicMin[iv]
+                                            ?? ['i', '♭ii', 'ii', '♭iii', 'iii', 'iv', '♯iv', 'v', '♭vi', 'vi', '♭vii', 'vii'][iv];
+                                    } else {
+                                        const diatonicMaj: Record<number, string> = { 0: 'I', 2: 'ii', 4: 'iii', 5: 'IV', 7: 'V', 9: 'vi' };
+                                        targetRoman = diatonicMaj[iv]
+                                            ?? ['I', '♭II', 'II', '♭III', 'III', 'IV', '♯IV', 'V', '♭VI', 'VI', '♭VII', 'VII'][iv];
+                                    }
+                                    if (targetRoman) {
+                                        const has7 = /7/.test(roman);
+                                        roman = `vii°${has7 ? '7' : ''}/${targetRoman}`;
+                                        _dt('Rsemi:viiResolution', roman);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch { /* ignore */ }
 
                 // R1: viiRescue — prefer fuller verticality when naming-filter collapses to dyad
                 try {
@@ -3392,7 +3451,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             // from tautological tonicization (e.g. F# maj = I in F#)
                             const _isDom = /^V($|[0-9°+])/.test(roman);
                             const _isBareI = /^[Ii]$/.test(s);
-                            if (!_isDom || !_isBareI) {
+                            // Don't override when current roman is already a secondary
+                            // function (vii°/X, V/X). Resolution-based readings (Rsemi)
+                            // are stronger than the tonicization-pivot display heuristic.
+                            const _isAlreadySecondary = /\//.test(roman);
+                            if (!_isAlreadySecondary && (!_isDom || !_isBareI)) {
                                 romanDisplay = s;
                                 _dt('D1:cadPivot', String(romanDisplay));
                             }
@@ -3531,6 +3594,18 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (currentTonic && currentTonic !== contextTonic) {
                         tonicCandidates.push({ tonic: currentTonic, isMinor: isMinorMode });
                     }
+                    // Relativa minore/maggiore della tonica corrente: B°7 in C maj → ii° in Am
+                    {
+                        const _curPc = noteNameToPc(currentTonic);
+                        if (Number.isFinite(_curPc)) {
+                            const relTonicPc = isMinorMode ? (_curPc + 3) % 12 : (_curPc + 9) % 12;
+                            const relIsMinor = !isMinorMode;
+                            const relTonic = pcToNoteName(relTonicPc);
+                            if (relTonic && relTonic !== contextTonic && relTonic !== currentTonic) {
+                                tonicCandidates.push({ tonic: relTonic, isMinor: relIsMinor });
+                            }
+                        }
+                    }
                     if (rootName && rootName !== contextTonic && rootName !== currentTonic) {
                         tonicCandidates.push({ tonic: rootName, isMinor: false });
                     }
@@ -3541,6 +3616,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const altR = getRomanAnalysis(altNotes, tc.tonic, tc.isMinor, { ornamentOverrides: ornOverrideRecord });
                         const altRoman = altR?.roman ?? '';
                         if (!altRoman || seenRomans.has(altRoman)) continue;
+                        // Filtra letture musicalmente impossibili: I°, i°, I+, i+ (la tonica non
+                        // può essere diminuita o aumentata per definizione). Si producono quando
+                        // si testa la root dell'accordo come tonica candidata su un accordo dim/aug.
+                        if (/^[Ii][°+]/.test(altRoman)) continue;
                         seenRomans.add(altRoman);
                         const altKeySignature = getKeySignature(tc.tonic, tc.isMinor ? 'Minor' : 'Major');
                         const altSymbol = getChordSymbol(altNotes, altKeySignature, tc.tonic) ?? '';
@@ -3558,7 +3637,6 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             }
 
             // ─────────────────────────────────────────────────────────────────
-
             labelsBySystem[systemIndex].push({
                 id: `lbl-${event.absBeat}`,
                 x,

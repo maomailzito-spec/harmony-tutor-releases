@@ -53,6 +53,14 @@ export const ALL_NOTE_SPELLINGS: string[][] = [
 ];
 export const NOTE_NAMES_BY_INDEX = ALL_NOTE_SPELLINGS;
 
+// Cross-letter enharmonic spellings: needed for chord/interval spelling but never
+// the right default when the user moves a note up/down in the editor. E.g. stepping
+// down from C# lands on pc 0 — picking 'B#' (cross-letter) would jump the staff
+// position by an octave. Use this set to exclude these names from "naive" sharp/flat
+// preference matching in input/editor code. Chord-spelling code (which knows the
+// chord root letter) can still use the full ALL_NOTE_SPELLINGS.
+export const CROSS_LETTER_ENHARMONICS: ReadonlySet<string> = new Set(['B#', 'E#', 'Cb', 'Fb']);
+
 // --- INTERVALS ---
 export const INTERVALS: Interval[] = [
   { name: 'Unison', shortName: 'P1', semitones: 0, color: 'text-gray-300', rgbColor: 'rgb(209, 213, 219)' },
