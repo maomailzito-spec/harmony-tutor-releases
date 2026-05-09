@@ -1,4 +1,396 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "midi-15-9600-64",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-18-10560-64",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-20-11520-45",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-125-32160-72",
+      "type": "neighbor"
+    },
+    {
+      "noteId": "midi-62-21840-57",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-61-21600-55",
+      "type": "passing"
+    },
+    {
+      "noteId": "midi-276-56160-65",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-275-56160-62",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-262-54240-64",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-261-54240-52",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-329-62880-74",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-328-62880-69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-327-62880-65",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-326-62880-52",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-331-63120-72",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-330-63120-53",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-337-63600-69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-336-63600-57",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-341-63840-71",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-340-63840-62",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-339-63840-59",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-338-63840-55",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-343-64080-67",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-342-64080-53",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-347-64560-74",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-346-64560-48",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-351-64800-72",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-350-64800-67",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-349-64800-64",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-348-64800-50",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-353-65040-71",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-352-65040-52",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-370-66960-50",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-581-100080-54",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-582-100320-55",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-583-100560-57",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-630-107760-59",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-632-108000-60",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-631-108000-59",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-633-108240-62",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-148-36720-66",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-149-36960-67",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-150-37200-69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-151-37440-63",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-152-37440-71",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-146-36480-54",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-204-44880-62",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-202-44640-60",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-203-44640-74",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-250-52080-54",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-251-52320-55",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-252-52560-57",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-660-112080-74",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-680-114480-76",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-673-113520-69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-676-113760-71",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-675-113760-60",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-677-114000-72",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-690-115440-67",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-689-115440-59",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-694-115680-69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-693-115680-60",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-696-115920-71",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-695-115920-62",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-691-115680-53",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-718-117840-76",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-717-117840-52",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-794-126960-76",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-793-126960-67",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-798-127200-74",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-797-127200-65",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-796-127200-53",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-795-127200-50",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-800-127440-72",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-799-127440-64",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-810-128160-69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-809-128160-60",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-808-128160-55",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-807-128160-43",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-838-130800-72",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-837-130800-64",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-842-131040-71",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-841-131040-62",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-844-131280-69",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-843-131280-60",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-840-131040-50",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-839-131040-47",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-854-132000-66",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-853-132000-57",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-852-132000-52",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-856-132240-68",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-855-132240-59",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-302-59760-59",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-304-60000-60",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-303-60000-47",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-305-60240-62",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-185-42480-77",
+      "type": "neighbor"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -20275,172 +20667,10 @@
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
+  "tonicizationHints": [],
+  "inferredContextSuppressions": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "midi-15-9600-64",
-      "type": "structural"
-    },
-    {
-      "noteId": "midi-18-10560-64",
-      "type": "structural"
-    },
-    {
-      "noteId": "midi-20-11520-45",
-      "type": "structural"
-    },
-    {
-      "noteId": "midi-125-32160-72",
-      "type": "neighbor"
-    },
-    {
-      "noteId": "midi-62-21840-57",
-      "type": "structural"
-    },
-    {
-      "noteId": "midi-61-21600-55",
-      "type": "passing"
-    },
-    {
-      "noteId": "midi-276-56160-65",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-275-56160-62",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-262-54240-64",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-261-54240-52",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-329-62880-74",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-328-62880-69",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-327-62880-65",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-326-62880-52",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-331-63120-72",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-330-63120-53",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-337-63600-69",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-336-63600-57",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-341-63840-71",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-340-63840-62",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-339-63840-59",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-338-63840-55",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-343-64080-67",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-342-64080-53",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-347-64560-74",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-346-64560-48",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-351-64800-72",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-350-64800-67",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-349-64800-64",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-348-64800-50",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-353-65040-71",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-352-65040-52",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-370-66960-50",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-581-100080-54",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-582-100320-55",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-583-100560-57",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-630-107760-59",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-632-108000-60",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-631-108000-59",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "midi-633-108240-62",
-      "type": "ornamental"
-    }
-  ],
   "bpm": 80,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -20457,6 +20687,14 @@
     "analysis",
     "key",
     "more",
-    "voiceInstrument"
-  ]
+    "voiceInstrument",
+    "chordInsert"
+  ],
+  "filePreferences": {
+    "analysis.enableInferredContexts": true,
+    "analysis.cadentialPatterns": true,
+    "analysis.profileBaseId": "academic",
+    "analysis.chromaticModulation": false,
+    "analysis.sequencesEnabled": true
+  }
 }
