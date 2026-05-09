@@ -3268,7 +3268,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         return;
       }
 
-      const pool = proximityPick(22, 10);
+      // yBandPx=5: one staff step. This way, for notes at a second (~5px apart) or
+      // a third (~10px), the geometrically closer note wins cleanly. Alt+Click still
+      // cycles through all candidates when the pick remains ambiguous.
+      const pool = proximityPick(22, 5);
 
       if (pool.length > 0) {
         // Option/Alt+Click cycles through overlapping candidates.
