@@ -78,13 +78,19 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          VITE_APP_FLAVOR: grandstaff
         run: npx electron-builder --mac --publish never
+
+      - name: List macOS build artifacts
+        run: ls -lh release/
 
       - uses: actions/upload-artifact@v4
         with:
           name: mac-release
           path: |
             release/*.dmg
+            release/*.zip
+            release/*.blockmap
             release/latest-mac.yml
 
   # ── Windows (x64) ────────────────────────────────────
@@ -109,13 +115,18 @@ jobs:
       - name: Build Windows installer
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          VITE_APP_FLAVOR: grandstaff
         run: npx electron-builder --win --publish never
+
+      - name: List Windows build artifacts
+        run: dir release
 
       - uses: actions/upload-artifact@v4
         with:
           name: win-release
           path: |
             release/*.exe
+            release/*.blockmap
             release/latest.yml
 
   # ── Create Release + Update Website ──────────────────
@@ -148,6 +159,33 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f | sort
 
+      - name: Rename artifacts (spaces to dots for GitHub)
+        run: |
+          cd artifacts/mac-release
+          for f in "Harmony Tutor"*; do
+            if [ -f "$f" ]; then
+              newname=$(echo "$f" | sed 's/ /./g')
+              mv "$f" "$newname"
+              echo "Renamed: $f -> $newname"
+            fi
+          done
+          cd ../win-release
+          for f in "Harmony Tutor"*; do
+            if [ -f "$f" ]; then
+              newname=$(echo "$f" | sed 's/ /./g')
+              mv "$f" "$newname"
+              echo "Renamed: $f -> $newname"
+            fi
+          done
+
+      - name: Fix latest-mac.yml (update URLs with dots)
+        run: |
+          if [ -f artifacts/mac-release/latest-mac.yml ]; then
+            sed -i 's/Harmony Tutor-/Harmony.Tutor-/g' artifacts/mac-release/latest-mac.yml
+            echo "Fixed latest-mac.yml:"
+            cat artifacts/mac-release/latest-mac.yml
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -155,13 +193,19 @@ jobs:
           name: Harmony Tutor ${{ steps.ver.outputs.tag }}
           body_path: RELEASE_NOTES.md
           generate_release_notes: false
+          prerelease: ${{ contains(steps.ver.outputs.version, 'test') || contains(steps.ver.outputs.version, 'beta') || contains(steps.ver.outputs.version, 'alpha') }}
           files: |
             artifacts/mac-release/*.dmg
+            artifacts/mac-release/*.zip
+            artifacts/mac-release/latest-mac.yml
             artifacts/win-release/*.exe
+            artifacts/win-release/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Update website download links
+        # Skip website update for test/beta/alpha releases
+        if: ${{ !contains(steps.ver.outputs.version, 'test') && !contains(steps.ver.outputs.version, 'beta') && !contains(steps.ver.outputs.version, 'alpha') }}
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
