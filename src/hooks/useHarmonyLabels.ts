@@ -335,6 +335,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             }
         };
         const _pivotCandidates = new Map<number, {tonic: string, isMinor: boolean}>();
+        // Beats where a Cadential 6/4 pattern places an I6/4. The label loop will
+        // relabel I6/4 → V6/4 at these beats (lettura funzionale moderna).
+        const _cadential64Beats = new Set<number>();
         // Gate: if the "Inferisci contesti" toggle is OFF, skip all inferred context generation.
         // Use the React prop (passed from GSE via usePreference) so changes re-trigger the memo.
         // undefined = key not set = default ON
@@ -456,6 +459,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
                 );
                 for (const m of _cadMatches) {
+                    // ── Cadential 6/4: collect the beat of the I6/4 chord so the
+                    // label assembly loop can relabel it as V6/4 later.
+                    if (/CAD64/i.test(m.formulaId)) {
+                        const _expectedBassPc = (m.targetTonicPc + 7) % 12;
+                        const _i64Ev = _chEvts.find(e =>
+                            e.absBeat >= m.startBeat - 1e-6
+                            && e.absBeat <= m.endBeat + 1e-6
+                            && e.rootPc === m.targetTonicPc
+                            && e.bassPc === _expectedBassPc,
+                        );
+                        if (_i64Ev) _cadential64Beats.add(_i64Ev.absBeat);
+                    }
+
                     // ── Overlap guard: skip cadences whose startBeat falls
                     // inside the span of a higher-confidence cadence.
                     // This prevents a spurious low-confidence deceptive
@@ -3635,6 +3651,62 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (altResults.length) alternatives = altResults;
                 } catch { /* ignore */ }
             }
+
+            // ─────────────────────────────────────────────────────────────────
+            // Cadential 6/4 relabeling: when an I6/4 chord stands on the dominant
+            // bass and resolves to V (same bass), it functions as a dominant with
+            // appoggiature (6→5, 4→3). Display it as V6/4 instead of I6/4 so the
+            // analysis reflects modern functional reading.
+            //
+            // Trigger conditions (any one is sufficient):
+            //  (a) The cadential pattern recognizer identified the I6/4 explicitly,
+            //      OR
+            //  (b) Direct local check: roman is I/i with figures 6/4 AND the bass
+            //      pitch class is the dominant of the current tonic AND the next
+            //      timeline event has the same bass (i.e. V→I follows).
+            try {
+                if (
+                    (roman === 'I' || roman === 'i')
+                    && !overrideByAbsBeat.has(qAbs(event.absBeat))
+                ) {
+                    const _figs = (figures || []).map(String);
+                    const _has64 = _figs.some(f => /(^|[^\d])6($|[^\d])/.test(f))
+                                && _figs.some(f => /(^|[^\d])4($|[^\d])/.test(f));
+                    if (_has64) {
+                        let _isCad64 = _cadential64Beats.has(event.absBeat);
+                        if (!_isCad64 && bassPc != null) {
+                            // Direct check: dominant of current context tonic
+                            const _tonicIdx = noteNameToPc(contextTonic);
+                            if (Number.isFinite(_tonicIdx)) {
+                                const _domPc = ((_tonicIdx + 7) % 12 + 12) % 12;
+                                if (bassPc === _domPc) {
+                                    // Look ahead: next non-empty timeline event
+                                    // must keep the same bass (the V→I motion).
+                                    for (let j = eventIndex + 1; j < timelineFiltered.length; j++) {
+                                        const ne = timelineFiltered[j] as any;
+                                        const nNotes = (ne?.notes as any[] || []).filter((n: any) => n && !n.isRest);
+                                        if (!nNotes.length) continue;
+                                        let _nextBassMidi = Infinity;
+                                        for (const nn of nNotes) {
+                                            const m = Number(nn.midi);
+                                            if (Number.isFinite(m) && m < _nextBassMidi) _nextBassMidi = m;
+                                        }
+                                        if (Number.isFinite(_nextBassMidi)) {
+                                            const _nextBassPc = ((_nextBassMidi % 12) + 12) % 12;
+                                            if (_nextBassPc === _domPc) _isCad64 = true;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (_isCad64) {
+                            roman = 'V';
+                            if (romanDisplay) romanDisplay = romanDisplay.replace(/^[iI]\b/, 'V');
+                        }
+                    }
+                }
+            } catch { /* ignore — keep I6/4 on error */ }
 
             // ─────────────────────────────────────────────────────────────────
             labelsBySystem[systemIndex].push({

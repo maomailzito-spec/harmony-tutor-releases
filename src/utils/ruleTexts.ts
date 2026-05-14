@@ -674,6 +674,15 @@ export const RULE_TEXTS: Record<string, RuleText> = {
     suggestion: 'Marker informativo — nessuna correzione necessaria. La cadenza plagale è stata rilevata correttamente.',
   },
 
+  'CAD-DEC': {
+      body: [
+        'La cadenza d\'inganno (deceptive cadence) si realizza quando la dominante (V) — invece di risolvere sulla tonica attesa — si muove verso un altro accordo che condivide due note con la tonica: il vi grado in modo maggiore, il VI in minore, oppure ♭VI in versione cromatica.',
+        'L\'effetto è di sorpresa: l\'orecchio attende la tonica e riceve un accordo "ingannevole" che prolunga la frase, spesso preparando una nuova cadenza più conclusiva. È particolarmente espressiva quando la dominante è preceduta da un I⁶⁄₄ cadenzale.',
+        'Nella condotta a quattro voci la sensibile, di norma libera di scendere, si comporta come nella cadenza perfetta: sale alla tonica per evitare le ottave parallele tra la sensibile e la fondamentale del vi.',
+      ].join('\n'),
+    suggestion: 'Marker informativo — nessuna correzione necessaria. La cadenza d\'inganno è stata rilevata correttamente.',
+  },
+
   'CAD-PIC': {
       body: [
         'Rilevata conclusione su accordo di tonica maggiore (I) in un brano in tonalità minore. Questa pratica, detta Terza Piccarda, è considerata regolare sia nella formula di cadenza perfetta (V→I) che in quella plagale (IV→I o iv→I).',

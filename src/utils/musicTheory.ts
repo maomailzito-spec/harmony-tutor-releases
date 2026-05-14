@@ -6336,6 +6336,27 @@ export function applyHarmonyRules(
                 if (!sounders.length) continue;
                 const S = sounders[0];
 
+                // ── Skip if the user MANUALLY overrode S (or the preparation) as a
+                // non-suspension ornament. detectSuspensions runs AFTER detectOrnaments
+                // and the manual override marker (`ornamentOverride`) is set early
+                // (before this detector runs). A manual 'appoggiatura' on S means the
+                // user has explicitly declared the note unprepared — we must not
+                // re-tag it as a suspension. (Auto-detected appoggiature without a
+                // manual override are still allowed to be reclassified as suspensions
+                // when preparation is found, preserving prior behavior.)
+                {
+                    const sAny = S as any;
+                    const prepAny = prep as any;
+                    if (sAny.ornamentOverride && sAny.ornamentOverride !== 'structural' && sAny.ornamentOverride !== 'suspension') {
+                        debugLog('[ANALYSIS] detectSuspensions skip-manual-override-S', { voice: v, sId: S.id, ov: sAny.ornamentOverride });
+                        continue;
+                    }
+                    if (prepAny.ornamentOverride && prepAny.ornamentOverride !== 'structural' && prepAny.ornamentOverride !== 'suspension') {
+                        debugLog('[ANALYSIS] detectSuspensions skip-manual-override-prep', { voice: v, prepId: prep.id, ov: prepAny.ornamentOverride });
+                        continue;
+                    }
+                }
+
                 // Rule 1: Preparation - there must be a note in previous chord equal in pitch to S
                 if ((prep.midi ?? 0) !== (S.midi ?? 0)) {
                     debugLog('[ANALYSIS] detectSuspensions skip-prep-mismatch', { voice: v, prepId: prep.id, prepMidi: prep.midi, sId: S.id, sMidi: S.midi, aAbs: a.absBeat, bAbs: b.absBeat });
@@ -7630,6 +7651,30 @@ export function applyHarmonyRules(
                     'CAD-PLAG',
                     'Cadenza plagale (Plagal)',
                     'Marker informativo: IV→I.',
+                    a,
+                    b
+                );
+                continue;
+            }
+
+            // Deceptive: V -> vi (major) / VI (minor) / ♭VI (chromatic) at a barline.
+            // The dominant resolves to a "deceptive" chord (sharing two notes with the
+            // expected tonic) instead of the tonic itself.
+            const isVILike = (roman: string) => {
+                const r = (roman || '').toLowerCase().trim();
+                return r === 'vi' || r === 'vi°' || r === '♭vi' || r === 'bvi' || r === '♭6' || r === 'b6';
+            };
+            if (isVLike(aRoman) && isVILike(bRoman)) {
+                markCadence(
+                    'CAD-DEC',
+                    'Cadenza d\'inganno (Deceptive)',
+                    'Cadenze\n'
+                    + '• Cadenza d\'inganno: V → vi (in maggiore) / V → VI (in minore) / V → ♭VI (cromatica). '
+                    + 'La dominante non risolve sulla tonica attesa ma su un accordo "ingannevole" — di solito vi/VI — '
+                    + 'che condivide due note con la tonica. Crea un effetto di sorpresa e prolunga la frase, '
+                    + 'spesso preparando una nuova cadenza più conclusiva.\n'
+                    + '\n'
+                    + 'Rilevamento: V(7) → vi/VI/♭VI alla stanghetta.',
                     a,
                     b
                 );

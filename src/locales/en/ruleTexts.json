@@ -459,6 +459,11 @@
     "suggestion": "Informational marker — no correction necessary. The plagal cadence has been correctly detected.",
     "title": "Plagal cadence"
   },
+  "CAD-DEC": {
+    "body": "The deceptive cadence occurs when the dominant (V) — instead of resolving to the expected tonic — moves to another chord sharing two notes with the tonic: vi in major mode, VI in minor, or ♭VI in its chromatic version.\nThe effect is one of surprise: the ear expects the tonic and instead receives a 'deceptive' chord that extends the phrase, often preparing a more conclusive cadence. It is particularly expressive when the dominant is preceded by a cadential I⁶⁄₄.\nIn four-part voice leading the leading tone, normally free to descend, behaves as in the perfect cadence: it rises to the tonic to avoid parallel octaves between the leading tone and the root of vi.",
+    "suggestion": "Informational marker — no correction necessary. The deceptive cadence has been correctly detected.",
+    "title": "Deceptive cadence"
+  },
   "CAD-PIC": {
     "body": "Detected conclusion on a major tonic chord (I) in a piece in a minor key. This practice, called the Picardy third, is considered regular in both the perfect cadence formula (V→I) and the plagal formula (IV→I or iv→I).\nThe use of the Picardy third transforms the character of the final resolution, conveying a greater sense of stability, solemnity, or \"light\" compared to the minor-key conclusion. It is particularly common in the Baroque and Classical periods (e.g., Bach).",
     "suggestion": "Informational marker — no correction necessary. The major I chord replaces the minor i in the final cadence formula.",
