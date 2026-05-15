@@ -3921,13 +3921,13 @@
     },
     {
       "id": "cd34d8e8-f502-4400-9621-0f5fe1ecccfe",
-      "pitch": "F",
+      "pitch": "D",
       "octave": 4,
-      "position": 3,
-      "midi": 65,
-      "noteIndex": 5,
+      "position": 1,
+      "midi": 61,
+      "noteIndex": 1,
       "clef": "treble",
-      "explicitAccidental": null,
+      "explicitAccidental": "flat",
       "duration": "whole",
       "durationTicks": 3840,
       "isRest": false,
@@ -3943,7 +3943,7 @@
         9
       ],
       "chordRootName": "Db",
-      "accidental": "natural"
+      "accidental": "flat"
     },
     {
       "id": "4504c014-d494-467f-a14b-88d58202260f",
@@ -5947,11 +5947,11 @@
     },
     {
       "id": "b6c6f70d-36f9-4dbc-918b-80bfee6335df",
-      "pitch": "B",
-      "octave": 3,
-      "position": -1,
-      "midi": 58,
-      "noteIndex": 10,
+      "pitch": "D",
+      "octave": 4,
+      "position": 1,
+      "midi": 62,
+      "noteIndex": 2,
       "clef": "treble",
       "explicitAccidental": null,
       "duration": "whole",
@@ -5969,7 +5969,7 @@
         2
       ],
       "chordRootName": "G",
-      "accidental": "flat"
+      "accidental": "natural"
     },
     {
       "id": "35e11baa-967a-4e33-92f6-a27aa1b9b0b2",
@@ -7594,24 +7594,45 @@
       "newIsMinor": false
     }
   ],
-  "tonicizationHints": [],
-  "inferredContextSuppressions": [],
+  "tonicizationHints": [
+    {
+      "absBeat": 136,
+      "tonic": "Bb",
+      "isMinor": false
+    },
+    {
+      "absBeat": 160,
+      "tonic": "F",
+      "isMinor": true
+    },
+    {
+      "absBeat": 164,
+      "tonic": "F",
+      "isMinor": false
+    }
+  ],
+  "inferredContextSuppressions": [
+    122,
+    127
+  ],
   "doubleBarlineMeasures": [],
   "repeatBarlines": {},
   "voltaBrackets": [],
-  "tempoCurves": [
-    {
-      "startNoteId": "6ebd173f-f2bc-4431-b429-34acf79c64f6",
-      "endNoteId": "2186b41c-c535-43e0-b454-c8dac5a78de9",
-      "fromBpm": 120,
-      "toBpm": 60
-    }
-  ],
+  "tempoCurves": [],
   "harmonyOverrides": [
     {
       "absBeat": 64,
       "roman": "I",
       "symbol": "Ab/Eb",
+      "figures": [
+        "4",
+        "6"
+      ]
+    },
+    {
+      "absBeat": 84,
+      "roman": "I+",
+      "symbol": "Dbaug/A",
       "figures": [
         "4",
         "6"
@@ -8194,18 +8215,6 @@
       "type": "ornamental"
     },
     {
-      "noteId": "b1861ad1-b575-404d-8db0-4e4e666cddbd",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4654ae3a-7b3a-4b0b-bc92-d6eb78ba59a4",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "99bc276b-0b6d-486f-9bda-e2515522bc37",
-      "type": "ornamental"
-    },
-    {
       "noteId": "580dd0ea-6d97-4ffb-a60e-f89dda39e120",
       "type": "ornamental"
     },
@@ -8252,6 +8261,26 @@
     {
       "noteId": "fa24bc24-5055-40f6-9df0-82414ab3933c",
       "type": "neighbor"
+    },
+    {
+      "noteId": "14dd4792-381f-4056-8990-c32f5606dfb7",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "feeb2b6e-6be4-49e9-8559-108a9237341b",
+      "type": "structural"
+    },
+    {
+      "noteId": "b1861ad1-b575-404d-8db0-4e4e666cddbd",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4654ae3a-7b3a-4b0b-bc92-d6eb78ba59a4",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "99bc276b-0b6d-486f-9bda-e2515522bc37",
+      "type": "ornamental"
     }
   ],
   "bpm": 120,
