@@ -568,6 +568,71 @@ const dim7SpellingRootBonus = (root: StaffNote, chordNotes: StaffNote[]): number
     }
 };
 
+/**
+ * Spelling-aware root preference for AUGMENTED triads (symmetric — three
+ * possible enharmonic roots).  The musically correct root is the one whose
+ * spelling produces clean tertian letter-steps: a major 3rd (M3) up and an
+ * augmented 5th (A5) up.
+ *
+ * Example: notes [Db, F, A] ➜ Db is the correct root because Db→F is M3
+ * (D→E→F = 3 letter-steps, 4 semitones) and Db→A is A5 (D→E→F→G→A = 5
+ * letter-steps, 8 semitones).  The other two rotations would require
+ * cross-letter spellings (A→C# / A→Db, A→E# / A→F → A6 dim) that don't
+ * match what the user wrote.
+ *
+ * Returns a positive score when the root matches the spelled tertian
+ * structure, a negative one when it conflicts, or null when there's no
+ * spelling info to rely on.
+ */
+const augTriadSpellingRootBonus = (root: StaffNote, chordNotes: StaffNote[]): number | null => {
+    try {
+        const notes = (chordNotes || []).filter(n => n && !n.isRest);
+        if (notes.length < 3) return null;
+
+        // Expected augmented-triad tertian structure above the root: M3, A5.
+        const expected = [
+            { diatonicNumber: 3, semitones: 4, quality: 'M' },
+            { diatonicNumber: 5, semitones: 8, quality: 'A' },
+        ];
+
+        const found = new Set<number>();
+        let mismatches = 0;
+        for (const other of notes) {
+            if (!other || other === root) continue;
+            const it = spelledSimpleIntervalFromRoot(root as any, other as any);
+            if (!it) continue;
+
+            const idx = expected.findIndex(e => e.diatonicNumber === it.diatonicNumber && e.semitones === it.semitones && e.quality === it.quality);
+            if (idx >= 0) {
+                found.add(idx);
+            } else {
+                // If the letter-distance collides with expected but quality
+                // doesn't (e.g. A→Db = diminished 4th instead of M3 from a
+                // would-be A-aug interpretation of [Db,F,A]), penalise it.
+                const collides = expected.some(e => e.diatonicNumber === it.diatonicNumber);
+                if (collides) mismatches += 1;
+            }
+        }
+
+        if (found.size === 0 && mismatches === 0) return null;
+
+        // Only emit a non-zero bonus when this root is unambiguously the
+        // canonical one (both M3 and A5 found in the spelled intervals).
+        // Any ambiguous case returns 0 so the candidate scoring is unchanged
+        // — avoids subtle regressions on non-pure-augmented sonorities that
+        // happen to include an Augmented variant in their candidate list.
+        if (found.size < 2) return 0;
+
+        let score = 0;
+        score += found.size * 7;
+        score += 20;                        // both M3 and A5 found ⇒ correct root
+        score -= mismatches * 5;            // wrong-quality interval ⇒ wrong root
+        return score;
+    } catch {
+        return null;
+    }
+};
+
 const spelledMidiFromPitchAccidentalOctave = (n: any): number | null => {
     try {
         if (!n || n.isRest) return null;
@@ -1850,6 +1915,17 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
                 if (candidate.root.noteIndex === minPc) score += 3;
             }
         }
+
+        // NOTE: augmented-triad spelling bonus is intentionally NOT applied
+        // here.  `identifyChord` is the entry point used by the harmonic
+        // analysis pipeline (Roman numerals, voice-leading rules, cadential
+        // matchers).  Functional analysis often relies on the bass note as
+        // the root of an augmented triad (e.g. V+ in minor mode is often
+        // notated with the diatonic 5th raised, producing a "Bb spelling"
+        // even when D is the functional root).  Re-routing the augmented
+        // root via spelling-only logic would corrupt the Roman analysis.
+        // The spelling bonus IS applied in `identifyChordCandidates` (used
+        // for chord-symbol display only).
         candidate.score = score;
     }
 
@@ -2017,6 +2093,11 @@ export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: 
                 const minPc = Math.min(...uniquePitches);
                 if (candidate.root.noteIndex === minPc) score += 3;
             }
+        }
+        // Symmetric augmented-triad spelling preference (mirror of °7).
+        if (candidate.type === BuiltInChords.Augmented) {
+            const bonus = augTriadSpellingRootBonus(candidate.root, uniqueNotes);
+            if (bonus != null) score += bonus;
         }
         candidate.score = score;
     }
