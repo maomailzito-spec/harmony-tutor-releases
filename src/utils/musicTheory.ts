@@ -2282,6 +2282,27 @@ export function getChordSymbol(
     const fullChord = (chord || []).filter(n => n && !n.isRest);
     const chordInfo = identifyChord(filteredChord) || identifyChord(fullChord);
 
+    // For symmetric augmented triads, identifyChord (used by the harmonic
+    // analysis pipeline) intentionally avoids the spelling-aware root bonus
+    // to preserve functional readings (e.g. V+ in minor).  But chord-symbol
+    // display SHOULD reflect the spelled tertian root: [Db,F,A] ⇒ "Dbaug",
+    // not "Aaug" or "Faug".  Re-route through identifyChordCandidates which
+    // applies augTriadSpellingRootBonus.
+    let chordInfoForSymbol = chordInfo;
+    try {
+        if (chordInfo && (chordInfo as any).type === BuiltInChords.Augmented) {
+            const cands = identifyChordCandidates(filteredChord) || identifyChordCandidates(fullChord);
+            const topAug = (cands || []).find((c: any) => c?.type === BuiltInChords.Augmented);
+            if (topAug) {
+                chordInfoForSymbol = {
+                    root: topAug.root as StaffNote,
+                    type: topAug.type,
+                    intervals: topAug.intervals as Set<number>,
+                };
+            }
+        }
+    } catch { /* ignore */ }
+
     // Dominant-7 rescue: sometimes voice-leading / suspension markers can cause the generic
     // chord-ID to mis-root a clear dominant sonority (e.g. Bb7/Ab becoming Fm/Ab).
     // If the pitch-class set contains the dominant core (M3 + m7), prefer that as the symbol root.
@@ -2366,7 +2387,7 @@ export function getChordSymbol(
         return analysisText;
     }
 
-    const { root: chordRoot, type: quality } = chordInfo;
+    const { root: chordRoot, type: quality } = chordInfoForSymbol;
     if (!chordRoot || !quality) return null;
 
     // Tonal ambiguity heuristic (common-practice): ii6 (minor triad in 1st inversion)
@@ -2397,7 +2418,7 @@ export function getChordSymbol(
     const chordRootPc = pitchClassOf(chordRoot);
     // Spelling-first: use rootSpelled (carried from identifyChordCandidates) to
     // produce the correct enharmonic name (Bb not A#, Eb not D#, etc.).
-    const _rootSpelledSym = (chordInfo as any).rootSpelled as import('../types').SpelledPitch | undefined;
+    const _rootSpelledSym = (chordInfoForSymbol as any).rootSpelled as import('../types').SpelledPitch | undefined;
     const rootName = _rootSpelledSym
         ? (() => { const sp = _rootSpelledSym; const acc = sp.accidental === 0 ? '' : sp.accidental === 1 ? '#' : sp.accidental === -1 ? 'b' : sp.accidental === 2 ? '##' : 'bb'; return `${sp.letter}${acc}`; })()
         : getNoteName(chordRootPc);
