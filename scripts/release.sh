@@ -108,14 +108,22 @@ echo -e "  ${GREEN}✓${NC} Build ok"
 # ── Bump versione ──
 echo -e "\n${GREEN}━━━ Bump versione ━━━${NC}"
 CURRENT_VERSION=$(node -p "require('./package.json').version")
-echo "  $CURRENT_VERSION → $VERSION"
-npm version "$VERSION" --no-git-tag-version >/dev/null
-echo -e "  ${GREEN}✓${NC} package.json + package-lock.json aggiornati"
+if [[ "$CURRENT_VERSION" == "$VERSION" ]]; then
+    echo -e "  ${YELLOW}⚠${NC}  package.json è già a $VERSION — skip bump"
+else
+    echo "  $CURRENT_VERSION → $VERSION"
+    npm version "$VERSION" --no-git-tag-version >/dev/null
+    echo -e "  ${GREEN}✓${NC} package.json + package-lock.json aggiornati"
+fi
 
 # ── Commit + tag + push ──
 echo -e "\n${GREEN}━━━ Commit, tag, push ━━━${NC}"
-git add package.json package-lock.json
-git commit -m "release: ${TAG}"
+if [[ -n "$(git status --porcelain package.json package-lock.json)" ]]; then
+    git add package.json package-lock.json
+    git commit -m "release: ${TAG}"
+else
+    echo "  (nessun bump da committare — package.json già a $VERSION)"
+fi
 git tag -a "$TAG" -m "Release ${TAG}"
 
 echo "  Push commit + tag su origin/$CURRENT_BRANCH..."
