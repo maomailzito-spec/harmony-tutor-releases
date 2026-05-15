@@ -405,8 +405,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             && _prev.bassPc === _newEv.bassPc
                             && _newEv.notePcs.length < _prev.notePcs.length
                             && _newEv.notePcs.every(pc => _prev.notePcs.includes(pc));
-                        if (_isSameChord || _isSubsetOfPrev) {
-                            // skip — same chord, or a "thinner" projection of the previous chord
+                        // Same-family collapse: consecutive events with same root and same
+                        // quality FAMILY (Dominant 7 / Dominant 9 / Dominant 11 / Dominant 13
+                        // are all "dominant" — they're micro-variations of the same harmony
+                        // caused by melodic decoration). Without this, a multi-event
+                        // dominant section breaks the cadential pattern matcher's sliding
+                        // window: e.g. A°→D7♭9→D11→D7→Gm has 5 events and no 3-element window
+                        // contains both A° and Gm with the dominant in between.
+                        const _isSameFamily = _prev
+                            && _prev.rootPc === _newEv.rootPc
+                            && qualityFamily(_prev.quality) === qualityFamily(_newEv.quality)
+                            && qualityFamily(_newEv.quality) !== 'other';
+                        if (_isSameChord || _isSubsetOfPrev || _isSameFamily) {
+                            // skip — same chord, subset, or same harmonic family
                         } else {
                             _chEvts.push(_newEv);
                         }
