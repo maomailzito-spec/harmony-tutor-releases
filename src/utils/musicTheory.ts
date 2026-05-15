@@ -4016,7 +4016,28 @@ export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignat
             const octave = Number(n.octave);
             const noteIndex = Number(n.noteIndex);
             if (!Number.isFinite(octave) || !Number.isFinite(noteIndex)) return n;
-            const computed = (octave + 1) * 12 + mod12(noteIndex);
+            // Use pitch+accidental formula to handle octave-boundary notes (Cb, B#).
+            // Plain (octave+1)*12+noteIndex gives the wrong octave for e.g. Cb5
+            // (noteIndex=11, octave=5 → 83) when the correct MIDI is 71 (=B4/Cb5).
+            const _bpCNB: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+            const letter = String(n.pitch || '').charAt(0).toUpperCase();
+            const basePitch = _bpCNB[letter];
+            let computed: number;
+            if (basePitch != null) {
+                let delta = 0;
+                const a = String(n.accidental || n.explicitAccidental || '');
+                if (a === 'sharp' || a === '#') delta = 1;
+                else if (a === 'flat' || a === 'b') delta = -1;
+                else if (a === 'double-sharp' || a === '##') delta = 2;
+                else if (a === 'double-flat' || a === 'bb') delta = -2;
+                const rawPc = basePitch + delta;
+                let octAdj = octave;
+                if (rawPc < 0) octAdj -= 1;
+                else if (rawPc >= 12) octAdj += 1;
+                computed = (octAdj + 1) * 12 + ((rawPc % 12 + 12) % 12);
+            } else {
+                computed = (octave + 1) * 12 + mod12(noteIndex);
+            }
             const cur = Number(n.midi);
             if (!Number.isFinite(cur) || cur !== computed) {
                 return { ...n, midi: computed };
@@ -12399,6 +12420,15 @@ export function applyHarmonyRules(
                 continue;
             }
             const simpleSemi = absSemi % 12;
+            // Enharmonic-spelling guard: if the actual semitone distance is ≤ 2
+            // (i.e. a step or unison in any spelling), R-06 must not fire even
+            // if the diatonic letter-distance computes to a larger value.
+            // Examples: Bb→Cb, Cb→Bb, B#→C, Fb→E — these are unisons/halfsteps
+            // misclassified as augmented unisons or diminished thirds depending
+            // on octave assignment. They are not melodic "leaps".
+            if (absSemi <= 2) {
+                continue;
+            }
             const quality = getIntervalQuality(diatonicSize, simpleSemi);
             if (quality === 'Augmented' || quality === 'Diminished') {
 
