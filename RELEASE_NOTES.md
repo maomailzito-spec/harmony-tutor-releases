@@ -1,3 +1,17 @@
+## Novità in v1.0.10
+
+### 🐛 Fix analisi armonica
+- **Cadenza ii°→V→i rilevata anche con dominanti decorati** (es. A°→D7♭9→D11→D7→Gm in Life on Mars): eventi consecutivi sulla stessa root e stessa famiglia di quality vengono ora collassati per il pattern matcher
+- **R-06 (salto melodico aug/dim) non scatta più su unisoni enarmonici**: intervalli come Bb→Cb, Cb→Bb, B#→C, Fb→E (≤ 2 semitoni reali) non sono più segnalati come errori di risoluzione
+- **MIDI corretto per note octave-boundary** (Cb5, B#3 ecc.): la formula di calcolo ora considera lettera + alterazione, eliminando errori di ottava su spelling cross-letter
+
+### 🐛 Fix sigle accordali
+- **Triadi aumentate ora siglate per spelling delle terze**, non per nota al basso. Es. [Db, F, A] con A al basso → `Caug/A` (non `Aaug`); [G#, C, E] → `Caug/G#` (non `G#aug`). L'analisi armonica funzionale (Roman) resta invariata e continua a riconoscere correttamente `V+` in minore
+- **Override ornamentali manuali (⌥O) ora rispettati anche dalla sigla**: marcando una nota con ⌥O viene esclusa anche dal computo del simbolo accordale (prima solo l'analisi Roman lo faceva). Es. melodia Eb sopra Gb-Bb-D → con ⌥O sull'Eb la sigla diventa `GbAug` (non più `EbmMaj7/Gb`)
+
+### 🐛 Fix UI
+- **Menu Aiuto → Scorciatoie** ora apre una finestra autonoma chiudibile (era una sheet macOS bloccata che superava l'altezza dello schermo, nascondendo il bottone OK)
+
 ## Novità in v1.0.9
 
 ### 🎵 Analisi armonica
