@@ -18,6 +18,7 @@ extraMetadata:
 
 mac:
   category: public.app-category.music
+  notarize: false   # disabled here — handled by build/notarize.js (afterSign hook)
   target:
     - target: dmg
       arch:
