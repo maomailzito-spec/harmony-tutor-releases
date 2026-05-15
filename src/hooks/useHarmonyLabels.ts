@@ -469,6 +469,24 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     (analysisContexts || []).filter((c: any) => c.source !== 'inferred')
                         .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
                 );
+                // Helper: when injecting a "return-to-home" inferred context,
+                // find the most recent MANUAL override before the return beat
+                // and return to that key instead of the file's initial tonic.
+                // Without this, a manual override (e.g. "Bb major from m26")
+                // gets silently superseded at the first cadential pattern that
+                // injects a return-to-home reverting to currentTonic.
+                const _resolveHomeAt = (returnBeat: number): { tonic: string; isMinor: boolean } => {
+                    const manuals = (analysisContexts || [])
+                        .filter((c: any) => c.source !== 'inferred')
+                        .map((c: AnalysisContext) => ({ ab: analysisContextAbsBeat(c), c }))
+                        .filter(x => x.ab <= returnBeat - 1e-6)
+                        .sort((a, b) => b.ab - a.ab);
+                    if (manuals.length > 0) {
+                        const top = manuals[0].c as any;
+                        return { tonic: top.newTonic, isMinor: !!top.newIsMinor };
+                    }
+                    return { tonic: currentTonic, isMinor: isMinorMode };
+                };
                 for (const m of _cadMatches) {
                     // ── Cadential 6/4: collect the beat of the I6/4 chord so the
                     // label assembly loop can relabel it as V6/4 later.
@@ -534,10 +552,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                         && other.endBeat >= decReturnBeat - 1e-6,
                                 );
                                 if (!decCoveredByNext && !_manualBeats.has(decReturnBeat)) {
+                                    const _h = _resolveHomeAt(nextAfterDec.absBeat);
                                     pushInferred({
                                         absBeat: nextAfterDec.absBeat,
-                                        newTonic: currentTonic,
-                                        newIsMinor: isMinorMode,
+                                        newTonic: _h.tonic,
+                                        newIsMinor: _h.isMinor,
                                         score: 0,
                                         source: 'inferred',
                                     });
@@ -581,10 +600,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             // modulated key. If it's still diatonic, the modulation persists.
                             const nextIsDiatonicHome = nextEvAfterRes.notePcs?.every(pc => _homeScalePcs0.has(pc));
                             if (!coveredByNext && !nextIsDiatonic && nextIsDiatonicHome && !_manualBeats.has(returnBeat)) {
+                                const _h = _resolveHomeAt(returnBeat);
                                 pushInferred({
                                     absBeat: returnBeat,
-                                    newTonic: currentTonic,
-                                    newIsMinor: isMinorMode,
+                                    newTonic: _h.tonic,
+                                    newIsMinor: _h.isMinor,
                                     score: 0,
                                     source: 'inferred',
                                 });
@@ -660,10 +680,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // persists — do not snap back to the home key.
                         const nextIsDiatonicHome = _nextAfterRes.notePcs?.every(pc => _homeScalePcs.has(pc));
                         if (!nextIsDiatonicD && nextIsDiatonicHome && !_manualBeats.has(_nextAfterRes.absBeat)) {
+                            const _h = _resolveHomeAt(_nextAfterRes.absBeat);
                             pushInferred({
                                 absBeat: _nextAfterRes.absBeat,
-                                newTonic: currentTonic,
-                                newIsMinor: isMinorMode,
+                                newTonic: _h.tonic,
+                                newIsMinor: _h.isMinor,
                                 score: 0,
                                 source: 'inferred',
                             });
@@ -711,10 +732,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const returnAlready = _effectiveCtxs.some(c =>
                         c.measureIndex != null && Math.abs(c.measureIndex - returnMeasure) <= 1);
                     if (!returnAlready) {
+                        const _h = _resolveHomeAt(returnMeasure * beatsPerMeasure);
                         pushInferred({
                             measureIndex: returnMeasure,
-                            newTonic: currentTonic,
-                            newIsMinor: isMinorMode,
+                            newTonic: _h.tonic,
+                            newIsMinor: _h.isMinor,
                             source: 'inferred',
                         });
                     }
@@ -780,10 +802,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Inject return-to-home at the next event after lastHintBeat
                     const returnEv = _hintEvts.find(ev => ev.absBeat > lastHintBeat + 1e-6);
                     if (returnEv && !_hintManualBeats.has(returnEv.absBeat)) {
+                        const _h = _resolveHomeAt(returnEv.absBeat);
                         pushInferred({
                             absBeat: returnEv.absBeat,
-                            newTonic: currentTonic,
-                            newIsMinor: isMinorMode,
+                            newTonic: _h.tonic,
+                            newIsMinor: _h.isMinor,
                             score: 0,
                             source: 'inferred',
                         });
