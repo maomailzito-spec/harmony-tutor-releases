@@ -451,72 +451,125 @@ function createMenu() {
   };
   const ms = _menuStrings[lng] || _menuStrings['it'];
   const mt = (/** @type {string} */ key) => ms[key] || _menuStrings['it'][key] || key;
+  let shortcutsWindow = null;
   const showShortcutsDialog = () => {
     try {
+      // If already open, focus it instead of opening a duplicate
+      if (shortcutsWindow && !shortcutsWindow.isDestroyed()) {
+        shortcutsWindow.focus();
+        return;
+      }
       if (!mainWindow) return;
-      const detail = [
-        `MENU (${app.name})`,
-        '• Cmd/Ctrl+N  Nuovo progetto',
-        '• Cmd/Ctrl+O  Apri…',
-        '• Cmd/Ctrl+I  Importa MIDI…',
-        '• Cmd/Ctrl+Shift+E  Esporta MIDI…',
-        '• Cmd/Ctrl+Shift+P  Esporta PDF…',
-        '• Cmd/Ctrl+Shift+G  Esporta PNG…',
-        '• Cmd/Ctrl+P  Stampa',
-        '• Cmd/Ctrl+S  Salva',
-        '• Cmd/Ctrl+Shift+S  Salva con nome…',
-        '• Cmd/Ctrl+W  Chiudi progetto',
-        '• Cmd/Ctrl+Z  Annulla   |   Shift+Cmd/Ctrl+Z  Ripeti',
-        '• Cmd/Ctrl+X  Taglia   |   Cmd/Ctrl+C  Copia   |   Cmd/Ctrl+V  Incolla   |   Cmd/Ctrl+A  Seleziona tutto',
-        '• Alt/Option+S  Seleziona solo voce corrente (rettangolo)',
-        '• Ctrl/Control+C  Colori voci (BTAS)',
-        '• Cmd/Ctrl+]  Aumenta dimensione titolo   |   Cmd/Ctrl+[  Diminuisci dimensione titolo',
-        '',
-        'GRAND STAFF (Editor)',
-        '• Alt/Option+L  Cicla layout righi (grandstaff ↔ SATB antiche ↔ treble-only)',
-        '• Alt/Option+T  Mostra/nascondi toolbar',
-        '• Space  Play/stop',
-        '• ArrowLeft/ArrowRight  Sposta playhead (Shift = passo più fine)',
-        '• Enter  Torna a inizio (senza suonare)',
-        '• K  Toggle metronomo',
-        '• V  Cicla voce selezionata (B→T→A→S)',
-        '• T  Toggle legatura (note selezionate)',
-        '• 1..7  Durate (semibreve…semibiscroma)',
-        '• R  Toggle inserimento nota/pausa',
-        '• .  Toggle punto (accetta anche ">" su alcune tastiere)',
-        '• b / n / #  Accidentali (bemolle / bequadro / diesis)',
-        '• ArrowUp/ArrowDown  Trasponi (1 semitono)   |   Shift+ArrowUp/Down  (1 ottava)',
-        '• Backspace/Delete  Cancella selezione',
-        '• Cmd/Ctrl+C  Copia note selezionate   |   Cmd/Ctrl+V  Incolla',
-        '',
-        'ALTRE VISTE',
-        '• Scale: Cmd/Ctrl+Z undo; Backspace/Delete rimuovi box; Arrow + numeri per muovere/selezionare shape',
-        '• Accordi: ArrowLeft/Right voicing prev/next; ArrowUp/Down cambia set corde (se presente)',
-        '• Intervalli: Cmd/Ctrl+Z undo',
-        '',
-        'MARCATURA ORNAMENTALE (nota selezionata)',
-        '⌥P — Nota di passaggio',
-        '⌥A — Appoggiatura',
-        '⌥V — Nota di volta',
-        '⌥N — Anticipazione',
-        '⌥S — Nota di sfuggita',
-        '⌥R — Ritardo (sospensione)',
-        '',
-        'FUNZIONI SENZA SCORCIATOIA DEDICATA (principali)',
-        '• Vista: Scale / Accordi / Intervalli / Editor / Grand Staff (dal menu)',
-        '• Riordina toolbar (drag)…',
-        '• Numeri misure (toggle dal menu)',
-        '• Debug harmony labels (pcs) (toggle dal menu)',
-      ].join('\n');
-
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
+      const sections = [
+        { title: `MENU (${app.name})`, items: [
+          'Cmd/Ctrl+N — Nuovo progetto',
+          'Cmd/Ctrl+O — Apri…',
+          'Cmd/Ctrl+I — Importa MIDI…',
+          'Cmd/Ctrl+Shift+E — Esporta MIDI…',
+          'Cmd/Ctrl+Shift+P — Esporta PDF…',
+          'Cmd/Ctrl+Shift+G — Esporta PNG…',
+          'Cmd/Ctrl+P — Stampa',
+          'Cmd/Ctrl+S — Salva',
+          'Cmd/Ctrl+Shift+S — Salva con nome…',
+          'Cmd/Ctrl+W — Chiudi progetto',
+          'Cmd/Ctrl+Z — Annulla   |   Shift+Cmd/Ctrl+Z — Ripeti',
+          'Cmd/Ctrl+X — Taglia   |   Cmd/Ctrl+C — Copia   |   Cmd/Ctrl+V — Incolla   |   Cmd/Ctrl+A — Seleziona tutto',
+          'Alt/Option+S — Seleziona solo voce corrente (rettangolo)',
+          'Ctrl/Control+C — Colori voci (BTAS)',
+          'Cmd/Ctrl+] — Aumenta dimensione titolo   |   Cmd/Ctrl+[ — Diminuisci dimensione titolo',
+        ]},
+        { title: 'GRAND STAFF (Editor)', items: [
+          'Alt/Option+L — Cicla layout righi (grandstaff ↔ SATB antiche ↔ treble-only)',
+          'Alt/Option+T — Mostra/nascondi toolbar',
+          'Space — Play/stop',
+          'ArrowLeft/ArrowRight — Sposta playhead (Shift = passo più fine)',
+          'Enter — Torna a inizio (senza suonare)',
+          'K — Toggle metronomo',
+          'V — Cicla voce selezionata (B→T→A→S)',
+          'T — Toggle legatura (note selezionate)',
+          '1..7 — Durate (semibreve…semibiscroma)',
+          'R — Toggle inserimento nota/pausa',
+          '. — Toggle punto (accetta anche ">" su alcune tastiere)',
+          'b / n / # — Accidentali (bemolle / bequadro / diesis)',
+          'ArrowUp/ArrowDown — Trasponi (1 semitono)   |   Shift+ArrowUp/Down — (1 ottava)',
+          'Backspace/Delete — Cancella selezione',
+          'Cmd/Ctrl+C — Copia note selezionate   |   Cmd/Ctrl+V — Incolla',
+        ]},
+        { title: 'ALTRE VISTE', items: [
+          'Scale: Cmd/Ctrl+Z undo; Backspace/Delete rimuovi box; Arrow + numeri per muovere/selezionare shape',
+          'Accordi: ArrowLeft/Right voicing prev/next; ArrowUp/Down cambia set corde (se presente)',
+          'Intervalli: Cmd/Ctrl+Z undo',
+        ]},
+        { title: 'MARCATURA ORNAMENTALE (nota selezionata)', items: [
+          '⌥P — Nota di passaggio',
+          '⌥A — Appoggiatura',
+          '⌥V — Nota di volta',
+          '⌥N — Anticipazione',
+          '⌥S — Nota di sfuggita',
+          '⌥R — Ritardo (sospensione)',
+        ]},
+        { title: 'FUNZIONI SENZA SCORCIATOIA DEDICATA (principali)', items: [
+          'Vista: Scale / Accordi / Intervalli / Editor / Grand Staff (dal menu)',
+          'Riordina toolbar (drag)…',
+          'Numeri misure (toggle dal menu)',
+          'Debug harmony labels (pcs) (toggle dal menu)',
+        ]},
+      ];
+      const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const sectionsHtml = sections.map(sec =>
+        `<section><h2>${escapeHtml(sec.title)}</h2><ul>${sec.items.map(it => `<li>${escapeHtml(it)}</li>`).join('')}</ul></section>`
+      ).join('');
+      const html = `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Scorciatoie da tastiera</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.5; }
+  body { display: flex; flex-direction: column; background: #fafafa; color: #222; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e1e; color: #ddd; } header { background: #2a2a2a !important; border-bottom-color: #444 !important; } h2 { color: #6cb6ff !important; border-bottom-color: #444 !important; } footer { background: #2a2a2a !important; border-top-color: #444 !important; } button { background: #3a3a3a !important; color: #ddd !important; border-color: #555 !important; } button:hover { background: #4a4a4a !important; } }
+  header { padding: 12px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  main { flex: 1; overflow-y: auto; padding: 8px 20px 16px; }
+  section { margin-top: 16px; }
+  h2 { font-size: 12px; font-weight: 600; color: #0066cc; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1px solid #e0e0e0; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  footer { padding: 10px 20px; background: #fff; border-top: 1px solid #e0e0e0; text-align: right; flex-shrink: 0; }
+  button { padding: 6px 18px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; }
+  button:hover { background: #e8e8e8; }
+</style>
+</head>
+<body>
+<header><h1>⌨️ Scorciatoie da tastiera e funzioni rapide</h1></header>
+<main>${sectionsHtml}</main>
+<footer><button id="closeBtn" autofocus>Chiudi (Esc)</button></footer>
+<script>
+  const { ipcRenderer } = require('electron');
+  document.getElementById('closeBtn').addEventListener('click', () => window.close());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
+</script>
+</body>
+</html>`;
+      shortcutsWindow = new BrowserWindow({
+        parent: mainWindow,
+        modal: false,
+        width: 720,
+        height: 640,
+        minWidth: 480,
+        minHeight: 360,
         title: 'Scorciatoie',
-        message: 'Scorciatoie da tastiera e funzioni rapide',
-        detail,
-        buttons: ['OK'],
-        defaultId: 0,
+        autoHideMenuBar: true,
+        webPreferences: {
+          nodeIntegration: true,
+          contextIsolation: false,
+        },
       });
+      shortcutsWindow.removeMenu();
+      shortcutsWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+      shortcutsWindow.on('closed', () => { shortcutsWindow = null; });
     } catch (err) {
       console.warn('[MAIN] Failed to show shortcuts dialog:', err);
     }
