@@ -1,3 +1,16 @@
+## Novità in v1.0.9
+
+### 🎵 Analisi armonica
+- Cadenza d'inganno (V → vi/VI/♭VI) ora rilevata e mostrata nel pannello con tratteggio verde
+- Cadential 6/4: I⁶⁄₄ → V → I rietichettato come V⁶⁄₄ → V → I (lettura funzionale moderna)
+
+### 🎼 Editor
+- Rallentando/accelerando: nuova curva di tempo applicabile a un range di note (effetto playback)
+- Corona (fermata) sulle note con espansione automatica nel playback
+- Analysis Lock: blocca l'analisi armonica con password (uso didattico)
+
+### 🐛 Fix
+- TempoCurve ora persistito correttamente nel file .htp
 ## Novità in v1.0.6
 
 ### 🎵 Analisi armonica — fix maggiori
@@ -33,4 +46,3 @@
 - Sigle inserite da tastiera (C#, F# ecc.) ora mostrate sempre con # e non convertite in enarmonico bemolle
 - Accordi half-diminished non più riscritti come vii°/X quando le note sono diatoniche
 - Fix octave per note come Cb/E# nella voicizzazione corale e nel parser simboli
-Test release  1.0.9-test prova aggiornamento
