@@ -208,13 +208,44 @@ jobs:
             fi
           done
 
-      - name: Fix latest-mac.yml (update URLs with dots)
+      - name: Fix latest-mac.yml (sync URLs with renamed files)
         run: |
-          if [ -f artifacts/mac-release/latest-mac.yml ]; then
-            sed -i 's/Harmony Tutor-/Harmony.Tutor-/g' artifacts/mac-release/latest-mac.yml
-            echo "Fixed latest-mac.yml:"
-            cat artifacts/mac-release/latest-mac.yml
+          cd artifacts/mac-release
+          if [ ! -f latest-mac.yml ]; then
+            echo "::error::latest-mac.yml not found"
+            exit 1
           fi
+          ZIP_FILE=$(ls *arm64-mac.zip 2>/dev/null | head -1)
+          DMG_FILE=$(ls *mac.dmg 2>/dev/null | head -1)
+          if [ -z "$ZIP_FILE" ] || [ -z "$DMG_FILE" ]; then
+            echo "::error::Missing renamed mac files (zip=$ZIP_FILE dmg=$DMG_FILE)"
+            exit 1
+          fi
+          echo "Renamed files on disk:  zip=$ZIP_FILE  dmg=$DMG_FILE"
+          # Rewrite all url:/path: lines that reference the zip or dmg, regardless of
+          # the original separator (space, dot, dash). Matches "Harmony[ .-]Tutor-...".
+          # Use # as sed delimiter so we can use | for alternation in the pattern.
+          sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-arm64-mac\.zip#\1: ${ZIP_FILE}#g" latest-mac.yml
+          sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-mac\.dmg#\1: ${DMG_FILE}#g" latest-mac.yml
+          echo "── Patched latest-mac.yml ──"
+          cat latest-mac.yml
+
+      - name: Fix latest.yml (sync URL with renamed Windows installer)
+        run: |
+          cd artifacts/win-release
+          if [ ! -f latest.yml ]; then
+            echo "::error::latest.yml not found"
+            exit 1
+          fi
+          EXE_FILE=$(ls *win.exe 2>/dev/null | head -1)
+          if [ -z "$EXE_FILE" ]; then
+            echo "::error::Missing renamed Windows installer"
+            exit 1
+          fi
+          echo "Renamed file on disk:  exe=$EXE_FILE"
+          sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-win\.exe#\1: ${EXE_FILE}#g" latest.yml
+          echo "── Patched latest.yml ──"
+          cat latest.yml
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
