@@ -2963,7 +2963,24 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const contextKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
                 // Symbols should reflect the actual verticality (including altered tones),
                 // while roman/figures follow the structural snapshot.
-                const s = getChordSymbol((fullNotes || []) as any, contextKeySignature, contextTonic);
+                // EXCEPT for explicit user-set ornament overrides (⌥O): when the
+                // user marks a note as ornamental, that intent must apply to the
+                // chord symbol too, otherwise a marked-out melodic passing tone
+                // (e.g. an Eb over a Gb-aug verticality) corrupts the sigla
+                // (it becomes EbmMaj7/Gb instead of GbAug).
+                const fullNotesForSymbol = (fullNotes || []).filter((n: any) => {
+                    if (!n) return true;
+                    const ovId = n.id ? ornOverrideMap.get(n.id) : undefined;
+                    if (ovId && ovId !== 'structural') return false;
+                    const midi = Number(n.midi);
+                    if (Number.isFinite(midi)) {
+                        const ovKey = ornOverrideMap.get(`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`);
+                        if (ovKey && ovKey !== 'structural') return false;
+                    }
+                    if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                    return true;
+                });
+                const s = getChordSymbol(fullNotesForSymbol as any, contextKeySignature, contextTonic);
                 if (s) symbol = s;
 
                 // R3: I7 — minor tonic maj7 fallback

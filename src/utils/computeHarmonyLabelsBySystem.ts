@@ -1742,7 +1742,25 @@ export function computeHarmonyLabelsBySystem(opts: {
                 // ignore
             }
 
-            const s = getChordSymbol((notesForSymbol || []) as any, contextKeySignature, contextTonic);
+            // Filter out only MANUAL ornament overrides (⌥O) from the verticality
+            // used for the chord symbol.  Auto-detected isPassing/isNeighbor flags
+            // are intentionally preserved here (the symbol can show altered surface
+            // tones); only the user's explicit ornamental marking removes a note.
+            const notesForSymbolFiltered = (notesForSymbol || []).filter((n: any) => {
+                if (!n) return true;
+                if (opts.ornamentOverrideMap) {
+                    const ovId = n.id ? opts.ornamentOverrideMap.get(n.id) : undefined;
+                    if (ovId && ovId !== 'structural') return false;
+                    const midi = Number(n.midi);
+                    if (Number.isFinite(midi)) {
+                        const ovKey = opts.ornamentOverrideMap.get(`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`);
+                        if (ovKey && ovKey !== 'structural') return false;
+                    }
+                }
+                if (n.ornamentOverride && n.ornamentOverride !== 'structural') return false;
+                return true;
+            });
+            const s = getChordSymbol((notesForSymbolFiltered || []) as any, contextKeySignature, contextTonic);
             if (s) symbol = s;
 
             try {
