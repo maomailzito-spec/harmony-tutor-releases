@@ -5,6 +5,66 @@
 
 ---
 
+## ⚡ Procedura automatica (consigliata)
+
+Per la **maggior parte** delle release usa lo script automatico:
+
+```bash
+./scripts/release.sh 1.0.7
+```
+
+Lo script esegue in ordine:
+1. Pre-flight checks (branch, working tree pulito, tag non esistente, allineato con remote)
+2. Conferma esplicita che `RELEASE_NOTES.md` sia aggiornato
+3. Build locale (`npm run build`) come pre-flight
+4. Bump versione in `package.json` + `package-lock.json`
+5. Commit `release: vX.Y.Z` + tag annotato + push (commit, poi tag)
+
+A push del tag, **GitHub Actions** prende in carico:
+- Build macOS (DMG + ZIP, firmato + notarizzato)
+- Build Windows (EXE)
+- Crea Release con DMG, ZIP, EXE, `latest-mac.yml`, `latest.yml`
+- Aggiorna i link sul sito `harmonytutor.it` (solo per release stabili — non test/beta/alpha)
+
+**Monitor**: https://github.com/maomailzito-spec/harmony-tutor-releases/actions
+
+### Pre-flight checklist manuale
+
+Prima di lanciare `release.sh`, verifica a mano:
+- [ ] `RELEASE_NOTES.md` aggiornato con le novità della versione
+- [ ] `npm run regress` passa (se hai toccato l'analisi armonica)
+- [ ] App testata localmente (smoke test: apri un .htp, salva, riapri)
+- [ ] Branch corretto (di norma `main` o `test-release-workflow` per test)
+- [ ] Tutto committato e pushato
+
+### Versioning
+
+- **Stabile**: `1.0.7` → pubblicata come Release normale, aggiorna sito
+- **Test**: `1.0.7-test` → pubblicata come Pre-release, sito NON aggiornato
+- **Beta/Alpha**: `1.0.7-beta.1`, `1.0.7-alpha.2` → pre-release
+
+### Se la GitHub Action fallisce
+
+Cause comuni (in ordine di frequenza):
+1. **`npm ci` fail per lock drift** — il workflow ora ha un fallback automatico (`rm package-lock.json && npm install`). Se ricapita, rigenera localmente: `rm package-lock.json && npm install && git add package-lock.json && git commit -m 'chore: refresh lockfile' && git push`.
+2. **Notarizzazione Apple lenta/timeout** — riavvia il workflow (Re-run failed jobs).
+3. **Artifact mancante** — il job ora fallisce esplicitamente con elenco file mancanti. Indica un build fallito a monte (controlla i log del job mac/win).
+4. **Release già esistente** — se il tag è stato pushato ma il workflow ha fallito a metà: cancella la Release dalla UI GitHub, poi `Re-run all jobs`.
+
+### Rollback (se devi rifare la release)
+
+```bash
+TAG=v1.0.7
+# Locale
+git tag -d "$TAG"
+# Remoto
+git push origin ":refs/tags/$TAG"
+# Cancella anche la Release su GitHub dalla UI
+# Poi rilancia: ./scripts/release.sh 1.0.7
+```
+
+---
+
 ## Prerequisiti
 
 | Requisito | Dettaglio |

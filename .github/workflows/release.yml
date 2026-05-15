@@ -52,7 +52,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies (with lock-drift fallback)
+        run: |
+          npm ci || {
+            echo "::warning::npm ci failed (lock drift). Falling back to npm install."
+            rm -f package-lock.json
+            npm install
+          }
 
       - name: Build frontend
         run: npm run build      # audit + tsc + vite
@@ -107,7 +113,14 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies (with lock-drift fallback)
+        shell: bash
+        run: |
+          npm ci || {
+            echo "::warning::npm ci failed (lock drift). Falling back to npm install."
+            rm -f package-lock.json
+            npm install
+          }
 
       - name: Build frontend
         run: npm run build
@@ -159,6 +172,22 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f | sort
 
+      - name: Verify required artifacts present
+        run: |
+          missing=0
+          check() {
+            if ! ls $1 >/dev/null 2>&1; then
+              echo "::error::Missing artifact: $1"
+              missing=1
+            fi
+          }
+          check 'artifacts/mac-release/*.dmg'
+          check 'artifacts/mac-release/*.zip'
+          check 'artifacts/mac-release/latest-mac.yml'
+          check 'artifacts/win-release/*.exe'
+          check 'artifacts/win-release/latest.yml'
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+
       - name: Rename artifacts (spaces to dots for GitHub)
         run: |
           cd artifacts/mac-release
@@ -193,6 +222,7 @@ jobs:
           name: Harmony Tutor ${{ steps.ver.outputs.tag }}
           body_path: RELEASE_NOTES.md
           generate_release_notes: false
+          fail_on_unmatched_files: true
           prerelease: ${{ contains(steps.ver.outputs.version, 'test') || contains(steps.ver.outputs.version, 'beta') || contains(steps.ver.outputs.version, 'alpha') }}
           files: |
             artifacts/mac-release/*.dmg
