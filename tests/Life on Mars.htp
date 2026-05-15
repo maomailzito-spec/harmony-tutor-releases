@@ -7599,7 +7599,14 @@
   "doubleBarlineMeasures": [],
   "repeatBarlines": {},
   "voltaBrackets": [],
-  "tempoCurves": [],
+  "tempoCurves": [
+    {
+      "startNoteId": "6ebd173f-f2bc-4431-b429-34acf79c64f6",
+      "endNoteId": "2186b41c-c535-43e0-b454-c8dac5a78de9",
+      "fromBpm": 120,
+      "toBpm": 60
+    }
+  ],
   "harmonyOverrides": [
     {
       "absBeat": 64,
