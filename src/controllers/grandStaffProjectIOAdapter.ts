@@ -45,12 +45,24 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	doubleBarlineMeasures: any[];
         repeatBarlines: Record<number, string>;
         voltaBrackets: any[];
+        tempoCurves?: any[];
         toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
 	isMetronomeOn: boolean;
 	metronomeUnit: any;
         computedLabelsRef?: { current: any[] | null };
+
+        analysisLocked?: boolean;
+        teacherPasswordHash?: string;
+        analysisLockOptions?: {
+                hideViolations: boolean;
+                hideRomanLabels: boolean;
+                hideChordSymbols: boolean;
+                hideOrnaments: boolean;
+                hideAlternatives: boolean;
+                disableExport: boolean;
+        };
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -73,6 +85,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 				inferredContextSuppressions: args.inferredContextSuppressions || [],		doubleBarlineMeasures: args.doubleBarlineMeasures,
 		repeatBarlines: args.repeatBarlines,
 		voltaBrackets: args.voltaBrackets,
+		tempoCurves: args.tempoCurves || [],
 		harmonyOverrides: args.latestHarmonyOverrides.current,
 		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
 		bpm: args.bpm,
@@ -80,6 +93,9 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		isMetronomeOn: args.isMetronomeOn,
 		metronomeUnit: args.metronomeUnit,
 		toolbarGroupOrder: args.toolbarGroupOrder,
+		analysisLocked: args.analysisLocked,
+		teacherPasswordHash: args.teacherPasswordHash,
+		analysisLockOptions: args.analysisLockOptions,
 		// Preferenze di analisi per-file
 		filePreferences: Object.fromEntries(
 			FILE_ANALYSIS_PREFS.map(id => [id, readPreference(id as any)])
@@ -122,6 +138,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setDoubleBarlineMeasures: (next: any) => void;
 	setRepeatBarlines: (next: any) => void;
 	setVoltaBrackets: (next: any) => void;
+	setTempoCurves?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
 	setAutoLeadingToneInMinor: (next: any) => void;
@@ -165,6 +182,11 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setTitleFontSize: (next: any) => void;
 	setTitleFontFamily: (next: any) => void;
 
+	setAnalysisLocked: (next: boolean) => void;
+	setTeacherPasswordHash: (next: string | undefined) => void;
+	setAnalysisLockOptions: (next: any) => void;
+	setSessionUnlocked?: (next: boolean) => void;
+
 	timeSignature: TimeSignature;
 };
 
@@ -183,6 +205,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setDoubleBarlineMeasures([]);
 		args.setRepeatBarlines({});
 		args.setVoltaBrackets([]);
+		args.setTempoCurves?.([]);
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
 		args.setAutoLeadingToneInMinor(true);
@@ -199,6 +222,10 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setPasteCaretImmediate(null);
 		args.setActiveAccidental(null);
 		args.setSelectedVoice(1);
+		args.setAnalysisLocked(false);
+		args.setTeacherPasswordHash(undefined);
+		args.setAnalysisLockOptions({ hideViolations: true, hideRomanLabels: false, hideChordSymbols: false, hideOrnaments: false, hideAlternatives: false, disableExport: true });
+		args.setSessionUnlocked?.(false);
 		args.projectExtrasRef.current = {};
 		return;
 	}
@@ -219,6 +246,10 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setAnalysisContexts([]);
 	args.setHarmonyOverrides([]);
 	args.setOrnamentOverrides([]);
+	args.setAnalysisLocked(false);
+	args.setTeacherPasswordHash(undefined);
+	args.setAnalysisLockOptions({ hideViolations: true, hideRomanLabels: false, hideChordSymbols: false, hideOrnaments: false, hideAlternatives: false, disableExport: true });
+	args.setSessionUnlocked?.(false);
 	args.setBpm(120);
 	args.setIsBpmActive(false);
 	args.setIsMetronomeOn(false);
@@ -390,11 +421,25 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (Array.isArray(loadedProject.voltaBrackets)) {
 				args.setVoltaBrackets(loadedProject.voltaBrackets);
 			}
+			if (Array.isArray(loadedProject.tempoCurves)) {
+				args.setTempoCurves?.(loadedProject.tempoCurves);
+			} else {
+				args.setTempoCurves?.([]);
+			}
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
 			}
 			if (Array.isArray(loadedProject.ornamentOverrides)) {
 				args.setOrnamentOverrides(loadedProject.ornamentOverrides);
+			}
+			if (typeof loadedProject.analysisLocked === 'boolean') {
+				args.setAnalysisLocked(loadedProject.analysisLocked);
+			}
+			if (typeof loadedProject.teacherPasswordHash === 'string') {
+				args.setTeacherPasswordHash(loadedProject.teacherPasswordHash);
+			}
+			if (loadedProject.analysisLockOptions && typeof loadedProject.analysisLockOptions === 'object') {
+				args.setAnalysisLockOptions(loadedProject.analysisLockOptions);
 			}
 			if (typeof loadedProject.bpm === 'number' && Number.isFinite(loadedProject.bpm) && loadedProject.bpm > 0) {
 				args.setBpm(loadedProject.bpm);
@@ -465,6 +510,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setDoubleBarlineMeasures([]);
 		args.apply.setRepeatBarlines({});
 		args.apply.setVoltaBrackets([]);
+		args.apply.setTempoCurves?.([]);
 		args.apply.setMinMeasureCount(4);
 		args.apply.setMeasuresPerLine(4);
 		args.apply.setIsMinorMode(false);

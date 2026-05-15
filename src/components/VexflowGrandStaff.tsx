@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature } from 'vexflow';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation } from 'vexflow';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 
@@ -2235,6 +2235,27 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               } catch {
                 // ignore
               }
+
+              // ── Fermata (corona) ──
+              // Render an articulation glyph above (voices 1/3) or below (voices 2/4)
+              // the note. For merged chords, render once on the chord's primary note
+              // if any of the merged notes carry the fermata flag.
+              try {
+                let hasFermata = !!(n as any).isFermata;
+                const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
+                if (!hasFermata && Array.isArray(mergedIds)) {
+                  for (const mid of mergedIds) {
+                    const sn = staffNoteById.get(String(mid));
+                    if (sn && (sn as any).isFermata) { hasFermata = true; break; }
+                  }
+                }
+                if (hasFermata && !n.isRest && n.id !== '__ghost__') {
+                  const stemUp = (n.voice ?? 1) % 2 === 1; // voices 1/3 → up → fermata above
+                  const code = stemUp ? 'a@a' : 'a@u';
+                  const art = new Articulation(code).setPosition(stemUp ? 3 : 4);
+                  (vfNote as any).addModifier(art, 0);
+                }
+              } catch { /* ignore fermata render errors */ }
 
               tc.preFormat();
               tc.setX(x);

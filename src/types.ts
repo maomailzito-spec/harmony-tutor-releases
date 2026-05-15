@@ -189,6 +189,10 @@ export type StaffNote = {
   isSuspension?: any;
   ornamentMark?: string;
   ornamentOverride?: OrnamentType;
+  /** Fermata (corona) — playback-only effect: doubles the note's sounding duration
+   *  and shifts all subsequent events by the same amount. Rendered as a fermata
+   *  glyph above (voices 1/3) or below (voices 2/4) the note. */
+  isFermata?: boolean;
   /** Pitch classes of all chord tones at insertion time — used by re-voice to avoid reconstructing from potentially incomplete voicings. */
   chordPcs?: number[];
   /** Root note name of the chord at insertion time (e.g. 'C' for C7/E) — used by re-voice for correct enharmonic spelling. */
@@ -197,6 +201,19 @@ export type StaffNote = {
 
 /** Manual ornament classification for a note. */
 export type OrnamentType = 'passing' | 'neighbor' | 'appoggiatura' | 'anticipation' | 'escape' | 'cambiata' | 'suspension' | 'structural' | 'ornamental';
+
+/**
+ * Tempo curve (rallentando / accelerando) — playback-only effect.
+ * Applies a linear BPM transition from `fromBpm` to `toBpm` across all events
+ * sounding in the inclusive window [startNoteId .. endNoteId] (sorted by absBeat).
+ * Identified by the IDs of the first and last notes in the user's selection.
+ */
+export type TempoCurve = {
+  startNoteId: string;
+  endNoteId: string;
+  fromBpm: number;
+  toBpm: number;
+};
 
 /** User override that forces a specific ornament classification on a note. */
 export interface OrnamentOverride {

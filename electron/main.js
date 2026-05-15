@@ -905,6 +905,11 @@ function createMenu() {
           accelerator: 'CmdOrCtrl+Shift+G',
           click: () => { sendAction(MENU_ACTIONS.GENERATE_FROM_ROMAN); }
         },
+        { type: 'separator' },
+        {
+          label: mt('toggleAnalysisLock', 'Blocca/Sblocca analisi\u2026'),
+          click: () => { sendAction(MENU_ACTIONS.TOGGLE_ANALYSIS_LOCK); }
+        },
       ]
     }
     ,

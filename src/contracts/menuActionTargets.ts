@@ -40,6 +40,9 @@ export const MENU_ACTION_TARGET: Record<MenuAction, MenuActionTarget> = {
   // Chorale generation panel
   [MENU_ACTIONS.GENERATE_FROM_ROMAN]: 'grandStaff',
 
+  // Analysis lock (teacher mode)
+  [MENU_ACTIONS.TOGGLE_ANALYSIS_LOCK]: 'grandStaff',
+
   // App-level routing (view switching)
   [MENU_ACTIONS.SET_APP_MODE]: 'app',
 };

@@ -46,6 +46,7 @@ const MENU_ACTIONS = Object.freeze({
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice',
   SET_APP_MODE: 'set-app-mode',
   GENERATE_FROM_ROMAN: 'generate-from-roman',
+  TOGGLE_ANALYSIS_LOCK: 'toggle-analysis-lock',
 });
 
 const MENU_ACTION_SET = new Set(Object.values(MENU_ACTIONS));

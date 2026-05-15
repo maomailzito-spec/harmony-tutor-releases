@@ -11,7 +11,7 @@ declare global {
     }
 }
 import React, { useState, useCallback, useMemo, useEffect, useRef, startTransition, useDeferredValue } from 'react';
-import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint } from '../types';
+import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve } from '../types';
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
@@ -36,7 +36,8 @@ import { electronBridge } from '../services/electronBridge';
 import { usePreference } from '../preferences/usePreference';
 import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
-import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData } from '../storage/projectSchema';
+import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData, DEFAULT_ANALYSIS_LOCK_OPTIONS } from '../storage/projectSchema';
+import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
 import { handleGrandStaffProjectIOMenuAction, buildGrandStaffProjectSnapshot } from '../controllers/grandStaffProjectIOAdapter';
@@ -46,6 +47,8 @@ import { expandMeasureOrder } from '../utils/expandMeasureOrder';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
+import AnalysisLockModal from './AnalysisLockModal';
+import TempoCurveDialog from './TempoCurveDialog';
 import RomanProgressionEditor from './RomanProgressionEditor';
 import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
@@ -285,10 +288,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [measuresPerLineDraft, setMeasuresPerLineDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
     const [ornamentOverrides, setOrnamentOverrides] = useState<OrnamentOverride[]>([]);
+    const [analysisLocked, setAnalysisLocked] = useState<boolean>(false);
+    const [teacherPasswordHash, setTeacherPasswordHash] = useState<string | undefined>(undefined);
+    const [analysisLockOptions, setAnalysisLockOptions] = useState<AnalysisLockOptions>(DEFAULT_ANALYSIS_LOCK_OPTIONS);
+    const [isAnalysisLockModalOpen, setIsAnalysisLockModalOpen] = useState<boolean>(false);
+    // Session-only unlock: teacher entered password to view analysis without modifying the file.
+    // Reset on every file open / new — never persisted.
+    const [sessionUnlocked, setSessionUnlocked] = useState<boolean>(false);
+
+    // Effective lock = file is locked AND not unlocked for this session.
+    const lockActive = analysisLocked && !sessionUnlocked;
+    const lockHides = {
+        violations:    lockActive && (analysisLockOptions?.hideViolations   ?? true),
+        romanLabels:   lockActive && (analysisLockOptions?.hideRomanLabels  ?? false),
+        chordSymbols:  lockActive && (analysisLockOptions?.hideChordSymbols ?? false),
+        ornaments:     lockActive && (analysisLockOptions?.hideOrnaments    ?? false),
+        alternatives:  lockActive && (analysisLockOptions?.hideAlternatives ?? false),
+        export:        lockActive && (analysisLockOptions?.disableExport    ?? true),
+    };
+    // Ref mirror so callbacks (handleMenuActionLegacy, keydown handlers) always
+    // see the latest lock state without re-creating on every dep change.
+    const lockHidesRef = useRef(lockHides);
+    lockHidesRef.current = lockHides;
     const [repeatBarlines, setRepeatBarlines] = useState<Record<number, 'repeat-begin' | 'repeat-end' | 'repeat-both'>>({});
     const repeatBarlinesRef = useRef(repeatBarlines);
     repeatBarlinesRef.current = repeatBarlines;
     const [voltaBrackets, setVoltaBrackets] = useState<VoltaBracket[]>([]);
+    // Rallentando / accelerando — playback-only tempo curves on selected note ranges.
+    const [tempoCurves, setTempoCurves] = useState<TempoCurve[]>([]);
+    const tempoCurvesRef = useRef(tempoCurves);
+    tempoCurvesRef.current = tempoCurves;
+    // Pending tempo-curve dialog state. When set, an inline modal appears with
+    // two BPM inputs; user confirms to create the curve, or cancels to dismiss.
+    const [tempoCurvePending, setTempoCurvePending] = useState<{
+        startNoteId: string;
+        endNoteId: string;
+        defaultFromBpm: number;
+        defaultToBpm: number;
+    } | null>(null);
     const [tool, setTool] = useState<Tool>('insert');
     const [selectedInsertion, setSelectedInsertion] = useState<InsertionElement>({ type: 'note', duration: 'quarter', isDotted: false });
     const selectedInsertionRef = useRef(selectedInsertion);
@@ -307,6 +344,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const justInsertedNoteRef = useRef<string | null>(null);
     /** Maps expanded playback beats → visual (original) beats for repeat expansion. null = identity. */
     const playbackBeatToVisualBeatRef = useRef<((expandedBeat: number) => number) | null>(null);
+    // Inverse of beatToTime() — maps elapsed seconds (since start) to abs beat,
+    // accounting for any active tempo curves. Set inside startPlayback; null means
+    // linear mapping at the current global BPM (default).
+    const playbackTimeToBeatRef = useRef<((elapsedSec: number) => number) | null>(null);
     const [isTriplet, setIsTriplet] = useState(false);
     const [isDuplet, setIsDuplet] = useState(false);
     const [tupletNoteCount, setTupletNoteCount] = useState(0);
@@ -1675,6 +1716,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Support both 'edit-command' payloads and role-based 'undo'/'redo' actions
             const command = (action === 'undo' || action === 'redo') ? action : payload.command;
 
+            // Block copy/cut/paste when export is disabled by teacher lock.
+            // The primary gate is the keydown interceptor (which alerts); this
+            // is the defensive backstop when the action arrives via the
+            // Electron Edit menu accelerator. Silent here to avoid a 2nd alert.
+            if (lockHidesRef.current.export && (command === 'copy' || command === 'cut' || command === 'paste')) {
+                return;
+            }
+
             const isTypingTarget = (() => {
                 try {
                     const el = (document.activeElement as HTMLElement | null);
@@ -2014,6 +2063,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
+        // Block all export/print actions when teacher lock has disableExport
+        if (lockHidesRef.current.export && (
+            action === MENU_ACTIONS.EXPORT_MIDI ||
+            action === MENU_ACTIONS.EXPORT_MUSICXML ||
+            action === MENU_ACTIONS.EXPORT_PDF ||
+            action === MENU_ACTIONS.EXPORT_PNG ||
+            action === 'print'
+        )) {
+            try { window.alert('Export disabilitato dal docente per questo file.'); } catch { /* ignore */ }
+            return;
+        }
+
         if (action === MENU_ACTIONS.EXPORT_MIDI) {
             try {
                 await exportMidi();
@@ -2076,11 +2137,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     doubleBarlineMeasures,
                     repeatBarlines,
                     voltaBrackets,
+                    tempoCurves,
                     toolbarGroupOrder,
                     bpm,
                     isBpmActive,
                     isMetronomeOn,
                     metronomeUnit,
+                    analysisLocked,
+                    teacherPasswordHash,
+                    analysisLockOptions,
                 },
                 apply: {
                     projectExtrasRef,
@@ -2100,6 +2165,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setDoubleBarlineMeasures,
                     setRepeatBarlines,
                     setVoltaBrackets,
+                    setTempoCurves,
                     setKeyChangeMode,
                     setModalTonicOverride,
                     setAutoLeadingToneInMinor,
@@ -2137,6 +2203,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setIsToolbarCustomizeOpen,
                     setMidiOutputs,
                     setSelectedMidiOutput,
+                    setAnalysisLocked,
+                    setTeacherPasswordHash,
+                    setAnalysisLockOptions,
+                    setSessionUnlocked,
                     timeSignature,
                 },
             });
@@ -2242,6 +2312,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setMarqueeSelectOnlyCurrentVoice(!!payload?.enabled);
         } else if (action === 'generate-from-roman') {
             setIsRomanEditorOpen(prev => !prev);
+        } else if (action === 'toggle-analysis-lock') {
+            setIsAnalysisLockModalOpen(true);
         }
     }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi]);
 
@@ -2262,6 +2334,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
         repeatBarlines, voltaBrackets, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        analysisLocked, teacherPasswordHash, analysisLockOptions,
     };
 
     // Auto-save: periodically trigger 'save' if a file path is already set.
@@ -2356,6 +2429,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setDoubleBarlineMeasures(p.doubleBarlineMeasures || []);
                 setRepeatBarlines(p.repeatBarlines || {});
                 setVoltaBrackets(p.voltaBrackets || []);
+                setTempoCurves((p as any).tempoCurves || []);
                 setAutoLeadingToneInMinor(p.autoLeadingToneInMinor ?? true);
                 setKeyChangeMode(p.keyChangeMode || 'none');
                 setModalTonicOverride(p.modalTonicOverride || '');
@@ -2367,6 +2441,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
                 if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
                 if (p.toolbarGroupOrder) setToolbarGroupOrder(p.toolbarGroupOrder);
+                if (typeof p.analysisLocked === 'boolean') setAnalysisLocked(p.analysisLocked);
+                if (typeof p.teacherPasswordHash === 'string') setTeacherPasswordHash(p.teacherPasswordHash);
+                if (p.analysisLockOptions && typeof p.analysisLockOptions === 'object') setAnalysisLockOptions(p.analysisLockOptions);
+                setSessionUnlocked(false);
                 setCurrentProjectFilePath(draft.filePath || null);
                 localStorage.removeItem(DRAFT_KEY);
             } catch {
@@ -2375,6 +2453,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }, 500);
         return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Top-priority lock interceptor: when the teacher lock disables export,
+    // hard-block Cmd/Ctrl + C/X/V at the keydown capture phase. This runs
+    // BEFORE the main editor keydown handler and BEFORE the OS Edit menu
+    // accelerator routes back as 'edit-command' (which is unreliable as the
+    // sole gate). Listener is always mounted; the lock flag is read from the
+    // ref so the listener never needs to re-bind.
+    useEffect(() => {
+        const onLockKeyDown = (e: KeyboardEvent) => {
+            if (!lockHidesRef.current.export) return;
+            const isMod = e.metaKey || e.ctrlKey;
+            if (!isMod) return;
+            const key = (e.key || '').toLowerCase();
+            if (key !== 'c' && key !== 'x' && key !== 'v') return;
+            e.preventDefault();
+            e.stopPropagation();
+            (e as any).stopImmediatePropagation?.();
+            try { window.alert('Copia/Taglia/Incolla disabilitato dal docente per questo file.'); } catch { /* ignore */ }
+        };
+        window.addEventListener('keydown', onLockKeyDown, { capture: true });
+        return () => window.removeEventListener('keydown', onLockKeyDown, { capture: true } as any);
     }, []);
 
     // Listener Electron: registrazione unica e cleanup
@@ -2392,6 +2492,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Listen for native copy events (keyboard) to set the paste marker as well
     useEffect(() => {
         const onNativeCopy = (ev: ClipboardEvent) => {
+            if (lockHidesRef.current.export) return;
             try {
                 handleCopy();
                 let marker = null as any;
@@ -3487,7 +3588,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            const curAbsBeat = b0 + ((ctx.currentTime - t0) / beatDurationSec);
+            const elapsedSec = ctx.currentTime - t0;
+            // If a tempo curve is active, use its inverse mapping; else linear.
+            const curAbsBeat = playbackTimeToBeatRef.current
+                ? playbackTimeToBeatRef.current(elapsedSec)
+                : b0 + (elapsedSec / beatDurationSec);
             const visualBeat = playbackBeatToVisualBeatRef.current
                 ? playbackBeatToVisualBeatRef.current(curAbsBeat)
                 : curAbsBeat;
@@ -3754,6 +3859,99 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             playbackBeatToVisualBeatRef.current = null;
         }
 
+        // ── Fermata (corona) expansion ──
+        // For every onset that contains at least one note flagged isFermata,
+        // double the sounding duration of all items starting at that onset
+        // (the fermata "stops" the entire vertical), and shift every later item
+        // forward by the same amount. The visual notation is unchanged — this
+        // is a playback-only transform.
+        // We also record each fermata's pause window so the visual playhead
+        // can FREEZE on the fermata note during the held portion (otherwise
+        // the cursor sprints ahead while audio is still sustaining).
+        type FermataSeg = {
+            cStart: number;       // expanded beat where the fermata onset starts
+            cNaturalEnd: number;  // expanded beat where the note's natural duration ends
+            cTotalEnd: number;    // expanded beat where the held pause ends
+            visualFreeze: number; // pre-fermata beat the playhead should freeze at
+        };
+        const fermataSegs: FermataSeg[] = [];
+        try {
+            const fermataOnsets: number[] = [];
+            const seenOnsets = new Set<string>();
+            for (const it of allItems) {
+                if (it.skip || it.note.isRest) continue;
+                if (!(it.note as any).isFermata) continue;
+                const k = it.absStartBeat.toFixed(6);
+                if (seenOnsets.has(k)) continue;
+                seenOnsets.add(k);
+                fermataOnsets.push(it.absStartBeat);
+            }
+            if (fermataOnsets.length > 0) {
+                fermataOnsets.sort((a, b) => a - b);
+                const EPS = 1e-6;
+                // Process onsets in order; shifts accumulate.
+                let cumulativeShift = 0;
+                for (const origOnset of fermataOnsets) {
+                    const shiftedOnset = origOnset + cumulativeShift;
+                    // Find the longest sounding duration among items starting at this (already-shifted) onset.
+                    let maxDur = 0;
+                    for (const it of allItems) {
+                        if (it.skip || it.note.isRest) continue;
+                        if (Math.abs(it.absStartBeat - shiftedOnset) > EPS) continue;
+                        if (it.durationBeats > maxDur) maxDur = it.durationBeats;
+                    }
+                    if (maxDur <= 0) continue;
+                    // Convention: fermata raddoppia → extra = maxDur (×2 totale).
+                    const extra = maxDur;
+                    // Extend all items at this onset by `extra` (full vertical pause).
+                    for (const it of allItems) {
+                        if (it.skip || it.note.isRest) continue;
+                        if (Math.abs(it.absStartBeat - shiftedOnset) > EPS) continue;
+                        it.durationBeats += extra;
+                    }
+                    // Shift every later item forward by `extra`.
+                    for (const it of allItems) {
+                        if (it.skip) continue;
+                        if (it.absStartBeat > shiftedOnset + EPS) {
+                            it.absStartBeat += extra;
+                        }
+                    }
+                    fermataSegs.push({
+                        cStart: shiftedOnset,
+                        cNaturalEnd: shiftedOnset + maxDur,
+                        cTotalEnd: shiftedOnset + maxDur + extra,
+                        visualFreeze: shiftedOnset + maxDur - cumulativeShift,
+                    });
+                    cumulativeShift += extra;
+                }
+            }
+        } catch { /* ignore fermata expansion failures */ }
+
+        // Compose fermata mapping with the existing repeat mapping (if any).
+        // Goal: convert audio-current beat (in fully-expanded coords) into the
+        // visual beat for getPlayheadPosForAbsBeat. During a fermata's pause
+        // window, the result freezes on the fermata note's natural end.
+        if (fermataSegs.length > 0) {
+            const repeatMap = playbackBeatToVisualBeatRef.current;
+            const fermataMap = (c: number): number => {
+                let cumShift = 0;
+                for (const f of fermataSegs) {
+                    if (c <= f.cStart + 1e-9) break;
+                    if (c <= f.cNaturalEnd + 1e-9) {
+                        return c - cumShift;
+                    }
+                    if (c < f.cTotalEnd - 1e-9) {
+                        return f.cNaturalEnd - cumShift;
+                    }
+                    cumShift = f.cTotalEnd - f.cNaturalEnd + cumShift; // accumulate this extra
+                }
+                return c - cumShift;
+            };
+            playbackBeatToVisualBeatRef.current = repeatMap
+                ? (c: number) => repeatMap(fermataMap(c))
+                : fermataMap;
+        }
+
         // Group items by start beat (rounded to avoid float key drift with tuplets).
         const startMap = new Map<string, { absBeat: number; items: PlaybackItem[] }>();
         for (const it of allItems) {
@@ -3849,9 +4047,155 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         }
 
+        // ── Tempo curves (rallentando / accelerando) — playback-only ──
+        // Build a piecewise tempo profile. `beatToTime(absBeat)` returns the
+        // wall-clock time (in seconds) elapsed from the playback origin (absBeat=0)
+        // accounting for any active tempo curves on the resolved item ranges.
+        // Linear BPM interpolation (constant Δbpm/Δbeat) means the per-beat
+        // duration is 60/(bpm0 + k*(b - b0)), and integration gives a logarithmic
+        // term — we use that closed form below for exactness.
+        type CurveSeg = { startBeat: number; endBeat: number; fromBpm: number; toBpm: number };
+        const curveSegs: CurveSeg[] = [];
+        try {
+            // Repeats duplicate items: a single note.id can appear multiple times in
+            // allItems with different absStartBeats. We must collect every occurrence
+            // (sorted) so a curve anchored to two note ids creates one CurveSeg per
+            // (start, end) occurrence pair — applying the rallentando on every repeat.
+            const idToAbsBeats = new Map<string, number[]>();
+            for (const it of allItems) {
+                if (it.skip) continue;
+                if (!it.note?.id) continue;
+                const arr = idToAbsBeats.get(it.note.id);
+                if (arr) arr.push(it.absStartBeat);
+                else idToAbsBeats.set(it.note.id, [it.absStartBeat]);
+            }
+            for (const c of (tempoCurvesRef.current || [])) {
+                const starts = (idToAbsBeats.get(c.startNoteId) || []).slice().sort((a, b) => a - b);
+                const ends = (idToAbsBeats.get(c.endNoteId) || []).slice().sort((a, b) => a - b);
+                if (starts.length === 0 || ends.length === 0) continue;
+                const from = Math.max(20, Math.min(300, c.fromBpm || safeBpm));
+                const to = Math.max(20, Math.min(300, c.toBpm || safeBpm));
+                // Pair each start with the next end strictly after it that hasn't been consumed.
+                // Greedy two-pointer keeps occurrences in order and avoids cross-repeat overlaps.
+                let ei = 0;
+                for (const s of starts) {
+                    while (ei < ends.length && ends[ei] <= s) ei++;
+                    if (ei >= ends.length) break;
+                    curveSegs.push({ startBeat: s, endBeat: ends[ei], fromBpm: from, toBpm: to });
+                    ei++;
+                }
+            }
+            curveSegs.sort((a, b) => a.startBeat - b.startBeat);
+        } catch { /* ignore */ }
+
+        const segDurationSec = (seg: CurveSeg, fromB: number, toB: number): number => {
+            // Time required to traverse [fromB, toB] within one curve segment using
+            // linear BPM interpolation. Returns Δt in seconds.
+            const span = seg.endBeat - seg.startBeat;
+            if (span <= 0) return 0;
+            const k = (seg.toBpm - seg.fromBpm) / span;
+            const bpmAt = (b: number) => seg.fromBpm + k * (b - seg.startBeat);
+            if (Math.abs(k) < 1e-9) return (toB - fromB) * 60 / seg.fromBpm;
+            const b0 = bpmAt(fromB), b1 = bpmAt(toB);
+            // ∫ 60/bpm(b) db = 60/k * ln(bpm(b1)/bpm(b0))
+            return (60 / k) * Math.log(b1 / b0);
+        };
+
+        const beatToTime = (absBeat: number): number => {
+            // Walks beat 0 → absBeat, splitting at each curve boundary.
+            let cursor = 0;
+            let acc = 0;
+            for (const seg of curveSegs) {
+                if (absBeat <= cursor + 1e-9) break;
+                if (seg.startBeat >= absBeat) break;
+                // Pre-segment region (base BPM)
+                if (cursor < seg.startBeat) {
+                    const span = Math.min(seg.startBeat, absBeat) - cursor;
+                    if (span > 0) acc += span * 60 / safeBpm;
+                    cursor = Math.min(seg.startBeat, absBeat);
+                    if (cursor >= absBeat - 1e-9) break;
+                }
+                // Inside-segment region
+                const segEnd = Math.min(seg.endBeat, absBeat);
+                if (segEnd > cursor) {
+                    acc += segDurationSec(seg, cursor, segEnd);
+                    cursor = segEnd;
+                }
+                if (cursor >= absBeat - 1e-9) break;
+            }
+            if (cursor < absBeat) acc += (absBeat - cursor) * 60 / safeBpm;
+            return acc;
+        };
+
+        const t0Anchor = beatToTime(startAbsBeat);
+
+        // Inverse mapping for the visual playhead: given elapsed seconds since
+        // playback origin (audioStartTime), find the absBeat the audio is at.
+        // Uses bisection on beatToTime since closed-form inversion is messy with
+        // multiple curve segments. Cheap (≤30 iterations) and runs once per RAF.
+        if (curveSegs.length > 0) {
+            const lastBeat = (allItems.length > 0
+                ? allItems.reduce((mx, it) => Math.max(mx, it.absStartBeat + it.durationBeats), 0)
+                : startAbsBeat) + 8;
+            playbackTimeToBeatRef.current = (elapsedSec: number) => {
+                const target = elapsedSec + t0Anchor;
+                let lo = startAbsBeat, hi = Math.max(lastBeat, startAbsBeat + 1);
+                // Expand hi if needed (rare safety net).
+                let guard = 0;
+                while (beatToTime(hi) < target && guard++ < 8) hi *= 2;
+                for (let i = 0; i < 30; i++) {
+                    const mid = (lo + hi) / 2;
+                    if (beatToTime(mid) < target) lo = mid; else hi = mid;
+                }
+                return (lo + hi) / 2;
+            };
+        } else {
+            playbackTimeToBeatRef.current = null;
+        }
+        // DEBUG: log full timing schedule
+        try {
+            const sample = eventsToPlay.slice(0, 50).map(ev => ({
+                absBeat: ev.absBeat,
+                tEv: beatToTime(ev.absBeat) - t0Anchor,
+            }));
+            // Events that fall INSIDE the first curve range
+            let inCurveSample: any[] = [];
+            if (curveSegs.length > 0) {
+                const seg = curveSegs[0];
+                inCurveSample = eventsToPlay
+                    .filter(ev => ev.absBeat >= seg.startBeat - 0.001 && ev.absBeat <= seg.endBeat + 0.001)
+                    .slice(0, 20)
+                    .map(ev => ({
+                        absBeat: ev.absBeat,
+                        tEv: beatToTime(ev.absBeat) - t0Anchor,
+                        noteIds: ev.items.map(it => it.note?.id?.slice(0, 8)),
+                    }));
+            }
+            console.log('[TEMPO] schedule', {
+                startAbsBeat, t0Anchor, curveSegs,
+                totalEvents: eventsToPlay.length,
+                lastEventBeat: eventsToPlay[eventsToPlay.length - 1]?.absBeat,
+                lastEventTime: eventsToPlay.length > 0 ? beatToTime(eventsToPlay[eventsToPlay.length - 1].absBeat) - t0Anchor : 0,
+                eventsInCurveRange: inCurveSample.length,
+                inCurveSample,
+                sample,
+            });
+        } catch { /* ignore */ }
+
         eventsToPlay.forEach((ev) => {
-            const delayMs = (ev.absBeat - startAbsBeat) * beatDurationSec * 1000;
-            const when = audioStartTime + (delayMs / 1000);
+            const tEv = beatToTime(ev.absBeat) - t0Anchor;
+            const delayMs = tEv * 1000;
+            const when = audioStartTime + tEv;
+            // DEBUG: log first 4 events inside curve range
+            try {
+                if (curveSegs.length > 0) {
+                    const seg = curveSegs[0];
+                    if (ev.absBeat >= seg.startBeat - 0.001 && ev.absBeat <= seg.endBeat + 0.001) {
+                        const ctxNow = audioService.audioContext?.currentTime ?? 0;
+                        console.log('[TEMPO][SCHED]', { absBeat: ev.absBeat, when: when.toFixed(3), ctxNow: ctxNow.toFixed(3), audioStartTime: audioStartTime.toFixed(3), tEv: tEv.toFixed(3) });
+                    }
+                }
+            } catch { /* ignore */ }
 
             // Pre-schedule audio immediately — Web Audio handles precise timing
             // via the `when` parameter (sample-accurate, no setTimeout jitter).
@@ -3860,7 +4204,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const n = it.note;
                     if (n.isRest) return;
                     if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
-                    const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
+                    const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
                     const midi = n.midi;
                     const midiT = (midi ?? 0) + playbackTransposeSemitones;
                     if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
@@ -3884,7 +4228,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const n = it.note;
                         if (n.isRest) return;
                         if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
-                        const durSec = Math.max(0.05, it.durationBeats * beatDurationSec);
+                        const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
                         sendMidiNote(n, selectedMidiOutput, durSec, midiWhenMs, ((n.voice ?? 1) as number) - 1);
                     });
                 }
@@ -3893,14 +4237,73 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             playbackTimeoutsRef.current.push(t);
         });
 
-        const endMs = (maxEndAbsBeat - startAbsBeat) * beatDurationSec * 1000;
-        playbackTimeoutsRef.current.push(window.setTimeout(() => { playbackBeatToVisualBeatRef.current = null; stopPlayback(); }, Math.max(0, (startMs - performance.now()) + endMs + 200)));
+        const endMs = (beatToTime(maxEndAbsBeat) - t0Anchor) * 1000;
+        playbackTimeoutsRef.current.push(window.setTimeout(() => { playbackBeatToVisualBeatRef.current = null; playbackTimeToBeatRef.current = null; stopPlayback(); }, Math.max(0, (startMs - performance.now()) + endMs + 200)));
     }, [audioService, bpm, getPlayheadPosForAbsBeat, isAudioReady, isSwing, midiToName, normalizedRawNotes, rawNotes, selectedMidiOutput, sendMidiNote, startMetronomeScheduler, stopPlayback, timeSignature, playbackTransposeSemitones]);
 
     const togglePlayback = useCallback(() => {
         if (isPlaying) stopPlayback();
         else void startPlayback();
     }, [isPlaying, startPlayback, stopPlayback]);
+
+    // Tempo curve markers — conventional notation: "rall." (or "accel.") text at the
+    // start note, followed by a dashed line to the end note. When the curve spans
+    // multiple systems (line break), the dash continues on each affected system.
+    const tempoCurveMarkersBySystem = useMemo(() => {
+        type Seg = {
+            curve: TempoCurve;
+            index: number;
+            isStart: boolean;   // show text label on this segment
+            fromX: number;      // dashed-line / text origin
+            toX: number;        // dashed-line end
+        };
+        const out: Record<number, Seg[]> = {};
+        const sysParams = (layoutData as any)?.systemsParams;
+        const positioned = (layoutData as any)?.positionedNotes;
+        if (!Array.isArray(sysParams) || !Array.isArray(positioned)) return out;
+        const idToPositioned = new Map<string, any>();
+        for (const n of positioned) {
+            if (!n?.id) continue;
+            if (!idToPositioned.has(n.id)) idToPositioned.set(n.id, n);
+        }
+        (tempoCurves || []).forEach((c, index) => {
+            const startPn = idToPositioned.get(c.startNoteId);
+            const endPn = idToPositioned.get(c.endNoteId);
+            if (!startPn || !endPn) return;
+            const startSys = noteToSystemIndex.get(c.startNoteId);
+            const endSys = noteToSystemIndex.get(c.endNoteId);
+            if (typeof startSys !== 'number' || typeof endSys !== 'number') return;
+            const startX = startPn.xPosition ?? 0;
+            const endX = endPn.xPosition ?? 0;
+
+            const pushSeg = (sys: number, seg: Seg) => {
+                if (!out[sys]) out[sys] = [];
+                out[sys].push(seg);
+            };
+
+            if (startSys === endSys) {
+                pushSeg(startSys, { curve: c, index, isStart: true, fromX: startX, toX: endX });
+                return;
+            }
+            // Multi-system: span across each affected system.
+            const lo = Math.min(startSys, endSys);
+            const hi = Math.max(startSys, endSys);
+            for (let sys = lo; sys <= hi; sys++) {
+                const sp = sysParams[sys];
+                if (!sp) continue;
+                const sysStart = (sp.startMeasuresX?.[0]) ?? 0;
+                const sysEnd = sp.width ?? sysStart;
+                if (sys === startSys) {
+                    pushSeg(sys, { curve: c, index, isStart: true, fromX: startX, toX: sysEnd });
+                } else if (sys === endSys) {
+                    pushSeg(sys, { curve: c, index, isStart: false, fromX: sysStart, toX: endX });
+                } else {
+                    pushSeg(sys, { curve: c, index, isStart: false, fromX: sysStart, toX: sysEnd });
+                }
+            }
+        });
+        return out;
+    }, [layoutData, tempoCurves, noteToSystemIndex]);
 
     // -----------------------
     // Triplet groups (keep ONLY ONE)
@@ -6701,8 +7104,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
             };
 
-            // ── Ornament override shortcuts (⌥ + key) ──
-            if (!isMod && e.altKey && selectedNoteIds.size > 0) {
+            // ── Ornament override shortcuts (⌥ + key, no Shift) ──
+            // NOTE: !e.shiftKey is required so that ⌥+⇧+R (rallentando) does not
+            // trigger the suspension ornament shortcut on KeyR.
+            if (!isMod && e.altKey && !e.shiftKey && selectedNoteIds.size > 0) {
                 const ornMap: Record<string, string> = { KeyP: 'passing', KeyA: 'appoggiatura', KeyV: 'neighbor', KeyR: 'suspension', KeyS: 'escape', KeyC: 'cambiata', KeyN: 'anticipation', KeyH: 'structural', KeyO: 'ornamental' };
                 // Use e.code (physical key) as primary; fall back to e.key for macOS
                 // Electron builds where ⌥ may produce a dead/composed key.
@@ -6722,6 +7127,67 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     });
                     return;
                 }
+            }
+
+            // ── Fermata (corona) shortcut: Alt+F toggles isFermata on selected notes ──
+            // Playback-only effect: doubles the note's sounding duration; rendering
+            // adds a fermata glyph above (voices 1/3) or below (voices 2/4).
+            if (!isMod && e.altKey && e.code === 'KeyF' && selectedNoteIds.size > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                setRawNotes(prev => {
+                    const arr = prev || [];
+                    // Toggle: if ALL selected notes already have isFermata, clear them
+                    const allHaveFermata = arr.filter(n => selectedNoteIds.has(n.id)).every(n => !!(n as any).isFermata);
+                    return arr.map(n => {
+                        if (!selectedNoteIds.has(n.id)) return n;
+                        if (n.isRest) return n; // pause non possono avere fermata in questa MVP
+                        return { ...n, isFermata: !allHaveFermata } as StaffNote;
+                    });
+                });
+                return;
+            }
+
+            // ── Rallentando / accelerando shortcut: Alt+Shift+R ──
+            // With ≥2 notes selected: open inline modal to choose fromBpm/toBpm,
+            //   then create a tempo curve from the first to the last selected note (by absBeat).
+            // With exactly 1 note selected: remove any curve that includes that note.
+            // With 0 notes selected: ask to clear all curves.
+            // NOTE: window.prompt() is not implemented in Electron — must use a React modal.
+            if (!isMod && e.altKey && e.shiftKey && e.code === 'KeyR') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (selectedNoteIds.size === 0) {
+                    const count = (tempoCurves || []).length;
+                    if (count === 0) return;
+                    if (window.confirm(`Rimuovere tutte le curve di tempo (${count})?`)) {
+                        setTempoCurves([]);
+                    }
+                    return;
+                }
+                const arr = (rawNotes || []).filter(n => selectedNoteIds.has(n.id) && !n.isRest);
+                if (arr.length === 0) return;
+                if (arr.length === 1) {
+                    // Single-note: remove any tempo curve covering that note as start or end.
+                    setTempoCurves(prev => (prev || []).filter(c => c.startNoteId !== arr[0].id && c.endNoteId !== arr[0].id));
+                    return;
+                }
+                // Sort by (measureIndex, beat) to find first/last in time.
+                const sorted = arr.slice().sort((a, b) => {
+                    const am = (a.measureIndex ?? 0), bm = (b.measureIndex ?? 0);
+                    if (am !== bm) return am - bm;
+                    return (a.beat ?? 0) - (b.beat ?? 0);
+                });
+                const first = sorted[0];
+                const last = sorted[sorted.length - 1];
+                const baseBpm = bpm || 120;
+                setTempoCurvePending({
+                    startNoteId: first.id,
+                    endNoteId: last.id,
+                    defaultFromBpm: baseBpm,
+                    defaultToBpm: Math.round(baseBpm / 2),
+                });
+                return;
             }
 
             // Alt/Option+L: cycle staff layout/view (view-only)
@@ -6836,6 +7302,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // Cmd/Ctrl+C: copy selected notes
             if (isMod && key === 'c') {
+                if (lockHidesRef.current.export) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
                 if (selectedNoteIds.size === 0) return;
                 e.preventDefault();
                 e.stopPropagation();
@@ -6855,6 +7326,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // Cmd/Ctrl+V: arm paste mode (next click selects paste location)
             if (isMod && (key === 'v' || (e as any).code === 'KeyV')) {
+                if (lockHidesRef.current.export) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -7245,6 +7721,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode,
         setStaffSystemMode,
         contextMenu,
+        tempoCurves,
     ]);
 
     // selectedNotesBeamState, handleToggleBeamGroup, handleToggleTie now in useNoteSelection
@@ -7299,7 +7776,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     );
 
     return (
-        <div className={`flex-grow flex flex-col ${isToolbarVisible ? 'gap-4' : 'gap-0'} min-h-0`}>
+        <div className={`flex-grow flex flex-col ${isToolbarVisible ? 'gap-4' : 'gap-0'} min-h-0 relative`}>
+            <button
+                type="button"
+                onClick={() => setIsAnalysisLockModalOpen(true)}
+                title={
+                    analysisLocked
+                        ? (sessionUnlocked
+                            ? 'File bloccato (sbloccato per la sessione) — clicca per gestire'
+                            : 'File bloccato dal docente — clicca per sbloccare')
+                        : 'Blocca analisi per studenti'
+                }
+                aria-label="Blocca/Sblocca analisi"
+                className={`absolute right-2 top-2 z-20 w-8 h-8 flex items-center justify-center rounded-md text-base shadow-sm transition-colors ${
+                    analysisLocked && !sessionUnlocked
+                        ? 'bg-amber-500 hover:bg-amber-400 text-white'
+                        : analysisLocked && sessionUnlocked
+                            ? 'bg-amber-200 hover:bg-amber-300 text-amber-900'
+                            : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                }`}
+            >
+                {analysisLocked && !sessionUnlocked ? '🔒' : '🔓'}
+            </button>
             <GrandStaffToolbar
                 isPlaying={isPlaying}
                 togglePlayback={togglePlayback}
@@ -7436,6 +7934,54 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setIsPreferencesOpen(false);
                     // Re-read debug prefs from localStorage after modal closes
                     try { setShowHarmonyDebug(localStorage.getItem('harmony-tutor.showHarmonyDebug.v1') === '1'); } catch { /* ignore */ }
+                }}
+            />
+
+            {/* Tempo curve dialog (rallentando / accelerando) */}
+            {tempoCurvePending && (
+                <TempoCurveDialog
+                    defaultFromBpm={tempoCurvePending.defaultFromBpm}
+                    defaultToBpm={tempoCurvePending.defaultToBpm}
+                    onCancel={() => setTempoCurvePending(null)}
+                    onConfirm={(fromBpm, toBpm) => {
+                        const startId = tempoCurvePending.startNoteId;
+                        const endId = tempoCurvePending.endNoteId;
+                        setTempoCurves(prev => {
+                            const filtered = (prev || []).filter(c => c.startNoteId !== startId);
+                            const next = [...filtered, { startNoteId: startId, endNoteId: endId, fromBpm, toBpm }];
+                            console.log('[TEMPO] curve created/updated', { startId, endId, fromBpm, toBpm, total: next.length });
+                            return next;
+                        });
+                        setTempoCurvePending(null);
+                    }}
+                />
+            )}
+
+            <AnalysisLockModal
+                isOpen={isAnalysisLockModalOpen}
+                onClose={() => setIsAnalysisLockModalOpen(false)}
+                analysisLocked={analysisLocked}
+                teacherPasswordHash={teacherPasswordHash}
+                analysisLockOptions={analysisLockOptions}
+                onLock={(hash, opts) => {
+                    setTeacherPasswordHash(hash);
+                    setAnalysisLockOptions(opts);
+                    setAnalysisLocked(true);
+                    setSessionUnlocked(false);
+                    // trigger save so the lock is persisted immediately
+                    setTimeout(() => dispatchMenuActionRef.current?.('save' as any, {}), 50);
+                }}
+                onUnlock={(permanent) => {
+                    if (permanent) {
+                        // Permanent removal: clear lock on disk and in memory.
+                        setAnalysisLocked(false);
+                        setTeacherPasswordHash(undefined);
+                        setSessionUnlocked(false);
+                        setTimeout(() => dispatchMenuActionRef.current?.('save' as any, {}), 50);
+                    } else {
+                        // Session-only: file stays locked on disk; just bypass UI gates.
+                        setSessionUnlocked(true);
+                    }
                 }}
             />
 
@@ -8044,6 +8590,69 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                               </svg>
                             )}
 
+                            {/* Overlay: tempo curve markers (rall. ----- / accel. -----) */}
+                            {(tempoCurveMarkersBySystem[systemIndex] || []).length > 0 && (
+                                <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                    {tempoCurveMarkersBySystem[systemIndex].map(({ curve, index, isStart, fromX, toX }, segIdx) => {
+                                        const isAccel = curve.toBpm > curve.fromBpm;
+                                        const label = isAccel ? 'accel.' : 'rall.';
+                                        const y = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 10;
+                                        // Approx text width: ~30px for "rall." / "accel." in 12px italic.
+                                        const TEXT_GAP = 34;
+                                        const lineX1 = isStart ? fromX + TEXT_GAP : fromX;
+                                        const lineX2 = toX;
+                                        const handleClick = (e: React.MouseEvent) => {
+                                            e.stopPropagation();
+                                            if (e.altKey) {
+                                                setTempoCurves(prev => (prev || []).filter((_, i) => i !== index));
+                                            } else {
+                                                setTempoCurvePending({
+                                                    startNoteId: curve.startNoteId,
+                                                    endNoteId: curve.endNoteId,
+                                                    defaultFromBpm: curve.fromBpm,
+                                                    defaultToBpm: curve.toBpm,
+                                                });
+                                            }
+                                        };
+                                        return (
+                                            <g key={`tc-${systemIndex}-${index}-${segIdx}`}>
+                                                {isStart && (
+                                                    <text
+                                                        x={fromX}
+                                                        y={y + 4}
+                                                        textAnchor="start"
+                                                        fontSize={12}
+                                                        fontStyle="italic"
+                                                        fontWeight={600}
+                                                        fill="black"
+                                                        style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                                                        onClick={handleClick}
+                                                    >
+                                                        <title>{`${label} ${curve.fromBpm}→${curve.toBpm} · Click: modifica · Alt+Click: elimina`}</title>
+                                                        {label}
+                                                    </text>
+                                                )}
+                                                {lineX2 > lineX1 && (
+                                                    <line
+                                                        x1={lineX1}
+                                                        y1={y}
+                                                        x2={lineX2}
+                                                        y2={y}
+                                                        stroke="black"
+                                                        strokeWidth={1}
+                                                        strokeDasharray="4 3"
+                                                        style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                                                        onClick={handleClick}
+                                                    >
+                                                        <title>{`${label} ${curve.fromBpm}→${curve.toBpm} · Click: modifica · Alt+Click: elimina`}</title>
+                                                    </line>
+                                                )}
+                                            </g>
+                                        );
+                                    })}
+                                </svg>
+                            )}
+
                             {/* Overlay: measure numbers */}
                             {showMeasureNumbers && (
                                 <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
@@ -8193,8 +8802,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         return Math.round(a * 1000) / 1000;
                                                                     };
                                                                     const lblAbsQ = qAbs(Number((lbl as any).absBeat));
-                                                                    const showRoman = showRomanAnalysis && !!lbl.roman && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
-                                                                    const showSymbol = showSymbolAnalysis && !!(lbl as any).symbol && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
+                                                                    const showRoman = !lockHides.romanLabels && showRomanAnalysis && !!lbl.roman && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
+                                                                    const showSymbol = !lockHides.chordSymbols && showSymbolAnalysis && !!(lbl as any).symbol && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
 
                                                                     // Keep a consistent left edge reference for both roman and symbols.
                                                                     const romanFont = '700 14px serif';
@@ -8425,7 +9034,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                 </text>
 
                 {/* Indicatore ambiguità ≈ — visibile quando ci sono letture alternative */}
-                {(lbl as any).alternatives?.length ? (
+                {!lockHides.alternatives && (lbl as any).alternatives?.length ? (
                     <text
                         x={romanX + measureTextWidth(String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? ''), '700 14px serif') + 2}
                         y={romanBelowY - 6}
@@ -8720,7 +9329,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                     // Only render connections that belong to this system AND that correspond
                                                                     // to an actual violation entry. This prevents drawing ad-hoc connections
                                                                     // (e.g., suspension-only connections without panel entries) as dashed lines.
-                                                                    const systemConnections = (errorConnections || []).filter(c => {
+                                                                    const systemConnections = lockHides.violations ? [] : (errorConnections || []).filter(c => {
                                                                         // Allow cross-system connections: if exactly one endpoint is in this system,
                                                                         // we will render a split segment to the system edge.
                                                                         const inThis1 = systemNoteIdSet.has(c.noteId1);
@@ -8961,6 +9570,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                         for (const n of analyzedNotes as any[]) {
                                                                             if (!n || !n.id) continue;
                                                                             if (!systemNoteIdSet.has(n.id)) continue;
+                                                                            if (lockHides.ornaments) continue;
                                                                             const text = displayOrnamentText(n);
                                                                             if (!text) continue;
 
@@ -9200,7 +9810,13 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                 {/* Restore analysis panel */}
                 {activeTab === 'analysis' && (
                     <div className="w-full max-w-sm flex-shrink-0 h-full min-h-0">
-                        {isAnalysisEnabled ? (
+                        {lockHides.violations ? (
+                            <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-2 p-6">
+                                <span className="text-4xl">🔒</span>
+                                <p className="font-semibold text-sm">Analisi bloccata dal docente</p>
+                                <p className="text-xs">Sblocca tramite File → Sblocca analisi…</p>
+                            </div>
+                        ) : isAnalysisEnabled ? (
                             <HarmonyAnalysisPanel
                                 violations={violations}
                                 sequenceMatches={sequenceMatches}

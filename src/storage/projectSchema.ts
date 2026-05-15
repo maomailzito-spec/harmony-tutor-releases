@@ -24,6 +24,10 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'isMetronomeOn',
   'metronomeUnit',
   'toolbarGroupOrder',
+  'tempoCurves',
+  'analysisLocked',
+  'teacherPasswordHash',
+  'analysisLockOptions',
 ] as const;
 
 const KNOWN_KEY_SET: ReadonlySet<string> = new Set(PROJECT_KNOWN_KEYS_V1 as readonly string[]);
@@ -57,6 +61,30 @@ export type ProjectDataV1 = {
   metronomeUnit?: 'quarter' | 'eighth' | 'dotted-quarter';
 
   toolbarGroupOrder?: any[];
+
+  tempoCurves?: any[];
+
+  analysisLocked?: boolean;
+  teacherPasswordHash?: string;
+  analysisLockOptions?: {
+    hideViolations: boolean;
+    hideRomanLabels: boolean;
+    hideChordSymbols: boolean;
+    hideOrnaments: boolean;
+    hideAlternatives: boolean;
+    disableExport: boolean;
+  };
+};
+
+export type AnalysisLockOptions = NonNullable<ProjectDataV1['analysisLockOptions']>;
+
+export const DEFAULT_ANALYSIS_LOCK_OPTIONS: AnalysisLockOptions = {
+  hideViolations: true,
+  hideRomanLabels: false,
+  hideChordSymbols: false,
+  hideOrnaments: false,
+  hideAlternatives: false,
+  disableExport: true,
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
