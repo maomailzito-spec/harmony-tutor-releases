@@ -33,3 +33,4 @@
 - Sigle inserite da tastiera (C#, F# ecc.) ora mostrate sempre con # e non convertite in enarmonico bemolle
 - Accordi half-diminished non più riscritti come vii°/X quando le note sono diatoniche
 - Fix octave per note come Cb/E# nella voicizzazione corale e nel parser simboli
+Test release  1.0.9-test prova aggiornamento
