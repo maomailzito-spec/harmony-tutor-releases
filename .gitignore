@@ -43,3 +43,7 @@ layout-audit-*.json
 release/
 _split/
 .recovery/
+
+# IDE / tooling locali
+.continue/
+.vscode/
