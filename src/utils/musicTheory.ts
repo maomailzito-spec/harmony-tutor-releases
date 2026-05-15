@@ -2298,7 +2298,16 @@ export function getChordSymbol(
                     root: topAug.root as StaffNote,
                     type: topAug.type,
                     intervals: topAug.intervals as Set<number>,
-                };
+                    // CRITICAL: carry rootSpelled from the candidate so the
+                    // symbol uses the user-written enharmonic (e.g. "Gbaug",
+                    // not "F#aug" when the key signature defaults to sharps).
+                    // Without this, downstream falls back to pickFromSpellings
+                    // and re-derives the root name from the pitch class via
+                    // key-signature heuristics, overriding the user's intent.
+                    ...((topAug as any).rootSpelled
+                        ? { rootSpelled: (topAug as any).rootSpelled }
+                        : {}),
+                } as any;
             }
         }
     } catch { /* ignore */ }
