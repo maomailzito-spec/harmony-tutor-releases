@@ -1583,11 +1583,32 @@ app.whenReady().then(async () => {
 
     autoUpdater.on('update-available', (info) => {
       safeStdioWrite(process.stdout, `[AutoUpdate] Update available: v${info.version}`);
+      // Format release notes for display in the dialog.
+      // electron-updater returns either a string (markdown/html) or an array of
+      // { version, note } objects. Strip HTML tags and truncate for readability.
+      const formatNotes = (rn) => {
+        if (!rn) return '';
+        let text = '';
+        if (typeof rn === 'string') text = rn;
+        else if (Array.isArray(rn)) text = rn.map(r => r?.note || '').filter(Boolean).join('\n\n');
+        if (!text) return '';
+        // Strip HTML tags and decode common entities
+        text = text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+        // Collapse excessive blank lines
+        text = text.replace(/\n{3,}/g, '\n\n').trim();
+        // Truncate if very long
+        if (text.length > 1500) text = text.slice(0, 1497) + '...';
+        return text;
+      };
+      const notes = formatNotes(info.releaseNotes);
+      const detail = notes
+        ? `Novità in questa versione:\n\n${notes}\n\nVuoi scaricare e installare l'aggiornamento?`
+        : 'Vuoi scaricare e installare l\'aggiornamento?';
       dialog.showMessageBox(mainWindow, {
         type: 'info',
         title: 'Aggiornamento disponibile',
         message: `È disponibile Harmony Tutor v${info.version}.`,
-        detail: 'Vuoi scaricare e installare l\'aggiornamento?',
+        detail,
         buttons: ['Aggiorna ora', 'Rimanda'],
         defaultId: 0,
         cancelId: 1,

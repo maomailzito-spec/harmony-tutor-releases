@@ -79,3 +79,6 @@ publish:
   owner: maomailzito-spec
   repo: harmony-tutor-releases
   private: false
+
+releaseInfo:
+  releaseNotesFile: RELEASE_NOTES.md
