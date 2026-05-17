@@ -3257,6 +3257,31 @@ export function getRomanAnalysis(
             }
 
             if (triadRootPc != null && triadType) {
+                // Symmetric augmented triads have THREE valid enharmonic roots.
+                // Picking the first pc found is arbitrary and yields wrong romans
+                // (e.g. Gb-Bb-D in Bb major picked as Bb+ → "I+" instead of "♭VI+").
+                // Re-pick the root using spelled tertian structure (M3 + A5 from
+                // the candidate root). Fall back to the bass pc when no candidate
+                // has an unambiguously tertian spelling.
+                if (triadType === BuiltInChords.Augmented) {
+                    try {
+                        const validNotes = (filteredChord || []).filter(n => n && !(n as any).isRest);
+                        const pcsArr = [...pcs];
+                        let chosenPc: number | null = null;
+                        for (const candPc of pcsArr) {
+                            const rNote = validNotes.find(n => mod12(pitchClassOf(n)) === candPc);
+                            if (!rNote) continue;
+                            const bonus = augTriadSpellingRootBonus(rNote as any, validNotes as any);
+                            if (bonus != null && bonus > 0) { chosenPc = candPc; break; }
+                        }
+                        if (chosenPc == null) {
+                            const bassNoteAug = pickPreferredBassNote(validNotes as any);
+                            const bassPcAug = bassNoteAug ? mod12(pitchClassOf(bassNoteAug as any)) : null;
+                            if (bassPcAug != null && pcs.has(bassPcAug)) chosenPc = bassPcAug;
+                        }
+                        if (chosenPc != null) triadRootPc = chosenPc;
+                    } catch { /* ignore */ }
+                }
                 const rootNote = (filteredChord || []).find(n => mod12(pitchClassOf(n)) === triadRootPc) || (filteredChord || [])[0];
                 const triadInfo = {
                     root: { ...(rootNote as any), noteIndex: triadRootPc } as StaffNote,

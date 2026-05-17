@@ -2721,7 +2721,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     };
 
     const handleApplyContext = (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => {
-        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e-6);
 
         setAnalysisContexts(prev => {
             const next = (prev || []).filter(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) > 1e-6);
