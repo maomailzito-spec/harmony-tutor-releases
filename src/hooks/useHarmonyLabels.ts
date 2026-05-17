@@ -469,15 +469,6 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     (analysisContexts || []).filter((c: any) => c.source !== 'inferred')
                         .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
                 );
-                // Also treat user-placed tonicizationHints as "manual" for the
-                // purposes of cadential-pattern context injection: a user hint
-                // must always win over an auto-detected V→i cadence at the
-                // same beat (otherwise the user has no way to override the
-                // auto-tonicization).
-                for (const h of (tonicizationHints || [])) {
-                    const _hb = Number((h as any)?.absBeat);
-                    if (Number.isFinite(_hb)) _manualBeats.add(_hb);
-                }
                 // Helper: when injecting a "return-to-home" inferred context,
                 // find the most recent MANUAL override before the return beat
                 // and return to that key instead of the file's initial tonic.
@@ -522,18 +513,6 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         m.startBeat <= other.endBeat + 1e-6,
                     );
                     if (_isOverlapped) continue;
-
-                    // A user hint anywhere inside the cadence span (start..end)
-                    // means the user wants to enforce their own reading of this
-                    // region — don't let the auto-cadential pattern inject a
-                    // competing context.
-                    const _userHintInSpan = (tonicizationHints || []).some(h => {
-                        const hb = Number((h as any)?.absBeat);
-                        return Number.isFinite(hb)
-                            && hb >= m.startBeat - 1e-6
-                            && hb <= m.endBeat + 1e-6;
-                    });
-                    if (_userHintInSpan) continue;
 
                     if (!_manualBeats.has(m.startBeat)) {
                         // Deceptive cadences confirm the *matched* key
@@ -788,45 +767,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         .map((c: AnalysisContext) => analysisContextAbsBeat(c)),
                 );
 
-                // Hard upper-bound for any single hint's lookahead span (in beats).
-                // Prevents a hint into a relative/closely-related key (whose scale
-                // overlaps the home scale) from extending arbitrarily far when the
-                // homeFit/hintFit comparison alone never breaks the tie.
-                const HINT_MAX_SPAN_BEATS = 16;
-
-                // Pre-compute boundary beats: any OTHER user hint stops the walk
-                // (so the user can chain hints), and any manual analysisContext
-                // also stops it (we never cross a key change).
-                const _allHintBeats = (tonicizationHints || [])
-                    .map(h => Number(h.absBeat))
-                    .filter(b => Number.isFinite(b))
-                    .sort((a, b) => a - b);
-                const _manualBeatsSorted = Array.from(_hintManualBeats).sort((a, b) => a - b);
-
                 for (const hint of tonicizationHints) {
                     const hintTonicPc = noteNameToPc(hint.tonic);
                     const hintScalePcs = new Set(getScalePcs(hintTonicPc, hint.isMinor));
-                    // Skip only if the EFFECTIVE manual context at this beat
-                    // already matches the hint tonic (no need to re-state it).
-                    // The old check (vs. global home tonic) was too aggressive:
-                    // it discarded user-placed "return to home" hints in regions
-                    // where a manual analysisContext had moved the key elsewhere.
-                    const _activeManualAtHint = (() => {
-                        const ms = (analysisContexts || [])
-                            .filter((c: any) => c.source !== 'inferred')
-                            .map((c: AnalysisContext) => ({ ab: analysisContextAbsBeat(c), c }))
-                            .filter(x => x.ab <= hint.absBeat + 1e-6)
-                            .sort((a, b) => b.ab - a.ab);
-                        if (ms.length > 0) {
-                            const top = ms[0].c as any;
-                            return { tonic: top.newTonic as string, isMinor: !!top.newIsMinor };
-                        }
-                        return { tonic: currentTonic, isMinor: isMinorMode };
-                    })();
-                    if (
-                        noteNameToPc(_activeManualAtHint.tonic) === hintTonicPc
-                        && _activeManualAtHint.isMinor === hint.isMinor
-                    ) continue;
+                    // Skip if hint tonic == home tonic
+                    if (hintTonicPc === noteNameToPc(currentTonic) && hint.isMinor === isMinorMode) continue;
                     // Skip if a manual context already covers this beat
                     if (_hintManualBeats.has(hint.absBeat)) continue;
 
@@ -834,20 +779,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     const eventsFromHint = _hintEvts.filter(ev => ev.absBeat >= hint.absBeat - 1e-6);
                     if (!eventsFromHint.length) continue;
 
-                    // Compute the hint's exhaustion boundary: the earliest of
-                    //  - next OTHER user hint
-                    //  - next manual analysisContext
-                    //  - hint.absBeat + HINT_MAX_SPAN_BEATS (safety cap)
-                    const _nextOtherHint = _allHintBeats.find(b => b > hint.absBeat + 1e-6) ?? Infinity;
-                    const _nextManual = _manualBeatsSorted.find(b => b > hint.absBeat + 1e-6) ?? Infinity;
-                    const _boundary = Math.min(_nextOtherHint, _nextManual, hint.absBeat + HINT_MAX_SPAN_BEATS);
-
-                    // Greedy lookahead: continue while hintFit >= homeFit and we're
-                    // still inside the exhaustion boundary.
+                    // Greedy lookahead: continue while hintFit >= homeFit
                     let lastHintBeat = hint.absBeat;
                     for (const ev of eventsFromHint) {
                         if (!ev.pcs.length) continue;
-                        if (ev.absBeat >= _boundary - 1e-6 && ev.absBeat > hint.absBeat + 1e-6) break;
                         const hintFit = ev.pcs.filter((pc: number) => hintScalePcs.has(pc)).length / ev.pcs.length;
                         const homeFit = ev.pcs.filter((pc: number) => hintHomeScalePcs.has(pc)).length / ev.pcs.length;
                         // Stop when home clearly dominates (gap > 0.3) and we've moved past the hint beat

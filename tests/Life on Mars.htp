@@ -11,7 +11,67 @@
   "voltaBrackets": [],
   "ornamentOverrides": [
     {
+      "noteId": "e5e97d57-4aaa-4759-be35-8469cbc3367e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "0fbea0f7-aa05-48f2-9627-7507f7152ad1",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "6dddcafb-a695-4855-b2b4-2ac799e927b4",
+      "type": "ornamental"
+    },
+    {
       "noteId": "982374af-fac4-461d-a45e-8807ccc6e921",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "a4077cb8-f8dc-4484-97a0-fb9fc8d874af",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "852d862c-bcc5-41d5-94c7-73fefd6bba53",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "66c2e668-74f2-4c58-8ecc-4924345fdeef",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "17ad5e41-efa0-41ad-aaf8-0ebada71dc8f",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "0247b19d-5610-4797-9eb7-17a54687a8a6",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "6ed50b73-9f4e-4c0d-9b1c-e5c2e4371096",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4f14e6ea-2486-49b2-b2a7-20f14e518b4b",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "b5cf2155-7c9c-4821-940f-544c7fdc7af1",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "462ac098-37fc-4171-8294-921cbac01dc6",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "f4a6dba0-1ffe-4139-9ca8-76118e3dfe29",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "9a571a5e-32bf-476a-9d3d-d9cdfcb71094",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "f9627d0b-bac2-4684-9297-9c545320e87e",
       "type": "ornamental"
     },
     {
@@ -139,6 +199,22 @@
       "type": "ornamental"
     },
     {
+      "noteId": "010eb392-3d8b-4f52-bcd4-1141eaded6dd",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "c0cc63fa-00c7-4071-a36d-f0769ddca22d",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "b09ceee7-52a7-417f-a19a-9b12cfcfc9df",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "029c294b-a02a-4b5b-af14-05705fcdfd26",
+      "type": "ornamental"
+    },
+    {
       "noteId": "4513644c-5a1c-4615-a91b-3560c16fcff2",
       "type": "ornamental"
     },
@@ -192,6 +268,14 @@
     },
     {
       "noteId": "11d2984f-e109-4af5-b4cb-9a77998d6590",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "d5147526-703d-4aa2-80af-44a354fc309a",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "38aa6de7-b848-445f-a8e2-01c2a3338d0b",
       "type": "ornamental"
     },
     {
@@ -383,7 +467,39 @@
       "type": "structural"
     },
     {
+      "noteId": "4dece44f-d8c9-40cb-9ffe-a44717768bfe",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "dfe0faac-c58f-42e0-a537-8d6b43a4a7b8",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "ec673ff3-cc3a-4225-88de-34c2f8ac3f5f",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4fe248f9-d5a1-4d70-9dad-12398126f066",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "30173502-a000-4b38-8523-53d0d5c34b74",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "605413d4-758b-42a3-8a05-de28bec9700a",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "3153377d-424c-40a1-867c-25469ee9907e",
+      "type": "ornamental"
+    },
+    {
       "noteId": "4fdc3e95-8bd8-475d-9983-743f6171d0ab",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "40474abf-3dc1-4098-b6b4-47e02d25c317",
       "type": "ornamental"
     },
     {
@@ -411,6 +527,30 @@
       "type": "ornamental"
     },
     {
+      "noteId": "580dd0ea-6d97-4ffb-a60e-f89dda39e120",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "6ebd173f-f2bc-4431-b429-34acf79c64f6",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "ad7c7ff4-bae7-4ace-ae10-4ff3021cbcbc",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "59c272dc-de7c-4fac-bfcb-eb8e548ebd46",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "459e2617-c5d6-42cb-9058-c76f6f149a6e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "8c78a97b-ed9a-4ded-81f1-c456c3590256",
+      "type": "ornamental"
+    },
+    {
       "noteId": "8dc8662b-37f1-4b64-a4c1-5c801545aecf",
       "type": "structural"
     },
@@ -429,6 +569,10 @@
     {
       "noteId": "04cbf60a-cdb4-4c81-99d5-d8b1b78a01cb",
       "type": "ornamental"
+    },
+    {
+      "noteId": "fa24bc24-5055-40f6-9df0-82414ab3933c",
+      "type": "neighbor"
     },
     {
       "noteId": "feeb2b6e-6be4-49e9-8559-108a9237341b",
@@ -455,6 +599,14 @@
       "type": "ornamental"
     },
     {
+      "noteId": "0c28bce6-4968-4f26-9d8b-cb15c805a251",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "fb2d7612-9003-4efc-8efc-8ba5cf7ac815",
+      "type": "ornamental"
+    },
+    {
       "noteId": "9a78dcd2-4463-49a9-afbb-d483638a42c9",
       "type": "ornamental"
     },
@@ -468,6 +620,22 @@
     },
     {
       "noteId": "a82157f4-522b-458e-a840-2eb2bceafec1",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "1c982f3a-81b8-46cb-bd2f-7523afe69247",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "2db25a0a-8a12-4303-9808-b13214f77c0e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "7c403191-34da-47d5-b05e-2537c97580a5",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4eb32dc0-a04a-4939-ba02-5a7c04c415be",
       "type": "ornamental"
     },
     {
@@ -575,6 +743,22 @@
       "type": "ornamental"
     },
     {
+      "noteId": "e5df58a8-62b6-4311-9934-48ead18deb80",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "fe896c78-8675-4377-908d-faa14f8db185",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "79901de8-f098-4f05-8117-7880fd7749df",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "edb1638f-57da-4ef5-8d65-c291aff24bc1",
+      "type": "ornamental"
+    },
+    {
       "noteId": "eb669131-d013-41b2-b1d3-181532728d02",
       "type": "ornamental"
     },
@@ -615,6 +799,14 @@
       "type": "ornamental"
     },
     {
+      "noteId": "e8855e32-f1dc-46cd-8248-9cda4ae8a938",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "dd338fc0-11f0-452a-b211-d9ff975b7568",
+      "type": "ornamental"
+    },
+    {
       "noteId": "9893acb7-5620-4eeb-ae19-243ed7179ab2",
       "type": "ornamental"
     },
@@ -631,11 +823,27 @@
       "type": "ornamental"
     },
     {
+      "noteId": "c652b08c-efff-4a0d-897d-39c69e7af114",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "47c52e9d-234d-44b0-b6e6-b8601a089d1c",
+      "type": "ornamental"
+    },
+    {
       "noteId": "8eccb5c7-ef23-4ad5-baf3-83e1810ffad0",
       "type": "ornamental"
     },
     {
       "noteId": "f4979db2-bda4-4d20-a3a3-17e089f0cc68",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4264e309-ce8f-41ee-9bee-b853c31c0fde",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "e2b36ace-5694-4c48-a1ff-ff6f434d01b8",
       "type": "ornamental"
     },
     {
@@ -663,11 +871,47 @@
       "type": "ornamental"
     },
     {
+      "noteId": "f6832651-3e15-4365-9c6c-a84e97e31d85",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "c185692f-500b-4584-b8e2-b521d0bdd56c",
+      "type": "ornamental"
+    },
+    {
       "noteId": "dc845ed8-9c5e-4d59-8cef-0eed908eb236",
       "type": "ornamental"
     },
     {
       "noteId": "d1573607-c412-4a2d-98c3-ce318c2bb885",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "fff362ea-b092-4476-8ff8-3b8360b337f0",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "714fabb7-55d8-427c-84ca-81556e1501cf",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "e5fda929-e272-465e-a89a-da91cf93461f",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "d53e4818-1c17-42c8-87b7-d33173c3c91b",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "4460a75b-c060-4352-9a1f-609a61a6e96e",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "b99d9e63-d1e9-4782-b035-ad7848793566",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "2c40109e-9bc3-4b5a-a01a-01292f987ac0",
       "type": "ornamental"
     },
     {
@@ -715,6 +959,10 @@
       "type": "ornamental"
     },
     {
+      "noteId": "052b37b0-4c38-40d9-9b92-cac8f6fd86c3",
+      "type": "ornamental"
+    },
+    {
       "noteId": "da7b3205-c4dc-488b-b65c-9a222f4a2f13",
       "type": "ornamental"
     },
@@ -723,8 +971,8 @@
       "type": "ornamental"
     },
     {
-      "noteId": "fe896c78-8675-4377-908d-faa14f8db185",
-      "type": "structural"
+      "noteId": "14dd4792-381f-4056-8990-c32f5606dfb7",
+      "type": "ornamental"
     },
     {
       "noteId": "0b1f9abe-cfad-4c8f-9ca8-db554a20d661",
@@ -743,315 +991,11 @@
       "type": "ornamental"
     },
     {
-      "noteId": "e5df58a8-62b6-4311-9934-48ead18deb80",
-      "type": "ornamental"
-    },
-    {
       "noteId": "9db9ab9c-404d-432c-90f6-ab17e1916764",
       "type": "ornamental"
     },
     {
       "noteId": "e43f2ea5-76c6-4501-a68b-566ad9116810",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "7d5596d2-3933-4820-ae78-55684611ea73",
-      "type": "structural"
-    },
-    {
-      "noteId": "82e9c1da-24e1-4cd4-b261-b30ef0a36586",
-      "type": "structural"
-    },
-    {
-      "noteId": "c1ec3194-344c-4458-a04d-715115f5a0d9",
-      "type": "structural"
-    },
-    {
-      "noteId": "2874d035-9248-44aa-b18b-52370162e6cc",
-      "type": "structural"
-    },
-    {
-      "noteId": "d99ba74d-2902-49bf-abaf-c2496d307d96",
-      "type": "structural"
-    },
-    {
-      "noteId": "118597c0-d3c4-4e8a-80fd-0c5336e4048c",
-      "type": "structural"
-    },
-    {
-      "noteId": "e8855e32-f1dc-46cd-8248-9cda4ae8a938",
-      "type": "structural"
-    },
-    {
-      "noteId": "dd338fc0-11f0-452a-b211-d9ff975b7568",
-      "type": "structural"
-    },
-    {
-      "noteId": "38aa6de7-b848-445f-a8e2-01c2a3338d0b",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "79901de8-f098-4f05-8117-7880fd7749df",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "edb1638f-57da-4ef5-8d65-c291aff24bc1",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "14dd4792-381f-4056-8990-c32f5606dfb7",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c652b08c-efff-4a0d-897d-39c69e7af114",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "47c52e9d-234d-44b0-b6e6-b8601a089d1c",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "74ae226c-130f-4d63-8706-cd81053a278d",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "661269dd-3e18-4dc3-8bd9-f0a560f09631",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "5ed7adba-37af-4f6c-8267-155aa9a6f139",
-      "type": "structural"
-    },
-    {
-      "noteId": "8acf34d4-26e4-4725-b6af-12ca9e9ba20d",
-      "type": "structural"
-    },
-    {
-      "noteId": "a35fbc59-7d2a-4da1-a48f-2736dc35a167",
-      "type": "structural"
-    },
-    {
-      "noteId": "4e99d9d7-eae7-46b3-a82d-0c4405fa9e3e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "f9627d0b-bac2-4684-9297-9c545320e87e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "7c403191-34da-47d5-b05e-2537c97580a5",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4eb32dc0-a04a-4939-ba02-5a7c04c415be",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "462ac098-37fc-4171-8294-921cbac01dc6",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "f4a6dba0-1ffe-4139-9ca8-76118e3dfe29",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "9a571a5e-32bf-476a-9d3d-d9cdfcb71094",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "1c982f3a-81b8-46cb-bd2f-7523afe69247",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "2db25a0a-8a12-4303-9808-b13214f77c0e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "6ed50b73-9f4e-4c0d-9b1c-e5c2e4371096",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4f14e6ea-2486-49b2-b2a7-20f14e518b4b",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b5cf2155-7c9c-4821-940f-544c7fdc7af1",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "f6832651-3e15-4365-9c6c-a84e97e31d85",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c185692f-500b-4584-b8e2-b521d0bdd56c",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "fff362ea-b092-4476-8ff8-3b8360b337f0",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "714fabb7-55d8-427c-84ca-81556e1501cf",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "8f2a28d3-6f45-4522-94bf-c9f401a4aab5",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "3153377d-424c-40a1-867c-25469ee9907e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4264e309-ce8f-41ee-9bee-b853c31c0fde",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e2b36ace-5694-4c48-a1ff-ff6f434d01b8",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "010eb392-3d8b-4f52-bcd4-1141eaded6dd",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c0cc63fa-00c7-4071-a36d-f0769ddca22d",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "63dc4975-56bd-4fbb-ae57-2551482a5c96",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "80a61e96-d80c-4e45-bb55-9479feea8e10",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "7714ea42-e65b-445b-bfa1-30e4d8d5d0ef",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b09ceee7-52a7-417f-a19a-9b12cfcfc9df",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "029c294b-a02a-4b5b-af14-05705fcdfd26",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "a4077cb8-f8dc-4484-97a0-fb9fc8d874af",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "852d862c-bcc5-41d5-94c7-73fefd6bba53",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "66c2e668-74f2-4c58-8ecc-4924345fdeef",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "0c28bce6-4968-4f26-9d8b-cb15c805a251",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "fb2d7612-9003-4efc-8efc-8ba5cf7ac815",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "17ad5e41-efa0-41ad-aaf8-0ebada71dc8f",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "0247b19d-5610-4797-9eb7-17a54687a8a6",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e5e97d57-4aaa-4759-be35-8469cbc3367e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "0fbea0f7-aa05-48f2-9627-7507f7152ad1",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "6dddcafb-a695-4855-b2b4-2ac799e927b4",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e5fda929-e272-465e-a89a-da91cf93461f",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4a044dd7-8303-4824-a579-8d3e0a3752f4",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "d53e4818-1c17-42c8-87b7-d33173c3c91b",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4460a75b-c060-4352-9a1f-609a61a6e96e",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b99d9e63-d1e9-4782-b035-ad7848793566",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "2c40109e-9bc3-4b5a-a01a-01292f987ac0",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "c8733b2e-1b84-4ab3-b6b4-bc7a2ae7c7e6",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "59c272dc-de7c-4fac-bfcb-eb8e548ebd46",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "e9359fab-be00-42d8-98c9-aa145ee06661",
-      "type": "structural"
-    },
-    {
-      "noteId": "fa24bc24-5055-40f6-9df0-82414ab3933c",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "6ebd173f-f2bc-4431-b429-34acf79c64f6",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "f3dce3f5-0c30-45de-bf9a-ae031c90bede",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b9f4c104-b376-4cf7-92d6-2c8de0f02638",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4dece44f-d8c9-40cb-9ffe-a44717768bfe",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "dfe0faac-c58f-42e0-a537-8d6b43a4a7b8",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "ec673ff3-cc3a-4225-88de-34c2f8ac3f5f",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "4fe248f9-d5a1-4d70-9dad-12398126f066",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "30173502-a000-4b38-8523-53d0d5c34b74",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "605413d4-758b-42a3-8a05-de28bec9700a",
       "type": "ornamental"
     }
   ],
@@ -4525,11 +4469,11 @@
     },
     {
       "id": "fe799ad5-6676-43fb-92f2-a80fac407bcc",
-      "pitch": "E",
+      "pitch": "G",
       "octave": 4,
-      "position": 2,
-      "midi": 64,
-      "noteIndex": 4,
+      "position": 4,
+      "midi": 67,
+      "noteIndex": 7,
       "clef": "treble",
       "explicitAccidental": null,
       "duration": "whole",
@@ -4551,11 +4495,11 @@
     },
     {
       "id": "f8c2d158-f86a-4a54-b92f-d8b084f7135a",
-      "pitch": "C",
+      "pitch": "E",
       "octave": 4,
-      "position": 0,
-      "midi": 60,
-      "noteIndex": 0,
+      "position": 2,
+      "midi": 64,
+      "noteIndex": 4,
       "clef": "bass",
       "explicitAccidental": null,
       "duration": "half",
@@ -4603,11 +4547,11 @@
     },
     {
       "id": "f559e9a4-3d38-41d6-8c7e-6b721b9d1d22",
-      "pitch": "C",
+      "pitch": "E",
       "octave": 4,
-      "position": 0,
-      "midi": 60,
-      "noteIndex": 0,
+      "position": 2,
+      "midi": 64,
+      "noteIndex": 4,
       "clef": "bass",
       "explicitAccidental": null,
       "duration": "half",
@@ -7583,8 +7527,8 @@
       "noteIndex": 2,
       "clef": "treble",
       "explicitAccidental": null,
-      "duration": "whole",
-      "durationTicks": 3840,
+      "duration": "half",
+      "durationTicks": 1920,
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
@@ -7609,8 +7553,8 @@
       "noteIndex": 6,
       "clef": "bass",
       "explicitAccidental": "flat",
-      "duration": "whole",
-      "durationTicks": 3840,
+      "duration": "half",
+      "durationTicks": 1920,
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
@@ -7709,6 +7653,58 @@
       "startTick": 105600,
       "durationTicks": 480,
       "voice": 1
+    },
+    {
+      "id": "e5df58a8-62b6-4311-9934-48ead18deb80",
+      "pitch": "D",
+      "octave": 4,
+      "position": 1,
+      "midi": 62,
+      "noteIndex": 2,
+      "clef": "bass",
+      "explicitAccidental": null,
+      "duration": "half",
+      "durationTicks": 1920,
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "measureIndex": 27,
+      "beat": 3,
+      "startTick": 105600,
+      "voice": 3,
+      "chordPcs": [
+        6,
+        10,
+        2
+      ],
+      "chordRootName": "Gb",
+      "accidental": "natural"
+    },
+    {
+      "id": "fe896c78-8675-4377-908d-faa14f8db185",
+      "pitch": "G",
+      "octave": 3,
+      "position": -3,
+      "midi": 54,
+      "noteIndex": 6,
+      "clef": "bass",
+      "explicitAccidental": "flat",
+      "duration": "half",
+      "durationTicks": 1920,
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "measureIndex": 27,
+      "beat": 3,
+      "startTick": 105600,
+      "voice": 4,
+      "chordPcs": [
+        6,
+        10,
+        2
+      ],
+      "chordRootName": "Gb",
+      "accidental": "flat"
     },
     {
       "id": "9db9ab9c-404d-432c-90f6-ab17e1916764",
@@ -9108,12 +9104,12 @@
       "accidental": "natural"
     },
     {
-      "id": "5dc0a440-eafd-4094-b11b-df5b90e34b16",
-      "pitch": "B",
-      "octave": 3,
-      "position": -1,
-      "midi": 58,
-      "noteIndex": 10,
+      "id": "c652b08c-efff-4a0d-897d-39c69e7af114",
+      "pitch": "D",
+      "octave": 4,
+      "position": 1,
+      "midi": 62,
+      "noteIndex": 2,
       "clef": "bass",
       "explicitAccidental": null,
       "duration": "half",
@@ -9131,10 +9127,10 @@
         5
       ],
       "chordRootName": "Bb",
-      "accidental": "flat"
+      "accidental": "natural"
     },
     {
-      "id": "23efc1b2-6aa4-4b97-976a-4b9cfb2418e5",
+      "id": "47c52e9d-234d-44b0-b6e6-b8601a089d1c",
       "pitch": "F",
       "octave": 3,
       "position": -4,
@@ -9220,8 +9216,8 @@
       "pitch": "B",
       "octave": 3,
       "position": -1,
-      "midi": 59,
-      "noteIndex": 11,
+      "midi": 58,
+      "noteIndex": 10,
       "clef": "treble",
       "duration": "half",
       "durationTicks": 1920,
@@ -9240,8 +9236,8 @@
       ],
       "chordRootName": "E",
       "userAccidental": "flat",
-      "explicitAccidental": "natural",
-      "accidental": "natural"
+      "explicitAccidental": "flat",
+      "accidental": "flat"
     },
     {
       "id": "8acf34d4-26e4-4725-b6af-12ca9e9ba20d",
@@ -9658,13 +9654,13 @@
     },
     {
       "id": "5cac3cea-1108-48c0-a4f0-72a82db28db9",
-      "pitch": "F",
+      "pitch": "A",
       "octave": 4,
-      "position": 3,
-      "midi": 66,
-      "noteIndex": 6,
+      "position": 5,
+      "midi": 69,
+      "noteIndex": 9,
       "clef": "treble",
-      "explicitAccidental": "sharp",
+      "explicitAccidental": null,
       "duration": "whole",
       "durationTicks": 3840,
       "isRest": false,
@@ -9680,16 +9676,15 @@
         0
       ],
       "chordRootName": "F#",
-      "accidental": "sharp",
-      "userAccidental": "sharp"
+      "accidental": "natural"
     },
     {
       "id": "334ed685-dea7-4a7b-8205-c784266bf9c4",
-      "pitch": "A",
-      "octave": 3,
-      "position": -2,
-      "midi": 57,
-      "noteIndex": 9,
+      "pitch": "C",
+      "octave": 4,
+      "position": 0,
+      "midi": 60,
+      "noteIndex": 0,
       "clef": "bass",
       "explicitAccidental": null,
       "duration": "half",
@@ -10257,24 +10252,25 @@
       "userAccidental": "natural"
     },
     {
-      "id": "6e2965a8-62ea-47a9-8ca1-0325ff1fd8bb",
+      "id": "3153377d-424c-40a1-867c-25469ee9907e",
       "pitch": "C",
       "octave": 5,
       "position": 7,
       "midi": 72,
       "noteIndex": 0,
       "clef": "treble",
-      "explicitAccidental": null,
+      "explicitAccidental": "natural",
       "accidental": "natural",
+      "userAccidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
-      "isDotted": false,
+      "isDotted": true,
       "measureIndex": 40,
       "beat": 2,
       "startTick": 154560,
-      "durationTicks": 1920,
+      "durationTicks": 2880,
       "voice": 1
     },
     {
@@ -10323,27 +10319,6 @@
       "startTick": 155520,
       "durationTicks": 1920,
       "voice": 4
-    },
-    {
-      "id": "5b302538-1c4c-4e2b-b4d0-7f6a2b5a932c",
-      "pitch": "C",
-      "octave": 5,
-      "position": 7,
-      "midi": 72,
-      "noteIndex": 0,
-      "clef": "treble",
-      "explicitAccidental": null,
-      "accidental": "natural",
-      "duration": "quarter",
-      "isRest": true,
-      "isTriplet": false,
-      "isDuplet": false,
-      "isDotted": false,
-      "measureIndex": 40,
-      "beat": 4,
-      "startTick": 156480,
-      "durationTicks": 960,
-      "voice": 1
     },
     {
       "id": "580dd0ea-6d97-4ffb-a60e-f89dda39e120",
