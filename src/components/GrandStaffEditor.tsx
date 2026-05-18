@@ -8192,6 +8192,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     : null;
 
                                 const invalidMeasures = new Set<number>();
+                                const invalidVoicesByMeasure = new Map<number, Set<number>>();
 
                                 const validateVoiceMeasure = (mi: number, line: StaffNote[]): boolean => {
                                     const expectedTicks = Math.round(beatsPerMeasureForIndex(mi) * TICKS_PER_QUARTER);
@@ -8245,12 +8246,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         if (!line.length) continue;
                                         if (!validateVoiceMeasure(mi, line)) {
                                             invalidMeasures.add(mi);
-                                            break;
+                                            if (!invalidVoicesByMeasure.has(mi)) invalidVoicesByMeasure.set(mi, new Set());
+                                            invalidVoicesByMeasure.get(mi)!.add(v);
                                         }
                                     }
                                 }
 
-                                if (!invalidMeasures.size) return [] as Array<{ x: number; w: number }>;
+                                if (!invalidMeasures.size) return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
 
                                 const barByMeasure = new Map<number, number>();
                                 (systemBarlines || []).forEach(b => {
@@ -8265,7 +8267,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     }
                                 });
 
-                                const rects: Array<{ x: number; w: number; mi: number }> = [];
+                                const rects: Array<{ x: number; w: number; mi: number; voices: number[] }> = [];
                                 measuresInSystem.forEach((mi, idx) => {
                                     if (!invalidMeasures.has(mi)) return;
                                     const x1 = barByMeasure.get(mi);
@@ -8274,7 +8276,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         : (idx > 0 ? (barByMeasure.get(measuresInSystem[idx - 1]) ?? NaN) : START_X);
                                     if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) return;
                                     const pad = 2;
-                                    rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi });
+                                    const voices = Array.from(invalidVoicesByMeasure.get(mi) ?? []).sort((a, b) => a - b);
+                                    rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi, voices });
                                 });
 
                                 if (rects.length > 0) {
@@ -8289,7 +8292,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                                 return rects;
                             } catch {
-                                return [] as Array<{ x: number; w: number; mi: number }>;
+                                return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
                             }
                         })();
 
@@ -8440,7 +8443,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     const yTop = PLAYHEAD_Y_TOP;
                                                                     const yBottom = PLAYHEAD_Y_BOTTOM;
                                                                     const h = yBottom - yTop;
-                                                                    return invalidMeasureRects.map((r, i) => (
+                                                                    return invalidMeasureRects.map((r, i) => {
+                                                                        const voiceLabel = r.voices.length > 0
+                                                                            ? `V. ${r.voices.join(',')} ⚠`
+                                                                            : '⚠';
+                                                                        return (
                                                                         <g key={`invalid-${systemIndex}-${i}`}>
                                                                             <rect
                                                                                 x={r.x}
@@ -8450,7 +8457,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 fill="rgba(239,68,68,0.22)"
                                                                                 stroke="rgb(220,38,38)"
                                                                                 strokeWidth={2}
-                                                                                strokeDasharray="4 3"
                                                                             />
                                                                             <rect
                                                                                 x={r.x + 4}
@@ -8469,10 +8475,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 fontWeight={700}
                                                                                 fontFamily="system-ui, sans-serif"
                                                                             >
-                                                                                {`Mis. ${r.mi + 1} ⚠`}
+                                                                                {voiceLabel}
                                                                             </text>
                                                                         </g>
-                                                                    ));
+                                                                        );
+                                                                    });
                                                                 })()}
                                                             </svg>
                                                         )}

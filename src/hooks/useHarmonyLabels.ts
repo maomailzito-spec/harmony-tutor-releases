@@ -343,6 +343,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // undefined = key not set = default ON
         const _inferCtxEnabled = enableInferredContexts !== false;
         const _cadEnabled2 = _inferCtxEnabled && cadentialPatternsEnabled !== false;
+        // Lifted: used by cadential, chromatic-modulation and tonicization-hint
+        // blocks below. Keeping the definition at the outer scope avoids the
+        // TS "name not found" errors when _cadEnabled is false (and the inner
+        // definition is skipped).
+        const _resolveHomeAt = (returnBeat: number): { tonic: string; isMinor: boolean } => {
+            const manuals = (analysisContexts || [])
+                .filter((c: any) => c.source !== 'inferred')
+                .map((c: AnalysisContext) => ({ ab: analysisContextAbsBeat(c), c }))
+                .filter(x => x.ab <= returnBeat - 1e-6)
+                .sort((a, b) => b.ab - a.ab);
+            if (manuals.length > 0) {
+                const top = manuals[0].c as any;
+                return { tonic: top.newTonic, isMinor: !!top.newIsMinor };
+            }
+            return { tonic: currentTonic, isMinor: isMinorMode };
+        };
         try {
             const _cadEnabled = _cadEnabled2;
             if (_cadEnabled && timelineForLabels.length >= 2) {
@@ -391,7 +407,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const bassMidi = Math.min(...(notesForCad as any[]).map((n: any) => Number(n.midi)));
                         const bassPc = ((bassMidi % 12) + 12) % 12;
                         const _newEv = { rootPc, quality: top.type || '', bassPc, absBeat: ev.absBeat,
-                            notePcs: [...new Set((notesForCad as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] };
+                            notePcs: [...new Set<number>((notesForCad as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] };
                         // Dedup: collapse consecutive events that don't represent a real harmonic change.
                         // The cadential pattern matcher slides a window over consecutive events; spurious
                         // partial-chord events (e.g. when a soprano onset gets filtered as ornamental,
@@ -403,8 +419,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             && _prev.bassPc === _newEv.bassPc;
                         const _isSubsetOfPrev = _prev
                             && _prev.bassPc === _newEv.bassPc
+                            && !!_prev.notePcs
                             && _newEv.notePcs.length < _prev.notePcs.length
-                            && _newEv.notePcs.every(pc => _prev.notePcs.includes(pc));
+                            && _newEv.notePcs.every(pc => _prev.notePcs!.includes(pc));
                         // Same-family collapse: consecutive events with same root and same
                         // quality FAMILY (Dominant 7 / Dominant 9 / Dominant 11 / Dominant 13
                         // are all "dominant" — they're micro-variations of the same harmony
@@ -475,18 +492,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // Without this, a manual override (e.g. "Bb major from m26")
                 // gets silently superseded at the first cadential pattern that
                 // injects a return-to-home reverting to currentTonic.
-                const _resolveHomeAt = (returnBeat: number): { tonic: string; isMinor: boolean } => {
-                    const manuals = (analysisContexts || [])
-                        .filter((c: any) => c.source !== 'inferred')
-                        .map((c: AnalysisContext) => ({ ab: analysisContextAbsBeat(c), c }))
-                        .filter(x => x.ab <= returnBeat - 1e-6)
-                        .sort((a, b) => b.ab - a.ab);
-                    if (manuals.length > 0) {
-                        const top = manuals[0].c as any;
-                        return { tonic: top.newTonic, isMinor: !!top.newIsMinor };
-                    }
-                    return { tonic: currentTonic, isMinor: isMinorMode };
-                };
+                // (definition lifted to the enclosing scope)
                 for (const m of _cadMatches) {
                     // ── Cadential 6/4: collect the beat of the I6/4 chord so the
                     // label assembly loop can relabel it as V6/4 later.
@@ -698,7 +704,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         try {
             if (_chromaticModulationEnabled) {
                 const chromResults = detectChromaticModulations(
-                    analyzedNotes, currentTonic, isMinorMode,
+                    analyzedNotes as any, currentTonic, isMinorMode,
                     timeSignature, undefined,
                     _effectiveCtxs,
                 );
@@ -942,7 +948,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // Compute root PC for fallback resolution matching (V/x → X where quality differs).
                 const rootPc = (() => {
                     try {
-                        const pcs = new Set((ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
+                        const pcs = new Set<number>((ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
                         if (pcs.size < 3) return null;
                         const arr = Array.from(pcs);
                         for (const pc of arr) {
@@ -1397,7 +1403,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 try {
                                     const rpc = bk.rootPc;
                                     if (rpc == null) return null;
-                                    const pcs = new Set((bk.ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
+                                    const pcs = new Set<number>((bk.ev?.notes || []).filter((n: any) => n && !n.isRest && Number.isFinite(n.midi)).map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
                                     const majThird = (rpc + 4) % 12;
                                     const minThird = (rpc + 3) % 12;
                                     if (pcs.has(majThird)) return true;
@@ -1434,7 +1440,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 if (isSubset) {
                                     protectedAbsBeats.add(bt.q);
 
-                autoRomanDisplayByAbsBeat.set(bt.q, resDisplay);
+                if (resDisplay) autoRomanDisplayByAbsBeat.set(bt.q, resDisplay);
                                 }
                             }
                         }
@@ -1680,8 +1686,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const best = (cands && cands.length) ? cands[0] : null;
                         const chordType = String(best?.type || '');
                         const rootPc = Number.isFinite((best?.root as any)?.noteIndex)
-                            ? (((best.root as any).noteIndex % 12) + 12) % 12
-                            : (Number.isFinite((best?.root as any)?.midi) ? (((best.root as any).midi % 12) + 12) % 12 : null);
+                            ? ((((best as any).root.noteIndex % 12) + 12) % 12)
+                            : (Number.isFinite((best?.root as any)?.midi) ? ((((best as any).root.midi % 12) + 12) % 12) : null);
                         const notePc = Number.isFinite(n?.midi)
                             ? (((n.midi % 12) + 12) % 12)
                             : (typeof n.noteIndex === 'number' ? (((n.noteIndex % 12) + 12) % 12) : null);
@@ -2053,7 +2059,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (typeof n?.noteIndex === 'number') return (((n.noteIndex % 12) + 12) % 12);
                         return null;
                     })
-                    .filter((v: any) => v != null && Number.isFinite(v)))].sort((a, b) => a - b);
+                    .filter((v: any): v is number => v != null && Number.isFinite(v)))].sort((a, b) => a - b);
                 return pcs.join('-');
             } catch {
                 return '';
@@ -3043,7 +3049,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             // R7: postInvRoot — infer inversion from previous chord root/type
             try {
-                const r7 = applyR7PostInvRoot({ roman, bassPc, analysisNotes: analysisNotes as any, prevRoman, prevRootPc, prevType });
+                const r7 = applyR7PostInvRoot({ roman, bassPc, analysisNotes: analysisNotes as any, prevRoman, prevRootPc: prevRootPc ?? null, prevType: prevType ?? null });
                 if (r7 !== roman) { roman = r7; _dt('R7:postInvRoot', roman, { prevRoman, prevRootPc }); }
             } catch { /* ignore */ }
 
@@ -5428,7 +5434,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const measureIndex = Number.isFinite(tc.measureIndex as any)
                 ? Number(tc.measureIndex)
                 : findMeasureIndexForAbsBeat(absBeat);
-            const sysIndex = layoutData.systemsParams.findIndex(sp => (sp.measureIndices || []).includes(measureIndex));
+            const sysIndex = layoutData.systemsParams.findIndex((sp: any) => (sp.measureIndices || []).includes(measureIndex));
             if (sysIndex < 0) continue;
             const system = layoutData.systemsParams[sysIndex];
             const x = getXForMeasureStart(system, measureIndex);

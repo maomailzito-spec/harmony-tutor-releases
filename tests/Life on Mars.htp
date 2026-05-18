@@ -1,16 +1,5 @@
 {
-  "tonicizationHints": [
-    {
-      "absBeat": 20,
-      "tonic": "F",
-      "isMinor": false
-    },
-    {
-      "absBeat": 160,
-      "tonic": "F",
-      "isMinor": true
-    }
-  ],
+  "tonicizationHints": [],
   "inferredContextSuppressions": [],
   "repeatBarlines": {},
   "voltaBrackets": [],
@@ -572,10 +561,6 @@
       "type": "ornamental"
     },
     {
-      "noteId": "fa24bc24-5055-40f6-9df0-82414ab3933c",
-      "type": "neighbor"
-    },
-    {
       "noteId": "feeb2b6e-6be4-49e9-8559-108a9237341b",
       "type": "structural"
     },
@@ -998,13 +983,17 @@
     {
       "noteId": "8c78a97b-ed9a-4ded-81f1-c456c3590256",
       "type": "structural"
+    },
+    {
+      "noteId": "fa24bc24-5055-40f6-9df0-82414ab3933c",
+      "type": "ornamental"
     }
   ],
   "filePreferences": {
     "analysis.enableInferredContexts": true,
     "analysis.cadentialPatterns": true,
     "analysis.profileBaseId": "academic",
-    "analysis.chromaticModulation": true,
+    "analysis.chromaticModulation": false,
     "analysis.sequencesEnabled": true
   },
   "schemaVersion": 1,
@@ -1328,7 +1317,8 @@
       "beat": 1.5,
       "startTick": 4320,
       "durationTicks": 480,
-      "voice": 1
+      "voice": 1,
+      "isFermata": false
     },
     {
       "id": "c548e54c-8466-4de2-bd86-e0cec3993906",
@@ -8694,13 +8684,13 @@
     },
     {
       "id": "b6c6f70d-36f9-4dbc-918b-80bfee6335df",
-      "pitch": "D",
-      "octave": 4,
-      "position": 1,
-      "midi": 62,
-      "noteIndex": 2,
+      "pitch": "B",
+      "octave": 3,
+      "position": -1,
+      "midi": 58,
+      "noteIndex": 10,
       "clef": "treble",
-      "explicitAccidental": null,
+      "explicitAccidental": "flat",
       "duration": "half",
       "durationTicks": 1920,
       "isRest": false,
@@ -8716,7 +8706,8 @@
         2
       ],
       "chordRootName": "G",
-      "accidental": "natural"
+      "accidental": "flat",
+      "userAccidental": "flat"
     },
     {
       "id": "35e11baa-967a-4e33-92f6-a27aa1b9b0b2",
@@ -9598,7 +9589,8 @@
         0
       ],
       "chordRootName": "F#",
-      "accidental": "natural"
+      "accidental": "natural",
+      "isFermata": false
     },
     {
       "id": "5cac3cea-1108-48c0-a4f0-72a82db28db9",
@@ -9628,11 +9620,11 @@
     },
     {
       "id": "334ed685-dea7-4a7b-8205-c784266bf9c4",
-      "pitch": "C",
-      "octave": 4,
-      "position": 0,
-      "midi": 60,
-      "noteIndex": 0,
+      "pitch": "B",
+      "octave": 3,
+      "position": -1,
+      "midi": 58,
+      "noteIndex": 10,
       "clef": "bass",
       "explicitAccidental": null,
       "duration": "half",
@@ -9650,7 +9642,7 @@
         0
       ],
       "chordRootName": "F#",
-      "accidental": "natural",
+      "accidental": "flat",
       "clefOverride": "bass"
     },
     {
@@ -10025,26 +10017,47 @@
       "explicitAccidental": "natural",
       "accidental": "natural",
       "userAccidental": "natural",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 39,
+      "beat": 2,
+      "startTick": 150720,
+      "durationTicks": 960,
+      "voice": 1
+    },
+    {
+      "id": "457e9232-f57b-4bba-ac7e-3cfd543eb08b",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 71,
+      "noteIndex": 11,
+      "clef": "treble",
+      "explicitAccidental": null,
+      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
-      "isDotted": true,
+      "isDotted": false,
       "measureIndex": 39,
-      "beat": 2,
-      "startTick": 150720,
-      "durationTicks": 2880,
+      "beat": 3,
+      "startTick": 151680,
+      "durationTicks": 1920,
       "voice": 1
     },
     {
       "id": "4264e309-ce8f-41ee-9bee-b853c31c0fde",
-      "pitch": "B",
-      "octave": 3,
-      "position": -1,
-      "midi": 59,
-      "noteIndex": 11,
+      "pitch": "D",
+      "octave": 4,
+      "position": 1,
+      "midi": 62,
+      "noteIndex": 2,
       "clef": "bass",
-      "explicitAccidental": "natural",
+      "explicitAccidental": null,
       "accidental": "natural",
       "duration": "half",
       "isRest": false,
@@ -10906,20 +10919,6 @@
     }
   ],
   "doubleBarlineMeasures": [],
-  "tempoCurves": [
-    {
-      "startNoteId": "dc845ed8-9c5e-4d59-8cef-0eed908eb236",
-      "endNoteId": "2186b41c-c535-43e0-b454-c8dac5a78de9",
-      "fromBpm": 120,
-      "toBpm": 60
-    },
-    {
-      "startNoteId": "c1519031-e3b9-4427-b3dd-c4556caf85b7",
-      "endNoteId": "684846c7-1acf-4738-b52a-951a524d7128",
-      "fromBpm": 120,
-      "toBpm": 90
-    }
-  ],
   "harmonyOverrides": [
     {
       "absBeat": 64,
