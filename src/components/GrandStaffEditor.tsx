@@ -3111,6 +3111,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const layoutDataRef = useRef(layoutData);
     useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
 
+    // Highest measure index that currently contains any note. The per-system
+    // metric-validation block uses this as the "currently being edited"
+    // measure and skips it: the warning rectangle only appears once the user
+    // has moved past an incomplete measure to a later one (so the banner does
+    // not flicker while a measure is still being filled).
+    const globalMaxMeasureWithNotes = useMemo(() => {
+        let max = -1;
+        for (const n of ((analyzedNotes as any[]) || [])) {
+            const mi = Number(n?.measureIndex);
+            if (Number.isFinite(mi) && mi > max) max = mi;
+        }
+        return max >= 0 ? max : null;
+    }, [analyzedNotes]);
+
     const deleteMeasureAtIndex = useCallback((measureIndex: number) => {
         try {
             const m = Math.max(0, Math.trunc(Number(measureIndex)));
@@ -8119,24 +8133,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                         const invalidMeasureRects = (() => {
                             try {
-                                const durationToBeatsForWarning = (n: StaffNote): number => {
-                                    const base = (() => {
-                                        switch (n.duration) {
-                                            case 'whole': return 4;
-                                            case 'half': return 2;
-                                            case 'quarter': return 1;
-                                            case 'eighth': return 0.5;
-                                            case 'sixteenth': return 0.25;
-                                            case 'thirty-second': return 0.125;
-                                            case 'sixty-fourth': return 0.0625;
-                                            default: return 1;
-                                        }
-                                    })();
-                                    let beats = base;
-                                    if ((n as any).isDotted) beats *= 1.5;
-                                    if ((n as any).isTriplet) beats *= (2 / 3);
-                                    if ((n as any).isDuplet) beats *= (3 / 2);
-                                    return beats;
+                                const durationMap: Record<string, number> = {
+                                    whole: 4, half: 2, quarter: 1, eighth: 0.5,
+                                    sixteenth: 0.25, 'thirty-second': 0.125, 'sixty-fourth': 0.0625,
+                                };
+                                // Tick-accurate duration: prefer authoritative
+                                // durationTicks (already includes dot/tuplet),
+                                // fall back to the figure label only if needed.
+                                const ticksOfNote = (n: StaffNote): number => {
+                                    const dt = Number((n as any)?.durationTicks);
+                                    if (Number.isFinite(dt) && dt > 0) return Math.round(dt);
+                                    let b = durationMap[String((n as any)?.duration)] ?? 1;
+                                    if ((n as any).isDotted) b *= 1.5;
+                                    if ((n as any).isTriplet) b *= 2 / 3;
+                                    if ((n as any).isDuplet) b *= 3 / 2;
+                                    return Math.round(b * TICKS_PER_QUARTER);
                                 };
 
                                 const beatsPerMeasureForIndex = (mi: number): number => {
@@ -8170,57 +8181,67 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     notesByMeasure.get(mi)!.push(n);
                                 });
 
-                                const maxMeasureWithNotes = (() => {
-                                    try {
-                                        const keys = Array.from(notesByMeasure.keys());
-                                        return keys.length ? Math.max(...keys) : null;
-                                    } catch {
-                                        return null;
-                                    }
-                                })();
+                                // Use the GLOBAL last edited measure (across all
+                                // systems) so the rectangle still shows up on
+                                // earlier systems once the user has moved to a
+                                // later system. The per-system max was hiding
+                                // incomplete measures whenever the cursor moved
+                                // past a system boundary.
+                                const currentMeasure = (typeof globalMaxMeasureWithNotes === 'number')
+                                    ? globalMaxMeasureWithNotes
+                                    : null;
 
                                 const invalidMeasures = new Set<number>();
-                                // Tolerance for MIDI-quantized beat positions (triplet rounding ≈0.083 beats)
-                                const EPS = 0.15;
 
                                 const validateVoiceMeasure = (mi: number, line: StaffNote[]): boolean => {
-                                    const beatsPerMeas = beatsPerMeasureForIndex(mi);
-                                    const endBeat = 1 + beatsPerMeas;
+                                    const expectedTicks = Math.round(beatsPerMeasureForIndex(mi) * TICKS_PER_QUARTER);
+                                    if (!Number.isFinite(expectedTicks) || expectedTicks <= 0) return true;
+
                                     const onsetGroups = new Map<number, StaffNote[]>();
+                                    let usable = 0;
                                     for (const n of (line || [])) {
                                         const b = Number((n as any)?.beat);
-                                        if (!Number.isFinite(b)) continue;
-                                        const key = Math.round(b * 1e6) / 1e6;
-                                        if (!onsetGroups.has(key)) onsetGroups.set(key, []);
-                                        onsetGroups.get(key)!.push(n);
+                                        let rel: number | null = null;
+                                        if (Number.isFinite(b)) {
+                                            rel = Math.round((b - 1) * TICKS_PER_QUARTER);
+                                        } else {
+                                            const st = Number((n as any)?.startTick);
+                                            if (Number.isFinite(st) && expectedTicks > 0) {
+                                                rel = ((st % expectedTicks) + expectedTicks) % expectedTicks;
+                                            }
+                                        }
+                                        if (rel == null) continue;
+                                        usable++;
+                                        if (!onsetGroups.has(rel)) onsetGroups.set(rel, []);
+                                        onsetGroups.get(rel)!.push(n);
                                     }
-                                    const onsets = Array.from(onsetGroups.entries())
-                                        .map(([b, ns]) => {
-                                            const d = Math.max(...ns.map(x => durationToBeatsForWarning(x)));
-                                            return { beat: b, dur: d };
-                                        })
-                                        .filter(x => Number.isFinite(x.beat) && Number.isFinite(x.dur) && x.dur > 0)
-                                        .sort((a, b) => a.beat - b.beat);
+                                    // Line has notes but no usable timing: treat as invalid.
+                                    if (onsetGroups.size === 0) return usable === 0;
 
-                                    if (onsets.length === 0) return true;
-                                    let cur = 1;
+                                    const onsets = Array.from(onsetGroups.entries())
+                                        .map(([t, ns]) => ({ t, dur: Math.max(...ns.map(ticksOfNote)) }))
+                                        .filter(o => Number.isFinite(o.t) && Number.isFinite(o.dur) && o.dur > 0)
+                                        .sort((a, b) => a.t - b.t);
+
+                                    if (onsets.length === 0) return false;
+
+                                    let cur = 0;
                                     for (const o of onsets) {
-                                        if (o.beat > cur + EPS) return false;
-                                        if (o.beat < cur - EPS) return false;
-                                        cur = o.beat + o.dur;
-                                        if (cur > endBeat + EPS) return false;
+                                        if (o.t !== cur) return false;
+                                        cur = o.t + o.dur;
+                                        if (cur > expectedTicks) return false;
                                     }
-                                    // Tolerance: accommodates MIDI triplet quantization (deficit ≤0.34 beats)
-                                    return Math.abs(cur - endBeat) <= 0.4;
+                                    return cur === expectedTicks;
                                 };
 
                                 for (const mi of measuresInSystem) {
                                     const notesInMeasure = notesByMeasure.get(mi) || [];
                                     if (!notesInMeasure.length) continue;
-                                    if (typeof maxMeasureWithNotes === 'number' && mi >= maxMeasureWithNotes) continue;
+                                    // Skip the measure the user is currently
+                                    // filling: only warn once they move past it.
+                                    if (typeof currentMeasure === 'number' && mi >= currentMeasure) continue;
                                     for (const v of [1, 2, 3, 4]) {
                                         const line = notesInMeasure.filter(n => (n.voice ?? 1) === v);
-                                        // Skip voices with no notes in this measure (common in MIDI imports).
                                         if (!line.length) continue;
                                         if (!validateVoiceMeasure(mi, line)) {
                                             invalidMeasures.add(mi);
@@ -8244,7 +8265,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     }
                                 });
 
-                                const rects: Array<{ x: number; w: number }> = [];
+                                const rects: Array<{ x: number; w: number; mi: number }> = [];
                                 measuresInSystem.forEach((mi, idx) => {
                                     if (!invalidMeasures.has(mi)) return;
                                     const x1 = barByMeasure.get(mi);
@@ -8253,12 +8274,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         : (idx > 0 ? (barByMeasure.get(measuresInSystem[idx - 1]) ?? NaN) : START_X);
                                     if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) return;
                                     const pad = 2;
-                                    rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad) });
+                                    rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi });
                                 });
+
+                                if (rects.length > 0) {
+                                    try {
+                                        // Surface detection in DevTools so the
+                                        // user can verify the warning is being
+                                        // computed even before the visual lands.
+                                        // eslint-disable-next-line no-console
+                                        console.warn('[HarmonyTutor] Misure incomplete (sistema ' + systemIndex + '):', rects.map(r => r.mi + 1));
+                                    } catch { /* ignore */ }
+                                }
 
                                 return rects;
                             } catch {
-                                return [] as Array<{ x: number; w: number }>;
+                                return [] as Array<{ x: number; w: number; mi: number }>;
                             }
                         })();
 
@@ -8410,15 +8441,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     const yBottom = PLAYHEAD_Y_BOTTOM;
                                                                     const h = yBottom - yTop;
                                                                     return invalidMeasureRects.map((r, i) => (
-                                                                        <rect
-                                                                            key={`invalid-${systemIndex}-${i}`}
-                                                                            x={r.x}
-                                                                            y={yTop}
-                                                                            width={r.w}
-                                                                            height={h}
-                                                                            fill="rgba(239,68,68,0.13)"
-                                                                        >
-                                                                        </rect>
+                                                                        <g key={`invalid-${systemIndex}-${i}`}>
+                                                                            <rect
+                                                                                x={r.x}
+                                                                                y={yTop}
+                                                                                width={r.w}
+                                                                                height={h}
+                                                                                fill="rgba(239,68,68,0.22)"
+                                                                                stroke="rgb(220,38,38)"
+                                                                                strokeWidth={2}
+                                                                                strokeDasharray="4 3"
+                                                                            />
+                                                                            <rect
+                                                                                x={r.x + 4}
+                                                                                y={yTop + 4}
+                                                                                width={56}
+                                                                                height={16}
+                                                                                rx={3}
+                                                                                fill="rgb(220,38,38)"
+                                                                            />
+                                                                            <text
+                                                                                x={r.x + 32}
+                                                                                y={yTop + 15}
+                                                                                textAnchor="middle"
+                                                                                fill="white"
+                                                                                fontSize={11}
+                                                                                fontWeight={700}
+                                                                                fontFamily="system-ui, sans-serif"
+                                                                            >
+                                                                                {`Mis. ${r.mi + 1} ⚠`}
+                                                                            </text>
+                                                                        </g>
                                                                     ));
                                                                 })()}
                                                             </svg>

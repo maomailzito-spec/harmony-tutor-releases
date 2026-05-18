@@ -1,4 +1,7 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [],
   "schemaVersion": 1,
   "notes": [
     {
@@ -4940,11 +4943,11 @@
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
-      "isDotted": false,
+      "isDotted": true,
       "measureIndex": 25,
       "beat": 1,
       "startTick": 144000,
-      "durationTicks": 3840,
+      "durationTicks": 5760,
       "voice": 3
     },
     {
@@ -5261,11 +5264,11 @@
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
+  "tonicizationHints": [],
+  "inferredContextSuppressions": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
+  "tempoCurves": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -5282,6 +5285,23 @@
     "analysis",
     "key",
     "more",
-    "voiceInstrument"
-  ]
+    "voiceInstrument",
+    "chordInsert"
+  ],
+  "analysisLocked": false,
+  "analysisLockOptions": {
+    "hideViolations": true,
+    "hideRomanLabels": false,
+    "hideChordSymbols": false,
+    "hideOrnaments": false,
+    "hideAlternatives": false,
+    "disableExport": true
+  },
+  "filePreferences": {
+    "analysis.enableInferredContexts": true,
+    "analysis.cadentialPatterns": true,
+    "analysis.profileBaseId": "academic",
+    "analysis.chromaticModulation": true,
+    "analysis.sequencesEnabled": true
+  }
 }

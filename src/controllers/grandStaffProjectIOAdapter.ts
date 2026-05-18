@@ -45,7 +45,6 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	doubleBarlineMeasures: any[];
         repeatBarlines: Record<number, string>;
         voltaBrackets: any[];
-        tempoCurves?: any[];
         toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
@@ -85,7 +84,6 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 				inferredContextSuppressions: args.inferredContextSuppressions || [],		doubleBarlineMeasures: args.doubleBarlineMeasures,
 		repeatBarlines: args.repeatBarlines,
 		voltaBrackets: args.voltaBrackets,
-		tempoCurves: args.tempoCurves || [],
 		harmonyOverrides: args.latestHarmonyOverrides.current,
 		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
 		bpm: args.bpm,
@@ -138,7 +136,6 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setDoubleBarlineMeasures: (next: any) => void;
 	setRepeatBarlines: (next: any) => void;
 	setVoltaBrackets: (next: any) => void;
-	setTempoCurves?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
 	setAutoLeadingToneInMinor: (next: any) => void;
@@ -205,7 +202,6 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setDoubleBarlineMeasures([]);
 		args.setRepeatBarlines({});
 		args.setVoltaBrackets([]);
-		args.setTempoCurves?.([]);
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
 		args.setAutoLeadingToneInMinor(true);
@@ -421,11 +417,6 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (Array.isArray(loadedProject.voltaBrackets)) {
 				args.setVoltaBrackets(loadedProject.voltaBrackets);
 			}
-			if (Array.isArray(loadedProject.tempoCurves)) {
-				args.setTempoCurves?.(loadedProject.tempoCurves);
-			} else {
-				args.setTempoCurves?.([]);
-			}
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
 			}
@@ -510,7 +501,6 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setDoubleBarlineMeasures([]);
 		args.apply.setRepeatBarlines({});
 		args.apply.setVoltaBrackets([]);
-		args.apply.setTempoCurves?.([]);
 		args.apply.setMinMeasureCount(4);
 		args.apply.setMeasuresPerLine(4);
 		args.apply.setIsMinorMode(false);

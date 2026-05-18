@@ -1,6 +1,11 @@
 {
   "tonicizationHints": [
     {
+      "absBeat": 20,
+      "tonic": "F",
+      "isMinor": false
+    },
+    {
       "absBeat": 160,
       "tonic": "F",
       "isMinor": true
@@ -547,10 +552,6 @@
       "type": "ornamental"
     },
     {
-      "noteId": "8c78a97b-ed9a-4ded-81f1-c456c3590256",
-      "type": "ornamental"
-    },
-    {
       "noteId": "8dc8662b-37f1-4b64-a4c1-5c801545aecf",
       "type": "structural"
     },
@@ -879,10 +880,6 @@
       "type": "ornamental"
     },
     {
-      "noteId": "dc845ed8-9c5e-4d59-8cef-0eed908eb236",
-      "type": "ornamental"
-    },
-    {
       "noteId": "d1573607-c412-4a2d-98c3-ce318c2bb885",
       "type": "ornamental"
     },
@@ -997,6 +994,10 @@
     {
       "noteId": "e43f2ea5-76c6-4501-a68b-566ad9116810",
       "type": "ornamental"
+    },
+    {
+      "noteId": "8c78a97b-ed9a-4ded-81f1-c456c3590256",
+      "type": "structural"
     }
   ],
   "filePreferences": {
@@ -1727,13 +1728,13 @@
     },
     {
       "id": "c89b68af-d73b-4665-b110-6e32addbeea2",
-      "pitch": "D",
+      "pitch": "C",
       "octave": 4,
-      "position": 1,
-      "midi": 62,
-      "noteIndex": 2,
+      "position": 0,
+      "midi": 60,
+      "noteIndex": 0,
       "clef": "treble",
-      "explicitAccidental": "natural",
+      "explicitAccidental": null,
       "duration": "half",
       "durationTicks": 1920,
       "isRest": false,
@@ -2068,8 +2069,8 @@
       "noteIndex": 10,
       "clef": "treble",
       "explicitAccidental": null,
-      "duration": "half",
-      "durationTicks": 1920,
+      "duration": "whole",
+      "durationTicks": 3840,
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
@@ -2094,67 +2095,14 @@
       "noteIndex": 7,
       "clef": "bass",
       "explicitAccidental": null,
-      "duration": "half",
-      "durationTicks": 1920,
+      "duration": "whole",
+      "durationTicks": 3840,
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
       "measureIndex": 4,
       "beat": 1,
       "startTick": 15360,
-      "voice": 4,
-      "chordPcs": [
-        7,
-        10,
-        2
-      ],
-      "chordRootName": "G",
-      "accidental": "natural",
-      "clefOverride": "bass"
-    },
-    {
-      "id": "9a78dcd2-4463-49a9-afbb-d483638a42c9",
-      "pitch": "B",
-      "octave": 3,
-      "position": -1,
-      "midi": 58,
-      "noteIndex": 10,
-      "clef": "bass",
-      "explicitAccidental": null,
-      "duration": "half",
-      "durationTicks": 1920,
-      "isRest": false,
-      "isTriplet": false,
-      "isDuplet": false,
-      "measureIndex": 4,
-      "beat": 3,
-      "startTick": 17280,
-      "voice": 3,
-      "chordPcs": [
-        7,
-        10,
-        2
-      ],
-      "chordRootName": "G",
-      "accidental": "flat"
-    },
-    {
-      "id": "d304f41d-0dcc-4ca4-834b-ad6ddcef7bdb",
-      "pitch": "G",
-      "octave": 3,
-      "position": -3,
-      "midi": 55,
-      "noteIndex": 7,
-      "clef": "bass",
-      "explicitAccidental": null,
-      "duration": "half",
-      "durationTicks": 1920,
-      "isRest": false,
-      "isTriplet": false,
-      "isDuplet": false,
-      "measureIndex": 4,
-      "beat": 3,
-      "startTick": 17280,
       "voice": 4,
       "chordPcs": [
         7,
@@ -9981,13 +9929,13 @@
     },
     {
       "id": "48615d9c-bf71-4320-9129-53e2eccdb1dc",
-      "pitch": "B",
-      "octave": 3,
-      "position": -1,
-      "midi": 59,
-      "noteIndex": 11,
+      "pitch": "D",
+      "octave": 4,
+      "position": 1,
+      "midi": 62,
+      "noteIndex": 2,
       "clef": "bass",
-      "explicitAccidental": "natural",
+      "explicitAccidental": null,
       "accidental": "natural",
       "duration": "half",
       "isRest": false,
@@ -10003,14 +9951,14 @@
     },
     {
       "id": "2f8a6bfa-1f1c-4627-bb92-9f81c5e1112c",
-      "pitch": "D",
+      "pitch": "G",
       "octave": 3,
-      "position": -6,
-      "midi": 50,
-      "noteIndex": 2,
+      "position": -3,
+      "midi": 56,
+      "noteIndex": 8,
       "clef": "bass",
-      "explicitAccidental": null,
-      "accidental": "natural",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -10020,7 +9968,8 @@
       "beat": 1,
       "startTick": 149760,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "userAccidental": "sharp"
     },
     {
       "id": "ad7c7ff4-bae7-4ace-ae10-4ff3021cbcbc",
@@ -10111,14 +10060,12 @@
     },
     {
       "id": "e2b36ace-5694-4c48-a1ff-ff6f434d01b8",
-      "pitch": "D",
-      "octave": 3,
-      "position": -6,
-      "midi": 50,
-      "noteIndex": 2,
+      "pitch": "G",
+      "octave": 2,
+      "position": -10,
+      "midi": 44,
+      "noteIndex": 8,
       "clef": "bass",
-      "explicitAccidental": null,
-      "accidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -10128,7 +10075,10 @@
       "beat": 3,
       "startTick": 151680,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "userAccidental": "sharp",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp"
     },
     {
       "id": "8dc8662b-37f1-4b64-a4c1-5c801545aecf",
@@ -10931,7 +10881,7 @@
   ],
   "staffSystemMode": "grandstaff",
   "keySignatureRoot": "F",
-  "projectTitle": "Life on Mars",
+  "projectTitle": "               Life on Mars",
   "titleFontSize": 30,
   "titleFontFamily": "serif",
   "timeSignature": {
@@ -10956,7 +10906,20 @@
     }
   ],
   "doubleBarlineMeasures": [],
-  "tempoCurves": [],
+  "tempoCurves": [
+    {
+      "startNoteId": "dc845ed8-9c5e-4d59-8cef-0eed908eb236",
+      "endNoteId": "2186b41c-c535-43e0-b454-c8dac5a78de9",
+      "fromBpm": 120,
+      "toBpm": 60
+    },
+    {
+      "startNoteId": "c1519031-e3b9-4427-b3dd-c4556caf85b7",
+      "endNoteId": "684846c7-1acf-4738-b52a-951a524d7128",
+      "fromBpm": 120,
+      "toBpm": 90
+    }
+  ],
   "harmonyOverrides": [
     {
       "absBeat": 64,
