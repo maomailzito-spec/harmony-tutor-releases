@@ -202,6 +202,29 @@ export type StaffNote = {
 /** Manual ornament classification for a note. */
 export type OrnamentType = 'passing' | 'neighbor' | 'appoggiatura' | 'anticipation' | 'escape' | 'cambiata' | 'suspension' | 'structural' | 'ornamental';
 
+/** Singola traccia di accompagnamento (piano, chitarra, ecc.).
+ *  Non viene analizzata armonicamente e non passa dal voice-leading checker.
+ *  Le note usano StaffNote con `voice = 0` per distinguersi dal SATB (1-4). */
+export type AccompanimentTrack = {
+  /** ID univoco della traccia */
+  id: string;
+  /** Nome visualizzato (es. "Piano", "Chitarra") */
+  name: string;
+  /** Strumento General MIDI (0-127) */
+  instrumentId: number;
+  /** Note della traccia — stessa struttura di StaffNote ma con voice sempre = 0 */
+  notes: StaffNote[];
+  /** Traccia silenziata */
+  muted: boolean;
+  /** Traccia visibile nel rendering */
+  visible: boolean;
+  /** Volume relativo 0-1 */
+  volume: number;
+  /** Modalità pentagramma: "grandstaff" (treble+bass) o "treble_only" (solo violino).
+   *  File legacy senza questo campo vengono trattati come "grandstaff" al consumo. */
+  staffMode: 'grandstaff' | 'treble_only';
+};
+
 /**
  * Tempo curve (rallentando / accelerando) — playback-only effect.
  * Applies a linear BPM transition from `fromBpm` to `toBpm` across all events

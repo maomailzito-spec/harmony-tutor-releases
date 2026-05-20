@@ -1,5 +1,5 @@
 import { DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
-import type { TimeSignature, TimeSignatureChange } from '../types';
+import type { AccompanimentTrack, TimeSignature, TimeSignatureChange } from '../types';
 import { getKeySignature, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
 import { extractProjectExtras, migrateProjectData, CURRENT_PROJECT_SCHEMA_VERSION } from '../storage/projectSchema';
 import { readPreference, writePreference } from '../preferences/preferencesStore';
@@ -62,6 +62,10 @@ export type BuildGrandStaffProjectSnapshotArgs = {
                 hideAlternatives: boolean;
                 disableExport: boolean;
         };
+
+        /** Tracce di accompagnamento (piano, chitarra, ecc.). Non passano per
+         *  l'analisi armonica né per il voice-leading checker. */
+        accompanimentTracks?: AccompanimentTrack[];
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -98,6 +102,10 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		filePreferences: Object.fromEntries(
 			FILE_ANALYSIS_PREFS.map(id => [id, readPreference(id as any)])
 		),
+		// Tracce di accompagnamento — solo se presenti, per mantenere i file leggeri.
+		...((args.accompanimentTracks && args.accompanimentTracks.length > 0)
+			? { accompanimentTracks: args.accompanimentTracks }
+			: {}),
 	};
 
 	// Persist final computed harmony labels for corpus accuracy
@@ -184,6 +192,8 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setAnalysisLockOptions: (next: any) => void;
 	setSessionUnlocked?: (next: boolean) => void;
 
+	setAccompanimentTracks?: (next: AccompanimentTrack[]) => void;
+
 	timeSignature: TimeSignature;
 };
 
@@ -222,6 +232,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setTeacherPasswordHash(undefined);
 		args.setAnalysisLockOptions({ hideViolations: true, hideRomanLabels: false, hideChordSymbols: false, hideOrnaments: false, hideAlternatives: false, disableExport: true });
 		args.setSessionUnlocked?.(false);
+		args.setAccompanimentTracks?.([]);
 		args.projectExtrasRef.current = {};
 		return;
 	}
@@ -246,6 +257,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setTeacherPasswordHash(undefined);
 	args.setAnalysisLockOptions({ hideViolations: true, hideRomanLabels: false, hideChordSymbols: false, hideOrnaments: false, hideAlternatives: false, disableExport: true });
 	args.setSessionUnlocked?.(false);
+	args.setAccompanimentTracks?.([]);
 	args.setBpm(120);
 	args.setIsBpmActive(false);
 	args.setIsMetronomeOn(false);
@@ -443,6 +455,13 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			}
 			if (loadedProject.metronomeUnit === 'quarter' || loadedProject.metronomeUnit === 'eighth' || loadedProject.metronomeUnit === 'dotted-quarter') {
 				args.setMetronomeUnit(loadedProject.metronomeUnit);
+			}
+
+			// Tracce di accompagnamento: retrocompatibilità totale con file vecchi.
+			if (Array.isArray(loadedProject.accompanimentTracks)) {
+				args.setAccompanimentTracks?.(loadedProject.accompanimentTracks as AccompanimentTrack[]);
+			} else {
+				args.setAccompanimentTracks?.([]);
 			}
 
 			args.setCurrentProjectFilePath(cmd.filePath);

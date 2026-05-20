@@ -11,7 +11,7 @@ declare global {
     }
 }
 import React, { useState, useCallback, useMemo, useEffect, useRef, startTransition, useDeferredValue } from 'react';
-import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve } from '../types';
+import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
@@ -53,6 +53,7 @@ import RomanProgressionEditor from './RomanProgressionEditor';
 import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
+import TrackMixerPanel from './TrackMixerPanel';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -240,6 +241,21 @@ class RenderErrorBoundary extends React.Component<
   }
 }
 
+function isAccompanimentNote(noteId: string, accompanimentTracks: AccompanimentTrack[]): boolean {
+    return accompanimentTracks.some(track => track.notes.some(note => note.id === noteId));
+}
+
+function findAccTrackForNote(noteId: string, accompanimentTracks: AccompanimentTrack[]): {
+    trackIndex: number;
+    noteIndex: number;
+} | null {
+    for (let ti = 0; ti < accompanimentTracks.length; ti++) {
+        const ni = accompanimentTracks[ti].notes.findIndex(n => n.id === noteId);
+        if (ni !== -1) return { trackIndex: ti, noteIndex: ni };
+    }
+    return null;
+}
+
 const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     isActive,
     audioService,
@@ -256,6 +272,70 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         latestRawNotes.current = rawNotes;
     }, [rawNotes]);
+
+    // Tracce di accompagnamento (piano, chitarra, ecc.). Separate dal SATB:
+    // non sono soggette ad analisi armonica né a voice-leading checker.
+    const [accompanimentTracks, setAccompanimentTracks, undoAccompanimentTracks, redoAccompanimentTracks] = useUndoableState<AccompanimentTrack[]>([]);
+    const latestAccompanimentTracks = useRef(accompanimentTracks);
+    useEffect(() => {
+        latestAccompanimentTracks.current = accompanimentTracks;
+    }, [accompanimentTracks]);
+
+    const [isMixerOpen, setIsMixerOpen] = useState(false);
+
+    // Per-track gain nodes for real-time mute/volume control without restarting playback.
+    // Index = position in accompanimentTracks; each gain node persists and is connected
+    // to audioContext.destination. Notes from playback route THROUGH this gain node, so
+    // changing .gain.value here affects all currently-playing AND future-scheduled notes.
+    const accTrackGainsRef = useRef<Map<number, GainNode>>(new Map());
+
+    const handleUpdateTrack = useCallback((trackId: string, updates: Partial<AccompanimentTrack>) => {
+        // Track config changes (volume, mute, visibility, name, instrument) must NOT
+        // go through the undo history: a single volume slider drag fires many events
+        // per second, and JSON.stringify on the full state would freeze the UI and
+        // disrupt audio playback. Use the silent setter to update state in place.
+        setAccompanimentTracks(prev => {
+            const next = prev.map(t => t.id === trackId ? { ...t, ...updates } : t);
+            latestAccompanimentTracks.current = next;
+            // Apply mute/volume to the live gain node, if it exists, for real-time effect.
+            const idx = next.findIndex(t => t.id === trackId);
+            if (idx >= 0) {
+                const gain = accTrackGainsRef.current.get(idx);
+                if (gain) {
+                    const t = next[idx];
+                    gain.gain.value = t.muted ? 0 : t.volume;
+                }
+            }
+            return next;
+        }, { undoable: false });
+    }, []);
+
+    const handleDeleteTrack = useCallback((trackId: string) => {
+        setAccompanimentTracks(prev => {
+            const next = prev.filter(t => t.id !== trackId);
+            latestAccompanimentTracks.current = next;
+            return next;
+        });
+    }, []);
+
+    const handleAddEmptyTrack = useCallback(() => {
+        setAccompanimentTracks(prev => {
+            const index = (prev || []).length + 1;
+            const newTrack: AccompanimentTrack = {
+                id: crypto.randomUUID(),
+                name: `Traccia ${index}`,
+                instrumentId: 0, // Acoustic Grand Piano
+                notes: [],
+                muted: false,
+                visible: true,
+                volume: 0.8,
+                staffMode: 'grandstaff',
+            };
+            const next = [...(prev || []), newTrack];
+            latestAccompanimentTracks.current = next;
+            return next;
+        });
+    }, []);
     // ...existing code...
     // copyPasteError now owned by useNoteSelection
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
@@ -438,10 +518,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
     }, [setRawNotes, setTimeSignature, setTimeSignatureChanges, setBpm, setMinMeasureCount, setMinMeasureCountDraft]);
 
-    const { exportMidi, importMidi } = useGrandStaffMidi({
+    const { exportMidi, importMidi, importMidiAsAccompaniment, pickMidiFile } = useGrandStaffMidi({
         project,
         setProject,
     });
+
+    // MIDI import destination dialog. The resolver lets the async menu handler
+    // await the user's choice between SATB / Accompaniment / Cancel.
+    type MidiImportChoice = 'satb' | 'accompaniment' | null;
+    const [midiImportDialogOpen, setMidiImportDialogOpen] = useState(false);
+    const midiImportResolverRef = useRef<((choice: MidiImportChoice) => void) | null>(null);
+    const askMidiImportDestination = useCallback((): Promise<MidiImportChoice> => {
+        return new Promise<MidiImportChoice>((resolve) => {
+            midiImportResolverRef.current = resolve;
+            setMidiImportDialogOpen(true);
+        });
+    }, []);
+    const resolveMidiImportChoice = useCallback((choice: MidiImportChoice) => {
+        const r = midiImportResolverRef.current;
+        midiImportResolverRef.current = null;
+        setMidiImportDialogOpen(false);
+        if (r) r(choice);
+    }, []);
 
     // ── MIDI step-input hook ──
     const insertNoteFromMidiRef = useRef<(midi: number) => void>(() => {});
@@ -512,13 +610,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const playbackTransposeSemitones = staffSystemMode === 'treble_only' ? -12 : 0;
 
-    const systemHeightPx = staffSystemMode === 'satb_ancient' ? VF_SATB_SYSTEM_HEIGHT : TOTAL_SYSTEM_HEIGHT;
+    // Accompaniment staves are rendered below the SATB Grand Staff when at least
+    // one accompaniment track is visible. Extra vertical space depends on the
+    // accompaniment staff mode of the visible tracks:
+    //  - "grandstaff": 100 gap + 40 (treble lines) + 130 (treble->bass span) = 270px
+    //  - "treble_only": 100 gap + 70 (single staff footprint)                = 170px
+    // The 100px gap matches ACCOMPANIMENT_STAFF_GAP in VexflowGrandStaff and
+    // leaves room for Roman-numeral overhang and high acc-treble ledger lines.
+    // If multiple visible tracks have mixed modes, we allocate the max (grandstaff wins).
+    const VF_ACC_EXTRA_GRANDSTAFF = 100 + 40 + 130; // 270 — keep in sync with VexflowGrandStaff
+    const VF_ACC_EXTRA_TREBLE_ONLY = 100 + 70; // 170
+    const visibleAccompanimentTracks = (accompanimentTracks || []).filter(t => t && t.visible);
+    const hasVisibleAccompaniment = visibleAccompanimentTracks.length > 0;
+    const anyVisibleGrandstaff = visibleAccompanimentTracks.some(
+        t => (t.staffMode ?? 'grandstaff') === 'grandstaff'
+    );
+    const effectiveAccStaffMode: 'grandstaff' | 'treble_only' = anyVisibleGrandstaff ? 'grandstaff' : 'treble_only';
+    const accExtraPx = !hasVisibleAccompaniment
+        ? 0
+        : (effectiveAccStaffMode === 'grandstaff' ? VF_ACC_EXTRA_GRANDSTAFF : VF_ACC_EXTRA_TREBLE_ONLY);
+    const systemHeightPx = (staffSystemMode === 'satb_ancient' ? VF_SATB_SYSTEM_HEIGHT : TOTAL_SYSTEM_HEIGHT)
+        + accExtraPx;
     const playheadYTopPx = staffSystemMode === 'satb_ancient'
         ? (VF_SATB_SOPRANO_Y + PLAYHEAD_Y_OFFSET_PX - 3)
         : PLAYHEAD_Y_TOP;
-    const playheadYBottomPx = staffSystemMode === 'satb_ancient'
+    // When ACC is visible, extend the playhead down to cover the ACC staves so the
+    // playback cursor spans both SATB and accompaniment systems.
+    const playheadYBottomPxBase = staffSystemMode === 'satb_ancient'
         ? ((VF_SATB_BASS_Y + (4 * VF_LINE_SPACING)) + PLAYHEAD_Y_OFFSET_PX)
         : PLAYHEAD_Y_BOTTOM;
+    const playheadYBottomPx = playheadYBottomPxBase + accExtraPx;
 
     const vfStaveTopYForClef = useCallback((clef: ClefType): number => {
         if (staffSystemMode === 'satb_ancient') {
@@ -972,6 +1093,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     } = useNoteEditor({
         selectedNoteIds, setSelectedNoteIds, setRawNotes,
         timeSignature, keySignature, justInsertedNoteRef,
+        latestAccompanimentTracksRef: latestAccompanimentTracks,
+        setAccompanimentTracks,
     });
 
     /** Avanza (delta>0) o retrocede (delta<0) il pasteCaret di una durata.
@@ -2051,10 +2174,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (action === MENU_ACTIONS.IMPORT_MIDI) {
             try {
                 const fromMenuBase64 = typeof payload?.base64 === 'string' ? payload.base64 : '';
+                // Resolve a source first (file already provided by menu, otherwise pick a file).
+                // The destination dialog appears AFTER the file is in hand, so the user
+                // doesn't see an extra click if they cancel the picker.
+                let source: File | string | undefined;
                 if (fromMenuBase64) {
-                    await importMidi(fromMenuBase64);
+                    source = fromMenuBase64;
                 } else {
-                    await importMidi();
+                    const picked = await pickMidiFile();
+                    if (!picked) return;
+                    source = picked;
+                }
+                const choice = await askMidiImportDestination();
+                if (choice === null) return; // user cancelled
+                if (choice === 'satb') {
+                    await importMidi(source);
+                } else {
+                    const newTrack = await importMidiAsAccompaniment(source);
+                    if (newTrack) {
+                        setAccompanimentTracks(prev => [...(prev || []), newTrack]);
+                    }
                 }
             } catch (err: any) {
                 console.error('MIDI import failed:', err);
@@ -2146,6 +2285,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     analysisLocked,
                     teacherPasswordHash,
                     analysisLockOptions,
+                    accompanimentTracks,
                 },
                 apply: {
                     projectExtrasRef,
@@ -2207,6 +2347,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setTeacherPasswordHash,
                     setAnalysisLockOptions,
                     setSessionUnlocked,
+                    setAccompanimentTracks,
                     timeSignature,
                 },
             });
@@ -2315,7 +2456,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } else if (action === 'toggle-analysis-lock') {
             setIsAnalysisLockModalOpen(true);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi, importMidiAsAccompaniment, pickMidiFile, askMidiImportDestination, setAccompanimentTracks]);
 
     // Routing: single source of truth for where actions are handled.
     const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {
@@ -2445,6 +2586,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (typeof p.teacherPasswordHash === 'string') setTeacherPasswordHash(p.teacherPasswordHash);
                 if (p.analysisLockOptions && typeof p.analysisLockOptions === 'object') setAnalysisLockOptions(p.analysisLockOptions);
                 setSessionUnlocked(false);
+                setAccompanimentTracks(Array.isArray(p.accompanimentTracks)
+                    ? p.accompanimentTracks.map((t: any) => ({ ...t, staffMode: t?.staffMode ?? 'grandstaff' }))
+                    : []);
                 setCurrentProjectFilePath(draft.filePath || null);
                 localStorage.removeItem(DRAFT_KEY);
             } catch {
@@ -2973,11 +3117,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const minPxPerTick = (MIN_PX_PER_QUARTER / TICKS_PER_QUARTER);
             const MIN_PIXEL_SPACING = 8; // px between adjacent onsets
 
-            // Compute the smallest tick delta between adjacent onsets inside the system
+            // Compute the smallest tick delta between adjacent onsets inside the system.
+            // Include ACC notes so eighth-note triplets (and other short subdivisions) in
+            // accompaniment tracks force the system to reserve enough horizontal space.
+            // Without this, when SATB is sparse the system uses a low pxPerTick and the
+            // ACC notes/playhead end up visually overlapping.
             let minDeltaTicks = Infinity;
+            const accNotesForLayout = (accompanimentTracks || [])
+                .filter(t => t && t.visible)
+                .flatMap(t => t.notes);
             sys.measureIndices.forEach(m => {
                 const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
-                const ticks = measureNotes.map(n => (typeof (n as any).startTick === 'number')
+                const accMeasureNotes = accNotesForLayout.filter(n => n.measureIndex === m);
+                const allMeasureNotes = [...measureNotes, ...accMeasureNotes];
+                const ticks = allMeasureNotes.map(n => (typeof (n as any).startTick === 'number')
                     ? (n as any).startTick
                     : Math.round((((measureStartAbsBeat[n.measureIndex ?? 0] ?? 0) + ((n.beat ?? 1) - 1))) * TICKS_PER_QUARTER));
                 ticks.sort((a, b) => a - b);
@@ -3090,7 +3243,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ignore logging errors
         }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
-    }, [notes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines]);
+    }, [notes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
 
     // Compute current playhead measure for choral panel insertion.
     const playheadMeasureForChoral = useMemo(() => {
@@ -3713,6 +3866,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             absStartBeat: number;
             durationBeats: number;
             skip: boolean;
+            accTrackIdx?: number;
         };
 
         const byVoice = new Map<number, StaffNote[]>();
@@ -3966,6 +4120,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 : fermataMap;
         }
 
+        // ── Accompaniment track items ──
+        // Build PlaybackItems for ACC tracks and add to allItems AFTER repeat/fermata
+        // expansion (ACC notes from MIDI imports are already linear — no repeat notation).
+        const accTracks = latestAccompanimentTracks.current || [];
+        const GM_TO_INSTR: Record<number, string> = {
+            0: 'acoustic_grand_piano', 6: 'harpsichord', 19: 'church_organ',
+            40: 'violin', 42: 'cello', 48: 'string_ensemble_1',
+            52: 'choir_aahs', 56: 'trumpet', 60: 'french_horn',
+            68: 'oboe', 71: 'clarinet', 73: 'flute',
+        };
+        accTracks.forEach((track, trackIdx) => {
+            // Note: do NOT skip muted tracks here. We still schedule the notes so the
+            // user can un-mute mid-playback. Mute is enforced via per-track gain node
+            // (gain=0 when muted), allowing real-time toggling without re-scheduling.
+            if (!track) return;
+            let accBeatCount = 0;
+            for (const n of (track.notes || [])) {
+                if (n.isRest) continue;
+                // ACC notes from MIDI import have pre-computed measureIndex, beat, durationTicks.
+                // Use them directly so chord notes (same tick) share the same absStartBeat.
+                const mIdx = n.measureIndex ?? 0;
+                const beat = n.beat ?? 1;
+                const absStartBeat = measureStartBeat(mIdx) + (beat - 1);
+                const durationBeats = typeof n.durationTicks === 'number' && n.durationTicks > 0
+                    ? n.durationTicks / TICKS_PER_QUARTER
+                    : DURATION_VALUES[n.duration || 'quarter'] * (n.isDotted ? 1.5 : 1);
+                allItems.push({ note: n, absStartBeat, durationBeats, skip: false, accTrackIdx: trackIdx });
+                accBeatCount++;
+            }
+        });
         // Group items by start beat (rounded to avoid float key drift with tuplets).
         const startMap = new Map<string, { absBeat: number; items: PlaybackItem[] }>();
         for (const it of allItems) {
@@ -4028,10 +4212,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     for (const it of ev.items) {
                         const n = it.note;
                         if (!n || n.isRest) continue;
-                        if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) continue;
+                        if (it.accTrackIdx === undefined && soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) continue;
                         const midi = (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midi) || midi < 21 || midi > 108) continue;
-                        const instr = voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano';
+                        const instr = it.accTrackIdx !== undefined
+                            ? (GM_TO_INSTR[accTracks[it.accTrackIdx]?.instrumentId ?? -1] || 'acoustic_grand_piano')
+                            : (voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano');
                         if (!neededByInstrument.has(instr)) neededByInstrument.set(instr, new Set());
                         neededByInstrument.get(instr)!.add(midiToName(midi));
                     }
@@ -4059,6 +4245,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const pc = INSTR_TO_GM[instr] ?? 0;
                 selectedMidiOutput.send([0xC0 + ch, pc]);
             }
+            // Program Change for accompaniment tracks (channels 4+)
+            accTracks.forEach((track, idx) => {
+                if (!track || track.muted) return;
+                const ch = 4 + idx;
+                if (ch > 15) return;
+                selectedMidiOutput.send([0xC0 + ch, track.instrumentId & 0x7F]);
+            });
         }
 
         // ── Tempo curves (rallentando / accelerando) — playback-only ──
@@ -4185,15 +4378,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         noteIds: ev.items.map(it => it.note?.id?.slice(0, 8)),
                     }));
             }
-            console.log('[TEMPO] schedule', {
-                startAbsBeat, t0Anchor, curveSegs,
-                totalEvents: eventsToPlay.length,
-                lastEventBeat: eventsToPlay[eventsToPlay.length - 1]?.absBeat,
-                lastEventTime: eventsToPlay.length > 0 ? beatToTime(eventsToPlay[eventsToPlay.length - 1].absBeat) - t0Anchor : 0,
-                eventsInCurveRange: inCurveSample.length,
-                inCurveSample,
-                sample,
-            });
         } catch { /* ignore */ }
 
         eventsToPlay.forEach((ev) => {
@@ -4217,6 +4401,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 ev.items.forEach((it) => {
                     const n = it.note;
                     if (n.isRest) return;
+                    if (it.accTrackIdx !== undefined) {
+                        const track = latestAccompanimentTracks.current[it.accTrackIdx];
+                        if (!track) return;
+                        const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
+                        const midiT = (n.midi ?? 0) + playbackTransposeSemitones;
+                        if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
+                        const instr = GM_TO_INSTR[track.instrumentId] || 'acoustic_grand_piano';
+                        // Get-or-create persistent per-track gain node. Routing notes through
+                        // it lets us mute/change volume in real-time (sample-accurate) even
+                        // while notes are already scheduled in the Web Audio queue.
+                        let trackGain = accTrackGainsRef.current.get(it.accTrackIdx);
+                        if (!trackGain && audioService.audioContext) {
+                            trackGain = audioService.audioContext.createGain();
+                            trackGain.connect(audioService.audioContext.destination);
+                            accTrackGainsRef.current.set(it.accTrackIdx, trackGain);
+                        }
+                        if (trackGain) {
+                            trackGain.gain.value = track.muted ? 0 : track.volume;
+                        }
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: 1, output: trackGain });
+                        return;
+                    }
                     if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
                     const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
                     const midi = n.midi;
@@ -4231,7 +4437,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // (visual timing is less critical than audio timing).
             const t = window.setTimeout(async () => {
                 const playable = ev.items
-                    .map(x => x.note)
+                    .filter(it => it.accTrackIdx === undefined)
+                    .map(it => it.note)
                     .filter(n => !n.isRest && (n.midi ?? 0) > 0 && (soloVoicesRef.current.size === 0 || soloVoicesRef.current.has((n.voice ?? 1) as number)));
 
                 setPlayingNoteIds(playable.map(n => n.id));
@@ -4241,6 +4448,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     ev.items.forEach((it) => {
                         const n = it.note;
                         if (n.isRest) return;
+                        if (it.accTrackIdx !== undefined) {
+                            const track = latestAccompanimentTracks.current[it.accTrackIdx];
+                            if (!track || track.muted) return;
+                            const ch = Math.max(0, Math.min(15, 4 + it.accTrackIdx));
+                            const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
+                            const midiT = (n.midi ?? 0) + playbackTransposeSemitones;
+                            if (!Number.isFinite(midiT) || midiT <= 0) return;
+                            const vel = Math.round(Math.min(127, Math.max(1, track.volume * 100)));
+                            selectedMidiOutput.send([0x90 + ch, midiT, vel], midiWhenMs);
+                            selectedMidiOutput.send([0x80 + ch, midiT, 0], midiWhenMs + durSec * 1000);
+                            return;
+                        }
                         if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
                         const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
                         sendMidiNote(n, selectedMidiOutput, durSec, midiWhenMs, ((n.voice ?? 1) as number) - 1);
@@ -4526,6 +4745,145 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [layoutData, getNoteY, staffSystemMode]);
 
     // -----------------------
+    // ACC triplet & duplet brackets (separate pipeline from SATB, uses ACC stave Y)
+    // -----------------------
+    const accTupletGroupsBySystem = useMemo(() => {
+        const systems: {
+            triplets: Array<{ id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; label: string }>;
+            duplets: Array<{ id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; label: string }>;
+        }[] = [];
+        if (!layoutData) return systems;
+        if (!hasVisibleAccompaniment) return systems;
+
+        const ACC_TREBLE_TOP_Y_LOCAL = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310
+        const ACC_BASS_TOP_Y_LOCAL = ACC_TREBLE_TOP_Y_LOCAL + 130;            // 440
+
+        // Y for note: top line at known reference pitch (treble F5=pos 10, bass A3=pos -2)
+        const noteYForAcc = (position: number, clef: ClefType, staffMode: 'grandstaff' | 'treble_only') => {
+            // In treble_only, bass notes are remapped to treble (per VexflowGrandStaff)
+            const useClef: ClefType = (staffMode === 'treble_only') ? 'treble' : clef;
+            const topY = useClef === 'bass' ? ACC_BASS_TOP_Y_LOCAL : ACC_TREBLE_TOP_Y_LOCAL;
+            const refTopPos = useClef === 'bass' ? -2 : 10;
+            return topY + (refTopPos - position) * (VF_LINE_SPACING / 2);
+        };
+
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
+
+        layoutData.systemsParams.forEach((system, systemIndex) => {
+            const measureToIdx = new Map<number, number>();
+            system.measureIndices.forEach((m, i) => measureToIdx.set(m, i));
+
+            // Build per-system ACC note list with xPosition (matches accompanimentNotesForSystem logic)
+            type AccPositioned = StaffNote & { xPosition: number; _trackIdx: number };
+            const accNotesInSys: AccPositioned[] = [];
+            (accompanimentTracks || []).forEach((track, ti) => {
+                if (!track || !track.visible) return;
+                for (const n of (track.notes || [])) {
+                    if (!n.isTriplet && !n.isDuplet) continue;
+                    if (n.isRest) continue;
+                    const mi = n.measureIndex ?? -1;
+                    const idxInSys = measureToIdx.get(mi);
+                    if (idxInSys === undefined) continue;
+                    const startTick = (n as any).startTick;
+                    if (typeof startTick !== 'number') continue;
+                    const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
+                    const measureStartTick = beatsToTicks(msAbsBeat);
+                    const relativeTicks = Math.max(0, startTick - measureStartTick);
+                    const relativeX = relativeTicks * system.pxPerTick;
+                    const baseX = system.startMeasuresX[idxInSys] ?? 0;
+                    const xPosition = baseX + MEASURE_PADDING_X + relativeX;
+                    accNotesInSys.push({ ...n, xPosition, _trackIdx: ti });
+                }
+            });
+
+            // Sort by track, measure, startTick
+            accNotesInSys.sort((a, b) =>
+                a._trackIdx - b._trackIdx ||
+                (a.measureIndex ?? 0) - (b.measureIndex ?? 0) ||
+                ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)
+            );
+
+            const triplets: typeof systems[number]['triplets'] = [];
+            const duplets: typeof systems[number]['duplets'] = [];
+            const TUPLET_LEFT_TRIM_PX = 20;
+
+            const buildGroup = (run: AccPositioned[], kind: 'triplet' | 'duplet') => {
+                if (run.length < (kind === 'triplet' ? 3 : 2)) return null;
+                const first = run[0];
+                const last = run[run.length - 1];
+                const clef = (first.clef || 'treble') as ClefType;
+                const ys = run.map(n => noteYForAcc(n.position, clef, effectiveAccStaffMode));
+                const highestY = Math.min(...ys);
+
+                let x1 = (first.xPosition ?? 0) - 6 + TUPLET_LEFT_TRIM_PX;
+                const x2 = (last.xPosition ?? 0) + 26;
+                if (x1 > x2 - 12) x1 = x2 - 12;
+                const midX = (x1 + x2) / 2;
+                const bracketY = highestY - 34;
+                const textY = bracketY + 14;
+
+                return {
+                    id: `acc-${kind}-${systemIndex}-${first.id}`,
+                    x1, x2, midX, bracketY, textY,
+                    label: kind === 'triplet' ? '3' : '2',
+                };
+            };
+
+            // Triplets: groups of 3 consecutive isTriplet notes in same (track, measure, clef)
+            {
+                let run: AccPositioned[] = [];
+                const flush = () => {
+                    const g = buildGroup(run, 'triplet');
+                    if (g) triplets.push(g);
+                    run = [];
+                };
+                for (const n of accNotesInSys) {
+                    if (!n.isTriplet) { flush(); continue; }
+                    if (run.length === 0 ||
+                        (run[0]._trackIdx === n._trackIdx &&
+                         (run[0].measureIndex ?? 0) === (n.measureIndex ?? 0) &&
+                         (run[0].clef || 'treble') === (n.clef || 'treble'))) {
+                        run.push(n);
+                        if (run.length === 3) flush();
+                    } else {
+                        flush();
+                        run = [n];
+                    }
+                }
+                flush();
+            }
+
+            // Duplets: groups of 2
+            {
+                let run: AccPositioned[] = [];
+                const flush = () => {
+                    const g = buildGroup(run, 'duplet');
+                    if (g) duplets.push(g);
+                    run = [];
+                };
+                for (const n of accNotesInSys) {
+                    if (!n.isDuplet) { flush(); continue; }
+                    if (run.length === 0 ||
+                        (run[0]._trackIdx === n._trackIdx &&
+                         (run[0].measureIndex ?? 0) === (n.measureIndex ?? 0) &&
+                         (run[0].clef || 'treble') === (n.clef || 'treble'))) {
+                        run.push(n);
+                        if (run.length === 2) flush();
+                    } else {
+                        flush();
+                        run = [n];
+                    }
+                }
+                flush();
+            }
+
+            systems[systemIndex] = { triplets, duplets };
+        });
+
+        return systems;
+    }, [layoutData, accompanimentTracks, hasVisibleAccompaniment, effectiveAccStaffMode]);
+
+    // -----------------------
     // Accidentals (apply on insertion)
     // -----------------------
     const applyAutoLeadingToneInMinor = useCallback((baseProps: any) => {
@@ -4633,13 +4991,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
-        const n = rawNotes.find(nn => nn.id === noteId);
+        const nInRaw = rawNotes.find(nn => nn.id === noteId);
+        const n = nInRaw ?? latestAccompanimentTracks.current.flatMap(t => t.notes).find(nn => nn.id === noteId);
+        const isAccNote = nInRaw === undefined && n !== undefined;
 
         // INSERT UX FIX: clicking a rest in insert mode should overwrite it
         // by running insertion rather than toggling selection.
         const isModifier = !!((e as any).shiftKey || (e as any).ctrlKey || (e as any).altKey);
         const isCmdHeld = !!((e as any).metaKey || (e as any).ctrlKey);
-        if (tool === 'insert' && n?.isRest && !isModifier && !isCmdHeld) {
+        if (tool === 'insert' && n?.isRest && !isModifier && !isCmdHeld && !isAccNote) {
             try {
                 const target = (e as any).target as Element | null;
                 const svg = target?.closest?.('svg') as SVGSVGElement | null;
@@ -4667,7 +5027,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Also set a paste caret at the clicked note's time (standard UX: click target, then Cmd+V).
         // Auto-switch voice to the clicked note (requested).
-        if (n && typeof (n as any).voice === 'number') {
+        if (n && typeof (n as any).voice === 'number' && (n as any).voice !== 0) {
             setSelectedVoice((n as any).voice as Voice);
         }
         if (n && Number.isFinite(n.measureIndex) && layoutData) {
@@ -5684,8 +6044,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return { ...n, clefOverride: targetClef };
         }));
+        // Route ACC notes: change clef directly (they have no clefOverride concept)
+        const accTracks = latestAccompanimentTracks.current;
+        const hasAccSelected = [...selectedNoteIds].some(id => isAccompanimentNote(id, accTracks));
+        if (hasAccSelected) {
+            setAccompanimentTracks(prev => prev.map(track => ({
+                ...track,
+                notes: track.notes.map(n => {
+                    if (!selectedNoteIds.has(n.id)) return n;
+                    const newClef = targetClef ?? 'treble';
+                    return { ...n, clef: newClef as ClefType };
+                }),
+            })));
+        }
         setContextMenu(null);
-    }, [selectedNoteIds]);
+    }, [selectedNoteIds, setAccompanimentTracks]);
 
     const handleBackgroundClick = useCallback((x: number, y: number, systemIndex: number, e?: MouseEvent) => {
         if (!layoutData) return;
@@ -5825,6 +6198,101 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Per compatibilità con i costruttori StaffNote che usano la shorthand "beat"
         const beat = beatInMeasure;
+
+        // ── ACC area detection ──
+        // ACC treble stave: top line Y = 310, bottom line Y = 350 (grand staff mode)
+        // ACC bass stave:   top line Y = 440, bottom line Y = 480
+        // Threshold conservative: clicks well below SATB bass ledger lines AND
+        // close enough to ACC area to be intentional.
+        const ACC_TREBLE_TOP_Y = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310
+        const ACC_BASS_TOP_Y = ACC_TREBLE_TOP_Y + 130;                  // 440
+        const ACC_AREA_THRESHOLD_Y = ACC_TREBLE_TOP_Y - 30;             // 280 — allows ~3 ledger lines above ACC treble
+        if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y) {
+            if (e?.altKey) return;
+            // Midpoint between stave centers (treble 330, bass 460) = 395
+            const accClefMidY = (ACC_TREBLE_TOP_Y + 2 * VF_LINE_SPACING + ACC_BASS_TOP_Y + 2 * VF_LINE_SPACING) / 2;
+
+            // Empirical calibration: the pointer Y reported to the editor is offset
+            // relative to the rendered VexFlow stave by ~40px (same as SATB treble).
+            const yCal = y + VF_TREBLE_MOUSE_Y_ADJUST_PX;
+
+            let accClef: ClefType;
+            let pos: number;
+            if (effectiveAccStaffMode === 'treble_only' || yCal < (accClefMidY + VF_TREBLE_MOUSE_Y_ADJUST_PX)) {
+                accClef = 'treble';
+                // Treble middle line (B4) is at Y = ACC_TREBLE_TOP_Y + 20 = 330; B4 corresponds to pos 6.
+                const middleY = ACC_TREBLE_TOP_Y + 2 * VF_LINE_SPACING;
+                const halfSteps = (middleY - yCal) / (VF_LINE_SPACING / 2);
+                pos = 6 + Math.round(halfSteps);
+            } else {
+                accClef = 'bass';
+                // Bass middle line (D3) is at Y = ACC_BASS_TOP_Y + 20 = 460; D3 corresponds to pos -6.
+                const middleY = ACC_BASS_TOP_Y + 2 * VF_LINE_SPACING;
+                const halfSteps = (middleY - yCal) / (VF_LINE_SPACING / 2);
+                pos = -6 + Math.round(halfSteps);
+            }
+
+            let accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignature);
+            accProps = applyAutoLeadingToneInMinor(accProps);
+            accProps = applyActiveAccidental(accProps);
+
+            const accNote: StaffNote = {
+                id: crypto.randomUUID(),
+                ...accProps,
+                duration: selectedInsertion.duration,
+                isRest: false,
+                isTriplet,
+                isDuplet,
+                isDotted: selectedInsertion.isDotted ?? false,
+                measureIndex: hit.measureIndex,
+                beat,
+                startTick,
+                durationTicks,
+                clef: accClef,
+                voice: 0 as any,
+            };
+
+            const firstVisibleIdx = latestAccompanimentTracks.current.findIndex(t => t.visible);
+            if (firstVisibleIdx !== -1) {
+                setAccompanimentTracks(prev => prev.map((track, i) => {
+                    if (i !== firstVisibleIdx) return track;
+                    return {
+                        ...track,
+                        notes: [...track.notes, accNote].sort((a, b) =>
+                            ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)),
+                    };
+                }));
+                setSelectedNoteIds(new Set([accNote.id]));
+                justInsertedNoteRef.current = accNote.id;
+                // Audition the inserted ACC note
+                void playNote(accNote);
+                // Advance playhead to the next position (same as SATB insertion)
+                try {
+                    const nextAbsBeat = (startTick + durationTicks) / TICKS_PER_QUARTER;
+                    playbackCursorAbsBeatRef.current = nextAbsBeat;
+                    const nextPos = getPlayheadPosForAbsBeat(nextAbsBeat);
+                    if (nextPos) {
+                        setPlayheadPosition(nextPos);
+                        const beatsPerMeasureAdv = timeSignature.numerator * (4 / timeSignature.denominator);
+                        const measureIndexAdv = Math.floor(nextAbsBeat / beatsPerMeasureAdv);
+                        const beatAdv = Math.round(((nextAbsBeat - (measureIndexAdv * beatsPerMeasureAdv)) + 1) * 1e6) / 1e6;
+                        setPasteCaret({ x: nextPos.x, systemIndex: nextPos.systemIndex, measureIndex: measureIndexAdv, beat: beatAdv });
+                    }
+                } catch { /* ignore */ }
+                // Auto-disarm triplet after a full group (3 notes) — same as SATB
+                if (isTriplet) {
+                    const next = tupletNoteCount + 1;
+                    if (next >= 3) {
+                        setIsTriplet(false);
+                        setTupletNoteCount(0);
+                        setTripletBaseDuration(null);
+                    } else {
+                        setTupletNoteCount(next);
+                    }
+                }
+            }
+            return;
+        }
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
 
@@ -6456,6 +6924,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         playNote,
         activeAccidental,
         clipboard,
+        hasVisibleAccompaniment,
+        effectiveAccStaffMode,
+        setAccompanimentTracks,
+        setSelectedNoteIds,
+        isTriplet,
+        tupletNoteCount,
+        setIsTriplet,
+        setTupletNoteCount,
+        setTripletBaseDuration,
+        setPlayheadPosition,
+        getPlayheadPosForAbsBeat,
     ]);
 
     const getPlayheadSnapGridTicks = useCallback((useFineStep: boolean): number => {
@@ -6686,6 +7165,80 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (!layoutData) return;
 
+        // ── ACC area: show ACC ghost note (suppresses SATB ghost) ──
+        const ACC_TREBLE_TOP_Y_GHOST = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310
+        const ACC_BASS_TOP_Y_GHOST = ACC_TREBLE_TOP_Y_GHOST + 130;            // 440
+        const ACC_AREA_THRESHOLD_Y_GHOST = ACC_TREBLE_TOP_Y_GHOST - 30;       // 280
+        if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y_GHOST) {
+            const hitGhost = getSystemMeasureAtX(systemIndex, x);
+            if (!hitGhost) { setGhostNote(null); return; }
+            const yCalGhost = y + VF_TREBLE_MOUSE_Y_ADJUST_PX;
+            const accClefMidYGhost = (ACC_TREBLE_TOP_Y_GHOST + 2 * VF_LINE_SPACING + ACC_BASS_TOP_Y_GHOST + 2 * VF_LINE_SPACING) / 2;
+
+            if (selectedInsertion.type === 'rest') {
+                setGhostNote(prev => {
+                    const accGhostClef: ClefType = (effectiveAccStaffMode === 'treble_only' || yCalGhost < (accClefMidYGhost + VF_TREBLE_MOUSE_Y_ADJUST_PX)) ? 'treble' : 'bass';
+                    const next = {
+                        id: 'ghost' as const,
+                        pitch: 'B',
+                        octave: accGhostClef === 'bass' ? 2 : 4,
+                        position: accGhostClef === 'bass' ? 4 : 8,
+                        midi: 0,
+                        noteIndex: 0,
+                        duration: selectedInsertion.duration,
+                        isRest: true as const,
+                        isTriplet,
+                        isDuplet,
+                        isDotted,
+                        xPosition: x,
+                        clef: accGhostClef,
+                        voice: 0 as any,
+                        systemIndex,
+                    };
+                    if (prev && prev.isRest && prev.xPosition === x && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+                    return next;
+                });
+                return;
+            }
+
+            let accGhostClef: ClefType;
+            let accGhostPos: number;
+            if (effectiveAccStaffMode === 'treble_only' || yCalGhost < (accClefMidYGhost + VF_TREBLE_MOUSE_Y_ADJUST_PX)) {
+                accGhostClef = 'treble';
+                const middleY = ACC_TREBLE_TOP_Y_GHOST + 2 * VF_LINE_SPACING;
+                const halfSteps = (middleY - yCalGhost) / (VF_LINE_SPACING / 2);
+                accGhostPos = 6 + Math.round(halfSteps);
+            } else {
+                accGhostClef = 'bass';
+                const middleY = ACC_BASS_TOP_Y_GHOST + 2 * VF_LINE_SPACING;
+                const halfSteps = (middleY - yCalGhost) / (VF_LINE_SPACING / 2);
+                accGhostPos = -6 + Math.round(halfSteps);
+            }
+
+            let accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignature);
+            accGhostProps = applyAutoLeadingToneInMinor(accGhostProps);
+            accGhostProps = applyActiveAccidental(accGhostProps);
+
+            setGhostNote(prev => {
+                const next = {
+                    id: 'ghost' as const,
+                    ...accGhostProps,
+                    duration: selectedInsertion.duration,
+                    isRest: false as const,
+                    isTriplet,
+                    isDuplet,
+                    isDotted,
+                    xPosition: x,
+                    clef: accGhostClef,
+                    voice: 0 as any,
+                    systemIndex,
+                };
+                if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+                return next;
+            });
+            return;
+        }
+
         const targetClef: ClefType = clefForVoice(selectedVoice);
 
         if (staffSystemMode === 'satb_ancient') {
@@ -6787,7 +7340,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === selectedVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
             return next;
         });
-    }, [applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor]);
+    }, [applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor, hasVisibleAccompaniment, effectiveAccStaffMode]);
 
     // Finalize marquee selection on mouse up
     useEffect(() => {
@@ -6819,7 +7372,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const yMax = Math.max(prev.startY, prev.endY);
 
                 const measureSet = new Set(sys.measureIndices);
-                const candidatesAll = layoutData.positionedNotes.filter(n => measureSet.has(n.measureIndex ?? -1));
+                const accNoteCandidates = latestAccompanimentTracks.current
+                    .filter(t => t.visible)
+                    .flatMap(t => t.notes)
+                    .filter(n => typeof n.measureIndex === 'number' && measureSet.has(n.measureIndex));
+                const candidatesAll = [
+                    ...layoutData.positionedNotes.filter(n => measureSet.has(n.measureIndex ?? -1)),
+                    ...accNoteCandidates,
+                ];
                 const candidates = (drag.filterVoice != null)
                     ? candidatesAll.filter(n => ((n.voice ?? 1) as Voice) === drag.filterVoice)
                     : candidatesAll;
@@ -7116,6 +7676,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         return { ...n, isTiedToNext: false, manualTieDirection: undefined };
                     });
                 });
+
+                // Also transpose any selected ACC notes
+                const accTracks = latestAccompanimentTracks.current;
+                const accIdsSelected = [...selectedNoteIds].filter(id => isAccompanimentNote(id, accTracks));
+                if (accIdsSelected.length > 0) {
+                    const accIdSet = new Set(accIdsSelected);
+                    setAccompanimentTracks(prev => prev.map(track => ({
+                        ...track,
+                        notes: track.notes.map(n => {
+                            if (!accIdSet.has(n.id)) return n;
+                            if (n.isRest) return n;
+                            if (!Number.isFinite(n.midi)) return n;
+                            const nextMidi = n.midi + delta;
+                            const clef: ClefType = (n.clef || 'treble') as ClefType;
+                            const preferred = preferFromAccidental(n);
+                            const props = getNotePropertiesFromMidi(nextMidi, keySignature, clef, preferred);
+                            return { ...n, ...props };
+                        }),
+                    })));
+                }
             };
 
             // ── Ornament override shortcuts (⌥ + key, no Shift) ──
@@ -7392,6 +7972,79 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
 
+                // ACC routing — mirror SATB behaviour: backward-first, forward fallback.
+                // For each selected ACC note, look for the previous same-clef same-pitch
+                // note in the same track and toggle ITS isTiedToNext (so the tie "arrives"
+                // at the just-inserted/selected note — the natural workflow).
+                {
+                    const accIdsForTie = [...selectedNoteIds].filter(id => isAccompanimentNote(id, latestAccompanimentTracks.current));
+                    if (accIdsForTie.length > 0) {
+                        const accTracksSnap = latestAccompanimentTracks.current;
+                        // Per-track set of note IDs whose isTiedToNext we will toggle.
+                        const toggleByTrackId = new Map<string, Set<string>>();
+
+                        for (const accId of accIdsForTie) {
+                            // Find which track contains this id
+                            for (const track of accTracksSnap) {
+                                const idxInTrack = track.notes.findIndex(n => n.id === accId);
+                                if (idxInTrack === -1) continue;
+
+                                const sel = track.notes[idxInTrack];
+                                if (sel.isRest) break;
+
+                                // Build a sorted view by startTick so adjacency reflects musical order
+                                const sortedNotes = [...track.notes].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0));
+                                const sortedIdx = sortedNotes.findIndex(n => n.id === accId);
+                                if (sortedIdx === -1) break;
+
+                                // Backward first: previous same-clef note in track
+                                let prev: typeof sortedNotes[number] | undefined;
+                                for (let i = sortedIdx - 1; i >= 0; i--) {
+                                    if (sortedNotes[i].clef !== sel.clef) continue;
+                                    prev = sortedNotes[i];
+                                    break;
+                                }
+                                if (prev && !prev.isRest && Number(prev.midi) === Number(sel.midi)) {
+                                    if (!toggleByTrackId.has(track.id)) toggleByTrackId.set(track.id, new Set());
+                                    toggleByTrackId.get(track.id)!.add(prev.id);
+                                    break;
+                                }
+
+                                // Forward fallback: next same-clef same-pitch note
+                                let nextN: typeof sortedNotes[number] | undefined;
+                                for (let i = sortedIdx + 1; i < sortedNotes.length; i++) {
+                                    if (sortedNotes[i].clef !== sel.clef) continue;
+                                    nextN = sortedNotes[i];
+                                    break;
+                                }
+                                if (nextN && !nextN.isRest && Number(nextN.midi) === Number(sel.midi)) {
+                                    if (!toggleByTrackId.has(track.id)) toggleByTrackId.set(track.id, new Set());
+                                    toggleByTrackId.get(track.id)!.add(sel.id);
+                                }
+                                break;
+                            }
+                        }
+
+                        if (toggleByTrackId.size > 0) {
+                            setAccompanimentTracks(prev => prev.map(track => {
+                                const toggleIds = toggleByTrackId.get(track.id);
+                                if (!toggleIds || toggleIds.size === 0) return track;
+                                return {
+                                    ...track,
+                                    notes: track.notes.map(n => {
+                                        if (!toggleIds.has(n.id)) return n;
+                                        if ((n as any).isTiedToNext) {
+                                            const { isTiedToNext, manualTieDirection, ...rest } = n as any;
+                                            return rest;
+                                        }
+                                        return { ...(n as any), isTiedToNext: true };
+                                    }),
+                                };
+                            }));
+                        }
+                    }
+                }
+
                 try {
                     const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges);
                     const selected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
@@ -7576,6 +8229,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 return prev;
                             }
                         });
+
+                        // Also update ACC notes (no timeline rebuild needed for ACC)
+                        const accTracks = latestAccompanimentTracks.current;
+                        const accIdsSelected = [...selectedNoteIds].filter(id => isAccompanimentNote(id, accTracks));
+                        if (accIdsSelected.length > 0) {
+                            const accIdSet = new Set(accIdsSelected);
+                            setAccompanimentTracks(prev => prev.map(track => ({
+                                ...track,
+                                notes: track.notes.map(n => {
+                                    if (!accIdSet.has(n.id)) return n;
+                                    let durBeats = (DURATION_VALUES as any)[duration] || 1;
+                                    if ((n as any).isDotted) durBeats *= 1.5;
+                                    if ((n as any).isTriplet) durBeats *= 2 / 3;
+                                    if ((n as any).isDuplet) durBeats *= 3 / 2;
+                                    const durationTicks = Math.max(1, Math.round(durBeats * TICKS_PER_QUARTER));
+                                    return { ...(n as any), duration, durationTicks } as StaffNote;
+                                }),
+                            })));
+                        }
                     }
                 }
                 return;
@@ -7652,7 +8324,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (isMod && key === 'a') {
                 e.preventDefault();
                 e.stopPropagation();
-                setSelectedNoteIds(new Set(rawNotes.map(n => n.id)));
+                const accIds = (latestAccompanimentTracks.current || [])
+                    .flatMap(t => t.notes.map(n => n.id));
+                setSelectedNoteIds(new Set([...rawNotes.map(n => n.id), ...accIds]));
                 return;
             }
 
@@ -7662,8 +8336,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.stopPropagation();
                 if (e.shiftKey) {
                     try { redoNotes && redoNotes(); } catch (err) { /* Removed debug log */ }
+                    try { redoAccompanimentTracks && redoAccompanimentTracks(); } catch (err) { /* ignore */ }
                 } else {
                     undoNotes();
+                    try { undoAccompanimentTracks && undoAccompanimentTracks(); } catch (err) { /* ignore */ }
                     // Selection may now reference deleted notes; clear defensively.
                     setSelectedNoteIds(new Set());
                 }
@@ -7689,6 +8365,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         isRest: true
                     };
                 }));
+                // Route Delete to ACC notes as well
+                const accTracks = latestAccompanimentTracks.current;
+                const accIdsSelected = [...selectedNoteIds].filter(id => isAccompanimentNote(id, accTracks));
+                if (accIdsSelected.length > 0) {
+                    const accIdSet = new Set(accIdsSelected);
+                    setAccompanimentTracks(prev => prev.map(track => ({
+                        ...track,
+                        notes: track.notes
+                            .filter(n => {
+                                if (!accIdSet.has(n.id)) return true;
+                                // Remove rests outright (same as SATB behaviour)
+                                return !n.isRest;
+                            })
+                            .map(n => {
+                                if (!accIdSet.has(n.id)) return n;
+                                // Convert note to rest
+                                return { ...n, isRest: true };
+                            }),
+                    })));
+                }
                 setSelectedNoteIds(new Set());
                 return;
             }
@@ -7736,6 +8432,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setStaffSystemMode,
         contextMenu,
         tempoCurves,
+        setAccompanimentTracks,
+        undoAccompanimentTracks,
+        redoAccompanimentTracks,
     ]);
 
     // selectedNotesBeamState, handleToggleBeamGroup, handleToggleTie now in useNoteSelection
@@ -7772,7 +8471,209 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return { ...(n as any), manualStemDirection: next };
         }));
-    }, [selectedNoteIds, selectedTiePair, setRawNotes]);
+
+        // ACC routing: same cycling logic
+        const accTracks = latestAccompanimentTracks.current;
+        const accIdsSelected = [...selectedNoteIds].filter(id => isAccompanimentNote(id, accTracks));
+        if (accIdsSelected.length > 0) {
+            const accIdSet = new Set(accIdsSelected);
+            setAccompanimentTracks(prev => prev.map(track => ({
+                ...track,
+                notes: track.notes.map(n => {
+                    if (!accIdSet.has(n.id)) return n;
+                    const cur = (n as any).manualStemDirection as ('up' | 'down' | undefined);
+                    const next = cur === undefined ? 'up' : (cur === 'up' ? 'down' : undefined);
+                    if (!next) {
+                        const { manualStemDirection, ...rest } = n as any;
+                        return rest;
+                    }
+                    return { ...(n as any), manualStemDirection: next };
+                }),
+            })));
+        }
+    }, [selectedNoteIds, selectedTiePair, setRawNotes, setAccompanimentTracks]);
+
+    // Beam state including ACC notes. The base hook only sees rawNotes, so if
+    // the user selects only ACC notes, the SATB state would say 'unbeamable'.
+    const beamStateWithAcc = useMemo(() => {
+        if (selectedNotesBeamState !== 'unbeamable') return selectedNotesBeamState;
+        const accNotes = (accompanimentTracks || []).flatMap(t => t.notes);
+        const beamable = accNotes.filter(n =>
+            selectedNoteIds.has(n.id) &&
+            !n.isRest &&
+            ((DURATION_VALUES as any)[n.duration || 'quarter'] ?? 1) <= 0.5
+        );
+        if (beamable.length < 2) return 'unbeamable' as const;
+        const firstId = (beamable[0] as any).manualBeamGroupId;
+        if (firstId && beamable.every(n => (n as any).manualBeamGroupId === firstId)) return 'beamed' as const;
+        return beamable.some(n => (n as any).manualBeamGroupId) ? 'mixed' as const : 'unbeamed' as const;
+    }, [selectedNotesBeamState, selectedNoteIds, accompanimentTracks]);
+
+    // Wrapper that extends the SATB-only handleToggleBeamGroup with ACC routing.
+    const handleToggleBeamGroupWithAcc = useCallback(() => {
+        // Run SATB handler first
+        handleToggleBeamGroup();
+
+        const accIds = [...selectedNoteIds].filter(id => isAccompanimentNote(id, latestAccompanimentTracks.current));
+        if (accIds.length === 0) return;
+
+        const accIdSet = new Set(accIds);
+        const isBeamableAccSelected = (n: StaffNote) =>
+            accIdSet.has(n.id) && !n.isRest && ((DURATION_VALUES as any)[n.duration || 'quarter'] ?? 1) <= 0.5;
+
+        // Decide action based on ACC-only beam state
+        const accNotes = latestAccompanimentTracks.current.flatMap(t => t.notes);
+        const beamable = accNotes.filter(isBeamableAccSelected);
+        if (beamable.length < 2) return;
+        const firstGid = (beamable[0] as any).manualBeamGroupId;
+        const allBeamed = firstGid && beamable.every(n => (n as any).manualBeamGroupId === firstGid);
+
+        if (allBeamed) {
+            setAccompanimentTracks(prev => prev.map(track => ({
+                ...track,
+                notes: track.notes.map(n => {
+                    if (!isBeamableAccSelected(n)) return n;
+                    const { manualBeamGroupId, ...rest } = n as any;
+                    return { ...rest, manualBeamDisabled: true };
+                }),
+            })));
+        } else {
+            const gid = crypto.randomUUID();
+            setAccompanimentTracks(prev => prev.map(track => ({
+                ...track,
+                notes: track.notes.map(n => isBeamableAccSelected(n)
+                    ? ({ ...(n as any), manualBeamGroupId: gid, manualBeamDisabled: false })
+                    : n),
+            })));
+        }
+    }, [handleToggleBeamGroup, selectedNoteIds, setAccompanimentTracks]);
+
+    // Tie wrapper for toolbar — uses backward-first / forward-fallback for both
+    // SATB and ACC, matching the keyboard 'L' workflow. Does NOT delegate to the
+    // forward-only `handleToggleTie` from useNoteSelection, because that would
+    // tie the SELECTED note to the next (opposite of the expected "ties arrives
+    // at the just-inserted note" convention).
+    const handleToggleTieWithAcc = useCallback(() => {
+        if (selectedNoteIds.size === 0) return;
+
+        // ── SATB pass ──
+        try {
+            const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges);
+            const satbSelected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
+            if (satbSelected.length > 0) {
+                const _tieMidi = (n: any): number => {
+                    try {
+                        const letter = String(n.pitch || '').charAt(0).toUpperCase();
+                        const bp: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                        const base = bp[letter];
+                        if (base == null || !Number.isFinite(n.octave)) return Number(n.midi) || 0;
+                        const acc = String(n.accidental || '');
+                        const off = acc === 'flat' ? -1 : acc === 'sharp' ? 1
+                            : acc === 'double-flat' ? -2 : acc === 'double-sharp' ? 2 : 0;
+                        let m = (Number(n.octave) + 1) * 12 + base + off;
+                        if (letter === 'B' && off > 0 && base + off >= 12) m += 12;
+                        return m;
+                    } catch { return Number(n.midi) || 0; }
+                };
+                const toggleForwardIds = new Set<string>();
+                const toggleBackwardIds = new Set<string>();
+                for (const sel of satbSelected) {
+                    const idx = notesWithBeats.findIndex(x => x.id === sel.id);
+                    if (idx < 0) continue;
+                    const voice = (notesWithBeats[idx] as any).voice;
+                    const midi = _tieMidi(notesWithBeats[idx]);
+
+                    let prev: StaffNote | undefined;
+                    for (let i = idx - 1; i >= 0; i--) {
+                        if ((notesWithBeats[i] as any).voice === voice) { prev = notesWithBeats[i]; break; }
+                    }
+                    if (prev && !prev.isRest && _tieMidi(prev) === midi) {
+                        toggleBackwardIds.add(prev.id);
+                        continue;
+                    }
+
+                    let nextN: StaffNote | undefined;
+                    for (let i = idx + 1; i < notesWithBeats.length; i++) {
+                        if ((notesWithBeats[i] as any).voice === voice) { nextN = notesWithBeats[i]; break; }
+                    }
+                    if (nextN && !nextN.isRest && _tieMidi(nextN) === midi) {
+                        toggleForwardIds.add(sel.id);
+                    }
+                }
+                if (toggleForwardIds.size > 0 || toggleBackwardIds.size > 0) {
+                    setRawNotes(prev => prev.map(n => {
+                        const id = (n as any).id;
+                        if (!toggleForwardIds.has(id) && !toggleBackwardIds.has(id)) return n;
+                        if ((n as any).isTiedToNext) {
+                            const { isTiedToNext, manualTieDirection, ...rest } = n as any;
+                            return rest;
+                        }
+                        return { ...(n as any), isTiedToNext: true };
+                    }));
+                }
+            }
+        } catch { /* ignore */ }
+
+        // ── ACC pass ──
+        const accIdsSelected = [...selectedNoteIds].filter(id => isAccompanimentNote(id, latestAccompanimentTracks.current));
+        if (accIdsSelected.length === 0) return;
+
+        const accTracksSnap = latestAccompanimentTracks.current;
+        const toggleByTrackId = new Map<string, Set<string>>();
+        for (const accId of accIdsSelected) {
+            for (const track of accTracksSnap) {
+                const sel = track.notes.find(n => n.id === accId);
+                if (!sel) continue;
+                if (sel.isRest) break;
+
+                const sortedNotes = [...track.notes].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0));
+                const sortedIdx = sortedNotes.findIndex(n => n.id === accId);
+                if (sortedIdx === -1) break;
+
+                let prev: typeof sortedNotes[number] | undefined;
+                for (let i = sortedIdx - 1; i >= 0; i--) {
+                    if (sortedNotes[i].clef !== sel.clef) continue;
+                    prev = sortedNotes[i];
+                    break;
+                }
+                if (prev && !prev.isRest && Number(prev.midi) === Number(sel.midi)) {
+                    if (!toggleByTrackId.has(track.id)) toggleByTrackId.set(track.id, new Set());
+                    toggleByTrackId.get(track.id)!.add(prev.id);
+                    break;
+                }
+
+                let nextN: typeof sortedNotes[number] | undefined;
+                for (let i = sortedIdx + 1; i < sortedNotes.length; i++) {
+                    if (sortedNotes[i].clef !== sel.clef) continue;
+                    nextN = sortedNotes[i];
+                    break;
+                }
+                if (nextN && !nextN.isRest && Number(nextN.midi) === Number(sel.midi)) {
+                    if (!toggleByTrackId.has(track.id)) toggleByTrackId.set(track.id, new Set());
+                    toggleByTrackId.get(track.id)!.add(sel.id);
+                }
+                break;
+            }
+        }
+
+        if (toggleByTrackId.size > 0) {
+            setAccompanimentTracks(prev => prev.map(track => {
+                const toggleIds = toggleByTrackId.get(track.id);
+                if (!toggleIds || toggleIds.size === 0) return track;
+                return {
+                    ...track,
+                    notes: track.notes.map(n => {
+                        if (!toggleIds.has(n.id)) return n;
+                        if ((n as any).isTiedToNext) {
+                            const { isTiedToNext, manualTieDirection, ...rest } = n as any;
+                            return rest;
+                        }
+                        return { ...(n as any), isTiedToNext: true };
+                    }),
+                };
+            }));
+        }
+    }, [selectedNoteIds, setAccompanimentTracks, setRawNotes, rawNotes, timeSignature, timeSignatureChanges]);
 
     // =========================================================
     // RENDER
@@ -7888,9 +8789,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 activeAccidental={activeAccidental}
                 activeAccidentalRef={activeAccidentalRef}
                 setActiveAccidentalAndApplyFromSource={setActiveAccidentalAndApplyFromSource}
-                selectedNotesBeamState={selectedNotesBeamState}
-                handleToggleBeamGroup={handleToggleBeamGroup}
-                handleToggleTie={handleToggleTie}
+                selectedNotesBeamState={beamStateWithAcc}
+                handleToggleBeamGroup={handleToggleBeamGroupWithAcc}
+                handleToggleTie={handleToggleTieWithAcc}
                 handleFlipStem={handleFlipStem}
                 selectedTiePair={selectedTiePair}
                 activeTab={activeTab}
@@ -7999,6 +8900,40 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }}
             />
 
+            {midiImportDialogOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                    onMouseDown={(e) => { if (e.target === e.currentTarget) resolveMidiImportChoice(null); }}
+                >
+                    <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4 text-sm text-gray-100">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-base font-bold">Importa MIDI</h2>
+                            <button
+                                onClick={() => resolveMidiImportChoice(null)}
+                                className="text-gray-400 hover:text-gray-200 text-lg leading-none"
+                                aria-label="Annulla"
+                            >✕</button>
+                        </div>
+                        <p className="text-xs text-gray-300">Dove vuoi importare le note?</p>
+                        <div className="flex gap-2 justify-end pt-2">
+                            <button
+                                onClick={() => resolveMidiImportChoice(null)}
+                                className="px-3 py-1.5 rounded border border-gray-600 text-gray-200 hover:bg-gray-800"
+                            >Annulla</button>
+                            <button
+                                onClick={() => resolveMidiImportChoice('accompaniment')}
+                                className="px-3 py-1.5 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
+                            >Accompagnamento</button>
+                            <button
+                                onClick={() => resolveMidiImportChoice('satb')}
+                                className="px-3 py-1.5 rounded bg-cyan-600 border border-cyan-500 text-white hover:bg-cyan-500"
+                                autoFocus
+                            >SATB</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <RomanProgressionEditor
                 isOpen={isRomanEditorOpen}
                 onClose={() => setIsRomanEditorOpen(false)}
@@ -8048,6 +8983,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             
             <div className="flex flex-row gap-4 flex-grow min-h-0">
+                {/* Mixer panel / toggle strip */}
+                <div className={`flex-shrink-0 h-full overflow-hidden transition-[width] duration-200 ease-in-out ${isMixerOpen ? 'w-[60px]' : 'w-6'}`}>
+                    {isMixerOpen ? (
+                        <TrackMixerPanel
+                            accompanimentTracks={accompanimentTracks}
+                            onUpdateTrack={handleUpdateTrack}
+                            onDeleteTrack={handleDeleteTrack}
+                            onAddEmptyTrack={handleAddEmptyTrack}
+                            onClose={() => setIsMixerOpen(false)}
+                        />
+                    ) : (
+                        <button
+                            onClick={() => setIsMixerOpen(true)}
+                            title="Mixer tracce"
+                            className="mt-1 h-8 w-6 bg-slate-700 hover:bg-slate-600 rounded text-gray-400 hover:text-gray-200 flex items-center justify-center text-base transition-colors"
+                        >
+                            ⊟
+                        </button>
+                    )}
+                </div>
+
                 <div
                     ref={scoreScrollRef}
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
@@ -8408,6 +9364,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 const systemTimeSignature = getTimeSignatureAtAbsBeat(systemStartAbsBeat);
                                                                 const systemMarkers = (timeSignatureMarkersBySystem?.[systemIndex] || [])
                                                                     .filter(m => m.measureIndex !== systemStartMeasureIndex);
+
+                                                                // Accompaniment notes for THIS system: merge visible tracks, filter by
+                                                                // measures of the system, and bake xPosition using the same per-tick
+                                                                // pixel grid used for SATB so barlines/beats align automatically.
+                                                                const accompanimentNotesForSystem: StaffNote[] = (() => {
+                                                                    if (!hasVisibleAccompaniment) return [];
+                                                                    const sysParams = layoutData?.systemsParams?.[systemIndex];
+                                                                    if (!sysParams) return [];
+                                                                    const measureToIdx = new Map<number, number>();
+                                                                    sysParams.measureIndices.forEach((m, i) => measureToIdx.set(m, i));
+                                                                    const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
+                                                                    const out: StaffNote[] = [];
+                                                                    for (const track of (accompanimentTracks || [])) {
+                                                                        if (!track || !track.visible) continue;
+                                                                        for (const n of (track.notes || [])) {
+                                                                            const mi = n.measureIndex ?? -1;
+                                                                            const idxInSys = measureToIdx.get(mi);
+                                                                            if (idxInSys === undefined) continue;
+                                                                            const startTick = (n as any).startTick;
+                                                                            if (typeof startTick !== 'number') continue;
+                                                                            const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
+                                                                            const measureStartTick = beatsToTicks(msAbsBeat);
+                                                                            const relativeTicks = Math.max(0, startTick - measureStartTick);
+                                                                            const relativeX = relativeTicks * sysParams.pxPerTick;
+                                                                            const baseX = sysParams.startMeasuresX[idxInSys] ?? 0;
+                                                                            const localX = baseX + MEASURE_PADDING_X + relativeX;
+                                                                            out.push({ ...n, xPosition: localX });
+                                                                        }
+                                                                    }
+                                                                    return out;
+                                                                })();
                                                                 return (
                                                             <VexflowGrandStaff
                                 key={`vf-${systemIndex}-${vexflowNonce}`}
@@ -8432,6 +9419,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 ghostNote={ghost}
                                                                 engravingMode={engravingMode}
                                                                 showVoiceColors={showVoiceColors}
+                                                                accompanimentNotes={accompanimentNotesForSystem}
+                                                                showAccompanimentStaves={hasVisibleAccompaniment}
+                                                                accompanimentStaffMode={effectiveAccStaffMode}
+                                                                accompanimentTracks={visibleAccompanimentTracks}
                               />
                                                                                                                                 );
                                                                                                                         })()}
@@ -8649,6 +9640,41 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 })}
                               </svg>
                             )}
+
+                            {/* Overlay: ACC triplet + duplet brackets */}
+                            {(() => {
+                                const accTup = accTupletGroupsBySystem[systemIndex];
+                                if (!accTup || (accTup.triplets.length === 0 && accTup.duplets.length === 0)) return null;
+                                const all = [...accTup.triplets, ...accTup.duplets];
+                                return (
+                                    <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                        {all.map((t) => {
+                                            const hook = 8;
+                                            const y = t.bracketY;
+                                            const { x1, x2, midX } = t;
+                                            return (
+                                                <g key={t.id}>
+                                                    <path
+                                                        d={`M ${x1} ${y} L ${x1} ${y + hook} M ${x1} ${y} L ${x2} ${y} M ${x2} ${y} L ${x2} ${y + hook}`}
+                                                        fill="none"
+                                                        stroke="black"
+                                                        strokeWidth={1.5}
+                                                    />
+                                                    <text
+                                                        x={midX}
+                                                        y={t.textY}
+                                                        textAnchor="middle"
+                                                        fontSize={14}
+                                                        fill="black"
+                                                    >
+                                                        {t.label}
+                                                    </text>
+                                                </g>
+                                            );
+                                        })}
+                                    </svg>
+                                );
+                            })()}
 
                             {/* Overlay: tempo curve markers (rall. ----- / accel. -----) */}
                             {(tempoCurveMarkersBySystem[systemIndex] || []).length > 0 && (

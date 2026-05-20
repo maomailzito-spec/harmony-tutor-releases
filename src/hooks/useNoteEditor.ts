@@ -6,7 +6,7 @@
  * UI wrappers (setActiveAccidentalAndApply, setDottedFromSource) stay in GSE.
  */
 import { useCallback } from 'react';
-import type { StaffNote, KeySignature, TimeSignature, AccidentalType, Voice } from '../types';
+import type { StaffNote, KeySignature, TimeSignature, AccidentalType, Voice, AccompanimentTrack } from '../types';
 import { rebuildMeasureTimelineForVoice } from '../utils/musicTheory';
 import { DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 
@@ -17,11 +17,14 @@ export interface UseNoteEditorParams {
     timeSignature: TimeSignature;
     keySignature: KeySignature;
     justInsertedNoteRef: React.MutableRefObject<string | null>;
+    latestAccompanimentTracksRef: React.MutableRefObject<AccompanimentTrack[]>;
+    setAccompanimentTracks: React.Dispatch<React.SetStateAction<AccompanimentTrack[]>>;
 }
 
 export function useNoteEditor({
     selectedNoteIds, setSelectedNoteIds, setRawNotes,
     timeSignature, keySignature, justInsertedNoteRef,
+    latestAccompanimentTracksRef, setAccompanimentTracks,
 }: UseNoteEditorParams) {
 
     // ── computeDurationTicks ──
@@ -78,7 +81,22 @@ export function useNoteEditor({
                 return prev;
             }
         });
-    }, [selectedNoteIds, setRawNotes, timeSignature]);
+
+        // Route the same updateFn to any selected ACC notes
+        const accTracks = latestAccompanimentTracksRef.current;
+        const accIds = [...selectedNoteIds].filter(id =>
+            accTracks.some(t => t.notes.some(n => n.id === id)));
+        if (accIds.length > 0) {
+            const accIdSet = new Set(accIds);
+            setAccompanimentTracks(prev => prev.map(track => ({
+                ...track,
+                notes: track.notes.map(n => {
+                    if (!accIdSet.has(n.id)) return n;
+                    return updateFn(n);
+                }),
+            })));
+        }
+    }, [selectedNoteIds, setRawNotes, timeSignature, latestAccompanimentTracksRef, setAccompanimentTracks]);
 
     // ── applyAccidentalToSelectedNotes ──
     const applyAccidentalToSelectedNotes = useCallback((acc: AccidentalType | null) => {

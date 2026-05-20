@@ -1,4 +1,4 @@
-import type { StaffNote, TimeSignature, TimeSignatureChange } from '../types';
+import type { AccompanimentTrack, StaffNote, TimeSignature, TimeSignatureChange } from '../types';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 1 as const;
 
@@ -28,6 +28,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'analysisLocked',
   'teacherPasswordHash',
   'analysisLockOptions',
+  'accompanimentTracks',
 ] as const;
 
 const KNOWN_KEY_SET: ReadonlySet<string> = new Set(PROJECT_KNOWN_KEYS_V1 as readonly string[]);
@@ -74,6 +75,10 @@ export type ProjectDataV1 = {
     hideAlternatives: boolean;
     disableExport: boolean;
   };
+
+  /** Tracce di accompagnamento (opzionale, retrocompatibile).
+   *  Non soggette ad analisi armonica né a voice-leading checker. */
+  accompanimentTracks?: AccompanimentTrack[];
 };
 
 export type AnalysisLockOptions = NonNullable<ProjectDataV1['analysisLockOptions']>;

@@ -191,7 +191,7 @@ export class AudioService {
     // Both sources failed — silently skip this note.
   }
 
-  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number }) {
+  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode }) {
     if (!this.audioContext) return;
     // For piano use existing (possibly local) buffer; for others use instrument::key
     const key = instrument === 'acoustic_grand_piano' ? audioFile : `${instrument}::${audioFile}`;
@@ -208,13 +208,15 @@ export class AudioService {
     const source = this.audioContext.createBufferSource();
     source.buffer = audioBuffer;
     const gainNode = this.audioContext.createGain();
-    gainNode.connect(this.audioContext.destination);
+    // If a custom output node is provided (e.g. per-track gain), route through it
+    // so the user can mute/change volume in real-time by modulating that node.
+    gainNode.connect(options?.output ?? this.audioContext.destination);
     source.connect(gainNode);
     const startTime = options?.when ?? this.audioContext.currentTime;
     const noteDurationInSeconds = options?.duration ?? audioBuffer.duration;
     const releaseDurationInSeconds = 0.5;
     const noteEndTime = startTime + noteDurationInSeconds;
-    gainNode.gain.setValueAtTime(1, startTime);
+    gainNode.gain.setValueAtTime(options?.volume ?? 1, startTime);
     gainNode.gain.linearRampToValueAtTime(0.0001, noteEndTime + releaseDurationInSeconds);
     source.start(startTime);
     source.stop(noteEndTime + releaseDurationInSeconds);
