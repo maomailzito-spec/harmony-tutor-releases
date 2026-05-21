@@ -66,8 +66,24 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   let keySharps: number | null = null;
   let keyIsMinor = false;
 
-  const active = new Map<string, Array<{ tick: number; velocity: number; track: number }>>();
+  type ActiveEntry = { tick: number; velocity: number; track: number };
+  const active = new Map<string, Array<ActiveEntry>>();
   const notes: ParsedMidiNote[] = [];
+
+  // Sustain pedal (CC 64) state per channel. When ON, note-offs are deferred
+  // so the note keeps "ringing" until the pedal releases — exactly the piano
+  // sustain behaviour Logic & friends export via CC 64 rather than extending
+  // raw note durations.
+  const sustainOn = new Map<number, boolean>();
+  // Note-offs that arrived while sustain was held, waiting for pedal release.
+  // Key: `${channel}:${note}`, Value: the original note-on entry.
+  const sustainPending = new Map<string, ActiveEntry>();
+
+  /** Emit a finalized note into the notes[] array. */
+  const emitNote = (channel: number, note: number, on: ActiveEntry, offTick: number) => {
+    const durationTicks = Math.max(1, offTick - on.tick);
+    notes.push({ tick: on.tick, durationTicks, midi: note, velocity: on.velocity, channel, track: on.track });
+  };
 
   const pushNoteOff = (channel: number, note: number, tick: number) => {
     const key = `${channel}:${note}`;
@@ -75,8 +91,48 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     if (!stack || stack.length === 0) return;
     const on = stack.pop();
     if (!on) return;
-    const durationTicks = Math.max(1, tick - on.tick);
-    notes.push({ tick: on.tick, durationTicks, midi: note, velocity: on.velocity, channel, track: on.track });
+    // If sustain pedal is held, defer finalization. The note's "real" off tick
+    // will be the pedal release tick (or the next note-on of the same key,
+    // which interrupts the sustained sound).
+    if (sustainOn.get(channel)) {
+      // If there was already a pending sustained off for this exact key (rare
+      // edge case: note ended → sustained → never re-played → another note
+      // ended on same key without a fresh note-on), finalize the older one at
+      // the current tick to avoid losing it.
+      const prev = sustainPending.get(key);
+      if (prev) emitNote(channel, note, prev, tick);
+      sustainPending.set(key, on);
+      return;
+    }
+    emitNote(channel, note, on, tick);
+  };
+
+  /** Releasing the pedal: finalize every pending note in this channel at the
+   *  release tick. Notes from other channels are untouched. */
+  const releaseSustainForChannel = (channel: number, atTick: number) => {
+    const prefix = `${channel}:`;
+    const toRelease: string[] = [];
+    for (const key of sustainPending.keys()) {
+      if (key.startsWith(prefix)) toRelease.push(key);
+    }
+    for (const key of toRelease) {
+      const entry = sustainPending.get(key);
+      if (!entry) continue;
+      sustainPending.delete(key);
+      const noteNum = Number(key.slice(prefix.length));
+      emitNote(channel, noteNum, entry, atTick);
+    }
+  };
+
+  /** Re-pressing a key while pedal is held replaces the sustained sound: the
+   *  prior pending note is finalized at the new on-tick, freeing the slot for
+   *  the new note-on. */
+  const interruptSustainedNote = (channel: number, note: number, newOnTick: number) => {
+    const key = `${channel}:${note}`;
+    const prev = sustainPending.get(key);
+    if (!prev) return;
+    sustainPending.delete(key);
+    emitNote(channel, note, prev, newOnTick);
   };
 
   for (let t = 0; t < tracksCount; t++) {
@@ -138,6 +194,9 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
         const note = view.getUint8(pos++);
         const vel = view.getUint8(pos++);
         if (hi === 0x90 && vel > 0) {
+          // Re-pressing a key while pedal is held finalises the prior sustained
+          // sound at the new on-tick (a fresh sound replaces the ringing one).
+          if (sustainOn.get(ch)) interruptSustainedNote(ch, note, absTick);
           const key = `${ch}:${note}`;
           const stack = active.get(key) || [];
           stack.push({ tick: absTick, velocity: vel, track: t });
@@ -148,7 +207,21 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
         continue;
       }
 
-      if (hi === 0xa0 || hi === 0xb0 || hi === 0xe0) {
+      if (hi === 0xb0) {
+        // Controller change. CC 64 = sustain pedal (Hold 1).
+        const cc = view.getUint8(pos++);
+        const value = view.getUint8(pos++);
+        if (cc === 64) {
+          const wasOn = sustainOn.get(ch) || false;
+          const isOn = value >= 64;
+          if (wasOn && !isOn) releaseSustainForChannel(ch, absTick);
+          sustainOn.set(ch, isOn);
+        }
+        // Other CCs are intentionally ignored (we only care about sustain).
+        continue;
+      }
+
+      if (hi === 0xa0 || hi === 0xe0) {
         pos += 2;
         continue;
       }
@@ -180,6 +253,22 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
         track: on.track,
       });
     }
+  }
+
+  // Pedal still held at file end: finalize any pending sustained notes at the
+  // latest tick we've seen — equivalent to an implicit pedal release.
+  for (const [key, entry] of sustainPending.entries()) {
+    const [channelStr, midiStr] = key.split(':');
+    const channel = Number(channelStr);
+    const midi = Number(midiStr);
+    notes.push({
+      tick: entry.tick,
+      durationTicks: Math.max(1, maxTick - entry.tick),
+      midi,
+      velocity: entry.velocity,
+      channel,
+      track: entry.track,
+    });
   }
 
   notes.sort((a, b) => (a.tick - b.tick) || (a.channel - b.channel) || (a.midi - b.midi));

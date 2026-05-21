@@ -49,6 +49,12 @@ function beatsToDurationFlags(beats: number): { duration: StaffNote['duration'];
     { duration: 'sixty-fourth', beats: 0.0625 },
   ];
 
+  // Tolerance allowed for "rounding UP" to a longer standard duration. Anything
+  // beyond this gap means the actual MIDI duration is genuinely shorter than
+  // the candidate — picking the longer label would silently extend the note.
+  // Tolerance = ~6% of a quarter (matches the quantizer's release-lag window).
+  const UP_TOLERANCE_BEATS = 0.0625; // 60 ticks at TPQ 960
+
   let best = { duration: 'quarter' as StaffNote['duration'], isDotted: false, isTriplet: false, isDuplet: false, diff: Infinity };
   for (const base of bases) {
     const candidates = [
@@ -58,9 +64,33 @@ function beatsToDurationFlags(beats: number): { duration: StaffNote['duration'];
       { isDotted: false, isTriplet: false, isDuplet: true, value: base.beats * (3 / 2) },
     ];
     for (const c of candidates) {
+      // Reject candidates that would auto-extend the note past its actual length
+      // by more than the tolerance: prefer SHORTER standard durations when in
+      // doubt. The rhythmic normaliser can always decompose a residue into
+      // tied shorter notes, but a wrongly-extended note can't be recovered.
+      if (c.value > beats + UP_TOLERANCE_BEATS) continue;
       const diff = Math.abs(c.value - beats);
       if (diff < best.diff) {
         best = { duration: base.duration, isDotted: c.isDotted, isTriplet: c.isTriplet, isDuplet: c.isDuplet, diff };
+      }
+    }
+  }
+
+  // Safety: if every candidate was rejected (e.g. beats is smaller than the
+  // shortest standard duration), fall back to the original nearest-match search.
+  if (best.diff === Infinity) {
+    for (const base of bases) {
+      const candidates = [
+        { isDotted: false, isTriplet: false, isDuplet: false, value: base.beats },
+        { isDotted: true, isTriplet: false, isDuplet: false, value: base.beats * 1.5 },
+        { isDotted: false, isTriplet: true, isDuplet: false, value: base.beats * (2 / 3) },
+        { isDotted: false, isTriplet: false, isDuplet: true, value: base.beats * (3 / 2) },
+      ];
+      for (const c of candidates) {
+        const diff = Math.abs(c.value - beats);
+        if (diff < best.diff) {
+          best = { duration: base.duration, isDotted: c.isDotted, isTriplet: c.isTriplet, isDuplet: c.isDuplet, diff };
+        }
       }
     }
   }
@@ -369,6 +399,595 @@ function fillRestsAfterImport(
   return out;
 }
 
+/** MIDI timing quantisation: snaps near-grid onsets and near-standard durations
+ *  to clean values so the rhythmic normaliser doesn't fragment slightly-off
+ *  timings (e.g. a quarter recorded as 950 ticks) into chains of tied 32nd /
+ *  64th notes. Tolerance is intentionally tight (60 ticks ≈ 1/16 quarter) so
+ *  legitimate 16ths (240 ticks from the nearest 8th) are never absorbed. */
+const QUANTIZE_GRID_TICKS = TICKS_PER_QUARTER / 2;          // 480 = 8th note grid
+const QUANTIZE_TOLERANCE_TICKS = TICKS_PER_QUARTER / 16;    // 60 ticks
+
+/** Standard musical durations available for snap (must match STANDARD_DURATIONS
+ *  in the normaliser below — duplicated here to avoid a forward reference). */
+const STANDARD_DURATION_TICKS: number[] = [
+  4 * TICKS_PER_QUARTER,                   // 3840 whole
+  3 * TICKS_PER_QUARTER,                   // 2880 dotted half
+  2 * TICKS_PER_QUARTER,                   // 1920 half
+  Math.round(1.5 * TICKS_PER_QUARTER),     // 1440 dotted quarter
+  TICKS_PER_QUARTER,                       // 960  quarter
+  Math.round(0.75 * TICKS_PER_QUARTER),    // 720  dotted eighth
+  Math.round(0.5 * TICKS_PER_QUARTER),     // 480  eighth
+  Math.round(0.375 * TICKS_PER_QUARTER),   // 360  dotted sixteenth
+  Math.round(0.25 * TICKS_PER_QUARTER),    // 240  sixteenth
+  Math.round(0.125 * TICKS_PER_QUARTER),   // 120  thirty-second
+  Math.round(0.0625 * TICKS_PER_QUARTER),  // 60   sixty-fourth
+];
+
+function snapToGrid(ticks: number, grid: number, tolerance: number): number {
+  const nearest = Math.round(ticks / grid) * grid;
+  return Math.abs(ticks - nearest) <= tolerance ? nearest : ticks;
+}
+
+function snapDurationToStandard(ticks: number, tolerance: number): number {
+  let best = -1;
+  let bestDist = tolerance + 1;
+  for (const std of STANDARD_DURATION_TICKS) {
+    const dist = Math.abs(ticks - std);
+    if (dist <= tolerance && dist < bestDist) {
+      best = std;
+      bestDist = dist;
+    }
+  }
+  return best !== -1 ? best : ticks;
+}
+
+/** Clean up MIDI imprecision BEFORE rhythmic normalisation:
+ *    - startTick snapped to the 8th-note grid within tolerance
+ *    - durationTicks snapped to the nearest standard duration within tolerance
+ *  Notes far from any grid point are left alone (they'll be handled by the
+ *  normaliser's tick-decomposition). After snapping, re-derive duration/dotted
+ *  fields from the new durationTicks so display labels match the cleaned values. */
+function quantizeMidiTimings(notes: StaffNote[]): StaffNote[] {
+  if (notes.length === 0) return notes;
+  return notes.map(n => {
+    const oldStart = n.startTick ?? 0;
+    const oldDur = n.durationTicks ?? 0;
+    const newStart = snapToGrid(oldStart, QUANTIZE_GRID_TICKS, QUANTIZE_TOLERANCE_TICKS);
+    const newDur = snapDurationToStandard(oldDur, QUANTIZE_TOLERANCE_TICKS);
+    if (newStart === oldStart && newDur === oldDur) return n;
+    const next = { ...n, startTick: newStart, durationTicks: newDur };
+    if (newDur !== oldDur) {
+      const flags = beatsToDurationFlags(newDur / TICKS_PER_QUARTER);
+      next.duration = flags.duration;
+      next.isDotted = flags.isDotted;
+      next.isTriplet = flags.isTriplet;
+      next.isDuplet = flags.isDuplet;
+    }
+    return next;
+  });
+}
+
+/** Notes whose startTicks differ by less than ARPEGGIO_THRESHOLD (= 120 ticks,
+ *  a 64th note at TPQ 960) are treated as one strummed/arpeggiated chord by
+ *  the MIDI recording — collapsed to a simultaneous chord. Real arpeggio
+ *  patterns the user wants to preserve should space notes ≥ a 16th note apart. */
+const ARPEGGIO_THRESHOLD = 120;
+
+/** Two-phase per-voice cleanup applied BEFORE rhythmic normalisation:
+ *
+ *  Phase 1 — Arpeggio detection. Consecutive notes (sorted by startTick) whose
+ *  startTicks differ by < ARPEGGIO_THRESHOLD are grouped. Each group is
+ *  collapsed to a single chord: all notes get the first note's startTick and
+ *  the longest durationTicks in the group. This cleans up "rolled chord"
+ *  artefacts from human MIDI recordings.
+ *
+ *  Phase 2 — Pair-wise overlap trim. After arpeggio collapse, walk consecutive
+ *  notes again: if A overlaps B (A.startTick + A.durationTicks > B.startTick)
+ *  truncate A to end at B.startTick. Chord tones (same startTick — including
+ *  arpeggios collapsed in Phase 1) are skipped: trimming them would zero out
+ *  the chord. */
+function trimOverlappingNotes(notes: StaffNote[]): StaffNote[] {
+  if (notes.length === 0) return notes;
+
+  // Group note indices by (voice, clef). Splitting by clef matters for ACC
+  // (voice=0) where treble and bass clefs share one voice: without the split
+  // a sustained bass note would be trimmed by a fast figure starting later
+  // on the treble staff (legitimate cross-clef polyphony — must be preserved).
+  const byStream = new Map<string, number[]>();
+  for (let i = 0; i < notes.length; i++) {
+    const v = (notes[i].voice ?? 0) as number;
+    const c: 'treble' | 'bass' = (notes[i].clef === 'bass') ? 'bass' : 'treble';
+    const key = `${v}:${c}`;
+    if (!byStream.has(key)) byStream.set(key, []);
+    byStream.get(key)!.push(i);
+  }
+
+  const result = notes.map(n => ({ ...n }));
+  const applyDurationFlags = (note: StaffNote, durTicks: number) => {
+    note.durationTicks = durTicks;
+    const flags = beatsToDurationFlags(durTicks / TICKS_PER_QUARTER);
+    note.duration = flags.duration;
+    note.isDotted = flags.isDotted;
+    note.isTriplet = flags.isTriplet;
+    note.isDuplet = flags.isDuplet;
+  };
+
+  // ── Phase 1: arpeggio detection ──
+  for (const indices of byStream.values()) {
+    indices.sort((a, b) => (result[a].startTick ?? 0) - (result[b].startTick ?? 0));
+
+    let groupStart = 0;
+    while (groupStart < indices.length) {
+      // Extend the group as long as each next note is within the threshold of
+      // the previous note in the chain.
+      let groupEnd = groupStart + 1;
+      while (groupEnd < indices.length) {
+        const prevTick = result[indices[groupEnd - 1]].startTick ?? 0;
+        const curTick = result[indices[groupEnd]].startTick ?? 0;
+        if (curTick - prevTick < ARPEGGIO_THRESHOLD) {
+          groupEnd++;
+        } else {
+          break;
+        }
+      }
+
+      // Collapse only if the group has more than one note. A single note that
+      // happens to be near the threshold is left intact.
+      if (groupEnd - groupStart > 1) {
+        const firstStartTick = result[indices[groupStart]].startTick ?? 0;
+        let maxDuration = 0;
+        for (let k = groupStart; k < groupEnd; k++) {
+          const dur = result[indices[k]].durationTicks ?? 0;
+          if (dur > maxDuration) maxDuration = dur;
+        }
+        if (maxDuration > 0) {
+          for (let k = groupStart; k < groupEnd; k++) {
+            const note = result[indices[k]];
+            note.startTick = firstStartTick;
+            applyDurationFlags(note, maxDuration);
+          }
+        }
+      }
+
+      groupStart = groupEnd;
+    }
+
+    // Re-sort: startTicks within a collapsed group are now equal, and Phase 2
+    // relies on a fresh ascending order to walk consecutive pairs correctly.
+    indices.sort((a, b) => (result[a].startTick ?? 0) - (result[b].startTick ?? 0));
+  }
+
+  // ── Phase 2: pair-wise overlap trim ──
+  for (const indices of byStream.values()) {
+    for (let i = 0; i < indices.length - 1; i++) {
+      const a = result[indices[i]];
+      const b = result[indices[i + 1]];
+      const aStart = a.startTick ?? 0;
+      const bStart = b.startTick ?? 0;
+
+      // Chord tones (incl. arpeggios collapsed in Phase 1) share startTick:
+      // trimming would zero-out the chord. Leave A alone.
+      if (aStart === bStart) continue;
+
+      const aEnd = aStart + (a.durationTicks ?? 0);
+      if (aEnd > bStart) {
+        const newDur = bStart - aStart;
+        if (newDur > 0) {
+          // Preserve the original sustain length for playback BEFORE the trim
+          // overwrites durationTicks. Only set on the first trim so chained
+          // trims don't lose the truly-original value.
+          if ((a as any).playbackDurationTicks == null) {
+            (a as any).playbackDurationTicks = a.durationTicks;
+          }
+          applyDurationFlags(a, newDur);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+// =============================================================================
+// RHYTHMIC NORMALIZER — beat-boundary aware split + tie generation
+// =============================================================================
+// Splits notes that cross strong beat boundaries (e.g. beat 3 in 4/4) into
+// shorter tied notes; splits rests on every beat boundary; decomposes non-
+// standard durations into chains of standard tied notes. Output preserves the
+// exact tick positions (no playback drift) but renders idiomatically.
+
+type BeatBoundary = { tick: number; isStrong: boolean };
+
+/** Beat boundaries within a single measure for a given time signature.
+ *  Tick offsets are RELATIVE to the measure start.
+ *  - "Strong" = mid-measure division (rests and most notes shouldn't cross it).
+ *  - Normal beats are returned but only used for rest splitting. */
+function getBeatBoundaries(
+  ts: { numerator: number; denominator: number },
+): BeatBoundary[] {
+  const ticksPerBeat = TICKS_PER_QUARTER * (4 / ts.denominator);
+  const boundaries: BeatBoundary[] = [];
+  for (let i = 1; i < ts.numerator; i++) {
+    boundaries.push({ tick: i * ticksPerBeat, isStrong: false });
+  }
+
+  // Mark the "strong" mid-measure division per convention.
+  if (ts.numerator === 4 && ts.denominator === 4) {
+    // 4/4: beat 3 is strong (mid-measure)
+    const t = 2 * ticksPerBeat;
+    const b = boundaries.find(x => x.tick === t);
+    if (b) b.isStrong = true;
+  } else if (ts.numerator === 2) {
+    // 2/4, 2/2: beat 2 is strong
+    const t = ticksPerBeat;
+    const b = boundaries.find(x => x.tick === t);
+    if (b) b.isStrong = true;
+  } else if (ts.numerator === 6 && ts.denominator === 8) {
+    // 6/8: split between the two ternary groups (after 3 eighths)
+    const mid = 3 * ticksPerBeat;
+    const b = boundaries.find(x => x.tick === mid);
+    if (b) b.isStrong = true;
+  } else if (ts.numerator === 3) {
+    // 3/4, 3/8: no truly strong inner boundary; use beat 2 as semi-strong
+    // so dotted-half from beat 1 stays whole but a half from beat 2 gets split.
+    const t = ticksPerBeat;
+    const b = boundaries.find(x => x.tick === t);
+    if (b) b.isStrong = true;
+  } else if (ts.numerator === 9 && ts.denominator === 8) {
+    // 9/8: split between the three ternary groups; the major one at 3/9.
+    const mid = 3 * ticksPerBeat;
+    const b = boundaries.find(x => x.tick === mid);
+    if (b) b.isStrong = true;
+  } else if (ts.numerator === 12 && ts.denominator === 8) {
+    // 12/8: strong split at mid-measure (after 6 eighths)
+    const mid = 6 * ticksPerBeat;
+    const b = boundaries.find(x => x.tick === mid);
+    if (b) b.isStrong = true;
+  } else {
+    // Generic: treat mid-measure (if it lands on a beat) as strong.
+    const midTicks = (ts.numerator * ticksPerBeat) / 2;
+    const b = boundaries.find(x => Math.abs(x.tick - midTicks) < 1);
+    if (b) b.isStrong = true;
+  }
+
+  boundaries.sort((a, b) => a.tick - b.tick);
+  return boundaries;
+}
+
+/** Standard musical durations from longest to shortest, used as the alphabet
+ *  for decomposing a non-standard tick run into a chain of tied standard notes. */
+const STANDARD_DURATIONS: Array<{ name: StaffNote['duration']; ticks: number; isDotted: boolean }> = [
+  { name: 'whole', ticks: 4 * TICKS_PER_QUARTER, isDotted: false },                 // 3840
+  { name: 'half', ticks: 3 * TICKS_PER_QUARTER, isDotted: true },                   // 2880
+  { name: 'half', ticks: 2 * TICKS_PER_QUARTER, isDotted: false },                  // 1920
+  { name: 'quarter', ticks: Math.round(1.5 * TICKS_PER_QUARTER), isDotted: true },  // 1440
+  { name: 'quarter', ticks: TICKS_PER_QUARTER, isDotted: false },                   // 960
+  { name: 'eighth', ticks: Math.round(0.75 * TICKS_PER_QUARTER), isDotted: true },  // 720
+  { name: 'eighth', ticks: Math.round(0.5 * TICKS_PER_QUARTER), isDotted: false },  // 480
+  { name: 'sixteenth', ticks: Math.round(0.375 * TICKS_PER_QUARTER), isDotted: true }, // 360
+  { name: 'sixteenth', ticks: Math.round(0.25 * TICKS_PER_QUARTER), isDotted: false }, // 240
+  { name: 'thirty-second', ticks: Math.round(0.125 * TICKS_PER_QUARTER), isDotted: false }, // 120
+  { name: 'sixty-fourth', ticks: Math.round(0.0625 * TICKS_PER_QUARTER), isDotted: false }, // 60
+];
+
+/** Greedy decompose `ticks` into a sequence of standard durations.
+ *  Used when a contiguous segment between two boundaries isn't itself a
+ *  representable standard duration. Returns at least one element. */
+function decomposeToStandardDurations(
+  ticks: number,
+): Array<{ name: StaffNote['duration']; ticks: number; isDotted: boolean }> {
+  const out: Array<{ name: StaffNote['duration']; ticks: number; isDotted: boolean }> = [];
+  let remaining = ticks;
+  let safety = 32;
+  while (remaining > 0 && safety-- > 0) {
+    const pick = STANDARD_DURATIONS.find(d => d.ticks <= remaining);
+    if (!pick) break;
+    out.push(pick);
+    remaining -= pick.ticks;
+  }
+  // If we couldn't represent it at all (e.g. < 60 ticks), fall back to the
+  // shortest standard duration so we don't emit a zero-length note.
+  if (out.length === 0) out.push(STANDARD_DURATIONS[STANDARD_DURATIONS.length - 1]);
+  return out;
+}
+
+/** True if `ticks` is exactly one standard duration (so it can be a single note). */
+function isStandardDuration(ticks: number): boolean {
+  return STANDARD_DURATIONS.some(d => d.ticks === ticks);
+}
+
+/** Return the standard duration matching `ticks` exactly, or null if non-standard. */
+function exactStandardDuration(ticks: number): { name: StaffNote['duration']; isDotted: boolean } | null {
+  const hit = STANDARD_DURATIONS.find(d => d.ticks === ticks);
+  return hit ? { name: hit.name, isDotted: hit.isDotted } : null;
+}
+
+/** Decide whether a note should be split at strong boundaries.
+ *  Exceptions: a note exactly covering the whole measure from beat 1 is
+ *  allowed to "cross" the strong boundary, as is any single standard
+ *  duration that lines up with a strong boundary at one end. */
+function shouldSplitNoteAtStrong(
+  noteOffset: number,        // start within the measure (0-based ticks)
+  noteEnd: number,           // end within the measure
+  boundaries: BeatBoundary[],
+  ticksPerMeasure: number,
+): boolean {
+  const crossedStrong = boundaries.filter(b => b.isStrong && b.tick > noteOffset && b.tick < noteEnd);
+  if (crossedStrong.length === 0) return false;
+
+  // Exception 1: whole-measure note starting on beat 1 (e.g. semibreve in 4/4).
+  if (noteOffset === 0 && noteEnd === ticksPerMeasure && isStandardDuration(ticksPerMeasure)) {
+    return false;
+  }
+  return true;
+}
+
+/** Split a single note on the strong beat boundaries it crosses, emitting
+ *  tied notes. Each resulting segment is further decomposed into standard
+ *  durations if not itself a standard length (also tied). */
+function splitNoteAtBoundaries(
+  note: StaffNote,
+  measureStartTick: number,
+  boundaries: BeatBoundary[],
+  ticksPerMeasure: number,
+): StaffNote[] {
+  if (note.isRest) return [note];
+  const noteOffset = (note.startTick ?? 0) - measureStartTick;
+  const noteEnd = noteOffset + (note.durationTicks ?? 0);
+
+  // Determine cut points: strong boundaries only.
+  let cuts: number[];
+  if (shouldSplitNoteAtStrong(noteOffset, noteEnd, boundaries, ticksPerMeasure)) {
+    const strong = boundaries.filter(b => b.isStrong && b.tick > noteOffset && b.tick < noteEnd).map(b => b.tick);
+    cuts = [noteOffset, ...strong, noteEnd];
+  } else {
+    cuts = [noteOffset, noteEnd];
+  }
+
+  // For each segment, also decompose into standard durations so we never emit
+  // a non-standard length (e.g. 1000 ticks → quarter + 16th tied).
+  const segments: Array<{ offset: number; ticks: number; durName: StaffNote['duration']; isDotted: boolean }> = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const segOffset = cuts[i];
+    const segTicks = cuts[i + 1] - cuts[i];
+    if (segTicks <= 0) continue;
+    const exact = exactStandardDuration(segTicks);
+    if (exact) {
+      segments.push({ offset: segOffset, ticks: segTicks, durName: exact.name, isDotted: exact.isDotted });
+    } else {
+      let local = segOffset;
+      for (const piece of decomposeToStandardDurations(segTicks)) {
+        segments.push({ offset: local, ticks: piece.ticks, durName: piece.name, isDotted: piece.isDotted });
+        local += piece.ticks;
+      }
+    }
+  }
+
+  if (segments.length <= 1) {
+    // Even if no boundary was crossed and the duration is standard, re-emit
+    // with normalised duration/isDotted so output is consistent.
+    if (segments.length === 1) {
+      const s = segments[0];
+      return [{
+        ...note,
+        duration: s.durName,
+        isDotted: s.isDotted,
+        durationTicks: s.ticks,
+        startTick: measureStartTick + s.offset,
+        beat: (s.offset / TICKS_PER_QUARTER) + 1,
+        isTiedToNext: (note as any).isTiedToNext ?? false,
+      }];
+    }
+    return [note];
+  }
+
+  const wasTied = !!(note as any).isTiedToNext;
+  const ticksPerBeat = TICKS_PER_QUARTER * (4 / 4); // default; recompute per beat field is not crucial
+  void ticksPerBeat;
+  return segments.map((s, i) => ({
+    ...note,
+    id: i === 0 ? note.id : makeRestId(),
+    duration: s.durName,
+    isDotted: s.isDotted,
+    durationTicks: s.ticks,
+    startTick: measureStartTick + s.offset,
+    beat: (s.offset / TICKS_PER_QUARTER) + 1,
+    // Every segment ties to the next, except the last (which keeps original tie state).
+    isTiedToNext: i < segments.length - 1 ? true : wasTied,
+  }));
+}
+
+/** Split a rest on EVERY beat boundary it crosses (and decompose non-standard
+ *  resulting segments). Rests are never tied. */
+function splitRestAtBoundaries(
+  rest: StaffNote,
+  measureStartTick: number,
+  boundaries: BeatBoundary[],
+): StaffNote[] {
+  const restOffset = (rest.startTick ?? 0) - measureStartTick;
+  const restEnd = restOffset + (rest.durationTicks ?? 0);
+  const crossedAll = boundaries.filter(b => b.tick > restOffset && b.tick < restEnd).map(b => b.tick);
+
+  const cuts: number[] = [restOffset, ...crossedAll, restEnd];
+  const segments: Array<{ offset: number; ticks: number; durName: StaffNote['duration']; isDotted: boolean }> = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const segOffset = cuts[i];
+    const segTicks = cuts[i + 1] - cuts[i];
+    if (segTicks <= 0) continue;
+    const exact = exactStandardDuration(segTicks);
+    if (exact) {
+      segments.push({ offset: segOffset, ticks: segTicks, durName: exact.name, isDotted: exact.isDotted });
+    } else {
+      let local = segOffset;
+      for (const piece of decomposeToStandardDurations(segTicks)) {
+        segments.push({ offset: local, ticks: piece.ticks, durName: piece.name, isDotted: piece.isDotted });
+        local += piece.ticks;
+      }
+    }
+  }
+
+  if (segments.length === 0) return [rest];
+
+  return segments.map((s, i) => ({
+    ...rest,
+    id: i === 0 ? rest.id : makeRestId(),
+    duration: s.durName,
+    isDotted: s.isDotted,
+    durationTicks: s.ticks,
+    startTick: measureStartTick + s.offset,
+    beat: (s.offset / TICKS_PER_QUARTER) + 1,
+  }));
+}
+
+/** Main entry point. Replaces fillRestsAfterImport with a boundary-aware
+ *  pipeline:
+ *    1. group by (voice, clef)
+ *    2. per measure: clamp note durations to measure end, split notes at
+ *       strong boundaries, fill gaps with rests, split rests at all boundaries.
+ *  Output is sorted by startTick. */
+function normalizeRhythm(
+  notes: StaffNote[],
+  timeSignature: { numerator: number; denominator: number },
+  timeSignatureChanges: Array<{ measureIndex: number; numerator: number; denominator: number }>,
+): StaffNote[] {
+  if (notes.length === 0) return notes;
+
+  const sortedChanges = [...timeSignatureChanges].sort((a, b) => a.measureIndex - b.measureIndex);
+  const tsForMeasure = (mi: number) => {
+    let active = timeSignature;
+    for (const c of sortedChanges) {
+      if (c.measureIndex <= mi) active = { numerator: c.numerator, denominator: c.denominator };
+      else break;
+    }
+    return active;
+  };
+  const ticksForMeasure = (mi: number): number => {
+    const ts = tsForMeasure(mi);
+    return TICKS_PER_QUARTER * ts.numerator * (4 / ts.denominator);
+  };
+
+  const maxMeasureIdx = notes.reduce((mx, n) => Math.max(mx, n.measureIndex ?? 0), 0);
+  const measureStartTicks: number[] = new Array(maxMeasureIdx + 2);
+  let acc = 0;
+  for (let m = 0; m <= maxMeasureIdx + 1; m++) {
+    measureStartTicks[m] = acc;
+    acc += ticksForMeasure(m);
+  }
+
+  type Stream = { voice: number; clef: 'treble' | 'bass'; notes: StaffNote[] };
+  const streams = new Map<string, Stream>();
+  for (const n of notes) {
+    const v = (n.voice ?? 0) as number;
+    const c: 'treble' | 'bass' = (n.clef === 'bass') ? 'bass' : 'treble';
+    const key = `${v}:${c}`;
+    let s = streams.get(key);
+    if (!s) { s = { voice: v, clef: c, notes: [] }; streams.set(key, s); }
+    s.notes.push(n);
+  }
+
+  const out: StaffNote[] = [];
+
+  for (const stream of streams.values()) {
+    const { voice, clef, notes: streamNotes } = stream;
+    const byMeasure = new Map<number, StaffNote[]>();
+    for (const n of streamNotes) {
+      const m = n.measureIndex ?? 0;
+      if (!byMeasure.has(m)) byMeasure.set(m, []);
+      byMeasure.get(m)!.push(n);
+    }
+    const measureIdxs = [...byMeasure.keys()].sort((a, b) => a - b);
+    if (measureIdxs.length === 0) continue;
+    const firstMeasure = measureIdxs[0];
+    const lastMeasure = measureIdxs[measureIdxs.length - 1];
+
+    let cursor = measureStartTicks[firstMeasure] ?? 0;
+
+    for (let m = firstMeasure; m <= lastMeasure; m++) {
+      const ts = tsForMeasure(m);
+      const ticksPerMeasure = ticksForMeasure(m);
+      const measureStart = measureStartTicks[m] ?? 0;
+      const measureEnd = measureStart + ticksPerMeasure;
+      const boundaries = getBeatBoundaries(ts);
+      if (cursor < measureStart) cursor = measureStart;
+
+      const measureNotes = (byMeasure.get(m) ?? [])
+        .slice()
+        .sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0));
+
+      // Pass 1: clamp note durations so they don't spill past measureEnd,
+      // then split each note at strong boundaries.
+      const splitNotes: StaffNote[] = [];
+      for (const note of measureNotes) {
+        const noteStart = note.startTick ?? measureStart;
+        const noteDur = note.durationTicks ?? 0;
+        const noteEnd = Math.min(noteStart + noteDur, measureEnd);
+        const clampedDur = noteEnd - noteStart;
+        const clamped = clampedDur !== noteDur
+          ? { ...note, durationTicks: clampedDur }
+          : note;
+        splitNotes.push(...splitNoteAtBoundaries(clamped, measureStart, boundaries, ticksPerMeasure));
+      }
+
+      // Pass 2: walk the measure, fill gaps with boundary-aware rests.
+      for (const note of splitNotes) {
+        const noteStart = note.startTick ?? cursor;
+        if (noteStart > cursor) {
+          const gapRest: StaffNote = {
+            id: makeRestId(),
+            pitch: 'B',
+            octave: clef === 'bass' ? 2 : 4,
+            position: clef === 'bass' ? 4 : 8,
+            midi: 0,
+            noteIndex: 0,
+            duration: 'quarter',
+            isRest: true,
+            isTriplet: false,
+            isDuplet: false,
+            isDotted: false,
+            measureIndex: m,
+            beat: ((cursor - measureStart) / TICKS_PER_QUARTER) + 1,
+            startTick: cursor,
+            durationTicks: noteStart - cursor,
+            clef,
+            voice: voice as Voice,
+          };
+          out.push(...splitRestAtBoundaries(gapRest, measureStart, boundaries));
+        }
+        out.push(note);
+        cursor = Math.max(cursor, noteStart + (note.durationTicks ?? 0));
+      }
+
+      // Trailing rest to fill any remaining tail of the measure.
+      if (cursor < measureEnd) {
+        const tailRest: StaffNote = {
+          id: makeRestId(),
+          pitch: 'B',
+          octave: clef === 'bass' ? 2 : 4,
+          position: clef === 'bass' ? 4 : 8,
+          midi: 0,
+          noteIndex: 0,
+          duration: 'quarter',
+          isRest: true,
+          isTriplet: false,
+          isDuplet: false,
+          isDotted: false,
+          measureIndex: m,
+          beat: ((cursor - measureStart) / TICKS_PER_QUARTER) + 1,
+          startTick: cursor,
+          durationTicks: measureEnd - cursor,
+          clef,
+          voice: voice as Voice,
+        };
+        out.push(...splitRestAtBoundaries(tailRest, measureStart, boundaries));
+        cursor = measureEnd;
+      }
+    }
+  }
+
+  out.sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0) || ((a.voice ?? 0) - (b.voice ?? 0)));
+  return out;
+}
+
 /** Resolve a heterogenous source (File / ArrayBuffer / base64 string / undefined)
  *  into an ArrayBuffer. Returns null if the source was a falsy/cancelled pick. */
 async function resolveMidiSource(
@@ -536,9 +1155,20 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       convertParsedNoteToStaffNote(n, idx, tpq, beatsPerMeasure, keySig, getVoice(n))
     );
 
-    // Fill rhythmic gaps in each voice/measure with explicit rests so the score
-    // renders without holes and the playback timeline doesn't collapse silence.
-    const notes = fillRestsAfterImport(convertedNotes, parsed.timeSignature, []);
+    // Quantise MIDI timings: snap near-grid onsets and near-standard durations
+    // so the normaliser doesn't fragment 950-tick "quarters" into chains of
+    // tied 32nds / 64ths. Tight tolerance preserves legitimate 16ths.
+    const quantizedNotes = quantizeMidiTimings(convertedNotes);
+
+    // Trim overlapping notes per (voice, clef) — chord tones (same startTick)
+    // kept; cross-clef polyphony preserved. Cleans ghost overlaps from sloppy
+    // MIDI recordings before the normaliser splits on beat boundaries.
+    const trimmedNotes = trimOverlappingNotes(quantizedNotes);
+
+    // Normalize rhythm: split notes/rests on beat boundaries, fill gaps with
+    // boundary-aware rests, decompose non-standard durations into chains of
+    // tied standard notes. Preserves tick positions so playback is unchanged.
+    const notes = normalizeRhythm(trimmedNotes, parsed.timeSignature, []);
 
     setProject({
       notes,
@@ -586,9 +1216,17 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     const ticksPerMeasure = TICKS_PER_QUARTER * parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
     const extendedNotes = extendNotesToNextOnset(convertedNotes, ticksPerMeasure);
 
-    // Same gap-filling as SATB — voice=0 for accompaniment. Rests are inserted
-    // per measure of the track so the rhythm reads correctly on its Grand Staff.
-    const notes = fillRestsAfterImport(extendedNotes, parsed.timeSignature, []);
+    // Quantise MIDI timings before trim/normalise (see importMidi for rationale).
+    const quantizedNotes = quantizeMidiTimings(extendedNotes);
+
+    // Trim overlapping notes per (voice, clef). For voice=0 ACC this preserves
+    // cross-clef polyphony (a sustained bass note + a fast treble figure remain
+    // independent) and skips chord tones (same startTick).
+    const trimmedNotes = trimOverlappingNotes(quantizedNotes);
+
+    // Normalize rhythm (same as SATB import) — voice=0 stream for accompaniment.
+    // Splits notes/rests on beat boundaries and decomposes non-standard durations.
+    const notes = normalizeRhythm(trimmedNotes, parsed.timeSignature, []);
 
     const newId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
       ? crypto.randomUUID()

@@ -3925,6 +3925,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                 }
 
+                // Playback duration override: prefer the tick-based value (high
+                // resolution from MIDI / editor) over the duration LABEL because:
+                //  (a) trimmed MIDI notes carry their original sustain in
+                //      `playbackDurationTicks` so the recording's pedal sustain
+                //      is preserved even though the score shows a shorter note;
+                //  (b) for non-trimmed MIDI notes the conservative label
+                //      (never longer than the actual recording) can be shorter
+                //      than the true duration — using durationTicks restores
+                //      the real held time.
+                // Skipped when swing has just rewritten durationBeats, so straight
+                // eighths still get the triplet-feel mapping intact.
+                const swingApplied = (
+                    isSwing
+                    && (n.duration || 'quarter') === 'eighth'
+                    && !n.isDotted
+                    && !n.isTriplet
+                    && !n.isDuplet
+                );
+                if (!swingApplied) {
+                    const pbTicks = (n as any).playbackDurationTicks;
+                    const sustainTicks = (typeof pbTicks === 'number' && pbTicks > 0)
+                        ? pbTicks
+                        : ((typeof n.durationTicks === 'number' && n.durationTicks > 0) ? n.durationTicks : 0);
+                    if (sustainTicks > 0) {
+                        durationBeats = sustainTicks / TICKS_PER_QUARTER;
+                    }
+                }
+
                 voiceItems.push({ note: { ...n, voice: voice as any, measureIndex, beat }, absStartBeat, durationBeats, skip: false });
 
                 durationInMeasureNotated += durationBeatsNotated;
@@ -4027,15 +4055,99 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             playbackBeatToVisualBeatRef.current = null;
         }
 
+        // ── Accompaniment track items ──
+        // Build PlaybackItems for ACC tracks and add to allItems. The fermata
+        // expansion below runs AFTER this so any sustained ACC notes get the
+        // correct extension/shift in sync with the SATB fermata.
+        const accTracks = latestAccompanimentTracks.current || [];
+        const GM_TO_INSTR: Record<number, string> = {
+            0: 'acoustic_grand_piano', 6: 'harpsichord', 19: 'church_organ',
+            40: 'violin', 42: 'cello', 48: 'string_ensemble_1',
+            52: 'choir_aahs', 56: 'trumpet', 60: 'french_horn',
+            68: 'oboe', 71: 'clarinet', 73: 'flute',
+        };
+        accTracks.forEach((track, trackIdx) => {
+            // Note: do NOT skip muted tracks here. We still schedule the notes so the
+            // user can un-mute mid-playback. Mute is enforced via per-track gain node
+            // (gain=0 when muted), allowing real-time toggling without re-scheduling.
+            if (!track) return;
+            const trackItems: PlaybackItem[] = [];
+            for (const n of (track.notes || [])) {
+                if (n.isRest) continue;
+                // ACC notes from MIDI import have pre-computed measureIndex, beat, durationTicks.
+                // Use them directly so chord notes (same tick) share the same absStartBeat.
+                const mIdx = n.measureIndex ?? 0;
+                const beat = n.beat ?? 1;
+                const absStartBeat = measureStartBeat(mIdx) + (beat - 1);
+                // Prefer playbackDurationTicks (original sustain before any trim),
+                // then durationTicks (high-resolution actual length), then fall
+                // back to the duration label.
+                const pbTicks = (n as any).playbackDurationTicks;
+                const sustainTicks = (typeof pbTicks === 'number' && pbTicks > 0)
+                    ? pbTicks
+                    : ((typeof n.durationTicks === 'number' && n.durationTicks > 0) ? n.durationTicks : 0);
+                const durationBeats = sustainTicks > 0
+                    ? sustainTicks / TICKS_PER_QUARTER
+                    : DURATION_VALUES[n.duration || 'quarter'] * (n.isDotted ? 1.5 : 1);
+                trackItems.push({ note: n, absStartBeat, durationBeats, skip: false, accTrackIdx: trackIdx });
+            }
+
+            // Tie-chain merge for ACC: a note with isTiedToNext should sound as a
+            // single sustained note that lasts through every consecutive same-pitch
+            // tied note in the same track. Unlike SATB voices (monophonic per
+            // voice), ACC tracks are polyphonic (chord tones share startTick), so
+            // we can't just check the immediate next item — we have to scan
+            // forward for the actual tied destination matching by midi and onset
+            // tick (≈ end of the current note).
+            for (let i = 0; i < trackItems.length; i++) {
+                const item = trackItems[i];
+                if (item.skip) continue;
+                if (item.note.isRest) continue;
+                if (!(item.note as any).isTiedToNext) continue;
+
+                let total = item.durationBeats;
+                let curIdx = i;
+                let safety = 32;
+                while (safety-- > 0) {
+                    const cur = trackItems[curIdx];
+                    if (!(cur.note as any).isTiedToNext) break;
+                    const curStart = (cur.note.startTick ?? 0);
+                    const curEnd = curStart + (cur.note.durationTicks ?? 0);
+                    let nextIdx = -1;
+                    for (let j = curIdx + 1; j < trackItems.length; j++) {
+                        if (trackItems[j].skip) continue;
+                        if (trackItems[j].note.isRest) continue;
+                        if (trackItems[j].note.midi !== cur.note.midi) continue;
+                        const nextStart = trackItems[j].note.startTick ?? 0;
+                        // The tied destination should start at (or very near) the
+                        // end of the current note.
+                        if (Math.abs(nextStart - curEnd) <= 5) {
+                            nextIdx = j;
+                            break;
+                        }
+                    }
+                    if (nextIdx === -1) break;
+                    const next = trackItems[nextIdx];
+                    total += next.durationBeats;
+                    next.skip = true;
+                    curIdx = nextIdx;
+                }
+                item.durationBeats = total;
+            }
+
+            allItems.push(...trackItems);
+        });
+
         // ── Fermata (corona) expansion ──
         // For every onset that contains at least one note flagged isFermata,
         // double the sounding duration of all items starting at that onset
         // (the fermata "stops" the entire vertical), and shift every later item
         // forward by the same amount. The visual notation is unchanged — this
-        // is a playback-only transform.
+        // is a playback-only transform. Runs AFTER ACC notes have been added
+        // to allItems so accompaniment sustains/onsets get the same extension
+        // and shift as SATB (otherwise ACC would race ahead and desync).
         // We also record each fermata's pause window so the visual playhead
-        // can FREEZE on the fermata note during the held portion (otherwise
-        // the cursor sprints ahead while audio is still sustaining).
+        // can FREEZE on the fermata note during the held portion.
         type FermataSeg = {
             cStart: number;       // expanded beat where the fermata onset starts
             cNaturalEnd: number;  // expanded beat where the note's natural duration ends
@@ -4077,6 +4189,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (Math.abs(it.absStartBeat - shiftedOnset) > EPS) continue;
                         it.durationBeats += extra;
                     }
+                    // Also extend any item whose sustain crosses the fermata onset
+                    // (e.g. a long ACC note that started earlier and is still
+                    // ringing through the fermata) so it stays in sync.
+                    for (const it of allItems) {
+                        if (it.skip || it.note.isRest) continue;
+                        const start = it.absStartBeat;
+                        const end = start + it.durationBeats;
+                        if (start < shiftedOnset - EPS && end > shiftedOnset + EPS) {
+                            it.durationBeats += extra;
+                        }
+                    }
                     // Shift every later item forward by `extra`.
                     for (const it of allItems) {
                         if (it.skip) continue;
@@ -4111,7 +4234,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (c < f.cTotalEnd - 1e-9) {
                         return f.cNaturalEnd - cumShift;
                     }
-                    cumShift = f.cTotalEnd - f.cNaturalEnd + cumShift; // accumulate this extra
+                    cumShift = f.cTotalEnd - f.cNaturalEnd + cumShift;
                 }
                 return c - cumShift;
             };
@@ -4120,36 +4243,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 : fermataMap;
         }
 
-        // ── Accompaniment track items ──
-        // Build PlaybackItems for ACC tracks and add to allItems AFTER repeat/fermata
-        // expansion (ACC notes from MIDI imports are already linear — no repeat notation).
-        const accTracks = latestAccompanimentTracks.current || [];
-        const GM_TO_INSTR: Record<number, string> = {
-            0: 'acoustic_grand_piano', 6: 'harpsichord', 19: 'church_organ',
-            40: 'violin', 42: 'cello', 48: 'string_ensemble_1',
-            52: 'choir_aahs', 56: 'trumpet', 60: 'french_horn',
-            68: 'oboe', 71: 'clarinet', 73: 'flute',
-        };
-        accTracks.forEach((track, trackIdx) => {
-            // Note: do NOT skip muted tracks here. We still schedule the notes so the
-            // user can un-mute mid-playback. Mute is enforced via per-track gain node
-            // (gain=0 when muted), allowing real-time toggling without re-scheduling.
-            if (!track) return;
-            let accBeatCount = 0;
-            for (const n of (track.notes || [])) {
-                if (n.isRest) continue;
-                // ACC notes from MIDI import have pre-computed measureIndex, beat, durationTicks.
-                // Use them directly so chord notes (same tick) share the same absStartBeat.
-                const mIdx = n.measureIndex ?? 0;
-                const beat = n.beat ?? 1;
-                const absStartBeat = measureStartBeat(mIdx) + (beat - 1);
-                const durationBeats = typeof n.durationTicks === 'number' && n.durationTicks > 0
-                    ? n.durationTicks / TICKS_PER_QUARTER
-                    : DURATION_VALUES[n.duration || 'quarter'] * (n.isDotted ? 1.5 : 1);
-                allItems.push({ note: n, absStartBeat, durationBeats, skip: false, accTrackIdx: trackIdx });
-                accBeatCount++;
-            }
-        });
         // Group items by start beat (rounded to avoid float key drift with tuplets).
         const startMap = new Map<string, { absBeat: number; items: PlaybackItem[] }>();
         for (const it of allItems) {
@@ -4359,26 +4452,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } else {
             playbackTimeToBeatRef.current = null;
         }
-        // DEBUG: log full timing schedule
-        try {
-            const sample = eventsToPlay.slice(0, 50).map(ev => ({
-                absBeat: ev.absBeat,
-                tEv: beatToTime(ev.absBeat) - t0Anchor,
-            }));
-            // Events that fall INSIDE the first curve range
-            let inCurveSample: any[] = [];
-            if (curveSegs.length > 0) {
-                const seg = curveSegs[0];
-                inCurveSample = eventsToPlay
-                    .filter(ev => ev.absBeat >= seg.startBeat - 0.001 && ev.absBeat <= seg.endBeat + 0.001)
-                    .slice(0, 20)
-                    .map(ev => ({
-                        absBeat: ev.absBeat,
-                        tEv: beatToTime(ev.absBeat) - t0Anchor,
-                        noteIds: ev.items.map(it => it.note?.id?.slice(0, 8)),
-                    }));
-            }
-        } catch { /* ignore */ }
 
         eventsToPlay.forEach((ev) => {
             const tEv = beatToTime(ev.absBeat) - t0Anchor;
@@ -4390,7 +4463,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const seg = curveSegs[0];
                     if (ev.absBeat >= seg.startBeat - 0.001 && ev.absBeat <= seg.endBeat + 0.001) {
                         const ctxNow = audioService.audioContext?.currentTime ?? 0;
-                        console.log('[TEMPO][SCHED]', { absBeat: ev.absBeat, when: when.toFixed(3), ctxNow: ctxNow.toFixed(3), audioStartTime: audioStartTime.toFixed(3), tEv: tEv.toFixed(3) });
                     }
                 }
             } catch { /* ignore */ }

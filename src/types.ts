@@ -170,6 +170,13 @@ export type StaffNote = {
   // Tick-based timeline (high resolution). Optional for legacy compatibility.
   startTick?: number;
   durationTicks?: number;
+  /** Playback-only override: original duration in ticks before the rhythmic
+   *  trim shortened the note for notation. Lets playback sustain the note
+   *  as long as the MIDI recording intended even though the score shows a
+   *  shorter value (e.g. a quarter trimmed to dotted-eighth at the next
+   *  onset still SOUNDS as a quarter). When undefined, durationTicks is
+   *  used for both notation and playback. */
+  playbackDurationTicks?: number;
   clef?: ClefType;
   /** Per-note staff override – lets the user move individual notes to the
    *  other staff regardless of the current parti-strette / parti-late mode. */
