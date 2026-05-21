@@ -41,8 +41,9 @@ import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
 import { handleGrandStaffProjectIOMenuAction, buildGrandStaffProjectSnapshot } from '../controllers/grandStaffProjectIOAdapter';
-import { useGrandStaffMidi } from '../hooks/useGrandStaffMidi';
+import { useGrandStaffMidi, trimOverlappingNotes, normalizeRhythm, beatsToDurationFlags, quantizeMidiTimings } from '../hooks/useGrandStaffMidi';
 import { useMidiStepInput } from '../hooks/useMidiStepInput';
+import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff from './VexflowGrandStaff';
@@ -256,6 +257,54 @@ function findAccTrackForNote(noteId: string, accompanimentTracks: AccompanimentT
     return null;
 }
 
+/** Converti gli eventi raw registrati in StaffNote pronte per la traccia ACC. */
+function convertRecordedEventsToNotes(
+  events: RawRecordedEvent[],
+  bpm: number,
+  timeSignature: { numerator: number; denominator: number },
+  startMeasureIndex: number,
+  keySignature: import('../types').KeySignature,
+): import('../types').StaffNote[] {
+  const ticksPerSecond = (bpm / 60) * TICKS_PER_QUARTER;
+  const ticksPerBeat = TICKS_PER_QUARTER * (4 / timeSignature.denominator);
+  const ticksPerMeasure = ticksPerBeat * timeSignature.numerator;
+  const measureStartTick = startMeasureIndex * ticksPerMeasure;
+
+  return events
+    .filter(ev => ev.timestampSec >= 0)
+    .map(ev => {
+      const startTick = Math.round(measureStartTick + ev.timestampSec * ticksPerSecond);
+      const durationTicks = Math.max(
+        Math.round(ev.durationSec * ticksPerSecond),
+        Math.round(TICKS_PER_QUARTER / 4), // minimo: semicroma
+      );
+      const measureIndex = Math.floor(startTick / ticksPerMeasure);
+      const beatInMeasure = ((startTick % ticksPerMeasure) / ticksPerBeat) + 1;
+
+      const clef: import('../types').ClefType = ev.midiNote >= 60 ? 'treble' : 'bass';
+      const props = getNotePropertiesFromMidi(ev.midiNote, keySignature, clef, null);
+      const dFlags = beatsToDurationFlags(durationTicks / TICKS_PER_QUARTER);
+
+      return {
+        id: crypto.randomUUID(),
+        ...props,
+        duration: dFlags.duration,
+        isDotted: dFlags.isDotted,
+        isTriplet: dFlags.isTriplet,
+        isDuplet: dFlags.isDuplet,
+        isRest: false,
+        measureIndex,
+        beat: beatInMeasure,
+        startTick,
+        durationTicks,
+        rawStartTick: startTick,       // preserva il tick raw per ri-quantizzazione
+        rawDurationTicks: durationTicks,
+        clef,
+        voice: 0 as any,
+      } satisfies import('../types').StaffNote;
+    });
+}
+
 const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     isActive,
     audioService,
@@ -365,6 +414,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [measuresPerLine, setMeasuresPerLine] = useState<number>(4);
     const [minMeasureCount, setMinMeasureCount] = useState<number>(4);
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
+    const [quantizeGrid, setQuantizeGrid] = useState<import('../types').NoteDuration>('eighth');
     const [measuresPerLineDraft, setMeasuresPerLineDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
     const [ornamentOverrides, setOrnamentOverrides] = useState<OrnamentOverride[]>([]);
@@ -547,7 +597,186 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         onNoteOn: (midi) => insertNoteFromMidiRef.current(midi),
     });
 
-    // Render-time note hit points from VexFlow, per system.
+    // ── Registrazione MIDI real-time ──────────────────────────────────────────
+    const {
+        isRecording,
+        isCountingIn,
+        startRecording,
+        stopRecording,
+        recordingDurationBeats,
+        getElapsedBeats,
+    } = useRealtimeRecording({
+        bpm,
+        timeSignature,
+        audioService,
+    });
+
+    // ── Passthrough audio MIDI sempre attivo ─────────────────────────────────
+    // Ascolta su tutti gli input MIDI e suona ogni nota premuta, indipendentemente
+    // da REC o step-input. Il listener si registra una volta e si aggiorna se
+    // cambiano i dispositivi.
+    const playMidiPassthrough = useCallback((midi: number) => {
+        const noteNamesWithFlats = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+        const name = `${noteNamesWithFlats[midi % 12]}${Math.floor(midi / 12) - 1}`;
+        void audioService.playNote(name, { duration: 0.6 });
+    }, [audioService]);
+    const playMidiPassthroughRef = useRef(playMidiPassthrough);
+    useEffect(() => { playMidiPassthroughRef.current = playMidiPassthrough; }, [playMidiPassthrough]);
+
+    useEffect(() => {
+        if (!navigator.requestMIDIAccess) return;
+        let midiAccess: MIDIAccess | null = null;
+        let cleanup: (() => void) | null = null;
+
+        const handleMessage = (e: Event) => {
+            const msg = e as MIDIMessageEvent;
+            const data = msg.data;
+            if (!data || data.length < 3) return;
+            const [status, note, velocity] = data;
+            if ((status & 0xf0) === 0x90 && velocity > 0) {
+                playMidiPassthroughRef.current(note);
+            }
+        };
+
+        const attachListeners = (access: MIDIAccess) => {
+            const inputs: MIDIInput[] = [];
+            access.inputs.forEach(input => {
+                input.addEventListener('midimessage', handleMessage as EventListener);
+                inputs.push(input);
+            });
+            return () => inputs.forEach(i => i.removeEventListener('midimessage', handleMessage as EventListener));
+        };
+
+        navigator.requestMIDIAccess().then(access => {
+            midiAccess = access;
+            let detachCurrent = attachListeners(access);
+            const onStateChange = () => {
+                detachCurrent();
+                detachCurrent = attachListeners(access);
+            };
+            access.addEventListener('statechange', onStateChange);
+            cleanup = () => {
+                detachCurrent();
+                access.removeEventListener('statechange', onStateChange);
+            };
+        }).catch(() => { /* MIDI non disponibile */ });
+
+        return () => { cleanup?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const stepInputWasEnabledRef = React.useRef(false);
+    // Refs aggiornati a ogni render per evitare temporal-dead-zone nei useCallback
+    const playheadMeasureForRecRef = React.useRef<number>(0);
+    const keySignatureForRecRef = React.useRef<import('../types').KeySignature | null>(null);
+    const recStartAbsBeatRef = React.useRef<number>(0);
+    // Misura di partenza catturata UNA SOLA VOLTA al click REC (non cambia durante la registrazione)
+    const recStartMeasureRef = React.useRef<number>(0);
+
+    // (La playhead durante REC è aggiornata dopo getPlayheadPosForAbsBeat — vedi sotto)
+
+    // true = REC button premuto, in attesa di Space per avviare
+    const [isRecArmed, setIsRecArmed] = React.useState(false);
+
+    /** Elabora gli eventi raw e li inserisce nella prima traccia ACC visibile. */
+    const processAndInsertRecordedEvents = React.useCallback((rawEvents: import('../hooks/useRealtimeRecording').RawRecordedEvent[]) => {
+        if (rawEvents.length > 0 && keySignatureForRecRef.current) {
+            const notes = convertRecordedEventsToNotes(
+                rawEvents,
+                bpm,
+                timeSignature,
+                recStartMeasureRef.current,
+                keySignatureForRecRef.current,
+            );
+            const trimmed = trimOverlappingNotes(notes);
+            setAccompanimentTracks(prev => {
+                const firstVisibleIdx = prev.findIndex(t => t.visible);
+                if (firstVisibleIdx === -1) return prev;
+                return prev.map((track, i) => {
+                    if (i !== firstVisibleIdx) return track;
+                    return {
+                        ...track,
+                        notes: [...(track.notes ?? []), ...trimmed].sort(
+                            (a, b) => (a.startTick ?? 0) - (b.startTick ?? 0),
+                        ),
+                    };
+                });
+            });
+        }
+    }, [bpm, timeSignature, setAccompanimentTracks]);
+
+    /** Ferma la registrazione, processa le note e disarma. */
+    const stopAndProcessRecording = React.useCallback(() => {
+        const rawEvents = stopRecording();
+        if (stepInputWasEnabledRef.current) {
+            midiStepInput.activate();
+            stepInputWasEnabledRef.current = false;
+        }
+        setIsRecArmed(false);
+        processAndInsertRecordedEvents(rawEvents);
+    }, [stopRecording, midiStepInput, processAndInsertRecordedEvents]);
+
+    /** Avvia la registrazione (chiamata da Space quando il REC è armato). */
+    const doStartRecording = React.useCallback(() => {
+        if (midiStepInput.enabled) {
+            stepInputWasEnabledRef.current = true;
+            midiStepInput.deactivate();
+        }
+        const beatsPerMeasureForRec = timeSignature.numerator * (4 / timeSignature.denominator);
+        recStartAbsBeatRef.current = playheadMeasureForRecRef.current * beatsPerMeasureForRec;
+        recStartMeasureRef.current = playheadMeasureForRecRef.current;
+        void startRecording();
+    }, [midiStepInput, timeSignature, startRecording]);
+
+    /** Premi REC button o R: arma / disarma (se sta registrando, ferma subito). */
+    const toggleRecording = React.useCallback(() => {
+        if (isRecording) {
+            stopAndProcessRecording();
+        } else {
+            setIsRecArmed(prev => !prev);
+        }
+    }, [isRecording, stopAndProcessRecording]);
+
+    // Mappa durata → tick per il quantize
+    const QUANTIZE_GRID_MAP: Record<string, number> = {
+        'sixteenth': TICKS_PER_QUARTER / 4,
+        'eighth':    TICKS_PER_QUARTER / 2,
+        'quarter':   TICKS_PER_QUARTER,
+        'half':      TICKS_PER_QUARTER * 2,
+    };
+
+    const onQuantizeAccTrack = React.useCallback(() => {
+        const gridTicks = QUANTIZE_GRID_MAP[quantizeGrid] ?? (TICKS_PER_QUARTER / 2);
+        const toleranceTicks = gridTicks / 2;
+        const ticksPerBeat = TICKS_PER_QUARTER * (4 / timeSignature.denominator);
+        const ticksPerMeasure = ticksPerBeat * timeSignature.numerator;
+        const hasSelection = selectedNoteIds.size > 0;
+        setAccompanimentTracks(prev => {
+            const firstVisibleIdx = prev.findIndex(t => t.visible);
+            if (firstVisibleIdx === -1) return prev;
+            return prev.map((track, i) => {
+                if (i !== firstVisibleIdx) return track;
+                const notesToProcess = hasSelection
+                    ? (track.notes ?? []).filter(n => selectedNoteIds.has(n.id))
+                    : (track.notes ?? []);
+                // Quantizza sempre dai tick raw (se disponibili) per poter cambiare griglia senza undo
+                const notesWithRaw = notesToProcess.map(n => ({
+                    ...n,
+                    startTick: n.rawStartTick ?? n.startTick,
+                    durationTicks: n.rawDurationTicks ?? n.durationTicks,
+                }));
+                const quantized = quantizeMidiTimings(notesWithRaw, gridTicks, toleranceTicks).map(n => {
+                    const st = n.startTick ?? 0;
+                    const measureIndex = Math.floor(st / ticksPerMeasure);
+                    const beat = ((st % ticksPerMeasure) / ticksPerBeat) + 1;
+                    return { ...n, measureIndex, beat };
+                });
+                const quantizedById = new Map(quantized.map(n => [n.id, n]));
+                const merged = (track.notes ?? []).map(n => quantizedById.get(n.id) ?? n);
+                return { ...track, notes: merged };
+            });
+        });
+    }, [quantizeGrid, timeSignature, selectedNoteIds, setAccompanimentTracks]);
     // Used to make marquee selection deterministic and independent from clef/position approximations.
     const systemNoteHitPointsRef = useRef<Record<number, Array<{ id: string; x: number; y: number; isGhost: boolean }>>>({});
 
@@ -1084,6 +1313,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const justDraggedRef = useRef(false);
 
     const keySignature = useMemo(() => getKeySignature(keySignatureRoot, 'Major'), [keySignatureRoot]);
+    keySignatureForRecRef.current = keySignature;
 
     const {
         computeDurationTicks,
@@ -3123,14 +3353,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Without this, when SATB is sparse the system uses a low pxPerTick and the
             // ACC notes/playhead end up visually overlapping.
             let minDeltaTicks = Infinity;
-            const accNotesForLayout = (accompanimentTracks || [])
-                .filter(t => t && t.visible)
-                .flatMap(t => t.notes);
             sys.measureIndices.forEach(m => {
                 const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
-                const accMeasureNotes = accNotesForLayout.filter(n => n.measureIndex === m);
-                const allMeasureNotes = [...measureNotes, ...accMeasureNotes];
-                const ticks = allMeasureNotes.map(n => (typeof (n as any).startTick === 'number')
+                const ticks = measureNotes.map(n => (typeof (n as any).startTick === 'number')
                     ? (n as any).startTick
                     : Math.round((((measureStartAbsBeat[n.measureIndex ?? 0] ?? 0) + ((n.beat ?? 1) - 1))) * TICKS_PER_QUARTER));
                 ticks.sort((a, b) => a - b);
@@ -3259,6 +3484,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         return sys.measureIndices[bestIdx] ?? 0;
     }, [pasteCaret, playheadPosition, layoutData]);
+    // Aggiorna i ref usati da toggleRecording (definito prima di questi useMemo)
+    playheadMeasureForRecRef.current = playheadMeasureForChoral ?? 0;
 
     // Keep a ref to the latest layoutData so async callbacks can read current layout
     const layoutDataRef = useRef(layoutData);
@@ -3738,6 +3965,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // che è dichiarata prima (evita TDZ nella deps array)
     const getPlayheadPosForAbsBeatRef = useRef(getPlayheadPosForAbsBeat);
     useEffect(() => { getPlayheadPosForAbsBeatRef.current = getPlayheadPosForAbsBeat; }, [getPlayheadPosForAbsBeat]);
+
+    // ── Playhead durante la registrazione ────────────────────────────────────
+    const recAnimFrameRef = useRef<number | null>(null);
+    useEffect(() => {
+        if (!isRecording) {
+            if (recAnimFrameRef.current !== null) {
+                window.cancelAnimationFrame(recAnimFrameRef.current);
+                recAnimFrameRef.current = null;
+            }
+            return;
+        }
+        const tick = () => {
+            const elapsedBeats = getElapsedBeats();
+            // Durante il count-in elapsedBeats è negativo: playhead ferma alla misura di partenza
+            const absBeat = recStartAbsBeatRef.current + Math.max(0, elapsedBeats);
+            playbackCursorAbsBeatRef.current = absBeat;
+            const pos = getPlayheadPosForAbsBeatRef.current?.(absBeat);
+            if (pos) setPlayheadPosition(pos);
+            recAnimFrameRef.current = window.requestAnimationFrame(tick);
+        };
+        recAnimFrameRef.current = window.requestAnimationFrame(tick);
+        return () => {
+            if (recAnimFrameRef.current !== null) {
+                window.cancelAnimationFrame(recAnimFrameRef.current);
+                recAnimFrameRef.current = null;
+            }
+        };
+    }, [isRecording, getElapsedBeats, setPlayheadPosition]);
 
     useEffect(() => {
         if (!isPlaying) return;
@@ -7903,11 +8158,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            // Space: always toggle playback (avoid requiring focus on the Play button)
+            // Space: avvia REC se armato, ferma REC se in corso, altrimenti toggle playback
             if (!isMod && (key === ' ' || key === 'spacebar')) {
                 e.preventDefault();
                 e.stopPropagation();
-                togglePlayback();
+                if (isRecording) {
+                    stopAndProcessRecording();
+                } else if (isRecArmed) {
+                    doStartRecording();
+                } else {
+                    togglePlayback();
+                }
                 return;
             }
 
@@ -8325,11 +8586,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            // R: toggle rest insertion mode (preserves duration / dotted / tuplets)
+            // R: arma/disarma REC se traccia ACC presente, altrimenti toggle rest/note
             if (!isMod && key === 'r') {
                 e.preventDefault();
                 e.stopPropagation();
-                setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' }));
+                if (accompanimentTracks.some(t => t.visible)) {
+                    toggleRecording(); // arm / disarm / stop
+                } else {
+                    setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' }));
+                }
                 return;
             }
 
@@ -8507,6 +8772,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setAccompanimentTracks,
         undoAccompanimentTracks,
         redoAccompanimentTracks,
+        isRecording,
+        toggleRecording,
+        isRecArmed,
+        stopAndProcessRecording,
+        doStartRecording,
     ]);
 
     // selectedNotesBeamState, handleToggleBeamGroup, handleToggleTie now in useNoteSelection
@@ -8789,6 +9059,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isPlaying={isPlaying}
                 togglePlayback={togglePlayback}
                 undoNotes={undoNotes}
+                isRecording={isRecording}
+                isCountingIn={isCountingIn}
+                isRecArmed={isRecArmed}
+                canRecord={accompanimentTracks.length > 0}
+                onToggleRecording={toggleRecording}
+                quantizeGrid={quantizeGrid}
+                setQuantizeGrid={setQuantizeGrid}
+                onQuantizeAccTrack={accompanimentTracks.some(t => t.visible) ? onQuantizeAccTrack : undefined}
                 bpm={bpm}
                 setBpm={setBpm}
                 isBpmActive={isBpmActive}
@@ -9554,16 +9832,49 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     (() => {
                                                                         const staffEndX = (actualSystemWidth ?? 0) - STAFF_MARGIN;
                                                                         const xClamped = Math.min(playheadPosition.x, staffEndX);
+                                                                        // Overlay rosso: regione misure già registrate (da recStart a playhead)
+                                                                        const recOverlay = (() => {
+                                                                            if (!isRecording || isCountingIn) return null;
+                                                                            const sys = layoutData?.systemsParams?.[systemIndex];
+                                                                            if (!sys) return null;
+                                                                            const startMeasure = recStartMeasureRef.current;
+                                                                            // Trova la X di inizio della prima misura registrata in questo sistema
+                                                                            const measIdx = sys.measureIndices.indexOf(startMeasure);
+                                                                            const startX = measIdx >= 0
+                                                                                ? (sys.startMeasuresX[measIdx] ?? 0)
+                                                                                : (sys.measureIndices[0] <= startMeasure ? 0 : null);
+                                                                            if (startX == null) return null;
+                                                                            const width = Math.max(0, xClamped - startX);
+                                                                            if (width <= 0) return null;
+                                                                            return (
+                                                                                <rect
+                                                                                    x={startX}
+                                                                                    y={playheadYTopPx}
+                                                                                    width={width}
+                                                                                    height={playheadYBottomPx - playheadYTopPx}
+                                                                                    fill="rgba(239,68,68,0.08)"
+                                                                                    stroke="none"
+                                                                                />
+                                                                            );
+                                                                        })();
+                                                                        const lineColor = isRecording
+                                                                            ? (isCountingIn ? 'stroke-orange-400' : 'stroke-red-500')
+                                                                            : isRecArmed
+                                                                                ? 'stroke-orange-400'
+                                                                                : 'stroke-cyan-500';
                                                                         return (
-                                                                            <line
-                                                                                x1={xClamped}
-                                                                                y1={playheadYTopPx}
-                                                                                x2={xClamped}
-                                                                                y2={playheadYBottomPx}
-                                                                                className="stroke-cyan-500"
-                                                                                strokeWidth={2}
-                                                                                opacity={0.7}
-                                                                            />
+                                                                            <>
+                                                                                {recOverlay}
+                                                                                <line
+                                                                                    x1={xClamped}
+                                                                                    y1={playheadYTopPx}
+                                                                                    x2={xClamped}
+                                                                                    y2={playheadYBottomPx}
+                                                                                    className={lineColor}
+                                                                                    strokeWidth={isRecording ? 2.5 : 2}
+                                                                                    opacity={isRecording ? 0.9 : 0.7}
+                                                                                />
+                                                                            </>
                                                                         );
                                                                     })()
                                                                 }

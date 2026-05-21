@@ -38,7 +38,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return out.buffer;
 }
 
-function beatsToDurationFlags(beats: number): { duration: StaffNote['duration']; isDotted: boolean; isTriplet: boolean; isDuplet: boolean } {
+export function beatsToDurationFlags(beats: number): { duration: StaffNote['duration']; isDotted: boolean; isTriplet: boolean; isDuplet: boolean } {
   const bases: Array<{ duration: StaffNote['duration']; beats: number }> = [
     { duration: 'whole', beats: 4 },
     { duration: 'half', beats: 2 },
@@ -447,13 +447,13 @@ function snapDurationToStandard(ticks: number, tolerance: number): number {
  *  Notes far from any grid point are left alone (they'll be handled by the
  *  normaliser's tick-decomposition). After snapping, re-derive duration/dotted
  *  fields from the new durationTicks so display labels match the cleaned values. */
-function quantizeMidiTimings(notes: StaffNote[]): StaffNote[] {
+export function quantizeMidiTimings(notes: StaffNote[], gridTicks = QUANTIZE_GRID_TICKS, toleranceTicks = QUANTIZE_TOLERANCE_TICKS): StaffNote[] {
   if (notes.length === 0) return notes;
   return notes.map(n => {
     const oldStart = n.startTick ?? 0;
     const oldDur = n.durationTicks ?? 0;
-    const newStart = snapToGrid(oldStart, QUANTIZE_GRID_TICKS, QUANTIZE_TOLERANCE_TICKS);
-    const newDur = snapDurationToStandard(oldDur, QUANTIZE_TOLERANCE_TICKS);
+    const newStart = snapToGrid(oldStart, gridTicks, toleranceTicks);
+    const newDur = snapDurationToStandard(oldDur, toleranceTicks);
     if (newStart === oldStart && newDur === oldDur) return n;
     const next = { ...n, startTick: newStart, durationTicks: newDur };
     if (newDur !== oldDur) {
@@ -486,7 +486,7 @@ const ARPEGGIO_THRESHOLD = 120;
  *  truncate A to end at B.startTick. Chord tones (same startTick — including
  *  arpeggios collapsed in Phase 1) are skipped: trimming them would zero out
  *  the chord. */
-function trimOverlappingNotes(notes: StaffNote[]): StaffNote[] {
+export function trimOverlappingNotes(notes: StaffNote[]): StaffNote[] {
   if (notes.length === 0) return notes;
 
   // Group note indices by (voice, clef). Splitting by clef matters for ACC
@@ -845,7 +845,7 @@ function splitRestAtBoundaries(
  *    2. per measure: clamp note durations to measure end, split notes at
  *       strong boundaries, fill gaps with rests, split rests at all boundaries.
  *  Output is sorted by startTick. */
-function normalizeRhythm(
+export function normalizeRhythm(
   notes: StaffNote[],
   timeSignature: { numerator: number; denominator: number },
   timeSignatureChanges: Array<{ measureIndex: number; numerator: number; denominator: number }>,

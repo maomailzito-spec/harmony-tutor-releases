@@ -70,6 +70,14 @@ type GrandStaffToolbarProps = {
     isPlaying: boolean;
     togglePlayback: () => void;
     undoNotes: () => void;
+    isRecording?: boolean;
+    isCountingIn?: boolean;
+    isRecArmed?: boolean;
+    canRecord?: boolean;
+    onToggleRecording?: () => void;
+    quantizeGrid?: NoteDuration;
+    setQuantizeGrid?: (value: NoteDuration) => void;
+    onQuantizeAccTrack?: () => void;
 
     bpm: number;
     setBpm: (value: number) => void;
@@ -236,6 +244,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         isPlaying,
         togglePlayback,
         undoNotes,
+        isRecording = false,
+        isCountingIn = false,
+        isRecArmed = false,
+        canRecord = false,
+        onToggleRecording,
+        quantizeGrid = 'eighth' as NoteDuration,
+        setQuantizeGrid,
+        onQuantizeAccTrack,
         bpm,
         setBpm,
         isBpmActive,
@@ -382,6 +398,60 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 >
                     {isPlaying ? <PauseSolidIcon className={TOOLBAR_ICON_CLASS} /> : <PlaySolidIcon className={TOOLBAR_ICON_CLASS} />}
                 </button>
+                {onToggleRecording && (
+                  <button
+                    onClick={canRecord ? onToggleRecording : undefined}
+                    disabled={!canRecord}
+                    className={`p-2 rounded-full transition-colors ${
+                      !canRecord
+                        ? 'text-gray-600 cursor-not-allowed opacity-40'
+                        : isRecording
+                          ? isCountingIn
+                            ? 'text-orange-400 animate-pulse'
+                            : 'text-red-500 animate-pulse'
+                          : isRecArmed
+                            ? 'text-red-400 animate-pulse'
+                            : 'text-gray-300 hover:bg-gray-600'
+                    }`}
+                    title={
+                      !canRecord
+                        ? 'REC: aggiungi una traccia ACC per registrare'
+                        : isRecording
+                          ? 'Ferma registrazione (REC / R)'
+                          : isRecArmed
+                            ? 'Premi Spazio per avviare — premi ancora per disarmare'
+                            : 'Arma registrazione MIDI (R / REC) — poi premi Spazio'
+                    }
+                  >
+                    <span className={`inline-block w-4 h-4 rounded-full border-2 ${
+                      isRecording ? 'bg-red-500 border-red-500' : 'border-current'
+                    }`} />
+                  </button>
+                )}
+                {(setQuantizeGrid || onQuantizeAccTrack) && (
+                  <div className="flex items-center gap-1 ml-1">
+                    {setQuantizeGrid && (
+                      <select
+                        value={quantizeGrid}
+                        onChange={e => setQuantizeGrid(e.target.value as NoteDuration)}
+                        className="bg-gray-700 text-gray-200 text-xs rounded px-1 py-0.5 border border-gray-600 cursor-pointer"
+                        title="Griglia di quantizzazione"
+                      >
+                        <option value="sixteenth">1/16</option>
+                        <option value="eighth">1/8</option>
+                        <option value="quarter">1/4</option>
+                        <option value="half">1/2</option>
+                      </select>
+                    )}
+                    {onQuantizeAccTrack && (
+                      <button
+                        onClick={onQuantizeAccTrack}
+                        className="px-2 py-0.5 text-xs rounded bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600 font-mono font-bold transition-colors"
+                        title={`Quantizza ${quantizeGrid === 'sixteenth' ? '1/16' : quantizeGrid === 'eighth' ? '1/8' : quantizeGrid === 'quarter' ? '1/4' : '1/2'} — note selezionate, o tutte se nessuna selezione`}
+                      >Q</button>
+                    )}
+                  </div>
+                )}
                 <button onClick={undoNotes} className="p-2 rounded-full text-gray-300 hover:bg-gray-600 transition-colors" title={tT('playback_undo')}>
                     <ArrowUturnLeftIcon className={TOOLBAR_ICON_CLASS} />
                 </button>

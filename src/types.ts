@@ -204,6 +204,10 @@ export type StaffNote = {
   chordPcs?: number[];
   /** Root note name of the chord at insertion time (e.g. 'C' for C7/E) — used by re-voice for correct enharmonic spelling. */
   chordRootName?: string;
+  /** Raw (pre-quantize) tick position from real-time recording — preserved so Q can re-quantize to a different grid without undo. */
+  rawStartTick?: number;
+  /** Raw (pre-quantize) duration in ticks from real-time recording. */
+  rawDurationTicks?: number;
 };
 
 /** Manual ornament classification for a note. */
