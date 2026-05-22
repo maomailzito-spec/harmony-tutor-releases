@@ -10,7 +10,7 @@ declare global {
         };
     }
 }
-import React, { useState, useCallback, useMemo, useEffect, useRef, startTransition, useDeferredValue } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import { AudioService } from '../services/AudioService';
 import { CycleIcon } from './icons/CycleIcon';
@@ -331,6 +331,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [accompanimentTracks]);
 
     const [isMixerOpen, setIsMixerOpen] = useState(false);
+    const sidebarRef = useRef<HTMLDivElement>(null);
+    const [mixerSidebarTop, setMixerSidebarTop] = useState(376);
 
     // Per-track gain nodes for real-time mute/volume control without restarting playback.
     // Index = position in accompanimentTracks; each gain node persists and is connected
@@ -542,6 +544,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => { chordInsertModeRef.current = chordInsertMode; }, [chordInsertMode]);
     const [chordInputText, setChordInputText] = useState('');
     const [chordInputError, setChordInputError] = useState(false);
+    // Tracks which staff area was last clicked, to route chord insert to SATB or ACC
+    const [activeStaffArea, setActiveStaffArea] = useState<'satb' | 'accompaniment'>('satb');
+    const activeStaffAreaRef = useRef<'satb' | 'accompaniment'>('satb');
+    useEffect(() => { activeStaffAreaRef.current = activeStaffArea; }, [activeStaffArea]);
+    // Stable ref to playNote — updated after playNote is defined (avoids TDZ in handleChordInsert)
+    const playNoteRef = useRef<((note: StaffNote, durationSec?: number) => Promise<void>) | null>(null);
 
     const project = useMemo(() => ({
         notes: rawNotes,
@@ -1381,6 +1389,83 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     /** Ricalcola il voicing delle note SATB selezionate con la prossima disposizione nel ciclo. */
     const handleRevoice = useCallback(() => {
         if (selectedNoteIds.size === 0) return;
+
+        // ── Branch ACC: le note selezionate sono sulla traccia di accompagnamento ──
+        const firstSelId = [...selectedNoteIds][0];
+        if (isAccompanimentNote(firstSelId, latestAccompanimentTracks.current)) {
+            const accInfo = findAccTrackForNote(firstSelId, latestAccompanimentTracks.current);
+            if (!accInfo) return;
+            const trackIdx = accInfo.trackIndex;
+            const accTrack = latestAccompanimentTracks.current[trackIdx];
+            if (!accTrack) return;
+            const accNotes = accTrack.notes as any[];
+            const staffMode = (accTrack as any).staffMode ?? 'grandstaff';
+
+            // Determina i tick da revoicare: basta che una sola nota del chord sia selezionata
+            const ticksToRevoice = new Set<number>();
+            for (const n of accNotes) {
+                if (!selectedNoteIds.has(n.id) || n.isRest) continue;
+                ticksToRevoice.add(Number(n.startTick ?? 0));
+            }
+            if (ticksToRevoice.size === 0) return;
+
+            const nextIdx = (revoiceDispIdx + 1) % VOICING_DISPOSITIONS.length;
+            setRevoiceDispIdx(nextIdx);
+            const disposition = VOICING_DISPOSITIONS[nextIdx] as VoicingDisposition;
+
+            const accReplacements = new Map<string, any>();
+            let accPrevVoicing: { soprano: number; alto: number; tenor: number; bass: number } | null = null;
+
+            for (const tick of Array.from(ticksToRevoice).sort((a, b) => a - b)) {
+                // Prende TUTTE le note ACC a questo tick (non solo quelle selezionate)
+                const allAtTick = accNotes.filter((n: any) => Number(n.startTick ?? 0) === tick && !n.isRest);
+                if (allAtTick.length < 2) continue;
+
+                // Assegna voci fittizie 1-4 ordinando per MIDI crescente (bass=4 il più basso)
+                const sorted = [...allAtTick].sort((a: any, b: any) => Number(a.midi) - Number(b.midi));
+                const fakeVoices: (1|2|3|4)[] = [4, 3, 2, 1];
+                const fakeNotes = sorted.map((n: any, i: number) => ({
+                    ...n,
+                    voice: fakeVoices[Math.min(i, fakeVoices.length - 1)],
+                }));
+
+                // Passa le note fittizie a revoiceChordAtTick (che filtra per voice 1-4)
+                const tickMeasure = (allAtTick[0] as any).measureIndex ?? 0;
+                const measureActiveAcc = buildMeasureAccidentals(accNotes as any, tickMeasure, tick);
+                const newSATBNotes = revoiceChordAtTick(fakeNotes as any, tick, disposition, keySignature, accPrevVoicing, measureActiveAcc);
+                if (!newSATBNotes) continue;
+
+                // Aggiorna prevVoicing per voice leading progressivo
+                const sop = newSATBNotes.find(n => Number(n.voice) === 1);
+                const alt = newSATBNotes.find(n => Number(n.voice) === 2);
+                const ten = newSATBNotes.find(n => Number(n.voice) === 3);
+                const bas = newSATBNotes.find(n => Number(n.voice) === 4);
+                if (sop && alt && ten && bas) {
+                    accPrevVoicing = { soprano: Number((sop as any).midi), alto: Number((alt as any).midi), tenor: Number((ten as any).midi), bass: Number((bas as any).midi) };
+                }
+
+                // Rimappa a voice=0, ripristina gli ID originali, assegna clef per MIDI
+                for (const newN of newSATBNotes) {
+                    const orig = fakeNotes.find((f: any) => Number(f.voice) === Number((newN as any).voice));
+                    if (!orig) continue;
+                    accReplacements.set(orig.id, {
+                        ...newN,
+                        id: orig.id,
+                        voice: 0 as any,
+                        clef: staffMode === 'treble_only' ? 'treble' : ((newN as any).midi >= 60 ? 'treble' : 'bass'),
+                    });
+                }
+            }
+
+            if (accReplacements.size === 0) return;
+            setAccompanimentTracks(prev => prev.map((track, i) => {
+                if (i !== trackIdx) return track;
+                return { ...track, notes: track.notes.map(n => accReplacements.get((n as any).id) ?? n) };
+            }));
+            return;
+        }
+
+        // ── Branch SATB (percorso esistente, invariato) ──
         const allNotes = latestRawNotes.current as any[];
 
         // Raggruppa le note selezionate per startTick (ogni gruppo = un accordo)
@@ -1440,7 +1525,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (replacements.size === 0) return;
         setRawNotes(prev => (prev || []).map(n => replacements.get((n as any).id) ?? n));
-    }, [selectedNoteIds, revoiceDispIdx, keySignature, setRawNotes]);
+    }, [selectedNoteIds, revoiceDispIdx, keySignature, setRawNotes, setAccompanimentTracks]);
 
     /** Inserisce un accordo dalla sigla (es. "Cmaj7/E") alla posizione della playhead.
      * Restituisce { startTick, durTicks } per permettere al chiamante di avanzare il caret,
@@ -1477,7 +1562,43 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const dummyNote = { duration: selectedInsertion.duration, isDotted: selectedInsertion.isDotted ?? false, isTriplet, isDuplet } as any;
         const durTicks = computeDurationTicks(dummyNote);
 
-        // Estrae il voicing precedente dalle rawNotes per il voice leading
+        // ── ACC block chord insertion ──
+        if (activeStaffAreaRef.current === 'accompaniment') {
+            const firstVisibleIdx = latestAccompanimentTracks.current.findIndex(t => t.visible);
+            if (firstVisibleIdx === -1) return null;
+            const firstVisibleTrack = latestAccompanimentTracks.current[firstVisibleIdx];
+            const staffMode = (firstVisibleTrack as any).staffMode ?? 'grandstaff';
+
+            const accAccidentals = buildMeasureAccidentals(firstVisibleTrack.notes as any, measureIndex, startTick);
+            const satbNotes = buildChordSATBNotes(parsed, measureIndex, beat, startTick,
+                selectedInsertion.duration, durTicks, keySignature, null, accAccidentals);
+
+            const accNotes: StaffNote[] = satbNotes.map(n => ({
+                ...n,
+                id: crypto.randomUUID(),
+                voice: 0 as any,
+                clef: (staffMode === 'treble_only' ? 'treble' : ((n as any).midi >= 60 ? 'treble' : 'bass')) as 'treble' | 'bass',
+            }));
+
+            setAccompanimentTracks(prev => prev.map((track, i) => {
+                if (i !== firstVisibleIdx) return track;
+                const filtered = track.notes.filter(n => (n as any).startTick !== startTick);
+                return {
+                    ...track,
+                    notes: [...filtered, ...accNotes].sort((a, b) =>
+                        ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)
+                    ),
+                };
+            }));
+
+            setChordInputText('');
+            setChordInputError(false);
+            setSelectedNoteIds(new Set(accNotes.map(n => n.id)));
+            accNotes.forEach(n => { void playNoteRef.current?.(n); });
+            return { startTick, durTicks };
+        }
+
+        // ── SATB insertion (percorso esistente, invariato) ──
         let prevVoicing: { soprano: number; alto: number; tenor: number; bass: number } | null = null;
         try {
             const allNotes = (latestRawNotes.current || []) as any[];
@@ -1505,7 +1626,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setChordInputError(false);
 
         return { startTick, durTicks };
-    }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, setRawNotes]);
+    }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, setRawNotes, setAccompanimentTracks, setSelectedNoteIds]);
 
     const mod12Local = useCallback((n: number) => ((n % 12) + 12) % 12, []);
 
@@ -2009,7 +2130,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             })();
 
                         return `<!doctype html><html><head><base href="${baseHref}">${head}<style>
-                              @page { size: A4 landscape; margin: 8mm; }
+                              @page { size: A4 ${canvasFormat === 'page' ? 'portrait' : 'landscape'}; margin: 8mm; }
                               html{overflow:visible !important;}
                               body{background:white;margin:0;padding:8px;overflow:visible !important;width:100% !important;box-sizing:border-box;}
                               .ht-staff-container{width:100% !important;max-width:100% !important;overflow:visible !important;}
@@ -2022,7 +2143,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch {
             return null;
         }
-    }, [exportIncludeTitle, projectTitle, titleFontFamily, titleFontSize]);
+    }, [exportIncludeTitle, projectTitle, titleFontFamily, titleFontSize, canvasFormat]);
 
     // Print handler (moved above menu handler to avoid temporal dead zone): opens a print window for the staff container
     const handlePrint = useCallback(() => {
@@ -2374,7 +2495,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const res = await electronBridge.exportPdfFromHtml(html, {
                     pageSize: 'A4',
                     marginsType: 0,
-                    landscape: true,
+                    landscape: canvasFormat !== 'page',
                     scaleFactor: computeScale(),
                 });
                 // On failure, main emits `menu-error` and the app shows a toast.
@@ -3199,7 +3320,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const measure = () => {
             try {
                 const w = el.getBoundingClientRect().width;
-                // staffContainer has `p-4` (16px per side).
                 const usable = Math.max(300, Math.floor(w - 32));
                 if (usable > 0) setContainerWidth(usable);
             } catch {
@@ -3491,6 +3611,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const layoutDataRef = useRef(layoutData);
     useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
 
+    useLayoutEffect(() => {
+        const sys0 = systemElementByIndexRef.current.get(0);
+        const sidebar = sidebarRef.current;
+        if (!sys0 || !sidebar) return;
+        const accY = staffSystemMode === 'satb_ancient'
+            ? VF_SATB_BASS_Y + 4 * VF_LINE_SPACING + 100
+            : VF_BASS_Y + 4 * VF_LINE_SPACING + 100;
+        const sys0Rect = sys0.getBoundingClientRect();
+        const sidebarRect = sidebar.getBoundingClientRect();
+        const top = sys0Rect.top - sidebarRect.top + accY;
+        if (Number.isFinite(top)) setMixerSidebarTop(Math.max(0, top));
+    }, [layoutData, staffSystemMode, hasVisibleAccompaniment]);
+
     // Highest measure index that currently contains any note. The per-system
     // metric-validation block uses this as the "currently being edited"
     // measure and skips it: the warning rectangle only appears once the user
@@ -3774,6 +3907,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         inferredContextSuppressions,
         enableInferredContexts: enableInferredContexts !== false,
         cadentialPatternsEnabled: cadentialPatternsEnabled !== false,
+        accompanimentTracks,
     });
 
     // Keep a ref to latest harmony labels for save-time corpus recording
@@ -3887,6 +4021,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         await playNoteSound(note, durationSec);
     }, [playNoteSound, selectedMidiOutput, sendMidiNote]);
+    playNoteRef.current = playNote;
 
     // stopPlayback now in usePlayback
 
@@ -6394,9 +6529,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         e?.stopPropagation?.();
 
         // ⌘/Ctrl required to insert notes — plain clicks only deselect.
+        // Exception: in chord insert mode a plain click repositions the caret without inserting
+        // and without clearing the current selection (so notes just inserted stay selected).
         if (!(e?.metaKey || e?.ctrlKey)) {
-            setSelectedNoteIds(new Set());
-            return;
+            if (!chordInsertModeRef.current) {
+                setSelectedNoteIds(new Set());
+                return;
+            }
+            // chord insert mode: fall through to reposition caret, keep selection intact
         }
 
 
@@ -6536,6 +6676,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const ACC_AREA_THRESHOLD_Y = ACC_TREBLE_TOP_Y - 30;             // 280 — allows ~3 ledger lines above ACC treble
         if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y) {
             if (e?.altKey) return;
+            setActiveStaffArea('accompaniment');
+            // In chord insert mode, just position the caret — don't insert a single note.
+            if (chordInsertModeRef.current) return;
             // Midpoint between stave centers (treble 330, bass 460) = 395
             const accClefMidY = (ACC_TREBLE_TOP_Y + 2 * VF_LINE_SPACING + ACC_BASS_TOP_Y + 2 * VF_LINE_SPACING) / 2;
 
@@ -6620,6 +6763,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return;
         }
+
+        setActiveStaffArea('satb');
+        // In chord insert mode, clicking SATB only repositions the caret — no single-note insertion.
+        if (chordInsertModeRef.current) return;
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
 
@@ -9331,29 +9478,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 playheadMeasure={playheadMeasureForChoral}
             />
 
-            
-            <div className="flex flex-row gap-4 flex-grow min-h-0">
-                {/* Mixer panel / toggle strip */}
-                <div className={`flex-shrink-0 h-full overflow-hidden transition-[width] duration-200 ease-in-out ${isMixerOpen ? 'w-[60px]' : 'w-6'}`}>
-                    {isMixerOpen ? (
-                        <TrackMixerPanel
-                            accompanimentTracks={accompanimentTracks}
-                            onUpdateTrack={handleUpdateTrack}
-                            onDeleteTrack={handleDeleteTrack}
-                            onAddEmptyTrack={handleAddEmptyTrack}
-                            onClose={() => setIsMixerOpen(false)}
-                        />
-                    ) : (
-                        <button
-                            onClick={() => setIsMixerOpen(true)}
-                            title="Mixer tracce"
-                            className="mt-1 h-8 w-6 bg-slate-700 hover:bg-slate-600 rounded text-gray-400 hover:text-gray-200 flex items-center justify-center text-base transition-colors"
-                        >
-                            ⊟
-                        </button>
-                    )}
-                </div>
 
+            <div className="flex flex-row gap-1 flex-grow min-h-0">
+                {/* ACC Mixer sidebar: aligned to ACC stave Y via dynamic measurement */}
+                <div ref={sidebarRef} className="relative flex-shrink-0 w-6">
+                    <div style={{ position: 'absolute', top: mixerSidebarTop, left: 0, zIndex: 10 }}>
+                        {isMixerOpen ? (
+                            <TrackMixerPanel
+                                accompanimentTracks={accompanimentTracks}
+                                onUpdateTrack={handleUpdateTrack}
+                                onDeleteTrack={handleDeleteTrack}
+                                onAddEmptyTrack={handleAddEmptyTrack}
+                                onClose={() => setIsMixerOpen(false)}
+                            />
+                        ) : (
+                            <button
+                                onClick={() => setIsMixerOpen(true)}
+                                title="Mixer tracce"
+                                className="h-8 w-6 bg-slate-700 hover:bg-slate-600 rounded text-gray-400 hover:text-gray-200 flex items-center justify-center text-base transition-colors"
+                            >
+                                ⊟
+                            </button>
+                        )}
+                    </div>
+                </div>
                 <div
                     ref={scoreScrollRef}
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}

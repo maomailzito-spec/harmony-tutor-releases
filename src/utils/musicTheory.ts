@@ -2919,7 +2919,7 @@ export function getRomanAnalysis(
     chord: StaffNote[],
     keySignatureRoot: string,
     isMinorMode: boolean,
-    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string> }
+    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string>; accHintPcs?: number[]; accLowestMidi?: number | null }
 ): { roman: string; figures: string[]; aug6Variants?: string[] } | null {
     if (!chord || chord.length < 2) return null;
 
@@ -3376,9 +3376,10 @@ export function getRomanAnalysis(
     // If ornament filtering collapses the sonority to a stable dyad shell (e.g. C–G),
     // infer the most likely diatonic Roman numeral from the bass before chord-ID.
     // This prevents appoggiature/ornaments from making Roman analysis disappear (null).
+    // Skip when ACC hint is active: the hint may supply the missing root and complete the chord.
     try {
         const pcs = new Set<number>([...new Set((filteredChord || []).map(pitchClassForRoman).map(mod12))]);
-        if (pcs.size <= 2) {
+        if (pcs.size <= 2 && !(opts?.accHintPcs && opts.accHintPcs.length > 0)) {
             const inferred = inferDiatonicRomanFromBassDyad();
             if (inferred?.roman) return { roman: inferred.roman, figures: figuresL2 };
         }
@@ -3651,6 +3652,67 @@ export function getRomanAnalysis(
 
     let chordInfo = identifyChord(filteredChord);
 
+    // ACC hint: merge accompaniment pcs into the note set so identifyChordCandidates
+    // can consider roots absent from SATB (e.g. E+G SATB + C acc → C major, not iii).
+    // Synthetic ACC-only roots are penalised to avoid overriding a confident SATB reading.
+    if (opts?.accHintPcs && opts.accHintPcs.length > 0) {
+        try {
+            const hintPcs = opts.accHintPcs;
+            const accBassMidi = opts.accLowestMidi ?? null;
+            const accBassPc = accBassMidi != null ? mod12(accBassMidi) : null;
+            const ACC_ONLY_ROOT_PENALTY = -6;  // root must be confirmed by SATB to avoid this
+            const ACC_HINT_WEIGHT = 3;
+            const ACC_BASS_HINT_WEIGHT = 12;
+
+            // Build the merged note set: SATB notes + synthetic notes for ACC-only pcs.
+            const satbBase = filteredChord.length >= 2 ? filteredChord : baseChord;
+            const satbPcs = new Set<number>(satbBase.map(n => mod12(pitchClassOf(n))));
+            const syntheticNotes: StaffNote[] = [];
+            for (const pc of hintPcs) {
+                if (satbPcs.has(pc)) continue;
+                // Use accLowestMidi for the ACC bass pc; choose a mid-range MIDI for others.
+                const midi = (accBassPc != null && pc === accBassPc && accBassMidi != null)
+                    ? accBassMidi
+                    : pc + 48; // octave 3 default
+                syntheticNotes.push({
+                    noteIndex: pc, midi, isRest: false,
+                    pitch: '', octave: Math.floor(midi / 12) - 1, position: 0,
+                    id: `__acc_hint_${pc}`, duration: 'quarter',
+                    isTriplet: false, isDuplet: false, isDotted: false,
+                    measureIndex: 0, beat: 1, startTick: 0, durationTicks: 960,
+                    voice: 0 as any,
+                } as StaffNote);
+            }
+
+            if (syntheticNotes.length > 0 || hintPcs.length > 0) {
+                const mergedNotes = [...satbBase, ...syntheticNotes];
+                const candidates = identifyChordCandidates(mergedNotes, ornOv);
+                if (candidates && candidates.length >= 1) {
+                    for (const c of candidates as any[]) {
+                        const rootPc = mod12((c.root as any)?.noteIndex ?? (c.root as any)?.midi ?? 0);
+                        // Penalty if the root came from ACC (not observed in SATB).
+                        // Exception: when the ACC bass IS that root, the bass directly evidences
+                        // the root — skip the penalty entirely.
+                        if (!satbPcs.has(rootPc) && rootPc !== accBassPc) c.score += ACC_ONLY_ROOT_PENALTY;
+                        // Bonus for ACC notes that match this candidate's chord tones.
+                        const formula = (CHORD_FORMULAS as any)?.[c.type] as number[] | undefined;
+                        const candPcs = Array.isArray(formula)
+                            ? formula.map((iv: number) => mod12(rootPc + iv))
+                            : [rootPc];
+                        const matchCount = hintPcs.filter(pc => candPcs.includes(pc)).length;
+                        if (matchCount > 0) c.score += matchCount * ACC_HINT_WEIGHT;
+                        if (accBassPc != null && accBassPc === rootPc) c.score += ACC_BASS_HINT_WEIGHT;
+                    }
+                    (candidates as any[]).sort((a: any, b: any) => (b.score as number) - (a.score as number));
+                    const best = (candidates as any[])[0];
+                    if (best?.root && best?.type) {
+                        chordInfo = { root: best.root, type: best.type, intervals: best.intervals };
+                    }
+                }
+            }
+        } catch { /* ignore */ }
+    }
+
     // Rescue: if filtering ornaments accidentally removes an essential chord tone and
     // collapses a 7th-chord sonority, prefer the unfiltered vertical when it yields a
     // clear tertian 7th (including ø7).
@@ -3915,7 +3977,8 @@ export function getRomanAnalysis(
             }
         } catch { /* ignore */ }
 
-        if (typeof baseRomanSymbol === 'string' && baseRomanSymbol && !baseRomanSymbol.includes('/')) {
+        if (typeof baseRomanSymbol === 'string' && baseRomanSymbol && !baseRomanSymbol.includes('/')
+                && !(opts?.accHintPcs && opts.accHintPcs.length > 0)) {
             const inferred = inferDiatonicRomanFromBassDyad();
             if (inferred) return { roman: inferred.roman, figures: figuresL2 };
         }

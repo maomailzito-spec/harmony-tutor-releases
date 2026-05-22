@@ -27,6 +27,7 @@ import {
   CHROMATIC_MODULATION_KEY,
   CADENTIAL_PATTERN_RECOGNITION_KEY,
   RULE_SUGGESTIONS_KEY,
+  ACC_HINT_KEY,
   MIDI_EXPORT_TYPE_KEY,
 } from '../storage/storageKeys';
 
@@ -60,6 +61,7 @@ export type PreferenceId =
   | 'analysis.cadentialPatterns'
   | 'analysis.ruleSuggestions'
   | 'analysis.chromaticModulation'
+  | 'analysis.accHint'
   | 'midi.exportType';
 
 export type PreferenceDef<T> = {
@@ -522,6 +524,17 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Modulazione cromatica (sperimentale)',
     i18nKey: 'pref_analysis_chromatic_modulation',
     storageKey: CHROMATIC_MODULATION_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+  'analysis.accHint': {
+    id: 'analysis.accHint',
+    section: 'Analysis',
+    label: 'Hint armonica dall\'accompagnamento',
+    i18nKey: 'pref_analysis_acc_hint',
+    storageKey: ACC_HINT_KEY,
     defaultValue: false,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, false),

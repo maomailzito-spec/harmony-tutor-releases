@@ -134,6 +134,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [tonicizationCompact, setTonicizationCompact] = usePreference<boolean>('analysis.tonicizationCompact');
   const [chromaticModulation, setChromaticModulation] = usePreference<boolean>('analysis.chromaticModulation');
   const [cadentialPatterns, setCadentialPatterns] = usePreference<boolean>('analysis.cadentialPatterns');
+  const [accHint, setAccHint] = usePreference<boolean>('analysis.accHint');
 
   const analysisProfileSelectionValue = useMemo(() => {
     return profileCustomized ? 'custom' : profileBaseId;
@@ -617,6 +618,21 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_chromatic_modulation', 'Modulazione cromatica (sperimentale)')}</div>
                     <div className="text-xs text-slate-400">
                       {tp('pref_analysis_chromatic_modulation_hint', 'Rileva modulazioni prive di preparazione cadenzale analizzando il contenuto cromatico su finestre di ≥ 3 misure consecutive.')}
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!accHint}
+                    onChange={(e) => setAccHint(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_acc_hint', 'Hint armonica dall\'accompagnamento')}</div>
+                    <div className="text-xs text-slate-400">
+                      {tp('pref_analysis_acc_hint_description', 'Usa le note delle tracce ACC (non mutate) per disambiguare l\'identificazione degli accordi SATB. Il basso ACC è il segnale più forte. Senza tracce ACC, o se disabilitato, l\'analisi è identica a prima.')}
                     </div>
                   </div>
                 </label>

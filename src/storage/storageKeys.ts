@@ -43,6 +43,7 @@ export const GUITAR_CUSTOM_SCALE_SHAPES_KEY = 'harmony-tutor.guitar.customScaleS
 export const GUITAR_CUSTOM_VOICINGS_KEY = 'harmony-tutor.guitar.customVoicings.v1' as const;
 export const CADENTIAL_PATTERN_RECOGNITION_KEY = 'harmony-tutor.analysis.cadentialPatterns.v1' as const;
 export const RULE_SUGGESTIONS_KEY = 'harmony-tutor.analysis.ruleSuggestions.v1' as const;
+export const ACC_HINT_KEY = 'harmony-tutor.analysis.accHint.v1' as const;
 
 // Aggregate export: use this (and `StorageKey`) to avoid introducing magic-string keys.
 export const STORAGE_KEYS = {
@@ -77,6 +78,7 @@ export const STORAGE_KEYS = {
         TONICIZATION_COMPACT_KEY,
         CADENTIAL_PATTERN_RECOGNITION_KEY,
         RULE_SUGGESTIONS_KEY,
+        ACC_HINT_KEY,
         MIDI_EXPORT_TYPE_KEY: 'harmony-tutor.midiExportType.v1',
 } as const;
 

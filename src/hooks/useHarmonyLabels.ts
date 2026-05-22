@@ -6,7 +6,7 @@
  * sequence markers, modulation markers, and time-signature markers.
  */
 import { useMemo } from 'react';
-import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange } from '../types';
+import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack } from '../types';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol } from '../utils/musicTheory';
 import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
@@ -77,6 +77,30 @@ export interface UseHarmonyLabelsParams {
     inferredContextSuppressions?: number[];
     enableInferredContexts?: boolean;
     cadentialPatternsEnabled?: boolean;
+    accompanimentTracks?: AccompanimentTrack[];
+}
+
+function getAccompanimentPcsForBeat(
+    tracks: AccompanimentTrack[],
+    absBeat: number,
+): { pcs: number[]; lowestMidi: number | null } {
+    const activePcs = new Set<number>();
+    let lowestMidi: number | null = null;
+    const beatTick = absBeat * TICKS_PER_QUARTER;
+    for (const track of tracks) {
+        if ((track as any).muted) continue;
+        for (const note of (track.notes ?? [])) {
+            if (note.isRest || !Number.isFinite(note.midi) || !note.midi) continue;
+            const s = note.startTick ?? 0;
+            const d = note.durationTicks ?? 0;
+            if (s <= beatTick && beatTick < s + d) {
+                const pc = ((note.midi % 12) + 12) % 12;
+                activePcs.add(pc);
+                if (lowestMidi === null || note.midi < lowestMidi) lowestMidi = note.midi;
+            }
+        }
+    }
+    return { pcs: [...activePcs], lowestMidi };
 }
 
 export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
@@ -95,10 +119,12 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         inferredContextSuppressions,
         enableInferredContexts,
         cadentialPatternsEnabled,
+        accompanimentTracks,
     } = params;
 
     const [compactTonicization] = usePreference<boolean>('analysis.tonicizationCompact');
     const [_chromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
+    const [accHintEnabled] = usePreference<boolean>('analysis.accHint');
 
     const minSpanBeats = Number(harmonyLabelMinSpanBeats) || 0;
 
@@ -943,7 +969,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const ctx = ctxAtAbsBeat(absBeat);
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
-                const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, { ornamentOverrides: ornOverrideRecord });
+                const _accHint = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
+                    ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), absBeat)
+                    : null;
+                const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, {
+                    ornamentOverrides: ornOverrideRecord,
+                    ...(_accHint && _accHint.pcs.length > 0 ? { accHintPcs: _accHint.pcs, accLowestMidi: _accHint.lowestMidi } : {}),
+                });
 
                 // Compute root PC for fallback resolution matching (V/x → X where quality differs).
                 const rootPc = (() => {
@@ -2902,7 +2934,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             try {
 
-                const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor, { ornamentOverrides: ornOverrideRecord });
+                const _accHintLabel = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
+                    ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), Number(event.absBeat))
+                    : null;
+                const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor, {
+                    ornamentOverrides: ornOverrideRecord,
+                    ...(_accHintLabel && _accHintLabel.pcs.length > 0 ? { accHintPcs: _accHintLabel.pcs, accLowestMidi: _accHintLabel.lowestMidi } : {}),
+                });
 
                 if (r) {
                     roman = r.roman;
@@ -3925,7 +3963,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         } catch { /* ignore */ }
 
         return labelsBySystem;
-    }, [_chromaticModulationEnabled, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions]);
+    }, [_chromaticModulationEnabled, accHintEnabled, accompanimentTracks, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
