@@ -212,6 +212,9 @@ type GrandStaffToolbarProps = {
     revoiceDispIdx: number;
     hasSelectedNotes: boolean;
     selectedNotesHave7th: boolean;
+    accPattern: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken';
+    onSetAccPattern: (p: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken') => void;
+    activeStaffArea: 'satb' | 'accompaniment';
 };
 
 const IconComponent: React.FC<{ type: 'note' | 'rest'; duration: NoteDuration; className?: string }> = ({ type, duration, className }) => {
@@ -368,6 +371,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         revoiceDispIdx,
         hasSelectedNotes,
         selectedNotesHave7th,
+        accPattern,
+        onSetAccPattern,
+        activeStaffArea,
     } = props;
 
     const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
@@ -887,6 +893,26 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         ? ['auto','S:7','S:3','S:5','S:R','S:7','S:3'][revoiceDispIdx % 7]
                         : ['auto','S:R','S:3','S:5','S:R','S:3','S:5'][revoiceDispIdx % 7]}
                 </button>
+                {activeStaffArea === 'accompaniment' && (
+                    <>
+                        <div className="w-px h-5 bg-slate-600 mx-0.5" />
+                        {([
+                            { id: 'block',         label: 'Bl',  title: 'Block Chords' },
+                            { id: 'arpeggio_up',   label: 'Ar▲', title: 'Arpeggio Up' },
+                            { id: 'arpeggio_down', label: 'Ar▼', title: 'Arpeggio Down' },
+                            { id: 'broken',        label: 'Brk', title: 'Broken Chords (boom-chick)' },
+                        ] as const).map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => onSetAccPattern(p.id)}
+                                title={p.title}
+                                className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accPattern === p.id ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                    </>
+                )}
             </div>
         ),
         notations: (

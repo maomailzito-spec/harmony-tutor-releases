@@ -75,6 +75,7 @@ type ActiveTab = 'editor' | 'analysis';
 type StaffLayoutMode = 'parti_late' | 'parti_strette';
 type StaffSystemMode = 'grandstaff' | 'treble_only' | 'satb_ancient';
 type EngravingMode = 'legacy' | 'enhanced';
+type AccompanimentPattern = 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken';
 
 const LINE_HEIGHT = 12;
 
@@ -548,6 +549,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [activeStaffArea, setActiveStaffArea] = useState<'satb' | 'accompaniment'>('satb');
     const activeStaffAreaRef = useRef<'satb' | 'accompaniment'>('satb');
     useEffect(() => { activeStaffAreaRef.current = activeStaffArea; }, [activeStaffArea]);
+    // Pattern for ACC chord insertion (ignored for SATB).
+    const [accPattern, setAccPattern] = useState<AccompanimentPattern>('block');
+    const accPatternRef = useRef<AccompanimentPattern>('block');
+    useEffect(() => { accPatternRef.current = accPattern; }, [accPattern]);
     // Stable ref to playNote — updated after playNote is defined (avoids TDZ in handleChordInsert)
     const playNoteRef = useRef<((note: StaffNote, durationSec?: number) => Promise<void>) | null>(null);
 
@@ -1527,6 +1532,104 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setRawNotes(prev => (prev || []).map(n => replacements.get((n as any).id) ?? n));
     }, [selectedNoteIds, revoiceDispIdx, keySignature, setRawNotes, setAccompanimentTracks]);
 
+    // Converts a tick count to the closest standard NoteDuration name (with optional dot).
+    // Used by ACC pattern generators (arpeggio, broken) to assign valid durations to
+    // sub-divisions of the inserted chord.
+    const ticksToDurationInfo = useCallback((ticks: number): { duration: NoteDuration; isDotted: boolean } => {
+        const TQ = TICKS_PER_QUARTER;
+        const table: Array<{ d: NoteDuration; dot: boolean; t: number }> = [
+            { d: 'whole',         dot: false, t: 4 * TQ },
+            { d: 'half',          dot: true,  t: 3 * TQ },
+            { d: 'half',          dot: false, t: 2 * TQ },
+            { d: 'quarter',       dot: true,  t: 1.5 * TQ },
+            { d: 'quarter',       dot: false, t: 1 * TQ },
+            { d: 'eighth',        dot: true,  t: 0.75 * TQ },
+            { d: 'eighth',        dot: false, t: 0.5 * TQ },
+            { d: 'sixteenth',     dot: true,  t: 0.375 * TQ },
+            { d: 'sixteenth',     dot: false, t: 0.25 * TQ },
+            { d: 'thirty-second', dot: false, t: 0.125 * TQ },
+            { d: 'sixty-fourth',  dot: false, t: 0.0625 * TQ },
+        ];
+        let best = table[0];
+        let bestDiff = Math.abs(ticks - best.t);
+        for (const row of table) {
+            const diff = Math.abs(ticks - row.t);
+            if (diff < bestDiff) { best = row; bestDiff = diff; }
+        }
+        return { duration: best.d, isDotted: best.dot };
+    }, []);
+
+    // Re-times a block-chord template (all notes at same startTick/durationTicks) into a
+    // sequence according to the given accompaniment pattern. Returns a new note array.
+    const applyAccPattern = useCallback((
+        baseNotes: StaffNote[],
+        startTick: number,
+        durationTicks: number,
+        ticksPerBeat: number,
+        pattern: AccompanimentPattern,
+    ): StaffNote[] => {
+        if (pattern === 'block' || baseNotes.length === 0) return baseNotes;
+
+        const sorted = [...baseNotes].sort((a, b) => ((a as any).midi ?? 0) - ((b as any).midi ?? 0));
+
+        if (pattern === 'arpeggio_up' || pattern === 'arpeggio_down') {
+            const seq = pattern === 'arpeggio_up' ? sorted : [...sorted].reverse();
+            const noteCount = seq.length;
+            const slot = Math.floor(durationTicks / noteCount);
+            const info = ticksToDurationInfo(slot);
+            const baseBeat = Number((seq[0] as any)?.beat) || 1;
+            return seq.map((n, i) => {
+                const s = startTick + i * slot;
+                const dt = (i === noteCount - 1) ? (durationTicks - i * slot) : slot;
+                return {
+                    ...n,
+                    id: crypto.randomUUID(),
+                    startTick: s,
+                    durationTicks: dt,
+                    duration: info.duration,
+                    isDotted: info.isDotted,
+                    beat: baseBeat + (i * slot) / (ticksPerBeat || 1),
+                } as StaffNote;
+            });
+        }
+
+        // broken: alternating bass / upper-chord "boom-chick"
+        const bass = sorted[0];
+        const upper = sorted.slice(1);
+        const pairSpan = 2 * ticksPerBeat;
+        const numPairs = Math.max(1, Math.floor(durationTicks / pairSpan));
+        const slot = ticksPerBeat;
+        const info = ticksToDurationInfo(slot);
+        const baseBeat = Number((bass as any)?.beat) || 1;
+        const out: StaffNote[] = [];
+        for (let p = 0; p < numPairs; p++) {
+            const pairStart = startTick + p * pairSpan;
+            const boomBeat = baseBeat + 2 * p;
+            const chickBeat = boomBeat + 1;
+            out.push({
+                ...bass,
+                id: crypto.randomUUID(),
+                startTick: pairStart,
+                durationTicks: slot,
+                duration: info.duration,
+                isDotted: info.isDotted,
+                beat: boomBeat,
+            } as StaffNote);
+            for (const u of upper) {
+                out.push({
+                    ...u,
+                    id: crypto.randomUUID(),
+                    startTick: pairStart + slot,
+                    durationTicks: slot,
+                    duration: info.duration,
+                    isDotted: info.isDotted,
+                    beat: chickBeat,
+                } as StaffNote);
+            }
+        }
+        return out;
+    }, [ticksToDurationInfo]);
+
     /** Inserisce un accordo dalla sigla (es. "Cmaj7/E") alla posizione della playhead.
      * Restituisce { startTick, durTicks } per permettere al chiamante di avanzare il caret,
      * oppure null se la sigla non è valida. */
@@ -1562,7 +1665,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const dummyNote = { duration: selectedInsertion.duration, isDotted: selectedInsertion.isDotted ?? false, isTriplet, isDuplet } as any;
         const durTicks = computeDurationTicks(dummyNote);
 
-        // ── ACC block chord insertion ──
+        // ── ACC chord insertion (block / arpeggio_up / arpeggio_down / broken) ──
         if (activeStaffAreaRef.current === 'accompaniment') {
             const firstVisibleIdx = latestAccompanimentTracks.current.findIndex(t => t.visible);
             if (firstVisibleIdx === -1) return null;
@@ -1573,16 +1676,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const satbNotes = buildChordSATBNotes(parsed, measureIndex, beat, startTick,
                 selectedInsertion.duration, durTicks, keySignature, null, accAccidentals);
 
-            const accNotes: StaffNote[] = satbNotes.map(n => ({
+            const blockAccNotes: StaffNote[] = satbNotes.map(n => ({
                 ...n,
                 id: crypto.randomUUID(),
                 voice: 0 as any,
                 clef: (staffMode === 'treble_only' ? 'treble' : ((n as any).midi >= 60 ? 'treble' : 'bass')) as 'treble' | 'bass',
             }));
 
+            const accNotes = applyAccPattern(blockAccNotes, startTick, durTicks, TICKS_PER_QUARTER, accPatternRef.current);
+
+            // Overwrite any pre-existing notes that fall inside the chord's time window.
+            const endTick = startTick + durTicks;
             setAccompanimentTracks(prev => prev.map((track, i) => {
                 if (i !== firstVisibleIdx) return track;
-                const filtered = track.notes.filter(n => (n as any).startTick !== startTick);
+                const filtered = track.notes.filter(n => {
+                    const s = (n as any).startTick ?? 0;
+                    return s < startTick || s >= endTick;
+                });
                 return {
                     ...track,
                     notes: [...filtered, ...accNotes].sort((a, b) =>
@@ -1626,7 +1736,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setChordInputError(false);
 
         return { startTick, durTicks };
-    }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, setRawNotes, setAccompanimentTracks, setSelectedNoteIds]);
+    }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, setRawNotes, setAccompanimentTracks, setSelectedNoteIds, applyAccPattern]);
 
     const mod12Local = useCallback((n: number) => ((n % 12) + 12) % 12, []);
 
@@ -9338,6 +9448,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const selNotes = (latestRawNotes.current as any[]).filter(n => selectedNoteIds.has(n.id));
                     return selNotes.some(n => Array.isArray(n.chordPcs) && n.chordPcs.length >= 4);
                 })()}
+                accPattern={accPattern}
+                onSetAccPattern={setAccPattern}
+                activeStaffArea={activeStaffArea}
             />
 
             <PreferencesModal
