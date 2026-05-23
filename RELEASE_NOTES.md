@@ -1,3 +1,8 @@
+## Novità in v1.0.13
+
+### 🐛 Fix licenza
+- **Voce "Gestisci Licenza…" sempre visibile nel menu** (non solo alla scadenza del trial): su macOS nel menu "Harmony Tutor", su Windows/Linux nel menu "Visualizza". Permette di inserire o gestire la licenza in qualsiasi momento.
+
 ## Novità in v1.0.10
 
 ### 🐛 Fix analisi armonica
