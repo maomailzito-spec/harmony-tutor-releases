@@ -426,6 +426,7 @@ function createMenu() {
       generateChorale: 'Genera corale da Roman Numerals…',
       shortcuts: 'Scorciatoie…', noRecent: 'Nessun file recente',
       collisionEnhanced: 'Verifica collisioni (Enhanced)…', collisionLegacy: 'Verifica collisioni (Legacy)…',
+      manageLicense: 'Gestisci Licenza…',
     },
     en: {
       file: 'File', edit: 'Edit', view: 'View', tools: 'Tools', help: 'Help',
@@ -447,6 +448,7 @@ function createMenu() {
       generateChorale: 'Generate chorale from Roman Numerals…',
       shortcuts: 'Shortcuts…', noRecent: 'No recent files',
       collisionEnhanced: 'Check collisions (Enhanced)…', collisionLegacy: 'Check collisions (Legacy)…',
+      manageLicense: 'Manage License…',
     },
   };
   const ms = _menuStrings[lng] || _menuStrings['it'];
@@ -584,6 +586,11 @@ function createMenu() {
           label: mt('preferences'),
           accelerator: 'CmdOrCtrl+,',
           click: () => { sendAction(MENU_ACTIONS.OPEN_PREFERENCES); }
+        },
+        { type: 'separator' },
+        {
+          label: mt('manageLicense'),
+          click: () => { showLicenseActivationDialog(); }
         },
         { type: 'separator' },
         { role: 'quit' }
@@ -833,6 +840,10 @@ function createMenu() {
           accelerator: 'CmdOrCtrl+,',
           click: () => { sendAction(MENU_ACTIONS.OPEN_PREFERENCES); }
         },
+        {
+          label: mt('manageLicense'),
+          click: () => { showLicenseActivationDialog(); }
+        },
         { type: 'separator' },
         ...(enableGuitar ? [
           {
@@ -1026,13 +1037,15 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
 });
 
 // ── License Activation Dialog (loop until activated or cancelled) ──
+// Pass extraMessage to show a specific reason (e.g. trial expired).
+// If called with no arguments (e.g. from the menu), shows a neutral message.
 async function showLicenseActivationDialog(extraMessage) {
   const { shell } = require('electron');
 
   while (true) {
     const msg = extraMessage
-      ? `${extraMessage}\n\nIl periodo di prova è terminato. Inserisci la tua chiave di licenza per continuare.`
-      : 'Il periodo di prova di 10 giorni è terminato.\nInserisci la tua chiave di licenza per continuare.';
+      ? `${extraMessage}\n\nInserisci la tua chiave di licenza per continuare.`
+      : 'Inserisci la tua chiave di licenza per attivare Harmony Tutor.';
 
     const result = await dialog.showMessageBox({
       type: 'info',
@@ -1575,7 +1588,7 @@ app.whenReady().then(async () => {
       const activationResult = await showLicenseActivationDialog(
         licenseStatus.status === 'grace-expired'
           ? 'Il periodo di grazia offline è scaduto. Connettiti a internet o inserisci una nuova licenza.'
-          : undefined
+          : 'Il periodo di prova di 10 giorni è terminato.'
       );
       if (!activationResult) {
         app.quit();
