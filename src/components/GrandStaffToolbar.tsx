@@ -212,9 +212,11 @@ type GrandStaffToolbarProps = {
     revoiceDispIdx: number;
     hasSelectedNotes: boolean;
     selectedNotesHave7th: boolean;
-    accPattern: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken';
-    onSetAccPattern: (p: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken') => void;
+    accPattern: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken' | 'albertino' | 'ondulato';
+    onSetAccPattern: (p: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken' | 'albertino' | 'ondulato') => void;
     activeStaffArea: 'satb' | 'accompaniment';
+    accLetRing: boolean;
+    onToggleAccLetRing: () => void;
 };
 
 const IconComponent: React.FC<{ type: 'note' | 'rest'; duration: NoteDuration; className?: string }> = ({ type, duration, className }) => {
@@ -374,6 +376,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         accPattern,
         onSetAccPattern,
         activeStaffArea,
+        accLetRing,
+        onToggleAccLetRing,
     } = props;
 
     const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
@@ -897,10 +901,12 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     <>
                         <div className="w-px h-5 bg-slate-600 mx-0.5" />
                         {([
-                            { id: 'block',         label: 'Bl',  title: 'Block Chords' },
-                            { id: 'arpeggio_up',   label: 'Ar▲', title: 'Arpeggio Up' },
-                            { id: 'arpeggio_down', label: 'Ar▼', title: 'Arpeggio Down' },
-                            { id: 'broken',        label: 'Brk', title: 'Broken Chords (boom-chick)' },
+                            { id: 'block',         label: 'Bl',   title: 'Block Chords' },
+                            { id: 'arpeggio_up',   label: 'Ar▲',  title: 'Arpeggio Up' },
+                            { id: 'arpeggio_down', label: 'Ar▼',  title: 'Arpeggio Down' },
+                            { id: 'broken',        label: 'Brk',  title: 'Broken (boom-chick)' },
+                            { id: 'albertino',     label: 'Alb',  title: 'Basso Albertino (0-2-1-2)' },
+                            { id: 'ondulato',      label: 'Ond',  title: 'Ondulato (su e giù)' },
                         ] as const).map(p => (
                             <button
                                 key={p.id}
@@ -911,6 +917,15 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 {p.label}
                             </button>
                         ))}
+                        {accPattern !== 'block' && (
+                            <button
+                                onClick={onToggleAccLetRing}
+                                title="Let Ring — le note risuonano fino alla fine dell'accordo"
+                                className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accLetRing ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                            >
+                                Ring
+                            </button>
+                        )}
                     </>
                 )}
             </div>

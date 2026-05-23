@@ -123,11 +123,7 @@ async function main() {
   }
 
   // Start Electron.
-  const electronArgs = [
-    '--disable-gpu',
-    '--disable-gpu-compositing',
-    '.',
-  ];
+  const electronArgs = ['.'];
 
   electron = spawn(electronPath, electronArgs, {
     stdio: 'inherit',

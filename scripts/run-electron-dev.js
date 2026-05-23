@@ -41,12 +41,7 @@ async function main() {
     return;
   }
 
-  // Options must come before the app path.
-  const electronArgs = [
-    '--disable-gpu',
-    '--disable-gpu-compositing',
-    '.',
-  ];
+  const electronArgs = ['.'];
 
   const child = spawn(electronPath, electronArgs, {
     stdio: 'inherit',
