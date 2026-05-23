@@ -6,7 +6,7 @@
 #
 # Il workflow:
 #   1. Builda il frontend (Vite)
-#   2. Builda l'installer macOS (DMG, arm64, firmato + notarizzato)
+#   2. Builda l'installer macOS (DMG, universal arm64+x64, firmato + notarizzato)
 #   3. Builda l'installer Windows (EXE, x64)
 #   4. Crea la GitHub Release e uploada i file
 #   5. Aggiorna i link di download sul sito (repo harmonytutor)
@@ -38,7 +38,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── macOS (arm64, signed + notarized) ─────────────────
+  # ── macOS (universal arm64+x64, signed + notarized) ──────
   build-mac:
     runs-on: macos-14          # Apple-Silicon runner
     steps:
@@ -215,7 +215,7 @@ jobs:
             echo "::error::latest-mac.yml not found"
             exit 1
           fi
-          ZIP_FILE=$(ls *arm64-mac.zip 2>/dev/null | head -1)
+          ZIP_FILE=$(ls *universal-mac.zip 2>/dev/null | head -1)
           DMG_FILE=$(ls *mac.dmg 2>/dev/null | head -1)
           if [ -z "$ZIP_FILE" ] || [ -z "$DMG_FILE" ]; then
             echo "::error::Missing renamed mac files (zip=$ZIP_FILE dmg=$DMG_FILE)"
@@ -225,7 +225,7 @@ jobs:
           # Rewrite all url:/path: lines that reference the zip or dmg, regardless of
           # the original separator (space, dot, dash). Matches "Harmony[ .-]Tutor-...".
           # Use # as sed delimiter so we can use | for alternation in the pattern.
-          sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-arm64-mac\.zip#\1: ${ZIP_FILE}#g" latest-mac.yml
+          sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-universal-mac\.zip#\1: ${ZIP_FILE}#g" latest-mac.yml
           sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-mac\.dmg#\1: ${DMG_FILE}#g" latest-mac.yml
           echo "── Patched latest-mac.yml ──"
           cat latest-mac.yml
