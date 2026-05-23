@@ -920,10 +920,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         {accPattern !== 'block' && (
                             <button
                                 onClick={onToggleAccLetRing}
-                                title="Let Ring — le note risuonano fino alla fine dell'accordo"
+                                title="Ped — le note risuonano fino alla fine dell'accordo"
                                 className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accLetRing ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                             >
-                                Ring
+                                Ped
                             </button>
                         )}
                     </>

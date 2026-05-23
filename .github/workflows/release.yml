@@ -215,17 +215,23 @@ jobs:
             echo "::error::latest-mac.yml not found"
             exit 1
           fi
-          ZIP_FILE=$(ls *arm64-mac.zip 2>/dev/null | head -1)
+          ZIP_ARM64=$(ls *arm64-mac.zip 2>/dev/null | head -1)
+          ZIP_X64=$(ls *x64-mac.zip 2>/dev/null | head -1)
           DMG_FILE=$(ls *mac.dmg 2>/dev/null | head -1)
-          if [ -z "$ZIP_FILE" ] || [ -z "$DMG_FILE" ]; then
-            echo "::error::Missing renamed mac files (zip=$ZIP_FILE dmg=$DMG_FILE)"
+          if [ -z "$ZIP_ARM64" ] && [ -z "$ZIP_X64" ]; then
+            echo "::error::Missing renamed mac zip files (arm64=$ZIP_ARM64 x64=$ZIP_X64)"
             exit 1
           fi
-          echo "Renamed files on disk:  zip=$ZIP_FILE  dmg=$DMG_FILE"
+          if [ -z "$DMG_FILE" ]; then
+            echo "::error::Missing renamed mac DMG file"
+            exit 1
+          fi
+          echo "Renamed files on disk:  arm64-zip=$ZIP_ARM64  x64-zip=$ZIP_X64  dmg=$DMG_FILE"
           # Rewrite all url:/path: lines that reference the zip or dmg, regardless of
           # the original separator (space, dot, dash). Matches "Harmony[ .-]Tutor-...".
           # Use # as sed delimiter so we can use | for alternation in the pattern.
-          sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-arm64-mac\.zip#\1: ${ZIP_FILE}#g" latest-mac.yml
+          [ -n "$ZIP_ARM64" ] && sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-arm64-mac\.zip#\1: ${ZIP_ARM64}#g" latest-mac.yml
+          [ -n "$ZIP_X64" ]   && sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-x64-mac\.zip#\1: ${ZIP_X64}#g" latest-mac.yml
           sed -i -E "s#(url|path): *Harmony[ .-]Tutor-[^[:space:]]*-mac\.dmg#\1: ${DMG_FILE}#g" latest-mac.yml
           echo "── Patched latest-mac.yml ──"
           cat latest-mac.yml

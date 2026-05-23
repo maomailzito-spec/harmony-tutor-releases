@@ -1497,6 +1497,31 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
 
+        // ── Accompaniment notes: merge same-onset notes into a single VexFlow chord ──
+        // Acc notes (voice=0) at the same tick must be rendered as ONE chord
+        // (single stem + single set of flags/beams). Without this, two separate
+        // StaveNotes at the same x position produce crossing stems and spurious
+        // "traversa" artifacts.
+        {
+          const accByOnset = new Map<string, StaffNote[]>();
+          for (const n of staffNotes) {
+            if ((n.voice ?? 1) !== 0 || n.isRest || n.id === '__ghost__') continue;
+            const ok = getNoteOnsetKey(n);
+            if (!accByOnset.has(ok)) accByOnset.set(ok, []);
+            accByOnset.get(ok)!.push(n);
+          }
+          for (const [ok, g] of accByOnset.entries()) {
+            if (g.length < 2) continue;
+            // Require identical rhythmic value so a single chord glyph is correct.
+            const baseDur = g[0].duration;
+            const baseDotted = !!g[0].isDotted;
+            if (!g.every(n => n.duration === baseDur && !!n.isDotted === baseDotted)) continue;
+            const chordKey = `acc_${ok}`;
+            for (const n of g) chordKeyByNoteId.set(n.id, chordKey);
+            chordNotesByKey.set(chordKey, g);
+          }
+        }
+
         const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
 
         // --- Bass staff: cross-voice accidental collision (voices 3+4) ---
