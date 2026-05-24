@@ -1086,8 +1086,20 @@ async function showLicenseActivationDialog(extraMessage) {
       return activation.data;
     }
 
-    // Activation failed — show error and loop
-    extraMessage = `Errore: ${activation.error}`;
+    // Activation failed — show explicit error dialog before looping
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Attivazione Fallita',
+      message: 'Impossibile attivare la licenza.',
+      detail: activation.error || 'Errore sconosciuto. Riprova o contatta il supporto.',
+      buttons: ['Riprova', 'Annulla'],
+      defaultId: 0,
+      cancelId: 1,
+    }).then(r => {
+      if (r.response === 1) extraMessage = '__cancel__';
+    });
+    if (extraMessage === '__cancel__') return null;
+    extraMessage = null;
   }
 }
 
@@ -1122,9 +1134,12 @@ async function showKeyInputDialog() {
   </div>
   <script>
     function submit() {
-      const v = document.getElementById('key').value;
+      const v = document.getElementById('key').value.trim();
+      if (!v) return;
+      document.getElementById('key').disabled = true;
+      document.querySelector('.ok').disabled = true;
       document.title = 'KEY:' + v;
-      window.close();
+      setTimeout(() => window.close(), 150);
     }
     document.getElementById('key').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
   </script>
@@ -1134,13 +1149,23 @@ async function showKeyInputDialog() {
     inputWin.setMenuBarVisibility(false);
 
     let licenseKey = null;
+    let resolved = false;
     inputWin.on('page-title-updated', (_e, title) => {
       if (title.startsWith('KEY:')) {
         licenseKey = title.slice(4);
+        // Resolve immediately once we have the key — don't wait for 'closed'
+        if (!resolved) {
+          resolved = true;
+          // Give the window time to close gracefully before resolving
+          setTimeout(() => resolve(licenseKey), 50);
+        }
       }
     });
     inputWin.on('closed', () => {
-      resolve(licenseKey || null);
+      if (!resolved) {
+        resolved = true;
+        resolve(licenseKey || null);
+      }
     });
   });
 }

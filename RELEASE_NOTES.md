@@ -1,3 +1,9 @@
+## Novità in v1.0.14
+
+### 🐛 Fix attivazione licenza
+- **Risolto bug silenzioso nell'inserimento chiave di licenza su Windows**: in alcuni casi la chiave inserita non veniva trasmessa correttamente al processo principale (race condition), causando un loop silenzioso senza feedback. L'attivazione ora è robusta su tutti i sistemi operativi.
+- **Errore di attivazione ora mostrato in un dialog dedicato** con opzione "Riprova" o "Annulla", invece di essere nascosto nel testo del messaggio principale.
+
 ## Novità in v1.0.13
 
 ### 🐛 Fix licenza
