@@ -1039,9 +1039,18 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
 // ── License Activation Dialog (loop until activated or cancelled) ──
 // Pass extraMessage to show a specific reason (e.g. trial expired).
 // If called with no arguments (e.g. from the menu), shows a neutral message.
+//
+// IMPORTANT (Windows fix): when this dialog runs BEFORE createWindow() — i.e.
+// at startup after trial expiry — closing the transient input BrowserWindow
+// would otherwise trigger `window-all-closed`, which on Windows quits the app
+// before the activation HTTP request can complete. `isActivationFlowActive`
+// flag below tells the listener to skip the auto-quit during this flow.
+let isActivationFlowActive = false;
+
 async function showLicenseActivationDialog(extraMessage) {
   const { shell } = require('electron');
-
+  isActivationFlowActive = true;
+  try {
   while (true) {
     const msg = extraMessage
       ? `${extraMessage}\n\nInserisci la tua chiave di licenza per continuare.`
@@ -1100,6 +1109,9 @@ async function showLicenseActivationDialog(extraMessage) {
     });
     if (extraMessage === '__cancel__') return null;
     extraMessage = null;
+  }
+  } finally {
+    isActivationFlowActive = false;
   }
 }
 
@@ -1764,5 +1776,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', function () {
+  // While the activation dialog runs BEFORE createWindow() (trial-expired path
+  // at startup), the transient input BrowserWindow closes after submit. Without
+  // this guard, on Windows app.quit() would fire and abort the activation HTTP
+  // request, leaving the user with "nothing happens after clicking Attiva".
+  if (isActivationFlowActive) return;
   if (process.platform !== 'darwin') app.quit();
 });
