@@ -1,3 +1,8 @@
+## Novità in v1.0.17
+
+### 🐛 Fix critico attivazione su Windows (trial scaduto)
+- **Risolto un secondo bug Windows-specifico nel flusso di attivazione all'avvio**: quando il trial era scaduto e l'app mostrava il dialog di inserimento chiave PRIMA della finestra principale, su Windows la chiusura della finestrella di input (dopo il click su "Attiva") faceva scattare il listener `window-all-closed` di Electron, che chiamava `app.quit()` interrompendo la richiesta HTTP al server di licenze. Risultato: il dialog si chiudeva e l'app terminava senza alcun messaggio, prima che la chiave potesse essere validata. Il bug non si manifestava su macOS (dove `window-all-closed` non chiude l'app) né dal menu "Gestisci Licenza" (dove la finestra principale è già aperta). Ora un flag protegge il flusso di attivazione iniziale dalla chiusura automatica.
+
 ## Novità in v1.0.16
 
 ### 🐛 Fix critico attivazione licenza
