@@ -1,3 +1,8 @@
+## Novità in v1.0.15
+
+### 🐛 Fix attivazione licenza su Windows
+- **Riscritta la comunicazione del dialog inserimento chiave**: sostituito il meccanismo basato sul titolo della finestra (inaffidabile su Windows) con IPC nativo di Electron. La chiave viene ora trasmessa in modo sicuro e garantito su tutti i sistemi operativi.
+
 ## Novità in v1.0.14
 
 ### 🐛 Fix attivazione licenza
