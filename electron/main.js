@@ -1105,15 +1105,21 @@ async function showLicenseActivationDialog(extraMessage) {
 
 async function showKeyInputDialog() {
   return new Promise((resolve) => {
+    const { ipcMain } = require('electron');
+
     const inputWin = new BrowserWindow({
       width: 480,
-      height: 200,
+      height: 220,
       resizable: false,
       minimizable: false,
       maximizable: false,
       alwaysOnTop: true,
       title: 'Inserisci Chiave di Licenza',
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'licenseInputPreload.js'),
+      },
     });
 
     const html = `<!DOCTYPE html>
@@ -1127,9 +1133,9 @@ async function showKeyInputDialog() {
   .cancel { background: #555; color: #ccc; } .cancel:hover { background: #666; }
 </style></head><body>
   <h3>Inserisci la chiave di licenza</h3>
-  <input id="key" placeholder="HT-XXXX-XXXX-XXXX-XXXX" autofocus />
+  <input id="key" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" autofocus />
   <div class="btns">
-    <button class="cancel" onclick="window.close()">Annulla</button>
+    <button class="cancel" onclick="cancel()">Annulla</button>
     <button class="ok" onclick="submit()">Attiva</button>
   </div>
   <script>
@@ -1138,35 +1144,34 @@ async function showKeyInputDialog() {
       if (!v) return;
       document.getElementById('key').disabled = true;
       document.querySelector('.ok').disabled = true;
-      document.title = 'KEY:' + v;
-      setTimeout(() => window.close(), 150);
+      window.licenseAPI.submitKey(v);
     }
-    document.getElementById('key').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+    function cancel() {
+      window.licenseAPI.cancelKey();
+    }
+    document.getElementById('key').addEventListener('keydown', e => {
+      if (e.key === 'Enter') submit();
+      if (e.key === 'Escape') cancel();
+    });
   </script>
 </body></html>`;
 
+    let resolved = false;
+    function done(key) {
+      if (resolved) return;
+      resolved = true;
+      ipcMain.removeAllListeners('license-key-submitted');
+      ipcMain.removeAllListeners('license-key-cancelled');
+      if (!inputWin.isDestroyed()) inputWin.destroy();
+      resolve(key || null);
+    }
+
+    ipcMain.once('license-key-submitted', (_e, key) => done(key));
+    ipcMain.once('license-key-cancelled', () => done(null));
+    inputWin.on('closed', () => done(null));
+
     inputWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
     inputWin.setMenuBarVisibility(false);
-
-    let licenseKey = null;
-    let resolved = false;
-    inputWin.on('page-title-updated', (_e, title) => {
-      if (title.startsWith('KEY:')) {
-        licenseKey = title.slice(4);
-        // Resolve immediately once we have the key — don't wait for 'closed'
-        if (!resolved) {
-          resolved = true;
-          // Give the window time to close gracefully before resolving
-          setTimeout(() => resolve(licenseKey), 50);
-        }
-      }
-    });
-    inputWin.on('closed', () => {
-      if (!resolved) {
-        resolved = true;
-        resolve(licenseKey || null);
-      }
-    });
   });
 }
 
