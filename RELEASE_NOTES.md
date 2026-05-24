@@ -1,3 +1,8 @@
+## Novità in v1.0.16
+
+### 🐛 Fix critico attivazione licenza
+- **Risolto bug bloccante nel dialog di inserimento chiave**: in v1.0.15 il preload chiamava un'API Electron inesistente (`exposeInWorld` invece di `exposeInMainWorld`), facendo fallire silenziosamente il caricamento dell'API IPC. Conseguenza: cliccando "Attiva" non veniva inviato alcun messaggio al processo principale, la chiave non veniva mai trasmessa al server di licenze e l'utente restava in un loop infinito tra "Inserisci Chiave" e "Acquista Licenza". Ora l'attivazione funziona correttamente su tutte le piattaforme.
+
 ## Novità in v1.0.15
 
 ### 🐛 Fix attivazione licenza su Windows
