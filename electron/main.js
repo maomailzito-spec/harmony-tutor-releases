@@ -427,6 +427,7 @@ function createMenu() {
       shortcuts: 'Scorciatoie…', noRecent: 'Nessun file recente',
       collisionEnhanced: 'Verifica collisioni (Enhanced)…', collisionLegacy: 'Verifica collisioni (Legacy)…',
       manageLicense: 'Gestisci Licenza…',
+      about: 'Informazioni su Harmony Tutor…',
     },
     en: {
       file: 'File', edit: 'Edit', view: 'View', tools: 'Tools', help: 'Help',
@@ -449,6 +450,7 @@ function createMenu() {
       shortcuts: 'Shortcuts…', noRecent: 'No recent files',
       collisionEnhanced: 'Check collisions (Enhanced)…', collisionLegacy: 'Check collisions (Legacy)…',
       manageLicense: 'Manage License…',
+      about: 'About Harmony Tutor…',
     },
   };
   const ms = _menuStrings[lng] || _menuStrings['it'];
@@ -574,6 +576,24 @@ function createMenu() {
       shortcutsWindow.on('closed', () => { shortcutsWindow = null; });
     } catch (err) {
       console.warn('[MAIN] Failed to show shortcuts dialog:', err);
+    }
+  };
+  const showAboutDialog = () => {
+    try {
+      const version = app.getVersion();
+      const name = app.getName();
+      const detail = lng === 'en'
+        ? `Version ${version}\n\nA desktop app for harmonic analysis — Grand Staff editor with figured bass, Roman numerals and voice leading.\n\n© 2026 Harmony Tutor\nhttps://harmonytutor.it`
+        : `Versione ${version}\n\nApp desktop per l'analisi armonica — editor su pentagramma con basso continuo, numerali romani e condotta delle voci.\n\n© 2026 Harmony Tutor\nhttps://harmonytutor.it`;
+      dialog.showMessageBox(mainWindow || null, {
+        type: 'info',
+        title: lng === 'en' ? 'About Harmony Tutor' : 'Informazioni su Harmony Tutor',
+        message: name,
+        detail,
+        buttons: ['OK'],
+      });
+    } catch (err) {
+      console.warn('[MAIN] Failed to show about dialog:', err);
     }
   };
   const template = [
@@ -981,6 +1001,11 @@ function createMenu() {
       role: 'help',
       label: mt('help'),
       submenu: [
+        {
+          label: mt('about'),
+          click: () => showAboutDialog(),
+        },
+        { type: 'separator' },
         {
           label: `Build: ${DEV_BUILD_TAG}${isDev ? ' (dev)' : ''}`,
           enabled: false,

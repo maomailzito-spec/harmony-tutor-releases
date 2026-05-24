@@ -282,6 +282,8 @@ jobs:
           cd /tmp/site
           # Replace any previous version in the download URLs
           sed -i "s|releases/download/v[0-9.]*\/Harmony\.Tutor-[0-9.]*-|releases/download/v${VERSION}/Harmony.Tutor-${VERSION}-|g" index.html
+          # Update the visible "Versione attuale: v…" label under the download buttons
+          sed -i -E "s|<strong>v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?</strong>|<strong>v${VERSION}</strong>|g" index.html
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html
