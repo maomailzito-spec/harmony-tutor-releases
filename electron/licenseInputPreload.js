@@ -4,7 +4,7 @@
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInWorld('licenseAPI', {
+contextBridge.exposeInMainWorld('licenseAPI', {
   submitKey: (key) => ipcRenderer.send('license-key-submitted', key),
   cancelKey: () => ipcRenderer.send('license-key-cancelled'),
 });
