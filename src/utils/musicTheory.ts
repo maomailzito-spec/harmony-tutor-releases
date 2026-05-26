@@ -2325,6 +2325,23 @@ export function getChordSymbol(
             const sounding = filteredChord.filter(n => n && !n.isRest);
             if (sounding.length < 2) return null;
 
+            // ── Spelling-consistency gate ───────────────────────────────
+            // Defer to legacy when ANY note has pitch+accidental
+            // inconsistent with its midi. The corpus (Dubois, Pedron, ...)
+            // contains many notes whose `pitch` is plain (e.g. "G") while
+            // midi indicates a chromatic value (e.g. midi=68 = G#). The
+            // legacy PC-based engine derives the chromatic accidental from
+            // midi; analyzeChord (letter-first) would misread "G" as G
+            // natural and produce e.g. "Fsus2/G" instead of "V/vi".
+            // Until we have an auto-spell step at the editor boundary,
+            // any spelling inconsistency means we MUST use the legacy path.
+            for (const n of sounding) {
+                const midi = Number((n as any).midi);
+                if (!Number.isFinite(midi)) continue;
+                const sp = staffNoteToSp(n as any);
+                if (mod12(spToPc(sp)) !== mod12(midi)) return null;
+            }
+
             const spelled: SpelledPitchType[] = sounding.map((n) => staffNoteToSp(n as any));
             const bassNote = pickPreferredBassNote(sounding) || sounding[0];
             const bassSp = bassNote ? staffNoteToSp(bassNote as any) : null;
