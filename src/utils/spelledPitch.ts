@@ -74,14 +74,31 @@ export function spellInterval(
   };
 }
 
-/** Convert a StaffNote-like object to SpelledPitch */
-export function staffNoteToSp(note: { pitch: string; accidental?: string | null; octave: number }): SpelledPitch {
+/**
+ * Convert a StaffNote-like object to SpelledPitch.
+ * Resolves the accidental with the priority `userAccidental` →
+ * `explicitAccidental` → `accidental` (matches the existing convention in
+ * musicTheory.ts:spelledPitchClassFromSpelling). This preserves the user's
+ * intended spelling — critical for chord-recognition decisions where the
+ * difference between e.g. user-set Eb and auto-derived D# changes the chord
+ * quality.
+ */
+export function staffNoteToSp(note: {
+  pitch: string;
+  accidental?: string | null;
+  userAccidental?: string | null;
+  explicitAccidental?: string | null;
+  octave: number;
+}): SpelledPitch {
   const letter = note.pitch.toUpperCase() as SpelledPitch['letter'];
+  // Resolution priority: user > explicit > generic.
+  const accStr: string | null | undefined =
+    note.userAccidental ?? note.explicitAccidental ?? note.accidental ?? null;
   let acc: SpelledPitch['accidental'] = 0;
-  if (note.accidental === 'sharp' || note.accidental === '#') acc = 1;
-  else if (note.accidental === 'flat' || note.accidental === 'b') acc = -1;
-  else if (note.accidental === 'dblsharp' || note.accidental === '##') acc = 2;
-  else if (note.accidental === 'dblflat' || note.accidental === 'bb') acc = -2;
+  if (accStr === 'sharp' || accStr === '#') acc = 1;
+  else if (accStr === 'flat' || accStr === 'b') acc = -1;
+  else if (accStr === 'dblsharp' || accStr === '##' || accStr === 'double-sharp') acc = 2;
+  else if (accStr === 'dblflat' || accStr === 'bb' || accStr === 'double-flat') acc = -2;
   return { letter, accidental: acc, octave: note.octave };
 }
 

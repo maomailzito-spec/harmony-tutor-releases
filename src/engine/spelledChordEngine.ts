@@ -317,13 +317,14 @@ export function analyzeChord(notes: SpelledPitch[], options?: AnalyzeOptions): A
   // Tie-break order (no cumulative scoring):
   //   1. fewer missing required degrees (more complete match)
   //   2. fewer extra notes (pattern explains the whole chord)
-  //   3. ROOT == BASS preferred (only when bass available, explicit or implicit):
-  //      resolves the classic Cmaj6 vs Am7 ambiguity (same pitch-class set,
-  //      different reading depending on which note is in the bass) and the
-  //      Csus2/Gsus4 symmetry.
-  //   4. higher specificity (richer pattern beats poorer pattern)
+  //   3. higher specificity (richer pattern beats poorer pattern)
+  //      Rationale: tonal convention reads {F,A,C,D} with F-in-bass as
+  //      ii6/5 (Dm7/F) — the more-specific m7 outranks the Maj6 reading
+  //      even when the bass coincides with the Maj6 root.
+  //   4. ROOT == BASS preferred (only when specificity ties, e.g. Sus2/Sus4
+  //      both at specificity 30 → bass disambiguates Csus2 vs Gsus4).
   //   5. simpler root spelling (fewer accidentals on the root)
-  //   6. pattern declaration order (stable, breaks remaining ties — eg Sus2 first)
+  //   6. pattern declaration order (stable, breaks remaining ties)
   //
   // Implicit bass: if no bass is supplied, fall back to the note with the
   // lowest octave (then lowest pitch-class within the octave). This matches
@@ -342,13 +343,13 @@ export function analyzeChord(notes: SpelledPitch[], options?: AnalyzeOptions): A
     if (dMiss !== 0) return dMiss;
     const dExtra = a.extraNoteIndices.length - b.extraNoteIndices.length;
     if (dExtra !== 0) return dExtra;
+    const dSpec = b.pattern.specificity - a.pattern.specificity;
+    if (dSpec !== 0) return dSpec;
     if (bass) {
       const aBassRoot = samePitchClassSpelled(a.root, bass) ? 0 : 1;
       const bBassRoot = samePitchClassSpelled(b.root, bass) ? 0 : 1;
       if (aBassRoot !== bBassRoot) return aBassRoot - bBassRoot;
     }
-    const dSpec = b.pattern.specificity - a.pattern.specificity;
-    if (dSpec !== 0) return dSpec;
     const dAcc = accidentalLoad(a.root) - accidentalLoad(b.root);
     if (dAcc !== 0) return dAcc;
     return CHORD_PATTERNS.indexOf(a.pattern) - CHORD_PATTERNS.indexOf(b.pattern);

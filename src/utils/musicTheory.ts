@@ -103,6 +103,8 @@ import {
     expectedSemitonesForMajorPerfect, qualityFromDiatonicAndAlteration,
     type SpelledInterval as SpelledIntervalFromUtil,
 } from './spelledPitch';
+import { analyzeChord as analyzeChordSpelled } from '../engine/spelledChordEngine';
+import type { SpelledPitch as SpelledPitchType } from '../types';
 
 /** Ornament learning — duration bucket */
 function ornDurationCategory(dur: string): string {
@@ -2284,6 +2286,133 @@ export function getChordSymbol(
     // } catch { /* ignore */ }
 
     const fullChord = (chord || []).filter(n => n && !n.isRest);
+
+    // ── Phase 3 (spelling-first wrapper) ─────────────────────────────────
+    // Try the new spelledChordEngine FIRST for the pattern families it
+    // covers (triads, sevenths, sixths, add9, sus). If it produces a
+    // confident match, build the symbol directly from the spelled root and
+    // skip the legacy chordInfo pipeline. Tension-append and slash-bass
+    // logic below still applies because we re-enter the standard flow with
+    // a synthetic `chordInfoForSymbol` that carries the spelled root.
+    //
+    // Out-of-scope cases (9/11/13, rootless V7♭9, dominant rescue) and
+    // contextual heuristics (ii6) fall through to the legacy path
+    // unchanged — zero regression risk by construction.
+    const PHASE3_COVERED_QUALITIES = new Set<string>([
+        BuiltInChords.Major, BuiltInChords.Minor, BuiltInChords.Diminished, BuiltInChords.Augmented,
+        BuiltInChords.Sus2, BuiltInChords.Sus4,
+        BuiltInChords.Major7, BuiltInChords.Minor7, BuiltInChords.MinorMajor7,
+        BuiltInChords.Dominant7, BuiltInChords.Diminished7, BuiltInChords.Minor7b5,
+        BuiltInChords.Major6, BuiltInChords.Minor6,
+        BuiltInChords.Add9, BuiltInChords.MinorAdd9,
+    ]);
+
+    const formatSpelledRoot = (sp: SpelledPitchType): string => {
+        const acc = sp.accidental === 0 ? ''
+            : sp.accidental === 1 ? '#'
+            : sp.accidental === -1 ? 'b'
+            : sp.accidental === 2 ? '##'
+            : sp.accidental === -2 ? 'bb'
+            : '';
+        return `${sp.letter}${acc}`;
+    };
+
+    // Hand-off to the new engine. Wrapped in a function so we can early-return
+    // a string OR fall through to the legacy block transparently.
+    const tryPhase3Wrapper = (): string | null => {
+        try {
+            if (filteredChord.length < 2) return null;
+            const sounding = filteredChord.filter(n => n && !n.isRest);
+            if (sounding.length < 2) return null;
+
+            const spelled: SpelledPitchType[] = sounding.map((n) => staffNoteToSp(n as any));
+            const bassNote = pickPreferredBassNote(sounding) || sounding[0];
+            const bassSp = bassNote ? staffNoteToSp(bassNote as any) : null;
+
+            const analyzed = analyzeChordSpelled(spelled, bassSp ? { bass: bassSp } : {});
+            if (!analyzed) return null;
+            if (!PHASE3_COVERED_QUALITIES.has(analyzed.quality)) return null;
+            // Require a high-quality match: every required degree present
+            // OR exactly one tolerable elision (typically the 5th).
+            if (analyzed.confidence < 0.6) return null;
+            // Defer to legacy when the new engine returns extras (notes the
+            // pattern doesn't explain) — those are precisely the cases where
+            // the legacy code adds tensions or detects a different sonority.
+            if (analyzed.extraNoteIndices.length > 0) return null;
+
+            // Defer to legacy ii6 heuristic when applicable: a 3-PC minor
+            // triad in first inversion whose root sits a M2 above the tonic
+            // (i.e. the ii of the key). Legacy produces "Xm/Y"; replicating
+            // that exact text path is brittle, so we let legacy run.
+            try {
+                if (contextTonic && analyzed.quality === BuiltInChords.Minor && analyzed.inversion === 1) {
+                    const pcCount = new Set(fullChord.map(pitchClassOf).map(mod12)).size;
+                    if (pcCount === 3) {
+                        const tonicPc = noteNameToIndex[contextTonic];
+                        const rootPc = spToPc(analyzed.root);
+                        if (Number.isFinite(tonicPc) && mod12(rootPc - tonicPc) === 2) {
+                            return null; // ii6 case → legacy
+                        }
+                    }
+                }
+            } catch { /* fall through to use engine result */ }
+
+            // Build the symbol from the spelled root + quality token.
+            const rootName = formatSpelledRoot(analyzed.root);
+            const qualityToken = CHORD_TYPE_TO_SYMBOL[analyzed.quality as keyof typeof CHORD_TYPE_TO_SYMBOL] ?? '';
+            let symbol = `${rootName}${qualityToken}`;
+
+            // Tensions: same logic as the legacy block — append chromatic
+            // tones above the root that are NOT in the chord's own formula,
+            // restricted to seventh-like chords (and not °7/ø7/m-Maj7).
+            try {
+                const q = String(analyzed.quality || '');
+                const isSeventhLike = q.includes('7') || q.startsWith('Dominant');
+                if (isSeventhLike
+                    && analyzed.quality !== BuiltInChords.MinorMajor7
+                    && analyzed.quality !== BuiltInChords.Diminished7
+                    && analyzed.quality !== BuiltInChords.Minor7b5) {
+                    const rootPc = spToPc(analyzed.root);
+                    const allPcs = new Set<number>(fullChord.map(pitchClassOf).map(mod12));
+                    const intsFromRoot = new Set<number>([...allPcs].map(pc => mod12(pc - rootPc)));
+                    const formulaIntervals = new Set<number>(
+                        ((CHORD_FORMULAS as any)?.[analyzed.quality] as number[] | undefined) || []
+                    );
+                    const addIfPresent = (interval: number, token: string) => {
+                        if (intsFromRoot.has(interval) && !symbol.includes(token) && !formulaIntervals.has(interval)) {
+                            symbol += token;
+                        }
+                    };
+                    addIfPresent(1, '♭9');
+                    addIfPresent(3, '♯9');
+                    addIfPresent(5, '11');
+                    addIfPresent(6, '♯11');
+                    addIfPresent(8, '♭13');
+                    addIfPresent(9, '13');
+                }
+            } catch { /* ignore tensions */ }
+
+            // Slash chord: bass spelled directly when available (same rule
+            // as the legacy block).
+            if (bassNote) {
+                const rootPc = spToPc(analyzed.root);
+                const bassPc = pitchClassOf(bassNote);
+                if (mod12(bassPc) !== mod12(rootPc)) {
+                    const bassName = bassSp ? formatSpelledRoot(bassSp) : getNoteName(mod12(bassPc));
+                    symbol += `/${bassName}`;
+                }
+            }
+
+            return symbol;
+        } catch {
+            return null;
+        }
+    };
+
+    const phase3Symbol = tryPhase3Wrapper();
+    if (phase3Symbol !== null) return phase3Symbol;
+    // ── End Phase 3 wrapper. Fall through to legacy chord recognition. ────
+
     const chordInfo = identifyChord(filteredChord) || identifyChord(fullChord);
 
     // For symmetric augmented triads, identifyChord (used by the harmonic
