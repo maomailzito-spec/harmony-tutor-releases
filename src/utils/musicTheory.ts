@@ -98,7 +98,11 @@ import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
 import { getRuleText, localizeViolationTitle } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
-import { midiToOctave, staffNoteToSp, letterIndex, spToPc, spToString } from './spelledPitch';
+import {
+    midiToOctave, staffNoteToSp, letterIndex, spToPc, spToString,
+    expectedSemitonesForMajorPerfect, qualityFromDiatonicAndAlteration,
+    type SpelledInterval as SpelledIntervalFromUtil,
+} from './spelledPitch';
 
 /** Ornament learning — duration bucket */
 function ornDurationCategory(dur: string): string {
@@ -431,18 +435,9 @@ export type IntervalSet = {
     intervals: BassInterval[];
 };
 
-const expectedSemitonesForMajorPerfect = (diatonicNumber: number): number => {
-    // Major/perfect simple intervals: 1,2,3,4,5,6,7
-    const simple = (((diatonicNumber - 1) % 7) + 7) % 7 + 1;
-    const octaves = Math.floor((diatonicNumber - 1) / 7);
-    const simpleSemis: Record<number, number> = { 1: 0, 2: 2, 3: 4, 4: 5, 5: 7, 6: 9, 7: 11 };
-    return (simpleSemis[simple] ?? 0) + (12 * octaves);
-};
-
-export type SpelledInterval = {
-    diatonicNumber: number;
-    quality: string; // e.g. 'P', 'M', 'm', 'A', 'AA', 'd', 'dd'
-};
+// expectedSemitonesForMajorPerfect: moved to ./spelledPitch (Fase 1 refactor).
+// SpelledInterval type: re-export the canonical one from ./spelledPitch.
+export type SpelledInterval = SpelledIntervalFromUtil;
 
 const accidentalToAlteration = (acc: any): number => {
     const s = String(acc ?? '').trim();
@@ -663,24 +658,7 @@ const spelledMidiFromPitchAccidentalOctave = (n: any): number | null => {
     }
 };
 
-const qualityFromDiatonicAndAlteration = (diatonicNumber: number, alteration: number): string => {
-    const simple = (((diatonicNumber - 1) % 7) + 7) % 7 + 1;
-    const isPerfectType = simple === 1 || simple === 4 || simple === 5;
-
-    const alt = Number.isFinite(alteration) ? Math.round(alteration) : 0;
-    if (isPerfectType) {
-        if (alt === 0) return 'P';
-        if (alt > 0) return 'A'.repeat(Math.min(4, alt));
-        return 'd'.repeat(Math.min(4, -alt));
-    }
-
-    // Major-type intervals: 2,3,6,7
-    if (alt === 0) return 'M';
-    if (alt === -1) return 'm';
-    if (alt > 0) return 'A'.repeat(Math.min(4, alt));
-    // alt <= -2 => diminished degrees below minor
-    return 'd'.repeat(Math.min(4, (-alt - 1)));
-};
+// qualityFromDiatonicAndAlteration: moved to ./spelledPitch (Fase 1 refactor).
 
 const intervalNameFromSemitones = (semitones: number): string => {
     try {
