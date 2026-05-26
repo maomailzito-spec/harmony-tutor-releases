@@ -166,7 +166,7 @@ export function applyR2SecDom(input: R2Input): string {
         let bestSecondary: { roman: string; score: number } | null = null;
         for (const c of (candidates as any[]) || []) {
             const rr = calculateRomanFromChordInfo(
-                { root: c.root, type: c.type, intervals: c.intervals },
+                { root: c.root, type: c.type, intervals: c.intervals, rootSpelled: (c as any).rootSpelled },
                 contextTonic,
                 contextIsMinor,
             );
@@ -268,7 +268,7 @@ export function applyR11SparseRescue(input: R11Input): string {
         if (currentRoman) {
             preferred = (candidates as any[]).find((c: any) => {
                 const rr = calculateRomanFromChordInfo(
-                    { root: c.root, type: c.type, intervals: c.intervals },
+                    { root: c.root, type: c.type, intervals: c.intervals, rootSpelled: (c as any).rootSpelled },
                     contextTonic, contextIsMinor,
                 );
                 return rr === currentRoman;
@@ -279,7 +279,7 @@ export function applyR11SparseRescue(input: R11Input): string {
         }
         if (preferred) {
             const forced = calculateRomanFromChordInfo(
-                { root: preferred.root, type: preferred.type, intervals: preferred.intervals },
+                { root: preferred.root, type: preferred.type, intervals: preferred.intervals, rootSpelled: (preferred as any).rootSpelled },
                 contextTonic, contextIsMinor,
             );
             if (forced) return forced;
@@ -692,7 +692,7 @@ export function applyR14CorpusBias(input: R14Input): string {
         if (!sameRoot) return roman;
 
         const altRoman = calculateRomanFromChordInfo(
-            { root: c1.root, type: c1.type, intervals: c1.intervals },
+            { root: c1.root, type: c1.type, intervals: c1.intervals, rootSpelled: (c1 as any).rootSpelled },
             contextTonic, contextIsMinor,
         );
         if (altRoman && altRoman !== roman) {

@@ -162,8 +162,23 @@ export function detectChromaticModulations(
         // Don't duplicate contexts that already exist
         const alreadyCovered = coveredMeasures.has(runStart);
         if (!alreadyCovered) {
-          // Prefer flat name for flat keys
-          const usesFlats = currentTonic.includes('b') || isMinorMode;
+          // Spelling-aware naming. The previous heuristic
+          // `currentTonic.includes('b') || isMinorMode` was wrong because many
+          // minor keys are sharp-side (E minor, B minor, F# minor, C# minor).
+          // For Because (E minor), a tonicization to pc=1 must read "C#m"
+          // (sharp side, matching the home key signature), not "Dbm".
+          //
+          // Resolution: use the home key signature side as the spelling guide.
+          //   – explicit 'b' / '#' in tonic name wins
+          //   – natural-letter tonic: F is the only flat-side major; the
+          //     flat-side minors are D, G, C, F (3+ flats in their relative
+          //     major), the others are sharp/neutral.
+          const usesFlats = (() => {
+            if (currentTonic.includes('b')) return true;
+            if (currentTonic.includes('#')) return false;
+            if (isMinorMode) return ['D','G','C','F'].includes(currentTonic);
+            return currentTonic === 'F';
+          })();
           const name = usesFlats ? PC_NAMES_FLAT[runKeyPc] : PC_NAMES_SHARP[runKeyPc];
           results.push({
             startMeasure: runStart,

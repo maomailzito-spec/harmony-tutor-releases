@@ -512,9 +512,15 @@ export function computeLookaheadTonicizationOverrides(opts: {
 
         const preferFlats = (() => {
             try {
-                return String(currentTonic || '').includes('b');
+                const t = String(currentTonic || '');
+                if (t.includes('b')) return true;
+                if (t.includes('#')) return false;
+                // Natural-letter tonic: F is the only flat-side major;
+                // D, G, C, F are the flat-side minors. Otherwise sharp/neutral.
+                if (isMinorMode) return ['D','G','C','F'].includes(t);
+                return t === 'F';
             } catch {
-                return true;
+                return false;
             }
         })();
 

@@ -1731,7 +1731,7 @@ export function computeHarmonyLabelsBySystem(opts: {
                     const candidates = identifyChordCandidates(notesForRoman as any);
                     let bestSecondary: { roman: string; score: number } | null = null;
                     for (const c of (candidates as any[]) || []) {
-                        const rr = calculateRomanFromChordInfo({ root: c.root, type: c.type, intervals: c.intervals }, contextTonic, contextIsMinor);
+                        const rr = calculateRomanFromChordInfo({ root: c.root, type: c.type, intervals: c.intervals, rootSpelled: (c as any).rootSpelled }, contextTonic, contextIsMinor);
                         if (!rr || !String(rr).startsWith('V/')) continue;
                         const score = Number.isFinite((c as any).score) ? Number((c as any).score) : 0;
                         if (!bestSecondary || score > bestSecondary.score) bestSecondary = { roman: rr, score };

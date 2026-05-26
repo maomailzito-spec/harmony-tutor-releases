@@ -3276,7 +3276,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                                 const curRoman = String(roman || '').trim();
                                 if (curRoman) {
                                     const matching = (candidates as any[]).find((c: any) => {
-                                        const rr = calculateRomanFromChordInfo({ root: c.root, type: c.type, intervals: c.intervals }, tonicHere, isMinorHere);
+                                        const rr = calculateRomanFromChordInfo({ root: c.root, type: c.type, intervals: c.intervals, rootSpelled: (c as any).rootSpelled }, tonicHere, isMinorHere);
                                         return rr === curRoman;
                                     });
                                     if (matching) preferred = matching;

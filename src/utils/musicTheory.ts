@@ -2113,7 +2113,7 @@ export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: 
 }
 
 export function calculateRomanFromChordInfo(
-    chordInfo: { root: StaffNote; type: string; intervals?: Set<number> },
+    chordInfo: { root: StaffNote; type: string; intervals?: Set<number>; rootSpelled?: SpelledPitchType },
     keySignatureRoot: string,
     isMinorMode: boolean
 ): string | null {
@@ -2710,36 +2710,273 @@ function getVerticalFiguresFromNotes(notes: StaffNote[]): string[] {
     }
 }
 
+// ── Letter-first Roman numeral engine (Phase 4 rewrite) ────────────────────
+//
+// The previous implementation routed every decision through pitch-class
+// (chordRootIndex vs keyTonicIndex). Letter spelling was only a fallback
+// in the chromatic branch. This rewrite flips the architecture: when the
+// chord carries spelling info (rootSpelled, derived from staffNoteToSp(root)
+// as default), the letter-degree (0..6) IS the scale degree, and the
+// semitone alteration on top determines ♭/♮/♯ prefixes. PC is only a
+// fallback for "virtual roots" that have no usable letter info.
+//
+// Consequences:
+//   - E#°7 in C# minor: E#→F# = 1 letter step (M2) → vii°/iv (correct).
+//     Mis-spelled "F" (same PC) would give 0 letter steps → NOT vii°/iv.
+//   - Cb major in Gb major: C→G letter distance = 3 (IV in Gb) → IV.
+//     Same chord misread as B major would give 4 → V (wrong).
+//   - A minor triad in F major on the 4th-degree letter D is "iv" by
+//     letter, not "v" (which the PC heuristic could pick if the chord
+//     happened to align enharmonically).
+
+const LETTER_VALID_SET = new Set(['C','D','E','F','G','A','B']);
+
+/** Diatonic target roman label for a target letter-degree (0..6). */
+function targetRomanLabel(letterDeg: number, isMinorMode: boolean, minorMode: 'natural'|'harmonic'): string {
+    const majorRomans  = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+    const minorNatural = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+    const minorHarmonic = ['i', 'ii°', 'III', 'iv', 'V', 'VI', 'vii°'];
+    if (!isMinorMode) return majorRomans[letterDeg];
+    return (minorMode === 'harmonic' ? minorHarmonic : minorNatural)[letterDeg];
+}
+
 function calculateRomanNumeral(
-    chordInfo: { root: StaffNote; type: string; intervals?: Set<number> },
+    chordInfo: { root: StaffNote; type: string; intervals?: Set<number>; rootSpelled?: SpelledPitchType },
     keyInfo: { tonicIndex: number; isMinor: boolean; minorScaleMode?: 'off' | 'natural' | 'harmonic'; tonicLetter?: string }
 ): string {
     const { root: chordRoot, type: quality } = chordInfo;
-    // Prefer explicit pitch-class (`noteIndex`) when available. This is required for
-    // virtual roots used by the label layer and heuristics.
     const chordRootIndex = (chordRoot && Number.isFinite((chordRoot as any).noteIndex))
         ? mod12((chordRoot as any).noteIndex)
         : mod12((chordRoot as any).midi);
     const { tonicIndex: keyTonicIndex, isMinor: isMinorMode } = keyInfo;
 
     // Neutral behavior in minor: decide natural vs harmonic *per chord*.
-    // This is mostly about the 7th degree (♭VII vs leading-tone vii°), and keeps room
-    // for future heuristics as the analysis improves.
     if (isMinorMode && keyInfo.minorScaleMode === 'off') {
         const intervalFromTonic = mod12(chordRootIndex - keyTonicIndex);
         const isDimQuality = quality === BuiltInChords.Diminished || /°|dim/i.test(String(quality || '')) || /b5/i.test(String(quality || ''));
-
         const naturalRoman = calculateRomanNumeral(chordInfo, { ...keyInfo, minorScaleMode: 'natural' });
         const harmonicRoman = calculateRomanNumeral(chordInfo, { ...keyInfo, minorScaleMode: 'harmonic' });
-
-        // Subtonic root (♭VII) -> natural minor by default.
         if (intervalFromTonic === 10) return naturalRoman;
-        // Leading-tone root (#7) -> harmonic if it's diminished-like, otherwise keep neutral/chromatic.
         if (intervalFromTonic === 11) return isDimQuality ? harmonicRoman : naturalRoman;
-
-        // Default: prefer harmonic (tonal default) when the choice doesn't affect diatonic degree.
         return harmonicRoman;
     }
+
+    // ── RESOLVE SPELLING (letter-first foundation) ────────────────────
+    const rootSp: SpelledPitchType | null = (chordInfo as any).rootSpelled
+        || (chordRoot ? staffNoteToSp(chordRoot as any) : null);
+    const tonicLetterRaw = (keyInfo.tonicLetter && keyInfo.tonicLetter.length > 0)
+        ? keyInfo.tonicLetter.charAt(0).toUpperCase()
+        : null;
+    const hasSpellingInfo = !!(rootSp && tonicLetterRaw && LETTER_VALID_SET.has(tonicLetterRaw));
+    if (hasSpellingInfo) {
+        return calculateRomanLetterFirst(chordInfo, keyInfo, rootSp!, tonicLetterRaw as SpelledPitchType['letter']);
+    }
+    // Fallback PC path for virtual-root cases without spelling info.
+    return calculateRomanFallbackPC(chordInfo, keyInfo);
+}
+
+// ── Canonical letter-first Roman computation ────────────────────────────
+function calculateRomanLetterFirst(
+    chordInfo: { root: StaffNote; type: string; intervals?: Set<number>; rootSpelled?: SpelledPitchType },
+    keyInfo: { tonicIndex: number; isMinor: boolean; minorScaleMode?: 'off' | 'natural' | 'harmonic'; tonicLetter?: string },
+    rootSp: SpelledPitchType,
+    tonicLetter: SpelledPitchType['letter'],
+): string {
+    const { type: quality } = chordInfo;
+    const { tonicIndex: keyTonicIndex, isMinor: isMinorMode } = keyInfo;
+    const intervals: Set<number> | undefined = chordInfo.intervals;
+
+    // ── Scale + letter geometry ───────────────────────────────────────
+    const minorMode: 'natural' | 'harmonic' = keyInfo.minorScaleMode === 'natural' ? 'natural' : 'harmonic';
+    const scaleSemis = isMinorMode
+        ? (minorMode === 'harmonic' ? [0,2,3,5,7,8,11] : [0,2,3,5,7,8,10])
+        : [0,2,4,5,7,9,11];
+
+    const rootLetterIdx  = letterIndex(rootSp.letter);
+    const tonicLetterIdx = letterIndex(tonicLetter);
+    const letterDegree   = ((rootLetterIdx - tonicLetterIdx) + 7) % 7; // 0..6
+    const expectedSemi   = scaleSemis[letterDegree];
+    const actualSemi     = ((spToPc(rootSp) - keyTonicIndex) % 12 + 12) % 12;
+    const altRaw         = actualSemi - expectedSemi;
+    const altNorm        = altRaw > 6 ? altRaw - 12 : altRaw < -6 ? altRaw + 12 : altRaw;
+
+    // ── Quality classification ────────────────────────────────────────
+    const qStr = String(quality || '');
+    const isMinChord = quality === BuiltInChords.Minor
+        || quality === BuiltInChords.Minor7
+        || quality === BuiltInChords.MinorMajor7
+        || quality === BuiltInChords.Minor6
+        || quality === BuiltInChords.Minor9
+        || quality === BuiltInChords.MinorAdd9
+        || quality === BuiltInChords.Minor11
+        || quality === BuiltInChords.Minor13;
+    const isDimQuality = quality === BuiltInChords.Diminished
+        || quality === BuiltInChords.Diminished7
+        || quality === BuiltInChords.Minor7b5
+        || /°|dim/i.test(qStr)
+        || /[b♭]5/i.test(qStr);
+    const isAug = quality === BuiltInChords.Augmented;
+    const isDom = /^Dominant/i.test(qStr);
+    const isMajorish = quality === BuiltInChords.Major
+        || quality === BuiltInChords.Major7
+        || quality === BuiltInChords.Major6
+        || quality === BuiltInChords.Major9
+        || quality === BuiltInChords.Major13
+        || quality === BuiltInChords.Add9
+        || isDom;
+
+    const hasMajorThird   = !!intervals?.has?.(4);
+    const hasMinorThird   = !!intervals?.has?.(3);
+    const hasDimFifth     = !!intervals?.has?.(6);
+    const hasPerfectFifth = !!intervals?.has?.(7);
+    const hasMinorSeventh = !!intervals?.has?.(10);
+    const isDimTriadLike  = isDimQuality && hasMinorThird && hasDimFifth;
+    const hasDomShell     = hasPerfectFifth && hasMinorSeventh && !hasMinorThird;
+
+    // ── Special readings (letter-first) ───────────────────────────────
+    // Neapolitan: ♭II as plain Major triad.
+    if (letterDegree === 1 && altNorm === -1) {
+        if (quality === BuiltInChords.Major) return 'N';
+        if (quality === BuiltInChords.Major7) return '♭II';
+    }
+    // ♭VI Major7 in major
+    if (!isMinorMode && letterDegree === 5 && altNorm === -1 && quality === BuiltInChords.Major7) return '♭VI';
+    // iv / v functional in major (modal mixture, plain chord with no chromaticism)
+    if (!isMinorMode && letterDegree === 3 && altNorm === 0 && (quality === BuiltInChords.Minor7 || isMinChord)) return 'iv';
+    if (!isMinorMode && letterDegree === 4 && altNorm === 0 && isMinChord && quality !== BuiltInChords.Minor7) return 'v';
+
+    // ── Secondary leading-tone vii°/X (letter-first) ──────────────────
+    // The chord MUST be diminished-triad-like and its root letter MUST be
+    // one written second below the target letter (1 letter step).
+    if (isDimTriadLike) {
+        const targetLetterDeg = (letterDegree + 1) % 7;
+        // Avoid relabeling the diatonic vii°-of-tonic as vii°/I — keep plain vii°.
+        // Also: if the diatonic degree already gives a diminished-triad reading
+        // on this letter-degree (e.g. ii° in minor, vii° in major), prefer the
+        // diatonic label. We check by seeing whether actualSemi matches the
+        // letter-degree's diatonic semitone (altNorm===0) AND the diatonic
+        // numeral for that degree carries a '°' marker.
+        const diatonicForThisDegree = targetRomanLabel(letterDegree, isMinorMode, minorMode);
+        const isDiatonicDimOnThisDegree = altNorm === 0 && diatonicForThisDegree.includes('°');
+        if (!isDiatonicDimOnThisDegree && targetLetterDeg !== 0) {
+            return `vii°/${targetRomanLabel(targetLetterDeg, isMinorMode, minorMode)}`;
+        }
+    }
+
+    // ── Secondary dominant V/X (letter-first) ─────────────────────────
+    // Eligible: Dominant family with major 3rd OR dominant shell, OR a plain
+    // Major triad with major 3rd (V/X used as triad).
+    const eligibleForV = (isDom && (hasMajorThird || hasDomShell))
+        || (quality === BuiltInChords.Major && hasMajorThird);
+    if (eligibleForV) {
+        // Target letter is 4 letter steps below: rootLetter - 4 (mod 7).
+        const targetLetterDeg = ((letterDegree - 4) + 7) % 7;
+        // Skip when target is tonic (V/I = just V) — handled by general mapping below.
+        if (targetLetterDeg !== 0) {
+            // Skip when the chord IS the diatonic V of the home key.
+            const isDiatonicV = letterDegree === 4 && altNorm === 0;
+            // Legacy guardrail for plain Major triads (not Dominant7 family):
+            // the chord's M3 must be the CHROMATIC leading-tone of the target
+            // — i.e. exactly 1 semitone below target's PC. This prevents F major
+            // in C major from being read as V/vii (would need A#, not A natural).
+            let passesLtGate = true;
+            if (!isDiatonicV && quality === BuiltInChords.Major && !isDom) {
+                const chord3rdPc   = (spToPc(rootSp) + 4) % 12;
+                const targetPc     = (keyTonicIndex + scaleSemis[targetLetterDeg]) % 12;
+                const ltDelta      = ((targetPc - chord3rdPc) % 12 + 12) % 12;
+                passesLtGate = (ltDelta === 1);
+            }
+            if (!isDiatonicV && passesLtGate) {
+                return `V/${targetRomanLabel(targetLetterDeg, isMinorMode, minorMode)}`;
+            }
+        }
+    }
+
+    // ── Borrowed-target secondary dominants V/♭III, V/♭VI, V/♭VII, V/♭II ──
+    // Major-key only. The target letter-degree is X, but with -1 alteration.
+    // The chord root is then 4 letter steps below X (with appropriate semi).
+    if (!isMinorMode && eligibleForV) {
+        // For target ♭X: target's semis = scaleSemis[X] - 1. Chord PC must
+        // be target PC + 7 (mod 12).
+        const borrowed: Array<{ letterDeg: number; label: string }> = [
+            { letterDeg: 1, label: '♭II' },
+            { letterDeg: 2, label: '♭III' },
+            { letterDeg: 5, label: '♭VI' },
+            { letterDeg: 6, label: '♭VII' },
+        ];
+        for (const bt of borrowed) {
+            const targetSemi = ((scaleSemis[bt.letterDeg] - 1) % 12 + 12) % 12;
+            const chordExpectedSemi = (targetSemi + 7) % 12;
+            // Letter test: chord root letter = target letter (since target is on
+            // letterDeg X) + 4 letter steps mod 7. So chord letter degree =
+            // (X + 4) % 7. Verify it matches.
+            const chordExpectedLetterDeg = (bt.letterDeg + 4) % 7;
+            if (actualSemi === chordExpectedSemi && letterDegree === chordExpectedLetterDeg) {
+                return `V/${bt.label}`;
+            }
+        }
+    }
+
+    // ── General degree mapping ────────────────────────────────────────
+    const altStr = altNorm === 0 ? ''
+        : altNorm === -1 ? '♭'
+        : altNorm === 1 ? '♯'
+        : altNorm === -2 ? '♭♭'
+        : altNorm === 2 ? '♯♯'
+        : '';
+
+    // V/V functional override: plain Major triad on letterDegree=1 with altNorm=0
+    // (i.e. on the II letter-degree, diatonic) in any mode → V/V.
+    if (letterDegree === 1 && altNorm === 0 && quality === BuiltInChords.Major && hasMajorThird && hasPerfectFifth) {
+        return `V/${targetRomanLabel(4, isMinorMode, minorMode)}`;
+    }
+
+    // Minor-mode I exception: i (Maj7) is rendered 'I' in legacy.
+    if (isMinorMode && letterDegree === 0 && altNorm === 0 && quality === BuiltInChords.MinorMajor7) {
+        return 'I';
+    }
+
+    // Base name from the diatonic roman table: encodes default case (ii vs
+    // II) AND default diatonic markers (ii° on degree 1 in minor, vii° on
+    // degree 6 in major). We strip the markers, then re-apply via the same
+    // quality-driven rules the legacy used.
+    const diatonicBase = targetRomanLabel(letterDegree, isMinorMode, minorMode);
+    let roman = altStr + diatonicBase.replace(/[°+]/g, '');
+
+    // Legacy quality-driven case adjustment:
+    //   – Major or Dominant family with currently-lowercase roman → uppercase.
+    //   – Minor / MinorMajor7 with currently-uppercase roman → lowercase.
+    //   – Minor7b5 ('Minor 7♭5') does NOT lowercase, because legacy uses
+    //     `quality.startsWith('m')` case-sensitive. Preserved bug-for-bug.
+    if (isMajorish && roman.toLowerCase() === roman) {
+        roman = roman.toUpperCase();
+    } else if ((quality === BuiltInChords.Minor || quality === BuiltInChords.MinorMajor7) && roman.toUpperCase() === roman) {
+        roman = roman.toLowerCase();
+    }
+
+    // ° / + markers (legacy rules, including Unicode-aware /[b♭]5/i check
+    // that the diatonic branch already used).
+    if ((quality === BuiltInChords.Diminished
+            || /°|dim/i.test(String(quality || ''))
+            || /[b♭]5/i.test(String(quality || '')))
+        && !roman.includes('°')) {
+        roman += '°';
+    }
+    if (isAug && !roman.includes('+')) roman += '+';
+
+    return roman;
+}
+
+// ── Legacy PC fallback (preserved for virtual-root cases without spelling) ──
+function calculateRomanFallbackPC(
+    chordInfo: { root: StaffNote; type: string; intervals?: Set<number> },
+    keyInfo: { tonicIndex: number; isMinor: boolean; minorScaleMode?: 'off' | 'natural' | 'harmonic'; tonicLetter?: string }
+): string {
+    const { root: chordRoot, type: quality } = chordInfo;
+    const chordRootIndex = (chordRoot && Number.isFinite((chordRoot as any).noteIndex))
+        ? mod12((chordRoot as any).noteIndex)
+        : mod12((chordRoot as any).midi);
+    const { tonicIndex: keyTonicIndex, isMinor: isMinorMode } = keyInfo;
 
     const isNeapolitanRoot = chordRootIndex === (keyTonicIndex + 1) % 12;
     if (isNeapolitanRoot && quality === BuiltInChords.Major) return 'N';
