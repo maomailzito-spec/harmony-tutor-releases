@@ -8352,11 +8352,21 @@ export function applyHarmonyRules(
                 // Standard key tonics (major+minor) — prefer these spellings
                 // over theoretical enharmonics like D#, G#, A# which are not
                 // real key signatures.
+                //
+                // Minimal spelling-aware override: pc=1 reads 'C#' instead of
+                // 'Db' when the home key is sharp-side. C#m is a valid key
+                // signature (4 sharps); the previous unconditional 'Db' broke
+                // tonicization labels in Because (E minor → C#m). Other pcs
+                // keep their flat default (Eb, Ab, Bb, Gb) since their sharp
+                // equivalents (D#, G#, A#, F#) are either non-keys or already
+                // covered (F# is already in the map).
                 const STANDARD_KEY_BY_PC: Record<number, string> = {
                     0: 'C', 1: 'Db', 2: 'D', 3: 'Eb', 4: 'E', 5: 'F',
                     6: 'F#', 7: 'G', 8: 'Ab', 9: 'A', 10: 'Bb', 11: 'B',
                 };
-                const stdName = STANDARD_KEY_BY_PC[mod12(pc)];
+                const p = mod12(pc);
+                if (p === 1 && !preferFlats) return 'C#';
+                const stdName = STANDARD_KEY_BY_PC[p];
                 if (stdName) return stdName;
 
                 const names = (ALL_NOTE_SPELLINGS as any)[mod12(pc)] as string[] | undefined;
