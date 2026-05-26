@@ -1644,14 +1644,14 @@
     },
     {
       "absBeat": 3,
-      "roman": "ii",
+      "roman": "ii°",
       "figuresInclude": [
         "7"
       ]
     },
     {
       "absBeat": 3.5,
-      "roman": "i",
+      "roman": "ii",
       "figuresInclude": [
         "7"
       ]
