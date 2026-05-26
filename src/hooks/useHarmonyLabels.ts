@@ -552,7 +552,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // matched tonic at the cadence span, then return to
                         // the home key after the resolution.
                         if (m.deceptive) {
-                            const _decTonic = pcToNoteName(m.targetTonicPc);
+                            const _decTonic = pcToNoteName(m.targetTonicPc, { tonic: currentTonic, isMinor: isMinorMode });
                             const _decMinor = m.targetIsMinor;
                             pushInferred({
                                 absBeat: m.startBeat,
@@ -599,7 +599,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // ── Tonicisation START: switch to target key ──
                         pushInferred({
                             absBeat: m.startBeat,
-                            newTonic: pcToNoteName(m.targetTonicPc),
+                            newTonic: pcToNoteName(m.targetTonicPc, { tonic: currentTonic, isMinor: isMinorMode }),
                             newIsMinor: m.targetIsMinor,
                             score: m.confidence,
                             source: 'inferred',
@@ -619,7 +619,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const nextIsDiatonic = nextEvAfterRes.notePcs?.every(pc => _tgtScale.has(pc));
                             if (nextIsDiatonic) {
                                 _pivotCandidates.set(nextEvAfterRes.absBeat,
-                                    { tonic: pcToNoteName(m.targetTonicPc), isMinor: m.targetIsMinor });
+                                    { tonic: pcToNoteName(m.targetTonicPc, { tonic: currentTonic, isMinor: isMinorMode }), isMinor: m.targetIsMinor });
                             }
                             const returnBeat = nextEvAfterRes.absBeat;
                             const coveredByNext = _cadMatches.some(
@@ -690,7 +690,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     // Inject tonicisation context covering V + resolution
                     pushInferred({
                         absBeat: dom.absBeat,
-                        newTonic: pcToNoteName(targetPc),
+                        newTonic: pcToNoteName(targetPc, { tonic: currentTonic, isMinor: isMinorMode }),
                         newIsMinor: targetIsMinor,
                         score: 65,
                         source: 'inferred',
@@ -704,7 +704,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const nextIsDiatonicD = _nextAfterRes.notePcs?.every(pc => _tgtScaleD.has(pc));
                         if (nextIsDiatonicD) {
                             _pivotCandidates.set(_nextAfterRes.absBeat,
-                                { tonic: pcToNoteName(targetPc), isMinor: targetIsMinor });
+                                { tonic: pcToNoteName(targetPc, { tonic: currentTonic, isMinor: isMinorMode }), isMinor: targetIsMinor });
                         }
                         // Only return to home key if the next chord is NOT diatonic
                         // to the target key (= the music left the modulated key).
@@ -3711,7 +3711,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (Number.isFinite(_curPc)) {
                             const relTonicPc = isMinorMode ? (_curPc + 3) % 12 : (_curPc + 9) % 12;
                             const relIsMinor = !isMinorMode;
-                            const relTonic = pcToNoteName(relTonicPc);
+                            const relTonic = pcToNoteName(relTonicPc, { tonic: currentTonic, isMinor: isMinorMode });
                             if (relTonic && relTonic !== contextTonic && relTonic !== currentTonic) {
                                 tonicCandidates.push({ tonic: relTonic, isMinor: relIsMinor });
                             }

@@ -496,11 +496,32 @@ export function evaluateCadentialPatterns(
 // Utility: pitch-class ↔ note name
 // ---------------------------------------------------------------------------
 
-const PC_TO_NOTE: readonly string[] = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const PC_TO_NOTE_FLAT:  readonly string[] = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const PC_TO_NOTE_SHARP: readonly string[] = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-/** Convert a pitch-class (0-11) to a note name suitable for the tonic field. */
-export function pcToNoteName(pc: number): string {
-  return PC_TO_NOTE[mod12(pc)] ?? 'C';
+/**
+ * Convert a pitch-class (0-11) to a note name suitable for the tonic field.
+ *
+ * Spelling-aware: if `homeKey` is provided, the function chooses sharp- or
+ * flat-side spelling matching the home key signature. Without it, defaults
+ * to flat (legacy behavior).
+ *
+ * Critical for tonicization labels: in Because (E minor, sharp-side key
+ * signature), a tonicization to pc=1 must read "C#m", not "Dbm". The legacy
+ * flat-default produced wrong spellings for all minor sharp-side keys
+ * (E, B, F#, C# minor) and most major sharp keys.
+ */
+export function pcToNoteName(pc: number, homeKey?: { tonic: string; isMinor: boolean }): string {
+  const idx = mod12(pc);
+  if (!homeKey) return PC_TO_NOTE_FLAT[idx] ?? 'C';
+  const t = homeKey.tonic;
+  const useFlats = (() => {
+    if (t.includes('b')) return true;
+    if (t.includes('#')) return false;
+    if (homeKey.isMinor) return ['D', 'G', 'C', 'F'].includes(t);
+    return t === 'F';
+  })();
+  return (useFlats ? PC_TO_NOTE_FLAT : PC_TO_NOTE_SHARP)[idx] ?? 'C';
 }
 
 /**
