@@ -530,7 +530,9 @@ const spelledSimpleIntervalFromRoot = (root: any, other: any): { diatonicNumber:
 const dim7SpellingRootBonus = (root: StaffNote, chordNotes: StaffNote[]): number | null => {
     try {
         const notes = (chordNotes || []).filter(n => n && !n.isRest);
-        if (notes.length < 4) return null;
+        // Accept 3-note inputs too: needed to detect °7-no-5 spellings like
+        // E#-G#-D (root + m3 + d7) where the 5th (B#) is intentionally omitted.
+        if (notes.length < 3) return null;
 
         // Expected °7 tertian structure above the root: m3, d5, d7.
         const expected = [
@@ -1880,7 +1882,19 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
         try {
             const isDimFamily = candidate.type === BuiltInChords.Diminished || candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7;
             if (isDimFamily && candidate.matchType === 'no_fifth') {
-                score -= 40;
+                // Exception: if the root produces letter-coherent tertian
+                // intervals (m3 + d7 by spelled name, zero mismatches), this
+                // is a legitimate °7-no-5 reading written intentionally —
+                // it must outrank an enharmonic triad competitor.
+                // Example: E#-G#-D in C# minor reads as E#°7 (no B#), not D°.
+                const sp = candidate.type === BuiltInChords.Diminished7
+                    ? dim7SpellingRootBonus(candidate.root, uniqueNotes)
+                    : null;
+                if (sp != null && sp >= 14) {
+                    score += 35;
+                } else {
+                    score -= 40;
+                }
             }
         } catch { /* ignore */ }
 
@@ -2079,7 +2093,19 @@ export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: 
         try {
             const isDimFamily = candidate.type === BuiltInChords.Diminished || candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7;
             if (isDimFamily && candidate.matchType === 'no_fifth') {
-                score -= 40;
+                // Exception: if the root produces letter-coherent tertian
+                // intervals (m3 + d7 by spelled name, zero mismatches), this
+                // is a legitimate °7-no-5 reading written intentionally —
+                // it must outrank an enharmonic triad competitor.
+                // Example: E#-G#-D in C# minor reads as E#°7 (no B#), not D°.
+                const sp = candidate.type === BuiltInChords.Diminished7
+                    ? dim7SpellingRootBonus(candidate.root, uniqueNotes)
+                    : null;
+                if (sp != null && sp >= 14) {
+                    score += 35;
+                } else {
+                    score -= 40;
+                }
             }
         } catch { /* ignore */ }
         const isSymmetricDim7 = candidate.type === BuiltInChords.Diminished7;
