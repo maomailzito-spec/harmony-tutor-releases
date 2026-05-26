@@ -701,7 +701,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Ascolta su tutti gli input MIDI e suona ogni nota premuta, indipendentemente
     // da REC o step-input. Il listener si registra una volta e si aggiorna se
     // cambiano i dispositivi.
+    //
+    // Comportamento:
+    //   • selectedMidiOutput === null  → riproduce piano interno (Web Audio)
+    //   • selectedMidiOutput !== null  → NON riproduce audio interno; l'utente
+    //     monitora direttamente dalla DAW. I messaggi CC (es. sustain pedal)
+    //     vengono inoltrati all'uscita MIDI per evitare note bloccate.
+    const selectedMidiOutputRef = useRef(selectedMidiOutput);
+    useEffect(() => { selectedMidiOutputRef.current = selectedMidiOutput; }, [selectedMidiOutput]);
+
     const playMidiPassthrough = useCallback((midi: number) => {
+        // Se è attivo un output MIDI esterno non suonare il piano interno
+        if (selectedMidiOutputRef.current) return;
         const noteNamesWithFlats = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
         const name = `${noteNamesWithFlats[midi % 12]}${Math.floor(midi / 12) - 1}`;
         void audioService.playNote(name, { duration: 0.6 });
@@ -719,6 +730,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const data = msg.data;
             if (!data || data.length < 3) return;
             const [status, note, velocity] = data;
+            const currentOutput = selectedMidiOutputRef.current;
+            // Quando è attivo un output MIDI, inoltra i messaggi CC (es. sustain
+            // pedal CC64) in modo che il synth esterno li riceva correttamente.
+            if (currentOutput && (status & 0xf0) === 0xB0) {
+                try { currentOutput.send([status, note, velocity]); } catch (_) {}
+                return;
+            }
             if ((status & 0xf0) === 0x90 && velocity > 0) {
                 playMidiPassthroughRef.current(note);
             }
@@ -1063,6 +1081,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [engravingMode]);
 
     const [showVoiceColors, setShowVoiceColors] = useState(false);
+    const [showIncompleteMeasureWarnings, setShowIncompleteMeasureWarnings] = useState(true);
 
     // Menu-driven toggles (Electron)
     const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
@@ -4532,6 +4551,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
     }, [audioService.audioContext, bpm, getPlayheadPosForAbsBeat, isPlaying]);
 
+    // When playback stops, silence the MIDI output on all channels.
+    // CC 64=0 releases sustain first, then CC 123 (All Notes Off) releases held
+    // notes. CC 120 (All Sound Off) is intentionally NOT used because Logic Pro
+    // and many DAW instruments treat it as a permanent mute that breaks
+    // subsequent playback until the channel is reset.
+    // Persistent across scheduler runs: lets stopPlayback flush explicit note-offs
+    // for notes whose note-on has already been handed to WebMIDI (timestamp may be
+    // in the past or up to 100ms in the future, inside the lookahead window).
+    const pendingMidiOffsRef = useRef<Array<{ ch: number; note: number; onMs: number; offMs: number }>>([]);
+
+    const wasPlayingRef = useRef(false);
+    useEffect(() => {
+        if (!isPlaying && wasPlayingRef.current && selectedMidiOutputRef.current) {
+            const output = selectedMidiOutputRef.current;
+            const now = performance.now();
+            // Explicit note-off for every still-active note. Required because many
+            // Logic instruments (Alchemy, EXS, third-party plugins) ignore CC 123.
+            // Timestamp must be >= the corresponding note-on, otherwise the DAW
+            // drops the off before the on has been processed.
+            for (const { ch, note, onMs } of pendingMidiOffsRef.current) {
+                const ts = Math.max(now + 1, onMs + 5);
+                try { output.send([0x80 + ch, note, 0], ts); } catch (_) {}
+            }
+            pendingMidiOffsRef.current = [];
+            // No CC 123 / CC 120 broadcast: Logic Pro instruments treat those as
+            // a track-level panic that puts the channel into a frozen state until
+            // the user clicks the track to wake it up. The explicit note-offs
+            // above already cover every still-active note.
+        }
+        wasPlayingRef.current = isPlaying;
+    }, [isPlaying]);
+
     // Auto-scroll during playback so the playhead never disappears off-screen.
     const lastAutoScrollAtRef = useRef<number>(0);
     const lastAutoScrollSystemRef = useRef<number | null>(null);
@@ -5207,6 +5258,85 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             playbackTimeToBeatRef.current = null;
         }
 
+        // ── Lookahead MIDI scheduler ──────────────────────────────────────────
+        // Schedules note-ons AND note-offs within rolling 100ms windows.
+        // Note-offs are kept in a local pending list — never sent far ahead.
+        // When stopPlayback() calls clearTimeout, the scheduler closure is
+        // abandoned: no stale note-offs remain in the WebMIDI queue, so
+        // restarting playback never gets silenced by old messages.
+        if (selectedMidiOutput) {
+            const MIDI_LOOKAHEAD_MS = 100;
+            const MIDI_TICK_MS = 50;
+            let noteOnIdx = 0;
+            // Persistent ref (survives scheduler closure GC) so stopPlayback can
+            // flush explicit note-offs for any note-on already handed to WebMIDI.
+            const pendingOffs = pendingMidiOffsRef.current;
+            pendingOffs.length = 0;
+
+            const tickMidi = () => {
+                const out = selectedMidiOutputRef.current;
+                if (!out) return;
+                const now = performance.now();
+                const windowEnd = now + MIDI_LOOKAHEAD_MS;
+
+                // ── Schedule note-ons whose time has entered the window ──
+                while (noteOnIdx < eventsToPlay.length) {
+                    const ev = eventsToPlay[noteOnIdx];
+                    const tEv = beatToTime(ev.absBeat) - t0Anchor;
+                    const midiWhenMs = startMs + tEv * 1000;
+                    if (midiWhenMs > windowEnd) break;
+
+                    ev.items.forEach((it) => {
+                        const n = it.note;
+                        if (n.isRest) return;
+                        const durBeats = it.durationBeats;
+                        const durSec = (Number.isFinite(durBeats) && durBeats > 0)
+                            ? Math.max(0.05, beatToTime(it.absStartBeat + durBeats) - beatToTime(it.absStartBeat))
+                            : 0.5; // safe fallback
+                        if (it.accTrackIdx !== undefined) {
+                            const track = latestAccompanimentTracks.current[it.accTrackIdx];
+                            if (!track || track.muted) return;
+                            const ch = Math.max(0, Math.min(15, 4 + it.accTrackIdx));
+                            const midiT = (n.midi ?? 0) + playbackTransposeSemitones;
+                            if (!Number.isFinite(midiT) || midiT <= 0) return;
+                            const vel = Math.round(Math.min(127, Math.max(1, track.volume * 100)));
+                            try { out.send([0x90 + ch, midiT, vel], midiWhenMs); } catch (_) {}
+                            pendingOffs.push({ ch, note: midiT, onMs: midiWhenMs, offMs: midiWhenMs + durSec * 1000 });
+                            return;
+                        }
+                        if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
+                        const ch = Math.max(0, Math.min(15, ((n.voice ?? 1) as number) - 1));
+                        const midiT = ((n.midi ?? 0) + playbackTransposeSemitones);
+                        if (!Number.isFinite(midiT) || midiT <= 0) return;
+                        const vel = 100;
+                        try { out.send([0x90 + ch, midiT, vel], midiWhenMs); } catch (_) {}
+                        pendingOffs.push({ ch, note: midiT, onMs: midiWhenMs, offMs: midiWhenMs + durSec * 1000 });
+                    });
+                    noteOnIdx++;
+                }
+
+                // ── Flush note-offs whose off-time has entered the window ──
+                let i = 0;
+                while (i < pendingOffs.length) {
+                    const { ch, note, offMs } = pendingOffs[i];
+                    if (offMs <= windowEnd) {
+                        try { out.send([0x80 + ch, note, 0], offMs); } catch (_) {}
+                        pendingOffs.splice(i, 1);
+                    } else {
+                        i++;
+                    }
+                }
+
+                if (noteOnIdx < eventsToPlay.length || pendingOffs.length > 0) {
+                    const tid = window.setTimeout(tickMidi, MIDI_TICK_MS);
+                    playbackTimeoutsRef.current.push(tid);
+                }
+            };
+
+            const firstTid = window.setTimeout(tickMidi, 0);
+            playbackTimeoutsRef.current.push(firstTid);
+        }
+
         eventsToPlay.forEach((ev) => {
             const tEv = beatToTime(ev.absBeat) - t0Anchor;
             const delayMs = tEv * 1000;
@@ -5259,38 +5389,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
             }
 
-            // Visual cursor highlighting + MIDI output via setTimeout
-            // (visual timing is less critical than audio timing).
-            const t = window.setTimeout(async () => {
+            // Visual cursor highlighting via setTimeout (timing less critical than audio/MIDI).
+            const t = window.setTimeout(() => {
                 const playable = ev.items
                     .filter(it => it.accTrackIdx === undefined)
                     .map(it => it.note)
                     .filter(n => !n.isRest && (n.midi ?? 0) > 0 && (soloVoicesRef.current.size === 0 || soloVoicesRef.current.has((n.voice ?? 1) as number)));
 
                 setPlayingNoteIds(playable.map(n => n.id));
-
-                if (selectedMidiOutput) {
-                    const midiWhenMs = startMs + delayMs;
-                    ev.items.forEach((it) => {
-                        const n = it.note;
-                        if (n.isRest) return;
-                        if (it.accTrackIdx !== undefined) {
-                            const track = latestAccompanimentTracks.current[it.accTrackIdx];
-                            if (!track || track.muted) return;
-                            const ch = Math.max(0, Math.min(15, 4 + it.accTrackIdx));
-                            const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
-                            const midiT = (n.midi ?? 0) + playbackTransposeSemitones;
-                            if (!Number.isFinite(midiT) || midiT <= 0) return;
-                            const vel = Math.round(Math.min(127, Math.max(1, track.volume * 100)));
-                            selectedMidiOutput.send([0x90 + ch, midiT, vel], midiWhenMs);
-                            selectedMidiOutput.send([0x80 + ch, midiT, 0], midiWhenMs + durSec * 1000);
-                            return;
-                        }
-                        if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
-                        const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
-                        sendMidiNote(n, selectedMidiOutput, durSec, midiWhenMs, ((n.voice ?? 1) as number) - 1);
-                    });
-                }
             }, Math.max(0, (startMs - performance.now()) + delayMs));
 
             playbackTimeoutsRef.current.push(t);
@@ -9616,6 +9722,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             >
                 {analysisLocked && !sessionUnlocked ? '🔒' : '🔓'}
             </button>
+            <button
+                type="button"
+                onClick={() => setShowIncompleteMeasureWarnings(v => !v)}
+                title={showIncompleteMeasureWarnings ? 'Nascondi avvisi misure incomplete' : 'Mostra avvisi misure incomplete'}
+                className={`absolute right-12 top-2 z-[60] flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md shadow transition-colors ${showIncompleteMeasureWarnings ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-gray-300 text-gray-600 hover:bg-gray-400'}`}
+            >
+                ⚠
+            </button>
             <GrandStaffToolbar
                 isPlaying={isPlaying}
                 togglePlayback={togglePlayback}
@@ -10153,16 +10267,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi, voices });
                                 });
 
-                                if (rects.length > 0) {
-                                    try {
-                                        // Surface detection in DevTools so the
-                                        // user can verify the warning is being
-                                        // computed even before the visual lands.
-                                        // eslint-disable-next-line no-console
-                                        console.warn('[HarmonyTutor] Misure incomplete (sistema ' + systemIndex + '):', rects.map(r => r.mi + 1));
-                                    } catch { /* ignore */ }
-                                }
-
                                 return rects;
                             } catch {
                                 return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
@@ -10345,7 +10449,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                                         })()}
                             </RenderErrorBoundary> {/* FIX: this closing tag was missing */}
 
-                                                        {invalidMeasureRects.length > 0 && (
+                                                        {showIncompleteMeasureWarnings && invalidMeasureRects.length > 0 && (
                                                             <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {(() => {
                                                                     const yTop = PLAYHEAD_Y_TOP;
@@ -10356,7 +10460,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             ? `V. ${r.voices.join(',')} ⚠`
                                                                             : '⚠';
                                                                         return (
-                                                                        <g key={`invalid-${systemIndex}-${i}`}>
+                                                                        <g key={`invalid-${systemIndex}-${i}`}
+                                                                           style={{pointerEvents:'auto', cursor:'pointer'}}
+                                                                           onClick={() => setShowIncompleteMeasureWarnings(false)}>
+                                                                            <title>Misura incompleta — clicca per nascondere</title>
                                                                             <rect
                                                                                 x={r.x}
                                                                                 y={yTop}
