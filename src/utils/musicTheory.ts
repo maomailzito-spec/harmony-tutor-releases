@@ -9939,6 +9939,58 @@ export function applyHarmonyRules(
                         const isDup = inferredAnalysisContexts.some(c =>
                             Math.abs(c.absBeat - absBeat) < 0.01 && c.newTonic === tonicName);
                         if (isDup) continue;
+                        // PHASE 5 FIX (2026-05-27): letter/key-coherence veto.
+                        // The sequence loop can propose a modulation to a key
+                        // whose KS contradicts the actual SPELLING of notes at
+                        // the proposed beat (e.g. F#°7 in C major with notes
+                        // F#/A♮/C♮/E♭ being proposed as B major, where KS
+                        // requires F#/C#/G#/D#/A# and E♮). Reject if a majority
+                        // of notes at this beat carry an accidental incompatible
+                        // with the proposed key signature.
+                        try {
+                            const newKS = getKeySignature(tonicName, 'Major');
+                            if (newKS) {
+                                const SHARP_ORD = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+                                const FLAT_ORD = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+                                const ksAccForLetter = (letter: string): number => {
+                                    if (!letter) return 0;
+                                    if (newKS.type === 'sharp') return SHARP_ORD.slice(0, newKS.count).includes(letter) ? 1 : 0;
+                                    if (newKS.type === 'flat') return FLAT_ORD.slice(0, newKS.count).includes(letter) ? -1 : 0;
+                                    return 0;
+                                };
+                                const accToSemi = (a: any): number => {
+                                    if (a == null) return 0;
+                                    const s = String(a).trim().toLowerCase();
+                                    if (s === 'sharp' || s === '#') return 1;
+                                    if (s === 'flat' || s === 'b') return -1;
+                                    if (s === 'natural') return 0;
+                                    if (s === 'double-sharp' || s === '##' || s === 'x') return 2;
+                                    if (s === 'double-flat' || s === 'bb') return -2;
+                                    return 0;
+                                };
+                                let total = 0;
+                                let outOfKey = 0;
+                                const seenIds = new Set<string>();
+                                for (const n of (notes || []) as any[]) {
+                                    if (!n || n.isRest) continue;
+                                    const nAbs = typeof n.absoluteBeat === 'number' ? n.absoluteBeat
+                                        : (typeof n.absBeat === 'number' ? n.absBeat
+                                            : (n.measureIndex ?? 0) * _bpm + ((n.beat ?? 1) - 1));
+                                    if (Math.abs(nAbs - absBeat) > 0.5) continue;
+                                    const letter = String(n.pitch || '').toUpperCase().charAt(0);
+                                    if (!letter) continue;
+                                    const acc = accToSemi(n.userAccidental ?? n.explicitAccidental ?? n.accidental);
+                                    const key = `${letter}${acc}`;
+                                    if (seenIds.has(key)) continue;
+                                    seenIds.add(key);
+                                    total++;
+                                    if (acc !== ksAccForLetter(letter)) outOfKey++;
+                                }
+                                if (total >= 3 && outOfKey * 2 > total) {
+                                    continue;
+                                }
+                            }
+                        } catch { /* ignore */ }
                         inferredAnalysisContexts.push({
                             absBeat,
                             newTonic: tonicName,
