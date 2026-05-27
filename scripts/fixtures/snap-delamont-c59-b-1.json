@@ -1860,16 +1860,16 @@
     },
     {
       "absBeat": 3,
-      "roman": "IV",
+      "roman": "I",
       "figuresInclude": [
         "7"
       ]
     },
     {
       "absBeat": 4,
-      "roman": "I",
+      "roman": "vi",
       "figuresInclude": [
-        "7"
+        "6"
       ]
     },
     {

@@ -809,16 +809,15 @@
       "absBeat": 10,
       "roman": "♭VI",
       "figuresInclude": [
-        "♭9",
-        "7"
+        "4",
+        "♭2"
       ]
     },
     {
       "absBeat": 11.5,
-      "roman": "♭VI",
+      "roman": "IV",
       "figuresInclude": [
-        "♭9",
-        "7"
+        "♭2"
       ]
     },
     {

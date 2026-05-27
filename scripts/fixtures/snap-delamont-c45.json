@@ -1764,8 +1764,16 @@
       "roman": "♭VI"
     },
     {
+      "absBeat": 22,
+      "roman": "V°",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
+    },
+    {
       "absBeat": 23,
-      "roman": "♭II",
+      "roman": "V°",
       "figuresInclude": [
         "4",
         "3"

@@ -1792,7 +1792,51 @@ function pickPreferredBassNote(notes: StaffNote[]): StaffNote | null {
     }
 }
 
+const PHASE5_COVERED_QUALITIES = new Set<string>([
+    BuiltInChords.Major, BuiltInChords.Minor, BuiltInChords.Diminished, BuiltInChords.Augmented,
+    BuiltInChords.Sus2, BuiltInChords.Sus4,
+    BuiltInChords.Major7, BuiltInChords.Minor7, BuiltInChords.MinorMajor7,
+    BuiltInChords.Dominant7, BuiltInChords.Diminished7, BuiltInChords.Minor7b5,
+    BuiltInChords.Major6, BuiltInChords.Minor6,
+    BuiltInChords.Add9, BuiltInChords.MinorAdd9,
+]);
+
+function buildChordInfoFromAnalyzed(notes: StaffNote[], analyzed: import('../engine/spelledChordEngine').AnalyzedChord): { root: StaffNote; type: string; intervals: Set<number>; priority: number; matchType: MatchType; rootSpelled: SpelledPitchType } | null {
+    let rootNote: StaffNote | null = null;
+    for (const n of notes) {
+        if (!n || n.isRest) continue;
+        const sp = staffNoteToSp(n as any);
+        if (sp.letter === analyzed.root.letter && sp.accidental === analyzed.root.accidental) { rootNote = n; break; }
+    }
+    if (!rootNote) return null;
+    const rootPc = spToPc(analyzed.root);
+    const intervals = new Set<number>();
+    for (const n of notes) { if (!n || n.isRest) continue; intervals.add(mod12(pitchClassOf(n) - rootPc)); }
+    let matchType: MatchType = 'exact';
+    if (analyzed.missingDegrees.includes(5)) matchType = 'no_fifth';
+    else if (analyzed.missingDegrees.includes(3)) matchType = 'no_third';
+    const priority = CHORD_CHECK_ORDER.indexOf(analyzed.quality as any);
+    return { root: rootNote, type: analyzed.quality, intervals, priority: priority >= 0 ? priority : 0, matchType, rootSpelled: analyzed.root };
+}
+
 function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; intervals: Set<number> } | null {
+    if (!notes || notes.length < 2) return null;
+    const validNotes = notes.filter(n => !n.isRest);
+    if (validNotes.length < 2) return null;
+    try {
+        const spelled = validNotes.map(n => staffNoteToSp(n as any));
+        const bassNote = pickPreferredBassNote(validNotes) || validNotes[0];
+        const bassSp = bassNote ? staffNoteToSp(bassNote as any) : undefined;
+        const analyzed = analyzeChordSpelled(spelled, bassSp ? { bass: bassSp } : {});
+        if (analyzed && PHASE5_COVERED_QUALITIES.has(analyzed.quality) && analyzed.confidence === 1.0 && analyzed.missingDegrees.length === 0 && analyzed.extraNoteIndices.length === 0) {
+            const info = buildChordInfoFromAnalyzed(validNotes, analyzed);
+            if (info) return { root: info.root, type: info.type, intervals: info.intervals };
+        }
+    } catch { /* fall through */ }
+    return identifyChordLegacy(notes);
+}
+
+function identifyChordLegacy(notes: StaffNote[]): { root: StaffNote; type: string; intervals: Set<number> } | null {
     if (!notes || notes.length < 2) return null;
     const validNotes = notes.filter(n => !n.isRest);
     if (validNotes.length < 2) return null;
@@ -2005,6 +2049,23 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
 
 // Return detailed candidate list for debugging/inspection.
 export function identifyChordCandidates(notes: StaffNote[], ornamentOverrides?: Record<string, string>) {
+    if (!notes || notes.length < 2) return [];
+    const validNotes = notes.filter(n => !n.isRest);
+    if (validNotes.length < 2) return [];
+    try {
+        const spelled = validNotes.map(n => staffNoteToSp(n as any));
+        const bassNote = pickPreferredBassNote(validNotes) || validNotes[0];
+        const bassSp = bassNote ? staffNoteToSp(bassNote as any) : undefined;
+        const analyzed = analyzeChordSpelled(spelled, bassSp ? { bass: bassSp } : {});
+        if (analyzed && PHASE5_COVERED_QUALITIES.has(analyzed.quality) && analyzed.confidence === 1.0 && analyzed.missingDegrees.length === 0 && analyzed.extraNoteIndices.length === 0) {
+            const info = buildChordInfoFromAnalyzed(validNotes, analyzed);
+            if (info) return [{ root: info.root, type: info.type, intervals: info.intervals, priority: info.priority, matchType: info.matchType, score: 100, rootSpelled: info.rootSpelled }];
+        }
+    } catch { /* fall through */ }
+    return identifyChordCandidatesLegacy(notes, ornamentOverrides);
+}
+
+function identifyChordCandidatesLegacy(notes: StaffNote[], ornamentOverrides?: Record<string, string>) {
     if (!notes || notes.length < 2) return [];
     // ── Filter out manually overridden ornamental notes ──
     const effectiveNotes = ornamentOverrides

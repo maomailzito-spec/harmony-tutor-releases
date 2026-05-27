@@ -1896,7 +1896,10 @@
     },
     {
       "absBeat": 20,
-      "roman": "ii°"
+      "roman": "ii°",
+      "figuresInclude": [
+        "3"
+      ]
     },
     {
       "absBeat": 22,

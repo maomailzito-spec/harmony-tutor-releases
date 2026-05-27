@@ -2697,11 +2697,17 @@
     },
     {
       "absBeat": 50,
-      "roman": "IV"
+      "roman": "IV",
+      "figuresInclude": [
+        "3"
+      ]
     },
     {
       "absBeat": 52,
-      "roman": "vii°"
+      "roman": "vii°",
+      "figuresInclude": [
+        "3"
+      ]
     },
     {
       "absBeat": 54,
@@ -2721,7 +2727,10 @@
     },
     {
       "absBeat": 62,
-      "roman": "vii°"
+      "roman": "vii°",
+      "figuresInclude": [
+        "3"
+      ]
     },
     {
       "absBeat": 64,
@@ -2751,7 +2760,7 @@
     },
     {
       "absBeat": 74,
-      "roman": "IV",
+      "roman": "iv",
       "figuresInclude": [
         "7",
         "5"

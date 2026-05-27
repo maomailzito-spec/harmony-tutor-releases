@@ -1838,18 +1838,14 @@
     },
     {
       "absBeat": 4,
-      "roman": "IV",
+      "roman": "ii",
       "figuresInclude": [
-        "7"
+        "6"
       ]
     },
     {
       "absBeat": 5,
-      "roman": "IV",
-      "figuresInclude": [
-        "7",
-        "5"
-      ]
+      "roman": "IV"
     },
     {
       "absBeat": 6,
