@@ -8727,57 +8727,54 @@ export function applyHarmonyRules(
                                     absBeat = downbeat;
                                 }
 
-                                // Symmetric stabilization for *entering* a new inferred key at a barline:
-                                // if the previous strong beat already spells a clear tonic (I/i) under the
-                                // inferred key, start the context there to avoid showing bIII/bVI/etc. in the
-                                // global key for what is effectively a tonic arrival.
+                                // Symmetric stabilization for *entering* a new inferred key:
+                                // if a previous strong beat already spells a clear tonic (I/i),
+                                // OR a pre-dominant function (ii*/iv/IV) — typically the ii of a
+                                // ii-V-i cadence — under the inferred key, start the context at
+                                // the EARLIEST such anchor inside the look-back window so the
+                                // entire cadential pattern is labeled in the new key.
                                 if (!isReturnToGlobal && Number.isFinite(absBeat)) {
-                                    const m = Math.floor(absBeat / beatsPerMeasLocal);
-                                    const downbeat = m * beatsPerMeasLocal;
-                                    const beat1 = (absBeat - downbeat) + 1;
-                                    const isDownbeat = Number.isFinite(beat1) && Math.abs(beat1 - 1) <= 1e-3;
-                                    if (isDownbeat) {
-                                        const MAX_BACK = 2.01;
-                                        const strongBeat = (b: number): boolean => {
-                                            try {
-                                                if (!Number.isFinite(b as any)) return false;
-                                                const bb = Number(b);
-                                                if (Math.abs(bb - 1) <= 1e-3) return true;
-                                                const ts = timeSignature;
-                                                if (!ts) return false;
-                                                if (ts.denominator === 4 && ts.numerator === 4) return Math.abs(bb - 3) <= 1e-3;
-                                                if (ts.denominator === 8 && ts.numerator === 6) return Math.abs(bb - 4) <= 1e-3;
-                                                return false;
-                                            } catch {
-                                                return false;
-                                            }
-                                        };
-
-                                        const hasOtherInferredNearby = Array.from(bestByAbsBeat.values()).some((y) => {
-                                            if (!y || y === x) return false;
-                                            const a = Number(y.absBeat);
-                                            if (!Number.isFinite(a)) return false;
-                                            return (a > (absBeat - MAX_BACK + 1e-6)) && (a < (absBeat - 1e-6));
-                                        });
-
-                                        if (!hasOtherInferredNearby) {
-                                            let bestEarlier: { absBeat: number; beat: number; notes: any[] } | null = null;
-                                            for (const ev of (chordEvents || []) as any[]) {
-                                                const a = Number(ev?.absBeat);
-                                                if (!Number.isFinite(a)) continue;
-                                                if (!(a < absBeat - 1e-6)) continue;
-                                                if (a < (absBeat - MAX_BACK - 1e-6)) continue;
-                                                const b = Number(ev?.beat);
-                                                if (!strongBeat(b)) continue;
-                                                if (!bestEarlier || a > bestEarlier.absBeat) bestEarlier = { absBeat: a, beat: b, notes: (ev?.notes || []) as any[] };
-                                            }
-
-                                            if (bestEarlier && Number.isFinite(bestEarlier.absBeat)) {
-                                                const r = String(_gRA(bestEarlier.notes || [], x.newTonic, x.newIsMinor)?.roman || '').replace(/\s+/g, '');
-                                                const want = x.newIsMinor ? 'i' : 'I';
-                                                if (r === want) absBeat = bestEarlier.absBeat;
-                                            }
+                                    const MAX_BACK = beatsPerMeasLocal * 2.0 + 0.01;
+                                    const strongBeat = (b: number): boolean => {
+                                        try {
+                                            if (!Number.isFinite(b as any)) return false;
+                                            const bb = Number(b);
+                                            if (Math.abs(bb - 1) <= 1e-3) return true;
+                                            const ts = timeSignature;
+                                            if (!ts) return false;
+                                            if (ts.denominator === 4 && ts.numerator === 4) return Math.abs(bb - 3) <= 1e-3;
+                                            if (ts.denominator === 8 && ts.numerator === 6) return Math.abs(bb - 4) <= 1e-3;
+                                            return false;
+                                        } catch {
+                                            return false;
                                         }
+                                    };
+
+                                    const hasOtherInferredNearby = Array.from(bestByAbsBeat.values()).some((y) => {
+                                        if (!y || y === x) return false;
+                                        const a = Number(y.absBeat);
+                                        if (!Number.isFinite(a)) return false;
+                                        return (a > (absBeat - MAX_BACK + 1e-6)) && (a < (absBeat - 1e-6));
+                                    });
+
+                                    if (!hasOtherInferredNearby) {
+                                        const wantTonic = x.newIsMinor ? 'i' : 'I';
+                                        // ii / ii° / iiø with any inversion or seventh, plus IV/iv.
+                                        // Exclude iii/III via negative lookahead.
+                                        const isPreDom = (r: string) => /^(ii(?!i)|IV|iv)/.test(r);
+                                        let earliest: { absBeat: number } | null = null;
+                                        for (const ev of (chordEvents || []) as any[]) {
+                                            const a = Number(ev?.absBeat);
+                                            if (!Number.isFinite(a)) continue;
+                                            if (!(a < absBeat - 1e-6)) continue;
+                                            if (a < (absBeat - MAX_BACK - 1e-6)) continue;
+                                            const b = Number(ev?.beat);
+                                            if (!strongBeat(b)) continue;
+                                            const r = String(_gRA(ev?.notes || [], x.newTonic, x.newIsMinor)?.roman || '').replace(/\s+/g, '');
+                                            if (r !== wantTonic && !isPreDom(r)) continue;
+                                            if (!earliest || a < earliest.absBeat) earliest = { absBeat: a };
+                                        }
+                                        if (earliest) absBeat = earliest.absBeat;
                                     }
                                 }
                             } catch {
