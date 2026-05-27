@@ -1819,7 +1819,7 @@ function buildChordInfoFromAnalyzed(notes: StaffNote[], analyzed: import('../eng
     return { root: rootNote, type: analyzed.quality, intervals, priority: priority >= 0 ? priority : 0, matchType, rootSpelled: analyzed.root };
 }
 
-function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; intervals: Set<number> } | null {
+function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; intervals: Set<number>; rootSpelled?: SpelledPitchType } | null {
     if (!notes || notes.length < 2) return null;
     const validNotes = notes.filter(n => !n.isRest);
     if (validNotes.length < 2) return null;
@@ -1830,10 +1830,20 @@ function identifyChord(notes: StaffNote[]): { root: StaffNote; type: string; int
         const analyzed = analyzeChordSpelled(spelled, bassSp ? { bass: bassSp } : {});
         if (analyzed && PHASE5_COVERED_QUALITIES.has(analyzed.quality) && analyzed.confidence === 1.0 && analyzed.missingDegrees.length === 0 && analyzed.extraNoteIndices.length === 0) {
             const info = buildChordInfoFromAnalyzed(validNotes, analyzed);
-            if (info) return { root: info.root, type: info.type, intervals: info.intervals };
+            if (info) return { root: info.root, type: info.type, intervals: info.intervals, rootSpelled: info.rootSpelled };
         }
     } catch { /* fall through */ }
-    return identifyChordLegacy(notes);
+    const legacy = identifyChordLegacy(notes);
+    // Phase 5 + bug fix: expose rootSpelled also for the legacy path so
+    // calculateRomanNumeral's letter-first logic can fire. Without this,
+    // getRomanAnalysis (which calls identifyChord then calculateRomanNumeral)
+    // would silently fall back to the PC branch and produce wrong roman
+    // labels for enharmonic ambiguous chords (e.g. F#°7 in C major
+    // labeled vii°/iii instead of the correct vii°/V).
+    if (legacy && legacy.root) {
+        return { ...legacy, rootSpelled: staffNoteToSp(legacy.root as any) };
+    }
+    return legacy;
 }
 
 function identifyChordLegacy(notes: StaffNote[]): { root: StaffNote; type: string; intervals: Set<number> } | null {
@@ -3738,6 +3748,9 @@ export function getRomanAnalysis(
                         triadType === BuiltInChords.Minor || triadType === BuiltInChords.Diminished ? 3 : 4,
                         triadType === BuiltInChords.Augmented ? 8 : (triadType === BuiltInChords.Diminished ? 6 : 7),
                     ]),
+                    // Phase 5 bug fix: propagate rootSpelled so letter-first
+                    // logic in calculateRomanNumeral fires.
+                    rootSpelled: rootNote ? staffNoteToSp(rootNote as any) : undefined,
                 };
                 const roman = calculateRomanNumeral(triadInfo as any, keyInfo);
                 if (roman) return { roman, figures: figuresL2 };
@@ -4044,9 +4057,44 @@ export function getRomanAnalysis(
                 // Score matches:
                 // - prefer the spelling that places the leading tone in the bass (common as root)
                 // - otherwise prefer secondary interpretations over tonic to avoid unstable I/I7 labels
+                // - PHASE 5 BUG FIX (2026-05-27): a dim7 chord is enharmonically
+                //   symmetric; multiple targets can match by PC. Use the chord's
+                //   rootSpelled to pick the target whose LT-letter matches the
+                //   chord's root-letter. Example: F#°7 in C maj has root letter F.
+                //   target V (G) has ltLetter=F → F#°7=vii°/V (CORRECT).
+                //   target iii (E) has ltLetter=D → D#°7=vii°/iii (WRONG for F# chord).
+                //   Without this bonus, the legacy tie-breaker arbitrarily picked
+                //   the first match (iii), producing wrong roman labels for any
+                //   dim7 that admits multiple secondary-LT interpretations.
                 let score = 0;
                 if (bassPc != null && bassPc === ltPc) score += 2;
                 if (i !== 0) score += 1;
+                // PHASE 5 BUG FIX (2026-05-27): a dim7 chord is enharmonically
+                // symmetric — multiple targets can match by PC. Use the chord
+                // note that lives on ltPc to verify its SPELLED LETTER matches
+                // the expected leading-tone letter for this target. Example:
+                // F#°7 in C major has voice with pitch=F at pc=6. target V (G)
+                // has ltLetter=F → match (vii°/V CORRECT). target iii (E) has
+                // ltLetter=D → no match → vii°/iii rejected.
+                try {
+                    const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+                    const tonicLetter = String(keySignatureRoot || '').charAt(0).toUpperCase();
+                    const tonicLetterIdx = LETTERS.indexOf(tonicLetter);
+                    if (tonicLetterIdx >= 0) {
+                        const targetLetter = LETTERS[(tonicLetterIdx + i) % 7];
+                        const targetLetterIdx = LETTERS.indexOf(targetLetter);
+                        const ltLetter = LETTERS[(targetLetterIdx - 1 + 7) % 7];
+                        // Find the note in the chord whose PC matches ltPc, and check its letter.
+                        const ltNote = (valid || []).find((n: any) => {
+                            if (!n || (n as any).isRest) return false;
+                            return mod12(pitchClassOf(n as any)) === ltPc;
+                        });
+                        if (ltNote) {
+                            const sp = staffNoteToSp(ltNote as any);
+                            if (sp.letter === ltLetter) score += 10; // overwhelming spelling-coherent preference
+                        }
+                    }
+                } catch { /* ignore */ }
 
                 if (!best || score > best.score) best = { score, i };
             }
@@ -4154,7 +4202,7 @@ export function getRomanAnalysis(
                     (candidates as any[]).sort((a: any, b: any) => (b.score as number) - (a.score as number));
                     const best = (candidates as any[])[0];
                     if (best?.root && best?.type) {
-                        chordInfo = { root: best.root, type: best.type, intervals: best.intervals };
+                        chordInfo = { root: best.root, type: best.type, intervals: best.intervals, rootSpelled: (best as any).rootSpelled };
                     }
                 }
             }
@@ -4209,7 +4257,7 @@ export function getRomanAnalysis(
                     const fullCandidates = identifyChordCandidates(baseChord);
                     const bestExactSeventh = (fullCandidates || []).find(c => c.matchType === 'exact' && isSeventhLike(c.type));
                     if (bestExactSeventh) {
-                        chordInfo = { root: bestExactSeventh.root, type: bestExactSeventh.type, intervals: bestExactSeventh.intervals };
+                        chordInfo = { root: bestExactSeventh.root, type: bestExactSeventh.type, intervals: bestExactSeventh.intervals, rootSpelled: (bestExactSeventh as any).rootSpelled };
                     }
                 }
             } catch { /* ignore */ }
@@ -4230,12 +4278,14 @@ export function getRomanAnalysis(
             }
             if (majorRootPc != null) {
                 const rootNote = (filteredChord || []).find(n => mod12(pitchClassOf(n)) === majorRootPc) || chordInfo.root;
-                chordInfo = { root: { ...(rootNote as any), noteIndex: majorRootPc } as StaffNote, type: BuiltInChords.Major, intervals: new Set([0, 4, 7]) };
+                chordInfo = { root: { ...(rootNote as any), noteIndex: majorRootPc } as StaffNote, type: BuiltInChords.Major, intervals: new Set([0, 4, 7]), rootSpelled: rootNote ? staffNoteToSp(rootNote as any) : undefined };
             }
         }
     } catch { /* ignore */ }
 
     let baseRomanSymbol = calculateRomanNumeral(chordInfo, keyInfo);
+    // eslint-disable-next-line no-console
+    console.log('[DBG3]', baseRomanSymbol, '|', (chordInfo as any)?.rootSpelled?.letter);
     // FIX dim7 cromatici: se il roman base è un grado dim diatonico (ii°, iii°, iv°, vi°)
     // ma le note dell'accordo hanno spelling cromatica (es. Cb, Ab, Ebb in C maj),
     // riscrivi come vii°/X dove X = grado della nota di risoluzione (root + 1 semitono).
@@ -4357,7 +4407,7 @@ export function getRomanAnalysis(
                 }
             } catch { /* ignore */ }
             for (const c of candidates as any[]) {
-                const roman = calculateRomanNumeral({ root: c.root, type: c.type, intervals: c.intervals }, keyInfo);
+                const roman = calculateRomanNumeral({ root: c.root, type: c.type, intervals: c.intervals, rootSpelled: c.rootSpelled }, keyInfo);
                 if (!roman || !roman.startsWith('V/')) continue;
                 const score = Number.isFinite(c.score) ? (c.score as number) : 0;
                 if (!bestSecondary || score > bestSecondary.score) bestSecondary = { roman, score };
@@ -4391,7 +4441,7 @@ export function getRomanAnalysis(
             const candidates = identifyChordCandidates(filteredChord.length >= 2 ? filteredChord : baseChord);
             let bestSecondaryLt: { roman: string; score: number } | null = null;
             for (const c of candidates as any[]) {
-                const roman = calculateRomanNumeral({ root: c.root, type: c.type, intervals: c.intervals }, keyInfo);
+                const roman = calculateRomanNumeral({ root: c.root, type: c.type, intervals: c.intervals, rootSpelled: c.rootSpelled }, keyInfo);
                 if (!roman) continue;
                 const rr = String(roman);
                 if (!rr.includes('/')) continue;
