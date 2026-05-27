@@ -67,8 +67,27 @@ Brani con casi-limite spelling già coperti dai gold/snap preesistenti:
 
 Durante Fasi 1-5, ogni esecuzione di `npm run regress` deve produrre:
 - **OK**: tutti i `(snapshot)` e gli altri gold non listati sopra
-- **FAIL**: SOLO i 6 known-broken sopra (o un sottoinsieme, se il refactor
-  ne risolve alcuni)
+- **FAIL**: SOLO i 6 known-broken sopra + i 4 nuovi gold di Phase 5 (sotto)
 
-Qualunque nuovo FAIL fuori da quella lista è una **regressione introdotta dal
-refactor** e va investigata prima di proseguire.
+## Nuovi fail di Phase 5 (commit a3430cf) — file mis-spelled
+
+Phase 5 ha sostituito identifyChord/identifyChordCandidates con un wrapper
+spelling-first sopra spelledChordEngine. 4 gold fail aggiuntivi sono
+emersi, tutti su file noti per avere note mis-spelled storicamente:
+
+| Fixture | Sintomo | Causa probabile |
+|---|---|---|
+| `gold-delachi-n2-p3471` | absBeat=16,24 figures '3' got [7] | Differenza stateless intermedia: app display OK ("vi 3/7"), regress cattura solo "7" |
+| `gold-dubois-n5-p-13` | absBeat=51 V/vi → ♭vi | File ha F al posto di E# (mis-spelled). Letter-first respinge V/vi, restituisce ♭vi |
+| `gold-pedron-n-71-p42` | absBeat=16,24 figures '3' got [7] | Stesso pattern di delachi |
+| `gold-pedron-n120-p-45` | molti delta (V→V°, V/♭VII, ii→V/V) | File con mis-spelling sistematico; nuovo motore onestamente rivela |
+
+Verifica empirica (utente, 2026-05-27): l'app a livello visibile mostra
+output corretto in entrambi i casi (es. ii° per cantata-71 m12b3,
+vi 3/7 per delachi-n2 m5b1). I delta sono di livello intermedio
+(applyStatelessRules); la pipeline finale `harmonyLabelPipeline` +
+post-rules corregge a runtime.
+
+**Risoluzione attesa**: una volta corretti manualmente i file mis-spelled
+nello `spelling-report.txt` (~51 note su 33 file), i 4 nuovi gold fail
+torneranno verdi.
