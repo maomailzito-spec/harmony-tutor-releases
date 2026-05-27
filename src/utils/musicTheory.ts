@@ -8712,6 +8712,7 @@ export function applyHarmonyRules(
                         .sort((a, b) => qAbs(a.absBeat) - qAbs(b.absBeat))
                         .map(x => {
                             let absBeat = x.absBeat;
+                            let scoreBoost = 0;
                             try {
                                 // If we are returning to the global key, prefer starting the context at the
                                 // measure downbeat instead of a mid-measure scanpoint. This avoids having the
@@ -8762,7 +8763,7 @@ export function applyHarmonyRules(
                                         // ii / ii° / iiø with any inversion or seventh, plus IV/iv.
                                         // Exclude iii/III via negative lookahead.
                                         const isPreDom = (r: string) => /^(ii(?!i)|IV|iv)/.test(r);
-                                        let earliest: { absBeat: number } | null = null;
+                                        let earliest: { absBeat: number; isPreDom: boolean } | null = null;
                                         for (const ev of (chordEvents || []) as any[]) {
                                             const a = Number(ev?.absBeat);
                                             if (!Number.isFinite(a)) continue;
@@ -8771,10 +8772,19 @@ export function applyHarmonyRules(
                                             const b = Number(ev?.beat);
                                             if (!strongBeat(b)) continue;
                                             const r = String(_gRA(ev?.notes || [], x.newTonic, x.newIsMinor)?.roman || '').replace(/\s+/g, '');
-                                            if (r !== wantTonic && !isPreDom(r)) continue;
-                                            if (!earliest || a < earliest.absBeat) earliest = { absBeat: a };
+                                            const matchTonic = (r === wantTonic);
+                                            const matchPreDom = isPreDom(r);
+                                            if (!matchTonic && !matchPreDom) continue;
+                                            if (!earliest || a < earliest.absBeat) earliest = { absBeat: a, isPreDom: matchPreDom };
                                         }
-                                        if (earliest) absBeat = earliest.absBeat;
+                                        if (earliest) {
+                                            absBeat = earliest.absBeat;
+                                            // Cadential confirmation bonus: when the back-prop
+                                            // anchors a complete ii-V-i (or IV-V-i) pattern, boost
+                                            // the score so the UI (which gates inferred contexts
+                                            // at score >= 12) actually surfaces this modulation.
+                                            if (earliest.isPreDom) scoreBoost += 4;
+                                        }
                                     }
                                 }
                             } catch {
@@ -8785,7 +8795,7 @@ export function applyHarmonyRules(
                             newTonic: x.newTonic,
                             newIsMinor: x.newIsMinor,
                             label: x.label,
-                            score: x.score,
+                            score: (Number(x.score) || 0) + scoreBoost,
                             source: 'inferred' as const,
                         };
                         });
