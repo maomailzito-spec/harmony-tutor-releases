@@ -6887,7 +6887,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Otherwise a quarter note at the 4th 8th would snap left to the previous quarter.
         const isCompound = (timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3);
         const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
-        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
+        // GCD ensures dotted/triplet durations (e.g. dotted-8th=720) still reach beat positions
+        // that are multiples of TICKS_PER_QUARTER. Without this, floor(1920/720)*720=1440 (beat 2.5).
+        const _snapGcd1 = (a: number, b: number): number => { let x = Math.abs(a); let y = Math.abs(b); while (y) { [x, y] = [y, x % y]; } return x || 1; };
+        const baseSnapGridTicks = Math.max(1, _snapGcd1(Math.min(durationTicks, snapCapTicks), TICKS_PER_QUARTER));
         const snapGridTicks = e.shiftKey
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
@@ -7076,7 +7079,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const tsAtMeasureStart = getTimeSignatureAtAbsBeat(measureStartAbsBeat);
         const isCompound = tsAtMeasureStart.denominator === 8 && (tsAtMeasureStart.numerator % 3 === 0) && tsAtMeasureStart.numerator > 3;
         const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
-        const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
+        // GCD ensures dotted/triplet durations (e.g. dotted-8th=720) still reach beat positions
+        // that are multiples of TICKS_PER_QUARTER. Without this, floor(1920/720)*720=1440 (beat 2.5).
+        const _snapGcd2 = (a: number, b: number): number => { let x = Math.abs(a); let y = Math.abs(b); while (y) { [x, y] = [y, x % y]; } return x || 1; };
+        const baseSnapGridTicks = Math.max(1, _snapGcd2(Math.min(durationTicks, snapCapTicks), TICKS_PER_QUARTER));
         const snapGridTicks = (e as any)?.shiftKey
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
@@ -7911,7 +7917,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
             const isCompound = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
             const snapCapTicks = isCompound ? Math.round(TICKS_PER_QUARTER / 2) : TICKS_PER_QUARTER;
-            const baseSnapGridTicks = Math.max(1, Math.min(durationTicks, snapCapTicks));
+            const _snapGcd3 = (a: number, b: number): number => { let x = Math.abs(a); let y = Math.abs(b); while (y) { [x, y] = [y, x % y]; } return x || 1; };
+            const baseSnapGridTicks = Math.max(1, _snapGcd3(Math.min(durationTicks, snapCapTicks), TICKS_PER_QUARTER));
             return useFineStep ? Math.max(1, Math.floor(baseSnapGridTicks / 2)) : baseSnapGridTicks;
         } catch {
             return TICKS_PER_QUARTER;

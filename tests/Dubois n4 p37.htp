@@ -1,4 +1,33 @@
 {
+  "tonicizationHints": [],
+  "inferredContextSuppressions": [],
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "c3e076c9-ddf5-44ee-89e6-28af4ac5948d",
+      "type": "structural"
+    },
+    {
+      "noteId": "e8e8053c-3929-4c02-bc33-4f8aa89233ec",
+      "type": "structural"
+    },
+    {
+      "noteId": "f97efc52-0a42-4fd5-b823-d8432da3d05e",
+      "type": "structural"
+    },
+    {
+      "noteId": "c49b9cb6-1928-4516-a80b-6497f29d911c",
+      "type": "structural"
+    }
+  ],
+  "filePreferences": {
+    "analysis.enableInferredContexts": true,
+    "analysis.cadentialPatterns": true,
+    "analysis.profileBaseId": "academic",
+    "analysis.chromaticModulation": false,
+    "analysis.sequencesEnabled": true
+  },
   "schemaVersion": 1,
   "notes": [
     {
@@ -10275,8 +10304,8 @@
   ],
   "staffSystemMode": "grandstaff",
   "keySignatureRoot": "C",
-  "projectTitle": "Dubois n4 p130/37",
-  "titleFontSize": 26,
+  "projectTitle": "",
+  "titleFontSize": 44,
   "titleFontFamily": "serif",
   "timeSignature": {
     "numerator": 4,
@@ -10288,46 +10317,8 @@
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
-  "tonicizationHints": [
-    {
-      "absBeat": 310,
-      "tonic": "C",
-      "isMinor": false
-    },
-    {
-      "absBeat": 332,
-      "tonic": "G",
-      "isMinor": false
-    },
-    {
-      "absBeat": 340,
-      "tonic": "C",
-      "isMinor": true
-    }
-  ],
-  "inferredContextSuppressions": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "c3e076c9-ddf5-44ee-89e6-28af4ac5948d",
-      "type": "structural"
-    },
-    {
-      "noteId": "e8e8053c-3929-4c02-bc33-4f8aa89233ec",
-      "type": "structural"
-    },
-    {
-      "noteId": "f97efc52-0a42-4fd5-b823-d8432da3d05e",
-      "type": "structural"
-    },
-    {
-      "noteId": "c49b9cb6-1928-4516-a80b-6497f29d911c",
-      "type": "structural"
-    }
-  ],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -10355,12 +10346,5 @@
     "hideOrnaments": false,
     "hideAlternatives": false,
     "disableExport": true
-  },
-  "filePreferences": {
-    "analysis.enableInferredContexts": true,
-    "analysis.cadentialPatterns": true,
-    "analysis.profileBaseId": "academic",
-    "analysis.chromaticModulation": false,
-    "analysis.sequencesEnabled": true
   }
 }
