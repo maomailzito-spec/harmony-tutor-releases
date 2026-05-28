@@ -4284,8 +4284,6 @@ export function getRomanAnalysis(
     } catch { /* ignore */ }
 
     let baseRomanSymbol = calculateRomanNumeral(chordInfo, keyInfo);
-    // eslint-disable-next-line no-console
-    console.log('[DBG3]', baseRomanSymbol, '|', (chordInfo as any)?.rootSpelled?.letter);
     // FIX dim7 cromatici: se il roman base è un grado dim diatonico (ii°, iii°, iv°, vi°)
     // ma le note dell'accordo hanno spelling cromatica (es. Cb, Ab, Ebb in C maj),
     // riscrivi come vii°/X dove X = grado della nota di risoluzione (root + 1 semitono).
