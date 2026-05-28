@@ -917,6 +917,12 @@ export function computeLookaheadTonicizationOverrides(opts: {
                         if ((base[t].absBeat - bj.absBeat) > maxLookaheadBeats + 1e-6) break;
                         const bt = base[t];
                         if (!bt) continue;
+                        // Don't cross context boundaries: if the candidate resolution
+                        // lives in a different (inferred) key than the V/x candidate,
+                        // the tonicization belongs to that other key — don't relabel
+                        // it as the resolution of bj.
+                        if (String(bt.ctxTonic || '') !== String(bj.ctxTonic || '')
+                            || !!bt.ctxIsMinor !== !!bj.ctxIsMinor) continue;
                         const rt = String(bt.roman || '').trim();
                         if (rt === targetRoman) { k = t; break; }
                         if (Number.isFinite(Number(bt.rootPc)) && Number(bt.rootPc) === targetRootPc) { k = t; break; }
