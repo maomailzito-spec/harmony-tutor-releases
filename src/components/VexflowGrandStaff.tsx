@@ -2779,8 +2779,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
             const mergedIds: string[] | undefined = (vfNote as any).__mergedIds;
             if (mergedIds && ys && ys.length >= mergedIds.length) {
-              for (let i = 0; i < mergedIds.length; i++) {
-                hitPoints.push({ id: mergedIds[i], x: xHit, y: ys[i], isGhost: false });
+              // VexFlow's getYs() returns Y values ordered by its internally-sorted
+              // keyProps, which does NOT necessarily match the order of __mergedIds
+              // (built from MIDI-sorted notes). Pairing positionally would swap the Y
+              // of e.g. the soprano and the alto — making clicks on the upper note
+              // select the lower one. Pair explicitly by pitch instead: highest MIDI
+              // (top of the staff) ↔ smallest Y, descending.
+              const idsByPitchDesc = [...mergedIds].sort((a, b) => {
+                const ma = staffNoteById.get(a)?.midi ?? 0;
+                const mb = staffNoteById.get(b)?.midi ?? 0;
+                return mb - ma;
+              });
+              const ysAsc = [...ys].sort((a, b) => a - b);
+              for (let i = 0; i < idsByPitchDesc.length; i++) {
+                hitPoints.push({ id: idsByPitchDesc[i], x: xHit, y: ysAsc[i], isGhost: false });
               }
             } else {
               const yHit = (ys && ys.length > 0)
@@ -3391,12 +3403,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         ? down.downNoteId
         : ((upNoteId && !upIsGhost) ? upNoteId : null);
 
-      if (chosenNoteId) {
-        onNoteClickRef.current?.(chosenNoteId, e);
-        return;
-      }
-
-      const proximityPick = (radiusPx: number, yBandPx: number) => {
+      // Must be declared before first use (no TDZ).
+      // sortByY: rank by |dy| first, then d2 — correct for pitch selection.
+      const proximityPick = (radiusPx: number, yBandPx: number, sortByY = false) => {
         const candidates: Array<{ id: string; d2: number; dx: number; dy: number }> = [];
         for (const p of noteHitPointsRef.current) {
           if (p.isGhost) continue;
@@ -3407,12 +3416,136 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             candidates.push({ id: p.id, d2, dx, dy });
           }
         }
-
         const preferred = candidates.filter(c => Math.abs(c.dy) <= yBandPx);
-        const pool = preferred.length > 0 ? preferred : candidates;
-        pool.sort((a, b) => a.d2 - b.d2);
+        // No fallback to candidates: if nothing is within yBandPx, return empty so that
+        // clicks clearly outside a notehead's vertical extent don't select any note.
+        const pool = preferred;
+        if (sortByY) {
+          pool.sort((a, b) => {
+            const diff = Math.abs(a.dy) - Math.abs(b.dy);
+            if (diff !== 0) return diff;
+            // When |dy| ties (click is at the midpoint between two notes a third apart),
+            // prefer the note whose center is ABOVE the click (dy < 0). This prevents
+            // an accidental on the lower note from winning the d2 tiebreaker when
+            // the accidental formatter shifts the upper note's hitpoint rightward.
+            const aAbove = a.dy < 0 ? 0 : 1;
+            const bAbove = b.dy < 0 ? 0 : 1;
+            if (aAbove !== bAbove) return aAbove - bAbove;
+            return a.d2 - b.d2;
+          });
+        } else {
+          pool.sort((a, b) => a.d2 - b.d2);
+        }
         return pool;
       };
+
+      if (enableProximityPick) {
+        if (chosenNoteId) {
+          // DOM found a note, but SVG elements (stems, accidental glyphs, ledger lines)
+          // extend beyond the notehead and can capture clicks intended for adjacent notes.
+          // Strategy: compute how far the DOM-picked note actually is from the cursor (domDy),
+          // then search for a Y-closer note using that distance as the band width.
+          // This handles accidentals that extend into the territory of the note above.
+          const domHit = noteHitPointsRef.current.find(p => p.id === chosenNoteId && !p.isGhost);
+          const domDy = domHit ? Math.abs(domHit.y - y) : 5;
+          // yBand wide enough to catch any note that's closer in Y than the DOM pick.
+          const adaptiveYBand = Math.max(5, domDy + 1);
+          // When the DOM note is far in Y (stem/accidental/ledger capture), expand the X
+          // radius: soprano may be displaced right by ~12 px (NOTEHEAD_TOUCH_SHIFT for
+          // seconds) while the click is 12 px left on the accidental → total dx ≈ 24 px,
+          // just outside the default 22 px radius.  35 px covers all practical offsets.
+          const adaptiveRadius = domDy > 3 ? 35 : 22;
+          const pool = proximityPick(adaptiveRadius, adaptiveYBand, true /* sortByY */);
+
+          if (e.altKey && pool.length > 1) {
+            const now = Date.now();
+            const prev = lastAltPickRef.current;
+            const sameSpot = !!prev && Math.hypot(prev.x - x, prev.y - y) <= 8 && (now - prev.ts) <= 2000;
+            const ids = pool.map(c => c.id);
+            let index = 0;
+            if (sameSpot && prev && prev.ids.join('|') === ids.join('|')) {
+              index = (prev.index + 1) % ids.length;
+            }
+            lastAltPickRef.current = { x, y, ids, index, ts: now };
+            onNoteClickRef.current?.(ids[index], e);
+            return;
+          }
+
+          // If the click is farther than one notehead from the DOM note's center, it
+          // landed on a stem/accidental/ledger — prefer the notehead actually under the
+          // cursor, giving the full upper notehead area to the upper note.
+          const NOTEHEAD_RADIUS_Y = 6;
+          if (domDy > NOTEHEAD_RADIUS_Y) {
+            const head = pool.find(c => c.id !== chosenNoteId
+              && Math.abs(c.dy) <= NOTEHEAD_RADIUS_Y);
+            if (head) {
+              onNoteClickRef.current?.(head.id, e);
+              return;
+            }
+          }
+          // Otherwise override only when proximity finds a strictly Y-closer note.
+          if (pool.length > 0 && pool[0].id !== chosenNoteId && Math.abs(pool[0].dy) < domDy) {
+            onNoteClickRef.current?.(pool[0].id, e);
+            return;
+          }
+
+          onNoteClickRef.current?.(chosenNoteId, e);
+          return;
+        }
+
+        // DOM found nothing (beam / ledger line / background): tight proximity only.
+        // No fallback to full candidates — clicks clearly outside a notehead don't select.
+        const pool = proximityPick(22, 5, true /* sortByY */);
+
+        if (e.altKey && pool.length > 1) {
+          const now = Date.now();
+          const prev = lastAltPickRef.current;
+          const sameSpot = !!prev && Math.hypot(prev.x - x, prev.y - y) <= 8 && (now - prev.ts) <= 2000;
+          const ids = pool.map(c => c.id);
+          let index = 0;
+          if (sameSpot && prev && prev.ids.join('|') === ids.join('|')) {
+            index = (prev.index + 1) % ids.length;
+          }
+          lastAltPickRef.current = { x, y, ids, index, ts: now };
+          onNoteClickRef.current?.(ids[index], e);
+          return;
+        }
+
+        if (pool.length > 0) {
+          onNoteClickRef.current?.(pool[0].id, e);
+          return;
+        }
+
+        if (e.altKey) return;
+        onStaffClickRef.current?.(x, y, e);
+        return;
+      }
+
+      if (chosenNoteId) {
+        // Insert mode: the DOM matched a note, but the click may have landed on the
+        // lower note's STEM or ACCIDENTAL glyph, which extend up into the upper note's
+        // area. A notehead is ~6 px tall (half a line space). If the click is farther
+        // than that from the DOM note's center, it did NOT land on that note's head —
+        // it hit a stem/accidental/ledger. In that case prefer the notehead actually
+        // under the cursor (Y-closest within one notehead), giving the full upper
+        // notehead area to the upper note instead of splitting at the midpoint.
+        const NOTEHEAD_RADIUS_Y = 6;
+        const domHit = noteHitPointsRef.current.find(p => p.id === chosenNoteId && !p.isGhost);
+        if (domHit) {
+          const domDy = Math.abs(domHit.y - y);
+          if (domDy > NOTEHEAD_RADIUS_Y) {
+            const refinePool = proximityPick(35, Math.max(5, domDy + 1), true /* sortByY */);
+            const head = refinePool.find(c => c.id !== chosenNoteId
+              && Math.abs(c.dy) <= NOTEHEAD_RADIUS_Y);
+            if (head) {
+              onNoteClickRef.current?.(head.id, e);
+              return;
+            }
+          }
+        }
+        onNoteClickRef.current?.(chosenNoteId, e);
+        return;
+      }
 
       // If the DOM target wasn't a note (beams/ledger lines/background), try a proximity pick.
       // This makes selection easier when notes overlap or are hard to click precisely.
@@ -3441,10 +3574,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         return;
       }
 
-      // yBandPx=5: one staff step. This way, for notes at a second (~5px apart) or
-      // a third (~10px), the geometrically closer note wins cleanly. Alt+Click still
-      // cycles through all candidates when the pick remains ambiguous.
-      const pool = proximityPick(22, 5);
+      // yBandPx=5: one staff step. sortByY so that for seconds/thirds the vertically
+      // closer note always wins, even when notes are at different X positions.
+      const pool = proximityPick(22, 5, true /* sortByY */);
 
       if (pool.length > 0) {
         // Option/Alt+Click cycles through overlapping candidates.
