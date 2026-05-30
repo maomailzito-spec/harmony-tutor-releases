@@ -6302,12 +6302,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         const forceSelectedVoice = pasteToSelectedVoiceRef.current;
-        // Paste DESTINATION is the active staff area (where you last clicked), not the
-        // clipboard's origin — this lets you move material between tracks and between
-        // SATB and orchestration (e.g. copy a corrected SATB voice into an ACC line).
-        const pasteIntoAcc = activeStaffAreaRef.current === 'accompaniment' && hasVisibleAccompaniment;
+        // Paste DESTINATION is decided here so material can move between tracks and
+        // between SATB and orchestration. Priority: the currently SELECTED note (the
+        // one the user clicked to choose where to paste) wins — it reliably reflects
+        // intent — then fall back to the active staff area/track.
+        let destIsAcc = activeStaffAreaRef.current === 'accompaniment';
+        let destAccTrackId: string | null = activeAccTrackIdRef.current;
+        {
+            const selIds = latestSelectedNoteIds.current;
+            const selId = selIds && selIds.size > 0 ? [...selIds][0] : null;
+            if (selId) {
+                const accInfo = findAccTrackForNote(selId, latestAccompanimentTracks.current);
+                if (accInfo) {
+                    destIsAcc = true;
+                    destAccTrackId = latestAccompanimentTracks.current[accInfo.trackIndex]?.id ?? destAccTrackId;
+                } else if ((latestRawNotes.current || []).some(n => n.id === selId)) {
+                    destIsAcc = false;
+                }
+            }
+        }
+        const pasteIntoAcc = destIsAcc && hasVisibleAccompaniment;
         const accDestTrack = pasteIntoAcc
-            ? (latestAccompanimentTracks.current.find(t => t.id === activeAccTrackIdRef.current && t.visible)
+            ? (latestAccompanimentTracks.current.find(t => t.id === destAccTrackId && t.visible)
                ?? latestAccompanimentTracks.current.find(t => t.visible) ?? null)
             : null;
         const accDestMode = accDestTrack?.staffMode ?? 'grandstaff';
