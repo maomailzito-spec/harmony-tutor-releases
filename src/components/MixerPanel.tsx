@@ -73,24 +73,37 @@ const ChannelStrip: React.FC<{
   onToggleVisible?: () => void;
   /** Optional staff/clef selector (ACC tracks only). */
   staffControl?: React.ReactNode;
+  /** Optional rename handler (ACC tracks only): makes the label an editable input. */
+  onRename?: (name: string) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
-  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onContextMenu,
+  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onRename, onContextMenu,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
     style={{ width: 56 }}
     onContextMenu={onContextMenu}
   >
-    {/* Label */}
-    <div
-      className="text-[10px] font-bold w-full text-center truncate leading-tight"
-      style={{ color: accent ?? '#cbd5e1' }}
-      title={title}
-    >
-      {label}
-    </div>
+    {/* Label — editable input for ACC tracks, static text for voices */}
+    {onRename ? (
+      <input
+        value={label}
+        onChange={(e) => onRename(e.target.value)}
+        title="Rinomina traccia"
+        aria-label="Nome traccia"
+        className="text-[10px] font-bold w-full text-center leading-tight bg-transparent border-b border-transparent hover:border-slate-600 focus:border-cyan-500 focus:bg-slate-900/60 outline-none rounded-sm"
+        style={{ color: accent ?? '#cbd5e1' }}
+      />
+    ) : (
+      <div
+        className="text-[10px] font-bold w-full text-center truncate leading-tight"
+        style={{ color: accent ?? '#cbd5e1' }}
+        title={title}
+      >
+        {label}
+      </div>
+    )}
 
     {/* Instrument selector (emoji button with an invisible native <select> overlay) */}
     <div
@@ -329,6 +342,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   onToggleSolo={() => onUpdateTrack(track.id, { solo: !track.solo })}
                   visible={track.visible}
                   onToggleVisible={() => onUpdateTrack(track.id, { visible: !track.visible })}
+                  onRename={(name) => onUpdateTrack(track.id, { name })}
                   staffControl={
                     <select
                       value={staffChoiceValue(track)}
