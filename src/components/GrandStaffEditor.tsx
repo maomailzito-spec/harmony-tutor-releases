@@ -365,6 +365,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // changing .gain.value here affects all currently-playing AND future-scheduled notes.
     const accTrackGainsRef = useRef<Map<number, GainNode>>(new Map());
 
+    // Re-apply the correct gain to EVERY live voice/track gain node based on the
+    // current mute/solo/volume state. Needed because playback pre-schedules all
+    // notes upfront: per-channel handlers only touch their own gain, so toggling
+    // SOLO (which silences *other* channels) wouldn't take effect mid-playback
+    // without this. Reads refs only, so it sees values updated synchronously by
+    // the callers below.
+    const refreshAudibilityGains = useCallback(() => {
+        const anySolo = soloVoicesRef.current.size > 0 || latestAccompanimentTracks.current.some(t => t.solo);
+        voiceGainsRef.current.forEach((gain, v) => {
+            const audible = (!anySolo || soloVoicesRef.current.has(v)) && !mutedVoicesRef.current.has(v);
+            gain.gain.value = audible ? (voiceVolumesRef.current[v] ?? 1) : 0;
+        });
+        accTrackGainsRef.current.forEach((gain, idx) => {
+            const track = latestAccompanimentTracks.current[idx];
+            if (!track) return;
+            const audible = (!anySolo || !!track.solo) && !track.muted;
+            gain.gain.value = audible ? track.volume : 0;
+        });
+    }, []);
+
     const handleUpdateTrack = useCallback((trackId: string, updates: Partial<AccompanimentTrack>) => {
         // Track config changes (volume, mute, visibility, name, instrument) must NOT
         // go through the undo history: a single volume slider drag fires many events
@@ -373,41 +393,40 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setAccompanimentTracks(prev => {
             const next = prev.map(t => t.id === trackId ? { ...t, ...updates } : t);
             latestAccompanimentTracks.current = next;
-            // Apply mute/volume to the live gain node, if it exists, for real-time effect.
-            const idx = next.findIndex(t => t.id === trackId);
-            if (idx >= 0) {
-                const gain = accTrackGainsRef.current.get(idx);
-                if (gain) {
-                    const t = next[idx];
-                    gain.gain.value = t.muted ? 0 : t.volume;
-                }
-            }
+            // Re-apply audibility to ALL channels so mute/solo/volume take effect in
+            // real-time (solo on one track must silence the others, voices included).
+            refreshAudibilityGains();
             return next;
         }, { undoable: false });
-    }, []);
+    }, [refreshAudibilityGains]);
 
     // Per-voice mixer update (volume / mute), twin of handleUpdateTrack.
     // Applies the change live to the voice gain node so it takes effect immediately,
     // even on notes already scheduled in the Web Audio queue.
     const handleUpdateVoice = useCallback((voice: number, updates: { volume?: number; muted?: boolean }) => {
+        // Update the refs synchronously so refreshAudibilityGains() (which reads
+        // refs) sees the new values immediately; the state setters keep React in sync.
         if (updates.volume !== undefined) {
+            voiceVolumesRef.current = { ...voiceVolumesRef.current, [voice]: updates.volume };
             setVoiceVolumes(prev => ({ ...prev, [voice]: updates.volume! }));
         }
         if (updates.muted !== undefined) {
-            setMutedVoices(prev => {
-                const next = new Set(prev);
-                if (updates.muted) next.add(voice); else next.delete(voice);
-                return next;
-            });
+            const next = new Set(mutedVoicesRef.current);
+            if (updates.muted) next.add(voice); else next.delete(voice);
+            mutedVoicesRef.current = next;
+            setMutedVoices(next);
         }
-        // Apply to the live gain node immediately.
-        const gain = voiceGainsRef.current.get(voice);
-        if (gain) {
-            const nextMuted = updates.muted ?? mutedVoicesRef.current.has(voice);
-            const nextVol = updates.volume ?? voiceVolumesRef.current[voice] ?? 1;
-            gain.gain.value = nextMuted ? 0 : nextVol;
-        }
-    }, []);
+        refreshAudibilityGains();
+    }, [refreshAudibilityGains]);
+
+    // Toggle solo for a SATB voice with real-time effect during playback.
+    const handleToggleVoiceSolo = useCallback((voice: number) => {
+        const next = new Set(soloVoicesRef.current);
+        if (next.has(voice)) next.delete(voice); else next.add(voice);
+        soloVoicesRef.current = next;
+        setSoloVoices(next);
+        refreshAudibilityGains();
+    }, [refreshAudibilityGains]);
 
     // Unified mute/solo audibility across SATB voices and ACC tracks.
     // If anything is soloed anywhere, only soloed channels sound; mute always silences.
@@ -9840,7 +9859,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 selectedVoice={selectedVoice}
                 setSelectedVoice={setSelectedVoice}
                 soloVoices={soloVoices}
-                onToggleSolo={(v: number) => setSoloVoices(prev => { const next = new Set(prev); if (next.has(v)) next.delete(v); else next.add(v); return next; })}
+                onToggleSolo={handleToggleVoiceSolo}
                 voiceInstruments={voiceInstruments}
                 onChangeVoiceInstrument={(voice: number, instrument: string) => setVoiceInstruments(prev => ({ ...prev, [voice]: instrument }))}
                 isMixerOpen={isMixerOpen}
@@ -10075,7 +10094,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     soloVoices={soloVoices}
                     onChangeVoiceInstrument={(voice, instrument) => setVoiceInstruments(prev => ({ ...prev, [voice]: instrument }))}
                     onUpdateVoice={handleUpdateVoice}
-                    onToggleSolo={(v) => setSoloVoices(prev => { const next = new Set(prev); if (next.has(v)) next.delete(v); else next.add(v); return next; })}
+                    onToggleSolo={handleToggleVoiceSolo}
                     accompanimentTracks={accompanimentTracks}
                     onUpdateTrack={handleUpdateTrack}
                     onAddEmptyTrack={handleAddEmptyTrack}
