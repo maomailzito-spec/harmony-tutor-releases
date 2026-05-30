@@ -3685,7 +3685,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const pc = noteNameToChromaticIndex(nm);
                         symRootPc = (typeof pc === 'number' && pc >= 0) ? ((pc % 12) + 12) % 12 : null;
                     }
-                    if (romanRootPc != null && symRootPc != null && romanRootPc !== symRootPc) {
+                    // Fire when marked ACC notes are in the merge (they can change the BASS
+                    // even if the root is unchanged, e.g. SATB Dm7/A + a lower ACC F → Dm7/F),
+                    // OR when the root itself differs (pure-SATB naming/symbol divergence).
+                    const hasMarkedAcc = (mergedNaming as any[]).length > (analysisNotesForNaming as any[]).length;
+                    if (hasMarkedAcc || (romanRootPc != null && symRootPc != null && romanRootPc !== symRootPc)) {
                         const ksReconcile = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
                         // Neutralize voice/clef so getChordSymbol's bass picker uses the
                         // GLOBALLY lowest note as the bass — otherwise it prefers the SATB
