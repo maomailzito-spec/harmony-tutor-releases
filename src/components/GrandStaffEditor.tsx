@@ -5797,16 +5797,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData) return systems;
         if (!hasVisibleAccompaniment) return systems;
 
-        const ACC_TREBLE_TOP_Y_LOCAL = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310
-        const ACC_BASS_TOP_Y_LOCAL = ACC_TREBLE_TOP_Y_LOCAL + 130;            // 440
+        const ACC_TREBLE_TOP_Y_LOCAL = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — first block treble top
+        // Diatonic position (C4=0) of each clef's TOP staff line.
+        const ACC_TOP_LINE_POS: Record<ClefType, number> = { treble: 10, bass: -2, alto: 4, tenor: 2, soprano: 8 };
+        const accVis = (accompanimentTracks || []).filter(t => t && t.visible);
+        const accOffsets = accompanimentTrackTrebleOffsets(accVis);
 
-        // Y for note: top line at known reference pitch (treble F5=pos 10, bass A3=pos -2)
-        const noteYForAcc = (position: number, clef: ClefType, staffMode: 'grandstaff' | 'treble_only') => {
-            // In treble_only, bass notes are remapped to treble (per VexflowGrandStaff)
-            const useClef: ClefType = (staffMode === 'treble_only') ? 'treble' : clef;
-            const topY = useClef === 'bass' ? ACC_BASS_TOP_Y_LOCAL : ACC_TREBLE_TOP_Y_LOCAL;
-            const refTopPos = useClef === 'bass' ? -2 : 10;
-            return topY + (refTopPos - position) * (VF_LINE_SPACING / 2);
+        // Y of a note on its OWN track's block (per-track vertical stacking + clef).
+        const noteYForAcc = (position: number, clef: ClefType, visIdx: number) => {
+            const trebleTop = ACC_TREBLE_TOP_Y_LOCAL + (accOffsets[visIdx] ?? 0);
+            const mode = accVis[visIdx]?.staffMode ?? 'grandstaff';
+            if (mode === 'grandstaff' && clef === 'bass') {
+                const bassTop = trebleTop + 130;
+                return bassTop + (ACC_TOP_LINE_POS.bass - position) * (VF_LINE_SPACING / 2);
+            }
+            const useClef: ClefType = mode === 'grandstaff' ? 'treble' : ((accVis[visIdx]?.clef ?? 'treble') as ClefType);
+            return trebleTop + ((ACC_TOP_LINE_POS[useClef] ?? 10) - position) * (VF_LINE_SPACING / 2);
         };
 
         const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
@@ -5818,8 +5824,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Build per-system ACC note list with xPosition (matches accompanimentNotesForSystem logic)
             type AccPositioned = StaffNote & { xPosition: number; _trackIdx: number };
             const accNotesInSys: AccPositioned[] = [];
-            (accompanimentTracks || []).forEach((track, ti) => {
-                if (!track || !track.visible) return;
+            accVis.forEach((track, visIdx) => {
                 for (const n of (track.notes || [])) {
                     if (!n.isTriplet && !n.isDuplet) continue;
                     if (n.isRest) continue;
@@ -5834,7 +5839,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const relativeX = relativeTicks * system.pxPerTick;
                     const baseX = system.startMeasuresX[idxInSys] ?? 0;
                     const xPosition = baseX + MEASURE_PADDING_X + relativeX;
-                    accNotesInSys.push({ ...n, xPosition, _trackIdx: ti });
+                    accNotesInSys.push({ ...n, xPosition, _trackIdx: visIdx });
                 }
             });
 
@@ -5853,8 +5858,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (run.length < (kind === 'triplet' ? 3 : 2)) return null;
                 const first = run[0];
                 const last = run[run.length - 1];
-                const clef = (first.clef || 'treble') as ClefType;
-                const ys = run.map(n => noteYForAcc(n.position, clef, effectiveAccStaffMode));
+                const ys = run.map(n => noteYForAcc(n.position, (n.clef || 'treble') as ClefType, n._trackIdx));
                 const highestY = Math.min(...ys);
 
                 let x1 = (first.xPosition ?? 0) - 6 + TUPLET_LEFT_TRIM_PX;
