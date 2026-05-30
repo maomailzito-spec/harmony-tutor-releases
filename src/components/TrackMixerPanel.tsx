@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { AccompanimentTrack } from '../types';
 
+/** General MIDI program numbers paired with the soundfont names supported by the
+ *  playback engine (see GM_TO_INSTR in GrandStaffEditor). Keep in sync with it. */
+const INSTRUMENT_OPTIONS: Array<{ gm: number; emoji: string; label: string }> = [
+  { gm: 0,  emoji: '🎹', label: 'Piano' },
+  { gm: 19, emoji: '⛪', label: 'Organo' },
+  { gm: 6,  emoji: '🎵', label: 'Clavicembalo' },
+  { gm: 48, emoji: '🎻', label: 'Archi' },
+  { gm: 52, emoji: '🎤', label: 'Coro' },
+  { gm: 73, emoji: '🪈', label: 'Flauto' },
+  { gm: 68, emoji: '🎼', label: 'Oboe' },
+  { gm: 71, emoji: '🎼', label: 'Clarinetto' },
+  { gm: 56, emoji: '🎺', label: 'Tromba' },
+  { gm: 60, emoji: '📯', label: 'Corno' },
+  { gm: 40, emoji: '🎻', label: 'Violino' },
+  { gm: 42, emoji: '🎻', label: 'Violoncello' },
+];
+const instrumentEmoji = (gm: number) =>
+  INSTRUMENT_OPTIONS.find(o => o.gm === gm)?.emoji ?? '🎹';
+
 interface TrackMixerPanelProps {
   accompanimentTracks: AccompanimentTrack[];
   onUpdateTrack: (trackId: string, updates: Partial<AccompanimentTrack>) => void;
@@ -87,6 +106,23 @@ const TrackMixerPanel: React.FC<TrackMixerPanelProps> = ({
                 title={track.name}
               >
                 {track.name}
+              </div>
+
+              {/* Instrument selector */}
+              <div className="relative w-7 h-6" title={`Strumento: ${INSTRUMENT_OPTIONS.find(o => o.gm === track.instrumentId)?.label ?? 'Piano'}`}>
+                <div className="w-full h-full rounded bg-slate-600 hover:bg-slate-500 flex items-center justify-center text-[13px] pointer-events-none transition-colors">
+                  {instrumentEmoji(track.instrumentId)}
+                </div>
+                <select
+                  value={track.instrumentId}
+                  onChange={(e) => onUpdateTrack(track.id, { instrumentId: parseInt(e.target.value, 10) })}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  aria-label="Strumento traccia"
+                >
+                  {INSTRUMENT_OPTIONS.map(opt => (
+                    <option key={opt.gm} value={opt.gm}>{opt.emoji} {opt.label}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Mute */}

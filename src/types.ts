@@ -227,6 +227,8 @@ export type AccompanimentTrack = {
   notes: StaffNote[];
   /** Traccia silenziata */
   muted: boolean;
+  /** Traccia in solo (se almeno un canale è in solo, suonano solo i canali in solo) */
+  solo?: boolean;
   /** Traccia visibile nel rendering */
   visible: boolean;
   /** Volume relativo 0-1 */

@@ -1,21 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import type { AccidentalType, NoteDuration, StaffNote, Voice } from '../types';
-
-const VOICE_INSTRUMENT_OPTIONS: Array<{ value: string; emoji: string; key: string }> = [
-    { value: 'acoustic_grand_piano', emoji: '🎹', key: 'piano' },
-    { value: 'church_organ',        emoji: '⛪', key: 'organ' },
-    { value: 'harpsichord',         emoji: '🎵', key: 'harpsichord' },
-    { value: 'string_ensemble_1',   emoji: '🎻', key: 'strings' },
-    { value: 'choir_aahs',          emoji: '🎤', key: 'choir' },
-    { value: 'flute',               emoji: '🪈', key: 'flute' },
-    { value: 'oboe',                emoji: '🎼', key: 'oboe' },
-    { value: 'clarinet',            emoji: '🎼', key: 'clarinet' },
-    { value: 'trumpet',             emoji: '🎺', key: 'trumpet' },
-    { value: 'french_horn',         emoji: '📯', key: 'horn' },
-    { value: 'violin',              emoji: '🎻', key: 'violin' },
-    { value: 'cello',               emoji: '🎻', key: 'cello' },
-];
+import { INSTRUMENTS } from '../constants/instruments';
 import {
     WholeNoteIcon,
     HalfNoteIcon,
@@ -701,8 +687,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     value={voiceInstruments?.[selectedVoice] || 'acoustic_grand_piano'}
                     onChange={(e) => onChangeVoiceInstrument(selectedVoice, e.target.value)}
                 >
-                    {VOICE_INSTRUMENT_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.emoji} {tT('instrument_' + opt.key)}</option>
+                    {INSTRUMENTS.map(opt => (
+                        <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
                     ))}
                 </select>
             </div>

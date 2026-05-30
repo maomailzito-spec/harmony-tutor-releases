@@ -13,6 +13,7 @@ declare global {
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import { AudioService } from '../services/AudioService';
+import { gmToSoundfont } from '../constants/instruments';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useNoteSelection } from '../hooks/useNoteSelection';
@@ -385,6 +386,41 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }, { undoable: false });
     }, []);
 
+    // Per-voice mixer update (volume / mute), twin of handleUpdateTrack.
+    // Applies the change live to the voice gain node so it takes effect immediately,
+    // even on notes already scheduled in the Web Audio queue.
+    const handleUpdateVoice = useCallback((voice: number, updates: { volume?: number; muted?: boolean }) => {
+        if (updates.volume !== undefined) {
+            setVoiceVolumes(prev => ({ ...prev, [voice]: updates.volume! }));
+        }
+        if (updates.muted !== undefined) {
+            setMutedVoices(prev => {
+                const next = new Set(prev);
+                if (updates.muted) next.add(voice); else next.delete(voice);
+                return next;
+            });
+        }
+        // Apply to the live gain node immediately.
+        const gain = voiceGainsRef.current.get(voice);
+        if (gain) {
+            const nextMuted = updates.muted ?? mutedVoicesRef.current.has(voice);
+            const nextVol = updates.volume ?? voiceVolumesRef.current[voice] ?? 1;
+            gain.gain.value = nextMuted ? 0 : nextVol;
+        }
+    }, []);
+
+    // Unified mute/solo audibility across SATB voices and ACC tracks.
+    // If anything is soloed anywhere, only soloed channels sound; mute always silences.
+    const anyChannelSoloed = useCallback(() =>
+        soloVoicesRef.current.size > 0 || latestAccompanimentTracks.current.some(t => t.solo),
+    []);
+    const isVoiceAudible = useCallback((voice: number) =>
+        (!anyChannelSoloed() || soloVoicesRef.current.has(voice)) && !mutedVoicesRef.current.has(voice),
+    [anyChannelSoloed]);
+    const isTrackAudible = useCallback((track: AccompanimentTrack) =>
+        (!anyChannelSoloed() || !!track.solo) && !track.muted,
+    [anyChannelSoloed]);
+
     const handleDeleteTrack = useCallback((trackId: string) => {
         setAccompanimentTracks(prev => {
             const next = prev.filter(t => t.id !== trackId);
@@ -519,6 +555,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano',
         3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano',
     });
+    // Per-voice volume (0-1) and mute, mirroring the accompaniment track mixer model.
+    const [voiceVolumes, setVoiceVolumes] = useState<Record<number, number>>({ 1: 1, 2: 1, 3: 1, 4: 1 });
+    const [mutedVoices, setMutedVoices] = useState<Set<number>>(new Set());
     const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
     const [hoveredViolationNotes, setHoveredViolationNotes] = useState<string[] | null>(null);
     const [selectedViolationIndex, setSelectedViolationIndex] = useState<number | null>(null);
@@ -1270,6 +1309,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // metronomeFlashStartTimeoutRef, metronomeFlashTimeoutRef now in usePlayback
     const soloVoicesRef = useRef(soloVoices);
     const voiceInstrumentsRef = useRef(voiceInstruments);
+    const voiceVolumesRef = useRef(voiceVolumes);
+    const mutedVoicesRef = useRef(mutedVoices);
+    // Per-voice gain nodes (twin of accTrackGainsRef): notes route through these so
+    // mute/volume changes apply in real-time to already-scheduled playback.
+    const voiceGainsRef = useRef<Map<number, GainNode>>(new Map());
 
     // isLooping/loopRange/isMetronomeOn sync effects now in usePlayback
 
@@ -1317,6 +1361,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // isPlayingRef sync now in usePlayback
     useEffect(() => { soloVoicesRef.current = soloVoices; }, [soloVoices]);
     useEffect(() => { voiceInstrumentsRef.current = voiceInstruments; }, [voiceInstruments]);
+    useEffect(() => { voiceVolumesRef.current = voiceVolumes; }, [voiceVolumes]);
+    useEffect(() => { mutedVoicesRef.current = mutedVoices; }, [mutedVoices]);
 
     const canUseDuplet = useMemo(() => {
         // Duina nei tempi composti: 2 ottavi nel tempo di 3 (cioè 2:3 su un beat composto).
@@ -4865,12 +4911,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // expansion below runs AFTER this so any sustained ACC notes get the
         // correct extension/shift in sync with the SATB fermata.
         const accTracks = latestAccompanimentTracks.current || [];
-        const GM_TO_INSTR: Record<number, string> = {
-            0: 'acoustic_grand_piano', 6: 'harpsichord', 19: 'church_organ',
-            40: 'violin', 42: 'cello', 48: 'string_ensemble_1',
-            52: 'choir_aahs', 56: 'trumpet', 60: 'french_horn',
-            68: 'oboe', 71: 'clarinet', 73: 'flute',
-        };
         accTracks.forEach((track, trackIdx) => {
             // Note: do NOT skip muted tracks here. We still schedule the notes so the
             // user can un-mute mid-playback. Mute is enforced via per-track gain node
@@ -5110,11 +5150,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     for (const it of ev.items) {
                         const n = it.note;
                         if (!n || n.isRest) continue;
-                        if (it.accTrackIdx === undefined && soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) continue;
+                        // Preload samples for ALL voices/tracks regardless of mute/solo, so
+                        // toggling them mid-playback (now real-time via gain nodes) works.
                         const midi = (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midi) || midi < 21 || midi > 108) continue;
                         const instr = it.accTrackIdx !== undefined
-                            ? (GM_TO_INSTR[accTracks[it.accTrackIdx]?.instrumentId ?? -1] || 'acoustic_grand_piano')
+                            ? gmToSoundfont(accTracks[it.accTrackIdx]?.instrumentId)
                             : (voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano');
                         if (!neededByInstrument.has(instr)) neededByInstrument.set(instr, new Set());
                         neededByInstrument.get(instr)!.add(midiToName(midi));
@@ -5363,7 +5404,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
                         const midiT = (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
-                        const instr = GM_TO_INSTR[track.instrumentId] || 'acoustic_grand_piano';
+                        const instr = gmToSoundfont(track.instrumentId);
                         // Get-or-create persistent per-track gain node. Routing notes through
                         // it lets us mute/change volume in real-time (sample-accurate) even
                         // while notes are already scheduled in the Web Audio queue.
@@ -5374,18 +5415,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             accTrackGainsRef.current.set(it.accTrackIdx, trackGain);
                         }
                         if (trackGain) {
-                            trackGain.gain.value = track.muted ? 0 : track.volume;
+                            trackGain.gain.value = isTrackAudible(track) ? track.volume : 0;
                         }
                         void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: 1, output: trackGain });
                         return;
                     }
-                    if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
+                    const v = (n.voice ?? 1) as number;
                     const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
                     const midi = n.midi;
                     const midiT = (midi ?? 0) + playbackTransposeSemitones;
                     if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
-                    const instr = voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano';
-                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec });
+                    const instr = voiceInstrumentsRef.current[v] || 'acoustic_grand_piano';
+                    // Get-or-create per-voice gain node so volume/mute apply in real-time
+                    // (same model as the accompaniment tracks above).
+                    let voiceGain = voiceGainsRef.current.get(v);
+                    if (!voiceGain && audioService.audioContext) {
+                        voiceGain = audioService.audioContext.createGain();
+                        voiceGain.connect(audioService.audioContext.destination);
+                        voiceGainsRef.current.set(v, voiceGain);
+                    }
+                    if (voiceGain) {
+                        voiceGain.gain.value = isVoiceAudible(v) ? (voiceVolumesRef.current[v] ?? 1) : 0;
+                    }
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: 1, output: voiceGain });
                 });
             }
 
