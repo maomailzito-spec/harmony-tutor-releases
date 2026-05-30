@@ -7200,13 +7200,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Exception 2: a plain click in the ACC area picks that track as the paste
         // destination and positions the paste caret there (no note inserted), so the
         // user can choose where to paste by clicking the staff.
+        // Plain clicks (no ⌘/Ctrl) never insert a note: they position the paste caret and
+        // pick the paste destination (which staff area / ACC track), then return. The
+        // insertion paths below are guarded by isPlainClick. Chord-insert keeps selection.
         const isPlainClick = !(e?.metaKey || e?.ctrlKey);
-        const accPlainThresholdY = (VF_BASS_Y + 4 * VF_LINE_SPACING + 100) - 30; // mirrors ACC_AREA_THRESHOLD_Y
-        const plainClickInAcc = isPlainClick && hasVisibleAccompaniment && y > accPlainThresholdY;
-        if (isPlainClick && !chordInsertModeRef.current && !plainClickInAcc) {
-            setSelectedNoteIds(new Set());
-            return;
-        }
 
 
         const hit = getSystemMeasureAtX(systemIndex, x);
@@ -7437,6 +7434,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setActiveStaffArea('satb');
         // In chord insert mode, clicking SATB only repositions the caret — no single-note insertion.
         if (chordInsertModeRef.current) return;
+        // Plain click: pick SATB as the paste destination (caret already positioned by the
+        // snap block above) and deselect — never insert.
+        if (isPlainClick) { setSelectedNoteIds(new Set()); return; }
 
         const targetClef: ClefType = clefForVoice(selectedVoice);
 
