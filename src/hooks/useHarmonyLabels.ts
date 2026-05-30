@@ -3625,6 +3625,36 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 } catch { /* ignore */ }
             }
 
+            // ── Q6: reconcile chord symbol with the Roman's final identification ──
+            // The Roman follows the structural snapshot (analysisNotesForNaming) while the
+            // symbol follows the full verticality (intentional, for altered chords). When
+            // those resolve to DIFFERENT roots the labels contradict (e.g. naming → ii on
+            // D-F-A while the symbol stayed Am): recompute the symbol from the Roman's note
+            // set so both agree on the root. Skipped for aug6 (symbol = enharmonic sonority)
+            // and override beats; cadential 6/4 and secondary dominants share the root, so
+            // the root-difference guard leaves them untouched.
+            try {
+                if (roman && symbol && !isAug6Roman && !hasAug6Variants
+                    && !overrideByAbsBeat.has(qAbs(event.absBeat))) {
+                    const romanCands = identifyChordCandidates(analysisNotesForNaming as any);
+                    const romanRootRaw = (romanCands as any)?.[0]?.root?.noteIndex;
+                    const romanRootPc = (typeof romanRootRaw === 'number' && Number.isFinite(romanRootRaw))
+                        ? ((romanRootRaw % 12) + 12) % 12 : null;
+                    const symRootMatch = String(symbol).match(/^([A-G])([#b♯♭]?)/);
+                    let symRootPc: number | null = null;
+                    if (symRootMatch) {
+                        const nm = `${symRootMatch[1]}${(symRootMatch[2] || '').replace('♯', '#').replace('♭', 'b')}`;
+                        const pc = noteNameToChromaticIndex(nm);
+                        symRootPc = (typeof pc === 'number' && pc >= 0) ? ((pc % 12) + 12) % 12 : null;
+                    }
+                    if (romanRootPc != null && symRootPc != null && romanRootPc !== symRootPc) {
+                        const ksReconcile = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
+                        const reSym = getChordSymbol(analysisNotesForNaming as any, ksReconcile, contextTonic);
+                        if (reSym) { symbol = reSym; _dt('Q6:symbolReconcile', symbol); }
+                    }
+                }
+            } catch { /* ignore */ }
+
             if (!roman && !symbol && !(figures && figures.length)) return;
 
             // ── User-ornament beat suppression ──

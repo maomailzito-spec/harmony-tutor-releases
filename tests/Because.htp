@@ -6,7 +6,9 @@
       "isMinor": true
     }
   ],
-  "inferredContextSuppressions": [],
+  "inferredContextSuppressions": [
+    92
+  ],
   "repeatBarlines": {},
   "voltaBrackets": [],
   "ornamentOverrides": [
@@ -17,38 +19,6 @@
     {
       "noteId": "c0d26996-3ba0-4dcf-ba07-adc1a788c6b0",
       "type": "cambiata"
-    },
-    {
-      "noteId": "06b1bc14-5efb-432f-b699-6e2b20f65862",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "66a3b876-91de-4e61-bf2f-9fa5f4da6aa0",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "07d52c87-8225-4170-83e3-3f033d18c93b",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "3d0659bd-4a81-4ced-8283-3aeb1369518c",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "b3ecb0fd-b457-4d2f-bd9a-67624ba896db",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "5942492c-5be0-4b81-933d-352ad444fcee",
-      "type": "structural"
-    },
-    {
-      "noteId": "b9ded2a5-bd47-4a9b-ad70-3952bd9a876a",
-      "type": "structural"
-    },
-    {
-      "noteId": "725d0c28-d4fd-4aaa-9b23-d07363b49b80",
-      "type": "structural"
     },
     {
       "noteId": "0290163e-3f35-49e9-9caf-9b98b93fc991",
@@ -601,6 +571,58 @@
     {
       "noteId": "51783ce0-cd0a-4171-a33d-b259d79a8a19",
       "type": "structural"
+    },
+    {
+      "noteId": "5942492c-5be0-4b81-933d-352ad444fcee",
+      "type": "structural"
+    },
+    {
+      "noteId": "8c3bb9fa-58f9-48a1-b87f-26124b1c01ba",
+      "type": "structural"
+    },
+    {
+      "noteId": "725d0c28-d4fd-4aaa-9b23-d07363b49b80",
+      "type": "structural"
+    },
+    {
+      "noteId": "b9ded2a5-bd47-4a9b-ad70-3952bd9a876a",
+      "type": "structural"
+    },
+    {
+      "noteId": "66a3b876-91de-4e61-bf2f-9fa5f4da6aa0",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "07d52c87-8225-4170-83e3-3f033d18c93b",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "3d0659bd-4a81-4ced-8283-3aeb1369518c",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "b3ecb0fd-b457-4d2f-bd9a-67624ba896db",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-69-34560-45",
+      "type": "structural"
+    },
+    {
+      "noteId": "7e172bd2-7eca-4f1a-aac7-2859235b0d68",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-70-35040-55",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-71-35520-61",
+      "type": "structural"
+    },
+    {
+      "noteId": "06b1bc14-5efb-432f-b699-6e2b20f65862",
+      "type": "ornamental"
     }
   ],
   "filePreferences": {
@@ -611,17 +633,20 @@
     "analysis.sequencesEnabled": true
   },
   "voiceInstruments": {
-    "1": "string_ensemble_1",
-    "2": "string_ensemble_1",
-    "3": "cello",
+    "1": "acoustic_grand_piano",
+    "2": "acoustic_grand_piano",
+    "3": "acoustic_grand_piano",
     "4": "acoustic_grand_piano"
   },
   "voiceVolumes": {
-    "1": 1,
-    "2": 0.75,
-    "3": 0.73,
-    "4": 0.88
+    "1": 0.87,
+    "2": 0.78,
+    "3": 1,
+    "4": 1
   },
+  "mutedVoices": [
+    4
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -1689,7 +1714,7 @@
       "midi": 63,
       "noteIndex": 3,
       "clef": "treble",
-      "explicitAccidental": null,
+      "explicitAccidental": "sharp",
       "accidental": "sharp",
       "duration": "quarter",
       "isRest": false,
@@ -1701,7 +1726,8 @@
       "startTick": 15360,
       "durationTicks": 1440,
       "voice": 1,
-      "clefOverride": "treble"
+      "clefOverride": "treble",
+      "userAccidental": "sharp"
     },
     {
       "id": "b9ded2a5-bd47-4a9b-ad70-3952bd9a876a",
@@ -8779,7 +8805,7 @@
   ],
   "staffSystemMode": "grandstaff",
   "keySignatureRoot": "E",
-  "projectTitle": "Because ",
+  "projectTitle": "Because     ",
   "titleFontSize": 44,
   "titleFontFamily": "serif",
   "timeSignature": {
@@ -8808,6 +8834,12 @@
         "2",
         "4"
       ]
+    },
+    {
+      "absBeat": 16,
+      "roman": "ii°",
+      "symbol": "",
+      "figures": []
     }
   ],
   "bpm": 80,
@@ -14759,10 +14791,9 @@
           "pitch": "C",
           "octave": 4,
           "position": 0,
-          "midi": 60,
-          "noteIndex": 0,
+          "midi": 61,
+          "noteIndex": 1,
           "clef": "treble",
-          "explicitAccidental": null,
           "duration": "eighth",
           "isRest": false,
           "isTriplet": false,
@@ -16071,12 +16102,9 @@
       ],
       "muted": false,
       "visible": true,
-      "volume": 0.57,
+      "volume": 0.86,
       "staffMode": "grandstaff",
       "color": "#fff705"
     }
-  ],
-  "mutedVoices": [
-    4
   ]
 }
