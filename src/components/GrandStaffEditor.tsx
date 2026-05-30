@@ -7196,14 +7196,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         e?.stopPropagation?.();
 
         // ⌘/Ctrl required to insert notes — plain clicks only deselect.
-        // Exception: in chord insert mode a plain click repositions the caret without inserting
-        // and without clearing the current selection (so notes just inserted stay selected).
-        if (!(e?.metaKey || e?.ctrlKey)) {
-            if (!chordInsertModeRef.current) {
-                setSelectedNoteIds(new Set());
-                return;
-            }
-            // chord insert mode: fall through to reposition caret, keep selection intact
+        // Exception 1: chord insert mode repositions the caret without inserting.
+        // Exception 2: a plain click in the ACC area picks that track as the paste
+        // destination and positions the paste caret there (no note inserted), so the
+        // user can choose where to paste by clicking the staff.
+        const isPlainClick = !(e?.metaKey || e?.ctrlKey);
+        const accPlainThresholdY = (VF_BASS_Y + 4 * VF_LINE_SPACING + 100) - 30; // mirrors ACC_AREA_THRESHOLD_Y
+        const plainClickInAcc = isPlainClick && hasVisibleAccompaniment && y > accPlainThresholdY;
+        if (isPlainClick && !chordInsertModeRef.current && !plainClickInAcc) {
+            setSelectedNoteIds(new Set());
+            return;
         }
 
 
@@ -7358,6 +7360,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (!accTarget) return;
             // Remember the clicked track as the active ACC target (for paste/REC).
             activeAccTrackIdRef.current = accTarget.trackId;
+
+            // Plain click: just pick this track as the paste destination. The paste
+            // caret was already positioned at the clicked X by the snap block above,
+            // so a following paste lands here. Do not insert a note.
+            if (isPlainClick) {
+                setSelectedNoteIds(new Set());
+                return;
+            }
+
             const accClef: ClefType = accTarget.clef;
             const pos = accTarget.pos;
 
