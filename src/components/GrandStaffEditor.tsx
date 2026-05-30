@@ -47,7 +47,7 @@ import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
 import GrandStaffToolbar from './GrandStaffToolbar';
-import VexflowGrandStaff, { accompanimentExtraPxForTracks } from './VexflowGrandStaff';
+import VexflowGrandStaff, { accompanimentExtraPxForTracks, accompanimentTrackTrebleOffsets } from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
 import AnalysisLockModal from './AnalysisLockModal';
 import TempoCurveDialog from './TempoCurveDialog';
@@ -1094,6 +1094,47 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const halfStep = VF_LINE_SPACING / 2;
         return Math.round((c4Y - yAdj) / halfStep);
     }, [isSvgYWithinClefStaff, staffSystemMode, vfC4YForClef, vfStaveTopYForClef]);
+
+    // Map a (calibrated) pointer Y to the accompaniment track block it falls in, plus
+    // the resolved clef and diatonic position on that block's staff. Each visible track
+    // draws its own stacked staff block (grandstaff or single staff with its clef), so
+    // inserted notes must reference the clicked block — not always the first track.
+    // `pos` is an absolute diatonic position (C4 = 0); the middle staff line per clef:
+    // treble B4=6, bass D3=-6, alto C4=0, tenor A3=-2, soprano G4=4.
+    const ACC_MIDDLE_LINE_POS: Record<ClefType, number> = { treble: 6, bass: -6, alto: 0, tenor: -2, soprano: 4 };
+    const ACC_GS_SPAN_PX = 130; // treble→bass top span (mirrors ACCOMPANIMENT_GS_SPAN)
+    const resolveAccTarget = useCallback((yCal: number, accTrebleBaseTopY: number): { trackId: string; visIdx: number; clef: ClefType; pos: number } | null => {
+        const tracks = (latestAccompanimentTracks.current || []).filter(t => t && t.visible);
+        if (tracks.length === 0) return null;
+        const offsets = accompanimentTrackTrebleOffsets(tracks);
+        const trebleTops = offsets.map(o => accTrebleBaseTopY + o);
+        const blockBottom = (i: number) =>
+            trebleTops[i] + (((tracks[i].staffMode ?? 'grandstaff') === 'grandstaff') ? ACC_GS_SPAN_PX + 4 * VF_LINE_SPACING : 4 * VF_LINE_SPACING);
+        // Pick the block: a click belongs to block i if it's above the midpoint between
+        // block i's bottom and block i+1's top; otherwise fall through to the last block.
+        let bi = tracks.length - 1;
+        for (let i = 0; i < tracks.length - 1; i++) {
+            const boundary = (blockBottom(i) + trebleTops[i + 1]) / 2;
+            if (yCal < boundary) { bi = i; break; }
+        }
+        const track = tracks[bi];
+        const mode = (track.staffMode ?? 'grandstaff');
+        const trebleTop = trebleTops[bi];
+        const halfStep = VF_LINE_SPACING / 2;
+        if (mode === 'grandstaff') {
+            const bassTop = trebleTop + ACC_GS_SPAN_PX;
+            const midSplit = (trebleTop + 2 * VF_LINE_SPACING + bassTop + 2 * VF_LINE_SPACING) / 2;
+            if (yCal < midSplit) {
+                const middleY = trebleTop + 2 * VF_LINE_SPACING;
+                return { trackId: track.id, visIdx: bi, clef: 'treble', pos: 6 + Math.round((middleY - yCal) / halfStep) };
+            }
+            const middleY = bassTop + 2 * VF_LINE_SPACING;
+            return { trackId: track.id, visIdx: bi, clef: 'bass', pos: -6 + Math.round((middleY - yCal) / halfStep) };
+        }
+        const clef = (track.clef ?? 'treble') as ClefType;
+        const middleY = trebleTop + 2 * VF_LINE_SPACING;
+        return { trackId: track.id, visIdx: bi, clef, pos: ACC_MIDDLE_LINE_POS[clef] + Math.round((middleY - yCal) / halfStep) };
+    }, []);
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
     const [harmonyOverrides, setHarmonyOverrides] = useState<HarmonyLabelOverride[]>([]);
     const [tonicizationHints, setTonicizationHints] = useState<TonicizationHint[]>([]);
@@ -7237,36 +7278,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // ACC bass stave:   top line Y = 440, bottom line Y = 480
         // Threshold conservative: clicks well below SATB bass ledger lines AND
         // close enough to ACC area to be intentional.
-        const ACC_TREBLE_TOP_Y = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310
-        const ACC_BASS_TOP_Y = ACC_TREBLE_TOP_Y + 130;                  // 440
+        const ACC_TREBLE_TOP_Y = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — first acc block's treble top
         const ACC_AREA_THRESHOLD_Y = ACC_TREBLE_TOP_Y - 30;             // 280 — allows ~3 ledger lines above ACC treble
         if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y) {
             if (e?.altKey) return;
             setActiveStaffArea('accompaniment');
             // In chord insert mode, just position the caret — don't insert a single note.
             if (chordInsertModeRef.current) return;
-            // Midpoint between stave centers (treble 330, bass 460) = 395
-            const accClefMidY = (ACC_TREBLE_TOP_Y + 2 * VF_LINE_SPACING + ACC_BASS_TOP_Y + 2 * VF_LINE_SPACING) / 2;
-
             // Empirical calibration: the pointer Y reported to the editor is offset
             // relative to the rendered VexFlow stave by ~40px (same as SATB treble).
             const yCal = y + VF_TREBLE_MOUSE_Y_ADJUST_PX;
 
-            let accClef: ClefType;
-            let pos: number;
-            if (effectiveAccStaffMode === 'treble_only' || yCal < (accClefMidY + VF_TREBLE_MOUSE_Y_ADJUST_PX)) {
-                accClef = 'treble';
-                // Treble middle line (B4) is at Y = ACC_TREBLE_TOP_Y + 20 = 330; B4 corresponds to pos 6.
-                const middleY = ACC_TREBLE_TOP_Y + 2 * VF_LINE_SPACING;
-                const halfSteps = (middleY - yCal) / (VF_LINE_SPACING / 2);
-                pos = 6 + Math.round(halfSteps);
-            } else {
-                accClef = 'bass';
-                // Bass middle line (D3) is at Y = ACC_BASS_TOP_Y + 20 = 460; D3 corresponds to pos -6.
-                const middleY = ACC_BASS_TOP_Y + 2 * VF_LINE_SPACING;
-                const halfSteps = (middleY - yCal) / (VF_LINE_SPACING / 2);
-                pos = -6 + Math.round(halfSteps);
-            }
+            // Resolve which track block (and clef/position) the click lands on, so the
+            // note is inserted into the clicked track's own staff — not always the first.
+            const accTarget = resolveAccTarget(yCal, ACC_TREBLE_TOP_Y);
+            if (!accTarget) return;
+            const accClef: ClefType = accTarget.clef;
+            const pos = accTarget.pos;
 
             let accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignature);
             accProps = applyAutoLeadingToneInMinor(accProps);
@@ -7288,10 +7316,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 voice: 0 as any,
             };
 
-            const firstVisibleIdx = latestAccompanimentTracks.current.findIndex(t => t.visible);
-            if (firstVisibleIdx !== -1) {
-                setAccompanimentTracks(prev => prev.map((track, i) => {
-                    if (i !== firstVisibleIdx) return track;
+            {
+                const targetTrackId = accTarget.trackId;
+                setAccompanimentTracks(prev => prev.map((track) => {
+                    if (track.id !== targetTrackId) return track;
                     return {
                         ...track,
                         notes: [...track.notes, accNote].sort((a, b) =>
@@ -8207,18 +8235,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData) return;
 
         // ── ACC area: show ACC ghost note (suppresses SATB ghost) ──
-        const ACC_TREBLE_TOP_Y_GHOST = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310
-        const ACC_BASS_TOP_Y_GHOST = ACC_TREBLE_TOP_Y_GHOST + 130;            // 440
+        const ACC_TREBLE_TOP_Y_GHOST = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — first acc block's treble top
         const ACC_AREA_THRESHOLD_Y_GHOST = ACC_TREBLE_TOP_Y_GHOST - 30;       // 280
         if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y_GHOST) {
             const hitGhost = getSystemMeasureAtX(systemIndex, x);
             if (!hitGhost) { setGhostNote(null); return; }
             const yCalGhost = y + VF_TREBLE_MOUSE_Y_ADJUST_PX;
-            const accClefMidYGhost = (ACC_TREBLE_TOP_Y_GHOST + 2 * VF_LINE_SPACING + ACC_BASS_TOP_Y_GHOST + 2 * VF_LINE_SPACING) / 2;
+            // Resolve the target track block so the ghost previews on the clicked staff.
+            const accTargetGhost = resolveAccTarget(yCalGhost, ACC_TREBLE_TOP_Y_GHOST);
+            if (!accTargetGhost) { setGhostNote(null); return; }
+            const accGhostTrackIdx = accTargetGhost.visIdx;
 
             if (selectedInsertion.type === 'rest') {
                 setGhostNote(prev => {
-                    const accGhostClef: ClefType = (effectiveAccStaffMode === 'treble_only' || yCalGhost < (accClefMidYGhost + VF_TREBLE_MOUSE_Y_ADJUST_PX)) ? 'treble' : 'bass';
+                    const accGhostClef: ClefType = accTargetGhost.clef;
                     const next = {
                         id: 'ghost' as const,
                         pitch: 'B',
@@ -8235,26 +8265,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         clef: accGhostClef,
                         voice: 0 as any,
                         systemIndex,
+                        _trackIdx: accGhostTrackIdx,
                     };
-                    if (prev && prev.isRest && prev.xPosition === x && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
-                    return next;
+                    if (prev && prev.isRest && prev.xPosition === x && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                    return next as any;
                 });
                 return;
             }
 
-            let accGhostClef: ClefType;
-            let accGhostPos: number;
-            if (effectiveAccStaffMode === 'treble_only' || yCalGhost < (accClefMidYGhost + VF_TREBLE_MOUSE_Y_ADJUST_PX)) {
-                accGhostClef = 'treble';
-                const middleY = ACC_TREBLE_TOP_Y_GHOST + 2 * VF_LINE_SPACING;
-                const halfSteps = (middleY - yCalGhost) / (VF_LINE_SPACING / 2);
-                accGhostPos = 6 + Math.round(halfSteps);
-            } else {
-                accGhostClef = 'bass';
-                const middleY = ACC_BASS_TOP_Y_GHOST + 2 * VF_LINE_SPACING;
-                const halfSteps = (middleY - yCalGhost) / (VF_LINE_SPACING / 2);
-                accGhostPos = -6 + Math.round(halfSteps);
-            }
+            const accGhostClef: ClefType = accTargetGhost.clef;
+            const accGhostPos: number = accTargetGhost.pos;
 
             let accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignature);
             accGhostProps = applyAutoLeadingToneInMinor(accGhostProps);
@@ -8273,9 +8293,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     clef: accGhostClef,
                     voice: 0 as any,
                     systemIndex,
+                    _trackIdx: accGhostTrackIdx,
                 };
-                if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
-                return next;
+                if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                return next as any;
             });
             return;
         }
