@@ -3644,16 +3644,22 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         .filter(n => n && !n.isRest).map(n => ((Number(n.midi) % 12) + 12) % 12));
                     const accBassMidi = _accHintLabel?.lowestMidi ?? null;
                     const accBassPc = accBassMidi != null ? ((accBassMidi % 12) + 12) % 12 : null;
-                    // Merge ACC-hint pcs into the naming set, mirroring getRomanAnalysis.
+                    // Merge the REAL accompaniment notes sounding at this beat into the naming
+                    // set (they carry proper spelling, so getChordSymbol can name the root —
+                    // synthetic pitch-less notes produced a malformed "/A").
                     let mergedNaming: any[] = analysisNotesForNaming as any[];
-                    if (_accHintLabel && _accHintLabel.pcs.length > 0) {
-                        const synth: any[] = [];
-                        for (const pc of _accHintLabel.pcs) {
-                            if (satbPcs.has(pc)) continue;
-                            const midi = (accBassPc != null && pc === accBassPc && accBassMidi != null) ? accBassMidi : pc + 48;
-                            synth.push({ noteIndex: pc, midi, isRest: false, pitch: '', octave: Math.floor(midi / 12) - 1, position: 0, id: `__sym_hint_${pc}`, duration: 'quarter', isTriplet: false, isDuplet: false, isDotted: false, measureIndex: 0, beat: 1, startTick: 0, durationTicks: 960, voice: 0 });
+                    if (_accHintLabel && _accHintLabel.pcs.length > 0 && accompanimentTracks && accompanimentTracks.length > 0) {
+                        const beatTick = Number(event.absBeat) * TICKS_PER_QUARTER;
+                        const accNotesAtBeat: any[] = [];
+                        for (const t of accompanimentTracks) {
+                            if ((t as any).muted || (t as any).visible === false) continue;
+                            for (const n of ((t as any).notes || [])) {
+                                if (!n || n.isRest || !Number.isFinite(n.midi) || !n.midi) continue;
+                                const s = n.startTick ?? 0; const d = n.durationTicks ?? 0;
+                                if (s <= beatTick && beatTick < s + d) accNotesAtBeat.push(n);
+                            }
                         }
-                        if (synth.length > 0) mergedNaming = [...(analysisNotesForNaming as any[]), ...synth];
+                        if (accNotesAtBeat.length > 0) mergedNaming = [...(analysisNotesForNaming as any[]), ...accNotesAtBeat];
                     }
                     const romanCands = identifyChordCandidates(mergedNaming as any);
                     const romanRootRaw = (romanCands as any)?.[0]?.root?.noteIndex;
