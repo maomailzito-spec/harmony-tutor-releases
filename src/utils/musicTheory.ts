@@ -3377,7 +3377,7 @@ export function getRomanAnalysis(
     chord: StaffNote[],
     keySignatureRoot: string,
     isMinorMode: boolean,
-    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string>; accHintPcs?: number[]; accLowestMidi?: number | null }
+    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string>; accHintPcs?: number[]; accLowestMidi?: number | null; accForced?: boolean }
 ): { roman: string; figures: string[]; aug6Variants?: string[] } | null {
     if (!chord || chord.length < 2) return null;
 
@@ -4188,8 +4188,10 @@ export function getRomanAnalysis(
                         const rootPc = mod12((c.root as any)?.noteIndex ?? (c.root as any)?.midi ?? 0);
                         // Penalty if the root came from ACC (not observed in SATB).
                         // Exception: when the ACC bass IS that root, the bass directly evidences
-                        // the root — skip the penalty entirely.
-                        if (!satbPcs.has(rootPc) && rootPc !== accBassPc) c.score += ACC_ONLY_ROOT_PENALTY;
+                        // the root — skip the penalty. Also skipped when the ACC pcs are
+                        // user-asserted (accForced: the note was marked harmonic via Opt+H),
+                        // so a marked ACC note participates fully regardless of register.
+                        if (!opts?.accForced && !satbPcs.has(rootPc) && rootPc !== accBassPc) c.score += ACC_ONLY_ROOT_PENALTY;
                         // Bonus for ACC notes that match this candidate's chord tones.
                         const formula = (CHORD_FORMULAS as any)?.[c.type] as number[] | undefined;
                         const candPcs = Array.isArray(formula)

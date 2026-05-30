@@ -6332,12 +6332,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             : null;
         const accDestMode = accDestTrack?.staffMode ?? 'grandstaff';
         const accDestClef: ClefType = (accDestTrack?.clef ?? 'treble') as ClefType;
+        // Maps each source note id to its freshly-generated paste id, so per-note marks
+        // (ornamentOverrides, e.g. Opt+H/Opt+O) can travel with the copied notes (Q5).
+        const noteIdRemap = new Map<string, string>();
         const pasted: StaffNote[] = dataToPaste
             .map(n => {
                 const m = n.measureIndex ?? 0;
                 const b = n.beat ?? 1;
                 const abs = absBeatForNote(n) + delta;
                 if (!Number.isFinite(abs) || abs < 0) return null;
+                const newId = crypto.randomUUID();
+                if ((n as any).id) noteIdRemap.set(String((n as any).id), newId);
 
                 const newMeasureIndex = findMeasureIndexForAbsBeat(abs);
                 const bpmLocal = (measureBeats && measureBeats[newMeasureIndex])
@@ -6373,7 +6378,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         : clefForVoice(targetVoice as any);
                     return {
                         ...(rest as StaffNote),
-                        id: crypto.randomUUID(),
+                        id: newId,
                         measureIndex: newMeasureIndex,
                         beat: newBeat,
                         startTick,
@@ -6392,7 +6397,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         : clefForVoice(targetVoice as any);
                     return {
                         ...(rest as StaffNote),
-                        id: crypto.randomUUID(),
+                        id: newId,
                         measureIndex: newMeasureIndex,
                         beat: newBeat,
                         voice: targetVoice,
@@ -6404,6 +6409,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             })
             .filter(Boolean) as StaffNote[];
+
+        // Q5: carry per-note marks (ornamentOverrides — Opt+H/Opt+O) onto the pasted copies,
+        // so marking a note's harmonic/ornamental role survives copy between tracks.
+        if (pasted.length > 0 && noteIdRemap.size > 0) {
+            setOrnamentOverrides(prev => {
+                const arr = prev || [];
+                const haveId = new Set(arr.map(o => o.noteId));
+                const additions: OrnamentOverride[] = [];
+                for (const o of arr) {
+                    const mappedId = noteIdRemap.get(o.noteId);
+                    if (mappedId && !haveId.has(mappedId)) additions.push({ noteId: mappedId, type: o.type });
+                }
+                return additions.length > 0 ? [...arr, ...additions] : arr;
+            });
+        }
 
         if (pasted.length > 0) {
             if (pasteIntoAcc && accDestTrack) {

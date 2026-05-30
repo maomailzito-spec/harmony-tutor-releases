@@ -83,6 +83,7 @@ export interface UseHarmonyLabelsParams {
 function getAccompanimentPcsForBeat(
     tracks: AccompanimentTrack[],
     absBeat: number,
+    ornOverrideMap?: Map<string, string>,
 ): { pcs: number[]; lowestMidi: number | null } {
     const activePcs = new Set<number>();
     let lowestMidi: number | null = null;
@@ -94,6 +95,15 @@ function getAccompanimentPcsForBeat(
             const s = note.startTick ?? 0;
             const d = note.durationTicks ?? 0;
             if (s <= beatTick && beatTick < s + d) {
+                // Surgical participation: an accompaniment note feeds the analysis ONLY
+                // when the user marked it harmonic (Opt+H → 'structural'). By default ACC
+                // notes stay out of chord identification (they "just sound"). Without a
+                // marking map nothing participates.
+                const ov = ornOverrideMap
+                    ? (ornOverrideMap.get(note.id)
+                       ?? ornOverrideMap.get(`${note.midi}-${note.measureIndex ?? -1}-${note.beat ?? -1}`))
+                    : undefined;
+                if (ov !== 'structural') continue;
                 const pc = ((note.midi % 12) + 12) % 12;
                 activePcs.add(pc);
                 if (lowestMidi === null || note.midi < lowestMidi) lowestMidi = note.midi;
@@ -970,11 +980,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
                 const _accHint = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
-                    ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), absBeat)
+                    ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), absBeat, ornOverrideMap)
                     : null;
                 const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, {
                     ornamentOverrides: ornOverrideRecord,
-                    ...(_accHint && _accHint.pcs.length > 0 ? { accHintPcs: _accHint.pcs, accLowestMidi: _accHint.lowestMidi } : {}),
+                    ...(_accHint && _accHint.pcs.length > 0 ? { accHintPcs: _accHint.pcs, accLowestMidi: _accHint.lowestMidi, accForced: true } : {}),
                 });
 
                 // Compute root PC for fallback resolution matching (V/x → X where quality differs).
@@ -2935,13 +2945,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Hoisted to event scope so the symbol-reconcile (below) can reuse the SAME
             // ACC hint the Roman used, keeping symbol and Roman on one identification.
             const _accHintLabel = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
-                ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), Number(event.absBeat))
+                ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), Number(event.absBeat), ornOverrideMap)
                 : null;
 
             try {
                 const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor, {
                     ornamentOverrides: ornOverrideRecord,
-                    ...(_accHintLabel && _accHintLabel.pcs.length > 0 ? { accHintPcs: _accHintLabel.pcs, accLowestMidi: _accHintLabel.lowestMidi } : {}),
+                    ...(_accHintLabel && _accHintLabel.pcs.length > 0 ? { accHintPcs: _accHintLabel.pcs, accLowestMidi: _accHintLabel.lowestMidi, accForced: true } : {}),
                 });
 
                 if (r) {
@@ -3640,13 +3650,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             try {
                 if (roman && symbol && !isAug6Roman && !hasAug6Variants
                     && !overrideByAbsBeat.has(qAbs(event.absBeat))) {
-                    const satbPcs = new Set<number>((analysisNotesForNaming as any[])
-                        .filter(n => n && !n.isRest).map(n => ((Number(n.midi) % 12) + 12) % 12));
-                    const accBassMidi = _accHintLabel?.lowestMidi ?? null;
-                    const accBassPc = accBassMidi != null ? ((accBassMidi % 12) + 12) % 12 : null;
-                    // Merge the REAL accompaniment notes sounding at this beat into the naming
-                    // set (they carry proper spelling, so getChordSymbol can name the root —
-                    // synthetic pitch-less notes produced a malformed "/A").
+                    // Merge the user-marked (Opt+H = 'structural') accompaniment notes
+                    // sounding at this beat into the naming set — the SAME notes the Roman
+                    // used via the ACC hint — so the symbol reflects the same identification.
+                    // Real notes carry proper spelling (synthetic pitch-less notes gave "/A").
                     let mergedNaming: any[] = analysisNotesForNaming as any[];
                     if (_accHintLabel && _accHintLabel.pcs.length > 0 && accompanimentTracks && accompanimentTracks.length > 0) {
                         const beatTick = Number(event.absBeat) * TICKS_PER_QUARTER;
@@ -3656,19 +3663,21 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             for (const n of ((t as any).notes || [])) {
                                 if (!n || n.isRest || !Number.isFinite(n.midi) || !n.midi) continue;
                                 const s = n.startTick ?? 0; const d = n.durationTicks ?? 0;
-                                if (s <= beatTick && beatTick < s + d) accNotesAtBeat.push(n);
+                                if (!(s <= beatTick && beatTick < s + d)) continue;
+                                const ov = ornOverrideMap.get(n.id)
+                                    ?? ornOverrideMap.get(`${n.midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`);
+                                if (ov !== 'structural') continue; // only user-marked notes participate
+                                accNotesAtBeat.push(n);
                             }
                         }
                         if (accNotesAtBeat.length > 0) mergedNaming = [...(analysisNotesForNaming as any[]), ...accNotesAtBeat];
                     }
                     const romanCands = identifyChordCandidates(mergedNaming as any);
                     const romanRootRaw = (romanCands as any)?.[0]?.root?.noteIndex;
-                    let romanRootPc = (typeof romanRootRaw === 'number' && Number.isFinite(romanRootRaw))
+                    const romanRootPc = (typeof romanRootRaw === 'number' && Number.isFinite(romanRootRaw))
                         ? ((romanRootRaw % 12) + 12) % 12 : null;
-                    // Trust an ACC-only root only when it is the ACC bass.
-                    if (romanRootPc != null && !satbPcs.has(romanRootPc) && romanRootPc !== accBassPc) {
-                        romanRootPc = null;
-                    }
+                    // No bass-only guard here: the merged ACC notes are user-marked
+                    // (Opt+H = harmonic), so they're trusted at any register.
                     const symRootMatch = String(symbol).match(/^([A-G])([#b♯♭]?)/);
                     let symRootPc: number | null = null;
                     if (symRootMatch) {
