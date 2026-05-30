@@ -55,7 +55,7 @@ import RomanProgressionEditor from './RomanProgressionEditor';
 import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
-import TrackMixerPanel from './TrackMixerPanel';
+import MixerPanel from './MixerPanel';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -179,6 +179,7 @@ type ToolbarGroupId =
     | 'measures'
     | 'voices'
     | 'voiceInstrument'
+    | 'mixer'
     | 'insert'
     | 'chordInsert'
     | 'accidentals'
@@ -197,6 +198,7 @@ const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'measures',
     'voices',
     'voiceInstrument',
+    'mixer',
     'insert',
     'chordInsert',
     'accidentals',
@@ -356,8 +358,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [accPushCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [isMixerOpen, setIsMixerOpen] = useState(false);
-    const sidebarRef = useRef<HTMLDivElement>(null);
-    const [mixerSidebarTop, setMixerSidebarTop] = useState(376);
 
     // Per-track gain nodes for real-time mute/volume control without restarting playback.
     // Index = position in accompanimentTracks; each gain node persists and is connected
@@ -4039,19 +4039,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Keep a ref to the latest layoutData so async callbacks can read current layout
     const layoutDataRef = useRef(layoutData);
     useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
-
-    useLayoutEffect(() => {
-        const sys0 = systemElementByIndexRef.current.get(0);
-        const sidebar = sidebarRef.current;
-        if (!sys0 || !sidebar) return;
-        const accY = staffSystemMode === 'satb_ancient'
-            ? VF_SATB_BASS_Y + 4 * VF_LINE_SPACING + 100
-            : VF_BASS_Y + 4 * VF_LINE_SPACING + 100;
-        const sys0Rect = sys0.getBoundingClientRect();
-        const sidebarRect = sidebar.getBoundingClientRect();
-        const top = sys0Rect.top - sidebarRect.top + accY;
-        if (Number.isFinite(top)) setMixerSidebarTop(Math.max(0, top));
-    }, [layoutData, staffSystemMode, hasVisibleAccompaniment]);
 
     // Highest measure index that currently contains any note. The per-system
     // metric-validation block uses this as the "currently being edited"
@@ -9850,6 +9837,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 onToggleSolo={(v: number) => setSoloVoices(prev => { const next = new Set(prev); if (next.has(v)) next.delete(v); else next.add(v); return next; })}
                 voiceInstruments={voiceInstruments}
                 onChangeVoiceInstrument={(voice: number, instrument: string) => setVoiceInstruments(prev => ({ ...prev, [voice]: instrument }))}
+                isMixerOpen={isMixerOpen}
+                onToggleMixer={() => setIsMixerOpen(o => !o)}
                 selectedInsertion={selectedInsertion}
                 setSelectedInsertion={setSelectedInsertion}
                 selectedNoteIds={selectedNoteIds}
@@ -10071,29 +10060,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             />
 
 
+            {/* Unified mixer: floating draggable window (toggled from the toolbar). */}
+            {isMixerOpen && (
+                <MixerPanel
+                    voiceInstruments={voiceInstruments}
+                    voiceVolumes={voiceVolumes}
+                    mutedVoices={mutedVoices}
+                    soloVoices={soloVoices}
+                    onChangeVoiceInstrument={(voice, instrument) => setVoiceInstruments(prev => ({ ...prev, [voice]: instrument }))}
+                    onUpdateVoice={handleUpdateVoice}
+                    onToggleSolo={(v) => setSoloVoices(prev => { const next = new Set(prev); if (next.has(v)) next.delete(v); else next.add(v); return next; })}
+                    accompanimentTracks={accompanimentTracks}
+                    onUpdateTrack={handleUpdateTrack}
+                    onAddEmptyTrack={handleAddEmptyTrack}
+                    onDeleteTrack={handleDeleteTrack}
+                    onClose={() => setIsMixerOpen(false)}
+                />
+            )}
+
             <div className="flex flex-row gap-1 flex-grow min-h-0">
-                {/* ACC Mixer sidebar: aligned to ACC stave Y via dynamic measurement */}
-                <div ref={sidebarRef} className="relative flex-shrink-0 w-6">
-                    <div style={{ position: 'absolute', top: mixerSidebarTop, left: 0, zIndex: 10 }}>
-                        {isMixerOpen ? (
-                            <TrackMixerPanel
-                                accompanimentTracks={accompanimentTracks}
-                                onUpdateTrack={handleUpdateTrack}
-                                onDeleteTrack={handleDeleteTrack}
-                                onAddEmptyTrack={handleAddEmptyTrack}
-                                onClose={() => setIsMixerOpen(false)}
-                            />
-                        ) : (
-                            <button
-                                onClick={() => setIsMixerOpen(true)}
-                                title="Mixer tracce"
-                                className="h-8 w-6 bg-slate-700 hover:bg-slate-600 rounded text-gray-400 hover:text-gray-200 flex items-center justify-center text-base transition-colors"
-                            >
-                                ⊟
-                            </button>
-                        )}
-                    </div>
-                </div>
                 <div
                     ref={scoreScrollRef}
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}

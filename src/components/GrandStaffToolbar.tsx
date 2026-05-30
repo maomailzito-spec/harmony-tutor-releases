@@ -120,6 +120,8 @@ type GrandStaffToolbarProps = {
     onToggleSolo?: (voice: number) => void;
     voiceInstruments?: Record<number, string>;
     onChangeVoiceInstrument?: (voice: number, instrument: string) => void;
+    isMixerOpen?: boolean;
+    onToggleMixer?: () => void;
 
     selectedInsertion: InsertionElement;
     setSelectedInsertion: React.Dispatch<React.SetStateAction<InsertionElement>>;
@@ -292,6 +294,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         onToggleSolo,
         voiceInstruments,
         onChangeVoiceInstrument,
+        isMixerOpen,
+        onToggleMixer,
         selectedInsertion,
         setSelectedInsertion,
         selectedNoteIds,
@@ -692,6 +696,15 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     ))}
                 </select>
             </div>
+        ) : null,
+        mixer: onToggleMixer ? (
+            <button
+                onClick={onToggleMixer}
+                title="Mixer"
+                className={`flex items-center gap-1 p-1 px-2 rounded-md text-xs font-semibold transition-colors ${isMixerOpen ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+                🎚 Mixer
+            </button>
         ) : null,
         insert: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
