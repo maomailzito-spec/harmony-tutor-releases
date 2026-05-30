@@ -240,6 +240,9 @@ export type AccompanimentTrack = {
    *  Permette righi strumentali/vocali in chiavi diverse (violino, basso, soprano,
    *  contralto, tenore). Default 'treble' se assente. Ignorata in 'grandstaff'. */
   clef?: ClefType;
+  /** Colore personalizzato della traccia (hex, es. "#38bdf8"). Mostrato come banda
+   *  verticale a fianco del rigo e usato per colorare le note in modalità colore. */
+  color?: string;
 };
 
 /**

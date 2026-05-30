@@ -75,10 +75,13 @@ const ChannelStrip: React.FC<{
   staffControl?: React.ReactNode;
   /** Optional rename handler (ACC tracks only): makes the label an editable input. */
   onRename?: (name: string) => void;
+  /** Optional track color + handler (ACC tracks only): shows a color swatch. */
+  color?: string;
+  onChangeColor?: (c: string) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
-  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onRename, onContextMenu,
+  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onRename, color, onChangeColor, onContextMenu,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
@@ -127,6 +130,23 @@ const ChannelStrip: React.FC<{
 
     {/* Staff/clef selector (ACC tracks only) */}
     {staffControl}
+
+    {/* Track color picker (ACC tracks only) */}
+    {onChangeColor && (
+      <label
+        className="relative w-7 h-4 rounded cursor-pointer border border-slate-600 overflow-hidden"
+        style={{ backgroundColor: color || '#64748b' }}
+        title="Colore traccia"
+      >
+        <input
+          type="color"
+          value={color || '#64748b'}
+          onChange={(e) => onChangeColor(e.target.value)}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+          aria-label="Colore traccia"
+        />
+      </label>
+    )}
 
     {/* Mute / Solo */}
     <div className="flex gap-1">
@@ -343,6 +363,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   visible={track.visible}
                   onToggleVisible={() => onUpdateTrack(track.id, { visible: !track.visible })}
                   onRename={(name) => onUpdateTrack(track.id, { name })}
+                  color={track.color}
+                  onChangeColor={(c) => onUpdateTrack(track.id, { color: c })}
                   staffControl={
                     <select
                       value={staffChoiceValue(track)}
