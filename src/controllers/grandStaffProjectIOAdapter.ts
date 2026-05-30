@@ -66,6 +66,11 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         /** Tracce di accompagnamento (piano, chitarra, ecc.). Non passano per
          *  l'analisi armonica né per il voice-leading checker. */
         accompanimentTracks?: AccompanimentTrack[];
+
+        /** Mixer per-voce SATB: strumento, volume (0-1) e mute per voce 1-4. */
+        voiceInstruments?: Record<number, string>;
+        voiceVolumes?: Record<number, number>;
+        mutedVoices?: Set<number>;
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -105,6 +110,12 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		// Tracce di accompagnamento — solo se presenti, per mantenere i file leggeri.
 		...((args.accompanimentTracks && args.accompanimentTracks.length > 0)
 			? { accompanimentTracks: args.accompanimentTracks }
+			: {}),
+		// Mixer per-voce SATB (strumento/volume/mute). mutedVoices serializzato come array.
+		...(args.voiceInstruments ? { voiceInstruments: args.voiceInstruments } : {}),
+		...(args.voiceVolumes ? { voiceVolumes: args.voiceVolumes } : {}),
+		...((args.mutedVoices && args.mutedVoices.size > 0)
+			? { mutedVoices: Array.from(args.mutedVoices) }
 			: {}),
 	};
 
@@ -193,6 +204,9 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setSessionUnlocked?: (next: boolean) => void;
 
 	setAccompanimentTracks?: (next: AccompanimentTrack[]) => void;
+	setVoiceInstruments?: (next: Record<number, string>) => void;
+	setVoiceVolumes?: (next: Record<number, number>) => void;
+	setMutedVoices?: (next: Set<number>) => void;
 
 	timeSignature: TimeSignature;
 };
@@ -233,6 +247,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setAnalysisLockOptions({ hideViolations: true, hideRomanLabels: false, hideChordSymbols: false, hideOrnaments: false, hideAlternatives: false, disableExport: true });
 		args.setSessionUnlocked?.(false);
 		args.setAccompanimentTracks?.([]);
+		args.setVoiceInstruments?.({ 1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano', 3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano' });
+		args.setVoiceVolumes?.({ 1: 1, 2: 1, 3: 1, 4: 1 });
+		args.setMutedVoices?.(new Set());
 		args.projectExtrasRef.current = {};
 		return;
 	}
@@ -258,6 +275,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setAnalysisLockOptions({ hideViolations: true, hideRomanLabels: false, hideChordSymbols: false, hideOrnaments: false, hideAlternatives: false, disableExport: true });
 	args.setSessionUnlocked?.(false);
 	args.setAccompanimentTracks?.([]);
+	args.setVoiceInstruments?.({ 1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano', 3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano' });
+	args.setVoiceVolumes?.({ 1: 1, 2: 1, 3: 1, 4: 1 });
+	args.setMutedVoices?.(new Set());
 	args.setBpm(120);
 	args.setIsBpmActive(false);
 	args.setIsMetronomeOn(false);
@@ -462,6 +482,17 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				args.setAccompanimentTracks?.(loadedProject.accompanimentTracks as AccompanimentTrack[]);
 			} else {
 				args.setAccompanimentTracks?.([]);
+			}
+
+			// Mixer per-voce SATB (assente nei file vecchi → restano i default già impostati sopra).
+			if (loadedProject.voiceInstruments && typeof loadedProject.voiceInstruments === 'object') {
+				args.setVoiceInstruments?.(loadedProject.voiceInstruments as Record<number, string>);
+			}
+			if (loadedProject.voiceVolumes && typeof loadedProject.voiceVolumes === 'object') {
+				args.setVoiceVolumes?.(loadedProject.voiceVolumes as Record<number, number>);
+			}
+			if (Array.isArray(loadedProject.mutedVoices)) {
+				args.setMutedVoices?.(new Set(loadedProject.mutedVoices as number[]));
 			}
 
 			args.setCurrentProjectFilePath(cmd.filePath);

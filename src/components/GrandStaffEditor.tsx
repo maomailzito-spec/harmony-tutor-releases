@@ -3057,6 +3057,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     teacherPasswordHash,
                     analysisLockOptions,
                     accompanimentTracks,
+                    voiceInstruments,
+                    voiceVolumes,
+                    mutedVoices,
                 },
                 apply: {
                     projectExtrasRef,
@@ -3119,6 +3122,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setAnalysisLockOptions,
                     setSessionUnlocked,
                     setAccompanimentTracks,
+                    setVoiceInstruments,
+                    setVoiceVolumes,
+                    setMutedVoices,
                     timeSignature,
                 },
             });
