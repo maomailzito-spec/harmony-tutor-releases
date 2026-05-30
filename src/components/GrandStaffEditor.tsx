@@ -992,15 +992,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [staffLayoutMode, layoutModeChanges, timeSignature]);
 
     const clefForVoice = useCallback((voice: number | undefined | null, clefOverride?: 'treble' | 'bass', measureIndex?: number | null, beat?: number | null): ClefType => {
-        if (clefOverride) return clefOverride;
-        if (staffSystemMode === 'treble_only') return 'treble';
         const v = voice ?? 1;
+        // In ancient-clef and treble-only layouts the clef is fixed (by voice / single
+        // staff): the treble/bass clefOverride only applies to the grandstaff layout,
+        // so it must NOT win here — otherwise overridden soprano/alto notes get a
+        // treble/bass clef that matches no ancient staff and vanish from the render.
         if (staffSystemMode === 'satb_ancient') {
             if (v === 1) return 'soprano';
             if (v === 2) return 'alto';
             if (v === 3) return 'tenor';
             return 'bass';
         }
+        if (staffSystemMode === 'treble_only') return 'treble';
+        if (clefOverride) return clefOverride;
         const mode = effectiveLayoutMode(measureIndex, beat);
         if (mode === 'parti_strette') return v === 4 ? 'bass' : 'treble';
         return (v === 3 || v === 4) ? 'bass' : 'treble';
