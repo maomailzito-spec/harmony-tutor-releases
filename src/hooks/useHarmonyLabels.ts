@@ -3698,6 +3698,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const mergedForSymbol = (mergedNaming as any[]).map(n => ({ ...n, voice: 1, clef: 'treble' }));
                         const reSym = getChordSymbol(mergedForSymbol as any, ksReconcile, contextTonic);
                         if (reSym) { symbol = reSym; _dt('Q6:symbolReconcile', symbol); }
+                        // Recompute the Roman inversion figure from the same merged set so the
+                        // figured bass follows the marked ACC bass too (e.g. ii 4/3 → 6/5 when
+                        // a lower ACC note becomes the bass). Only when marked ACC notes joined.
+                        if (hasMarkedAcc) {
+                            const reFig = computeFiguredBassFromNotes(mergedForSymbol as any, FIGURED_BASS_UI_OPTIONS).figures;
+                            if (reFig && reFig.length) { figures = reFig; _dt('Q6:figuresReconcile', figures.join('/')); }
+                        }
                     }
                 }
             } catch { /* ignore */ }
