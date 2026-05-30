@@ -1139,6 +1139,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const middleY = trebleTop + 2 * VF_LINE_SPACING;
         return { trackId: track.id, visIdx: bi, clef, pos: ACC_MIDDLE_LINE_POS[clef] + Math.round((middleY - yCal) / halfStep) };
     }, []);
+
+    // Copy the current selection robustly: detect whether the selected notes live in the
+    // accompaniment tracks or in the SATB rawNotes (instead of trusting activeStaffArea),
+    // remember that source as the active area/track (so a plain paste returns to it), and
+    // write both the local and system clipboard. Returns the copied notes ([] if none).
+    const copySelectedToClipboard = useCallback((): StaffNote[] => {
+        const sel = latestSelectedNoteIds.current;
+        if (!sel || sel.size === 0) return [];
+        const accSelected = latestAccompanimentTracks.current.flatMap(t => t.notes).filter(n => sel.has(n.id));
+        const satbSelected = (latestRawNotes.current || []).filter(n => sel.has(n.id));
+        const source = accSelected.length > 0 ? accSelected : satbSelected;
+        if (source.length === 0) return [];
+        if (accSelected.length > 0) {
+            activeStaffAreaRef.current = 'accompaniment';
+            setActiveStaffArea('accompaniment');
+            const owner = latestAccompanimentTracks.current.find(t => t.notes.some(n => n.id === accSelected[0].id));
+            if (owner) activeAccTrackIdRef.current = owner.id;
+        } else {
+            activeStaffAreaRef.current = 'satb';
+            setActiveStaffArea('satb');
+        }
+        const copied = source.map(n => { const { xPosition, ...rest } = n as any; return rest as StaffNote; });
+        setClipboard(copied);
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
+        }
+        return copied;
+    }, [setClipboard, setCopyPasteError]);
+
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
     const [harmonyOverrides, setHarmonyOverrides] = useState<HarmonyLabelOverride[]>([]);
     const [tonicizationHints, setTonicizationHints] = useState<TonicizationHint[]>([]);
@@ -2735,25 +2764,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // Keep silent: menu copy should not pop errors when nothing is selected.
                     return;
                 }
-                // ACC area: copy from accompaniment tracks instead of rawNotes
-                if (activeStaffAreaRef.current === 'accompaniment') {
-                    const allAccNotes = latestAccompanimentTracks.current.flatMap(t => t.notes);
-                    const accSelected = allAccNotes.filter(n => currentSelected.has(n.id));
-                    if (accSelected.length > 0) {
-                        const copied = accSelected.map(n => { const { xPosition, ...rest } = n as any; return rest as StaffNote; });
-                        setClipboard(copied);
-                    }
-                    return;
-                }
-                const selected = (latestRawNotes.current || []).filter(n => currentSelected && currentSelected.has(n.id));
-                const copied = selected.map(n => {
-                    const { xPosition, ...rest } = n as any;
-                    return rest as StaffNote;
-                });
-                setClipboard(copied);
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
-                }
+                const copied = copySelectedToClipboard();
+                if (copied.length === 0) return;
                 // Imposta un pasteMarker basato sul contenuto appena copiato (primo evento nel blocco)
                 try {
                     if (copied && copied.length > 0) {
@@ -9007,29 +9019,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
 
-                if (activeStaffAreaRef.current === 'accompaniment') {
-                    const allAccNotes = accompanimentTracks.flatMap(t => t.notes);
-                    const accSelected = allAccNotes.filter(n => selectedNoteIds.has(n.id));
-                    const copied = accSelected.map(n => { const { xPosition, ...rest } = n as any; return rest as StaffNote; });
-                    if (copied.length > 0) {
-                        setClipboard(copied);
-                        if (navigator.clipboard && window.isSecureContext) {
-                            navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
-                        }
-                    }
-                    return;
-                }
-
-                const selected = rawNotes.filter(n => selectedNoteIds.has(n.id));
-                const copied = selected.map(n => {
-                    const { xPosition, ...rest } = n as any;
-                    return rest as StaffNote;
-                });
-                setClipboard(copied);
-                // Prova anche a copiare come testo JSON negli appunti di sistema
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
-                }
+                copySelectedToClipboard();
                 return;
             }
 
