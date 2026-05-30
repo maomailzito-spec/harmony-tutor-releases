@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AccompanimentTrack } from '../types';
+import type { AccompanimentTrack, ClefType } from '../types';
 import { INSTRUMENTS, instrumentEmoji, soundfontToGm } from '../constants/instruments';
 
 /**
@@ -37,6 +37,21 @@ const VOICE_NAMES: Record<number, string> = { 1: 'Soprano', 2: 'Contralto', 3: '
 // Accent colours match the per-voice colours used in the toolbar.
 const VOICE_ACCENTS: Record<number, string> = { 1: '#2563eb', 2: '#f97316', 3: '#16a34a', 4: '#dc2626' };
 
+// Per-track staff options. "grandstaff" = treble+bass (keyboard); the others are a
+// single staff with the given clef (instrumental/vocal lines). Encoded as
+// { staffMode, clef } applied to the AccompanimentTrack.
+type StaffChoice = { value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType };
+const STAFF_OPTIONS: StaffChoice[] = [
+  { value: 'grandstaff',     label: 'Grandstaff',  staffMode: 'grandstaff' },
+  { value: 'single-treble',  label: '𝄞 Violino',   staffMode: 'treble_only', clef: 'treble' },
+  { value: 'single-bass',    label: '𝄢 Basso',     staffMode: 'treble_only', clef: 'bass' },
+  { value: 'single-soprano', label: 'Soprano',     staffMode: 'treble_only', clef: 'soprano' },
+  { value: 'single-alto',    label: 'Contralto',   staffMode: 'treble_only', clef: 'alto' },
+  { value: 'single-tenor',   label: 'Tenore',      staffMode: 'treble_only', clef: 'tenor' },
+];
+const staffChoiceValue = (track: AccompanimentTrack): string =>
+  track.staffMode === 'grandstaff' ? 'grandstaff' : `single-${track.clef ?? 'treble'}`;
+
 /** A single vertical channel strip (shared layout for voices and tracks). */
 const ChannelStrip: React.FC<{
   /** Translator for the 'toolbar' namespace (instrument labels). */
@@ -56,10 +71,12 @@ const ChannelStrip: React.FC<{
   /** Optional visibility toggle (ACC tracks only). */
   visible?: boolean;
   onToggleVisible?: () => void;
+  /** Optional staff/clef selector (ACC tracks only). */
+  staffControl?: React.ReactNode;
   onContextMenu?: (e: React.MouseEvent) => void;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
-  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, onContextMenu,
+  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onContextMenu,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
@@ -94,6 +111,9 @@ const ChannelStrip: React.FC<{
         ))}
       </select>
     </div>
+
+    {/* Staff/clef selector (ACC tracks only) */}
+    {staffControl}
 
     {/* Mute / Solo */}
     <div className="flex gap-1">
@@ -309,6 +329,22 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   onToggleSolo={() => onUpdateTrack(track.id, { solo: !track.solo })}
                   visible={track.visible}
                   onToggleVisible={() => onUpdateTrack(track.id, { visible: !track.visible })}
+                  staffControl={
+                    <select
+                      value={staffChoiceValue(track)}
+                      onChange={(e) => {
+                        const opt = STAFF_OPTIONS.find(o => o.value === e.target.value);
+                        if (opt) onUpdateTrack(track.id, { staffMode: opt.staffMode, clef: opt.clef });
+                      }}
+                      title="Tipo di rigo / chiave"
+                      aria-label="Tipo di rigo"
+                      className="w-full bg-slate-700 text-gray-200 text-[8px] rounded px-0.5 py-0.5 border border-slate-600 cursor-pointer"
+                    >
+                      {STAFF_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  }
                   onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, trackId: track.id }); }}
                 />
               ))

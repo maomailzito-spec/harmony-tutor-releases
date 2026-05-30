@@ -459,7 +459,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 muted: false,
                 visible: true,
                 volume: 0.8,
-                staffMode: 'grandstaff',
+                // New tracks default to a single instrumental staff in treble clef
+                // (one grandstaff/keyboard is usually enough; extra tracks are lines).
+                staffMode: 'treble_only',
+                clef: 'treble',
             };
             const next = [...(prev || []), newTrack];
             latestAccompanimentTracks.current = next;

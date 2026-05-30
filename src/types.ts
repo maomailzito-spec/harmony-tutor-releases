@@ -233,9 +233,13 @@ export type AccompanimentTrack = {
   visible: boolean;
   /** Volume relativo 0-1 */
   volume: number;
-  /** Modalità pentagramma: "grandstaff" (treble+bass) o "treble_only" (solo violino).
+  /** Modalità pentagramma: "grandstaff" (treble+bass) o "treble_only" (rigo singolo).
    *  File legacy senza questo campo vengono trattati come "grandstaff" al consumo. */
   staffMode: 'grandstaff' | 'treble_only';
+  /** Chiave del rigo singolo (usata quando staffMode === 'treble_only').
+   *  Permette righi strumentali/vocali in chiavi diverse (violino, basso, soprano,
+   *  contralto, tenore). Default 'treble' se assente. Ignorata in 'grandstaff'. */
+  clef?: ClefType;
 };
 
 /**
