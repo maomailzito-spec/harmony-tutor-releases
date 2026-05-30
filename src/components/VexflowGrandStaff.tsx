@@ -37,10 +37,10 @@ interface VexflowGrandStaffProps {
    *  - "treble_only": solo treble (le note con clef:"bass" usano ledger lines)
    *  Default: "grandstaff" se omesso. */
   accompanimentStaffMode?: 'grandstaff' | 'treble_only';
-  /** Lista delle tracce di accompagnamento. Viene usata solo per ricavare il nome
-   *  (track.name) della prima traccia visibile, da stampare a sinistra del Grand Staff
-   *  di accompagnamento. Non influenza le note renderizzate. */
-  accompanimentTracks?: Array<{ name: string; visible?: boolean }>;
+  /** Tracce di accompagnamento VISIBILI, in ordine. Ogni traccia disegna il proprio
+   *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
+   *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
+  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType }>;
 }
 
 const DEFAULT_WIDTH = 900;
@@ -78,6 +78,44 @@ const ACC_TREBLE_Y_SATB_ANCIENT = SATB_BASS_Y + STAVE_LINES_HEIGHT + ACCOMPANIME
 // gap + treble lines + treble->bass span + bass lines.
 // (Used by parent to grow systemHeightPx; mirrored constant in GrandStaffEditor.tsx.)
 export const ACCOMPANIMENT_EXTRA_PX = ACCOMPANIMENT_STAFF_GAP + STAVE_LINES_HEIGHT + ACCOMPANIMENT_GS_SPAN;
+
+// ── Per-track accompaniment layout ──
+// Each visible track draws its own staff block, stacked below the SATB system.
+// "occupied" = vertical space the block's staff lines actually take (excl. the
+// leading gap); a grand staff spans treble→bass, a single staff is one pentagram.
+const ACC_OCCUPIED_GRANDSTAFF = ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT; // 170
+const ACC_OCCUPIED_SINGLE = STAVE_LINES_HEIGHT + 30; // 70 (lines + breathing room)
+const accBlockOccupied = (mode: 'grandstaff' | 'treble_only') =>
+  mode === 'grandstaff' ? ACC_OCCUPIED_GRANDSTAFF : ACC_OCCUPIED_SINGLE;
+
+/** Total extra vertical px for a set of visible accompaniment tracks (in order).
+ *  Each block contributes a leading gap + its occupied height. Mirrors the per-track
+ *  stacking used when rendering, so the parent can size the system to match. */
+export function accompanimentExtraPxForTracks(
+  tracks: Array<{ staffMode?: 'grandstaff' | 'treble_only' }>
+): number {
+  return tracks.reduce(
+    (sum, t) => sum + ACCOMPANIMENT_STAFF_GAP + accBlockOccupied(t.staffMode ?? 'grandstaff'),
+    0
+  );
+}
+
+/** Treble-Y offset of each track block, relative to the first block's treble Y
+ *  (which sits at the base accTrebleY). offset[i] = Σ_{j<i}(gap + occupied(j)). */
+export function accompanimentTrackTrebleOffsets(
+  tracks: Array<{ staffMode?: 'grandstaff' | 'treble_only' }>
+): number[] {
+  const offsets: number[] = [];
+  let acc = 0;
+  tracks.forEach((_t, i) => {
+    if (i === 0) { offsets.push(0); }
+    else {
+      acc += ACCOMPANIMENT_STAFF_GAP + accBlockOccupied(tracks[i - 1].staffMode ?? 'grandstaff');
+      offsets.push(acc);
+    }
+  });
+  return offsets;
+}
 
 const durationToVexflow = (duration: StaffNote['duration']): string => {
   switch (duration) {
@@ -666,20 +704,40 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const satbTenor = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, TENOR_Y, staffWidth) : null;
     const satbBass = staffMode === 'satb_ancient' ? new Stave(STAFF_MARGIN, SATB_BASS_Y, staffWidth) : null;
 
-    // Accompaniment staves: rendered BELOW the SATB Grand Staff when requested.
-    // Same X/width as the SATB staves so barlines align horizontally.
-    // In "treble_only" mode only the treble stave is created (no brace).
+    // Accompaniment staves: one block per visible track, stacked BELOW the SATB.
+    // Each block is a grand staff (treble+bass+brace) or a single staff with the
+    // track's clef. Same X/width as the SATB staves so barlines align horizontally.
     const accTrebleY = staffMode === 'satb_ancient' ? ACC_TREBLE_Y_SATB_ANCIENT : ACC_TREBLE_Y_GRANDSTAFF;
-    const accBassY = accTrebleY + ACCOMPANIMENT_GS_SPAN;
-    const accTreble = showAccompanimentStaves ? new Stave(STAFF_MARGIN, accTrebleY, staffWidth) : null;
-    const accBass = (showAccompanimentStaves && accompanimentStaffMode === 'grandstaff')
-      ? new Stave(STAFF_MARGIN, accBassY, staffWidth)
-      : null;
+    type AccBlock = {
+      trackIdx: number;
+      mode: 'grandstaff' | 'treble_only';
+      clef: ClefType;
+      name?: string;
+      treble: Stave;
+      bass: Stave | null;
+      trebleY: number;
+    };
+    let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
+    // Robustness: if asked to show acc staves but no track metadata arrived, draw one
+    // default grand staff so notes still have somewhere to render.
+    if (showAccompanimentStaves && accVisibleTracks.length === 0) {
+      accVisibleTracks = [{ name: '', visible: true, staffMode: accompanimentStaffMode ?? 'grandstaff' }];
+    }
+    const accTrebleOffsets = accompanimentTrackTrebleOffsets(accVisibleTracks);
+    const accBlocks: AccBlock[] = accVisibleTracks.map((t, i) => {
+      const mode = (t.staffMode ?? 'grandstaff');
+      const clef: ClefType = mode === 'grandstaff' ? 'treble' : (t.clef ?? 'treble');
+      const trebleY = accTrebleY + accTrebleOffsets[i];
+      const treble = new Stave(STAFF_MARGIN, trebleY, staffWidth);
+      const bass = mode === 'grandstaff' ? new Stave(STAFF_MARGIN, trebleY + ACCOMPANIMENT_GS_SPAN, staffWidth) : null;
+      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY };
+    });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
     // so suppress per-staff right-end barlines to avoid double-thickness.
     // (Internal measure barlines are handled separately below.)
-    const stavesForEndBarSuppression: Stave[] = [treble, bass, satbSoprano, satbAlto, satbTenor, satbBass, accTreble, accBass].filter(Boolean) as Stave[];
+    const stavesForEndBarSuppression: Stave[] = [treble, bass, satbSoprano, satbAlto, satbTenor, satbBass,
+      ...accBlocks.flatMap(b => [b.treble, b.bass])].filter(Boolean) as Stave[];
     for (const s of stavesForEndBarSuppression) {
       try {
         s.setEndBarType(VFBarline.type.NONE);
@@ -738,51 +796,48 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // Same clef/timesig/keysig as the SATB Grand Staff. In "grandstaff" mode draws
     // treble+bass + BRACE + SINGLE_LEFT connector. In "treble_only" mode draws only
     // the treble stave (single pentagram, no brace).
-    if (accTreble) {
-      accTreble.addClef('treble').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
-      accTreble.addKeySignature(keyString);
-      accTreble.setContext(context).draw();
-    }
-    if (accTreble && accBass) {
-      accBass.addClef('bass').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
-      accBass.addKeySignature(keyString);
-      accBass.setContext(context).draw();
+    // Draw each track block: grandstaff (treble+bass+brace) or single staff (track clef),
+    // plus its own name label to the left, rotated -90° and centered on the block.
+    const svgElForLabels = containerRef.current?.querySelector('svg');
+    for (const block of accBlocks) {
+      block.treble
+        .addClef(block.clef as any)
+        .addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
+      block.treble.addKeySignature(keyString);
+      block.treble.setContext(context).draw();
 
-      const accBrace = new StaveConnector(accTreble, accBass);
-      accBrace.setType(StaveConnector.type.BRACE);
-      accBrace.setContext(context).draw();
+      if (block.bass) {
+        block.bass.addClef('bass').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
+        block.bass.addKeySignature(keyString);
+        block.bass.setContext(context).draw();
 
-      const accLineLeft = new StaveConnector(accTreble, accBass);
-      accLineLeft.setType(StaveConnector.type.SINGLE_LEFT);
-      accLineLeft.setContext(context).draw();
-    }
+        const accBrace = new StaveConnector(block.treble, block.bass);
+        accBrace.setType(StaveConnector.type.BRACE);
+        accBrace.setContext(context).draw();
 
-    // Track name label: drawn to the left of the acc Grand Staff, rotated -90°.
-    if (accTreble && accompanimentTracks) {
-      const firstVisible = accompanimentTracks.find(t => t.visible !== false);
-      if (firstVisible?.name) {
-        const svgEl = containerRef.current?.querySelector('svg');
-        if (svgEl) {
-          const labelX = 14;
-          // Grand staff: center on the treble→bass midpoint (with the established
-          // +40 nudge). Single staff: the full grand-staff formula drops the label
-          // too low (toward a non-existent bass), while the bare staff-center is too
-          // high by the same amount — so use the midpoint between the two.
-          const grandstaffLabelY = (accTrebleY + accBassY + STAVE_LINES_HEIGHT) / 2 + 40;
-          const labelY = accompanimentStaffMode === 'grandstaff'
-            ? grandstaffLabelY
-            : (grandstaffLabelY + (accTrebleY + STAVE_LINES_HEIGHT / 2)) / 2 - 15;
-          const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          textEl.setAttribute('x', '0');
-          textEl.setAttribute('y', '4');
-          textEl.setAttribute('transform', `translate(${labelX}, ${labelY}) rotate(-90)`);
-          textEl.setAttribute('text-anchor', 'middle');
-          textEl.setAttribute('font-family', 'Arial, sans-serif');
-          textEl.setAttribute('font-size', '12');
-          textEl.setAttribute('fill', 'black');
-          textEl.textContent = firstVisible.name;
-          svgEl.appendChild(textEl);
-        }
+        const accLineLeft = new StaveConnector(block.treble, block.bass);
+        accLineLeft.setType(StaveConnector.type.SINGLE_LEFT);
+        accLineLeft.setContext(context).draw();
+      }
+
+      if (block.name && svgElForLabels) {
+        const labelX = 14;
+        // Grand staff: center on the treble→bass midpoint (+40 nudge). Single staff:
+        // midpoint between that and the bare staff-center, nudged up 15px.
+        const grandstaffLabelY = block.trebleY + (ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT) / 2 + 40;
+        const labelY = block.mode === 'grandstaff'
+          ? grandstaffLabelY
+          : (grandstaffLabelY + (block.trebleY + STAVE_LINES_HEIGHT / 2)) / 2 - 15;
+        const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textEl.setAttribute('x', '0');
+        textEl.setAttribute('y', '4');
+        textEl.setAttribute('transform', `translate(${labelX}, ${labelY}) rotate(-90)`);
+        textEl.setAttribute('text-anchor', 'middle');
+        textEl.setAttribute('font-family', 'Arial, sans-serif');
+        textEl.setAttribute('font-size', '12');
+        textEl.setAttribute('fill', 'black');
+        textEl.textContent = block.name;
+        svgElForLabels.appendChild(textEl);
       }
     }
 
@@ -833,7 +888,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // matching standard engraving where each Grand Staff has its own bridged barlines.
       // For "treble_only" accompaniment, the range collapses to a single stave (top===bottom).
       const ranges: Array<{ top: Stave; bottom: Stave }> = [{ top: topStave, bottom: bottomStave }];
-      if (accTreble) ranges.push({ top: accTreble, bottom: accBass ?? accTreble });
+      // One bridged barline range per accompaniment block (single staff → top===bottom).
+      for (const block of accBlocks) ranges.push({ top: block.treble, bottom: block.bass ?? block.treble });
 
       const ctxAny = context as any;
       ctxAny.save?.();
@@ -3253,20 +3309,30 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         if (bass) drawNotesAtX(bassNotes, bass, 'bass');
       }
 
-      // Accompaniment notes (including ACC ghost when voice === 0): render on the acc staves.
-      if (accTreble && allAccompanimentNotes.length > 0) {
-        if (accBass) {
-          // grandstaff: route by clef, low notes go to bass stave.
-          const accTrebleNotes = allAccompanimentNotes.filter(n => (n.clef || 'treble') === 'treble');
-          const accBassNotes = allAccompanimentNotes.filter(n => n.clef === 'bass');
-          if (accTrebleNotes.length > 0) drawNotesAtX(accTrebleNotes, accTreble, 'treble');
-          if (accBassNotes.length > 0) drawNotesAtX(accBassNotes, accBass, 'bass');
-        } else {
-          // treble_only: all notes (incl. clef:"bass") go to the treble stave;
-          // override clef to "treble" so VexFlow positions them by treble clef
-          // (low notes will naturally use ledger lines below the stave).
-          const allAccNotes = allAccompanimentNotes.map(n => ({ ...n, clef: 'treble' as ClefType }));
-          drawNotesAtX(allAccNotes, accTreble, 'treble');
+      // Accompaniment notes (including ACC ghost when voice === 0): route each note to
+      // its track's block via `_trackIdx`, then draw on that block's stave(s).
+      if (accBlocks.length > 0 && allAccompanimentNotes.length > 0) {
+        const notesByTrack = new Map<number, StaffNote[]>();
+        for (const n of allAccompanimentNotes) {
+          // Clamp untagged/ghost notes into a valid block (default first).
+          const ti = Math.min(accBlocks.length - 1, Math.max(0, ((n as any)._trackIdx ?? 0)));
+          if (!notesByTrack.has(ti)) notesByTrack.set(ti, []);
+          notesByTrack.get(ti)!.push(n);
+        }
+        for (const block of accBlocks) {
+          const trackNotes = notesByTrack.get(block.trackIdx);
+          if (!trackNotes || trackNotes.length === 0) continue;
+          if (block.bass) {
+            // grandstaff: route by clef, low notes go to the bass stave.
+            const tn = trackNotes.filter(n => (n.clef || 'treble') === 'treble');
+            const bn = trackNotes.filter(n => n.clef === 'bass');
+            if (tn.length > 0) drawNotesAtX(tn, block.treble, 'treble');
+            if (bn.length > 0) drawNotesAtX(bn, block.bass, 'bass');
+          } else {
+            // single staff: position all notes by the block's clef.
+            const single = trackNotes.map(n => ({ ...n, clef: block.clef }));
+            drawNotesAtX(single, block.treble, block.clef);
+          }
         }
         // ACC hit-points are preserved to enable click and marquee selection.
       }

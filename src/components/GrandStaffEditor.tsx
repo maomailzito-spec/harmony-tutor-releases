@@ -47,7 +47,7 @@ import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
 import GrandStaffToolbar from './GrandStaffToolbar';
-import VexflowGrandStaff from './VexflowGrandStaff';
+import VexflowGrandStaff, { accompanimentExtraPxForTracks } from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
 import AnalysisLockModal from './AnalysisLockModal';
 import TempoCurveDialog from './TempoCurveDialog';
@@ -1011,18 +1011,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     //  - "treble_only": 100 gap + 70 (single staff footprint)                = 170px
     // The 100px gap matches ACCOMPANIMENT_STAFF_GAP in VexflowGrandStaff and
     // leaves room for Roman-numeral overhang and high acc-treble ledger lines.
-    // If multiple visible tracks have mixed modes, we allocate the max (grandstaff wins).
-    const VF_ACC_EXTRA_GRANDSTAFF = 100 + 40 + 130; // 270 — keep in sync with VexflowGrandStaff
-    const VF_ACC_EXTRA_TREBLE_ONLY = 100 + 70; // 170
+    // Each visible track now draws its OWN staff block (grandstaff or single staff),
+    // stacked below the SATB. Total extra height = sum of per-track footprints,
+    // computed by the shared helper so it stays in sync with the renderer.
     const visibleAccompanimentTracks = (accompanimentTracks || []).filter(t => t && t.visible);
     const hasVisibleAccompaniment = visibleAccompanimentTracks.length > 0;
     const anyVisibleGrandstaff = visibleAccompanimentTracks.some(
         t => (t.staffMode ?? 'grandstaff') === 'grandstaff'
     );
+    // Kept for legacy hit-testing/ghost logic that still assumes a single acc block;
+    // refined to per-track mapping in a later phase.
     const effectiveAccStaffMode: 'grandstaff' | 'treble_only' = anyVisibleGrandstaff ? 'grandstaff' : 'treble_only';
-    const accExtraPx = !hasVisibleAccompaniment
-        ? 0
-        : (effectiveAccStaffMode === 'grandstaff' ? VF_ACC_EXTRA_GRANDSTAFF : VF_ACC_EXTRA_TREBLE_ONLY);
+    const accExtraPx = hasVisibleAccompaniment
+        ? accompanimentExtraPxForTracks(visibleAccompanimentTracks)
+        : 0;
     const systemHeightPx = (staffSystemMode === 'satb_ancient' ? VF_SATB_SYSTEM_HEIGHT : TOTAL_SYSTEM_HEIGHT)
         + accExtraPx;
     const playheadYTopPx = staffSystemMode === 'satb_ancient'
@@ -10469,8 +10471,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     sysParams.measureIndices.forEach((m, i) => measureToIdx.set(m, i));
                                                                     const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
                                                                     const out: StaffNote[] = [];
-                                                                    for (const track of (accompanimentTracks || [])) {
-                                                                        if (!track || !track.visible) continue;
+                                                                    // Iterate VISIBLE tracks in order and tag each note with its
+                                                                    // visible-track index (_trackIdx) so the renderer can route it to
+                                                                    // the matching staff block (same ordering as visibleAccompanimentTracks).
+                                                                    visibleAccompanimentTracks.forEach((track, visIdx) => {
                                                                         for (const n of (track.notes || [])) {
                                                                             const mi = n.measureIndex ?? -1;
                                                                             const idxInSys = measureToIdx.get(mi);
@@ -10483,9 +10487,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             const relativeX = relativeTicks * sysParams.pxPerTick;
                                                                             const baseX = sysParams.startMeasuresX[idxInSys] ?? 0;
                                                                             const localX = baseX + MEASURE_PADDING_X + relativeX;
-                                                                            out.push({ ...n, xPosition: localX });
+                                                                            out.push({ ...n, xPosition: localX, _trackIdx: visIdx } as StaffNote);
                                                                         }
-                                                                    }
+                                                                    });
                                                                     return out;
                                                                 })();
                                                                 return (
