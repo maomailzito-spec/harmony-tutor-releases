@@ -352,6 +352,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   tT={tT}
                   label={track.name}
                   title={track.name}
+                  accent={track.color}
                   gm={track.instrumentId}
                   onChangeInstrument={(gm) => onUpdateTrack(track.id, { instrumentId: gm })}
                   volume={track.volume}
