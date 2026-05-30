@@ -633,6 +633,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [activeStaffArea, setActiveStaffArea] = useState<'satb' | 'accompaniment'>('satb');
     const activeStaffAreaRef = useRef<'satb' | 'accompaniment'>('satb');
     useEffect(() => { activeStaffAreaRef.current = activeStaffArea; }, [activeStaffArea]);
+    // Active accompaniment track: the last ACC staff clicked/edited. Used as the target
+    // for paste and (future) recording, so they go to the track you're working on —
+    // not always the first. Falls back to the first visible track when unset.
+    const activeAccTrackIdRef = useRef<string | null>(null);
     // Pattern for ACC chord insertion (ignored for SATB).
     const [accPattern, setAccPattern] = useState<AccompanimentPattern>('block');
     const accPatternRef = useRef<AccompanimentPattern>('block');
@@ -6041,6 +6045,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const n = nInRaw ?? latestAccompanimentTracks.current.flatMap(t => t.notes).find(nn => nn.id === noteId);
         const isAccNote = nInRaw === undefined && n !== undefined;
 
+        // Selecting an ACC note makes its track the active paste/REC target.
+        if (isAccNote) {
+            const accInfo = findAccTrackForNote(noteId, latestAccompanimentTracks.current);
+            if (accInfo) {
+                activeAccTrackIdRef.current = latestAccompanimentTracks.current[accInfo.trackIndex]?.id ?? null;
+                setActiveStaffArea('accompaniment');
+            }
+        } else if (nInRaw) {
+            setActiveStaffArea('satb');
+        }
+
         // INSERT UX FIX: clicking a rest in insert mode should overwrite it
         // by running insertion rather than toggling selection.
         const isModifier = !!((e as any).shiftKey || (e as any).ctrlKey || (e as any).altKey);
@@ -6211,7 +6226,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const measureStarts = (layoutDataRef.current as any)?.measureStartAbsBeat as number[] | undefined;
         const measureBeats = (layoutDataRef.current as any)?.measureBeatsPerMeasure as number[] | undefined;
-        const isAccPaste = dataToPaste.length > 0 && (dataToPaste[0] as any).voice === 0;
 
         const absBeatForNote = (n: any) => {
             const m = Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : 0;
@@ -6276,6 +6290,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         const forceSelectedVoice = pasteToSelectedVoiceRef.current;
+        // Paste DESTINATION is the active staff area (where you last clicked), not the
+        // clipboard's origin — this lets you move material between tracks and between
+        // SATB and orchestration (e.g. copy a corrected SATB voice into an ACC line).
+        const pasteIntoAcc = activeStaffAreaRef.current === 'accompaniment' && hasVisibleAccompaniment;
+        const accDestTrack = pasteIntoAcc
+            ? (latestAccompanimentTracks.current.find(t => t.id === activeAccTrackIdRef.current && t.visible)
+               ?? latestAccompanimentTracks.current.find(t => t.visible) ?? null)
+            : null;
+        const accDestMode = accDestTrack?.staffMode ?? 'grandstaff';
+        const accDestClef: ClefType = (accDestTrack?.clef ?? 'treble') as ClefType;
         const pasted: StaffNote[] = dataToPaste
             .map(n => {
                 const m = n.measureIndex ?? 0;
@@ -6310,8 +6334,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if ((n as any).isDuplet) durBeats *= 3 / 2;
                     const durationTicks = Math.round(durBeats * TICKS_PER_QUARTER);
 
-                    const targetVoice = (!isAccPaste && forceSelectedVoice) ? selectedVoice : ((n as any).voice ?? selectedVoice);
-                    const targetClef = isAccPaste ? ((n as any).clef ?? 'treble') : clefForVoice(targetVoice as any);
+                    const srcVoice = (n as any).voice ?? selectedVoice;
+                    const targetVoice = pasteIntoAcc ? 0 : ((forceSelectedVoice || srcVoice === 0) ? selectedVoice : srcVoice);
+                    const targetClef = pasteIntoAcc
+                        ? (accDestMode === 'grandstaff' ? ((((n as any).midi ?? 60) >= 60) ? 'treble' : 'bass') : accDestClef)
+                        : clefForVoice(targetVoice as any);
                     return {
                         ...(rest as StaffNote),
                         id: crypto.randomUUID(),
@@ -6326,8 +6353,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         manualBeamGroupId: remapId(beamGroupIdMap, (n as any).manualBeamGroupId),
                     };
                 } catch (e) {
-                    const targetVoice = (!isAccPaste && forceSelectedVoice) ? selectedVoice : ((n as any).voice ?? selectedVoice);
-                    const targetClef = isAccPaste ? ((n as any).clef ?? 'treble') : clefForVoice(targetVoice as any);
+                    const srcVoice = (n as any).voice ?? selectedVoice;
+                    const targetVoice = pasteIntoAcc ? 0 : ((forceSelectedVoice || srcVoice === 0) ? selectedVoice : srcVoice);
+                    const targetClef = pasteIntoAcc
+                        ? (accDestMode === 'grandstaff' ? ((((n as any).midi ?? 60) >= 60) ? 'treble' : 'bass') : accDestClef)
+                        : clefForVoice(targetVoice as any);
                     return {
                         ...(rest as StaffNote),
                         id: crypto.randomUUID(),
@@ -6344,22 +6374,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             .filter(Boolean) as StaffNote[];
 
         if (pasted.length > 0) {
-            if (isAccPaste) {
-                const firstVisibleIdx = latestAccompanimentTracks.current.findIndex(t => t.visible);
-                if (firstVisibleIdx >= 0) {
-                    const minTick = Math.min(...pasted.map(n => (n as any).startTick ?? 0));
-                    const maxTick = Math.max(...pasted.map(n => ((n as any).startTick ?? 0) + ((n as any).durationTicks ?? 0)));
-                    setAccompanimentTracks(prev => prev.map((track, i) => {
-                        if (i !== firstVisibleIdx) return track;
-                        const filtered = track.notes.filter(n => {
-                            const s = (n as any).startTick ?? 0;
-                            return s < minTick || s >= maxTick;
-                        });
-                        return { ...track, notes: [...filtered, ...pasted].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)) };
-                    }));
-                    const lastPasted = pasted[pasted.length - 1];
-                    setSelectedNoteIds(lastPasted ? new Set([lastPasted.id]) : new Set());
-                }
+            if (pasteIntoAcc && accDestTrack) {
+                const destId = accDestTrack.id;
+                const minTick = Math.min(...pasted.map(n => (n as any).startTick ?? 0));
+                const maxTick = Math.max(...pasted.map(n => ((n as any).startTick ?? 0) + ((n as any).durationTicks ?? 0)));
+                setAccompanimentTracks(prev => prev.map((track) => {
+                    if (track.id !== destId) return track;
+                    const filtered = track.notes.filter(n => {
+                        const s = (n as any).startTick ?? 0;
+                        return s < minTick || s >= maxTick;
+                    });
+                    return { ...track, notes: [...filtered, ...pasted].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)) };
+                }));
+                const lastPasted = pasted[pasted.length - 1];
+                setSelectedNoteIds(lastPasted ? new Set([lastPasted.id]) : new Set());
             } else {
             const targetVoices = Array.from(new Set(pasted.map(n => Number((n as any).voice ?? selectedVoice)))).filter(v => Number.isFinite(v));
 
@@ -7297,6 +7325,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // note is inserted into the clicked track's own staff — not always the first.
             const accTarget = resolveAccTarget(yCal, ACC_TREBLE_TOP_Y);
             if (!accTarget) return;
+            // Remember the clicked track as the active ACC target (for paste/REC).
+            activeAccTrackIdRef.current = accTarget.trackId;
             const accClef: ClefType = accTarget.clef;
             const pos = accTarget.pos;
 
