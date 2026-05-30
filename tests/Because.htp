@@ -610,6 +610,18 @@
     "analysis.chromaticModulation": true,
     "analysis.sequencesEnabled": true
   },
+  "voiceInstruments": {
+    "1": "string_ensemble_1",
+    "2": "string_ensemble_1",
+    "3": "cello",
+    "4": "acoustic_grand_piano"
+  },
+  "voiceVolumes": {
+    "1": 1,
+    "2": 0.75,
+    "3": 0.73,
+    "4": 0.88
+  },
   "schemaVersion": 1,
   "notes": [
     {
@@ -8767,7 +8779,7 @@
   ],
   "staffSystemMode": "grandstaff",
   "keySignatureRoot": "E",
-  "projectTitle": "    t",
+  "projectTitle": "Because ",
   "titleFontSize": 44,
   "titleFontFamily": "serif",
   "timeSignature": {
@@ -8831,7 +8843,7 @@
     {
       "id": "302e21e3-421c-419d-8460-72730d83e060",
       "name": "Piano",
-      "instrumentId": 0,
+      "instrumentId": 6,
       "notes": [
         {
           "id": "midi-0-0-54",
@@ -16059,21 +16071,12 @@
       ],
       "muted": false,
       "visible": true,
-      "volume": 1,
+      "volume": 0.57,
       "staffMode": "grandstaff",
       "color": "#fff705"
     }
   ],
-  "voiceInstruments": {
-    "1": "acoustic_grand_piano",
-    "2": "acoustic_grand_piano",
-    "3": "acoustic_grand_piano",
-    "4": "acoustic_grand_piano"
-  },
-  "voiceVolumes": {
-    "1": 1,
-    "2": 1,
-    "3": 1,
-    "4": 1
-  }
+  "mutedVoices": [
+    4
+  ]
 }

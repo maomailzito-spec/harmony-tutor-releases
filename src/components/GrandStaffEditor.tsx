@@ -4708,7 +4708,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [isPlaying]);
 
     // Auto-scroll during playback so the playhead never disappears off-screen.
-    const lastAutoScrollAtRef = useRef<number>(0);
     const lastAutoScrollSystemRef = useRef<number | null>(null);
     useEffect(() => {
         if (!isPlaying) return;
@@ -4717,41 +4716,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const container = scoreScrollRef.current;
         if (!container) return;
 
-        const sysEl = systemElementByIndexRef.current.get(playheadPosition.systemIndex);
+        const sysIdx = playheadPosition.systemIndex;
+        // Auto-scroll ONLY when the active row (system) changes. Within a row the
+        // playhead just moves horizontally, so there's no need to touch the vertical
+        // scroll — this lets the user pan freely during playback without the view
+        // snapping back to the playhead on every tick.
+        if (lastAutoScrollSystemRef.current === sysIdx) return;
+
+        const sysEl = systemElementByIndexRef.current.get(sysIdx);
         if (!sysEl) return;
+        lastAutoScrollSystemRef.current = sysIdx;
 
-        const now = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
-        const sameSystem = lastAutoScrollSystemRef.current === playheadPosition.systemIndex;
-        if (sameSystem && (now - lastAutoScrollAtRef.current) < 60) return;
-
-        // Use DOM geometry rather than assuming constant top padding.
-        const playheadYLocal = (playheadYTopPx + playheadYBottomPx) / 2;
-        const playheadYAbs = sysEl.offsetTop + playheadYLocal;
-
+        // Whole-system geometry (the system div's height includes the SATB staves,
+        // the Roman-numeral band below, and the accompaniment staves).
+        const sysTop = sysEl.offsetTop;
+        const sysHeight = sysEl.offsetHeight;
         const viewTop = container.scrollTop;
         const viewBottom = viewTop + container.clientHeight;
 
-        const marginTop = 60;
-        const marginBottom = 140;
+        // Already fully on screen → don't move.
+        if (sysTop >= viewTop && (sysTop + sysHeight) <= viewBottom) return;
 
-        let targetTop: number | null = null;
-        if (playheadYAbs < (viewTop + marginTop)) {
-            targetTop = playheadYAbs - marginTop;
-        } else if (playheadYAbs > (viewBottom - marginBottom)) {
-            targetTop = playheadYAbs - (container.clientHeight - marginBottom);
-        }
-
-        if (targetTop == null) return;
+        // Reveal the WHOLE system (so Roman numerals / ACC staves below aren't cut).
+        // If it fits, leave a little headroom at the top; otherwise align the top.
+        const marginTop = 28;
+        const slack = container.clientHeight - sysHeight;
+        const targetTopRaw = slack > 0 ? (sysTop - Math.min(marginTop, slack / 2)) : (sysTop - marginTop);
 
         const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        const clamped = Math.max(0, Math.min(maxTop, targetTop));
+        const clamped = Math.max(0, Math.min(maxTop, targetTopRaw));
         if (Math.abs(clamped - container.scrollTop) <= 2) return;
 
-        // Immediate scroll keeps playback visually in sync.
-        container.scrollTo({ top: clamped, behavior: 'auto' });
-        lastAutoScrollAtRef.current = now;
-        lastAutoScrollSystemRef.current = playheadPosition.systemIndex;
-    }, [isPlaying, playheadPosition, playheadYBottomPx, playheadYTopPx]);
+        container.scrollTo({ top: clamped, behavior: 'smooth' });
+    }, [isPlaying, playheadPosition]);
 
     const startPlayback = useCallback(async () => {
         if (!isAudioReady) return;
