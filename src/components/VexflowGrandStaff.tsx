@@ -771,7 +771,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           const grandstaffLabelY = (accTrebleY + accBassY + STAVE_LINES_HEIGHT) / 2 + 40;
           const labelY = accompanimentStaffMode === 'grandstaff'
             ? grandstaffLabelY
-            : (grandstaffLabelY + (accTrebleY + STAVE_LINES_HEIGHT / 2)) / 2;
+            : (grandstaffLabelY + (accTrebleY + STAVE_LINES_HEIGHT / 2)) / 2 - 15;
           const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           textEl.setAttribute('x', '0');
           textEl.setAttribute('y', '4');
