@@ -6321,7 +6321,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             }
         }
-        const pasteIntoAcc = destIsAcc && hasVisibleAccompaniment;
+        // Compute visibility FRESH from the ref (the component-level
+        // hasVisibleAccompaniment is captured stale in this callback's closure).
+        const hasVisibleAccFresh = (latestAccompanimentTracks.current || []).some(t => t && t.visible);
+        const pasteIntoAcc = destIsAcc && hasVisibleAccFresh;
         const accDestTrack = pasteIntoAcc
             ? (latestAccompanimentTracks.current.find(t => t.id === destAccTrackId && t.visible)
                ?? latestAccompanimentTracks.current.find(t => t.visible) ?? null)
