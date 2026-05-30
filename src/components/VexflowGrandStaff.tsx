@@ -845,7 +845,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       if (block.color && svgElForLabels) {
         // The rendered staff lines sit ~50px below the block's nominal trebleY
         // (same offset seen when calibrating the track-name label), so shift the band.
-        const ACC_BAND_Y_OFFSET = 50;
+        const ACC_BAND_Y_OFFSET = 37;
         const top = block.trebleY + ACC_BAND_Y_OFFSET;
         const bottom = (block.mode === 'grandstaff'
           ? block.trebleY + ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT
