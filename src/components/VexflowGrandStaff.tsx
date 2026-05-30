@@ -40,7 +40,7 @@ interface VexflowGrandStaffProps {
   /** Tracce di accompagnamento VISIBILI, in ordine. Ogni traccia disegna il proprio
    *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
    *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
-  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType }>;
+  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string }>;
 }
 
 const DEFAULT_WIDTH = 900;
@@ -716,6 +716,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       treble: Stave;
       bass: Stave | null;
       trebleY: number;
+      color?: string;
     };
     let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
     // Robustness: if asked to show acc staves but no track metadata arrived, draw one
@@ -730,7 +731,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const trebleY = accTrebleY + accTrebleOffsets[i];
       const treble = new Stave(STAFF_MARGIN, trebleY, staffWidth);
       const bass = mode === 'grandstaff' ? new Stave(STAFF_MARGIN, trebleY + ACCOMPANIMENT_GS_SPAN, staffWidth) : null;
-      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY };
+      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -838,6 +839,22 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         textEl.setAttribute('fill', 'black');
         textEl.textContent = block.name;
         svgElForLabels.appendChild(textEl);
+      }
+
+      // Vertical color band beside the staff (track color from the mixer).
+      if (block.color && svgElForLabels) {
+        const top = block.trebleY;
+        const bottom = block.mode === 'grandstaff'
+          ? block.trebleY + ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT
+          : block.trebleY + STAVE_LINES_HEIGHT;
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(STAFF_MARGIN - 9));
+        rect.setAttribute('y', String(top));
+        rect.setAttribute('width', '4');
+        rect.setAttribute('height', String(Math.max(0, bottom - top)));
+        rect.setAttribute('rx', '2');
+        rect.setAttribute('fill', block.color);
+        svgElForLabels.appendChild(rect);
       }
     }
 
@@ -2185,7 +2202,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               if (c === 'bass') return 4;
               return 1;
             })();
-            const vc = showVoiceColors ? voiceColor(voiceForColor) : null;
+            // ACC notes (voice 0) use their track's chosen color when set; otherwise
+            // fall back to the clef-derived voice color. SATB voices unchanged.
+            const accTrackColor = (Number(n.voice) === 0)
+              ? accBlocks[((n as any)._trackIdx ?? 0)]?.color
+              : undefined;
+            const vc = showVoiceColors
+              ? (accTrackColor ? { fill: accTrackColor, stroke: accTrackColor } : voiceColor(voiceForColor))
+              : null;
             if (vc && n.id !== '__ghost__' && !selectedNoteIds.includes(n.id) && !(n as any).errorType) {
               try {
                 const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
