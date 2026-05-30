@@ -2932,11 +2932,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const prevRootPc = lastChordRootPcBySystem.get(systemIndex);
             const prevType = lastChordTypeBySystem.get(systemIndex);
 
-            try {
+            // Hoisted to event scope so the symbol-reconcile (below) can reuse the SAME
+            // ACC hint the Roman used, keeping symbol and Roman on one identification.
+            const _accHintLabel = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
+                ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), Number(event.absBeat))
+                : null;
 
-                const _accHintLabel = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
-                    ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), Number(event.absBeat))
-                    : null;
+            try {
                 const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor, {
                     ornamentOverrides: ornOverrideRecord,
                     ...(_accHintLabel && _accHintLabel.pcs.length > 0 ? { accHintPcs: _accHintLabel.pcs, accLowestMidi: _accHintLabel.lowestMidi } : {}),
@@ -3626,20 +3628,41 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             }
 
             // ── Q6: reconcile chord symbol with the Roman's final identification ──
-            // The Roman follows the structural snapshot (analysisNotesForNaming) while the
-            // symbol follows the full verticality (intentional, for altered chords). When
-            // those resolve to DIFFERENT roots the labels contradict (e.g. naming → ii on
-            // D-F-A while the symbol stayed Am): recompute the symbol from the Roman's note
-            // set so both agree on the root. Skipped for aug6 (symbol = enharmonic sonority)
-            // and override beats; cadential 6/4 and secondary dominants share the root, so
-            // the root-difference guard leaves them untouched.
+            // The Roman follows the naming snapshot + ACC hint; the symbol follows the SATB
+            // verticality. When they resolve to different roots the labels contradict (e.g.
+            // an ACC bass D under SATB A-C: Roman → ii but symbol stayed Am). Recompute the
+            // symbol from the SAME merged set (naming notes + ACC-hint pcs, with the ACC
+            // bass) so both agree. Faithfulness guard: an ACC-derived root is trusted only
+            // when it's the ACC bass — mirroring getRomanAnalysis, which lets an ACC-only
+            // root win only when the bass evidences it (otherwise it's penalised). Skipped
+            // for aug6 (symbol = enharmonic sonority) and override beats; cadential 6/4 and
+            // secondary dominants share the root, so the root-difference guard is inert.
             try {
                 if (roman && symbol && !isAug6Roman && !hasAug6Variants
                     && !overrideByAbsBeat.has(qAbs(event.absBeat))) {
-                    const romanCands = identifyChordCandidates(analysisNotesForNaming as any);
+                    const satbPcs = new Set<number>((analysisNotesForNaming as any[])
+                        .filter(n => n && !n.isRest).map(n => ((Number(n.midi) % 12) + 12) % 12));
+                    const accBassMidi = _accHintLabel?.lowestMidi ?? null;
+                    const accBassPc = accBassMidi != null ? ((accBassMidi % 12) + 12) % 12 : null;
+                    // Merge ACC-hint pcs into the naming set, mirroring getRomanAnalysis.
+                    let mergedNaming: any[] = analysisNotesForNaming as any[];
+                    if (_accHintLabel && _accHintLabel.pcs.length > 0) {
+                        const synth: any[] = [];
+                        for (const pc of _accHintLabel.pcs) {
+                            if (satbPcs.has(pc)) continue;
+                            const midi = (accBassPc != null && pc === accBassPc && accBassMidi != null) ? accBassMidi : pc + 48;
+                            synth.push({ noteIndex: pc, midi, isRest: false, pitch: '', octave: Math.floor(midi / 12) - 1, position: 0, id: `__sym_hint_${pc}`, duration: 'quarter', isTriplet: false, isDuplet: false, isDotted: false, measureIndex: 0, beat: 1, startTick: 0, durationTicks: 960, voice: 0 });
+                        }
+                        if (synth.length > 0) mergedNaming = [...(analysisNotesForNaming as any[]), ...synth];
+                    }
+                    const romanCands = identifyChordCandidates(mergedNaming as any);
                     const romanRootRaw = (romanCands as any)?.[0]?.root?.noteIndex;
-                    const romanRootPc = (typeof romanRootRaw === 'number' && Number.isFinite(romanRootRaw))
+                    let romanRootPc = (typeof romanRootRaw === 'number' && Number.isFinite(romanRootRaw))
                         ? ((romanRootRaw % 12) + 12) % 12 : null;
+                    // Trust an ACC-only root only when it is the ACC bass.
+                    if (romanRootPc != null && !satbPcs.has(romanRootPc) && romanRootPc !== accBassPc) {
+                        romanRootPc = null;
+                    }
                     const symRootMatch = String(symbol).match(/^([A-G])([#b♯♭]?)/);
                     let symRootPc: number | null = null;
                     if (symRootMatch) {
@@ -3649,7 +3672,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                     if (romanRootPc != null && symRootPc != null && romanRootPc !== symRootPc) {
                         const ksReconcile = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
-                        const reSym = getChordSymbol(analysisNotesForNaming as any, ksReconcile, contextTonic);
+                        const reSym = getChordSymbol(mergedNaming as any, ksReconcile, contextTonic);
                         if (reSym) { symbol = reSym; _dt('Q6:symbolReconcile', symbol); }
                     }
                 }
