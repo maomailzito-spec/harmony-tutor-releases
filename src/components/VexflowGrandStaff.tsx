@@ -764,12 +764,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const svgEl = containerRef.current?.querySelector('svg');
         if (svgEl) {
           const labelX = 14;
-          // Center the label on the actual staff: the full grand staff (treble→bass)
-          // in grandstaff mode, or just the single treble staff otherwise — so the
-          // name doesn't drop toward a non-existent bass staff for single-staff tracks.
+          // Grand staff: center on the treble→bass midpoint (with the established
+          // +40 nudge). Single staff: the full grand-staff formula drops the label
+          // too low (toward a non-existent bass), while the bare staff-center is too
+          // high by the same amount — so use the midpoint between the two.
+          const grandstaffLabelY = (accTrebleY + accBassY + STAVE_LINES_HEIGHT) / 2 + 40;
           const labelY = accompanimentStaffMode === 'grandstaff'
-            ? (accTrebleY + accBassY + STAVE_LINES_HEIGHT) / 2 + 40
-            : accTrebleY + STAVE_LINES_HEIGHT / 2;
+            ? grandstaffLabelY
+            : (grandstaffLabelY + (accTrebleY + STAVE_LINES_HEIGHT / 2)) / 2;
           const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           textEl.setAttribute('x', '0');
           textEl.setAttribute('y', '4');
