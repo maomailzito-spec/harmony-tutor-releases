@@ -3687,26 +3687,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     }
                     if (romanRootPc != null && symRootPc != null && romanRootPc !== symRootPc) {
                         const ksReconcile = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
-                        const reSym = getChordSymbol(mergedNaming as any, ksReconcile, contextTonic);
-                        if (reSym) {
-                            let fixed = reSym;
-                            // getChordSymbol's bass picker prefers the SATB bass voice / bass
-                            // clef, so it can miss a marked ACC note that's genuinely lower.
-                            // If the true lowest note of the merged set is the chord ROOT, it's
-                            // root position → drop the spurious slash (e.g. F/A → F).
-                            const slashIdx = fixed.indexOf('/');
-                            if (slashIdx >= 0) {
-                                let lowest: any = null;
-                                for (const n of mergedNaming as any[]) {
-                                    if (!n || n.isRest || !Number.isFinite(Number(n.midi))) continue;
-                                    if (lowest == null || Number(n.midi) < Number(lowest.midi)) lowest = n;
-                                }
-                                if (lowest != null && (((Number(lowest.midi) % 12) + 12) % 12) === romanRootPc) {
-                                    fixed = fixed.slice(0, slashIdx);
-                                }
-                            }
-                            symbol = fixed; _dt('Q6:symbolReconcile', symbol);
-                        }
+                        // Neutralize voice/clef so getChordSymbol's bass picker uses the
+                        // GLOBALLY lowest note as the bass — otherwise it prefers the SATB
+                        // bass voice and ignores a lower marked ACC note, mislabelling the
+                        // inversion (e.g. always Dm7/A regardless of the real ACC bass).
+                        const mergedForSymbol = (mergedNaming as any[]).map(n => ({ ...n, voice: 1, clef: 'treble' }));
+                        const reSym = getChordSymbol(mergedForSymbol as any, ksReconcile, contextTonic);
+                        if (reSym) { symbol = reSym; _dt('Q6:symbolReconcile', symbol); }
                     }
                 }
             } catch { /* ignore */ }
