@@ -3688,7 +3688,25 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (romanRootPc != null && symRootPc != null && romanRootPc !== symRootPc) {
                         const ksReconcile = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
                         const reSym = getChordSymbol(mergedNaming as any, ksReconcile, contextTonic);
-                        if (reSym) { symbol = reSym; _dt('Q6:symbolReconcile', symbol); }
+                        if (reSym) {
+                            let fixed = reSym;
+                            // getChordSymbol's bass picker prefers the SATB bass voice / bass
+                            // clef, so it can miss a marked ACC note that's genuinely lower.
+                            // If the true lowest note of the merged set is the chord ROOT, it's
+                            // root position → drop the spurious slash (e.g. F/A → F).
+                            const slashIdx = fixed.indexOf('/');
+                            if (slashIdx >= 0) {
+                                let lowest: any = null;
+                                for (const n of mergedNaming as any[]) {
+                                    if (!n || n.isRest || !Number.isFinite(Number(n.midi))) continue;
+                                    if (lowest == null || Number(n.midi) < Number(lowest.midi)) lowest = n;
+                                }
+                                if (lowest != null && (((Number(lowest.midi) % 12) + 12) % 12) === romanRootPc) {
+                                    fixed = fixed.slice(0, slashIdx);
+                                }
+                            }
+                            symbol = fixed; _dt('Q6:symbolReconcile', symbol);
+                        }
                     }
                 }
             } catch { /* ignore */ }
