@@ -15,7 +15,7 @@ export interface InstrumentOption {
   /** Soundfont instrument name used by the audio service (voiceInstruments values). */
   soundfont: string;
   emoji: string;
-  /** Suffix for the `instrument_<key>` i18n entries (see locales/*/toolbar.json). */
+  /** Suffix for the `instrument_<key>` i18n entries in the toolbar locale files. */
   i18nKey: string;
 }
 
