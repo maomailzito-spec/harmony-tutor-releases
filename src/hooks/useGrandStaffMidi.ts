@@ -280,6 +280,9 @@ function extendNotesToNextOnset(notes: StaffNote[], ticksPerMeasure: number): St
       for (const idx of indices) {
         const note = result[idx];
         if ((note.startTick ?? 0) !== currentTick) continue;
+        // Leave snapper-confirmed triplets alone: extending them would swallow the
+        // intentional triplet rests and turn eighth-triplets into quarter-triplets.
+        if (note.isTriplet || note.isDuplet) continue;
         const noteEnd = currentTick + (note.durationTicks ?? 0);
         const gap = nextTick - noteEnd;
         if (gap > 0 && gap <= TICKS_PER_QUARTER) {
@@ -450,6 +453,9 @@ function snapDurationToStandard(ticks: number, tolerance: number): number {
 export function quantizeMidiTimings(notes: StaffNote[], gridTicks = QUANTIZE_GRID_TICKS, toleranceTicks = QUANTIZE_TOLERANCE_TICKS): StaffNote[] {
   if (notes.length === 0) return notes;
   return notes.map(n => {
+    // Snapper-confirmed triplets are already on the triplet grid; the binary grid
+    // would drag e.g. an eighth-triplet (320) onto a dotted-16th (360) and shred it.
+    if (n.isTriplet || n.isDuplet) return n;
     const oldStart = n.startTick ?? 0;
     const oldDur = n.durationTicks ?? 0;
     const newStart = snapToGrid(oldStart, gridTicks, toleranceTicks);
@@ -465,6 +471,121 @@ export function quantizeMidiTimings(notes: StaffNote[], gridTicks = QUANTIZE_GRI
     }
     return next;
   });
+}
+
+/** Per-(clef, beat) triplet detection + snapping, run BEFORE the binary
+ *  quantiser. The binary quantiser only knows the 8th-note grid, so a beat of
+ *  eighth-note triplets that was performed slightly detached (notes released
+ *  early, tiny note-off "tails") survives as off-grid 16th/64th fragments that
+ *  render as an illegible cluster inside the triplet bracket.
+ *
+ *  For each clef+beat we compare how well the onsets fit the binary 16th grid
+ *  vs the eighth-triplet grid. When the triplet grid fits clearly better (and at
+ *  least one onset is genuinely off the binary grid) we snap that beat's onsets
+ *  and durations to the triplet grid and drop sub-grid fragments (< half a
+ *  triplet unit). Beats that read as binary are left untouched for the binary
+ *  quantiser. Classification is per-clef so a binary bass line under triplet
+ *  treble figuration is never disturbed. */
+export function quantizeTripletBeats(
+  notes: StaffNote[],
+  timeSignature: { numerator: number; denominator: number },
+): StaffNote[] {
+  if (notes.length === 0) return notes;
+  const ticksPerBeat = TICKS_PER_QUARTER * (4 / timeSignature.denominator); // 960 in x/4
+  const tripUnit = Math.round(ticksPerBeat / 3);                            // 320 — eighth-triplet
+  const tripOffsets = [0, tripUnit, 2 * tripUnit];
+  const binOffsets = [0, ticksPerBeat / 4, ticksPerBeat / 2, (3 * ticksPerBeat) / 4]; // 0,240,480,720
+
+  const nearestDist = (off: number, grid: number[]) =>
+    grid.reduce((m, g) => Math.min(m, Math.abs(off - g)), Infinity);
+  const nearestPt = (off: number, grid: number[]) =>
+    grid.reduce((best, g) => (Math.abs(off - g) < Math.abs(off - best) ? g : best), grid[0]);
+  const clefOf = (n: StaffNote): 'treble' | 'bass' => (n.clef === 'bass' ? 'bass' : 'treble');
+  const beatOf = (st: number) => Math.floor(st / ticksPerBeat);
+
+  // Classify each (clef, beat).
+  const tripletBeats = new Set<string>();
+  const offsByKey = new Map<string, number[]>();
+  for (const n of notes) {
+    const st = n.startTick ?? 0;
+    const key = `${clefOf(n)}:${beatOf(st)}`;
+    const off = st - beatOf(st) * ticksPerBeat;
+    const arr = offsByKey.get(key);
+    if (arr) arr.push(off); else offsByKey.set(key, [off]);
+  }
+  // Evidence-based classification (robust to off-grid fragments): an onset that
+  // is clearly nearer a triplet-only point (320/640) than any binary point is
+  // "triplet evidence"; one clearly nearer the binary grid is "binary evidence".
+  // Fragments sit far from both and count as neither, so they can't veto a beat
+  // that contains genuine triplet onsets. Margin = half the binary↔triplet gap.
+  const MARGIN = Math.round(tripUnit / 8); // ~40 ticks; the 320↔{240,480} gap is 80
+  for (const [key, offs] of offsByKey) {
+    let tripEvidence = 0, binEvidence = 0;
+    for (const o of offs) {
+      const b = nearestDist(o, binOffsets);
+      const t = nearestDist(o, tripOffsets);
+      if (b - t >= MARGIN) tripEvidence++;
+      else if (t - b >= MARGIN) binEvidence++;
+    }
+    if (tripEvidence >= 1 && tripEvidence >= binEvidence) tripletBeats.add(key);
+  }
+
+  // Snap onsets + durations inside triplet beats; drop sub-grid fragments and
+  // merge same-pitch collisions onto the snapped slot.
+  const snappedStartOf = (n: StaffNote): number => {
+    const st = n.startTick ?? 0;
+    const beat = beatOf(st);
+    const off = st - beat * ticksPerBeat;
+    return beat * ticksPerBeat + nearestPt(off, [...tripOffsets, ticksPerBeat]);
+  };
+  // How many triplet-beat notes land on each (clef, slot): lets us tell a lone
+  // on-grid onset (a real re-articulation — keep) from a release-tail fragment
+  // that piles onto an already-occupied slot (drop).
+  const slotCount = new Map<string, number>();
+  for (const n of notes) {
+    if (!tripletBeats.has(`${clefOf(n)}:${beatOf(n.startTick ?? 0)}`)) continue;
+    const slot = `${clefOf(n)}:${snappedStartOf(n)}`;
+    slotCount.set(slot, (slotCount.get(slot) ?? 0) + 1);
+  }
+
+  const out: StaffNote[] = [];
+  const slotIndex = new Map<string, number>(); // clef:startTick:midi → index in out
+  for (const n of notes) {
+    const st = n.startTick ?? 0;
+    const beat = beatOf(st);
+    if (!tripletBeats.has(`${clefOf(n)}:${beat}`)) {
+      // Not a triplet beat. Clear any spurious triplet flag that convert assigned
+      // to a duration that merely happens to sit near a triplet value (e.g. a
+      // 324-tick staccato bass quarter), so isTriplet downstream reliably marks a
+      // snapper-confirmed triplet that extend/binary-quantise must leave alone.
+      out.push((n.isTriplet || n.isDuplet) ? { ...n, isTriplet: false, isDuplet: false } : n);
+      continue;
+    }
+    const newStart = snappedStartOf(n);
+    let units = Math.round((n.durationTicks ?? 0) / tripUnit);
+    if (units < 1) {
+      // Tiny note. A release-tail fragment shares its snapped slot with another
+      // note → drop it. A lone on-grid onset (e.g. a re-articulated downbeat whose
+      // MIDI note-off was glitched short by pedal/legato) is real → keep as 1 unit.
+      if ((slotCount.get(`${clefOf(n)}:${newStart}`) ?? 0) > 1) continue;
+      units = 1;
+    }
+    const newDur = units * tripUnit;
+    const flags = beatsToDurationFlags(newDur / TICKS_PER_QUARTER);
+    const dedupeKey = `${clefOf(n)}:${newStart}:${n.midi}`;
+    const existingIdx = slotIndex.get(dedupeKey);
+    if (existingIdx != null) {
+      // Same pitch already on this slot: keep the longer of the two.
+      if ((out[existingIdx].durationTicks ?? 0) < newDur) {
+        out[existingIdx] = { ...out[existingIdx], durationTicks: newDur, duration: flags.duration, isTriplet: flags.isTriplet, isDotted: flags.isDotted, isDuplet: flags.isDuplet };
+      }
+      continue;
+    }
+    slotIndex.set(dedupeKey, out.length);
+    out.push({ ...n, startTick: newStart, durationTicks: newDur, duration: flags.duration, isTriplet: flags.isTriplet, isDotted: flags.isDotted, isDuplet: flags.isDuplet });
+  }
+  out.sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0));
+  return out;
 }
 
 /** Notes whose startTicks differ by less than ARPEGGIO_THRESHOLD (= 120 ticks,
@@ -702,6 +823,32 @@ function exactStandardDuration(ticks: number): { name: StaffNote['duration']; is
   return hit ? { name: hit.name, isDotted: hit.isDotted } : null;
 }
 
+/** Triplet (3:2) tick lengths for the common base values. Used to recognise
+ *  tuplet RESTS (which carry no isTriplet flag from the MIDI source) so a gap
+ *  between triplet notes is emitted as a single triplet rest instead of being
+ *  shredded into tied binary fragments (16th+64th). A small tolerance absorbs
+ *  MIDI drift; it stays well below the ~80-tick gap to the nearest binary value
+ *  so a 16th/8th rest is never mistaken for a triplet. */
+const TRIPLET_DURATION_TICKS: Array<{ name: StaffNote['duration']; ticks: number }> = [
+  { name: 'half',          ticks: Math.round((2 / 3) * 2 * TICKS_PER_QUARTER) },     // 1280
+  { name: 'quarter',       ticks: Math.round((2 / 3) * 1 * TICKS_PER_QUARTER) },     // 640
+  { name: 'eighth',        ticks: Math.round((2 / 3) * 0.5 * TICKS_PER_QUARTER) },   // 320
+  { name: 'sixteenth',     ticks: Math.round((2 / 3) * 0.25 * TICKS_PER_QUARTER) },  // 160
+  { name: 'thirty-second', ticks: Math.round((2 / 3) * 0.125 * TICKS_PER_QUARTER) }, // 80
+];
+const TRIPLET_SNAP_TOLERANCE = Math.round(TICKS_PER_QUARTER / 48); // ~20 ticks @ TPQ 960
+
+/** Return the triplet duration matching `ticks` within tolerance, or null. */
+function exactTripletDuration(ticks: number): { name: StaffNote['duration'] } | null {
+  let best: { name: StaffNote['duration'] } | null = null;
+  let bestDist = TRIPLET_SNAP_TOLERANCE + 1;
+  for (const d of TRIPLET_DURATION_TICKS) {
+    const dist = Math.abs(ticks - d.ticks);
+    if (dist <= TRIPLET_SNAP_TOLERANCE && dist < bestDist) { best = { name: d.name }; bestDist = dist; }
+  }
+  return best;
+}
+
 /** Decide whether a note should be split at strong boundaries.
  *  Exceptions: a note exactly covering the whole measure from beat 1 is
  *  allowed to "cross" the strong boundary, as is any single standard
@@ -734,6 +881,23 @@ function splitNoteAtBoundaries(
   if (note.isRest) return [note];
   const noteOffset = (note.startTick ?? 0) - measureStartTick;
   const noteEnd = noteOffset + (note.durationTicks ?? 0);
+
+  // Tuplet notes (triplets/duplets) are not representable in the binary
+  // STANDARD_DURATIONS alphabet: running them through decomposeToStandardDurations
+  // shreds an eighth-triplet (320 ticks @ TPQ 960) into tied 16th+64th fragments
+  // and leaves a stray isTriplet flag on the pieces — the "triplets piled up with
+  // 16ths/32nds" symptom on MIDI import. beatsToDurationFlags has already tagged
+  // the correct base value + isTriplet, so as long as the tuplet note doesn't span
+  // a strong boundary we re-emit it intact instead of decomposing.
+  if ((note.isTriplet || note.isDuplet) &&
+      !shouldSplitNoteAtStrong(noteOffset, noteEnd, boundaries, ticksPerMeasure)) {
+    return [{
+      ...note,
+      startTick: measureStartTick + noteOffset,
+      beat: (noteOffset / TICKS_PER_QUARTER) + 1,
+      isTiedToNext: (note as any).isTiedToNext ?? false,
+    }];
+  }
 
   // Determine cut points: strong boundaries only.
   let cuts: number[];
@@ -809,7 +973,7 @@ function splitRestAtBoundaries(
   const crossedAll = boundaries.filter(b => b.tick > restOffset && b.tick < restEnd).map(b => b.tick);
 
   const cuts: number[] = [restOffset, ...crossedAll, restEnd];
-  const segments: Array<{ offset: number; ticks: number; durName: StaffNote['duration']; isDotted: boolean }> = [];
+  const segments: Array<{ offset: number; ticks: number; durName: StaffNote['duration']; isDotted: boolean; isTriplet?: boolean }> = [];
   for (let i = 0; i < cuts.length - 1; i++) {
     const segOffset = cuts[i];
     const segTicks = cuts[i + 1] - cuts[i];
@@ -818,10 +982,17 @@ function splitRestAtBoundaries(
     if (exact) {
       segments.push({ offset: segOffset, ticks: segTicks, durName: exact.name, isDotted: exact.isDotted });
     } else {
-      let local = segOffset;
-      for (const piece of decomposeToStandardDurations(segTicks)) {
-        segments.push({ offset: local, ticks: piece.ticks, durName: piece.name, isDotted: piece.isDotted });
-        local += piece.ticks;
+      // Prefer a single triplet rest over a binary decomposition: a gap between
+      // triplet notes (e.g. 320 ticks) is one eighth-triplet rest, not 16th+64th.
+      const trip = exactTripletDuration(segTicks);
+      if (trip) {
+        segments.push({ offset: segOffset, ticks: segTicks, durName: trip.name, isDotted: false, isTriplet: true });
+      } else {
+        let local = segOffset;
+        for (const piece of decomposeToStandardDurations(segTicks)) {
+          segments.push({ offset: local, ticks: piece.ticks, durName: piece.name, isDotted: piece.isDotted });
+          local += piece.ticks;
+        }
       }
     }
   }
@@ -833,6 +1004,7 @@ function splitRestAtBoundaries(
     id: i === 0 ? rest.id : makeRestId(),
     duration: s.durName,
     isDotted: s.isDotted,
+    isTriplet: !!s.isTriplet,
     durationTicks: s.ticks,
     startTick: measureStartTick + s.offset,
     beat: (s.offset / TICKS_PER_QUARTER) + 1,
@@ -889,11 +1061,55 @@ export function normalizeRhythm(
 
   for (const stream of streams.values()) {
     const { voice, clef, notes: streamNotes } = stream;
+    const measureForTick = (tick: number): number => {
+      let mm = 0;
+      while (mm + 1 < measureStartTicks.length && (measureStartTicks[mm + 1] ?? Infinity) <= tick) mm++;
+      return mm;
+    };
+    const measureEndTick = (mm: number): number =>
+      (measureStartTicks[mm + 1] ?? ((measureStartTicks[mm] ?? 0) + ticksForMeasure(mm)));
+
     const byMeasure = new Map<number, StaffNote[]>();
+    const pushTo = (mm: number, nn: StaffNote) => {
+      if (!byMeasure.has(mm)) byMeasure.set(mm, []);
+      byMeasure.get(mm)!.push(nn);
+    };
     for (const n of streamNotes) {
-      const m = n.measureIndex ?? 0;
-      if (!byMeasure.has(m)) byMeasure.set(m, []);
-      byMeasure.get(m)!.push(n);
+      const start = n.startTick ?? (measureStartTicks[n.measureIndex ?? 0] ?? 0);
+      const end = start + (n.durationTicks ?? 0);
+      const startM = n.measureIndex ?? measureForTick(start);
+      // Notes that stay inside their measure (and all rests) pass through unchanged.
+      if (n.isRest || end <= measureEndTick(startM)) {
+        pushTo(startM, n);
+        continue;
+      }
+      // A note that spills past its barline is split into tied per-measure pieces so
+      // the continuation survives in the next measure instead of being clamped away
+      // (e.g. a melody note held across the bar line in a MIDI import).
+      let segStart = start;
+      let first = true;
+      let guard = 0;
+      while (segStart < end && guard++ < 64) {
+        const m = measureForTick(segStart);
+        const segEnd = Math.min(end, measureEndTick(m));
+        const segDur = segEnd - segStart;
+        if (segDur <= 0) break;
+        const df = beatsToDurationFlags(segDur / TICKS_PER_QUARTER);
+        pushTo(m, {
+          ...n,
+          id: first ? n.id : makeRestId(),
+          startTick: segStart,
+          durationTicks: segDur,
+          duration: df.duration,
+          isDotted: df.isDotted,
+          isTriplet: df.isTriplet,
+          isDuplet: df.isDuplet,
+          measureIndex: m,
+          isTiedToNext: segEnd < end ? true : ((n as any).isTiedToNext ?? false),
+        });
+        segStart = segEnd;
+        first = false;
+      }
     }
     const measureIdxs = [...byMeasure.keys()].sort((a, b) => a - b);
     if (measureIdxs.length === 0) continue;
@@ -1210,11 +1426,16 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       convertParsedNoteToStaffNote(n, idx, tpq, beatsPerMeasure, keySig, 0)
     );
 
+    // Per-beat triplet detection FIRST: snaps triplet beats to the triplet grid
+    // and drops sub-grid fragments, so detached/imprecise triplets don't survive
+    // as 16th/64th clusters. Binary beats pass through untouched.
+    const tripletSnapped = quantizeTripletBeats(convertedNotes, parsed.timeSignature);
+
     // Extend staccato notes to fill small gaps before the rest-filler runs.
     // e.g. a chord played for 472 ticks (staccato quarter = 960 intended) is extended
     // to its next onset so no spurious rest appears mid-beat.
     const ticksPerMeasure = TICKS_PER_QUARTER * parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
-    const extendedNotes = extendNotesToNextOnset(convertedNotes, ticksPerMeasure);
+    const extendedNotes = extendNotesToNextOnset(tripletSnapped, ticksPerMeasure);
 
     // Quantise MIDI timings before trim/normalise (see importMidi for rationale).
     const quantizedNotes = quantizeMidiTimings(extendedNotes);

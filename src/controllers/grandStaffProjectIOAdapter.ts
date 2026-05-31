@@ -587,7 +587,10 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 	if (action === 'save' || action === 'save-as') {
 		try {
 			const latest = args.snapshot.latestRawNotes.current || [];
-			if (latest.length === 0 && !window.confirm('Il progetto è vuoto. Salvare comunque?')) return true;
+			// A project with only accompaniment tracks (no SATB notes) is NOT empty.
+			const accHasNotes = (args.snapshot.accompanimentTracks || [])
+				.some(t => (t?.notes?.length ?? 0) > 0);
+			if (latest.length === 0 && !accHasNotes && !window.confirm('Il progetto è vuoto. Salvare comunque?')) return true;
 
 			const project = buildGrandStaffProjectSnapshot(args.snapshot);
 			const projectData = JSON.stringify(project, null, 2);

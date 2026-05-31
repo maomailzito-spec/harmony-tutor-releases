@@ -3914,6 +3914,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             notesByMeasure.get(m)!.push(note);
         });
 
+        // Accompaniment tracks live on their own staves but must still expand the
+        // page: a 70-bar ACC-only import would otherwise show just minMeasureCount
+        // bars. Fold their span into maxMeasureIndex (measureIndex, or derived from
+        // startTick when absent).
+        {
+            const defTicksPerMeasure = TICKS_PER_QUARTER * timeSignature.numerator * (4 / timeSignature.denominator);
+            for (const track of (accompanimentTracks || [])) {
+                for (const n of (track.notes || [])) {
+                    const m = Number.isFinite((n as any).measureIndex)
+                        ? Number((n as any).measureIndex)
+                        : Math.floor((Number((n as any).startTick) || 0) / Math.max(1, defTicksPerMeasure));
+                    if (m > maxMeasureIndex) maxMeasureIndex = m;
+                }
+            }
+        }
+
         const finalMeasureIndex = Math.max(0, Math.max((minMeasureCount - 1), maxMeasureIndex));
         const targetTotalMeasures = Math.max(minMeasureCount, maxMeasureIndex + 1);
 
