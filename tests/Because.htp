@@ -21,10 +21,6 @@
       "type": "cambiata"
     },
     {
-      "noteId": "0290163e-3f35-49e9-9caf-9b98b93fc991",
-      "type": "structural"
-    },
-    {
       "noteId": "50ba67a0-e467-4a44-ad71-9aa54ca0c2f0",
       "type": "ornamental"
     },
@@ -597,32 +593,170 @@
       "type": "ornamental"
     },
     {
-      "noteId": "3d0659bd-4a81-4ced-8283-3aeb1369518c",
-      "type": "ornamental"
-    },
-    {
       "noteId": "b3ecb0fd-b457-4d2f-bd9a-67624ba896db",
       "type": "ornamental"
-    },
-    {
-      "noteId": "midi-69-34560-45",
-      "type": "structural"
     },
     {
       "noteId": "7e172bd2-7eca-4f1a-aac7-2859235b0d68",
       "type": "structural"
     },
     {
-      "noteId": "midi-70-35040-55",
+      "noteId": "06b1bc14-5efb-432f-b699-6e2b20f65862",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "midi-170-88320-45",
       "type": "structural"
+    },
+    {
+      "noteId": "midi-243-126720-45",
+      "type": "structural"
+    },
+    {
+      "noteId": "2a38d4b3-5227-4d97-b163-3a018a6bb7d1",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-244-127200-55",
+      "type": "structural"
+    },
+    {
+      "noteId": "midi-235-122880-45",
+      "type": "structural"
+    },
+    {
+      "noteId": "592cb414-9ac7-46e3-9397-a7efe7ece3e7",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "3d0659bd-4a81-4ced-8283-3aeb1369518c",
+      "type": "structural",
+      "midi": 66,
+      "measureIndex": 4,
+      "beat": 4
+    },
+    {
+      "noteId": "midi-34-17760-57",
+      "type": "structural",
+      "midi": 57,
+      "measureIndex": 4,
+      "beat": 3.5
+    },
+    {
+      "noteId": "midi-29-15360-51",
+      "type": "structural",
+      "midi": 51,
+      "measureIndex": 4,
+      "beat": 1
+    },
+    {
+      "noteId": "midi-36-18720-54",
+      "type": "structural",
+      "midi": 54,
+      "measureIndex": 4,
+      "beat": 4.5
+    },
+    {
+      "noteId": "midi-69-34560-45",
+      "type": "structural",
+      "midi": 45,
+      "measureIndex": 9,
+      "beat": 1
+    },
+    {
+      "noteId": "midi-70-35040-55",
+      "type": "structural",
+      "midi": 55,
+      "measureIndex": 9,
+      "beat": 1.5
     },
     {
       "noteId": "midi-71-35520-61",
+      "type": "structural",
+      "midi": 61,
+      "measureIndex": 9,
+      "beat": 2
+    },
+    {
+      "noteId": "0290163e-3f35-49e9-9caf-9b98b93fc991",
+      "type": "structural",
+      "midi": 66,
+      "measureIndex": 9,
+      "beat": 1
+    },
+    {
+      "noteId": "midi-61-30720-45",
+      "type": "structural",
+      "midi": 45,
+      "measureIndex": 8,
+      "beat": 1
+    },
+    {
+      "noteId": "midi-62-31200-55",
+      "type": "structural",
+      "midi": 55,
+      "measureIndex": 8,
+      "beat": 1.5
+    },
+    {
+      "noteId": "midi-63-31680-61",
+      "type": "structural",
+      "midi": 61,
+      "measureIndex": 8,
+      "beat": 2
+    },
+    {
+      "noteId": "midi-64-32160-67",
+      "type": "structural",
+      "midi": 67,
+      "measureIndex": 8,
+      "beat": 2.5
+    },
+    {
+      "noteId": "f5f93562-09aa-4f26-8edc-eac71d8f1e55",
+      "type": "structural",
+      "midi": 67,
+      "measureIndex": 8,
+      "beat": 1
+    },
+    {
+      "noteId": "9cefac8e-519c-4350-a615-e597e7b808dd",
+      "type": "structural",
+      "midi": 61,
+      "measureIndex": 8,
+      "beat": 1
+    },
+    {
+      "noteId": "midi-0-0-54",
       "type": "structural"
     },
     {
-      "noteId": "06b1bc14-5efb-432f-b699-6e2b20f65862",
-      "type": "ornamental"
+      "noteId": "midi-8-3840-50",
+      "type": "structural",
+      "midi": 50,
+      "measureIndex": 1,
+      "beat": 1
+    },
+    {
+      "noteId": "midi-9-4320-56",
+      "type": "structural",
+      "midi": 56,
+      "measureIndex": 1,
+      "beat": 1.5
+    },
+    {
+      "noteId": "midi-10-4800-62",
+      "type": "structural",
+      "midi": 62,
+      "measureIndex": 1,
+      "beat": 2
+    },
+    {
+      "noteId": "midi-12-5760-65",
+      "type": "structural",
+      "midi": 65,
+      "measureIndex": 1,
+      "beat": 3
     }
   ],
   "filePreferences": {
@@ -633,9 +767,9 @@
     "analysis.sequencesEnabled": true
   },
   "voiceInstruments": {
-    "1": "acoustic_grand_piano",
-    "2": "acoustic_grand_piano",
-    "3": "acoustic_grand_piano",
+    "1": "choir_aahs",
+    "2": "choir_aahs",
+    "3": "choir_aahs",
     "4": "acoustic_grand_piano"
   },
   "voiceVolumes": {
@@ -909,15 +1043,15 @@
     },
     {
       "id": "fc8af02e-5bf5-456f-87e2-0d67452c1a8b",
-      "pitch": "E",
+      "pitch": "F",
       "octave": 4,
-      "position": 2,
+      "position": 3,
       "midi": 65,
       "noteIndex": 5,
       "clef": "treble",
-      "explicitAccidental": "sharp",
-      "accidental": "sharp",
-      "userAccidental": "sharp",
+      "explicitAccidental": "natural",
+      "accidental": "natural",
+      "userAccidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -8828,18 +8962,12 @@
   "harmonyOverrides": [
     {
       "absBeat": 4,
-      "roman": "+iii°7",
-      "symbol": "",
+      "roman": "vii°7/VI",
+      "symbol": "G#°7 (no3a)",
       "figures": [
-        "2",
+        "3",
         "4"
       ]
-    },
-    {
-      "absBeat": 16,
-      "roman": "ii°",
-      "symbol": "",
-      "figures": []
     }
   ],
   "bpm": 80,
@@ -9223,7 +9351,7 @@
           "noteIndex": 5,
           "clef": "treble",
           "explicitAccidental": "natural",
-          "duration": "half",
+          "duration": "quarter",
           "isRest": false,
           "isTriplet": false,
           "isDuplet": false,
@@ -9231,15 +9359,15 @@
           "measureIndex": 1,
           "beat": 3,
           "startTick": 5760,
-          "durationTicks": 1920,
+          "durationTicks": 960,
           "voice": 0,
           "isTiedToNext": false
         },
         {
-          "id": "97914887-dc1d-42c0-8cd5-6b558d050823",
+          "id": "9084707e-e1bf-46cf-82b6-ef9bdbac75f5",
           "pitch": "B",
-          "octave": 2,
-          "position": 4,
+          "octave": 4,
+          "position": 8,
           "midi": 0,
           "noteIndex": 0,
           "duration": "quarter",
@@ -9251,7 +9379,7 @@
           "beat": 4,
           "startTick": 6720,
           "durationTicks": 960,
-          "clef": "bass",
+          "clef": "treble",
           "voice": 0
         },
         {
@@ -16104,7 +16232,7 @@
       "visible": true,
       "volume": 0.86,
       "staffMode": "grandstaff",
-      "color": "#fff705"
+      "color": "#b546dd"
     }
   ]
 }

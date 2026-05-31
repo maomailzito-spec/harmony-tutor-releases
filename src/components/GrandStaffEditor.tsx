@@ -20,7 +20,7 @@ import { useNoteSelection } from '../hooks/useNoteSelection';
 import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
 import { useNoteEditor } from '../hooks/useNoteEditor';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
 import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, VOICING_DISPOSITIONS, type VoicingDisposition } from '../utils/parseChordSymbol';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
@@ -3338,6 +3338,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
         repeatBarlines, voltaBrackets, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
+        // Campi che il salvataggio su file include e che la bozza deve preservare:
+        // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
+        tonicizationHints, inferredContextSuppressions,
+        accompanimentTracks, voiceInstruments, voiceVolumes, mutedVoices,
     };
 
     // Auto-save: periodically trigger 'save' if a file path is already set.
@@ -3451,6 +3455,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setAccompanimentTracks(Array.isArray(p.accompanimentTracks)
                     ? p.accompanimentTracks.map((t: any) => ({ ...t, staffMode: t?.staffMode ?? 'grandstaff' }))
                     : []);
+                // Mixer per-voce SATB (mirror del caricamento file normale).
+                if ((p as any).voiceInstruments && typeof (p as any).voiceInstruments === 'object') {
+                    setVoiceInstruments((p as any).voiceInstruments);
+                }
+                if ((p as any).voiceVolumes && typeof (p as any).voiceVolumes === 'object') {
+                    setVoiceVolumes((p as any).voiceVolumes);
+                }
+                if (Array.isArray((p as any).mutedVoices)) {
+                    setMutedVoices(new Set((p as any).mutedVoices as number[]));
+                }
                 setCurrentProjectFilePath(draft.filePath || null);
                 localStorage.removeItem(DRAFT_KEY);
             } catch {
@@ -7154,6 +7168,127 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setHarmonyOverrides(prev => (prev || []).filter(o => qAbsForOverrides(o.absBeat) !== a));
     }, [qAbsForOverrides]);
 
+    /**
+     * Opt+Shift+H — "Marca come accordo unico alla playhead".
+     * Prende le note selezionate (anche sparse su beat diversi, es. un arpeggio), su SATB
+     * e/o sulle tracce di accompagnamento (ACC), ne deduce un'unica sigla/roman dall'insieme
+     * dei pitch (basso = pitch più grave) e la ancóra al beat della playhead. Gli altri onset
+     * della selezione vengono soppressi con override "vuoti" (roman/symbol/figures vuoti →
+     * l'evento viene saltato in useHarmonyLabels), così l'arpeggio collassa in una sola
+     * etichetta. Per un accordo solo-ACC (nessuna nota SATB sotto la playhead) l'hook
+     * sintetizza l'evento-etichetta sul beat dell'override.
+     */
+    const markSelectionAsChordAtPlayhead = useCallback(() => {
+        const ids = selectedNoteIds;
+        if (ids.size < 2) return;
+
+        const ld = layoutDataRef.current as any;
+        const starts = ld?.measureStartAbsBeat as number[] | undefined;
+        const baseBeats = timeSignature.numerator * (4 / timeSignature.denominator);
+        const absBeatFromMeasure = (n: any): number => {
+            const mi = Number(n.measureIndex ?? 0);
+            const ms = starts?.[mi] ?? (mi * baseBeats);
+            return ms + (Number(n.beat ?? 1) - 1);
+        };
+
+        // Gather the selected notes from BOTH the SATB staff and the ACC tracks, each with
+        // its absBeat (SATB: measure+beat; ACC: startTick → quarter units).
+        const sel: { note: any; absBeat: number }[] = [];
+        for (const n of (latestRawNotes.current || []) as StaffNote[]) {
+            if (!ids.has(n.id) || n.isRest || !Number.isFinite((n as any).midi)) continue;
+            sel.push({ note: n, absBeat: absBeatFromMeasure(n) });
+        }
+        for (const track of (latestAccompanimentTracks.current || [])) {
+            for (const n of (track.notes || []) as any[]) {
+                if (!ids.has(n.id) || n.isRest || !Number.isFinite(n.midi) || !n.midi) continue;
+                const st = Number(n.startTick);
+                const absBeat = Number.isFinite(st) ? st / TICKS_PER_QUARTER : absBeatFromMeasure(n);
+                sel.push({ note: n, absBeat });
+            }
+        }
+        if (sel.length < 2) return;
+
+        // Distinct onset beats spanned by the selection.
+        const onsetBeats = new Set<number>();
+        for (const s of sel) onsetBeats.add(qAbsForOverrides(s.absBeat));
+
+        // Resolve the playhead's absBeat (pixel→tick inverse of getPlayheadPosForAbsBeat),
+        // then anchor to the selected onset closest to it. Falls back to the earliest onset.
+        let playheadAbs: number | null = null;
+        const ph = playheadPositionRef.current;
+        const sysParams = ld?.systemsParams;
+        if (ph && Array.isArray(sysParams) && sysParams[ph.systemIndex]) {
+            const sys = sysParams[ph.systemIndex];
+            const startsX = (sys.startMeasuresX || []) as number[];
+            const mIndices = (sys.measureIndices || []) as number[];
+            let pick = 0;
+            for (let i = 0; i < startsX.length; i++) if (ph.x >= startsX[i] - 1e-6) pick = i;
+            const measureIndex = mIndices[pick] ?? 0;
+            const bpmMeas = ld?.measureBeatsPerMeasure?.[measureIndex] ?? baseBeats;
+            const ticksPerMeasure = Math.max(1, Math.round(bpmMeas * TICKS_PER_QUARTER));
+            const startX = startsX[pick];
+            const endX = pick < startsX.length - 1 ? startsX[pick + 1] : (sys.width - START_X);
+            const contentWidth = Math.max(1, (endX - startX) - (MEASURE_PADDING_X * 2));
+            const rawPxPerTick = sys.pxPerTick;
+            const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
+                ? rawPxPerTick : (contentWidth / ticksPerMeasure);
+            let localTicks = (ph.x - (startX + MEASURE_PADDING_X)) / pxPerTick;
+            if (!Number.isFinite(localTicks) || localTicks < 0) localTicks = 0;
+            if (localTicks > ticksPerMeasure) localTicks = ticksPerMeasure;
+            const measureStartAbs = ld?.measureStartAbsBeat?.[measureIndex] ?? (measureIndex * bpmMeas);
+            playheadAbs = measureStartAbs + (localTicks / TICKS_PER_QUARTER);
+        }
+
+        let anchorAbs: number;
+        if (playheadAbs != null) {
+            anchorAbs = [...onsetBeats].reduce((best, q) =>
+                Math.abs(q - playheadAbs!) < Math.abs(best - playheadAbs!) ? q : best, [...onsetBeats][0]);
+        } else {
+            anchorAbs = Math.min(...sel.map(s => s.absBeat));
+        }
+        const anchorQ = qAbsForOverrides(anchorAbs);
+
+        // Identify the chord from the union of the selected pitches. Neutralize voice/clef so
+        // the GLOBALLY lowest selected pitch is taken as the bass (drives the inversion),
+        // matching the same trick used in the ACC-reconcile path of useHarmonyLabels.
+        const forAnalysis = sel.map(s => ({ ...s.note, voice: 1, clef: 'treble' }));
+        const candidates = identifyChordCandidates(forAnalysis as any);
+        const chordInfo = candidates && candidates.length ? candidates[0] : null;
+        const tonicRoot = (currentTonic || keySignatureRoot || (keySignature as any).root || 'C') as string;
+        const roman = chordInfo ? (calculateRomanFromChordInfo(chordInfo as any, tonicRoot, isMinorMode) || '') : '';
+        const symbol = getChordSymbol(forAnalysis as any, keySignature, tonicRoot) || '';
+        let figures: string[] = [];
+        try { figures = computeFiguredBassFromNotes(forAnalysis as any, FIGURED_BASS_UI_OPTIONS).figures || []; } catch { figures = []; }
+
+        // Nothing recognizable — leave the score untouched.
+        if (!roman && !symbol && figures.length === 0) return;
+
+        // 1) Pin the full chord label at the anchor beat.
+        applyHarmonyOverride(anchorQ, roman, figures, symbol);
+        // 2) Blank the other onset beats so the scattered arpeggio collapses to one label.
+        for (const q of onsetBeats) {
+            if (Math.abs(q - anchorQ) < 1e-6) continue;
+            applyHarmonyOverride(q, '', [], '');
+        }
+        // 3) Mark the selected notes structural (consistent with Opt+H chord-tone marking).
+        const srcById = new Map<string, any>(sel.map(s => [s.note.id, s.note]));
+        setOrnamentOverrides(prev => {
+            const arr = (prev || []).filter(o => !ids.has(o.noteId));
+            for (const noteId of ids) {
+                const src = srcById.get(noteId);
+                if (!src) continue;
+                arr.push({
+                    noteId,
+                    type: 'structural' as OrnamentType,
+                    midi: src?.midi != null ? Number(src.midi) : undefined,
+                    measureIndex: src?.measureIndex != null ? Number(src.measureIndex) : undefined,
+                    beat: src?.beat != null ? Number(src.beat) : undefined,
+                });
+            }
+            return arr;
+        });
+    }, [selectedNoteIds, timeSignature, currentTonic, keySignatureRoot, keySignature, isMinorMode, qAbsForOverrides, applyHarmonyOverride, setOrnamentOverrides]);
+
     const handleApplyOrnamentOverride = useCallback((type: string) => {
         if (selectedNoteIds.size === 0) return;
         setOrnamentOverrides(prev => {
@@ -7389,6 +7524,60 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             const accClef: ClefType = accTarget.clef;
             const pos = accTarget.pos;
+
+            // ── Rest insertion into the clicked ACC track (mirror of the SATB rest path) ──
+            if (selectedInsertion.type === 'rest') {
+                const accRest: StaffNote = {
+                    id: crypto.randomUUID(),
+                    pitch: 'B',
+                    octave: accClef === 'bass' ? 2 : 4,
+                    position: accClef === 'bass' ? 4 : 8,
+                    midi: 0,
+                    noteIndex: 0,
+                    duration: selectedInsertion.duration,
+                    isRest: true,
+                    isTriplet,
+                    isDuplet,
+                    isDotted: selectedInsertion.isDotted ?? false,
+                    measureIndex: hit.measureIndex,
+                    beat,
+                    startTick,
+                    durationTicks,
+                    clef: accClef,
+                    voice: 0 as any,
+                };
+                const targetTrackId = accTarget.trackId;
+                const endTick = startTick + durationTicks;
+                setAccompanimentTracks(prev => prev.map((track) => {
+                    if (track.id !== targetTrackId) return track;
+                    // Overwrite any pre-existing events overlapping this rest's tick window.
+                    const filtered = track.notes.filter(n => {
+                        const s = (n as any).startTick ?? 0;
+                        return s < startTick || s >= endTick;
+                    });
+                    return {
+                        ...track,
+                        notes: [...filtered, accRest].sort((a, b) =>
+                            ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)),
+                    };
+                }));
+                setSelectedNoteIds(new Set([accRest.id]));
+                justInsertedNoteRef.current = accRest.id;
+                // Advance playhead to the next slot (same as ACC note insertion).
+                try {
+                    const nextAbsBeat = (startTick + durationTicks) / TICKS_PER_QUARTER;
+                    playbackCursorAbsBeatRef.current = nextAbsBeat;
+                    const nextPos = getPlayheadPosForAbsBeat(nextAbsBeat);
+                    if (nextPos) {
+                        setPlayheadPosition(nextPos);
+                        const beatsPerMeasureAdv = timeSignature.numerator * (4 / timeSignature.denominator);
+                        const measureIndexAdv = Math.floor(nextAbsBeat / beatsPerMeasureAdv);
+                        const beatAdv = Math.round(((nextAbsBeat - (measureIndexAdv * beatsPerMeasureAdv)) + 1) * 1e6) / 1e6;
+                        setPasteCaret({ x: nextPos.x, systemIndex: nextPos.systemIndex, measureIndex: measureIndexAdv, beat: beatAdv });
+                    }
+                } catch { /* ignore */ }
+                return;
+            }
 
             let accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignature);
             accProps = applyAutoLeadingToneInMinor(accProps);
@@ -8857,6 +9046,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             };
 
+            // ── Opt+Shift+H — collapse scattered selection into one chord at the playhead ──
+            // Marks the selected notes (even across different beats, e.g. an arpeggio) as a
+            // single harmony anchored under the playhead, suppressing the in-between onsets.
+            if (!isMod && e.altKey && e.shiftKey && e.code === 'KeyH' && selectedNoteIds.size >= 2) {
+                e.preventDefault();
+                e.stopPropagation();
+                markSelectionAsChordAtPlayhead();
+                return;
+            }
+
             // ── Ornament override shortcuts (⌥ + key, no Shift) ──
             // NOTE: !e.shiftKey is required so that ⌥+⇧+R (rallentando) does not
             // trigger the suspension ornament shortcut on KeyR.
@@ -9409,15 +9608,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            // R: arma/disarma REC se traccia ACC presente, altrimenti toggle rest/note
-            if (!isMod && key === 'r') {
+            // ⇧R: arma/disarma REC (registrazione nelle tracce ACC, se presenti)
+            if (!isMod && e.shiftKey && key === 'r') {
                 e.preventDefault();
                 e.stopPropagation();
                 if (accompanimentTracks.some(t => t.visible)) {
                     toggleRecording(); // arm / disarm / stop
-                } else {
-                    setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' }));
                 }
+                return;
+            }
+
+            // R: alterna pausa/nota (coerente con SATB, anche con traccia ACC visibile)
+            if (!isMod && !e.shiftKey && key === 'r') {
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' }));
                 return;
             }
 
@@ -9586,6 +9791,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         isActive,
         activeTab,
         selectedNoteIds,
+        markSelectionAsChordAtPlayhead,
         setRawNotes,
         rawNotes,
         undoNotes,

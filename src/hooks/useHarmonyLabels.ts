@@ -916,11 +916,30 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // in the filtered timeline so the override is actually applied.
         if (overrideByAbsBeat.size > 0) {
             const filteredBeats = new Set(timelineFiltered.map((ev: any) => qAbs(Number(ev?.absBeat))));
-            for (const [ovrBeat] of overrideByAbsBeat) {
+            const _msab = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+            const _baseBeatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
+            const _measureIndexForAbs = (ab: number): number => {
+                if (!_msab || _msab.length === 0) return Math.max(0, Math.floor(ab / Math.max(1, _baseBeatsPerMeas)));
+                for (let m = _msab.length - 1; m >= 0; m--) {
+                    if (ab >= (_msab[m] ?? 0) - 1e-9) return m;
+                }
+                return 0;
+            };
+            for (const [ovrBeat, ovrVal] of overrideByAbsBeat) {
                 if (filteredBeats.has(ovrBeat)) continue;
                 const match = (timeline || []).find((ev: any) =>
                     ev && Math.abs(qAbs(Number(ev?.absBeat)) - ovrBeat) < 1e-6);
-                if (match) timelineFiltered.push(match);
+                if (match) { timelineFiltered.push(match); continue; }
+                // No underlying SATB note at this beat (e.g. an ACC-only chord marked via
+                // Opt+Shift+H). Synthesize a minimal event so a content-bearing override can
+                // still render a label here. Blank (suppression) overrides need no event.
+                const hasContent = !!((ovrVal?.roman && String(ovrVal.roman).trim())
+                    || (ovrVal?.symbol && String(ovrVal.symbol).trim())
+                    || (Array.isArray(ovrVal?.figures) && ovrVal.figures.length));
+                if (!hasContent) continue;
+                const mi = _measureIndexForAbs(ovrBeat);
+                const measureStart = (_msab && _msab[mi] != null) ? _msab[mi] : mi * _baseBeatsPerMeas;
+                timelineFiltered.push({ absBeat: ovrBeat, measureIndex: mi, beat: ovrBeat - measureStart + 1, notes: [], __overrideSynthetic: true } as any);
             }
             timelineFiltered.sort((a: any, b: any) => Number(a?.absBeat) - Number(b?.absBeat));
         }
@@ -2167,6 +2186,28 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             }
             if (systemIndex === -1) return;
             const system = layoutData.systemsParams[systemIndex];
+
+            // Synthetic override event (no underlying notes — e.g. an ACC-only chord placed
+            // via Opt+Shift+H). Render the override label directly and skip all structural
+            // bookkeeping so it never disturbs the SATB suppression state of neighbours.
+            if ((event as any).__overrideSynthetic) {
+                const ovr = overrideByAbsBeat.get(qAbs(Number(event.absBeat)));
+                const roman = ovr?.roman ?? '';
+                const symbol = ovr?.symbol ?? '';
+                const figures = Array.isArray(ovr?.figures) ? (ovr!.figures as string[]) : [];
+                if (roman || symbol || figures.length) {
+                    labelsBySystem[systemIndex].push({
+                        id: `lbl-${event.absBeat}`,
+                        x: getXForAbsBeat(event.absBeat, system),
+                        roman,
+                        figures,
+                        symbol,
+                        absBeat: event.absBeat,
+                        isOverride: true,
+                    });
+                }
+                return;
+            }
 
             // Structural harmony: ignore ornaments/anticipations so they don't create
             // micro-harmony labels on every scan-point.
