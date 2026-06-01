@@ -144,6 +144,7 @@ function convertParsedNoteToStaffNote(
     startTick: appStartTick,
     durationTicks: appDurationTicks,
     voice: voice as Voice,
+    velocity: n.velocity,
   };
 }
 
@@ -253,7 +254,7 @@ function buildRestsForGap(
  *  longer than one beat are preserved.
  *
  *  ticksPerMeasure is used to compute the "measure end" for the last note in a group. */
-function extendNotesToNextOnset(notes: StaffNote[], ticksPerMeasure: number): StaffNote[] {
+export function extendNotesToNextOnset(notes: StaffNote[], ticksPerMeasure: number): StaffNote[] {
   if (notes.length === 0) return notes;
 
   const groups = new Map<string, number[]>();

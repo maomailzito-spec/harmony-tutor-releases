@@ -64,9 +64,9 @@ export class AudioService {
     await Promise.all(soundPromises);
   }
 
-  public async playNote(audioFile: string, options?: { duration?: number, when?: number }) {
+  public async playNote(audioFile: string, options?: { duration?: number, when?: number, volume?: number }) {
     if (!this.audioContext) return;
-    
+
     if (!this.audioBuffers.has(audioFile)) {
         await this.loadAudioFile(audioFile);
     }
@@ -75,7 +75,7 @@ export class AudioService {
     if (audioBuffer) {
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      
+
       const gainNode = this.audioContext.createGain();
       gainNode.connect(this.audioContext.destination);
       source.connect(gainNode);
@@ -85,7 +85,7 @@ export class AudioService {
       const releaseDurationInSeconds = 0.5; // Fade-out duration
       const noteEndTime = startTime + noteDurationInSeconds;
 
-      gainNode.gain.setValueAtTime(1, startTime);
+      gainNode.gain.setValueAtTime(options?.volume ?? 1, startTime);
       gainNode.gain.linearRampToValueAtTime(0.0001, noteEndTime + releaseDurationInSeconds);
 
       source.start(startTime);

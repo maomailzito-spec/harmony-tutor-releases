@@ -42,7 +42,7 @@ import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
 import { handleGrandStaffProjectIOMenuAction, buildGrandStaffProjectSnapshot } from '../controllers/grandStaffProjectIOAdapter';
-import { useGrandStaffMidi, trimOverlappingNotes, normalizeRhythm, beatsToDurationFlags, quantizeMidiTimings } from '../hooks/useGrandStaffMidi';
+import { useGrandStaffMidi, trimOverlappingNotes, normalizeRhythm, beatsToDurationFlags, extendNotesToNextOnset } from '../hooks/useGrandStaffMidi';
 import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
@@ -261,6 +261,22 @@ function findAccTrackForNote(noteId: string, accompanimentTracks: AccompanimentT
     return null;
 }
 
+/** Mappa la velocity MIDI (1..127) in un fattore di volume per il playback.
+ *  Le note senza velocity (inserite a mano) restituiscono 1 (volume pieno),
+ *  così il comportamento esistente non cambia. La curva è leggermente
+ *  esponenziale (^1.6) per avvicinarsi alla risposta percettiva dei sintetizzatori
+ *  e con un pavimento minimo così le note pianissimo restano udibili. */
+function velocityToGain(velocity: number | undefined): number {
+    if (velocity == null || !Number.isFinite(velocity)) return 1;
+    const v = Math.max(0, Math.min(127, velocity)) / 127;
+    // Curva realistica: i pianissimo restano UDIBILI (non spariscono) ma chiaramente
+    // più piani; i fortissimi pieni. Pavimento 0.12 + esponente morbido (1.3) così la
+    // gamma media non si schiaccia ma le note piano non diventano inudibili.
+    // Es.: vel 18→0.16, vel 40→0.30, vel 64→0.48, vel 100→0.77, vel 127→1.0.
+    // Le note senza velocity (inserite a mano) restano a 1 (gestito nel guard sopra).
+    return 0.12 + 0.88 * Math.pow(v, 1.3);
+}
+
 /** Converti gli eventi raw registrati in StaffNote pronte per la traccia ACC. */
 function convertRecordedEventsToNotes(
   events: RawRecordedEvent[],
@@ -303,10 +319,55 @@ function convertRecordedEventsToNotes(
         durationTicks,
         rawStartTick: startTick,       // preserva il tick raw per ri-quantizzazione
         rawDurationTicks: durationTicks,
+        velocity: ev.velocity,         // dinamica suonata → playback espressivo + export MIDI
         clef,
         voice: 0 as any,
       } satisfies import('../types').StaffNote;
     });
+}
+
+/** Aggancia un gruppo di note reali alla griglia (DURA, pulita) SENZA tassellare
+ *  con le pause — quel passo (normalizeRhythm) va fatto a parte sull'insieme
+ *  completo. Funziona sia per griglie binarie (480 = ottavo) sia di TERZINA
+ *  (320 = ottavo terzinato): beatsToDurationFlags deduce l'etichetta giusta dalla
+ *  durata agganciata. */
+function gridSnapAccNotes(
+    notes: import('../types').StaffNote[],
+    gridTicks: number,
+    ticksPerMeasure: number,
+): import('../types').StaffNote[] {
+    // 1) Aggancia gli ONSET alla griglia e azzera i flag terzina/duina residui
+    //    (assegnati dalla conversione in base alla durata suonata) così l'estensione
+    //    non li salta e la griglia scelta è l'unica a decidere.
+    const snapped = notes.map(n => ({
+        ...n,
+        startTick: Math.round((n.startTick ?? 0) / gridTicks) * gridTicks,
+        isTriplet: false,
+        isDuplet: false,
+    }));
+    // 2) ESTENDI ogni nota fino all'attacco successivo (legato): assorbe i gap di
+    //    staccato (semiminima corta → semiminima piena). I gap reali > 1/4 restano pause.
+    const extended = extendNotesToNextOnset(snapped, ticksPerMeasure);
+    // 3) Aggancia le DURATE alla griglia e ricalcola l'etichetta (terzina/puntato/…).
+    return extended.map(n => {
+        const dur = Math.max(gridTicks, Math.round((n.durationTicks ?? gridTicks) / gridTicks) * gridTicks);
+        const f = beatsToDurationFlags(dur / TICKS_PER_QUARTER);
+        return { ...n, durationTicks: dur, duration: f.duration, isDotted: f.isDotted, isTriplet: f.isTriplet, isDuplet: f.isDuplet };
+    });
+}
+
+/** Quantizzazione completa di note ACC reali a una griglia: snap + trim + pause.
+ *  `notes` = solo note reali (le pause vengono rigenerate). */
+function normalizeRecordedAccNotes(
+    notes: import('../types').StaffNote[],
+    timeSignature: { numerator: number; denominator: number },
+    gridTicks: number,
+): import('../types').StaffNote[] {
+    if (notes.length === 0) return [];
+    const ticksPerMeasure = TICKS_PER_QUARTER * timeSignature.numerator * (4 / timeSignature.denominator);
+    const gridded = gridSnapAccNotes(notes, gridTicks, ticksPerMeasure);
+    const trimmed = trimOverlappingNotes(gridded);
+    return normalizeRhythm(trimmed, timeSignature, []);
 }
 
 const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
@@ -498,7 +559,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [measuresPerLine, setMeasuresPerLine] = useState<number>(4);
     const [minMeasureCount, setMinMeasureCount] = useState<number>(4);
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
-    const [quantizeGrid, setQuantizeGrid] = useState<import('../types').NoteDuration>('eighth');
+    // Griglia di quantizzazione: chiave di QUANTIZE_GRID_MAP (binaria o di terzina).
+    const [quantizeGrid, setQuantizeGrid] = useState<string>('sixteenth');
     const [measuresPerLineDraft, setMeasuresPerLineDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
     const [ornamentOverrides, setOrnamentOverrides] = useState<OrnamentOverride[]>([]);
@@ -775,12 +837,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const selectedMidiOutputRef = useRef(selectedMidiOutput);
     useEffect(() => { selectedMidiOutputRef.current = selectedMidiOutput; }, [selectedMidiOutput]);
 
-    const playMidiPassthrough = useCallback((midi: number) => {
+    const playMidiPassthrough = useCallback((midi: number, velocity?: number) => {
         // Se è attivo un output MIDI esterno non suonare il piano interno
         if (selectedMidiOutputRef.current) return;
         const noteNamesWithFlats = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
         const name = `${noteNamesWithFlats[midi % 12]}${Math.floor(midi / 12) - 1}`;
-        void audioService.playNote(name, { duration: 0.6 });
+        // Monitoraggio espressivo: suona con lo stesso volume che avrà in playback,
+        // così l'utente SENTE le dinamiche mentre le esegue.
+        void audioService.playNote(name, { duration: 0.6, volume: velocityToGain(velocity) });
     }, [audioService]);
     const playMidiPassthroughRef = useRef(playMidiPassthrough);
     useEffect(() => { playMidiPassthroughRef.current = playMidiPassthrough; }, [playMidiPassthrough]);
@@ -803,7 +867,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
             if ((status & 0xf0) === 0x90 && velocity > 0) {
-                playMidiPassthroughRef.current(note);
+                playMidiPassthroughRef.current(note, velocity);
             }
         };
 
@@ -857,18 +921,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 recStartMeasureRef.current,
                 keySignatureForRecRef.current,
             );
-            const trimmed = trimOverlappingNotes(notes);
             setAccompanimentTracks(prev => {
                 const firstVisibleIdx = prev.findIndex(t => t.visible);
                 if (firstVisibleIdx === -1) return prev;
                 return prev.map((track, i) => {
                     if (i !== firstVisibleIdx) return track;
-                    return {
-                        ...track,
-                        notes: [...(track.notes ?? []), ...trimmed].sort(
-                            (a, b) => (a.startTick ?? 0) - (b.startTick ?? 0),
-                        ),
-                    };
+                    // Quantizzazione pulita di default a griglia di OTTAVO. Re-quantizza
+                    // l'INTERA traccia (esistenti + nuove) insieme, ripartendo dai tick
+                    // raw, così due registrazioni successive non producono flussi di
+                    // pause sovrapposti. Per terzine o risoluzioni diverse si usa la Q
+                    // con la griglia adatta (anche su selezione).
+                    const existingReal = (track.notes ?? [])
+                        .filter(n => !n.isRest)
+                        .map(n => ({ ...n, startTick: n.rawStartTick ?? n.startTick, durationTicks: n.rawDurationTicks ?? n.durationTicks }));
+                    const allReal = [...existingReal, ...notes]
+                        .sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0));
+                    // Interpretazione di default a SEDICESIMO: cattura ottavi, ottavi
+                    // puntati e sedicesimi con i valori giusti (il 16mo è un sovrainsieme
+                    // dell'ottavo, quindi gli ottavi restano ottavi), restando pulita
+                    // (niente 32mi/pause spurie). Le terzine e altre risoluzioni si
+                    // ottengono dopo con la Q (anche su selezione).
+                    const cleaned = normalizeRecordedAccNotes(allReal, timeSignature, TICKS_PER_QUARTER / 4);
+                    return { ...track, notes: cleaned };
                 });
             });
         }
@@ -908,41 +982,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Mappa durata → tick per il quantize
     const QUANTIZE_GRID_MAP: Record<string, number> = {
-        'sixteenth': TICKS_PER_QUARTER / 4,
-        'eighth':    TICKS_PER_QUARTER / 2,
-        'quarter':   TICKS_PER_QUARTER,
-        'half':      TICKS_PER_QUARTER * 2,
+        'sixteenth':       TICKS_PER_QUARTER / 4,            // 240
+        'eighth':          TICKS_PER_QUARTER / 2,            // 480
+        'quarter':         TICKS_PER_QUARTER,                // 960
+        'half':            TICKS_PER_QUARTER * 2,            // 1920
+        'eighth-triplet':  Math.round(TICKS_PER_QUARTER / 3),       // 320 — ottavo terzinato
+        'quarter-triplet': Math.round((TICKS_PER_QUARTER * 2) / 3), // 640 — quarto terzinato
     };
 
     const onQuantizeAccTrack = React.useCallback(() => {
+        // Griglia scelta nella toolbar (binaria o di terzina). Quantizzazione dura,
+        // pulita e prevedibile.
         const gridTicks = QUANTIZE_GRID_MAP[quantizeGrid] ?? (TICKS_PER_QUARTER / 2);
-        const toleranceTicks = gridTicks / 2;
-        const ticksPerBeat = TICKS_PER_QUARTER * (4 / timeSignature.denominator);
-        const ticksPerMeasure = ticksPerBeat * timeSignature.numerator;
+        const ticksPerMeasure = TICKS_PER_QUARTER * timeSignature.numerator * (4 / timeSignature.denominator);
+        const fromRaw = (n: StaffNote) => ({ ...n, startTick: n.rawStartTick ?? n.startTick, durationTicks: n.rawDurationTicks ?? n.durationTicks });
+        const runPipeline = (real: StaffNote[]) => normalizeRecordedAccNotes(real, timeSignature, gridTicks);
         const hasSelection = selectedNoteIds.size > 0;
         setAccompanimentTracks(prev => {
             const firstVisibleIdx = prev.findIndex(t => t.visible);
             if (firstVisibleIdx === -1) return prev;
             return prev.map((track, i) => {
                 if (i !== firstVisibleIdx) return track;
-                const notesToProcess = hasSelection
-                    ? (track.notes ?? []).filter(n => selectedNoteIds.has(n.id))
-                    : (track.notes ?? []);
-                // Quantizza sempre dai tick raw (se disponibili) per poter cambiare griglia senza undo
-                const notesWithRaw = notesToProcess.map(n => ({
-                    ...n,
-                    startTick: n.rawStartTick ?? n.startTick,
-                    durationTicks: n.rawDurationTicks ?? n.durationTicks,
-                }));
-                const quantized = quantizeMidiTimings(notesWithRaw, gridTicks, toleranceTicks).map(n => {
-                    const st = n.startTick ?? 0;
-                    const measureIndex = Math.floor(st / ticksPerMeasure);
-                    const beat = ((st % ticksPerMeasure) / ticksPerBeat) + 1;
-                    return { ...n, measureIndex, beat };
-                });
-                const quantizedById = new Map(quantized.map(n => [n.id, n]));
-                const merged = (track.notes ?? []).map(n => quantizedById.get(n.id) ?? n);
-                return { ...track, notes: merged };
+                const allNotes = track.notes ?? [];
+                // Traccia intera (nessuna selezione).
+                if (!hasSelection) {
+                    const real = allNotes.filter(n => !n.isRest).map(fromRaw);
+                    return { ...track, notes: runPipeline(real) };
+                }
+                // SELETTIVA: riquantizza SOLO le note selezionate alla griglia scelta,
+                // lasciando FERME le altre (così in una misura mista puoi quantizzare
+                // una terzina a 1/8 T senza toccare i beat binari accanto). Poi ri-
+                // tassella con le pause le misure toccate, attorno a entrambe.
+                const selReal = allNotes.filter(n => !n.isRest && selectedNoteIds.has(n.id));
+                if (selReal.length === 0) return track;
+                const minM = Math.min(...selReal.map(n => n.measureIndex ?? 0));
+                const maxM = Math.max(...selReal.map(n => n.measureIndex ?? 0));
+                const inRange = (n: StaffNote) => (n.measureIndex ?? 0) >= minM && (n.measureIndex ?? 0) <= maxM;
+                // Selezionate: aggancia alla griglia (dai tick raw). Non selezionate
+                // nelle misure toccate: tenute COSÌ COME SONO (niente re-griglia).
+                const snappedSel = gridSnapAccNotes(selReal.map(fromRaw), gridTicks, ticksPerMeasure);
+                const unselInRange = allNotes.filter(n => !n.isRest && !selectedNoteIds.has(n.id) && inRange(n));
+                const combined = [...snappedSel, ...unselInRange].sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0));
+                const processed = normalizeRhythm(trimOverlappingNotes(combined), timeSignature, []);
+                const kept = allNotes.filter(n => !inRange(n));
+                return { ...track, notes: [...kept, ...processed].sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
             });
         });
     }, [quantizeGrid, timeSignature, selectedNoteIds, setAccompanimentTracks]);
@@ -1892,7 +1975,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     'eighth':    TICKS_PER_QUARTER / 2,
                     'quarter':   TICKS_PER_QUARTER,
                     'half':      TICKS_PER_QUARTER * 2,
-                } as Record<string, number>)[quantizeGrid] ?? TICKS_PER_QUARTER;
+                } as Record<string, number>)[quantizeGrid] ?? (TICKS_PER_QUARTER / 2);
 
                 const newAccNotes = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, accPatternRef.current, accLetRingRef.current);
 
@@ -4521,7 +4604,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!output || note.isRest) return;
         const midi = (note.midi ?? 0) + playbackTransposeSemitones;
         if (!Number.isFinite(midi) || midi <= 0) return;
-        const vel = 100;
+        // Honor the captured dynamics on external MIDI output too (default 100 for
+        // manually-entered notes that have no velocity).
+        const noteVel = Number(note.velocity);
+        const vel = (Number.isFinite(noteVel) && noteVel > 0) ? Math.max(1, Math.min(127, Math.round(noteVel))) : 100;
         const ch = Math.max(0, Math.min(15, channel)); // MIDI channel 0-15
         const t0 = (typeof whenMs === 'number' && Number.isFinite(whenMs)) ? whenMs : window.performance.now();
         // Use WebMIDI scheduling to avoid chord notes being slightly staggered.
@@ -5522,7 +5608,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (trackGain) {
                             trackGain.gain.value = isTrackAudible(track) ? track.volume : 0;
                         }
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: 1, output: trackGain });
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: trackGain });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -5542,7 +5628,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (voiceGain) {
                         voiceGain.gain.value = isVoiceAudible(v) ? (voiceVolumesRef.current[v] ?? 1) : 0;
                     }
-                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: 1, output: voiceGain });
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: voiceGain });
                 });
             }
 
@@ -6471,7 +6557,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const lastPasted = pasted[pasted.length - 1];
                 setSelectedNoteIds(lastPasted ? new Set([lastPasted.id]) : new Set());
             } else {
-            const targetVoices = Array.from(new Set(pasted.map(n => Number((n as any).voice ?? selectedVoice)))).filter(v => Number.isFinite(v));
+            // Incolla in SATB: SCARTA le pause della sorgente. Una traccia ACC è un
+            // grand staff e normalizeRhythm riempie ENTRAMBI i righi (es. una pausa
+            // intera di basso anche se la melodia è solo al violino). Collassando tutto
+            // in UNA voce SATB quelle pause raddoppierebbero il contenuto della misura
+            // → l'accumulo del playback sfora e fa scattare la misura in anticipo
+            // (flam che cresce di misura in misura) e il layout esplode. Teniamo solo
+            // le note reali; le pause corrette per la singola voce le rigenera il
+            // gap-fill più sotto.
+            const realPasted = pasted.filter(n => !n.isRest);
+            const targetVoices = Array.from(new Set(realPasted.map(n => Number((n as any).voice ?? selectedVoice)))).filter(v => Number.isFinite(v));
 
             setRawNotes(prev => {
                 const existingNotes = prev || [];
@@ -6515,9 +6610,47 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                 }
 
-                return [...existingNotes, ...missingRests, ...pasted];
+                // Tassella le misure toccate dall'incolla con LO STESSO motore dell'ACC
+                // (normalizeRhythm), così il collocamento delle pause è IDENTICO tra le
+                // due tracce e l'accumulo di durate del playback SATB cade esattamente
+                // sulla griglia → niente flam (anche con terzine/durate non binarie).
+                // Si re-tassella SOLO la voce e l'intervallo di misure toccate: le note
+                // reali esistenti in quell'intervallo vengono ri-tassellate insieme alle
+                // incollate (gli onset non si spostano, si rigenerano solo le pause);
+                // tutto il resto (altre voci, altre misure, scritto a mano) resta intatto.
+                const affectedByVoice = new Map<number, number[]>();
+                for (const p of realPasted) {
+                    const v = Number((p as any).voice ?? selectedVoice);
+                    const m = Number(p.measureIndex ?? 0);
+                    if (!affectedByVoice.has(v)) affectedByVoice.set(v, []);
+                    affectedByVoice.get(v)!.push(m);
+                }
+                const removeIds = new Set<string>();
+                const retiled: StaffNote[] = [];
+                for (const [v, measures] of affectedByVoice.entries()) {
+                    const minM = Math.min(...measures);
+                    const maxM = Math.max(...measures);
+                    // Rimuovi (e rigenera) tutte le note/pause della voce v nell'intervallo
+                    // toccato, così la rimozione combacia esattamente con ciò che
+                    // normalizeRhythm ri-tassella (evita doppioni nelle misure intermedie).
+                    const existingRealInRange: StaffNote[] = [];
+                    for (const n of existingNotes) {
+                        if (Number((n as any).voice ?? -1) !== v) continue;
+                        const m = Number(n.measureIndex ?? -1);
+                        if (m < minM || m > maxM) continue;
+                        removeIds.add(n.id);
+                        if (!n.isRest) existingRealInRange.push(n);
+                    }
+                    const pastedV = realPasted.filter(n => Number((n as any).voice ?? selectedVoice) === v);
+                    const toTile = [...existingRealInRange, ...pastedV];
+                    if (toTile.length === 0) continue;
+                    retiled.push(...normalizeRhythm(toTile, timeSignature, []));
+                }
+                const kept = existingNotes.filter(n => !removeIds.has(n.id));
+
+                return [...kept, ...missingRests, ...retiled];
             });
-            const lastPasted = pasted[pasted.length - 1];
+            const lastPasted = realPasted[realPasted.length - 1];
             setSelectedNoteIds(lastPasted ? new Set([lastPasted.id]) : new Set());
 
             // After a tick, log positions to compare pre/post paste
@@ -10920,7 +11053,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                     y={playheadYTopPx}
                                                                                     width={width}
                                                                                     height={playheadYBottomPx - playheadYTopPx}
-                                                                                    fill="rgba(239,68,68,0.08)"
+                                                                                    fill="rgba(239,68,68,0.18)"
                                                                                     stroke="none"
                                                                                 />
                                                                             );

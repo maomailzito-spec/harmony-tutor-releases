@@ -61,8 +61,8 @@ type GrandStaffToolbarProps = {
     isRecArmed?: boolean;
     canRecord?: boolean;
     onToggleRecording?: () => void;
-    quantizeGrid?: NoteDuration;
-    setQuantizeGrid?: (value: NoteDuration) => void;
+    quantizeGrid?: string;
+    setQuantizeGrid?: (value: string) => void;
     onQuantizeAccTrack?: () => void;
 
     bpm: number;
@@ -242,7 +242,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         isRecArmed = false,
         canRecord = false,
         onToggleRecording,
-        quantizeGrid = 'eighth' as NoteDuration,
+        quantizeGrid = 'eighth',
         setQuantizeGrid,
         onQuantizeAccTrack,
         bpm,
@@ -433,21 +433,23 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     {setQuantizeGrid && (
                       <select
                         value={quantizeGrid}
-                        onChange={e => setQuantizeGrid(e.target.value as NoteDuration)}
+                        onChange={e => setQuantizeGrid(e.target.value)}
                         className="bg-gray-700 text-gray-200 text-xs rounded px-1 py-0.5 border border-gray-600 cursor-pointer"
-                        title="Griglia di quantizzazione"
+                        title="Griglia di quantizzazione (binaria o di terzina)"
                       >
                         <option value="sixteenth">1/16</option>
                         <option value="eighth">1/8</option>
                         <option value="quarter">1/4</option>
                         <option value="half">1/2</option>
+                        <option value="eighth-triplet">1/8 T</option>
+                        <option value="quarter-triplet">1/4 T</option>
                       </select>
                     )}
                     {onQuantizeAccTrack && (
                       <button
                         onClick={onQuantizeAccTrack}
                         className="px-2 py-0.5 text-xs rounded bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600 font-mono font-bold transition-colors"
-                        title={`Quantizza ${quantizeGrid === 'sixteenth' ? '1/16' : quantizeGrid === 'eighth' ? '1/8' : quantizeGrid === 'quarter' ? '1/4' : '1/2'} — note selezionate, o tutte se nessuna selezione`}
+                        title="Quantizza alla griglia scelta — note selezionate (solo quelle misure), o tutte se nessuna selezione"
                       >Q</button>
                     )}
                   </div>

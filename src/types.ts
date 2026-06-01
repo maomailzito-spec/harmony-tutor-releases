@@ -208,6 +208,10 @@ export type StaffNote = {
   rawStartTick?: number;
   /** Raw (pre-quantize) duration in ticks from real-time recording. */
   rawDurationTicks?: number;
+  /** MIDI note-on velocity (1..127) captured from import or real-time recording.
+   *  Drives expressive playback volume and is written back out on MIDI export.
+   *  Undefined for manually-entered notes (played at full/default level). */
+  velocity?: number;
 };
 
 /** Manual ornament classification for a note. */

@@ -59,6 +59,14 @@ function noteTick(note: StaffNote, beatsPerMeasure: number): number {
   return Math.max(0, Math.round(absBeats * DEFAULT_TPQ));
 }
 
+/** Velocity da scrivere nel note-on. Usa la velocity catturata (import/registrazione)
+ *  se presente, altrimenti il default storico 88 per le note inserite a mano. */
+function noteVelocity(note: StaffNote): number {
+  const v = Number(note.velocity);
+  if (Number.isFinite(v) && v > 0) return Math.max(1, Math.min(127, Math.round(v)));
+  return 88;
+}
+
 function noteDurationTicks(note: StaffNote): number {
   if (Number.isFinite(note.durationTicks as number) && Number(note.durationTicks) > 0) {
     const appTicks = Math.max(1, Math.round(Number(note.durationTicks)));
@@ -129,7 +137,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
       const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
-      const velOn = 88;
+      const velOn = noteVelocity(note);
       events.push({ tick, order: 2, bytes: [0x90 | ch, midi, velOn] });
       events.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
@@ -164,7 +172,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       const dur = noteDurationTicks(note);
       const ch = Math.max(0, Math.min(15, (note.voice ?? 1) - 1));
       const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
-      allEvents.push({ tick, order: 2, bytes: [0x90 | ch, midi, 88] });
+      allEvents.push({ tick, order: 2, bytes: [0x90 | ch, midi, noteVelocity(note)] });
       allEvents.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
     tracks = [eventsToTrackData(allEvents)];
