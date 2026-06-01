@@ -2490,7 +2490,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               // Re-enforce stem direction after preFormat/postFormat which may
               // recalculate it (VexFlow internals can flip stems on certain layouts).
               try {
-                const stemDir = stemOverrideById.get(n.id) ?? n.manualStemDirection;
+                // manualStemDirection is an explicit intent (flip-stem button, or a
+                // multi-voice import pinning melody=up/arpeggio=down) and must win over
+                // the automatic position-based collision hint — same priority as at note
+                // creation above. Otherwise the close-position heuristic flips a pinned
+                // voice's stems to follow pitch (e.g. melody stems flipping with the
+                // arpeggio's contour).
+                const stemDir = n.manualStemDirection ?? stemOverrideById.get(n.id);
                 if (stemDir && !n.isRest) {
                   vfNote.setStemDirection(stemDir === 'up' ? 1 : -1);
                 }
@@ -2549,7 +2555,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           return dur === '8' || dur === '16' || dur === '32' || dur === '64';
         };
 
-        const isTightTrebleForBeams = staffMode === 'grandstaff' && clef === 'treble' && staffNotes.filter(n => !n.isRest).some(n => (n.voice ?? 1) >= 2);
+        // Treble staff carrying ≥2 voices needs per-voice stem control for beams
+        // (S↑ / lower↓). This is true for SATB grandstaff AND for a multi-voice
+        // accompaniment staff. In satb_ancient mode each voice has its own stave so
+        // `clef` is a voice label (not 'treble') and this stays false there.
+        const isTightTrebleForBeams = clef === 'treble' && staffNotes.filter(n => !n.isRest).some(n => (n.voice ?? 1) >= 2);
 
         // Standard 3+1 (parti strette) stem directions:
         //   Layer 1 (Soprano v1): stems ALWAYS UP
@@ -2565,8 +2575,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           // Standard parti strette: S always UP, A+T always DOWN.
           // S always UP, T always DOWN, A dynamic (UP near S, DOWN near T).
           for (const g of group) {
-            if (g.staffNote.manualStemDirection) continue;
-            const dir = getTightStemDir(g.staffNote);
+            // Honor an explicit manualStemDirection (flip-stem button, or a multi-voice
+            // import pinning melody=up/arpeggio=down): set it BEFORE the Beam so VexFlow
+            // builds a consistent group instead of recomputing the direction by pitch.
+            const dir = g.staffNote.manualStemDirection
+              ? (g.staffNote.manualStemDirection === 'up' ? 1 : -1)
+              : getTightStemDir(g.staffNote);
             try {
               g.vfNote.setStemDirection(dir);
             } catch {

@@ -117,13 +117,14 @@ function convertParsedNoteToStaffNote(
   beatsPerMeasure: number,
   keySig: ReturnType<typeof getKeySignature>,
   voice: number,
+  clefOverride?: 'treble' | 'bass',
 ): StaffNote {
   const absBeats = n.tick / tpq;
   const durBeats = n.durationTicks / tpq;
   const measureIndex = Math.max(0, Math.floor(absBeats / Math.max(1, beatsPerMeasure)));
   const beat = 1 + (absBeats - (measureIndex * beatsPerMeasure));
 
-  const clef = inferClefFromMidi(n.midi);
+  const clef = clefOverride ?? inferClefFromMidi(n.midi);
   const props = getNotePropertiesFromMidi(n.midi, keySig, clef, null);
   const durationInfo = beatsToDurationFlags(durBeats);
 
@@ -488,10 +489,14 @@ export function quantizeMidiTimings(notes: StaffNote[], gridTicks = QUANTIZE_GRI
  *  treble figuration is never disturbed. */
 export function quantizeTripletBeats(
   notes: StaffNote[],
-  timeSignature: { numerator: number; denominator: number },
 ): StaffNote[] {
   if (notes.length === 0) return notes;
-  const ticksPerBeat = TICKS_PER_QUARTER * (4 / timeSignature.denominator); // 960 in x/4
+  // Eighth-note triplets subdivide the QUARTER-note pulse (3 per quarter),
+  // independent of the meter: in 2/2 the metric beat is a half note, but the
+  // triplets are still eighth-triplets of 320 ticks — so the grid is built on
+  // TICKS_PER_QUARTER, NOT on the meter denominator (which previously made 2/2
+  // look for quarter-triplets and miss every eighth-triplet).
+  const ticksPerBeat = TICKS_PER_QUARTER;                                   // 960 — the quarter pulse
   const tripUnit = Math.round(ticksPerBeat / 3);                            // 320 — eighth-triplet
   const tripOffsets = [0, tripUnit, 2 * tripUnit];
   const binOffsets = [0, ticksPerBeat / 4, ticksPerBeat / 2, (3 * ticksPerBeat) / 4]; // 0,240,480,720
@@ -501,14 +506,18 @@ export function quantizeTripletBeats(
   const nearestPt = (off: number, grid: number[]) =>
     grid.reduce((best, g) => (Math.abs(off - g) < Math.abs(off - best) ? g : best), grid[0]);
   const clefOf = (n: StaffNote): 'treble' | 'bass' => (n.clef === 'bass' ? 'bass' : 'treble');
+  const voiceOf = (n: StaffNote) => Number((n as any).voice ?? 0);
   const beatOf = (st: number) => Math.floor(st / ticksPerBeat);
+  // Key per (voice, clef, beat): triplet-ness is decided independently per voice,
+  // so a held melody (its own voice) isn't dragged onto the arpeggio's grid.
+  const beatKey = (n: StaffNote) => `${voiceOf(n)}:${clefOf(n)}:${beatOf(n.startTick ?? 0)}`;
 
-  // Classify each (clef, beat).
+  // Classify each (voice, clef, beat).
   const tripletBeats = new Set<string>();
   const offsByKey = new Map<string, number[]>();
   for (const n of notes) {
     const st = n.startTick ?? 0;
-    const key = `${clefOf(n)}:${beatOf(st)}`;
+    const key = beatKey(n);
     const off = st - beatOf(st) * ticksPerBeat;
     const arr = offsByKey.get(key);
     if (arr) arr.push(off); else offsByKey.set(key, [off]);
@@ -543,17 +552,15 @@ export function quantizeTripletBeats(
   // that piles onto an already-occupied slot (drop).
   const slotCount = new Map<string, number>();
   for (const n of notes) {
-    if (!tripletBeats.has(`${clefOf(n)}:${beatOf(n.startTick ?? 0)}`)) continue;
-    const slot = `${clefOf(n)}:${snappedStartOf(n)}`;
+    if (!tripletBeats.has(beatKey(n))) continue;
+    const slot = `${voiceOf(n)}:${clefOf(n)}:${snappedStartOf(n)}`;
     slotCount.set(slot, (slotCount.get(slot) ?? 0) + 1);
   }
 
   const out: StaffNote[] = [];
-  const slotIndex = new Map<string, number>(); // clef:startTick:midi → index in out
+  const slotIndex = new Map<string, number>(); // voice:clef:startTick:midi → index in out
   for (const n of notes) {
-    const st = n.startTick ?? 0;
-    const beat = beatOf(st);
-    if (!tripletBeats.has(`${clefOf(n)}:${beat}`)) {
+    if (!tripletBeats.has(beatKey(n))) {
       // Not a triplet beat. Clear any spurious triplet flag that convert assigned
       // to a duration that merely happens to sit near a triplet value (e.g. a
       // 324-tick staccato bass quarter), so isTriplet downstream reliably marks a
@@ -567,12 +574,12 @@ export function quantizeTripletBeats(
       // Tiny note. A release-tail fragment shares its snapped slot with another
       // note → drop it. A lone on-grid onset (e.g. a re-articulated downbeat whose
       // MIDI note-off was glitched short by pedal/legato) is real → keep as 1 unit.
-      if ((slotCount.get(`${clefOf(n)}:${newStart}`) ?? 0) > 1) continue;
+      if ((slotCount.get(`${voiceOf(n)}:${clefOf(n)}:${newStart}`) ?? 0) > 1) continue;
       units = 1;
     }
     const newDur = units * tripUnit;
     const flags = beatsToDurationFlags(newDur / TICKS_PER_QUARTER);
-    const dedupeKey = `${clefOf(n)}:${newStart}:${n.midi}`;
+    const dedupeKey = `${voiceOf(n)}:${clefOf(n)}:${newStart}:${n.midi}`;
     const existingIdx = slotIndex.get(dedupeKey);
     if (existingIdx != null) {
       // Same pitch already on this slot: keep the longer of the two.
@@ -583,6 +590,124 @@ export function quantizeTripletBeats(
     }
     slotIndex.set(dedupeKey, out.length);
     out.push({ ...n, startTick: newStart, durationTicks: newDur, duration: flags.duration, isTriplet: flags.isTriplet, isDotted: flags.isDotted, isDuplet: flags.isDuplet });
+  }
+  out.sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0));
+  return out;
+}
+
+/** Standard MIDI→score voice separation for ONE staff (clef): notes that
+ *  overlap in time are pushed to different voices, so a held melody note over a
+ *  moving arpeggio ends up in its own monophonic voice instead of being mangled
+ *  into a single rest-filled line. Greedy by start tick: a note reuses the free
+ *  voice (whose previous note has ended) closest in pitch, else opens a new one.
+ *  Voices are then ordered by mean pitch (highest = voice 1) and capped at
+ *  `maxVoices`; any extra voice folds into the nearest kept one (residual
+ *  overlaps are later trimmed/normalised). Returns notes with `voice` set to
+ *  1..maxVoices. Chord tones (identical start+duration) stay in the same voice. */
+export function separateVoices(notes: StaffNote[], maxVoices: number): StaffNote[] {
+  if (notes.length === 0) return notes;
+  if (notes.length === 1) return [{ ...notes[0], voice: 1 as Voice }];
+  const sorted = [...notes].sort((a, b) =>
+    ((a.startTick ?? 0) - (b.startTick ?? 0)) || ((b.midi ?? 0) - (a.midi ?? 0)));
+
+  type V = { end: number; lastMidi: number; lastStart: number; lastDur: number; notes: StaffNote[] };
+  const voices: V[] = [];
+  for (const n of sorted) {
+    const st = n.startTick ?? 0;
+    const dur = n.durationTicks ?? 0;
+    const end = st + dur;
+    const midi = n.midi ?? 0;
+    // A TRUE chord tone (same onset AND same duration as a voice's last note)
+    // joins that voice's chord. A note merely sharing the onset but with a
+    // different length (e.g. an arpeggio note under a held melody note) is NOT a
+    // chord tone — it overlaps and must take a different voice.
+    let chordIdx = -1;
+    for (let i = 0; i < voices.length; i++) if (voices[i].lastStart === st && voices[i].lastDur === dur) { chordIdx = i; break; }
+    if (chordIdx >= 0) {
+      const v = voices[chordIdx];
+      v.notes.push(n); v.end = Math.max(v.end, end); v.lastMidi = midi;
+      continue;
+    }
+    // Otherwise reuse the closest free voice, else open a new one.
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < voices.length; i++) {
+      if (voices[i].end <= st + 1) {
+        const d = Math.abs(voices[i].lastMidi - midi);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+    }
+    if (best < 0) voices.push({ end, lastMidi: midi, lastStart: st, lastDur: dur, notes: [n] });
+    else { const v = voices[best]; v.notes.push(n); v.end = end; v.lastMidi = midi; v.lastStart = st; v.lastDur = dur; }
+  }
+
+  // Cap to maxVoices: fold the lowest-median extra voices into the nearest kept
+  // one. (The upper/lower role of the survivors is NOT decided here — it is done
+  // per measure below, since a single global ordering tangles melody and
+  // figuration on real piano writing.)
+  const medianP = (v: V) => {
+    const a = v.notes.map(x => x.midi ?? 0).sort((p, q) => p - q);
+    return a[Math.floor(a.length / 2)] ?? 0;
+  };
+  voices.sort((a, b) => medianP(b) - medianP(a));
+  while (voices.length > maxVoices) {
+    const extra = voices.pop()!;
+    const ep = medianP(extra);
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < voices.length; i++) { const d = Math.abs(medianP(voices[i]) - ep); if (d < bestD) { bestD = d; best = i; } }
+    voices[best].notes.push(...extra.notes);
+  }
+  // Single line: voice 1, natural position-based stems (no override) so a simple
+  // monophonic import isn't regressed.
+  if (voices.length < 2) {
+    return voices.flatMap(v => v.notes.map(n => ({ ...n, voice: 1 as Voice })));
+  }
+
+  // Two voices: a GLOBAL ordering ("voice A is always on top") fails on real
+  // piano writing — the greedy reuse-by-pitch lets the held melody and the
+  // moving figuration trade voice slots mid-piece, so one global "upper voice"
+  // decision puts the melody below the arpeggio for whole sections (234 stem
+  // crossings on Moonlight). Decide the upper/lower role PER MEASURE instead:
+  // within each bar, whichever of the two lines is higher at the moments they
+  // actually overlap becomes voice 1 (stems up); the other is voice 2 (down).
+  // The few residual crossings left are genuine within-bar voice crossings that
+  // a human engraver would also leave. A measure where only one line sounds gets
+  // voice 1 with natural (un-pinned) stems.
+  const [A, B] = voices;
+  const measureOf = (n: StaffNote) => (n.measureIndex ?? 0);
+  const tally = (aNotes: StaffNote[], bNotes: StaffNote[]): number => {
+    let score = 0;
+    for (const a of aNotes) {
+      const as = a.startTick ?? 0, ae = as + (a.durationTicks ?? 0);
+      for (const b of bNotes) {
+        const bs = b.startTick ?? 0;
+        if (bs >= ae) continue;
+        if (bs + (b.durationTicks ?? 0) <= as) continue;
+        score += Math.sign((a.midi ?? 0) - (b.midi ?? 0));
+      }
+    }
+    return score;
+  };
+  const aByM = new Map<number, StaffNote[]>();
+  const bByM = new Map<number, StaffNote[]>();
+  for (const n of A.notes) { const m = measureOf(n); (aByM.get(m) ?? aByM.set(m, []).get(m)!).push(n); }
+  for (const n of B.notes) { const m = measureOf(n); (bByM.get(m) ?? bByM.set(m, []).get(m)!).push(n); }
+
+  const out: StaffNote[] = [];
+  const measuresSet = new Set<number>([...aByM.keys(), ...bByM.keys()]);
+  for (const m of measuresSet) {
+    const aN = aByM.get(m) ?? [];
+    const bN = bByM.get(m) ?? [];
+    if (aN.length === 0 || bN.length === 0) {
+      // Only one line in this bar → single voice, natural stems.
+      for (const n of [...aN, ...bN]) out.push({ ...n, voice: 1 as Voice });
+      continue;
+    }
+    // Both lines present: upper line (tally ≥ 0 ⇒ A above B) → voice 1 / up.
+    const aUpper = tally(aN, bN) >= 0;
+    const upper = aUpper ? aN : bN;
+    const lower = aUpper ? bN : aN;
+    for (const n of upper) out.push({ ...n, voice: 1 as Voice, manualStemDirection: 'up' });
+    for (const n of lower) out.push({ ...n, voice: 2 as Voice, manualStemDirection: 'down' });
   }
   out.sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0));
   return out;
@@ -1422,14 +1547,39 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // to the project's current key so accidentals look reasonable on the staff.
     const keySig = getKeySignature(project.keySignatureRoot || 'C', project.isMinorMode ? 'Minor' : 'Major');
 
+    // Staff (clef) assignment: when the MIDI has ≥2 tracks (typically L/R hands),
+    // route each track to a staff by its mean pitch (low track → bass staff) so a
+    // low right-hand note doesn't fall onto the bass staff. Single-track MIDI keeps
+    // the per-note pitch heuristic.
+    const trackPitch = new Map<number, { sum: number; n: number }>();
+    for (const n of parsed.notes) {
+      const e = trackPitch.get(n.track) ?? { sum: 0, n: 0 };
+      e.sum += n.midi; e.n += 1; trackPitch.set(n.track, e);
+    }
+    const multiTrack = trackPitch.size >= 2;
+    const clefForTrack = (track: number): 'treble' | 'bass' | undefined => {
+      if (!multiTrack) return undefined;
+      const e = trackPitch.get(track);
+      return (e && e.n > 0 && e.sum / e.n < 60) ? 'bass' : 'treble';
+    };
+
     const convertedNotes: StaffNote[] = parsed.notes.map((n, idx) =>
-      convertParsedNoteToStaffNote(n, idx, tpq, beatsPerMeasure, keySig, 0)
+      convertParsedNoteToStaffNote(n, idx, tpq, beatsPerMeasure, keySig, 0, clefForTrack(n.track))
     );
+
+    // Voice separation per staff: notes overlapping in time go to separate voices,
+    // so a held melody over a moving arpeggio is no longer flattened into one
+    // rest-filled line. Up to 2 voices per staff (piano convention).
+    const MAX_VOICES_PER_STAFF = 2;
+    const voicedNotes: StaffNote[] = [
+      ...separateVoices(convertedNotes.filter(n => (n.clef ?? 'treble') === 'treble'), MAX_VOICES_PER_STAFF),
+      ...separateVoices(convertedNotes.filter(n => n.clef === 'bass'), MAX_VOICES_PER_STAFF),
+    ];
 
     // Per-beat triplet detection FIRST: snaps triplet beats to the triplet grid
     // and drops sub-grid fragments, so detached/imprecise triplets don't survive
     // as 16th/64th clusters. Binary beats pass through untouched.
-    const tripletSnapped = quantizeTripletBeats(convertedNotes, parsed.timeSignature);
+    const tripletSnapped = quantizeTripletBeats(voicedNotes);
 
     // Extend staccato notes to fill small gaps before the rest-filler runs.
     // e.g. a chord played for 472 ticks (staccato quarter = 960 intended) is extended
