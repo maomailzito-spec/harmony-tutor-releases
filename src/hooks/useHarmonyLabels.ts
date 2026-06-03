@@ -999,7 +999,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const ctxTonic = ctx ? String(ctx.newTonic || '') : String(currentTonic || 'C');
                 const ctxIsMinor = ctx ? !!ctx.newIsMinor : !!isMinorMode;
                 const _accHint = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
-                    ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), absBeat, ornOverrideMap)
+                    ? getAccompanimentPcsForBeat(accompanimentTracks, absBeat, ornOverrideMap)
                     : null;
                 const r = getRomanAnalysis(structuralNotes(ev?.notes || [], ornOverrideMap), ctxTonic, ctxIsMinor, {
                     ornamentOverrides: ornOverrideRecord,
@@ -2986,7 +2986,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // Hoisted to event scope so the symbol-reconcile (below) can reuse the SAME
             // ACC hint the Roman used, keeping symbol and Roman on one identification.
             const _accHintLabel = (accHintEnabled && accompanimentTracks && accompanimentTracks.length > 0)
-                ? getAccompanimentPcsForBeat(accompanimentTracks.filter(t => !t.muted && t.visible !== false), Number(event.absBeat), ornOverrideMap)
+                ? getAccompanimentPcsForBeat(accompanimentTracks, Number(event.absBeat), ornOverrideMap)
                 : null;
 
             try {
@@ -3700,7 +3700,6 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         const beatTick = Number(event.absBeat) * TICKS_PER_QUARTER;
                         const accNotesAtBeat: any[] = [];
                         for (const t of accompanimentTracks) {
-                            if ((t as any).muted || (t as any).visible === false) continue;
                             for (const n of ((t as any).notes || [])) {
                                 if (!n || n.isRest || !Number.isFinite(n.midi) || !n.midi) continue;
                                 const s = n.startTick ?? 0; const d = n.durationTicks ?? 0;

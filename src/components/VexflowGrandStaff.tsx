@@ -2017,6 +2017,24 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               if (!chord) {
                 const chordNotes = chordNotesByKey.get(chordKey) ?? [n];
                 chord = makeVfChordNote(chordNotes);
+                // Aggiungi le alterazioni di TUTTI i toni SUBITO, alla creazione (prima del
+                // disegno). L'accordo è una StaveNote condivisa disegnata processando il tono
+                // PRIMARIO: un'alterazione su un tono NON-primario, aggiunta dopo nel ciclo,
+                // arriverebbe a disegno già avvenuto e NON verrebbe renderizzata (bug:
+                // "si sente ma non si vede" sugli accordi ACC).
+                try {
+                  const ck = chord.vf as any;
+                  const keysArr: string[] = Array.isArray(ck?.keys) ? ck.keys : [];
+                  chordNotes.forEach((cn, ci) => {
+                    const g2 = accidentalTypeToVexflow(accidentalGlyphById.get(cn.id) ?? null);
+                    if (!g2) return;
+                    const ks = `${staffNoteToVexflowKeyName(cn)}/${(cn as any).octave ?? 4}`;
+                    const ki = keysArr.length ? keysArr.indexOf(ks) : -1;
+                    const idx2 = ki >= 0 ? ki : ci;
+                    if (idx2 >= 0) ck.addModifier(new Accidental(g2), idx2);
+                  });
+                  ck.__accAddedAtCreation = true;
+                } catch { /* ignore */ }
                 chordVfByKey.set(chordKey, chord);
               }
               vfNote = chord.vf;
@@ -2044,7 +2062,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
                     const keyIdx = keysArr.length ? keysArr.indexOf(keyStr) : -1;
                     const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(n.id);
-                    if (idx >= 0) {
+                    // Le alterazioni dell'accordo sono già state aggiunte alla creazione
+                    // (vedi sopra); qui si applica solo lo stagger/posizionamento.
+                    if (idx >= 0 && !(vfNote as any).__accAddedAtCreation) {
                       const acc = new Accidental(vfGlyph);
                       (vfNote as any).addModifier(acc, idx);
 
@@ -3131,13 +3151,21 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             if (!cur.isTiedToNext) continue;
 
             const curVoice = cur.voice ?? 1;
+            const curStartForTie = Number((cur as any).startTick);
+            const emCurForSearch = effectiveMidiForTie(cur as any);
             let next: (typeof sorted)[number] | undefined;
             for (let j = i + 1; j < sorted.length; j++) {
               const cand = sorted[j].staffNote;
               if ((cand.voice ?? 1) !== curVoice) continue;
               if (cand.isRest) continue;
-              // Ties are only between *contiguous* notes of the same voice.
-              // We validate pitch via effective MIDI (spelling-aware) to support enharmonic ties.
+              // Salta i toni dello STESSO attacco (fratelli d'accordo): la legatura va a un
+              // attacco successivo. Senza questo, in un accordo (voce 0) `next` sarebbe un
+              // fratello e il controllo d'altezza farebbe fallire la legatura.
+              if (Number.isFinite(curStartForTie) && Number.isFinite(Number((cand as any).startTick))
+                  && Number((cand as any).startTick) <= curStartForTie) continue;
+              // Abbina per altezza (effective MIDI, spelling-aware): all'attacco successivo
+              // (accordo) sceglie il tono giusto, così ogni voce dell'accordo lega al suo.
+              if (emCurForSearch != null && effectiveMidiForTie(cand as any) !== emCurForSearch) continue;
               next = sorted[j];
               break;
             }

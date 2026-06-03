@@ -24,6 +24,9 @@ interface MixerPanelProps {
   onChangeVoiceInstrument: (voice: number, instrument: string) => void;
   onUpdateVoice: (voice: number, updates: { volume?: number; muted?: boolean }) => void;
   onToggleSolo: (voice: number) => void;
+  /** SATB staff visibility (display-only, like ACC tracks; audio keeps playing). */
+  satbVisible?: boolean;
+  onToggleSatbVisible?: () => void;
   // Accompaniment tracks
   accompanimentTracks: AccompanimentTrack[];
   onUpdateTrack: (trackId: string, updates: Partial<AccompanimentTrack>) => void;
@@ -222,6 +225,7 @@ const ChannelStrip: React.FC<{
 const MixerPanel: React.FC<MixerPanelProps> = ({
   voiceInstruments, voiceVolumes, mutedVoices, soloVoices,
   onChangeVoiceInstrument, onUpdateVoice, onToggleSolo,
+  satbVisible, onToggleSatbVisible,
   accompanimentTracks, onUpdateTrack, onAddEmptyTrack, onDeleteTrack,
   onClose,
 }) => {
@@ -300,7 +304,20 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
       <div className="flex items-stretch gap-3 p-2 max-w-[80vw] overflow-x-auto">
         {/* VOCI section */}
         <section className="flex flex-col">
-          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">Voci</div>
+          <div className="flex items-center justify-between mb-1 px-1">
+            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Voci (SATB)</span>
+            {onToggleSatbVisible && (
+              <button
+                onClick={onToggleSatbVisible}
+                title={satbVisible ? 'Nascondi rigo SATB' : 'Mostra rigo SATB'}
+                className={`h-4 px-1 rounded text-[10px] leading-none flex items-center justify-center transition-colors ${
+                  satbVisible ? 'bg-slate-600 text-gray-300 hover:bg-slate-500' : 'bg-slate-700 text-gray-600 hover:bg-slate-600'
+                }`}
+              >
+                {satbVisible ? '👁' : '🚫'}
+              </button>
+            )}
+          </div>
           <div className="flex gap-1">
             {[1, 2, 3, 4].map(v => (
               <ChannelStrip

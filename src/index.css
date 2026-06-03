@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Nascondere il rigo SATB: il blocco SATB occupa la fascia superiore del sistema
+   (≈270px). Quando è nascosto, ritagliamo quella fascia (overflow:hidden +
+   altezza ridotta, applicata inline sul contenitore) e trasliamo TUTTI i figli
+   diretti verso l'alto della stessa quantità, così i righi ACC salgono in cima.
+   Tutte le coordinate interne (overlay, click, playhead) restano invariate:
+   vengono solo traslate uniformemente, quindi click e disegno restano allineati. */
+.ht-satb-hidden > * {
+  transform: translateY(-270px);
+}
