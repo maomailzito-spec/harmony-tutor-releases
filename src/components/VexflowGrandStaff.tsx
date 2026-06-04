@@ -1605,6 +1605,36 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
 
+        // ACC (voce 0): seconde/unisoni allo STESSO attacco con DURATE DIVERSE non
+        // vengono fuse in accordo (la fusione richiede durata identica) → restano
+        // StaveNote separate alla stessa x e le teste si sovrappongono. Applica uno
+        // spostamento orizzontale alla testa SUPERIORE della coppia (come il
+        // displacement d'accordo di VexFlow), così non si accavallano. Le seconde a
+        // pari durata sono già gestite dalla fusione/displacement nativo.
+        {
+          const ACC_SECOND_SHIFT = (NOTE_HEAD_RX * 2.0) - 0.5; // ~larghezza di una testa
+          const byOnsetClef = new Map<string, StaffNote[]>();
+          for (const n of staffNotes) {
+            if (Number((n as any).voice ?? 1) !== 0 || n.isRest || n.id === '__ghost__') continue;
+            if (chordKeyByNoteId.has(n.id)) continue; // già fusa in accordo → VexFlow gestisce le seconde
+            const k = `${n.clef ?? 'treble'}|${getNoteOnsetKey(n)}`;
+            (byOnsetClef.get(k) ?? byOnsetClef.set(k, []).get(k)!).push(n);
+          }
+          for (const group of byOnsetClef.values()) {
+            if (group.length < 2) continue;
+            const sorted = group.slice().sort((a, b) => Number(a.position) - Number(b.position));
+            for (let i = 1; i < sorted.length; i++) {
+              const diff = Number(sorted[i].position) - Number(sorted[i - 1].position);
+              if (diff === 0 || diff === 1) { // unisono o seconda
+                const upper = sorted[i];
+                if (!(upper as any).manualStemDirection && !offsetMap.has(upper.id)) {
+                  offsetMap.set(upper.id, ACC_SECOND_SHIFT);
+                }
+              }
+            }
+          }
+        }
+
         const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
 
         // --- Bass staff: cross-voice accidental collision (voices 3+4) ---

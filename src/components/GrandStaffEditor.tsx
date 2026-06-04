@@ -7779,24 +7779,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             {
                 const targetTrackId = accTarget.trackId;
-                const accNoteEndTick = startTick + durationTicks;
                 setAccompanimentTracks(prev => prev.map((track) => {
                     if (track.id !== targetTrackId) return track;
-                    // Sovrascrivi gli eventi della STESSA CHIAVE che si sovrappongono alla
-                    // finestra temporale della nota, MA conserva i toni d'accordo (note di
-                    // altezza diversa con lo STESSO attacco si impilano in un accordo).
+                    // Rimuovi SOLO ciò che occupa lo STESSO attacco in modo incompatibile:
+                    //  - una pausa sullo stesso attacco (la nota la sostituisce);
+                    //  - un duplicato di stessa altezza (re-click → sostituisce/ridurata).
+                    // Si CONSERVANO: i toni d'accordo (stesso attacco, altra altezza) e la
+                    // POLIFONIA (note ad attacchi DIVERSI con durate sovrapposte — es. una
+                    // nota tenuta sotto crome che si muovono). L'ACC è a voce singola: le
+                    // sovrapposizioni restano nei dati (l'incisione le affianca; non spariscono).
                     // Per-chiave: una nota di violino non tocca il basso allo stesso tick.
                     const filtered = track.notes.filter(n => {
                         if ((n.clef ?? 'treble') !== accClef) return true;
                         const s = (n as any).startTick ?? 0;
-                        const d = (n as any).durationTicks ?? 0;
-                        const overlaps = s < accNoteEndTick && startTick < s + d;
-                        if (!overlaps) return true;
-                        // Stesso attacco + nota reale di altezza diversa → accordo: tieni.
-                        if (s === startTick && !n.isRest && (n as any).midi !== accNote.midi) return true;
-                        // Altrimenti rimuovi: pause sull'attacco, duplicati di stessa altezza,
-                        // e note che si sovrappongono partendo da attacchi diversi.
-                        return false;
+                        if (s !== startTick) return true; // attacco diverso → conserva (sequenza/polifonia)
+                        if (n.isRest) return false; // pausa sull'attacco → sostituita
+                        return (n as any).midi !== accNote.midi; // stessa altezza → duplicato, rimuovi; altrimenti accordo
                     });
                     return {
                         ...track,
@@ -8572,18 +8570,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     clef: accClefStep,
                     voice: 0 as any,
                 };
-                const accEndTickStep = startTick + durationTicks;
                 const targetId = target.id;
                 setAccompanimentTracks(prev => prev.map(track => {
                     if (track.id !== targetId) return track;
+                    // Vedi note nel percorso click: rimuovi solo duplicati/pause sullo
+                    // stesso attacco; conserva accordi e polifonia (attacchi diversi).
                     const filtered = track.notes.filter(n => {
                         if ((n.clef ?? 'treble') !== accClefStep) return true;
                         const s = (n as any).startTick ?? 0;
-                        const d = (n as any).durationTicks ?? 0;
-                        const overlaps = s < accEndTickStep && startTick < s + d;
-                        if (!overlaps) return true;
-                        if (s === startTick && !n.isRest && (n as any).midi !== accNoteStep.midi) return true; // accordo
-                        return false;
+                        if (s !== startTick) return true;
+                        if (n.isRest) return false;
+                        return (n as any).midi !== accNoteStep.midi;
                     });
                     return { ...track, notes: [...filtered, accNoteStep].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)) };
                 }));
