@@ -5426,8 +5426,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // (start, end) occurrence pair — applying the rallentando on every repeat.
             const idToAbsBeats = new Map<string, number[]>();
             for (const it of allItems) {
-                if (it.skip) continue;
                 if (!it.note?.id) continue;
+                // Includi anche gli item con skip=true (continuazioni di legatura non
+                // ribattute): per ancorare una curva di tempo serve solo la POSIZIONE
+                // della nota, non se viene ribattuta. Escludendole, una curva che
+                // termina su una nota legata non si risolveva (endsFound=0) → nessun
+                // rallentando (succedeva sui file con legature, non su quelli nuovi).
                 const arr = idToAbsBeats.get(it.note.id);
                 if (arr) arr.push(it.absStartBeat);
                 else idToAbsBeats.set(it.note.id, [it.absStartBeat]);
@@ -5690,6 +5694,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             isStart: boolean;   // show text label on this segment
             fromX: number;      // dashed-line / text origin
             toX: number;        // dashed-line end
+            y: number;          // baseline Y (sopra il SATB per curve SATB, sopra il rigo ACC per curve ACC)
         };
         const out: Record<number, Seg[]> = {};
         const sysParams = (layoutData as any)?.systemsParams;
@@ -5700,15 +5705,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (!n?.id) continue;
             if (!idToPositioned.has(n.id)) idToPositioned.set(n.id, n);
         }
+        // Risolvi sistema + xPosition per un id, sia SATB (positionedNotes) sia ACC.
+        // Le note ACC non sono in positionedNotes: la xPosition si ricalcola con la
+        // stessa formula di accompanimentNotesForSystem (baseX misura + tick relativi).
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
+        // Y di base del marcatore: sopra il rigo di violino per il SATB; sopra il
+        // rigo della traccia ACC per le curve ACC (così non appare "sul SATB").
+        const satbMarkerY = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 10;
+        const ACC_TREBLE_TOP_Y_LOCAL = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — prima traccia ACC
+        const visAccTracks = (accompanimentTracks || []).filter(t => t && t.visible);
+        const accTrebleOffsets = accompanimentTrackTrebleOffsets(visAccTracks);
+        const resolvePos = (noteId: string): { sys: number; x: number; y: number } | null => {
+            const pn = idToPositioned.get(noteId);
+            if (pn) {
+                const sys = noteToSystemIndex.get(noteId);
+                if (typeof sys === 'number') return { sys, x: pn.xPosition ?? 0, y: satbMarkerY };
+            }
+            for (const t of (accompanimentTracks || [])) {
+                const an = (t.notes || []).find(nn => nn.id === noteId);
+                if (!an) continue;
+                const mi = an.measureIndex ?? -1;
+                const sys = measureToSystemIndex.get(mi);
+                if (typeof sys !== 'number') return null;
+                const sp = sysParams[sys];
+                if (!sp) return null;
+                const idxInSys = sp.measureIndices.indexOf(mi);
+                if (idxInSys < 0) return null;
+                const measureStartTick = beatsToTicks(Number(measureStartAbsBeat[mi]) || 0);
+                const relativeTicks = Math.max(0, ((an as any).startTick ?? 0) - measureStartTick);
+                const baseX = sp.startMeasuresX?.[idxInSys] ?? 0;
+                const vi = visAccTracks.findIndex(vt => vt.id === t.id);
+                const accY = ACC_TREBLE_TOP_Y_LOCAL + (vi >= 0 ? (accTrebleOffsets[vi] ?? 0) : 0) - 10;
+                return { sys, x: baseX + MEASURE_PADDING_X + relativeTicks * sp.pxPerTick, y: accY };
+            }
+            return null;
+        };
         (tempoCurves || []).forEach((c, index) => {
-            const startPn = idToPositioned.get(c.startNoteId);
-            const endPn = idToPositioned.get(c.endNoteId);
-            if (!startPn || !endPn) return;
-            const startSys = noteToSystemIndex.get(c.startNoteId);
-            const endSys = noteToSystemIndex.get(c.endNoteId);
-            if (typeof startSys !== 'number' || typeof endSys !== 'number') return;
-            const startX = startPn.xPosition ?? 0;
-            const endX = endPn.xPosition ?? 0;
+            const startP = resolvePos(c.startNoteId);
+            const endP = resolvePos(c.endNoteId);
+            if (!startP || !endP) return;
+            const startSys = startP.sys;
+            const endSys = endP.sys;
+            const startX = startP.x;
+            const endX = endP.x;
+            const markerY = startP.y;
 
             const pushSeg = (sys: number, seg: Seg) => {
                 if (!out[sys]) out[sys] = [];
@@ -5716,7 +5756,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             };
 
             if (startSys === endSys) {
-                pushSeg(startSys, { curve: c, index, isStart: true, fromX: startX, toX: endX });
+                pushSeg(startSys, { curve: c, index, isStart: true, fromX: startX, toX: endX, y: markerY });
                 return;
             }
             // Multi-system: span across each affected system.
@@ -5728,16 +5768,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const sysStart = (sp.startMeasuresX?.[0]) ?? 0;
                 const sysEnd = sp.width ?? sysStart;
                 if (sys === startSys) {
-                    pushSeg(sys, { curve: c, index, isStart: true, fromX: startX, toX: sysEnd });
+                    pushSeg(sys, { curve: c, index, isStart: true, fromX: startX, toX: sysEnd, y: markerY });
                 } else if (sys === endSys) {
-                    pushSeg(sys, { curve: c, index, isStart: false, fromX: sysStart, toX: endX });
+                    pushSeg(sys, { curve: c, index, isStart: false, fromX: sysStart, toX: endX, y: markerY });
                 } else {
-                    pushSeg(sys, { curve: c, index, isStart: false, fromX: sysStart, toX: sysEnd });
+                    pushSeg(sys, { curve: c, index, isStart: false, fromX: sysStart, toX: sysEnd, y: markerY });
                 }
             }
         });
         return out;
-    }, [layoutData, tempoCurves, noteToSystemIndex]);
+    }, [layoutData, tempoCurves, noteToSystemIndex, accompanimentTracks, measureToSystemIndex]);
 
     // -----------------------
     // Triplet groups (keep ONLY ONE)
@@ -9384,7 +9424,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                     return;
                 }
-                const arr = (rawNotes || []).filter(n => selectedNoteIds.has(n.id) && !n.isRest);
+                // Cerca le note selezionate sia nel SATB sia nelle tracce ACC: la curva
+                // di tempo è ancorata agli id delle note e il playback risolve le
+                // posizioni da entrambi (allItems include SATB + ACC). Senza gli ACC qui,
+                // una selezione su una traccia ACC darebbe arr vuoto → nessuna curva.
+                const accAllForCurve = (latestAccompanimentTracks.current || []).flatMap(t => t.notes);
+                const arr = [...(rawNotes || []), ...accAllForCurve].filter(n => selectedNoteIds.has(n.id) && !n.isRest);
                 if (arr.length === 0) return;
                 if (arr.length === 1) {
                     // Single-note: remove any tempo curve covering that note as start or end.
@@ -10551,7 +10596,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         setTempoCurves(prev => {
                             const filtered = (prev || []).filter(c => c.startNoteId !== startId);
                             const next = [...filtered, { startNoteId: startId, endNoteId: endId, fromBpm, toBpm }];
-                            console.log('[TEMPO] curve created/updated', { startId, endId, fromBpm, toBpm, total: next.length });
                             return next;
                         });
                         setTempoCurvePending(null);
@@ -11404,10 +11448,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             {/* Overlay: tempo curve markers (rall. ----- / accel. -----) */}
                             {(tempoCurveMarkersBySystem[systemIndex] || []).length > 0 && (
                                 <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
-                                    {tempoCurveMarkersBySystem[systemIndex].map(({ curve, index, isStart, fromX, toX }, segIdx) => {
+                                    {tempoCurveMarkersBySystem[systemIndex].map(({ curve, index, isStart, fromX, toX, y }, segIdx) => {
                                         const isAccel = curve.toBpm > curve.fromBpm;
                                         const label = isAccel ? 'accel.' : 'rall.';
-                                        const y = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 10;
                                         // Approx text width: ~30px for "rall." / "accel." in 12px italic.
                                         const TEXT_GAP = 34;
                                         const lineX1 = isStart ? fromX + TEXT_GAP : fromX;
