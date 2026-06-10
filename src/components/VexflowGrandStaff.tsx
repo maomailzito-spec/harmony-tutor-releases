@@ -40,7 +40,7 @@ interface VexflowGrandStaffProps {
   /** Tracce di accompagnamento VISIBILI, in ordine. Ogni traccia disegna il proprio
    *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
    *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
-  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string }>;
+  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean }>;
 }
 
 const DEFAULT_WIDTH = 900;
@@ -717,6 +717,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       bass: Stave | null;
       trebleY: number;
       color?: string;
+      voiced?: boolean;
     };
     let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
     // Robustness: if asked to show acc staves but no track metadata arrived, draw one
@@ -731,7 +732,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const trebleY = accTrebleY + accTrebleOffsets[i];
       const treble = new Stave(STAFF_MARGIN, trebleY, staffWidth);
       const bass = mode === 'grandstaff' ? new Stave(STAFF_MARGIN, trebleY + ACCOMPANIMENT_GS_SPAN, staffWidth) : null;
-      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color };
+      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -1012,7 +1013,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const drawNotesAtX = (
         staffNotes: StaffNote[],
         stave: Stave,
-        clef: ClefType
+        clef: ClefType,
+        // Voiced grand staff ACC: notes use voices 1-4 (1-2 treble, 3-4 bass).
+        // Chord-merge happens PER VOICE (so different voices keep separate stems),
+        // and the SATB-specific cross-voice close-position merges are disabled.
+        isVoicedAcc: boolean = false,
       ) => {
         const prepared: Array<{
           staffNote: StaffNote;
@@ -1066,7 +1071,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // This produces a single stem (more conventional in close-position notation)
         // while preserving per-note selection via proximity hitpoints.
         const isTightTreble = clef === 'treble';
-        if (isTightTreble && enableEngravingEnhancements) {
+        if (isTightTreble && enableEngravingEnhancements && !isVoicedAcc) {
           for (const [absX, group] of byX.entries()) {
             const byTime = new Map<string, StaffNote[]>();
             for (const n of group) {
@@ -1162,7 +1167,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // single notehead with one stem.  We mark the higher-numbered voice for
         // skipping so only the primary voice's StaveNote is rendered.
         const sameDirectionUnisonSkipIds = new Set<string>();
-        if (clef === 'treble' && enableEngravingEnhancements) {
+        if (clef === 'treble' && enableEngravingEnhancements && !isVoicedAcc) {
           for (const onset of byTimeKeyAll.values()) {
             const notes = onset.filter(n => n.id !== '__ghost__' && !n.isRest && !chordKeyByNoteId.has(n.id));
             for (let i = 0; i < notes.length; i++) {
@@ -1239,6 +1244,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           } catch {
             // ignore
           }
+          // Voiced ACC: un accordo appartiene a UNA sola voce → il gambo segue la voce
+          // (1/3 su, 2/4 giù) per coerenza con le note singole della stessa voce.
+          try {
+            const chordVoices = new Set(notesInChord.map(n => Number((n as any).voice ?? 0)));
+            if (chordVoices.size === 1) {
+              const v = [...chordVoices][0];
+              if (v === 1 || v === 3) chordStem = 'up';
+              else if (v === 2 || v === 4) chordStem = 'down';
+            }
+          } catch {
+            // ignore
+          }
           try {
             vf.setStemDirection(chordStem === 'up' ? 1 : -1);
           } catch {
@@ -1272,7 +1289,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         const MIDDLE_LINE_POS_TREBLE = 6; // B4 relative to C4=0
 
         const isTrebleStaff = clef === 'treble';
-        const enableClosePositionHeuristics = isTrebleStaff && enableEngravingEnhancements;
+        // Voiced ACC: i cluster dentro una voce sono già fusi in accordi (displacement
+        // delle seconde gestito nativamente da VexFlow); le euristiche close-position del
+        // SATB qui darebbero conflitti (es. il tenore voce 3 trattato due volte). Disattive.
+        const enableClosePositionHeuristics = isTrebleStaff && enableEngravingEnhancements && !isVoicedAcc;
 
         const getSecondClusterOffsetsById = (
           chord: StaffNote[],
@@ -1464,7 +1484,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // On the bass staff (parti late), voices 3 (tenor) and 4 (bass) can form
         // seconds or unisons that need the same X-shift treatment.
         const isBassStaff = clef === 'bass';
-        if (isBassStaff && enableEngravingEnhancements) {
+        if (isBassStaff && enableEngravingEnhancements && !isVoicedAcc) {
           for (const group of byX.values()) {
             const byTime = new Map<string, StaffNote[]>();
             for (const n of group) {
@@ -1528,7 +1548,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // --- Treble staff: unisons collision avoidance (voices 1+2 or 1+2+3) ---
         // When two voices on the same staff have the same pitch (unison),
         // the noteheads overlap. Apply X-shift to separate them visually.
-        if (isTrebleStaff && enableEngravingEnhancements) {
+        if (isTrebleStaff && enableEngravingEnhancements && !isVoicedAcc) {
           for (const group of byX.values()) {
             const byTime = new Map<string, StaffNote[]>();
             for (const n of group) {
@@ -1588,18 +1608,39 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         {
           const accByOnset = new Map<string, StaffNote[]>();
           for (const n of staffNotes) {
-            if ((n.voice ?? 1) !== 0 || n.isRest || n.id === '__ghost__') continue;
+            if (n.isRest || n.id === '__ghost__') continue;
+            const v = Number(n.voice ?? 1);
+            // Voce singola (voice 0): fonde TUTTE le note dello stesso attacco (toni
+            //   d'accordo della linea unica).
+            // Voiced (voci 1-4): fonde solo le note della STESSA voce allo stesso attacco
+            //   (un accordo dentro una voce → un gambo); voci diverse restano separate.
+            // SATB (qui isVoicedAcc=false, voci 1-4): NON gestito da questo blocco.
+            if (v === 0) {
+              // ok
+            } else if (isVoicedAcc) {
+              // ok (raggruppato per voce sotto)
+            } else {
+              continue;
+            }
             const ok = getNoteOnsetKey(n);
-            if (!accByOnset.has(ok)) accByOnset.set(ok, []);
-            accByOnset.get(ok)!.push(n);
+            const key = v === 0 ? `o:${ok}` : `v:${v}:${ok}`;
+            if (!accByOnset.has(key)) accByOnset.set(key, []);
+            accByOnset.get(key)!.push(n);
           }
-          for (const [ok, g] of accByOnset.entries()) {
+          for (const [key, g] of accByOnset.entries()) {
             if (g.length < 2) continue;
             // Require identical rhythmic value so a single chord glyph is correct.
             const baseDur = g[0].duration;
             const baseDotted = !!g[0].isDotted;
             if (!g.every(n => n.duration === baseDur && !!n.isDotted === baseDotted)) continue;
-            const chordKey = `acc_${ok}`;
+            // Voiced: due note alla stessa altezza diatonica nella stessa voce
+            // collasserebbero in una sola testa fondendole — tienile separate.
+            // (Per voice 0 si preserva il comportamento storico: si fonde comunque.)
+            if (isVoicedAcc) {
+              const diaKeys = g.map(n => `${pitchLetterOf((n as any).pitch)}/${Number((n as any).octave)}`);
+              if (new Set(diaKeys).size !== diaKeys.length) continue;
+            }
+            const chordKey = `acc_${key}`;
             for (const n of g) chordKeyByNoteId.set(n.id, chordKey);
             chordNotesByKey.set(chordKey, g);
           }
@@ -1630,6 +1671,48 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 if (!(upper as any).manualStemDirection && !offsetMap.has(upper.id)) {
                   offsetMap.set(upper.id, ACC_SECOND_SHIFT);
                 }
+              }
+            }
+          }
+        }
+
+        // ── Voiced ACC: seconde/unisoni tra VOCI DIVERSE allo stesso attacco ──
+        // I cluster dentro una voce sono già fusi (VexFlow sfalsa le seconde). Restano
+        // da gestire le seconde/unisoni tra note di voci DIVERSE (StaveNote separate alla
+        // stessa x): si sposta a destra la nota col gambo in giù (gambi affacciati,
+        // convenzione standard a due voci). Le note già fuse in un accordo si saltano.
+        if (isVoicedAcc) {
+          const stemDirOf = (n: StaffNote): 'up' | 'down' => {
+            const ov = stemOverrideById.get(n.id);
+            if (ov) return ov;
+            const v = Number((n as any).voice ?? 1);
+            return (v === 1 || v === 3) ? 'up' : 'down';
+          };
+          const isRealChord = (n: StaffNote): boolean => {
+            const ck = chordKeyByNoteId.get(n.id);
+            if (!ck) return false;
+            const m = chordNotesByKey.get(ck);
+            return !!m && m.length >= 2;
+          };
+          const byOnsetVoiced = new Map<string, StaffNote[]>();
+          for (const n of staffNotes) {
+            if (n.isRest || n.id === '__ghost__') continue;
+            if (isRealChord(n)) continue; // gestita dalla fusione (VexFlow)
+            const k = getNoteOnsetKey(n);
+            (byOnsetVoiced.get(k) ?? byOnsetVoiced.set(k, []).get(k)!).push(n);
+          }
+          for (const group of byOnsetVoiced.values()) {
+            if (group.length < 2) continue;
+            const sorted = group.slice().sort((a, b) => Number(a.position) - Number(b.position));
+            for (let i = 1; i < sorted.length; i++) {
+              const lower = sorted[i - 1];
+              const upper = sorted[i];
+              if (Number((lower as any).voice ?? 1) === Number((upper as any).voice ?? 1)) continue; // stessa voce → già fusa
+              const diff = Number(upper.position) - Number(lower.position);
+              if (diff !== 0 && diff !== 1) continue; // non unisono/seconda
+              const downNote = stemDirOf(upper) === 'down' ? upper : (stemDirOf(lower) === 'down' ? lower : upper);
+              if (!(downNote as any).manualStemDirection && !offsetMap.has(downNote.id)) {
+                offsetMap.set(downNote.id, NOTEHEAD_TOUCH_SHIFT);
               }
             }
           }
@@ -1770,7 +1853,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // offset / stagger / inset / stem / merge logic interferes with VexFlow's
         // built-in layout and causes overlaps. Revert ALL engraving overrides
         // for those notes so they render exactly like legacy mode.
-        if (enableEngravingEnhancements) {
+        // (Voiced ACC: salta — la fusione per-voce non va mai disfatta qui.)
+        if (enableEngravingEnhancements && !isVoicedAcc) {
           for (const onset of byTimeKeyAll.values()) {
             const nonRest = onset.filter(n => n && n.id !== '__ghost__' && !n.isRest);
             const withAcc = nonRest.filter(n => {
@@ -1836,7 +1920,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         // Ensure ALL Tenor notes get stem DOWN in parti strette,
         // even single-voice beats not covered by the multi-voice stemOverrideById logic.
-        if (isClosePositionTreble) {
+        if (isClosePositionTreble && !isVoicedAcc) {
           for (const n of staffNotes) {
             if (Number(n.voice ?? 1) === 3 && !n.isRest && !n.manualStemDirection && !stemOverrideById.has(n.id)) {
               stemOverrideById.set(n.id, 'down');
@@ -1847,7 +1931,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Ensure ALL Tenor notes get stem UP on the bass staff in parti late,
         // so they don't visually merge with Bass (voice 4, stem DOWN).
         // This is the mirror of the close-position rule above.
-        if (isPartiLate && clef === 'bass') {
+        if (isPartiLate && clef === 'bass' && !isVoicedAcc) {
           for (const n of staffNotes) {
             if (Number(n.voice ?? 1) === 3 && !n.isRest && !n.manualStemDirection && !stemOverrideById.has(n.id)) {
               stemOverrideById.set(n.id, 'up');
@@ -3423,10 +3507,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           if (!trackNotes || trackNotes.length === 0) continue;
           if (block.bass) {
             // grandstaff: route by clef, low notes go to the bass stave.
-            const tn = trackNotes.filter(n => (n.clef || 'treble') === 'treble');
-            const bn = trackNotes.filter(n => n.clef === 'bass');
-            if (tn.length > 0) drawNotesAtX(tn, block.treble, 'treble');
-            if (bn.length > 0) drawNotesAtX(bn, block.bass, 'bass');
+            // Voiced grand staff: clef follows the voice (1-2 → treble, 3-4 → bass)
+            // unless the note carries an explicit clef override (cross-staff move).
+            const effClef = (n: StaffNote): ClefType => {
+              if (block.voiced) {
+                if (n.clef === 'treble' || n.clef === 'bass') return n.clef;
+                const v = Number((n as any).voice ?? 1);
+                return (v === 3 || v === 4) ? 'bass' : 'treble';
+              }
+              return (n.clef || 'treble') === 'bass' ? 'bass' : 'treble';
+            };
+            const tn = trackNotes.filter(n => effClef(n) === 'treble');
+            const bn = trackNotes.filter(n => effClef(n) === 'bass');
+            if (tn.length > 0) drawNotesAtX(tn, block.treble, 'treble', !!block.voiced);
+            if (bn.length > 0) drawNotesAtX(bn, block.bass, 'bass', !!block.voiced);
           } else {
             // single staff: position all notes by the block's clef.
             const single = trackNotes.map(n => ({ ...n, clef: block.clef }));

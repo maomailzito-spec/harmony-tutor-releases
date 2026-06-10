@@ -240,6 +240,12 @@ export type AccompanimentTrack = {
   /** Modalità pentagramma: "grandstaff" (treble+bass) o "treble_only" (rigo singolo).
    *  File legacy senza questo campo vengono trattati come "grandstaff" al consumo. */
   staffMode: 'grandstaff' | 'treble_only';
+  /** Grand staff "a voci": come 'grandstaff' (treble+bass) ma le note usano le voci
+   *  1-4 invece di voice 0 (1-2 = rigo violino/mano destra, 3-4 = rigo basso/mano
+   *  sinistra), così da avere fino a 4 voci poliritmiche con accordi per voce,
+   *  riusando il motore di incisione del SATB (gambi 1/3 su, 2/4 giù). Solo per
+   *  staffMode === 'grandstaff'. Le altre tracce restano a voce singola (voice 0). */
+  voiced?: boolean;
   /** Chiave del rigo singolo (usata quando staffMode === 'treble_only').
    *  Permette righi strumentali/vocali in chiavi diverse (violino, basso, soprano,
    *  contralto, tenore). Default 'treble' se assente. Ignorata in 'grandstaff'. */

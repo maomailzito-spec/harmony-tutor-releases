@@ -280,13 +280,18 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
           git clone "https://x-access-token:${GH_TOKEN}@github.com/maomailzito-spec/harmonytutor.git" /tmp/site
           cd /tmp/site
-          # Replace any previous version in the download URLs
-          sed -i "s|releases/download/v[0-9.]*\/Harmony\.Tutor-[0-9.]*-|releases/download/v${VERSION}/Harmony.Tutor-${VERSION}-|g" index.html
-          # Update the visible "Versione attuale: v…" label under the download buttons
-          sed -i -E "s|<strong>v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?</strong>|<strong>v${VERSION}</strong>|g" index.html
+          # Update both the Italian (index.html) and English (en.html) pages.
+          # Skip a file gracefully if it is not present in the site repo.
+          for f in index.html en.html; do
+            [ -f "$f" ] || continue
+            # Replace any previous version in the download URLs
+            sed -i "s|releases/download/v[0-9.]*\/Harmony\.Tutor-[0-9.]*-|releases/download/v${VERSION}/Harmony.Tutor-${VERSION}-|g" "$f"
+            # Update the visible "Versione attuale / Current version: v…" label under the download buttons
+            sed -i -E "s|<strong>v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?</strong>|<strong>v${VERSION}</strong>|g" "$f"
+          done
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
+          git add -A
           git diff --cached --quiet || {
             git commit -m "chore: update download links to v${VERSION}"
             git push

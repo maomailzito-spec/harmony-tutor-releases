@@ -582,9 +582,12 @@ function createMenu() {
     try {
       const version = app.getVersion();
       const name = app.getName();
-      const detail = lng === 'en'
+      const credits = lng === 'en'
+        ? `\n\nPiano samples: Salamander Grand Piano V3 — Alexander Holm,\nlicensed under CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/),\nsamples recompressed/reduced.`
+        : `\n\nCampioni di pianoforte: Salamander Grand Piano V3 — Alexander Holm,\nlicenza CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/),\ncampioni ricompressi/ridotti.`;
+      const detail = (lng === 'en'
         ? `Version ${version}\n\nA desktop app for harmonic analysis — Grand Staff editor with figured bass, Roman numerals and voice leading.\n\n© 2026 Harmony Tutor\nhttps://harmonytutor.it`
-        : `Versione ${version}\n\nApp desktop per l'analisi armonica — editor su pentagramma con basso continuo, numerali romani e condotta delle voci.\n\n© 2026 Harmony Tutor\nhttps://harmonytutor.it`;
+        : `Versione ${version}\n\nApp desktop per l'analisi armonica — editor su pentagramma con basso continuo, numerali romani e condotta delle voci.\n\n© 2026 Harmony Tutor\nhttps://harmonytutor.it`) + credits;
       dialog.showMessageBox(mainWindow || null, {
         type: 'info',
         title: lng === 'en' ? 'About Harmony Tutor' : 'Informazioni su Harmony Tutor',

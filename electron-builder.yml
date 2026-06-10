@@ -12,6 +12,10 @@ files:
   - shared/**/*
   - package.json
 
+extraResources:
+  - from: docs/THIRD-PARTY-NOTICES.txt
+    to: THIRD-PARTY-NOTICES.txt
+
 extraMetadata:
   main: electron/main.js
   appFlavor: grandstaff

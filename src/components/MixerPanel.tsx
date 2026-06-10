@@ -32,6 +32,10 @@ interface MixerPanelProps {
   onUpdateTrack: (trackId: string, updates: Partial<AccompanimentTrack>) => void;
   onAddEmptyTrack: () => void;
   onDeleteTrack: (trackId: string) => void;
+  /** Instantaneous output peak (0..1) for a SATB voice — drives the signal LEDs. */
+  getVoiceLevel?: (voice: number) => number;
+  /** Instantaneous output peak (0..1) for an ACC track (by array index). */
+  getTrackLevel?: (trackIndex: number) => number;
   onClose: () => void;
 }
 
@@ -43,9 +47,10 @@ const VOICE_ACCENTS: Record<number, string> = { 1: '#2563eb', 2: '#f97316', 3: '
 // Per-track staff options. "grandstaff" = treble+bass (keyboard); the others are a
 // single staff with the given clef (instrumental/vocal lines). Encoded as
 // { staffMode, clef } applied to the AccompanimentTrack.
-type StaffChoice = { value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType };
+type StaffChoice = { value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType; voiced?: boolean };
 const STAFF_OPTIONS: StaffChoice[] = [
-  { value: 'grandstaff',     label: 'Grandstaff',  staffMode: 'grandstaff' },
+  { value: 'grandstaff',        label: 'Grandstaff',        staffMode: 'grandstaff' },
+  { value: 'grandstaff-voiced', label: 'Grand staff a voci', staffMode: 'grandstaff', voiced: true },
   { value: 'single-treble',  label: '𝄞 Violino',   staffMode: 'treble_only', clef: 'treble' },
   { value: 'single-bass',    label: '𝄢 Basso',     staffMode: 'treble_only', clef: 'bass' },
   { value: 'single-soprano', label: 'Soprano',     staffMode: 'treble_only', clef: 'soprano' },
@@ -53,7 +58,184 @@ const STAFF_OPTIONS: StaffChoice[] = [
   { value: 'single-tenor',   label: 'Tenore',      staffMode: 'treble_only', clef: 'tenor' },
 ];
 const staffChoiceValue = (track: AccompanimentTrack): string =>
-  track.staffMode === 'grandstaff' ? 'grandstaff' : `single-${track.clef ?? 'treble'}`;
+  track.staffMode === 'grandstaff'
+    ? (track.voiced ? 'grandstaff-voiced' : 'grandstaff')
+    : `single-${track.clef ?? 'treble'}`;
+
+// ── Fader / level helpers ───────────────────────────────────────────────────
+// The stored `volume` stays a LINEAR gain in [0..1] (0 dB at unity), so the
+// audio engine is untouched. The fader uses a gentle audio taper (squared) so
+// the mid-throw stays usable — about −19 dB at 1/3, −5 dB at 3/4, 0 dB at top —
+// instead of a steep dB-linear taper that left the lower half nearly silent.
+// The dB readout still shows 20·log10(gain).
+const DB_FLOOR = -60; // readout shows −∞ below this
+const gainToDb = (g: number) => (g <= 0 ? -Infinity : 20 * Math.log10(g));
+/** fader position (0 bottom .. 1 top) → linear gain */
+const posToGain = (p: number): number => (p <= 0 ? 0 : p * p);
+/** linear gain → fader position (0..1) */
+const gainToPos = (g: number): number => (g <= 0 ? 0 : Math.sqrt(Math.min(1, g)));
+
+const FADER_H = 104;       // px height of the fader travel
+const CAP_H = 13;          // px height of the fader cap
+const LED_COUNT = 20;      // segments in the signal meter
+const METER_FLOOR_DB = -48; // bottom of the LED meter scale
+
+/** Per-segment colour ramp (green → yellow → orange → red as we climb toward
+ *  the top), so a hot signal lights the red segments and the whole meter reads
+ *  "loud" at a glance. `i` is 1-based from the bottom. */
+const ledColor = (i: number): string => {
+  const f = (i - 1) / (LED_COUNT - 1);      // 0 bottom … 1 top
+  const hue = Math.round(120 * (1 - Math.pow(f, 1.15))); // 120=green → 0=red
+  return `hsl(${hue}, 92%, 52%)`;
+};
+
+/** Vertical LED signal meter. Runs its own rAF so only this tiny column
+ *  repaints (~60fps), never the whole panel. Fast attack, slow release,
+ *  with a short peak-hold segment. */
+const LedMeter: React.FC<{ getLevel?: () => number }> = ({ getLevel }) => {
+  const [lit, setLit] = useState(0);
+  const [peakSeg, setPeakSeg] = useState(0);
+  const getLevelRef = useRef(getLevel);
+  getLevelRef.current = getLevel;
+
+  useEffect(() => {
+    let raf = 0;
+    let smooth = 0;       // smoothed 0..1 level
+    let peak = 0;         // peak-hold 0..1
+    let peakWait = 0;     // seconds remaining before peak decays
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const amp = getLevelRef.current ? Math.max(0, Math.min(1, getLevelRef.current())) : 0;
+      const db = amp > 0 ? 20 * Math.log10(amp) : -Infinity;
+      const frac = db === -Infinity ? 0 : Math.max(0, Math.min(1, (db - METER_FLOOR_DB) / -METER_FLOOR_DB));
+      // fast attack, slow release
+      smooth = frac > smooth ? frac : smooth + (frac - smooth) * Math.min(1, dt * 7);
+      if (smooth >= peak) { peak = smooth; peakWait = 0.7; }
+      else if (peakWait > 0) { peakWait -= dt; }
+      else { peak = Math.max(0, peak - dt * 0.5); }
+      setLit(Math.round(smooth * LED_COUNT));
+      setPeakSeg(peak > 0.001 ? Math.max(1, Math.round(peak * LED_COUNT)) : 0);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const segs = [];
+  for (let i = 1; i <= LED_COUNT; i++) {
+    const on = i <= lit;
+    const isPeak = i === peakSeg;
+    const color = ledColor(i);
+    segs.push(
+      <div
+        key={i}
+        style={{
+          flex: 1,
+          marginTop: 1,
+          borderRadius: 1,
+          background: on || isPeak ? color : '#161f2e',
+          opacity: on ? 1 : isPeak ? 0.85 : 0.5,
+          boxShadow: on ? `0 0 2px ${color}` : 'none',
+          transition: 'background 40ms linear, opacity 40ms linear',
+        }}
+      />
+    );
+  }
+  // column-reverse so the first child sits at the BOTTOM
+  return <div style={{ display: 'flex', flexDirection: 'column-reverse', width: 7, height: FADER_H }}>{segs}</div>;
+};
+
+/** Console-style vertical fader: incised groove, accent fill, metal cap with an
+ *  accent center line, a dB scale on the left and the LED meter on the right. */
+const ConsoleFader: React.FC<{
+  value: number;                 // linear gain 0..1
+  onChange: (gain: number) => void;
+  accent: string;
+  getLevel?: () => number;
+}> = ({ value, onChange, accent, getLevel }) => {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const pos = gainToPos(value);
+
+  const setFromClientY = useCallback((clientY: number) => {
+    const el = trackRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const p = Math.max(0, Math.min(1, 1 - (clientY - r.top) / r.height));
+    onChange(posToGain(p));
+  }, [onChange]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    setFromClientY(e.clientY);
+    const move = (ev: PointerEvent) => setFromClientY(ev.clientY);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    const np = Math.max(0, Math.min(1, pos - Math.sign(e.deltaY) * 0.03));
+    onChange(posToGain(np));
+  };
+
+  const capTop = (1 - pos) * (FADER_H - CAP_H);
+  const ticks = [0, -6, -12, -24, -48];
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 3, height: FADER_H }}>
+      {/* dB scale */}
+      <div style={{ position: 'relative', width: 15, fontSize: 7, color: '#64748b', lineHeight: 1 }}>
+        {ticks.map(t => {
+          // throw position for a given dB under the squared taper: p = 10^(dB/40)
+          const y = (1 - Math.pow(10, t / 40)) * 100;
+          return (
+            <span key={t} style={{ position: 'absolute', top: `calc(${y}% - 3px)`, right: 0 }}>{t}</span>
+          );
+        })}
+        <span style={{ position: 'absolute', bottom: -2, right: 0 }}>∞</span>
+      </div>
+
+      {/* groove + fill + cap (drag area) */}
+      <div
+        ref={trackRef}
+        onPointerDown={onPointerDown}
+        onWheel={onWheel}
+        title={`Volume: ${gainToDb(value) <= DB_FLOOR + 0.1 ? '−∞' : gainToDb(value).toFixed(1) + ' dB'}`}
+        style={{ position: 'relative', width: 24, cursor: 'ns-resize', touchAction: 'none' }}
+      >
+        {/* groove */}
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 5, transform: 'translateX(-50%)', borderRadius: 3, background: '#0b1220', boxShadow: 'inset 0 0 2px #000, inset 0 0 0 1px #334155' }} />
+        {/* accent fill below the cap */}
+        <div style={{ position: 'absolute', left: '50%', width: 5, transform: 'translateX(-50%)', bottom: 0, top: `${(1 - pos) * 100}%`, borderRadius: 3, background: accent, opacity: 0.85 }} />
+        {/* 0 dB reference tick (top) */}
+        <div style={{ position: 'absolute', left: 3, right: 3, top: 0, height: 1, background: '#475569' }} />
+        {/* fader cap */}
+        <div
+          style={{
+            position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: capTop,
+            width: 26, height: CAP_H, borderRadius: 3,
+            background: 'linear-gradient(180deg,#e2e8f0 0%,#94a3b8 55%,#64748b 100%)',
+            border: '1px solid #0f172a',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.6)',
+          }}
+        >
+          <div style={{ position: 'absolute', left: 2, right: 2, top: '50%', height: 2, transform: 'translateY(-50%)', background: accent, borderRadius: 1 }} />
+        </div>
+      </div>
+
+      {/* signal LEDs */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <LedMeter getLevel={getLevel} />
+      </div>
+    </div>
+  );
+};
 
 /** A single vertical channel strip (shared layout for voices and tracks). */
 const ChannelStrip: React.FC<{
@@ -81,14 +263,16 @@ const ChannelStrip: React.FC<{
   /** Optional track color + handler (ACC tracks only): shows a color swatch. */
   color?: string;
   onChangeColor?: (c: string) => void;
+  /** Instantaneous output peak (0..1) for the signal LEDs. */
+  getLevel?: () => number;
   onContextMenu?: (e: React.MouseEvent) => void;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
-  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onRename, color, onChangeColor, onContextMenu,
+  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onRename, color, onChangeColor, getLevel, onContextMenu,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
-    style={{ width: 56 }}
+    style={{ width: 66 }}
     onContextMenu={onContextMenu}
   >
     {/* Label — editable input for ACC tracks, static text for voices */}
@@ -186,29 +370,17 @@ const ChannelStrip: React.FC<{
       </button>
     )}
 
-    {/* Volume fader (vertical) */}
+    {/* Volume fader (console style) + dB readout */}
     <div className="flex flex-col items-center gap-0.5 mt-0.5">
-      <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={volume}
-          onChange={(e) => onChangeVolume(parseFloat(e.target.value))}
-          title={`Volume: ${Math.round(volume * 100)}%`}
-          orient="vertical"
-          style={{
-            writingMode: 'vertical-lr' as any,
-            direction: 'rtl',
-            width: 20,
-            height: 80,
-            cursor: 'pointer',
-            accentColor: accent ?? '#38bdf8',
-          }}
-        />
-      </div>
-      <span className="text-[8px] text-gray-400 leading-none">{Math.round(volume * 100)}%</span>
+      <ConsoleFader
+        value={volume}
+        onChange={onChangeVolume}
+        accent={accent ?? '#38bdf8'}
+        getLevel={getLevel}
+      />
+      <span className="text-[8px] text-gray-300 font-mono leading-none tabular-nums">
+        {gainToDb(volume) <= DB_FLOOR + 0.1 ? '−∞' : `${gainToDb(volume) > 0 ? '+' : ''}${gainToDb(volume).toFixed(1)}`} dB
+      </span>
     </div>
 
     {/* FX placeholder (layout only — future insert slots) */}
@@ -227,6 +399,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   onChangeVoiceInstrument, onUpdateVoice, onToggleSolo,
   satbVisible, onToggleSatbVisible,
   accompanimentTracks, onUpdateTrack, onAddEmptyTrack, onDeleteTrack,
+  getVoiceLevel, getTrackLevel,
   onClose,
 }) => {
   const { t: tT } = useTranslation('toolbar');
@@ -337,6 +510,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 onToggleMute={() => onUpdateVoice(v, { muted: !mutedVoices.has(v) })}
                 solo={soloVoices.has(v)}
                 onToggleSolo={() => onToggleSolo(v)}
+                getLevel={getVoiceLevel ? () => getVoiceLevel(v) : undefined}
               />
             ))}
           </div>
@@ -363,7 +537,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 Nessuna<br />traccia
               </div>
             ) : (
-              accompanimentTracks.map(track => (
+              accompanimentTracks.map((track, idx) => (
                 <ChannelStrip
                   key={track.id}
                   tT={tT}
@@ -383,12 +557,13 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   onRename={(name) => onUpdateTrack(track.id, { name })}
                   color={track.color}
                   onChangeColor={(c) => onUpdateTrack(track.id, { color: c })}
+                  getLevel={getTrackLevel ? () => getTrackLevel(idx) : undefined}
                   staffControl={
                     <select
                       value={staffChoiceValue(track)}
                       onChange={(e) => {
                         const opt = STAFF_OPTIONS.find(o => o.value === e.target.value);
-                        if (opt) onUpdateTrack(track.id, { staffMode: opt.staffMode, clef: opt.clef });
+                        if (opt) onUpdateTrack(track.id, { staffMode: opt.staffMode, clef: opt.clef, voiced: !!opt.voiced });
                       }}
                       title="Tipo di rigo / chiave"
                       aria-label="Tipo di rigo"
