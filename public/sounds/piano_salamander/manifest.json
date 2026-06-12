@@ -3,12 +3,12 @@
   "layers": 6,
   "chosenLayers": [
     1,
+    2,
+    3,
     4,
-    7,
-    10,
-    13,
-    16
+    5,
+    6
   ],
-  "format": "mp3 stereo VBR ~q3 (~175 kbps)",
-  "generated": "2026-06-10T14:35:00.338Z"
+  "format": "mp3 stereo VBR ~q0 (~240 kbps, soft layers)",
+  "generated": "2026-06-12T08:06:18.739Z"
 }
