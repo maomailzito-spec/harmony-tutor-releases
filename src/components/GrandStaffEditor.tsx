@@ -425,6 +425,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // continua (per silenziarlo si usa il Mute nel mixer). Lo shift di clip in px
     // corrisponde all'altezza del blocco SATB sopra gli ACC (ACC treble 310 → 40).
     const [satbVisible, setSatbVisible] = useState(true);
+    // Custom name for the SATB group (like ACC track names). Empty = no staff label.
+    const [satbName, setSatbName] = useState('');
     const SATB_HIDE_SHIFT_PX = (VF_BASS_Y + 4 * VF_LINE_SPACING + 100) - VF_TREBLE_Y; // 270
 
     // Per-track gain nodes for real-time mute/volume control without restarting playback.
@@ -3356,6 +3358,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     defaultToolbarGroupOrder: DEFAULT_TOOLBAR_ORDER,
                     setRawNotes,
                     setProjectTitle,
+                    setSatbName,
                     setCurrentProjectFilePath,
                     setKeySignatureRoot,
                     setIsMinorMode,
@@ -3546,7 +3549,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
         tonicizationHints, inferredContextSuppressions,
-        accompanimentTracks, voiceInstruments, voiceVolumes, mutedVoices,
+        accompanimentTracks, voiceInstruments, voiceVolumes, mutedVoices, satbName,
     };
 
     // Auto-save: periodically trigger 'save' if a file path is already set.
@@ -10873,6 +10876,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onToggleSolo={handleToggleVoiceSolo}
                     satbVisible={satbVisible}
                     onToggleSatbVisible={() => setSatbVisible(v => !v)}
+                    satbName={satbName}
+                    onRenameSatb={(name) => setSatbName(name)}
                     accompanimentTracks={accompanimentTracks}
                     onUpdateTrack={handleUpdateTrack}
                     onAddEmptyTrack={handleAddEmptyTrack}
@@ -11306,6 +11311,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 showAccompanimentStaves={hasVisibleAccompaniment}
                                                                 accompanimentStaffMode={effectiveAccStaffMode}
                                                                 accompanimentTracks={visibleAccompanimentTracks}
+                                                                satbName={satbVisible ? satbName : ''}
                               />
                                                                                                                                 );
                                                                                                                         })()}

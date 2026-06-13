@@ -37,6 +37,8 @@ interface VexflowGrandStaffProps {
    *  - "treble_only": solo treble (le note con clef:"bass" usano ledger lines)
    *  Default: "grandstaff" se omesso. */
   accompanimentStaffMode?: 'grandstaff' | 'treble_only';
+  /** Optional custom name for the SATB group, drawn as a label beside the staff. */
+  satbName?: string;
   /** Tracce di accompagnamento VISIBILI, in ordine. Ogni traccia disegna il proprio
    *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
    *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
@@ -523,6 +525,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   showAccompanimentStaves = false,
   accompanimentStaffMode = 'grandstaff',
   accompanimentTracks,
+  satbName,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const enableEngravingEnhancements = engravingMode === 'enhanced';
@@ -802,6 +805,24 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // Draw each track block: grandstaff (treble+bass+brace) or single staff (track clef),
     // plus its own name label to the left, rotated -90° and centered on the block.
     const svgElForLabels = containerRef.current?.querySelector('svg');
+
+    // SATB group name label (vertical, left of the staff) — mirrors ACC track labels.
+    if (satbName && svgElForLabels) {
+      const satbMidY = ((staffMode === 'satb_ancient')
+        ? (SOPRANO_Y + SATB_BASS_Y + STAVE_LINES_HEIGHT) / 2
+        : (TREBLE_Y + BASS_Y + STAVE_LINES_HEIGHT) / 2) + 40;
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', '0');
+      t.setAttribute('y', '4');
+      t.setAttribute('transform', `translate(14, ${satbMidY}) rotate(-90)`);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('font-family', 'Arial, sans-serif');
+      t.setAttribute('font-size', '12');
+      t.setAttribute('fill', 'black');
+      t.textContent = satbName;
+      svgElForLabels.appendChild(t);
+    }
+
     for (const block of accBlocks) {
       block.treble
         .addClef(block.clef as any)
@@ -3539,7 +3560,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       noteHitPointsRef.current = [];
       onNoteHitPoints?.([]);
     }
-  }, [notes, timeSignature, keySignature, barlines, width, height, staffMode, selectedNoteIds, ghostNote, accompanimentNotes, showAccompanimentStaves, accompanimentStaffMode, accompanimentTracks]);
+  }, [notes, timeSignature, keySignature, barlines, width, height, staffMode, selectedNoteIds, ghostNote, accompanimentNotes, showAccompanimentStaves, accompanimentStaffMode, accompanimentTracks, satbName]);
 
   // Attach pointer handlers ONCE to the persistent container. The SVG is frequently
   // re-created (ghost note updates), so attaching listeners to the SVG would

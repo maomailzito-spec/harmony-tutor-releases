@@ -71,6 +71,8 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         voiceInstruments?: Record<number, string>;
         voiceVolumes?: Record<number, number>;
         mutedVoices?: Set<number>;
+        /** Custom SATB group name (like ACC track names). */
+        satbName?: string;
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -111,6 +113,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		...((args.accompanimentTracks && args.accompanimentTracks.length > 0)
 			? { accompanimentTracks: args.accompanimentTracks }
 			: {}),
+		...(args.satbName ? { satbName: args.satbName } : {}),
 		// Mixer per-voce SATB (strumento/volume/mute). mutedVoices serializzato come array.
 		...(args.voiceInstruments ? { voiceInstruments: args.voiceInstruments } : {}),
 		...(args.voiceVolumes ? { voiceVolumes: args.voiceVolumes } : {}),
@@ -204,6 +207,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setSessionUnlocked?: (next: boolean) => void;
 
 	setAccompanimentTracks?: (next: AccompanimentTrack[]) => void;
+	setSatbName?: (name: string) => void;
 	setVoiceInstruments?: (next: Record<number, string>) => void;
 	setVoiceVolumes?: (next: Record<number, number>) => void;
 	setMutedVoices?: (next: Set<number>) => void;
@@ -484,6 +488,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				args.setAccompanimentTracks?.([]);
 			}
 
+			if (typeof loadedProject.satbName === 'string') args.setSatbName?.(loadedProject.satbName);
 			// Mixer per-voce SATB (assente nei file vecchi → restano i default già impostati sopra).
 			if (loadedProject.voiceInstruments && typeof loadedProject.voiceInstruments === 'object') {
 				args.setVoiceInstruments?.(loadedProject.voiceInstruments as Record<number, string>);

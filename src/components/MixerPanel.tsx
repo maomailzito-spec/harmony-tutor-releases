@@ -27,6 +27,9 @@ interface MixerPanelProps {
   /** SATB staff visibility (display-only, like ACC tracks; audio keeps playing). */
   satbVisible?: boolean;
   onToggleSatbVisible?: () => void;
+  /** Custom SATB group name (editable like ACC track names). */
+  satbName?: string;
+  onRenameSatb?: (name: string) => void;
   // Accompaniment tracks
   accompanimentTracks: AccompanimentTrack[];
   onUpdateTrack: (trackId: string, updates: Partial<AccompanimentTrack>) => void;
@@ -397,7 +400,7 @@ const ChannelStrip: React.FC<{
 const MixerPanel: React.FC<MixerPanelProps> = ({
   voiceInstruments, voiceVolumes, mutedVoices, soloVoices,
   onChangeVoiceInstrument, onUpdateVoice, onToggleSolo,
-  satbVisible, onToggleSatbVisible,
+  satbVisible, onToggleSatbVisible, satbName, onRenameSatb,
   accompanimentTracks, onUpdateTrack, onAddEmptyTrack, onDeleteTrack,
   getVoiceLevel, getTrackLevel,
   onClose,
@@ -478,7 +481,18 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         {/* VOCI section */}
         <section className="flex flex-col">
           <div className="flex items-center justify-between mb-1 px-1">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Voci (SATB)</span>
+            {onRenameSatb ? (
+              <input
+                value={satbName ?? ''}
+                onChange={(e) => onRenameSatb(e.target.value)}
+                placeholder="Voci (SATB)"
+                title="Rinomina il gruppo SATB"
+                aria-label="Nome SATB"
+                className="text-[9px] font-bold text-gray-300 uppercase tracking-wider w-24 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-cyan-500 focus:bg-slate-900/60 outline-none rounded-sm"
+              />
+            ) : (
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Voci (SATB)</span>
+            )}
             {onToggleSatbVisible && (
               <button
                 onClick={onToggleSatbVisible}
