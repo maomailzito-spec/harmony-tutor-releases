@@ -91,3 +91,37 @@ post-rules corregge a runtime.
 **Risoluzione attesa**: una volta corretti manualmente i file mis-spelled
 nello `spelling-report.txt` (~51 note su 33 file), i 4 nuovi gold fail
 torneranno verdi.
+
+---
+
+## Aggiornamento 2026-06-13 — stato attuale (FAIL: 10 → 5)
+
+### Risolti
+- **I 4 "nuovi fail di Phase 5"** (sopra): `delachi-n2-p3471` e `pedron-n-71-p42`
+  erano artefatti dello strato stateless (app già corretta) → gold rigenerati con
+  `regression-check.ts --update-gold`; `pedron-n120-p-45` idem; `dubois-n5-p-13`
+  ricostruito dal sorgente corretto a mano (E♯) → beat 51 ora `V/vi`.
+- **`Delamont C55 b`** + i beat `ii°` di **`delamont-c50-3f`** (b6/b17) + **24
+  snapshot Delamont**: risolti dal fix engine "borrowed diminished su grado
+  diatonico" (una `iiø7`/IV°/vi°/iv° non viene più riscritta come `vii°/♭X` verso
+  target flat-side implausibili). Commit `3727de1`.
+
+### Known-broken residui (5) — ACCETTATI come noti
+Decisione: **documentare e accettare** (l'app è corretta dove verificato; il
+harness testa lo strato *stateless*, non la pipeline finale dell'app).
+
+| Fixture | Sintomo | Causa | Tipo |
+|---|---|---|---|
+| `cantata-19-bach` | b12.5/36.5 `V`, b40 `V°` | **Gap di fedeltà del harness**: la pipeline dell'app dà `I`/`I`/`♯IV` (= gold, **corretto**, verificato via trial stub + utente); solo lo strato `applyStatelessRules` del regress diverge. | harness-gap (app OK) |
+| `delamont-c50-3f` (b5) | `V/IV`→`I`, `♭7`→`[5]` | 7ª minore non promossa a dominante secondaria | gap engine |
+| `pedron-116-p44` | `i`→`ii`/`V/iv`, cifre 5→4/2, 2→6/4 | root/rivolto scelti male | gap engine |
+| `Pedron 55 p.41` | cifra `5`→`6` | rivolto | gap engine |
+| `pedron-120-p45` (unit) | `V`→`V/♭VII` + sospensione "vietata" | spelling root + edge case sospensioni | gap engine |
+
+### Perché NON allineiamo il harness alla pipeline (opzione A, rinviata)
+Trial 2026-06-13: la pipeline dell'app (`computeHarmonyLabelsBySystem`) è
+**riproducibile headless ed è fedele** (validata su cantata-19), ma è accoppiata
+al layout (stato per-sistema). Stima: switchare il checker da `applyStatelessRules`
+alla pipeline **ri-baselinizzerebbe ~292/513 fixture** (~270 snapshot auto + ~17
+gold da rivedere) e richiede ~2-3 giorni + validazione "headless == app". Rischio
+solo-test, ma sproporzionato per ~3-5 false-fail. **Rinviato**; l'app resta corretta.
