@@ -2,6 +2,27 @@
   "repeatBarlines": {},
   "voltaBrackets": [],
   "ornamentOverrides": [],
+  "tonicizationHints": [],
+  "inferredContextSuppressions": [],
+  "filePreferences": {
+    "analysis.enableInferredContexts": true,
+    "analysis.cadentialPatterns": true,
+    "analysis.profileBaseId": "academic",
+    "analysis.chromaticModulation": true,
+    "analysis.sequencesEnabled": true
+  },
+  "voiceInstruments": {
+    "1": "acoustic_grand_piano",
+    "2": "acoustic_grand_piano",
+    "3": "acoustic_grand_piano",
+    "4": "acoustic_grand_piano"
+  },
+  "voiceVolumes": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 1
+  },
   "schemaVersion": 1,
   "notes": [
     {
@@ -22,7 +43,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-1-0-69",
@@ -42,7 +64,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-2-0-64",
@@ -62,7 +85,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-3-0-57",
@@ -82,7 +106,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-4-1920-71",
@@ -102,7 +127,8 @@
       "beat": 3,
       "startTick": 1920,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-5-1920-68",
@@ -122,7 +148,8 @@
       "beat": 3,
       "startTick": 1920,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-6-1920-64",
@@ -142,7 +169,8 @@
       "beat": 3,
       "startTick": 1920,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-7-1920-52",
@@ -162,7 +190,8 @@
       "beat": 3,
       "startTick": 1920,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-8-2880-69",
@@ -182,7 +211,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-9-2880-66",
@@ -202,7 +232,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-10-2880-61",
@@ -222,7 +253,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-11-2880-54",
@@ -242,7 +274,8 @@
       "beat": 1,
       "startTick": 2880,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-12-4800-68",
@@ -262,7 +295,8 @@
       "beat": 3,
       "startTick": 4800,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-13-4800-64",
@@ -282,7 +316,8 @@
       "beat": 3,
       "startTick": 4800,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-14-4800-61",
@@ -302,7 +337,8 @@
       "beat": 3,
       "startTick": 4800,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-15-4800-49",
@@ -322,7 +358,8 @@
       "beat": 3,
       "startTick": 4800,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-16-5760-66",
@@ -342,7 +379,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-17-5760-62",
@@ -362,7 +400,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-18-5760-57",
@@ -382,7 +421,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-19-5760-50",
@@ -402,7 +442,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-20-7680-71",
@@ -422,7 +463,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-21-7680-66",
@@ -442,7 +484,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-22-7680-62",
@@ -462,7 +505,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-23-7680-47",
@@ -482,7 +526,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-24-8640-69",
@@ -502,7 +547,8 @@
       "beat": 1,
       "startTick": 8640,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-25-8640-64",
@@ -522,7 +568,8 @@
       "beat": 1,
       "startTick": 8640,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-26-8640-61",
@@ -542,7 +589,8 @@
       "beat": 1,
       "startTick": 8640,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-27-8640-52",
@@ -562,7 +610,8 @@
       "beat": 1,
       "startTick": 8640,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-28-10560-68",
@@ -582,7 +631,8 @@
       "beat": 3,
       "startTick": 10560,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-29-10560-64",
@@ -602,7 +652,8 @@
       "beat": 3,
       "startTick": 10560,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-30-10560-59",
@@ -622,7 +673,8 @@
       "beat": 3,
       "startTick": 10560,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-31-10560-52",
@@ -642,7 +694,8 @@
       "beat": 3,
       "startTick": 10560,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-32-11520-69",
@@ -662,7 +715,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-33-11520-64",
@@ -682,7 +736,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-34-11520-61",
@@ -702,7 +757,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-35-11520-52",
@@ -722,7 +778,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-36-13440-68",
@@ -742,7 +799,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-37-13440-64",
@@ -762,7 +820,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-38-13440-59",
@@ -782,7 +841,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-39-13440-52",
@@ -802,7 +862,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-40-14400-69",
@@ -822,7 +883,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-41-14400-64",
@@ -842,7 +904,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-42-14400-57",
@@ -862,7 +925,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-43-14400-49",
@@ -882,7 +946,8 @@
       "beat": 1,
       "startTick": 14400,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-44-15360-61",
@@ -902,7 +967,8 @@
       "beat": 2,
       "startTick": 15360,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-45-15360-57",
@@ -922,7 +988,8 @@
       "beat": 2,
       "startTick": 15360,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-46-16320-74",
@@ -942,7 +1009,8 @@
       "beat": 3,
       "startTick": 16320,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-47-16320-69",
@@ -962,7 +1030,8 @@
       "beat": 3,
       "startTick": 16320,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-48-16320-66",
@@ -982,7 +1051,8 @@
       "beat": 3,
       "startTick": 16320,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-49-16320-54",
@@ -1002,7 +1072,8 @@
       "beat": 3,
       "startTick": 16320,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-50-17280-73",
@@ -1022,7 +1093,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-51-17280-68",
@@ -1042,7 +1114,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-52-17280-64",
@@ -1062,7 +1135,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-53-17280-56",
@@ -1082,17 +1156,17 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-54-19200-72",
-      "pitch": "C",
-      "octave": 5,
-      "position": 7,
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
       "midi": 72,
       "noteIndex": 0,
       "clef": "treble",
-      "explicitAccidental": "natural",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -1102,7 +1176,10 @@
       "beat": 3,
       "startTick": 19200,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "userAccidental": "sharp",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp"
     },
     {
       "id": "midi-55-19200-68",
@@ -1122,7 +1199,8 @@
       "beat": 3,
       "startTick": 19200,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-56-19200-63",
@@ -1142,7 +1220,8 @@
       "beat": 3,
       "startTick": 19200,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-57-19200-56",
@@ -1162,7 +1241,8 @@
       "beat": 3,
       "startTick": 19200,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-58-20160-73",
@@ -1182,7 +1262,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-59-20160-68",
@@ -1202,7 +1283,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-60-20160-61",
@@ -1222,7 +1304,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-61-20160-52",
@@ -1242,7 +1325,8 @@
       "beat": 1,
       "startTick": 20160,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-62-21120-64",
@@ -1262,7 +1346,8 @@
       "beat": 2,
       "startTick": 21120,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-63-21120-61",
@@ -1282,7 +1367,8 @@
       "beat": 2,
       "startTick": 21120,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-64-22080-78",
@@ -1302,7 +1388,8 @@
       "beat": 3,
       "startTick": 22080,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-65-22080-73",
@@ -1322,7 +1409,8 @@
       "beat": 3,
       "startTick": 22080,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-66-22080-69",
@@ -1342,7 +1430,8 @@
       "beat": 3,
       "startTick": 22080,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-67-22080-57",
@@ -1362,7 +1451,8 @@
       "beat": 3,
       "startTick": 22080,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-68-23040-76",
@@ -1382,7 +1472,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-69-23040-71",
@@ -1402,7 +1493,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-70-23040-68",
@@ -1422,7 +1514,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-71-23040-59",
@@ -1442,7 +1535,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-72-24960-71",
@@ -1462,7 +1556,8 @@
       "beat": 3,
       "startTick": 24960,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-73-24960-68",
@@ -1482,7 +1577,8 @@
       "beat": 3,
       "startTick": 24960,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-74-24960-64",
@@ -1502,7 +1598,8 @@
       "beat": 3,
       "startTick": 24960,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-75-24960-59",
@@ -1522,7 +1619,8 @@
       "beat": 3,
       "startTick": 24960,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-76-25920-76",
@@ -1542,7 +1640,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-77-25920-71",
@@ -1562,7 +1661,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-78-25920-64",
@@ -1582,7 +1682,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-79-25920-56",
@@ -1602,7 +1703,8 @@
       "beat": 1,
       "startTick": 25920,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-80-26880-73",
@@ -1622,7 +1724,8 @@
       "beat": 2,
       "startTick": 26880,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-81-26880-69",
@@ -1642,7 +1745,8 @@
       "beat": 2,
       "startTick": 26880,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-82-26880-57",
@@ -1662,7 +1766,8 @@
       "beat": 2,
       "startTick": 26880,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-83-27840-75",
@@ -1682,7 +1787,8 @@
       "beat": 3,
       "startTick": 27840,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-84-27840-69",
@@ -1702,7 +1808,8 @@
       "beat": 3,
       "startTick": 27840,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-85-27840-63",
@@ -1722,7 +1829,8 @@
       "beat": 3,
       "startTick": 27840,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-86-27840-54",
@@ -1742,7 +1850,8 @@
       "beat": 3,
       "startTick": 27840,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-87-28800-73",
@@ -1762,7 +1871,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-88-28800-68",
@@ -1782,7 +1892,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-89-28800-64",
@@ -1802,7 +1913,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-90-28800-56",
@@ -1822,17 +1934,18 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-91-30720-72",
-      "pitch": "C",
-      "octave": 5,
-      "position": 7,
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
       "midi": 72,
       "noteIndex": 0,
       "clef": "treble",
-      "explicitAccidental": "natural",
+      "explicitAccidental": "sharp",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -1842,7 +1955,9 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp",
+      "userAccidental": "sharp"
     },
     {
       "id": "midi-92-30720-68",
@@ -1862,7 +1977,8 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-93-30720-63",
@@ -1882,7 +1998,8 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-94-30720-44",
@@ -1902,7 +2019,8 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-95-31680-73",
@@ -1922,7 +2040,8 @@
       "beat": 1,
       "startTick": 31680,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-96-31680-68",
@@ -1942,7 +2061,8 @@
       "beat": 1,
       "startTick": 31680,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "64f7664c-f088-4a04-8321-92e334bcc17a",
@@ -1984,7 +2104,8 @@
       "beat": 1,
       "startTick": 31680,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-99-32640-53",
@@ -2026,7 +2147,8 @@
       "beat": 3,
       "startTick": 33600,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-101-34560-72",
@@ -2068,7 +2190,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-103-34560-63",
@@ -2088,7 +2211,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-104-34560-56",
@@ -2108,7 +2232,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-105-36480-44",
@@ -2128,7 +2253,8 @@
       "beat": 3,
       "startTick": 36480,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-106-37440-70",
@@ -2148,7 +2274,8 @@
       "beat": 1,
       "startTick": 37440,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-107-37440-65",
@@ -2190,7 +2317,8 @@
       "beat": 1,
       "startTick": 37440,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-109-37440-46",
@@ -2210,7 +2338,8 @@
       "beat": 1,
       "startTick": 37440,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-110-38400-49",
@@ -2230,7 +2359,8 @@
       "beat": 2,
       "startTick": 38400,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-111-39360-46",
@@ -2250,7 +2380,8 @@
       "beat": 3,
       "startTick": 39360,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-112-40320-68",
@@ -2270,7 +2401,8 @@
       "beat": 1,
       "startTick": 40320,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-113-40320-65",
@@ -2312,7 +2444,8 @@
       "beat": 1,
       "startTick": 40320,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-115-40320-53",
@@ -2376,7 +2509,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-118-43200-61",
@@ -2396,7 +2530,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-119-43200-58",
@@ -2416,7 +2551,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-120-43200-42",
@@ -2436,7 +2572,8 @@
       "beat": 1,
       "startTick": 43200,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-121-44160-46",
@@ -2456,7 +2593,8 @@
       "beat": 2,
       "startTick": 44160,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-122-45120-42",
@@ -2476,17 +2614,17 @@
       "beat": 3,
       "startTick": 45120,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-123-46080-65",
-      "pitch": "F",
+      "pitch": "E",
       "octave": 4,
-      "position": 3,
+      "position": 2,
       "midi": 65,
       "noteIndex": 5,
       "clef": "treble",
-      "explicitAccidental": "natural",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -2496,7 +2634,10 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "userAccidental": "sharp",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp"
     },
     {
       "id": "midi-124-46080-61",
@@ -2516,7 +2657,8 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-125-46080-56",
@@ -2536,7 +2678,8 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-126-46080-49",
@@ -2556,15 +2699,16 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-127-48000-66",
       "pitch": "F",
       "octave": 4,
       "position": 3,
-      "midi": 65,
-      "noteIndex": 5,
+      "midi": 66,
+      "noteIndex": 6,
       "clef": "treble",
       "explicitAccidental": null,
       "duration": "quarter",
@@ -2576,7 +2720,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-128-48000-61",
@@ -2596,7 +2741,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-129-48000-54",
@@ -2616,7 +2762,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-130-48000-46",
@@ -2636,7 +2783,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-131-48960-68",
@@ -2656,7 +2804,8 @@
       "beat": 1,
       "startTick": 48960,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-132-48960-61",
@@ -2676,17 +2825,18 @@
       "beat": 1,
       "startTick": 48960,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-133-48960-53",
-      "pitch": "F",
+      "pitch": "E",
       "octave": 3,
-      "position": -4,
+      "position": -5,
       "midi": 53,
       "noteIndex": 5,
       "clef": "bass",
-      "explicitAccidental": "natural",
+      "explicitAccidental": "sharp",
       "duration": "half",
       "isRest": false,
       "isTriplet": false,
@@ -2696,7 +2846,9 @@
       "beat": 1,
       "startTick": 48960,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp",
+      "userAccidental": "sharp"
     },
     {
       "id": "midi-134-48960-44",
@@ -2716,7 +2868,8 @@
       "beat": 1,
       "startTick": 48960,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-135-50880-68",
@@ -2736,17 +2889,17 @@
       "beat": 3,
       "startTick": 50880,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-136-50880-60",
-      "pitch": "C",
-      "octave": 4,
-      "position": 0,
+      "pitch": "B",
+      "octave": 3,
+      "position": -1,
       "midi": 60,
       "noteIndex": 0,
       "clef": "treble",
-      "explicitAccidental": "natural",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -2756,7 +2909,10 @@
       "beat": 3,
       "startTick": 50880,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "userAccidental": "sharp",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp"
     },
     {
       "id": "midi-137-50880-51",
@@ -2776,7 +2932,8 @@
       "beat": 3,
       "startTick": 50880,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-138-50880-44",
@@ -2796,7 +2953,8 @@
       "beat": 3,
       "startTick": 50880,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-139-51840-68",
@@ -2816,7 +2974,8 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-140-51840-61",
@@ -2836,17 +2995,17 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-141-51840-53",
-      "pitch": "F",
+      "pitch": "E",
       "octave": 3,
-      "position": -4,
+      "position": -5,
       "midi": 53,
       "noteIndex": 5,
       "clef": "bass",
-      "explicitAccidental": "natural",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -2856,7 +3015,10 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "userAccidental": "sharp",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp"
     },
     {
       "id": "midi-142-51840-49",
@@ -2876,17 +3038,17 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-143-52800-65",
-      "pitch": "F",
+      "pitch": "E",
       "octave": 4,
-      "position": 3,
+      "position": 2,
       "midi": 65,
       "noteIndex": 5,
       "clef": "treble",
-      "explicitAccidental": "natural",
       "duration": "quarter",
       "isRest": false,
       "isTriplet": false,
@@ -2896,7 +3058,10 @@
       "beat": 2,
       "startTick": 52800,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "userAccidental": "sharp",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp"
     },
     {
       "id": "midi-144-52800-56",
@@ -2916,7 +3081,8 @@
       "beat": 2,
       "startTick": 52800,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-145-53760-68",
@@ -2936,7 +3102,8 @@
       "beat": 3,
       "startTick": 53760,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-146-53760-53",
@@ -2956,7 +3123,8 @@
       "beat": 3,
       "startTick": 53760,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-147-54720-69",
@@ -2976,7 +3144,8 @@
       "beat": 1,
       "startTick": 54720,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-148-54720-57",
@@ -2996,7 +3165,8 @@
       "beat": 1,
       "startTick": 54720,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-149-54720-52",
@@ -3016,7 +3186,8 @@
       "beat": 1,
       "startTick": 54720,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-150-54720-49",
@@ -3036,7 +3207,8 @@
       "beat": 1,
       "startTick": 54720,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-151-55680-69",
@@ -3056,7 +3228,8 @@
       "beat": 2,
       "startTick": 55680,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-152-56640-64",
@@ -3076,7 +3249,8 @@
       "beat": 3,
       "startTick": 56640,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-153-57600-69",
@@ -3096,7 +3270,8 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-154-57600-66",
@@ -3116,7 +3291,8 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-155-57600-50",
@@ -3136,7 +3312,8 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-156-57600-50",
@@ -3156,7 +3333,8 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-157-59520-71",
@@ -3176,7 +3354,8 @@
       "beat": 3,
       "startTick": 59520,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-158-59520-66",
@@ -3196,7 +3375,8 @@
       "beat": 3,
       "startTick": 59520,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-159-59520-62",
@@ -3216,7 +3396,8 @@
       "beat": 3,
       "startTick": 59520,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-160-59520-50",
@@ -3236,7 +3417,8 @@
       "beat": 3,
       "startTick": 59520,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-161-60480-69",
@@ -3256,7 +3438,8 @@
       "beat": 1,
       "startTick": 60480,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-162-60480-64",
@@ -3276,7 +3459,8 @@
       "beat": 1,
       "startTick": 60480,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-163-60480-61",
@@ -3296,7 +3480,8 @@
       "beat": 1,
       "startTick": 60480,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-164-60480-52",
@@ -3316,7 +3501,8 @@
       "beat": 1,
       "startTick": 60480,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-165-62400-68",
@@ -3336,7 +3522,8 @@
       "beat": 3,
       "startTick": 62400,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-166-62400-64",
@@ -3356,7 +3543,8 @@
       "beat": 3,
       "startTick": 62400,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-167-62400-59",
@@ -3376,7 +3564,8 @@
       "beat": 3,
       "startTick": 62400,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-168-62400-52",
@@ -3396,7 +3585,8 @@
       "beat": 3,
       "startTick": 62400,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-169-63360-69",
@@ -3416,7 +3606,8 @@
       "beat": 1,
       "startTick": 63360,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-170-63360-60",
@@ -3436,7 +3627,8 @@
       "beat": 1,
       "startTick": 63360,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-171-63360-57",
@@ -3456,7 +3648,8 @@
       "beat": 1,
       "startTick": 63360,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-172-63360-53",
@@ -3476,7 +3669,8 @@
       "beat": 1,
       "startTick": 63360,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-173-65280-59",
@@ -3496,7 +3690,8 @@
       "beat": 3,
       "startTick": 65280,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-174-66240-69",
@@ -3516,7 +3711,8 @@
       "beat": 1,
       "startTick": 66240,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-175-66240-64",
@@ -3536,7 +3732,8 @@
       "beat": 1,
       "startTick": 66240,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-176-66240-57",
@@ -3556,7 +3753,8 @@
       "beat": 1,
       "startTick": 66240,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-177-66240-48",
@@ -3576,7 +3774,8 @@
       "beat": 1,
       "startTick": 66240,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-178-67200-69",
@@ -3596,7 +3795,8 @@
       "beat": 2,
       "startTick": 67200,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-179-68160-64",
@@ -3616,7 +3816,8 @@
       "beat": 3,
       "startTick": 68160,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-180-69120-69",
@@ -3636,7 +3837,8 @@
       "beat": 1,
       "startTick": 69120,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-181-69120-65",
@@ -3656,7 +3858,8 @@
       "beat": 1,
       "startTick": 69120,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-182-69120-57",
@@ -3676,7 +3879,8 @@
       "beat": 1,
       "startTick": 69120,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-183-69120-50",
@@ -3696,7 +3900,8 @@
       "beat": 1,
       "startTick": 69120,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-184-70080-74",
@@ -3716,7 +3921,8 @@
       "beat": 2,
       "startTick": 70080,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-185-71040-70",
@@ -3736,7 +3942,8 @@
       "beat": 3,
       "startTick": 71040,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-186-71040-65",
@@ -3756,7 +3963,8 @@
       "beat": 3,
       "startTick": 71040,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-187-71040-62",
@@ -3776,7 +3984,8 @@
       "beat": 3,
       "startTick": 71040,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-188-71040-50",
@@ -3796,7 +4005,8 @@
       "beat": 3,
       "startTick": 71040,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-189-72000-69",
@@ -3816,7 +4026,8 @@
       "beat": 1,
       "startTick": 72000,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-190-72000-64",
@@ -3836,7 +4047,8 @@
       "beat": 1,
       "startTick": 72000,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-191-72000-61",
@@ -3856,7 +4068,8 @@
       "beat": 1,
       "startTick": 72000,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-192-72000-52",
@@ -3876,7 +4089,8 @@
       "beat": 1,
       "startTick": 72000,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-193-73920-68",
@@ -3896,7 +4110,8 @@
       "beat": 3,
       "startTick": 73920,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-194-73920-64",
@@ -3916,7 +4131,8 @@
       "beat": 3,
       "startTick": 73920,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-195-73920-59",
@@ -3936,7 +4152,8 @@
       "beat": 3,
       "startTick": 73920,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-196-73920-52",
@@ -3956,7 +4173,8 @@
       "beat": 3,
       "startTick": 73920,
       "durationTicks": 960,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-197-74880-69",
@@ -3976,7 +4194,8 @@
       "beat": 1,
       "startTick": 74880,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-198-74880-64",
@@ -3996,7 +4215,8 @@
       "beat": 1,
       "startTick": 74880,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-199-74880-61",
@@ -4016,7 +4236,8 @@
       "beat": 1,
       "startTick": 74880,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-200-74880-45",
@@ -4036,7 +4257,8 @@
       "beat": 1,
       "startTick": 74880,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-201-75840-64",
@@ -4056,7 +4278,8 @@
       "beat": 2,
       "startTick": 75840,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-202-76800-69",
@@ -4076,7 +4299,8 @@
       "beat": 3,
       "startTick": 76800,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-203-77760-73",
@@ -4096,7 +4320,8 @@
       "beat": 1,
       "startTick": 77760,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-204-77760-64",
@@ -4116,7 +4341,8 @@
       "beat": 1,
       "startTick": 77760,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-205-77760-61",
@@ -4136,7 +4362,8 @@
       "beat": 1,
       "startTick": 77760,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-206-77760-57",
@@ -4156,7 +4383,8 @@
       "beat": 1,
       "startTick": 77760,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-207-78720-61",
@@ -4176,7 +4404,8 @@
       "beat": 2,
       "startTick": 78720,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-208-79680-64",
@@ -4196,7 +4425,8 @@
       "beat": 3,
       "startTick": 79680,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-209-80640-69",
@@ -4216,7 +4446,8 @@
       "beat": 1,
       "startTick": 80640,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-210-80640-66",
@@ -4236,7 +4467,8 @@
       "beat": 1,
       "startTick": 80640,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-211-80640-61",
@@ -4256,7 +4488,8 @@
       "beat": 1,
       "startTick": 80640,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-212-80640-54",
@@ -4276,7 +4509,8 @@
       "beat": 1,
       "startTick": 80640,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "sharp"
     },
     {
       "id": "midi-213-81600-66",
@@ -4296,7 +4530,8 @@
       "beat": 2,
       "startTick": 81600,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-214-81600-57",
@@ -4316,7 +4551,8 @@
       "beat": 2,
       "startTick": 81600,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-215-82560-69",
@@ -4336,7 +4572,8 @@
       "beat": 3,
       "startTick": 82560,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-216-82560-61",
@@ -4356,7 +4593,8 @@
       "beat": 3,
       "startTick": 82560,
       "durationTicks": 960,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-217-83520-71",
@@ -4376,7 +4614,8 @@
       "beat": 1,
       "startTick": 83520,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-218-83520-66",
@@ -4396,7 +4635,8 @@
       "beat": 1,
       "startTick": 83520,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-219-83520-54",
@@ -4416,7 +4656,8 @@
       "beat": 1,
       "startTick": 83520,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "sharp"
     },
     {
       "id": "midi-220-83520-50",
@@ -4436,7 +4677,8 @@
       "beat": 1,
       "startTick": 83520,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "midi-221-84480-69",
@@ -4456,7 +4698,8 @@
       "beat": 2,
       "startTick": 84480,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-222-85440-71",
@@ -4476,7 +4719,8 @@
       "beat": 3,
       "startTick": 85440,
       "durationTicks": 960,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "midi-223-85440-62",
@@ -4496,7 +4740,8 @@
       "beat": 3,
       "startTick": 85440,
       "durationTicks": 960,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "midi-224-86400-73",
@@ -4516,7 +4761,8 @@
       "beat": 1,
       "startTick": 86400,
       "durationTicks": 2880,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "midi-225-86400-61",
@@ -4536,7 +4782,8 @@
       "beat": 1,
       "startTick": 86400,
       "durationTicks": 2880,
-      "voice": 2
+      "voice": 2,
+      "accidental": "sharp"
     },
     {
       "id": "midi-226-86400-52",
@@ -4556,7 +4803,8 @@
       "beat": 1,
       "startTick": 86400,
       "durationTicks": 2880,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "midi-227-86400-45",
@@ -4576,7 +4824,8 @@
       "beat": 1,
       "startTick": 86400,
       "durationTicks": 2880,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     }
   ],
   "staffSystemMode": "grandstaff",
@@ -4612,6 +4861,17 @@
     "analysis",
     "key",
     "more",
-    "voiceInstrument"
-  ]
+    "voiceInstrument",
+    "mixer",
+    "chordInsert"
+  ],
+  "analysisLocked": false,
+  "analysisLockOptions": {
+    "hideViolations": true,
+    "hideRomanLabels": false,
+    "hideChordSymbols": false,
+    "hideOrnaments": false,
+    "hideAlternatives": false,
+    "disableExport": true
+  }
 }

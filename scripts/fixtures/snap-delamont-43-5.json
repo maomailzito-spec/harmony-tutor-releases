@@ -1194,7 +1194,7 @@
     },
     {
       "absBeat": 7,
-      "roman": "vii°/♭III",
+      "roman": "ii°",
       "figuresInclude": [
         "7",
         "♭5"
@@ -1202,7 +1202,7 @@
     },
     {
       "absBeat": 7.5,
-      "roman": "vii°/♭III",
+      "roman": "ii°",
       "figuresInclude": [
         "7",
         "♭5"
@@ -1248,7 +1248,7 @@
     },
     {
       "absBeat": 13,
-      "roman": "vii°/♭III",
+      "roman": "ii°",
       "figuresInclude": [
         "7",
         "♭5"

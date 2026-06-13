@@ -4312,9 +4312,15 @@ export function getRomanAnalysis(
                     ? mod12((chordInfo.root as any).noteIndex)
                     : mod12((chordInfo.root as any).midi))
                 : null;
-            const _isFullyDim = !!(chordInfo?.type && /diminished\s*7|°7|dim7/i.test(String(chordInfo.type)));
-            const _ownChordPcs = (_isFullyDim && _ownRootPc != null)
-                ? new Set<number>([_ownRootPc, mod12(_ownRootPc + 3), mod12(_ownRootPc + 6), mod12(_ownRootPc + 9)])
+            // The chord's own tertian tones (m3/d5/m7 or d7) are part of the chord —
+            // NOT evidence of a secondary leading-tone reinterpretation — for ANY
+            // diminished-family chord: dim triad, half-dim 7th (iiø7) and fully-dim 7th.
+            // (Previously only fully-dim 7ths were skipped, so a borrowed iiø7's own
+            // d5/m7 wrongly triggered a vii°/♭III rewrite instead of staying ii°.)
+            const _ivs: number[] = chordInfo?.intervals ? Array.from(chordInfo.intervals as Set<number>) : [];
+            const _isDimFamily = _ivs.includes(3) && _ivs.includes(6);
+            const _ownChordPcs = (_ownRootPc != null && _isDimFamily)
+                ? new Set<number>(_ivs.map((iv) => mod12(_ownRootPc + iv)))
                 : new Set<number>();
             const hasChromaticSpelling = (filteredChord || []).some((n: any) => {
                 const letter = String(n?.pitch || '').toUpperCase();

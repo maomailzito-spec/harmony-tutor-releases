@@ -1,4 +1,64 @@
 {
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [
+    {
+      "noteId": "e969b7c8-b8e2-4c63-80fd-c363be32f211",
+      "type": "structural"
+    },
+    {
+      "noteId": "4fb398ae-c3cd-4f65-8ad1-cea450faf176",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "94643b25-5ea7-4dd6-b58d-6ebee623f7fe",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "de68bf65-901a-449e-af34-d191ba4a70af",
+      "type": "structural"
+    },
+    {
+      "noteId": "ae899532-4830-4171-825e-89c5e98f638f",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "21aa90f0-e3fb-45b4-90c7-3d617163fad3",
+      "type": "suspension"
+    },
+    {
+      "noteId": "96415983-1ae2-49d6-9e65-c5dd55784502",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "47f6c352-f140-4b66-92bb-57b645b50ee2",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "451162ab-b9e0-460e-b97a-a629417440d8",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "98ee618a-4e6d-4bb3-864b-8a12880fb6da",
+      "type": "ornamental"
+    },
+    {
+      "noteId": "57f6e393-2216-45cb-833c-37d6050b51fb",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "7cc3e0c5-1133-4991-a6e0-2ff2375d1e63",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "d3a84d6e-153b-4827-87bf-590f901a97e3",
+      "type": "appoggiatura"
+    },
+    {
+      "noteId": "0155e631-a127-4c74-a030-5eba5e10bdf4",
+      "type": "appoggiatura"
+    }
+  ],
   "schemaVersion": 1,
   "notes": [
     {
@@ -1167,72 +1227,10 @@
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
+  "tonicizationHints": [],
+  "inferredContextSuppressions": [],
   "doubleBarlineMeasures": [],
-  "repeatBarlines": {},
-  "voltaBrackets": [],
   "harmonyOverrides": [],
-  "ornamentOverrides": [
-    {
-      "noteId": "0155e631-a127-4c74-a030-5eba5e10bdf4",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "e969b7c8-b8e2-4c63-80fd-c363be32f211",
-      "type": "structural"
-    },
-    {
-      "noteId": "4fb398ae-c3cd-4f65-8ad1-cea450faf176",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "94643b25-5ea7-4dd6-b58d-6ebee623f7fe",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "e9b84700-f567-4a76-85de-86a670849ee1",
-      "type": "structural"
-    },
-    {
-      "noteId": "de68bf65-901a-449e-af34-d191ba4a70af",
-      "type": "structural"
-    },
-    {
-      "noteId": "ae899532-4830-4171-825e-89c5e98f638f",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "21aa90f0-e3fb-45b4-90c7-3d617163fad3",
-      "type": "suspension"
-    },
-    {
-      "noteId": "96415983-1ae2-49d6-9e65-c5dd55784502",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "47f6c352-f140-4b66-92bb-57b645b50ee2",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "451162ab-b9e0-460e-b97a-a629417440d8",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "98ee618a-4e6d-4bb3-864b-8a12880fb6da",
-      "type": "ornamental"
-    },
-    {
-      "noteId": "57f6e393-2216-45cb-833c-37d6050b51fb",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "7cc3e0c5-1133-4991-a6e0-2ff2375d1e63",
-      "type": "appoggiatura"
-    },
-    {
-      "noteId": "d3a84d6e-153b-4827-87bf-590f901a97e3",
-      "type": "appoggiatura"
-    }
-  ],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
@@ -1249,6 +1247,36 @@
     "analysis",
     "key",
     "more",
-    "voiceInstrument"
-  ]
+    "voiceInstrument",
+    "mixer",
+    "chordInsert"
+  ],
+  "analysisLocked": false,
+  "analysisLockOptions": {
+    "hideViolations": true,
+    "hideRomanLabels": false,
+    "hideChordSymbols": false,
+    "hideOrnaments": false,
+    "hideAlternatives": false,
+    "disableExport": true
+  },
+  "filePreferences": {
+    "analysis.enableInferredContexts": true,
+    "analysis.cadentialPatterns": true,
+    "analysis.profileBaseId": "academic",
+    "analysis.chromaticModulation": true,
+    "analysis.sequencesEnabled": true
+  },
+  "voiceInstruments": {
+    "1": "acoustic_grand_piano",
+    "2": "acoustic_grand_piano",
+    "3": "acoustic_grand_piano",
+    "4": "acoustic_grand_piano"
+  },
+  "voiceVolumes": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 1
+  }
 }

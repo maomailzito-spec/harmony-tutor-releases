@@ -831,85 +831,91 @@ const main = () => {
   if (anyFailed) process.exitCode = 1;
 };
 
+// Re-run the analysis on a fixture's inline notes and return the freshly computed
+// `expects` (same exact logic the checker uses, so the result is self-consistent).
+const computeExpects = (fx: any): any[] => {
+  if (!fx.keyTonic) fx.keyTonic = fx.keySignatureRoot;
+  const keySignature = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
+  const result = applyHarmonyRules(
+    fx.notes as any,
+    keySignature as any,
+    fx.keyTonic,
+    fx.isMinorMode,
+    (fx.analysisContexts || []) as any,
+    fx.timeSignature as any,
+    (fx as any).doubleBarlineMeasures || [],
+    (fx as any).ornamentOverrides || [],
+    (fx as any).harmonyOverrides || [],
+  );
+  const rawTl = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
+  // Merge float-duplicate events (same dedup as checker)
+  const timeline: typeof rawTl = [];
+  for (const ev of rawTl) {
+    const idx = timeline.findIndex(t => Math.abs(t.absBeat - ev.absBeat) < 1e-4);
+    if (idx === -1) {
+      timeline.push(ev);
+    } else if ((ev.notes || []).length > (timeline[idx].notes || []).length) {
+      timeline[idx] = ev;
+    }
+  }
+  const newExpects: any[] = [];
+  for (const ev of timeline) {
+    const ab = Math.round(Number(ev.absBeat) * 1e6) / 1e6;
+    if (!Number.isFinite(ab)) continue;
+    const substNotes = substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat);
+    const bassPc = (() => {
+      let lowest: any = null;
+      for (const n of (substNotes || [])) {
+        if (!n || n.isRest) continue;
+        const m = Number(n.midi);
+        if (!Number.isFinite(m)) continue;
+        if (!lowest || m < lowest.midi) lowest = { midi: m, pc: ((m % 12) + 12) % 12 };
+      }
+      return lowest?.pc ?? null;
+    })();
+    const stateless = applyStatelessRules({
+      analysisNotesForNaming: substNotes as any,
+      analysisNotes: substNotes as any,
+      fullNotes: ev.notes as any,
+      contextTonic: fx.keyTonic,
+      contextIsMinor: fx.isMinorMode,
+      bassPc,
+      absBeat: ab,
+      autoOverrideByAbsBeat: new Map(),
+      overrideByAbsBeat: new Map(),
+    });
+    const roman = stateless.roman;
+    const figures = stateless.figures;
+    if (!roman) continue;
+    const entry: any = { absBeat: ab, roman };
+    if (figures.length > 0 && !(figures.length === 1 && figures[0] === '5')) {
+      entry.figuresInclude = figures;
+    }
+    newExpects.push(entry);
+  }
+  // Deduplicate by absBeat (within epsilon) — keep entry with roman + most figures
+  const deduped: any[] = [];
+  for (const e of newExpects) {
+    const idx = deduped.findIndex(d => Math.abs(d.absBeat - e.absBeat) < 1e-4);
+    if (idx === -1) {
+      deduped.push(e);
+    } else {
+      const prev = deduped[idx];
+      const prevScore = (prev.roman ? 1 : 0) + (prev.figuresInclude || []).length;
+      const eScore = (e.roman ? 1 : 0) + (e.figuresInclude || []).length;
+      if (eScore > prevScore) deduped[idx] = e;
+    }
+  }
+  return deduped;
+};
+
 const updateSnapshots = () => {
   const fixtures = loadFixtures();
   let updated = 0;
   for (const fx of fixtures) {
     if (!fx.name.endsWith('(snapshot)')) continue;
-    const keySignature = getKeySignature(fx.keySignatureRoot, fx.isMinorMode ? 'Minor' : 'Major');
-    const result = applyHarmonyRules(
-      fx.notes as any,
-      keySignature as any,
-      fx.keyTonic,
-      fx.isMinorMode,
-      (fx.analysisContexts || []) as any,
-      fx.timeSignature as any,
-      (fx as any).doubleBarlineMeasures || [],
-      (fx as any).ornamentOverrides || [],
-      (fx as any).harmonyOverrides || [],
-    );
-    const rawTl = getActiveNotesTimeline(result.analyzedNotes as any, fx.timeSignature as any);
-    // Merge float-duplicate events (same dedup as checker)
-    const timeline: typeof rawTl = [];
-    for (const ev of rawTl) {
-      const idx = timeline.findIndex(t => Math.abs(t.absBeat - ev.absBeat) < 1e-4);
-      if (idx === -1) {
-        timeline.push(ev);
-      } else if ((ev.notes || []).length > (timeline[idx].notes || []).length) {
-        timeline[idx] = ev;
-      }
-    }
-    const newExpects: typeof fx.expects = [];
-    for (const ev of timeline) {
-      const ab = Math.round(Number(ev.absBeat) * 1e6) / 1e6;
-      if (!Number.isFinite(ab)) continue;
-      const substNotes = substituteSuspensionsForAnalysis(ev.notes as any, ev.absBeat);
-      const bassPc = (() => {
-        let lowest: any = null;
-        for (const n of (substNotes || [])) {
-          if (!n || n.isRest) continue;
-          const m = Number(n.midi);
-          if (!Number.isFinite(m)) continue;
-          if (!lowest || m < lowest.midi) lowest = { midi: m, pc: ((m % 12) + 12) % 12 };
-        }
-        return lowest?.pc ?? null;
-      })();
-      const stateless = applyStatelessRules({
-        analysisNotesForNaming: substNotes as any,
-        analysisNotes: substNotes as any,
-        fullNotes: ev.notes as any,
-        contextTonic: fx.keyTonic,
-        contextIsMinor: fx.isMinorMode,
-        bassPc,
-        absBeat: ab,
-        autoOverrideByAbsBeat: new Map(),
-        overrideByAbsBeat: new Map(),
-      });
-      const roman = stateless.roman;
-      const figures = stateless.figures;
-      if (!roman) continue;
-      const entry: any = { absBeat: ab, roman };
-      if (figures.length > 0 && !(figures.length === 1 && figures[0] === '5')) {
-        entry.figuresInclude = figures;
-      }
-      newExpects.push(entry);
-    }
-    // Deduplicate by absBeat (within epsilon) — keep entry with roman + most figures
-    const deduped: typeof newExpects = [];
-    for (const e of newExpects) {
-      const idx = deduped.findIndex(d => Math.abs(d.absBeat - e.absBeat) < 1e-4);
-      if (idx === -1) {
-        deduped.push(e);
-      } else {
-        const prev = deduped[idx];
-        const prevScore = (prev.roman ? 1 : 0) + (prev.figuresInclude || []).length;
-        const eScore = (e.roman ? 1 : 0) + (e.figuresInclude || []).length;
-        if (eScore > prevScore) deduped[idx] = e;
-      }
-    }
-    const finalExpects = deduped;
+    const finalExpects = computeExpects(fx);
     if (finalExpects.length === 0) continue;
-    fx.expects = finalExpects;
     // Write back — find the file
     const files = fs.readdirSync(fixturesDir).filter(f => f.endsWith('.json')).sort();
     for (const f of files) {
@@ -927,8 +933,42 @@ const updateSnapshots = () => {
   console.log(`\nDone: ${updated} snapshots updated`);
 };
 
+// Regenerate `expects` for SPECIFIC fixture files only (by filename inside
+// scripts/fixtures/). Use this to refresh hand-fixed (gold) fixtures whose
+// reference values are stale but whose current analysis you've verified correct.
+// Touches ONLY the named files; everything else is left untouched.
+const updateNamedFixtures = (fileNames: string[]) => {
+  const want = new Set(fileNames);
+  let updated = 0;
+  for (const f of fs.readdirSync(fixturesDir).filter(x => x.endsWith('.json')).sort()) {
+    if (!want.has(f)) continue;
+    want.delete(f);
+    const full = path.join(fixturesDir, f);
+    const obj = JSON.parse(fs.readFileSync(full, 'utf8'));
+    if (!obj || !Array.isArray(obj.notes)) { console.log(`SKIP      ${f} (no inline notes)`); continue; }
+    const before = Array.isArray(obj.expects) ? obj.expects.length : 0;
+    const finalExpects = computeExpects(obj);
+    if (finalExpects.length === 0) { console.log(`SKIP      ${f} (analysis produced 0 expects)`); continue; }
+    obj.expects = finalExpects;
+    fs.writeFileSync(full, JSON.stringify(obj, null, 2) + '\n');
+    updated++;
+    console.log(`UPDATED   ${f}  "${obj.name}"  (${before} → ${finalExpects.length} expects)`);
+  }
+  for (const missing of want) console.log(`NOT FOUND ${missing}`);
+  console.log(`\nDone: ${updated} fixture(s) regenerated`);
+};
+
 if (process.argv.includes('--update-snapshots')) {
   updateSnapshots();
+} else if (process.argv.includes('--update-gold')) {
+  const i = process.argv.indexOf('--update-gold');
+  const files = process.argv.slice(i + 1).filter(a => a.endsWith('.json'));
+  if (files.length === 0) {
+    console.error('Uso: tsx scripts/regression-check.ts --update-gold <file1.json> [file2.json ...]');
+    console.error('     (nomi dei file dentro scripts/fixtures/, es. gold-delachi-n2-p3471.json)');
+    process.exit(1);
+  }
+  updateNamedFixtures(files);
 } else {
   main();
 }
