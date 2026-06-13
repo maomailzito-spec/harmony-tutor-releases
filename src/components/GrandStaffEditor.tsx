@@ -9386,8 +9386,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         const onKeyDown = (e: KeyboardEvent) => {
             // Important: this listener runs in capture phase.
-            // Se chord insert mode è attivo, non intercettare nulla — l'input gestisce tutto.
-            if (chordInsertModeRef.current) return;
+            // NB: in chord-insert mode we no longer block everything here — the
+            // isTypingTarget() check below already defers to the chord input while
+            // it has focus, so shortcuts work again once the box is not focused
+            // (the user can edit the score without leaving chord-insert mode).
 
             // If BPM control is focused/active, let it handle digits/arrows.
             const activeEl = document.activeElement as HTMLElement | null;
