@@ -60,9 +60,15 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   }
 
   const tpq = Math.max(1, division);
+  // Capture the INITIAL tempo/time-signature (the event at the smallest tick),
+  // not the last one. A file that joins two pieces has a tempo/TS change partway
+  // through; keeping the last value gave the wrong project tempo (e.g. 32 instead
+  // of the opening 75) and barred the first piece against the wrong meter.
   let tempoBpm = 120;
+  let tempoTick = Infinity;
   let tsNum = 4;
   let tsDen = 4;
+  let tsTick = Infinity;
   let keySharps: number | null = null;
   let keyIsMinor = false;
 
@@ -166,11 +172,14 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
 
         if (metaType === 0x51 && len.value === 3) {
           const usPerQuarter = (view.getUint8(pos) << 16) | (view.getUint8(pos + 1) << 8) | view.getUint8(pos + 2);
-          if (usPerQuarter > 0) tempoBpm = Math.round(60000000 / usPerQuarter);
+          if (usPerQuarter > 0 && absTick < tempoTick) { tempoBpm = Math.round(60000000 / usPerQuarter); tempoTick = absTick; }
         } else if (metaType === 0x58 && len.value >= 2) {
-          tsNum = Math.max(1, view.getUint8(pos));
-          const dd = view.getUint8(pos + 1);
-          tsDen = Math.max(1, Math.pow(2, dd));
+          if (absTick < tsTick) {
+            tsNum = Math.max(1, view.getUint8(pos));
+            const dd = view.getUint8(pos + 1);
+            tsDen = Math.max(1, Math.pow(2, dd));
+            tsTick = absTick;
+          }
         } else if (metaType === 0x59 && len.value >= 2) {
           // Key signature: sf = signed byte (-7..+7, neg=flats, pos=sharps), mi = 0 major / 1 minor
           keySharps = view.getInt8(pos);

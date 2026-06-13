@@ -3245,9 +3245,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (choice === 'satb') {
                     await importMidi(source);
                 } else {
-                    const newTrack = await importMidiAsAccompaniment(source);
-                    if (newTrack) {
-                        setAccompanimentTracks(prev => [...(prev || []), newTrack]);
+                    const result = await importMidiAsAccompaniment(source);
+                    if (result) {
+                        setAccompanimentTracks(prev => [...(prev || []), result.track]);
+                        // Apply the file's tempo + time signature to the project (the
+                        // SATB import path already does this; the ACC path previously
+                        // dropped them → bpm stuck at 120 and notes mis-barred against
+                        // the default 4/4).
+                        if (Number.isFinite(result.bpm) && result.bpm > 0) setBpm(result.bpm);
+                        if (result.timeSignature) setTimeSignature(result.timeSignature);
                     }
                 }
             } catch (err: any) {

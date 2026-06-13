@@ -407,9 +407,12 @@ function fillRestsAfterImport(
 /** MIDI timing quantisation: snaps near-grid onsets and near-standard durations
  *  to clean values so the rhythmic normaliser doesn't fragment slightly-off
  *  timings (e.g. a quarter recorded as 950 ticks) into chains of tied 32nd /
- *  64th notes. Tolerance is intentionally tight (60 ticks ≈ 1/16 quarter) so
- *  legitimate 16ths (240 ticks from the nearest 8th) are never absorbed. */
-const QUANTIZE_GRID_TICKS = TICKS_PER_QUARTER / 2;          // 480 = 8th note grid
+ *  64th notes. Tolerance is tight (60 ticks ≈ 1/16 quarter, i.e. ±1/4 of a 16th)
+ *  so legitimate 32nds (120 ticks from the nearest 16th) are never absorbed. */
+// 16th-note grid: snaps the small onset jitter that some exporters add (e.g. a
+// uniform +1 source-tick offset → notes at 240k+2 internal) which the previous
+// 8th-note grid left off-grid, fragmenting clean 16ths into 32nds + 32nd rests.
+const QUANTIZE_GRID_TICKS = TICKS_PER_QUARTER / 4;          // 240 = 16th note grid
 const QUANTIZE_TOLERANCE_TICKS = TICKS_PER_QUARTER / 16;    // 60 ticks
 
 /** Standard musical durations available for snap (must match STANDARD_DURATIONS
@@ -1527,7 +1530,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
    *  to nothing (e.g. user cancelled the file picker). */
   const importMidiAsAccompaniment = useCallback(async (
     source?: File | ArrayBuffer | string,
-  ): Promise<AccompanimentTrack | null> => {
+  ): Promise<{ track: AccompanimentTrack; bpm: number; timeSignature: TimeSignature } | null> => {
     const arrayBuffer = await resolveMidiSource(source, pickMidiFile);
     if (!arrayBuffer) return null;
 
@@ -1605,14 +1608,18 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       : `acc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     return {
-      id: newId,
-      name: 'Piano',
-      instrumentId: 0,
-      notes,
-      muted: false,
-      visible: true,
-      volume: 1,
-      staffMode: 'grandstaff',
+      track: {
+        id: newId,
+        name: 'Piano',
+        instrumentId: 0,
+        notes,
+        muted: false,
+        visible: true,
+        volume: 1,
+        staffMode: 'grandstaff',
+      },
+      bpm: parsed.tempoBpm,
+      timeSignature: parsed.timeSignature,
     };
   }, [pickMidiFile, project.keySignatureRoot, project.isMinorMode]);
 
