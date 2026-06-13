@@ -62,18 +62,19 @@ const MEASURE_PADDING_X = 20;
 
 // --- Accompaniment Grand Staff (rendered BELOW the SATB Grand Staff) ---
 // Gap below the bottom line of the SATB bass stave.
-// 100px breakdown: ~7px Roman-numeral overhang descending into the acc area,
-// ~15px headroom for high acc notes with ledger lines above the treble stave,
-// and the rest as visual breathing room separating the two Grand Staffs.
-const ACCOMPANIMENT_STAFF_GAP = 100;
+// 140px breakdown: the SATB Roman-numeral row (roman + figured-bass digits) hangs
+// well below the bass stave, and high acc notes carry ledger lines ABOVE the acc
+// treble stave; the two used to collide at 100px. 140px = ~40px Roman row + ~30px
+// acc ledger headroom + breathing room between the two Grand Staffs.
+const ACCOMPANIMENT_STAFF_GAP = 140;
 // Span between accompaniment treble and bass tops (mirrors SATB BASS_Y - TREBLE_Y = 130).
 const ACCOMPANIMENT_GS_SPAN = 130;
 // 5 lines * 10px per line.
 const STAVE_LINES_HEIGHT = 40;
 // Y of accompaniment treble in grandstaff mode: bottom of SATB bass + gap.
-const ACC_TREBLE_Y_GRANDSTAFF = BASS_Y + STAVE_LINES_HEIGHT + ACCOMPANIMENT_STAFF_GAP; // 260
+const ACC_TREBLE_Y_GRANDSTAFF = BASS_Y + STAVE_LINES_HEIGHT + ACCOMPANIMENT_STAFF_GAP; // 300
 // Y of accompaniment treble in satb_ancient mode: bottom of SATB bass + gap.
-const ACC_TREBLE_Y_SATB_ANCIENT = SATB_BASS_Y + STAVE_LINES_HEIGHT + ACCOMPANIMENT_STAFF_GAP; // 430
+const ACC_TREBLE_Y_SATB_ANCIENT = SATB_BASS_Y + STAVE_LINES_HEIGHT + ACCOMPANIMENT_STAFF_GAP; // 470
 // Total vertical footprint added when accompaniment is shown:
 // gap + treble lines + treble->bass span + bass lines.
 // (Used by parent to grow systemHeightPx; mirrored constant in GrandStaffEditor.tsx.)

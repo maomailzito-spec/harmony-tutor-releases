@@ -1214,10 +1214,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Accompaniment staves are rendered below the SATB Grand Staff when at least
     // one accompaniment track is visible. Extra vertical space depends on the
     // accompaniment staff mode of the visible tracks:
-    //  - "grandstaff": 100 gap + 40 (treble lines) + 130 (treble->bass span) = 270px
-    //  - "treble_only": 100 gap + 70 (single staff footprint)                = 170px
-    // The 100px gap matches ACCOMPANIMENT_STAFF_GAP in VexflowGrandStaff and
-    // leaves room for Roman-numeral overhang and high acc-treble ledger lines.
+    //  - "grandstaff": 140 gap + 40 (treble lines) + 130 (treble->bass span) = 310px
+    //  - "treble_only": 140 gap + 70 (single staff footprint)                = 210px
+    // The 140px gap matches ACCOMPANIMENT_STAFF_GAP in VexflowGrandStaff and
+    // leaves room for the SATB Roman-numeral row and high acc-treble ledger lines.
     // Each visible track now draws its OWN staff block (grandstaff or single staff),
     // stacked below the SATB. Total extra height = sum of per-track footprints,
     // computed by the shared helper so it stays in sync with the renderer.
