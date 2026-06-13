@@ -11671,7 +11671,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             <text
                                                 key={`mnum-${systemIndex}-${mIdx}`}
                                                 x={startX}
-                                                y={staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 14) : (TOP_STAFF_TOP + 44)}
+                                                // With SATB hidden the system is shifted up by SATB_HIDE_SHIFT_PX and the
+                                                // top band (where measure numbers sit) is clipped — reposition them into
+                                                // the visible ACC area (compensating the shift) so they don't vanish.
+                                                y={!satbVisible
+                                                    ? (SATB_HIDE_SHIFT_PX + 114)
+                                                    : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 14) : (TOP_STAFF_TOP + 44))}
                                                 textAnchor="middle"
                                                 dominantBaseline="middle"
                                                 fontSize={11}
