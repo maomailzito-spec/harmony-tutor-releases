@@ -26,6 +26,7 @@
   "voice_bass": "Basso",
   "voice_solo_suffix": " (SOLO)",
   "voice_tooltip_suffix": " — doppio-click per solo",
+  "voice_reassign_suffix": " — sposta qui le note selezionate",
   "voice_instrument_tooltip": "Strumento per {{voice}}",
 
   "accidental_sharp": "Diesis (♯)",

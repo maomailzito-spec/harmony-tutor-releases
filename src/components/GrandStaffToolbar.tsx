@@ -116,6 +116,10 @@ type GrandStaffToolbarProps = {
 
     selectedVoice: Voice;
     setSelectedVoice: (value: Voice) => void;
+    // When notes are selected, clicking a voice button also moves the selection to
+    // that voice (reassign), in addition to setting the insertion voice.
+    hasNoteSelection?: boolean;
+    onReassignSelectionToVoice?: (voice: Voice) => void;
     soloVoices?: Set<number>;
     onToggleSolo?: (voice: number) => void;
     voiceInstruments?: Record<number, string>;
@@ -290,6 +294,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         bumpMeasuresPerLine,
         selectedVoice,
         setSelectedVoice,
+        hasNoteSelection,
+        onReassignSelectionToVoice,
         soloVoices,
         onToggleSolo,
         voiceInstruments,
@@ -676,10 +682,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 {[1, 2, 3, 4].map(v => (
                     <button
                         key={v}
-                        onClick={() => setSelectedVoice(v as Voice)}
+                        onClick={() => { setSelectedVoice(v as Voice); if (hasNoteSelection) onReassignSelectionToVoice?.(v as Voice); }}
                         onDoubleClick={(e) => { e.preventDefault(); onToggleSolo?.(v); }}
                         className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${soloVoices?.has(v) ? 'ring-2 ring-yellow-400 ' : ''}${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
-                        title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${tT('voice_tooltip_suffix')}`}
+                        title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${hasNoteSelection ? tT('voice_reassign_suffix') : tT('voice_tooltip_suffix')}`}
                     >
                         {v === 1 ? 'S' : v === 2 ? 'A' : v === 3 ? 'T' : 'B'}
                     </button>

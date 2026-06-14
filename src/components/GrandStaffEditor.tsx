@@ -1211,6 +1211,107 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return (v === 3 || v === 4) ? 'bass' : 'treble';
     }, [effectiveLayoutMode, staffSystemMode]);
 
+    // Move the currently-selected SATB notes to another voice (e.g. soprano→alto).
+    // Triggered by the toolbar voice buttons when a selection is active. The clef
+    // is recomputed from the target voice (so a cross-staff move, e.g. S→Bass,
+    // follows the clef — same as paste, which also only re-sets voice+clef and
+    // lets the renderer place by pitch). Collisions "merge as a chord" naturally:
+    // a moved note sharing onset with an existing target-voice note becomes a
+    // chord, and normalizeRhythm keeps both. Source + target voices are re-tiled
+    // over the touched measure range so rests regenerate correctly.
+    const reassignSelectionToVoice = useCallback((targetVoice: Voice) => {
+        if (selectedNoteIds.size === 0) return;
+        setRawNotes(prev => {
+            const existing = prev || [];
+            const selReal = existing.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
+            const toMove = selReal.filter(n => Number((n as any).voice ?? 1) !== targetVoice);
+            if (toMove.length === 0) return prev;
+            const moveIds = new Set(toMove.map(n => n.id));
+            const moved: StaffNote[] = toMove.map(n => ({
+                ...n,
+                voice: targetVoice,
+                clef: clefForVoice(targetVoice, undefined, n.measureIndex, n.beat),
+                clefOverride: undefined,
+                manualStemDirection: undefined,
+            } as StaffNote));
+            const affectedVoices = new Set<number>([...toMove.map(n => Number((n as any).voice ?? 1)), targetVoice]);
+            const measures = toMove.map(n => Number(n.measureIndex ?? 0));
+            const minM = Math.min(...measures), maxM = Math.max(...measures);
+
+            const removeIds = new Set<string>();
+            const retiled: StaffNote[] = [];
+            for (const v of affectedVoices) {
+                const realInRange: StaffNote[] = [];
+                for (const n of existing) {
+                    if (Number((n as any).voice ?? -1) !== v) continue;
+                    const m = Number(n.measureIndex ?? -1);
+                    if (m < minM || m > maxM) continue;
+                    removeIds.add(n.id);
+                    if (!n.isRest && !moveIds.has(n.id)) realInRange.push(n);
+                }
+                const toTile = [...realInRange, ...(v === targetVoice ? moved : [])];
+                if (toTile.length === 0) continue;
+                retiled.push(...normalizeRhythm(toTile, timeSignature, timeSignatureChanges));
+            }
+            return [...existing.filter(n => !removeIds.has(n.id)), ...retiled];
+        });
+
+        // ACC voiced grand-staff: same behaviour, but its voice model is
+        // (clef, voice 1/2). Map the SATB-style button to (clef, voice):
+        // 1→treble-up, 2→treble-down, 3→bass-up, 4→bass-down. Only voiced
+        // grand-staff tracks are affected; treble-only / single-voice (voice 0)
+        // tracks are left as they are.
+        const accClef: 'treble' | 'bass' = targetVoice <= 2 ? 'treble' : 'bass';
+        const accVoice = (targetVoice === 1 || targetVoice === 3) ? 1 : 2;
+        setAccompanimentTracks(prev => prev.map(track => {
+            if ((track.staffMode ?? 'grandstaff') !== 'grandstaff' || !track.voiced) return track;
+            const existing = track.notes || [];
+            const selReal = existing.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
+            const toMove = selReal.filter(n => !((n.clef ?? 'treble') === accClef && Number((n as any).voice ?? 1) === accVoice));
+            if (toMove.length === 0) return track;
+            const moveIds = new Set(toMove.map(n => n.id));
+            const moved: StaffNote[] = toMove.map(n => ({
+                ...n,
+                clef: accClef,
+                voice: accVoice as any,
+                clefOverride: undefined,
+                manualStemDirection: undefined,
+            } as StaffNote));
+            const streamKey = (c: string, v: number) => `${c}:${v}`;
+            const affected = new Set<string>([streamKey(accClef, accVoice), ...toMove.map(n => streamKey((n.clef ?? 'treble'), Number((n as any).voice ?? 1)))]);
+            const measures = toMove.map(n => Number(n.measureIndex ?? 0));
+            const minM = Math.min(...measures), maxM = Math.max(...measures);
+            const removeIds = new Set<string>();
+            const retiled: StaffNote[] = [];
+            for (const key of affected) {
+                const [c, vStr] = key.split(':'); const v = Number(vStr);
+                const realInRange: StaffNote[] = [];
+                for (const n of existing) {
+                    if ((n.clef ?? 'treble') !== c || Number((n as any).voice ?? 1) !== v) continue;
+                    const m = Number(n.measureIndex ?? -1);
+                    if (m < minM || m > maxM) continue;
+                    removeIds.add(n.id);
+                    if (!n.isRest && !moveIds.has(n.id)) realInRange.push(n);
+                }
+                const movedIn = moved.filter(mn => (mn.clef ?? 'treble') === c && Number((mn as any).voice ?? 1) === v);
+                const toTile = [...realInRange, ...movedIn];
+                if (toTile.length === 0) continue;
+                // omitEmptyVoiceMeasures=true keeps ACC consistent with its import
+                // (no phantom rests in bars where a voice is silent).
+                retiled.push(...normalizeRhythm(toTile, timeSignature, timeSignatureChanges, true));
+            }
+            return { ...track, notes: [...existing.filter(n => !removeIds.has(n.id)), ...retiled] };
+        }));
+    }, [selectedNoteIds, clefForVoice, timeSignature, timeSignatureChanges, setRawNotes, setAccompanimentTracks]);
+
+    const hasReassignableSelection = useMemo(() => {
+        if (selectedNoteIds.size === 0) return false;
+        if (rawNotes.some(n => selectedNoteIds.has(n.id) && !n.isRest)) return true;
+        return (accompanimentTracks || []).some(t =>
+            (t.staffMode ?? 'grandstaff') === 'grandstaff' && t.voiced
+            && (t.notes || []).some(n => selectedNoteIds.has(n.id) && !n.isRest));
+    }, [selectedNoteIds, rawNotes, accompanimentTracks]);
+
     const playbackTransposeSemitones = staffSystemMode === 'treble_only' ? -12 : 0;
 
     // Accompaniment staves are rendered below the SATB Grand Staff when at least
@@ -5053,23 +5154,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             let tupletContext: { notesInGroup: number; beatsForGroup: number; notesProcessed: number } | null = null;
 
             const voiceItems: PlaybackItem[] = [];
+            // Chord within ONE voice (e.g. after moving a note onto a voice that
+            // already has a note at that beat): notes sharing the previous note's
+            // onset sound SIMULTANEOUSLY. They reuse its beat/measure and do NOT
+            // advance the time cursor — otherwise the 2nd+ chord notes get
+            // serialised (only one sounds; the rest shift to later beats).
+            let prevChordStartTick: number | null = null;
+            let prevChordPlacement: { measureIndex: number; beat: number; absStartBeatNotated: number } | null = null;
 
             for (const n of voiceNotes) {
+                const curStartTick = typeof (n as any).startTick === 'number' ? (n as any).startTick as number : null;
+                const isChordMate = !n.isRest && prevChordPlacement != null
+                    && curStartTick != null && prevChordStartTick != null
+                    && curStartTick === prevChordStartTick;
+
                 let durationBeatsNotated = DURATION_VALUES[n.duration || 'quarter'] * (n.isDotted ? 1.5 : 1);
 
-                if (!tupletContext) {
+                if (!isChordMate && !tupletContext) {
                     if (n.isTriplet) tupletContext = { notesInGroup: 3, beatsForGroup: durationBeatsNotated * 2, notesProcessed: 0 };
                     else if (n.isDuplet) tupletContext = { notesInGroup: 2, beatsForGroup: durationBeatsNotated * 3, notesProcessed: 0 };
                 }
-                if (tupletContext) durationBeatsNotated = tupletContext.beatsForGroup / tupletContext.notesInGroup;
+                if (tupletContext && !isChordMate) durationBeatsNotated = tupletContext.beatsForGroup / tupletContext.notesInGroup;
 
-                if (durationInMeasureNotated + durationBeatsNotated > bpmAtMeasure(measureIndex) + 0.001) {
+                if (!isChordMate && durationInMeasureNotated + durationBeatsNotated > bpmAtMeasure(measureIndex) + 0.001) {
                     measureIndex++;
                     durationInMeasureNotated = 0;
                 }
+                if (isChordMate) measureIndex = prevChordPlacement!.measureIndex;
 
-                const beat = durationInMeasureNotated + 1;
-                const absStartBeatNotated = measureStartBeat(measureIndex) + (beat - 1);
+                const beat = isChordMate ? prevChordPlacement!.beat : (durationInMeasureNotated + 1);
+                const absStartBeatNotated = isChordMate ? prevChordPlacement!.absStartBeatNotated : (measureStartBeat(measureIndex) + (beat - 1));
 
                 // Swing (ottavi terzinati): playback-only mapping for straight eighths.
                 // Notation stays in straight time; playback maps offbeats (x.5) to triplet offbeats (x + 2/3).
@@ -5122,11 +5236,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                 voiceItems.push({ note: { ...n, voice: voice as any, measureIndex, beat }, absStartBeat, durationBeats, skip: false });
 
-                durationInMeasureNotated += durationBeatsNotated;
-                if (tupletContext) {
-                    tupletContext.notesProcessed++;
-                    if (tupletContext.notesProcessed >= tupletContext.notesInGroup) tupletContext = null;
+                if (!isChordMate) {
+                    durationInMeasureNotated += durationBeatsNotated;
+                    if (tupletContext) {
+                        tupletContext.notesProcessed++;
+                        if (tupletContext.notesProcessed >= tupletContext.notesInGroup) tupletContext = null;
+                    }
                 }
+                prevChordStartTick = curStartTick;
+                prevChordPlacement = { measureIndex, beat, absStartBeatNotated };
             }
 
             // Merge tie chains: keep the first note, extend its duration, skip the tied-to notes.
@@ -10638,6 +10756,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 bumpMeasuresPerLine={bumpMeasuresPerLine}
                 selectedVoice={selectedVoice}
                 setSelectedVoice={setSelectedVoice}
+                hasNoteSelection={hasReassignableSelection}
+                onReassignSelectionToVoice={reassignSelectionToVoice}
                 soloVoices={soloVoices}
                 onToggleSolo={handleToggleVoiceSolo}
                 voiceInstruments={voiceInstruments}

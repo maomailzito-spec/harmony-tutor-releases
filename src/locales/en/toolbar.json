@@ -26,6 +26,7 @@
   "voice_bass": "Bass",
   "voice_solo_suffix": " (SOLO)",
   "voice_tooltip_suffix": " — double-click for solo",
+  "voice_reassign_suffix": " — move selected notes here",
   "voice_instrument_tooltip": "Instrument for {{voice}}",
 
   "accidental_sharp": "Sharp (♯)",
