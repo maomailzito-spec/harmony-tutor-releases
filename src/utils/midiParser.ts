@@ -1,6 +1,13 @@
 export type ParsedMidiNote = {
   tick: number;
+  /** Sounding length: how long the note RINGS, i.e. extended by the sustain
+   *  pedal (CC 64) up to the pedal release / re-press. Use this for playback. */
   durationTicks: number;
+  /** Un-pedaled length: how long the KEY was physically held (note-on→note-off),
+   *  ignoring pedal sustain. Equals durationTicks when no pedal extended the note.
+   *  Use this for NOTATION so pedal resonance doesn't inflate a 16th into a held
+   *  value. A genuinely long key-hold (a real independent voice) is unaffected. */
+  notatedTicks: number;
   midi: number;
   velocity: number;
   channel: number;
@@ -72,7 +79,10 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   let keySharps: number | null = null;
   let keyIsMinor = false;
 
-  type ActiveEntry = { tick: number; velocity: number; track: number };
+  // keyOffTick = the tick the KEY was released (note-off), set when a note-off is
+  // deferred because the sustain pedal was held. Lets us recover the un-pedaled
+  // (notated) length separately from the pedal-extended sounding length.
+  type ActiveEntry = { tick: number; velocity: number; track: number; keyOffTick?: number };
   const active = new Map<string, Array<ActiveEntry>>();
   const notes: ParsedMidiNote[] = [];
 
@@ -85,10 +95,13 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   // Key: `${channel}:${note}`, Value: the original note-on entry.
   const sustainPending = new Map<string, ActiveEntry>();
 
-  /** Emit a finalized note into the notes[] array. */
+  /** Emit a finalized note into the notes[] array. `offTick` is the SOUNDING end
+   *  (pedal release / interrupt / EOF); `on.keyOffTick`, when present, is the
+   *  earlier KEY release used for the notated length. */
   const emitNote = (channel: number, note: number, on: ActiveEntry, offTick: number) => {
     const durationTicks = Math.max(1, offTick - on.tick);
-    notes.push({ tick: on.tick, durationTicks, midi: note, velocity: on.velocity, channel, track: on.track });
+    const notatedTicks = Math.max(1, (on.keyOffTick ?? offTick) - on.tick);
+    notes.push({ tick: on.tick, durationTicks, notatedTicks, midi: note, velocity: on.velocity, channel, track: on.track });
   };
 
   const pushNoteOff = (channel: number, note: number, tick: number) => {
@@ -107,6 +120,9 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
       // the current tick to avoid losing it.
       const prev = sustainPending.get(key);
       if (prev) emitNote(channel, note, prev, tick);
+      // Remember when the key was actually released; the note will be finalised
+      // (sounding) later at the pedal release, but its notated length stops here.
+      on.keyOffTick = tick;
       sustainPending.set(key, on);
       return;
     }
@@ -253,9 +269,11 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     const channel = Number(channelStr);
     const midi = Number(midiStr);
     for (const on of stack) {
+      const durationTicks = Math.max(1, maxTick - on.tick);
       notes.push({
         tick: on.tick,
-        durationTicks: Math.max(1, maxTick - on.tick),
+        durationTicks,
+        notatedTicks: Math.max(1, (on.keyOffTick ?? maxTick) - on.tick),
         midi,
         velocity: on.velocity,
         channel,
@@ -273,6 +291,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     notes.push({
       tick: entry.tick,
       durationTicks: Math.max(1, maxTick - entry.tick),
+      notatedTicks: Math.max(1, (entry.keyOffTick ?? maxTick) - entry.tick),
       midi,
       velocity: entry.velocity,
       channel,

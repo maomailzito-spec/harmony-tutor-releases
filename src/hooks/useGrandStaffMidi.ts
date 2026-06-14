@@ -110,7 +110,7 @@ function inferClefFromMidi(midi: number): 'treble' | 'bass' {
 /** Convert one ParsedMidiNote into a StaffNote. The voice/clef strategy is supplied
  *  by the caller: SATB import passes a Voice 1..4 derived from track/channel/pitch,
  *  accompaniment import passes 0 for all notes. Pitch/duration/timing logic is identical. */
-function convertParsedNoteToStaffNote(
+export function convertParsedNoteToStaffNote(
   n: ParsedMidiNote,
   idx: number,
   tpq: number,
@@ -450,11 +450,19 @@ function snapDurationToStandard(ticks: number, tolerance: number): number {
 }
 
 /** Clean up MIDI imprecision BEFORE rhythmic normalisation:
- *    - startTick snapped to the 8th-note grid within tolerance
- *    - durationTicks snapped to the nearest standard duration within tolerance
- *  Notes far from any grid point are left alone (they'll be handled by the
- *  normaliser's tick-decomposition). After snapping, re-derive duration/dotted
- *  fields from the new durationTicks so display labels match the cleaned values. */
+ *    - startTick snapped to the 16th-note grid within tolerance
+ *    - the note END snapped to the 16th grid within tolerance, so the LENGTH is
+ *      a grid multiple (start and end both on grid). This is what stops the
+ *      normaliser from manufacturing illegible 32nd/64th + sliver-rest chains:
+ *      a few ticks of onset jitter (e.g. note-ons at +1/+2) otherwise leak into
+ *      a note's length (1198 instead of 1200), landing its end off-grid, and the
+ *      decomposer then splits the off-grid remainder into sub-16th tied fragments.
+ *    - durationTicks snapped to the nearest standard value as a fallback when the
+ *      end did NOT land on the grid (genuine sub-16th content or a sloppy
+ *      near-standard length).
+ *  Genuine sub-16th content is preserved: a real 32nd or dotted-16th sits ≥120
+ *  ticks off the 16th grid, far beyond tolerance, so neither snap moves it.
+ *  After snapping, re-derive duration/dotted fields so display labels match. */
 export function quantizeMidiTimings(notes: StaffNote[], gridTicks = QUANTIZE_GRID_TICKS, toleranceTicks = QUANTIZE_TOLERANCE_TICKS): StaffNote[] {
   if (notes.length === 0) return notes;
   return notes.map(n => {
@@ -464,7 +472,14 @@ export function quantizeMidiTimings(notes: StaffNote[], gridTicks = QUANTIZE_GRI
     const oldStart = n.startTick ?? 0;
     const oldDur = n.durationTicks ?? 0;
     const newStart = snapToGrid(oldStart, gridTicks, toleranceTicks);
-    const newDur = snapDurationToStandard(oldDur, toleranceTicks);
+    const newEnd = snapToGrid(oldStart + oldDur, gridTicks, toleranceTicks);
+    let newDur = newEnd - newStart;
+    // End didn't reach the grid (real sub-16th, or a near-standard sloppy length)
+    // → fall back to a standard single duration. Guard against degenerate ≤0.
+    if (newEnd % gridTicks !== 0 || newDur <= 0) {
+      newDur = snapDurationToStandard(newEnd - newStart, toleranceTicks);
+      if (newDur <= 0) newDur = oldDur;
+    }
     if (newStart === oldStart && newDur === oldDur) return n;
     const next = { ...n, startTick: newStart, durationTicks: newDur };
     if (newDur !== oldDur) {
@@ -1150,6 +1165,11 @@ export function normalizeRhythm(
   notes: StaffNote[],
   timeSignature: { numerator: number; denominator: number },
   timeSignatureChanges: Array<{ measureIndex: number; numerator: number; denominator: number }>,
+  // When true, a (voice, clef) stream emits NOTHING in measures where it has no
+  // notes (instead of a full bar of rests). Used by ACC MIDI import to avoid an
+  // empty 2nd voice littering monophonic bars. Off by default so SATB import and
+  // paste/edit keep the conventional whole-rest for a silent voice.
+  omitEmptyVoiceMeasures = false,
 ): StaffNote[] {
   if (notes.length === 0) return notes;
 
@@ -1248,6 +1268,13 @@ export function normalizeRhythm(
     let cursor = measureStartTicks[firstMeasure] ?? 0;
 
     for (let m = firstMeasure; m <= lastMeasure; m++) {
+      // Empty measure for this (voice, clef) stream → emit nothing. Keeping a
+      // voice "alive" with a full bar of rests across measures where it is
+      // silent produces phantom rests (e.g. an empty 2nd voice littering bars
+      // that are really monophonic). A voice simply isn't drawn in bars where it
+      // has no notes — separateVoices already yields voice-absent measures, so
+      // the renderer handles this.
+      if (omitEmptyVoiceMeasures && !byMeasure.has(m)) continue;
       const ts = tsForMeasure(m);
       const ticksPerMeasure = ticksForMeasure(m);
       const measureStart = measureStartTicks[m] ?? 0;
@@ -1567,9 +1594,27 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       return (e && e.n > 0 && e.sum / e.n < 60) ? 'bass' : 'treble';
     };
 
-    const convertedNotes: StaffNote[] = parsed.notes.map((n, idx) =>
-      convertParsedNoteToStaffNote(n, idx, tpq, beatsPerMeasure, keySig, 0, clefForTrack(n.track))
-    );
+    // De-pedal the NOTATION: a 16th-note figure recorded with the sustain pedal
+    // (CC 64) reaches us with pedal-inflated durations (a 16th that rings a whole
+    // bar), which would otherwise be written as held/tied long values and force
+    // the figuration into spurious "held" voices. We notate the un-pedaled key
+    // length (`notatedTicks`) and keep the full ringing length only for playback
+    // (playbackDurationTicks). A genuinely long key-hold (a real independent
+    // voice) has notatedTicks == durationTicks, so it is untouched.
+    const TPR = TICKS_PER_QUARTER;
+    const convertedNotes: StaffNote[] = parsed.notes.map((n, idx) => {
+      const sounding = n.durationTicks;
+      const notated = n.notatedTicks ?? sounding;
+      const dePedaled = notated < sounding ? { ...n, durationTicks: notated } : n;
+      const sn = convertParsedNoteToStaffNote(dePedaled, idx, tpq, beatsPerMeasure, keySig, 0, clefForTrack(n.track));
+      if (notated < sounding) {
+        // Preserve the pedal-sustained sound for playback while the staff shows
+        // the real rhythm. trim only sets playbackDurationTicks when it is unset,
+        // so this value survives any later display-trim.
+        (sn as StaffNote).playbackDurationTicks = Math.max(1, Math.round((sounding / Math.max(1, tpq)) * TPR));
+      }
+      return sn;
+    });
 
     // Voice separation per staff: notes overlapping in time go to separate voices,
     // so a held melody over a moving arpeggio is no longer flattened into one
@@ -1601,7 +1646,9 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
 
     // Normalize rhythm (same as SATB import) — voice=0 stream for accompaniment.
     // Splits notes/rests on beat boundaries and decomposes non-standard durations.
-    const notes = normalizeRhythm(trimmedNotes, parsed.timeSignature, []);
+    // omitEmptyVoiceMeasures: ACC may have a 2nd voice only in some bars; don't
+    // litter the monophonic bars with a phantom voice full of rests.
+    const notes = normalizeRhythm(trimmedNotes, parsed.timeSignature, [], true);
 
     const newId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
       ? crypto.randomUUID()
