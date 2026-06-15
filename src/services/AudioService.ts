@@ -35,6 +35,31 @@ const VELOCITY_LAYERED: Record<string, { dir: string; layers: number }> = {
 const pickVelocityLayer = (velocity: number | undefined, layers: number): number =>
   Math.max(0, Math.min(layers - 1, Math.floor(((velocity ?? 100) / 128) * layers)));
 
+/**
+ * Sustained instruments whose samples are an ATTACK followed by a seamlessly
+ * crossfaded LOOP BODY (see scripts/prepare-orchestra.mjs). For these we set
+ * `source.loop` so held notes (long chords, fermatas, pedals) ring for their
+ * full duration instead of cutting off when the sample ends. The loop region is
+ * `[loopStartSec .. buffer.duration]` (the body that follows the attack).
+ * `ext` is the local file format (FLAC for these; the historical mp3 stays the
+ * default for everything else). Inert until the FLAC assets are present.
+ */
+const SUSTAINED: Record<string, { loopStartSec: number; ext: 'flac' | 'mp3' }> = {
+  string_ensemble_1: { loopStartSec: 1.0, ext: 'flac' }, // Phase 1 test instrument (loopStart past the attack swell)
+};
+const instrumentExt = (instrument: string): 'flac' | 'mp3' => SUSTAINED[instrument]?.ext ?? 'mp3';
+
+/**
+ * Per-instrument playback gain = the orchestral MIX TRIM. Samples are rendered
+ * to a common loudness reference (LUFS, see prepare-orchestra.mjs); this map
+ * balances each instrument against the piano (the untouched reference) and each
+ * other, in ONE place, tunable by ear without re-rendering any asset. 1 = unity.
+ */
+const INSTRUMENT_GAIN: Record<string, number> = {
+  string_ensemble_1: 0.32, // archi VSCO2 (rif. −18 LUFS) ≈ −10 dB → pareggia l'attacco del piano
+};
+const instrumentGain = (instrument: string): number => INSTRUMENT_GAIN[instrument] ?? 1;
+
 /** Handle for a sustained (note-on/note-off) monitored note. */
 export interface SustainHandle {
   _released: boolean;
@@ -214,8 +239,9 @@ export class AudioService {
     const key = `${instrument}::${audioFile}`;
     if (this.audioBuffers.has(key) || this.failedLoads.has(key)) return;
 
-    // Try local bundled file first, then fall back to remote CDN.
-    const localUrl = `./sounds/${instrument}/${audioFile}.mp3`;
+    // Try local bundled file first (FLAC for sustained instruments, else mp3),
+    // then fall back to remote CDN (mp3 only).
+    const localUrl = `./sounds/${instrument}/${audioFile}.${instrumentExt(instrument)}`;
     const remoteUrl = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/${audioFile}.mp3`;
 
     for (const url of [localUrl, remoteUrl]) {
@@ -284,6 +310,14 @@ export class AudioService {
 
     const source = this.audioContext.createBufferSource();
     source.buffer = audioBuffer;
+    // Sustained instruments: loop the body so a held note doesn't cut off when
+    // the sample ends. Loop region = [loopStartSec .. end] (body after attack).
+    const sus = SUSTAINED[instrument];
+    if (sus && audioBuffer.duration > sus.loopStartSec + 0.05) {
+      source.loop = true;
+      source.loopStart = sus.loopStartSec;
+      source.loopEnd = audioBuffer.duration;
+    }
     const gainNode = this.audioContext.createGain();
     // If a custom output node is provided (e.g. per-track gain), route through it
     // so the user can mute/change volume in real-time by modulating that node.
@@ -305,7 +339,7 @@ export class AudioService {
     const noteDurationInSeconds = options?.duration ?? audioBuffer.duration;
     const releaseDurationInSeconds = 0.5;
     const noteEndTime = startTime + noteDurationInSeconds;
-    const vol = options?.volume ?? 1;
+    const vol = (options?.volume ?? 1) * instrumentGain(instrument);
     if (options?.sustain) {
       // Natural envelope: INSTANT attack (the sample starts from silence, so no
       // click — keeps the percussive transient and lets it scale with velocity),
@@ -367,6 +401,14 @@ export class AudioService {
 
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
+      // Sustained instruments: loop the body so a long held key keeps ringing
+      // (matches the played-back behaviour). Loop region = [loopStartSec .. end].
+      const sus = SUSTAINED[instrument];
+      if (sus && audioBuffer.duration > sus.loopStartSec + 0.05) {
+        source.loop = true;
+        source.loopStart = sus.loopStartSec;
+        source.loopEnd = audioBuffer.duration;
+      }
       const gainNode = this.audioContext.createGain();
       gainNode.connect(options?.output ?? this.audioContext.destination);
       // Optional velocity→timbre low-pass (single-layer only; skipped for real
@@ -382,7 +424,7 @@ export class AudioService {
       } else {
         source.connect(gainNode);
       }
-      const vol = options?.volume ?? 1;
+      const vol = (options?.volume ?? 1) * instrumentGain(instrument);
       const now = this.audioContext.currentTime;
       // Instant attack (the sample already starts from silence, so no click): keeps
       // the natural percussive transient and lets the attack scale with velocity.
