@@ -1021,6 +1021,11 @@ function splitNoteAtBoundaries(
   measureStartTick: number,
   boundaries: BeatBoundary[],
   ticksPerMeasure: number,
+  // When false, a note is NOT broken at mid-measure strong beats (it is still
+  // decomposed into standard durations and still split at barlines upstream).
+  // Used by editing ops (paste / voice reassign) so a copied value keeps its
+  // shape; MIDI import keeps it true for conventional engraving.
+  splitAtStrong = true,
 ): StaffNote[] {
   if (note.isRest) return [note];
   const noteOffset = (note.startTick ?? 0) - measureStartTick;
@@ -1034,7 +1039,7 @@ function splitNoteAtBoundaries(
   // the correct base value + isTriplet, so as long as the tuplet note doesn't span
   // a strong boundary we re-emit it intact instead of decomposing.
   if ((note.isTriplet || note.isDuplet) &&
-      !shouldSplitNoteAtStrong(noteOffset, noteEnd, boundaries, ticksPerMeasure)) {
+      (!splitAtStrong || !shouldSplitNoteAtStrong(noteOffset, noteEnd, boundaries, ticksPerMeasure))) {
     return [{
       ...note,
       startTick: measureStartTick + noteOffset,
@@ -1045,7 +1050,7 @@ function splitNoteAtBoundaries(
 
   // Determine cut points: strong boundaries only.
   let cuts: number[];
-  if (shouldSplitNoteAtStrong(noteOffset, noteEnd, boundaries, ticksPerMeasure)) {
+  if (splitAtStrong && shouldSplitNoteAtStrong(noteOffset, noteEnd, boundaries, ticksPerMeasure)) {
     const strong = boundaries.filter(b => b.isStrong && b.tick > noteOffset && b.tick < noteEnd).map(b => b.tick);
     cuts = [noteOffset, ...strong, noteEnd];
   } else {
@@ -1170,6 +1175,10 @@ export function normalizeRhythm(
   // empty 2nd voice littering monophonic bars. Off by default so SATB import and
   // paste/edit keep the conventional whole-rest for a silent voice.
   omitEmptyVoiceMeasures = false,
+  // When false, notes are NOT broken at mid-measure strong beats — a copied note
+  // keeps its written value (e.g. a half pasted on beat 1 of 3/4 stays a half).
+  // MIDI import leaves it true for conventional engraving.
+  splitAtStrongBeats = true,
 ): StaffNote[] {
   if (notes.length === 0) return notes;
 
@@ -1297,7 +1306,7 @@ export function normalizeRhythm(
         const clamped = clampedDur !== noteDur
           ? { ...note, durationTicks: clampedDur }
           : note;
-        splitNotes.push(...splitNoteAtBoundaries(clamped, measureStart, boundaries, ticksPerMeasure));
+        splitNotes.push(...splitNoteAtBoundaries(clamped, measureStart, boundaries, ticksPerMeasure, splitAtStrongBeats));
       }
 
       // Pass 2: walk the measure, fill gaps with boundary-aware rests.

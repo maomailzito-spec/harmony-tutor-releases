@@ -11,6 +11,11 @@ export type PreferencesModalProps = {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: PreferenceSectionId;
+  // MIDI output selection — mirrored into the MIDI tab (also stays in the toolbar).
+  midiOutputs?: Array<{ id: string; name?: string }>;
+  selectedMidiOutput?: { id: string; name?: string } | null;
+  setSelectedMidiOutput?: (value: any | null) => void;
+  onActivateMidi?: () => void | Promise<void>;
 };
 
 // ─── Consigli personalizzati – costanti e editor inline ───
@@ -102,6 +107,10 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   isOpen,
   onClose,
   initialTab = 'Editor',
+  midiOutputs,
+  selectedMidiOutput,
+  setSelectedMidiOutput,
+  onActivateMidi,
 }) => {
   const { t } = useTranslation(['ui', 'preferences']);
   const tp = (key: string | undefined, fallback: string, opts?: Record<string, unknown>) =>
@@ -347,7 +356,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
       <div className="absolute inset-0 bg-black/40" onMouseDown={onClose} />
       <div className="absolute inset-0" onMouseDown={onClose}>
         <div
-          className="w-[860px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] overflow-hidden rounded-xl bg-slate-900/95 border border-slate-700 shadow-2xl"
+          className="flex flex-col w-[860px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] overflow-hidden rounded-xl bg-slate-900/95 border border-slate-700 shadow-2xl"
           onMouseDown={(e) => e.stopPropagation()}
           style={pos ? { position: 'absolute', left: pos.x, top: pos.y, userSelect: isDragging ? 'none' : 'auto' } : { position: 'absolute', left: 12, top: 12 }}
           role="dialog"
@@ -408,7 +417,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
             })}
           </div>
 
-          <div className="p-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
+          <div className="p-4 overflow-y-auto flex-1 min-h-0">
             {activeTab === 'Analysis' && (
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-slate-100">{tp('section_analysis_title', 'Analisi')}</div>
@@ -681,6 +690,47 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                         <option value="en">{t('language_english')}</option>
                         <option value="it">{t('language_italian')}</option>
                       </select>
+                    </div>
+                  </div>
+                )}
+                {activeTab === 'MIDI' && setSelectedMidiOutput && (
+                  <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                    <div className="text-sm font-semibold text-slate-100">{tp('midi_output_title', 'Uscita MIDI')}</div>
+                    <div className="text-xs text-slate-400 mt-1">{tp('midi_output_hint', 'Scegli dove inviare il playback: audio interno o un dispositivo MIDI esterno. È la stessa impostazione del menu nella toolbar.')}</div>
+                    <div className="mt-2 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMidiOutput(null)}
+                        className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${selectedMidiOutput ? 'text-gray-200 hover:bg-slate-700' : 'bg-cyan-600 text-white'}`}
+                      >
+                        <span>{tp('midi_internal_audio', 'Audio interno')}</span>
+                        {!selectedMidiOutput && <span className="text-[11px]">✓</span>}
+                      </button>
+                      {(midiOutputs || []).length === 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => { void onActivateMidi?.(); }}
+                          className="w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-slate-700 transition-colors"
+                        >
+                          {tp('midi_activate', 'Attiva MIDI / cerca dispositivi…')}
+                        </button>
+                      ) : (
+                        (midiOutputs || []).map((output) => {
+                          const isSelected = selectedMidiOutput?.id === output.id;
+                          return (
+                            <button
+                              key={output.id}
+                              type="button"
+                              onClick={() => setSelectedMidiOutput(output)}
+                              className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${isSelected ? 'bg-cyan-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
+                              title={output.name}
+                            >
+                              <span className="truncate">{output.name}</span>
+                              {isSelected && <span className="text-[11px]">✓</span>}
+                            </button>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 )}

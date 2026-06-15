@@ -1,85 +1,97 @@
 # tests/bach_846 (1).mid
-# invariants: {"struckNotes":1284,"finalNonRest":1511,"finalRests":78,"sub16Notes":61,"sub16Rests":3}
+# invariants: {"struckNotes":1284,"finalNonRest":1538,"finalRests":60,"sub16Notes":59,"sub16Rests":3}
 # struckSig: 14941 chars
 --- m1 (idx 0) ---
-  bass v1: C4/16 E4/q.~ E4/16 C4/16 E4/q.~ E4/16
+  bass v1: R/16 E4/q.~ E4/16~ E4/16 E4/q.~ E4/16~
+  bass v2: C4/h C4/h
   tre  v1: R/8 G4/16 C5/16 E5/16 G4/16 C5/16 E5/16~ E5/8 G4/16 C5/16 E5/16 G4/16 C5/16 E5/16~
 --- m2 (idx 1) ---
-  bass v1: C4/16 D4/q.~ D4/16 C4/16 D4/q.~ D4/16~
+  bass v1: E4/16 D4/q.~ D4/16~ D4/16 D4/q.~ D4/16~
+  bass v2: C4/h C4/h
   tre  v1: E5/8 A4/16 D5/16 F5/16 A4/16 D5/16 F5/16~ F5/8 A4/16 D5/16 F5/16 A4/16 D5/16 F5/16~
 --- m3 (idx 2) ---
-  bass v1: D4/16 D4/q.~ D4/16~ D4/16 D4/q.~ D4/16
+  bass v1: D4/16 D4/q.~ D4/16~ D4/16 D4/q.~ D4/16~
   bass v2: B3/h B3/h
   tre  v1: F5/8 G4/16 D5/16 F5/16 G4/16 D5/16 F5/16~ F5/8 G4/16 D5/16 F5/16 G4/16 D5/16 F5/16~
 --- m4 (idx 3) ---
-  bass v1: C4/16 E4/q.~ E4/16 C4/16 E4/q.~ E4/16
+  bass v1: D4/16 E4/q.~ E4/16~ E4/16 E4/q.~ E4/16~
+  bass v2: C4/h C4/h
   tre  v1: F5/8 G4/16 C5/16 E5/16 G4/16 C5/16 E5/16~ E5/8 G4/16 C5/16 E5/16 G4/16 C5/16 E5/16~
 --- m5 (idx 4) ---
-  bass v1: C4/16 E4/q.~ E4/16 C4/16 E4/q.~ E4/16
+  bass v1: E4/16 E4/q.~ E4/16~ E4/16 E4/q.~ E4/16~
+  bass v2: C4/h C4/h
   tre  v1: E5/8 A4/16 E5/16 A5/16 A4/16 E5/16 A5/16~ A5/8 A4/16 E5/16 A5/16 A4/16 E5/16 A5/16~
 --- m6 (idx 5) ---
-  bass v1: C4/16 D4/q.~ D4/16 C4/16 D4/q.~ D4/16~
+  bass v1: E4/16 D4/q.~ D4/16~ D4/16 D4/q.~ D4/16~
+  bass v2: C4/h C4/h
   tre  v1: A5/8 F4/16 A4/16 D5/16 F4/16 A4/16 D5/16~ D5/8 F4/16 A4/16 D5/16 F4/16 A4/16 D5/16~
 --- m7 (idx 6) ---
   bass v1: D4/16 D4/q.~ D4/16~ D4/16 D4/q.~ D4/16~
   bass v2: B3/h B3/h
   tre  v1: D5/8 G4/16 D5/16 G5/16 G4/16 D5/16 G5/16~ G5/8 G4/16 D5/16 G5/16 G4/16 D5/16 G5/16~
 --- m8 (idx 7) ---
-  bass v1: D4/16 C4/q.~ C4/16~ C4/16 C4/q.~ C4/16
+  bass v1: D4/16 C4/q.~ C4/16~ C4/16 C4/q.~ C4/16~
   bass v2: B3/h B3/h
   tre  v1: G5/8 E4/16 G4/16 C5/16 E4/16 G4/16 C5/16~ C5/8 E4/16 G4/16 C5/16 E4/16 G4/16 C5/16~
 --- m9 (idx 8) ---
-  bass v1: A3/16 C4/q.~ C4/16 A3/16 C4/q.~ C4/16~
+  bass v1: C4/16 C4/q.~ C4/16~ C4/16 C4/q.~ C4/16~
+  bass v2: A3/h A3/h
   tre  v1: C5/8 E4/16 G4/16 C5/16 E4/16 G4/16 C5/16~ C5/8 E4/16 G4/16 C5/16 E4/16 G4/16 C5/16~
 --- m10 (idx 9) ---
-  bass v1: C4/16 A3/q.~ A3/16~ A3/16 A3/q.~ A3/16
+  bass v1: C4/16 A3/q.~ A3/16~ A3/16 A3/q.~ A3/16~
   bass v2: D3/h D3/h
   tre  v1: C5/8 D4/16 F4/16 C5/16 D4/16 F4/16 C5/16~ C5/8 D4/16 F4/16 C5/16 D4/16 F4/16 C5/16~
 --- m11 (idx 10) ---
-  bass v1: G3/16 B3/q.~ B3/16 G3/16 B3/q.~ B3/16
+  bass v1: A3/16 B3/q.~ B3/16~ B3/16 B3/q.~ B3/16~
+  bass v2: G3/h G3/h
   tre  v1: C5/8 D4/16 G4/16 B4/16 D4/16 G4/16 B4/16~ B4/8 D4/16 G4/16 B4/16 D4/16 G4/16 B4/16~
 --- m12 (idx 11) ---
-  bass v1: G3/16 A3/q.~ A3/16 G3/16 A3/q.~ A3/16~
+  bass v1: B3/16 A3/q.~ A3/16~ A3/16 A3/q.~ A3/16~
+  bass v2: G3/h G3/h
   tre  v1: B4/8 E4/16 G4/16 C5/16 E4/16 G4/16 C5/16~ C5/8 E4/16 G4/16 C5/16 E4/16 G4/16 C5/16~
 --- m13 (idx 12) ---
   bass v1: A3/16 A3/q.~ A3/16~ A3/16 A3/q.~ A3/16~
   bass v2: F3/h F3/h
   tre  v1: C5/8 D4/16 A4/16 D5/16 D4/16 A4/16 D5/16~ D5/8 D4/16 A4/16 D5/16 D4/16 A4/16 D5/16~
 --- m14 (idx 13) ---
-  bass v1: A3/16 G3/q.~ G3/16~ G3/16 G3/q.~ G3/16
+  bass v1: A3/16 G3/q.~ G3/16~ G3/16 G3/q.~ G3/16~
   bass v2: F3/h F3/h
   tre  v1: D5/8 D4/16 F4/16 B4/16 D4/16 F4/16 B4/16~ B4/8 D4/16 F4/16 B4/16 D4/16 F4/16 B4/16~
 --- m15 (idx 14) ---
-  bass v1: E3/16 G3/q.~ G3/16 E3/16 G3/q.~ G3/16~
+  bass v1: G3/16 G3/q.~ G3/16~ G3/16 G3/q.~ G3/16~
+  bass v2: E3/h E3/h
   tre  v1: B4/8 C4/16 G4/16 C5/16 C4/16 G4/16 C5/16~ C5/8 C4/16 G4/16 C5/16 C4/16 G4/16 C5/16~
 --- m16 (idx 15) ---
   bass v1: G3/16 F3/q.~ F3/16~ F3/16 F3/q.~ F3/16~
   bass v2: E3/h E3/h
   tre  v1: C5/8 A3/16 C4/16 F4/16 A3/16 C4/16 F4/16~ F4/8 A3/16 C4/16 F4/16 A3/16 C4/16 F4/16~
 --- m17 (idx 16) ---
-  bass v1: F3/16 F3/q.~ F3/16~ F3/16 F3/q.~ F3/16
+  bass v1: F3/16 F3/q.~ F3/16~ F3/16 F3/q.~ F3/16~
   bass v2: D3/h D3/h
   tre  v1: F4/8 A3/16 C4/16 F4/16 A3/16 C4/16 F4/16~ F4/8 A3/16 C4/16 F4/16 A3/16 C4/16 F4/16~
 --- m18 (idx 17) ---
-  bass v1: G2/16 D3/q.~ D3/16 G2/16 D3/q.~ D3/16~
+  bass v1: F3/16 D3/q.~ D3/16~ D3/16 D3/q.~ D3/16~
+  bass v2: G2/h G2/h
   tre  v1: F4/8 G3/16 B3/16 F4/16 G3/16 B3/16 F4/16~ F4/8 G3/16 B3/16 F4/16 G3/16 B3/16 F4/16~
 --- m19 (idx 18) ---
   bass v1: D3/16 E3/q.~ E3/16~ E3/16 E3/q.~ E3/16~
   bass v2: C3/h C3/h
   tre  v1: F4/8 G3/16 C4/16 E4/16 G3/16 C4/16 E4/16~ E4/8 G3/16 C4/16 E4/16 G3/16 C4/16 E4/16~
 --- m20 (idx 19) ---
-  bass v1: E3/16 G3/q.~ G3/16~ G3/16 G3/q.~ G3/16
+  bass v1: E3/16 G3/q.~ G3/16~ G3/16 G3/q.~ G3/16~
   bass v2: C3/h C3/h
   tre  v1: E4/8 A3/16 C4/16 E4/16 A3/16 C4/16 E4/16~ E4/8 A3/16 C4/16 E4/16 A3/16 C4/16 E4/16~
 --- m21 (idx 20) ---
-  bass v1: F2/16 F3/q.~ F3/16 F2/16 F3/q.~ F3/16~
+  bass v1: G3/16 F3/q.~ F3/16~ F3/16 F3/q.~ F3/16~
+  bass v2: F2/h F2/h
   tre  v1: E4/8 A3/16 C4/16 E4/16 A3/16 C4/16 E4/16~ E4/8 A3/16 C4/16 E4/16 A3/16 C4/16 E4/16~
 --- m22 (idx 21) ---
-  bass v1: F3/16 C3/q.~ C3/16~ C3/16 C3/q.~ C3/16
+  bass v1: F3/16 C3/q.~ C3/16~ C3/16 C3/q.~ C3/16~
   bass v2: F2/h F2/h
   tre  v1: E4/8 A3/16 C4/16 D4/16 A3/16 C4/16 D4/16~ D4/8 A3/16 C4/16 D4/16 A3/16 C4/16 D4/16~
 --- m23 (idx 22) ---
-  bass v1: G2/16 F3/q.~ F3/16 G2/16 F3/q.~ F3/16~
+  bass v1: C3/16 F3/q.~ F3/16~ F3/16 F3/q.~ F3/16~
+  bass v2: G2/h G2/h
   tre  v1: D4/8 B3/16 C4/16 D4/16 B3/16 C4/16 D4/16~ D4/8 B3/16 C4/16 D4/16 B3/16 C4/16 D4/16~
 --- m24 (idx 23) ---
   bass v1: F3/16 F3/q.~ F3/16~ F3/16 F3/q.~ F3/16~
@@ -110,20 +122,23 @@
   bass v2: G2/h G2/h
   tre  v1: G4/8 G3/16 C4/16 F4/16 G3/16 C4/16 F4/16~ F4/8 G3/16 C4/16 F4/16 G3/16 C4/16 F4/16~
 --- m31 (idx 30) ---
-  bass v1: D3/16 D3/q.~ D3/16~ D3/16 D3/q.~ D3/16
+  bass v1: D3/16 D3/q.~ D3/16~ D3/16 D3/q.~ D3/16~
   bass v2: G2/h G2/h
   tre  v1: F4/8 G3/16 B3/16 F4/16 G3/16 B3/16 F4/16~ F4/8 G3/16 B3/16 F4/16 G3/16 B3/16 F4/16~
 --- m32 (idx 31) ---
-  bass v1: C2/16 C3/q.~ C3/16 C2/16 C3/q.~ C3/16
+  bass v1: D3/16 C3/q.~ C3/16~ C3/16 C3/q.~ C3/16~
+  bass v2: C2/h C2/h
   tre  v1: F4/8 G3/16 A3/16 E4/16 G3/16 A3/16 E4/16~ E4/8 G3/16 A3/16 E4/16 G3/16 A3/16 E4/16~
 --- m33 (idx 32) ---
-  bass v1: C2/16 C3/q.~ C3/16~ C3/h
+  bass v1: C3/16 C3/q.~ C3/16~ C3/h~
+  bass v2: C2/w
   tre  v1: E4/8 F3/16 A3/16 C4/16 F4/16 C4/16 A3/16 C4/16 A3/16 F3/16 A3/16 F3/16 D3/16 F3/16 D3/16~
 --- m34 (idx 33) ---
-  bass v1: C2/16 D3/q.~ D3/16~ D3/h
+  bass v1: C3/16 D3/q.~ D3/16~ D3/h
+  bass v2: C2/w
   tre  v1: D3/8 G4/16 B4/16 D5/16 F5/16 D5/16 B4/16 D5/16 B4/16 G4/16 B4/16 D4/16 F4/16 E4/16 D4/16
 --- m35 (idx 34) ---
-  bass v1: C3/h~ C2/h~ C3/q.~ C2/q.~ C3/32 C2/32 R/16.
+  bass v1: C3/h~ C2/h~ C3/q C2/q R/q
   tre  v1: C5/h~ G4/h~ E4/h~ C5/q G4/q E4/q R/q
 --- m36 (idx 35) ---
   tre  v1: R/8 C4/8 D4/8 E4/8 F4/8. G4/32 F4/32 E4/8 A4/8
@@ -153,26 +168,27 @@
   tre  v1: B4/8 C5/8 D5/8 E5/8 F5/8. G5/32 F5/32 E5/8 A5/8
   tre  v2: G4/q R/q R/q R/q
 --- m43 (idx 42) ---
-  bass v1: B3/8 E4/8 C3/8 D4/8~ D3/8~ D4/16 D3/16 E4/16 D4/16 C4/16 B3/q E3/8 E4/8
-  bass v2: G3/16 A3/16 A3/16 G3/16 A3/q A3/q R/q
+  bass v1: G3/16 A3/16 A3/16 G3/16 A3/8 D4/8~ D4/16 E4/16 D4/16 C4/16 B3/8 E4/8
+  bass v2: B3/8 E4/8 C3/8 D3/8 A3/q E3/q~
   tre  v1: D5/8 G5/8. A5/16 G5/16 F5/16 E5/8 A5/8. B5/16 A5/16 G5/16
 --- m44 (idx 43) ---
-  bass v1: A3/16 B3/16 C4/16 D4/16 D4/q C4/8 C4/8 E4/16 D4/16 C4/16 B3/16
-  bass v2: R/q C4/16 B3/16 A3/16 G3/16~ G3/16 B3/8 A3/16 R/q
+  bass v1: A3/16 B3/16 C4/16 D4/16 D4/q C4/8 C4/8 E4/16 D4/16 C4/16 B3/16~
+  bass v2: E3/q C4/16 B3/16 A3/16 G3/16~ G3/16 B3/8 A3/16 R/q
   tre  v1: F5/h E5/8. C5/8. F5/16 G5/q~
   tre  v2: R/8 G4/8 A4/8 B4/8~ B4/8. D5/32 C5/32 B4/8 E5/8
 --- m45 (idx 44) ---
-  bass v1: C4/8 B3/16 C4/16 D4/16 C4/16 B3/16 R/16 R/q R/q
-  bass v2: R/16 A3/16 R/8 R/8. A3/16 G3/8 G2/8 A2/8 B2/8
+  bass v1: B3/16 A3/16 R/8 R/8. A3/16 G3/q R/q
+  bass v2: C4/8 B3/16 C4/16 D4/16 C4/16 B3/8~ B3/8 G2/8 A2/8 B2/8
   tre  v1: G5/q F5/q G5/16 F5/16 E5/16 D5/8 D5/16 D4/8
   tre  v2: A4/8 D5/8. E5/16 D5/16 C5/16 B4/q C5/8 C5/16 B4/16
 --- m46 (idx 45) ---
-  bass v1: C3/8. D3/32 C3/32 B2/8 E3/8 A2/8 D3/8. E3/16 D3/16 C3/16
+  bass v1: R/q R/8 E3/8~ E3/8 D3/8. E3/16 D3/16 C3/16
+  bass v2: C3/8. D3/32 C3/32 B2/q A2/8 R/8 R/q
   tre  v1: A4/16 C5/16 B4/16 A4/q A4/16~ A4/16 C5/16 B4/8 E4/8 A4/8~
   tre  v2: E4/8 F4/8 G4/8.~ G4/32 G4/32 F4/8. A4/16 G4/8 E5/8
 --- m47 (idx 46) ---
-  bass v1: R/q R/q A3/8. B3/32 A3/32 G3/8 C4/8
-  bass v2: B2/8 E3/8 F3/8 G3/8 D3/8 C3/8 F3/q E3/8~
+  bass v1: B2/8 E3/8 F3/8 G3/8 D3/8 A3/8. B3/32 A3/32 G3/8 C4/8
+  bass v2: R/q R/q C3/8 F3/q E3/8~
   tre  v1: A4/16 B4/16 C5/16 A4/16 B4/16 G4/16 A4/16 G4/16 A4/16 B4/16 C5/16 F4/16 A4/16 G4/16 B4/8 A4/16 F4/16 B4/16 G4/16
   tre  v2: D5/q F4/8 F4/8 E4/8 D4/8. E4/8.
 --- m48 (idx 47) ---
@@ -182,12 +198,12 @@
   tre  v2: A4/16 G4/16 A4/16 B4/16 G4/16 F4/16 G4/16 A4/16 B4/8 C5/16 B4/16 B4/163 C5/163 R/323 B4/8 A4/16~
 --- m49 (idx 48) ---
   bass v1: A3/q A2/q R/q R/q R/q
-  bass v2: R/q R/8 G3/8 A3/8 B3/8 C4/8. D4/32 C4/32~
+  bass v2: R/q R/8 G3/8 A3/8 B3/8 C4/8. D4/32 C4/32
   tre  v1: A4/q R/q R/8. G4/8. A4/8~
   tre  v2: A4/8 C4/8 D4/8 E4/8 F4/8.~ F4/32 F4/32 E4/q
 --- m50 (idx 49) ---
-  bass v1: B3/8 E4/8 G2/8 A3/8 D4/8~ D4/8 G3/8 D4/q~
-  bass v2: C4/q A2/8 B2/8 C3/8. D3/32 C3/32 B2/8 E3/8
+  bass v1: R/q A3/8 D4/8~ D4/8 G3/8 D4/q~
+  bass v2: B3/8 E4/8 G2/8 A2/8 B2/8 C3/8. D3/32 C3/32 B2/8 E3/8
   tre  v1: A4/8 G4/8. A4/16 G4/16 F4/16 E4/8 G4/8 E4/8 A4/8 F4/8 B4/8
   tre  v2: D4/8 R/8 R/q R/q R/8 G4/8~
 --- m51 (idx 50) ---
@@ -206,46 +222,48 @@
   tre  v1: C5/8 A5/8 G5/8 A5/8 C5/8 G5/16 F5/16 G5/16 F5/16 G5/16 E5/16 F5/16 G5/16 G5/32 A5/32 G5/32 F5/32 G5/32
   tre  v2: D5/8 B4/8 R/8 R/8 D5/8 E5/8 C5/8 D5/8 E5/8
 --- m54 (idx 53) ---
-  bass v1: G3/8 A3/8 B3/8 G3/8 C4/8 A3/8 D4/8. E4/32 D4/32 C4/8 F4/8
-  bass v2: F3/16 E3/16 F3/16 D3/q~ D3/16 D3/h~
+  bass v1: G3/8 A3/8 B3/8 G3/8 C4/8 A3/8 D4/8. E4/32 D4/32 C4/8 F4/8~
+  bass v2: F3/16 E3/16 F3/16 D3/q~ D3/16 D3/h
   tre  v1: A5/16 C5/16 D5/16 G5/16 E5/163 F5/163 R/323 E5/8 D5/16 D5/8 F4/8 G4/8 A4/8. B4/32 A4/32~
   tre  v2: A4/q. E4/8 R/q R/q
 --- m55 (idx 54) ---
-  bass v1: B3/8 E4/8. F4/8 A2/8 D4/16 F2/16 E2/8 R/8 R/q
-  bass v2: D3/16 E3/16 D3/16 C3/16 B2/8 E4/8 G2/8 C4/8 E3/8 F3/8 G3/8~
+  bass v1: F4/16 E3/16 D3/16 C3/16 B2/8 E4/8 G2/8 C4/h~
+  bass v2: B3/8 E4/8. F4/8 A2/8 D4/16 F2/16 E2/8 E3/8 F3/8 G3/8~
   tre  v1: A4/q F4/16 R/8. R/q G4/16 F4/16 G4/8
   tre  v2: G4/8 C5/q B4/8~ B4/16 C5/16 B4/16 A4/8. E4/16 D4/16
 --- m56 (idx 55) ---
-  bass v1: R/16 D4/16 C4/16 A3/16 B3/16 G3/16 A3/8 F3/16 G3/16 A3/8 D3/16 F3/16 G3/h~ G3/8 B3/8 C4/8 D4/8
-  bass v2: G3/8 R/8 R/q R/q R/q
+  bass v1: C4/16 D4/16 C4/16 A3/16 B3/16 G3/16 A3/16 G3/16 A3/16 F3/16 G3/8 B3/8 C4/8 D4/8
+  bass v2: G3/q F3/8 D3/8 G3/h
   tre  v1: A4/8 B4/8 C5/8. D5/32 C5/32 B4/8 E5/8 E4/16 G4/16 F4/16 A4/16~
   tre  v2: E4/q D4/q~ D4/16 A4/16 G4/16 F4/16 A4/8 D5/8
 --- m57 (idx 56) ---
-  bass v1: G3/h E4/8. F4/32 E4/32 D4/8 G4/8 A3/q C4/8 F4/8 B3/16 G4/16 C4/8 F4/16 E4/16
+  bass v1: R/q R/q C4/8 F4/8. G4/16 F4/16 E4/16
+  bass v2: E4/8. F4/32 E4/32 D4/8 G4/8 A3/q B3/8 C4/8
   tre  v1: A4/16 E5/16 D5/16 C5/16 B4/16 C5/16 A4/16 D5/16 E5/16 F5/16 G5/16 A5/16 G5/16 F5/16 E5/16 G4/8
   tre  v2: G4/q. A4/8 C5/q D5/8 D5/16 C5/16
 --- m58 (idx 57) ---
-  bass v1: D4/q F3/16 A3/16 G3/16 F3/16 E4/8 E3/16 D3/16 D4/8~ C3/16 B2/16 D4/8 C3/16 D3/16 E3/8 G3/16 F3/16 G3/q~
-  bass v2: R/q R/q R/q R/8 G2/8
+  bass v1: D4/q E4/8 D4/8~ D4/8 E3/16 F3/8. G2/8~
+  bass v2: F3/16 A3/16 G3/16 F3/16 E3/16 D3/16 C3/16 B2/16 C3/16 D3/16 G3/8 G3/q
   tre  v1: B4/q C5/8 D5/8 G4/8 C5/q B4/8
   tre  v2: G4/q. F4/8~ F4/8 E4/8 D4/q
 --- m59 (idx 58) ---
-  bass v1: G3/8 C3/8 D3/8 E3/8 F3/8.~ F3/32 F3/32 E3/q
-  bass v2: C3/h3~ C3/8.3 G3/8. A3/8~
+  bass v1: G2/8 C3/8 D3/8 E3/8 F3/8. G3/32 F3/32 E3/8 A3/8
+  bass v2: C3/w~
   tre  v1: E4/8 A4/q A4/8 A4/8 D5/q C5/8 A4/8
   tre  v2: C5/q B4/8 G4/8~ G4/8 F4/8 G4/q
 --- m60 (idx 59) ---
-  bass v1: D3/8 R/8 R/q R/16 D3/16 R/8 R/q
-  bass v2: A3/8 G3/8. A3/16 G3/16 F3/16 E3/8 E3/16 F3/16 G3/16 A3/16 A3/16 G3/16
+  bass v1: D3/8 G3/8. A3/16 G3/16 F3/16 E3/16 D3/16 E3/16 F3/16 G3/16 A3/16 A3/16 G3/16
+  bass v2: C3/w~
   tre  v1: D5/8 E5/8 F5/q~ F5/16 A5/16 G5/16 F5/16 E5/16 F5/16 D5/16 E5/16 C5/16 D5/16 A4/16
   tre  v2: A4/8. C5/32 A4/32 A4/8 D5/8 G4/8 C5/q.
 --- m61 (idx 60) ---
-  bass v1: R/16 E3/16 F3/16 R/16 R/q R/q R/q
-  bass v2: A3/8. G3/16 A3/16 B3/16 C4/16 A3/16 B3/h
+  bass v1: A3/16 E3/16 F3/16 G3/16 A3/16 B3/16 C4/16 A3/16 B3/h
+  bass v2: C3/w~
   tre  v1: C5/h~ C5/16 G4/32 A4/32 B4/16 C5/16 D5/16 E5/16 F5/8~
   tre  v2: A4/16 A4/16 A4/16 G4/16 F4/16 G4/16 F4/16 E4/16 D4/q.~ D4/16 G4/16
 --- m62 (idx 61) ---
   bass v1: C4/w
+  bass v2: C3/w
   tre  v1: F5/32 C5/32 D5/32 E5/32 F5/16 G5/16 A5/8. B5/16 C6/h G5/h E5/h
   tre  v2: A4/q~ A4/16 F5/16 D5/8 R/q R/q
 # STRUCK-SIGNATURE

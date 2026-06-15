@@ -5175,6 +5175,11 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (!row?.lab) continue;
                     const lbl = labelsBySystem[row.lab.systemIndex]?.[row.lab.labelIndex];
                     if (!lbl) continue;
+                    // Boundary home-dominant guard: the closing slot (kk===L) is the
+                    // unvalidated overshoot. If it is the home-key cadential dominant
+                    // (bare V/V7), keep its native functional Roman rather than the
+                    // sequence's local-tonic relabel (which would call an A7 in D "IV").
+                    if (kk === L && /^V7?$/.test(String((lbl as any).roman || '').trim())) continue;
                     if (row.src && !skipFunctional) {
                         (lbl as any).sequenceRoman = row.stripped;
                         if (row.functional) {
@@ -5227,6 +5232,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                     if (!templateRoman) continue;
                     const target = labelsBySystem[labB.systemIndex]?.[labB.labelIndex];
                     if (!target) continue;
+                    // Boundary home-dominant guard (see template loop): a closing slot
+                    // that is the home-key cadential dominant keeps its native V/V7.
+                    if (k === L && /^V7?$/.test(String((target as any).roman || '').trim())) continue;
                     if (skipFunctional || !row.functional) continue;
 
                     // Per-slot validation for modulating sequences: ensure the

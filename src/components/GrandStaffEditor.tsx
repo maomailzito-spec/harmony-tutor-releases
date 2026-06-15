@@ -1251,7 +1251,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 const toTile = [...realInRange, ...(v === targetVoice ? moved : [])];
                 if (toTile.length === 0) continue;
-                retiled.push(...normalizeRhythm(toTile, timeSignature, timeSignatureChanges));
+                retiled.push(...normalizeRhythm(toTile, timeSignature, timeSignatureChanges, false, false));
             }
             return [...existing.filter(n => !removeIds.has(n.id)), ...retiled];
         });
@@ -1298,7 +1298,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (toTile.length === 0) continue;
                 // omitEmptyVoiceMeasures=true keeps ACC consistent with its import
                 // (no phantom rests in bars where a voice is silent).
-                retiled.push(...normalizeRhythm(toTile, timeSignature, timeSignatureChanges, true));
+                retiled.push(...normalizeRhythm(toTile, timeSignature, timeSignatureChanges, true, false));
             }
             return { ...track, notes: [...existing.filter(n => !removeIds.has(n.id)), ...retiled] };
         }));
@@ -6935,7 +6935,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const pastedV = realPasted.filter(n => Number((n as any).voice ?? selectedVoice) === v);
                     const toTile = [...existingRealInRange, ...pastedV];
                     if (toTile.length === 0) continue;
-                    retiled.push(...normalizeRhythm(toTile, timeSignature, []));
+                    retiled.push(...normalizeRhythm(toTile, timeSignature, [], false, false));
                 }
                 const kept = existingNotes.filter(n => !removeIds.has(n.id));
 
@@ -10853,6 +10853,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // Re-read debug prefs from localStorage after modal closes
                     try { setShowHarmonyDebug(localStorage.getItem('harmony-tutor.showHarmonyDebug.v1') === '1'); } catch { /* ignore */ }
                 }}
+                midiOutputs={midiOutputs}
+                selectedMidiOutput={selectedMidiOutput}
+                setSelectedMidiOutput={setSelectedMidiOutput}
+                onActivateMidi={handleActivateMidi}
             />
 
             {/* Tempo curve dialog (rallentando / accelerando) */}

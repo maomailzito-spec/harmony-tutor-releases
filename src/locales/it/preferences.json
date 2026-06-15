@@ -62,6 +62,10 @@
   "pref_export_include_title": "Includi titolo in stampa/export",
   "pref_debug_show_harmony_debug": "Debug harmony labels (pcs)",
 
+  "midi_output_title": "Uscita MIDI",
+  "midi_output_hint": "Scegli dove inviare il playback: audio interno o un dispositivo MIDI esterno. È la stessa impostazione del menu nella toolbar.",
+  "midi_internal_audio": "Audio interno",
+  "midi_activate": "Attiva MIDI / cerca dispositivi…",
   "pref_midi_export_type": "Formato export MIDI",
   "pref_midi_export_type_description": "Type 1 (multi-traccia): una traccia per voce — compatibile con MuseScore/Finale/Sibelius. Type 0 (traccia singola): tutte le voci in una traccia — massima compatibilità.",
   "opt_midi_type1": "Type 1 — Multi-traccia (una per voce)",
