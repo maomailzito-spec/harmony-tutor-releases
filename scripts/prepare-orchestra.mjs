@@ -44,15 +44,15 @@ const DYLD = join(TOOL, 'lib');
 
 // ── parametri timbro/loop (tarabili al gate d'ascolto) ───────────────────────
 const VEL = 100;          // velocity MIDI del render
-// loopStart DEVE cadere DOPO lo swell d'attacco, in zona stazionaria (vedi analisi
-// inviluppo). loopEnd = loopStart+LOOP_LEN, da tenere PRIMA del decay del campione.
-const ATTACK = parseFloat(opt('attack', '1.00'));    // = SUSTAINED.loopStartSec nel motore (S)
-const LOOP_LEN = parseFloat(opt('looplen', '3.00')); // lunghezza loop CENTRALE (la ricerca varia intorno)
-const XFADE = parseFloat(opt('xfade', '0.05'));      // crossfade coda (corto: loop trovato in fase)
+// loopStart DEVE cadere DOPO lo swell d'attacco, in zona stazionaria. Il file tiene
+// il campione naturale fino a ~CAP; il loop è solo in coda → note normali non loopano.
+const ATTACK = parseFloat(opt('attack', '1.00'));    // = SUSTAINED.loopStartSec nel motore (S): dove la nota torna se tenuta oltre il file
+const CAP = parseFloat(opt('cap', '8.00'));          // lunghezza max del file: le note ≤ CAP suonano NATURALI (nessun loop)
+const XFADE = parseFloat(opt('xfade', '0.05'));      // crossfade del raro wrap di coda
 const LUFS = parseFloat(opt('lufs', '-18'));         // target integrated loudness
 const SR = 44100;
-// La nota renderizzata deve coprire la ricerca del loop fino a Lmax (LOOP_LEN+1).
-const HOLD_SEC = Math.max(6.0, ATTACK + LOOP_LEN + 2.5);
+// Tenere la nota oltre il cap così a CAP siamo ancora in sustain pieno (campioni lunghi).
+const HOLD_SEC = CAP + 2.0;
 
 const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const midiToName = (m) => `${NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
@@ -97,7 +97,7 @@ console.log(`── prepare-orchestra (Fase 1) ───────────
 console.log(`SFZ:        ${SFZ}`);
 console.log(`Strumento:  ${INSTRUMENT}  →  ${OUT_DIR}`);
 console.log(`Range:      ${midiToName(LO)}..${midiToName(HI)} (${targets.length} note)`);
-console.log(`Loop:       attacco ${ATTACK}s + corpo ${LOOP_LEN}s (xfade ${XFADE}s) · LUFS ${LUFS} · FLAC`);
+console.log(`File:       naturale fino a ~${CAP}s + loop in coda da ${ATTACK}s (xfade ${XFADE}s) · LUFS ${LUFS} · FLAC`);
 if (DRY) { console.log('\n[--dry-run] nessun file scritto.'); process.exit(0); }
 
 mkdirSync(OUT_DIR, { recursive: true });
@@ -119,9 +119,7 @@ for (const midi of targets) {
     const built = join(tmp, 'built.wav');
     const normd = join(tmp, 'norm.wav');
     const outFlac = join(OUT_DIR, `${name}.flac`);
-    const Lmin = Math.max(1.0, LOOP_LEN - 0.75);
-    const Lmax = LOOP_LEN + 1.0;
-    run('python3', [join(scriptDir, '_make_loop.py'), raw, built, String(ATTACK), String(Lmin), String(Lmax), String(XFADE)]);
+    run('python3', [join(scriptDir, '_make_loop.py'), raw, built, String(ATTACK), String(CAP), String(XFADE)]);
 
     // Normalizzazione LUFS con guadagno COSTANTE (loop-safe): misura → volume.
     const m = measureLoudness(built);

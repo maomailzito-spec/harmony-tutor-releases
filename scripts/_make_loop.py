@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 """
-_make_loop.py — costruisce un campione tenuto LOOPABILE da un render grezzo.
+_make_loop.py — rende una nota tenuta con LOOP IN CODA ("alla sampler serio").
 
-1. trova loopEnd per cross-correlazione → la coda combacia IN FASE con l'inizio
-   del loop (niente click);
-2. pareggia il LIVELLO: rampa di guadagno lenta sul corpo così che il livello a
-   loopEnd = livello a loopStart (niente gradino di volume tra le ripetizioni);
-3. crossfade corto che atterra su render[loopStart].
+Si tiene il campione NATURALE quasi per intero (fino a capSec) e si mette il loop
+solo nella PARTE FINALE. Così le note di durata normale (≤ durata del file)
+suonano naturali, SENZA loop né giunta; solo le tenute estreme entrano nel loop
+[loopStart .. fine]. È il motivo per cui i sampler veri non hanno "stacchi" sulle
+note comuni: non loopano affatto finché la nota non supera il campione.
 
-File risultante = render[0..loopEnd]; il motore lo riproduce con loop [loopStart..fine].
+- loopStart = loopStartSec (fisso, oltre lo swell d'attacco): dove la nota torna
+  quando è tenuta PIÙ del file.
+- loopEnd = fine del file: scelta vicino al cap / alla fine utile del campione, nel
+  punto che meglio si aggancia in fase a loopStart (declick del wrap) e di vibrato.
+- rampa di livello SOLO sull'ultimo tratto (non tocca il corpo naturale) + crossfade
+  corto allineato → il raro wrap è pulito.
 
-Uso: _make_loop.py <in.wav> <out.wav> <loopStartSec> <Lmin> <Lmax> <xfadeSec> [previewWav] [nLoops]
+Uso: _make_loop.py <in.wav> <out.wav> <loopStartSec> <capSec> <xfadeSec> [previewWav] [nLoops]
 """
 import sys, wave, array, math
 
 inp, outp = sys.argv[1], sys.argv[2]
-S_sec, Lmin, Lmax, XF = map(float, sys.argv[3:7])
-preview = sys.argv[7] if len(sys.argv) > 7 else None
-nloops = int(sys.argv[8]) if len(sys.argv) > 8 else 5
+S_sec, CAP, XF = map(float, sys.argv[3:6])
+preview = sys.argv[6] if len(sys.argv) > 6 else None
+nloops = int(sys.argv[7]) if len(sys.argv) > 7 else 5
 
 w = wave.open(inp, 'rb')
 sr, ch, sw, n = w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()
@@ -27,53 +32,55 @@ mono = chans[0] if ch == 1 else array.array('i', (chans[0][i] + chans[1][i] for 
 N = len(mono)
 
 S = int(round(S_sec * sr))
-# Il difetto udibile sugli archi in loop è DOPPIO e va trattato separatamente:
-#   1. CLICK    = discontinuità della fondamentale → serve fase fondamentale uguale
-#                 a loopStart (finestra corta Wc, pochi periodi).
-#   2. GRADINO  = mismatch dell'INVILUPPO del vibrato (AM ~5-6 Hz): loopEnd deve
-#                 cadere allo STESSO punto del ciclo di vibrato di loopStart, cioè
-#                 stesso valore d'inviluppo E stessa pendenza (sale/scende uguale).
-We = max(1, int(0.030 * sr))      # finestra inviluppo AM (> periodo fondamentale, < periodo vibrato)
-Wc = max(2, int(0.012 * sr))      # finestra correlazione fondamentale (declick)
-dlt = max(1, int(0.025 * sr))     # passo per la pendenza dell'inviluppo (fase vibrato)
-Wl = int(0.10 * sr)               # finestra livello per la rampa di pareggio: UGUALE alla
-                                  # finestra di giudizio del seam, così la rampa annulla la
-                                  # deriva di decadimento proprio dove si percepisce il gradino
-emin = S + int(Lmin * sr)
-emax = min(N - 1, S + int(Lmax * sr))
+Xs = int(XF * sr)
+Wc = max(int(0.012 * sr), Xs)   # correlazione fondamentale = lunghezza crossfade (allinea ciò che si fonde)
+We = max(1, int(0.030 * sr))    # inviluppo AM (fase vibrato)
+dlt = max(1, int(0.025 * sr))
+Wl = int(0.10 * sr)
 
-# RMS O(1) via somma-prefissi dei quadrati (la ricerca fine itera migliaia di punti)
+# RMS O(1) via somma-prefissi dei quadrati
 P = [0.0] * (N + 1); acc = 0.0
 for i in range(N): acc += float(mono[i]) * mono[i]; P[i + 1] = acc
 def rms(lo, hi):
     lo = max(0, lo); hi = min(N, hi)
     return math.sqrt((P[hi] - P[lo]) / (hi - lo)) if hi > lo else 0.0
-def env(t): return rms(t - We // 2, t + We // 2)   # ampiezza istantanea (inviluppo vibrato)
+def env(t): return rms(t - We // 2, t + We // 2)
 
-refc = mono[S - Wc:S]
-refc_e = sum(x * x for x in refc) or 1
+bodyLevel = rms(S, S + int(1.0 * sr)) or 1.0
+
+# Fine UTILE del campione: ultimo punto (≤ cap) ancora "in suono", prima del
+# rilascio/decadimento/silenzio (per i campioni più corti del cap).
+capN = min(N - 1, int(CAP * sr))
+thr = 0.4 * bodyLevel
+U = capN; t = capN; stepd = int(0.02 * sr)
+while t > S + int(1.5 * sr):
+    if rms(t - int(0.05 * sr), t) >= thr: U = t; break
+    t -= stepd
+U = max(S + int(1.5 * sr), U - int(0.08 * sr))   # margine dal bordo
+
+# Cerca loopEnd E in una finestra vicino a U: aggancio di fase fondamentale (declick
+# del wrap) + stessa fase di vibrato di loopStart. Il loop [S..E] è lungo → il wrap
+# capita di rado (solo note tenute oltre il file).
+refc = mono[S - Wc:S]; refc_e = sum(x * x for x in refc) or 1
 envS = env(S) or 1.0
-slopeS = env(S + dlt) - env(S - dlt)   # fase del vibrato a loopStart (segno = sale/scende)
-levelS = rms(S, S + Wl) or 1.0         # livello medio all'inizio del loop (per la rampa)
-
-steady = abs(slopeS) < 0.03 * envS   # nota quasi ferma: il vibrato non è informativo
+slopeS = env(S + dlt) - env(S - dlt)
+steady = abs(slopeS) < 0.03 * envS
+win = min(int(3.0 * sr), int((U - S) * 0.6))   # finestra ampia: cerca il MIGLIOR aggancio di
+emin = max(S + int(2.0 * sr), U - win); emax = U  # fase a S (giunzione pulita), anche un po' prima di U
 def score(e):
-    # (2) stessa ampiezza di vibrato e stessa fase (no gradino di volume)
     lvl = math.exp(-3.0 * abs(env(e) - envS) / envS)
     if steady:
-        phase = 1.0   # niente vibrato → la fase è rumore: non penalizzare, lascia decidere la fondamentale
+        phase = 1.0
     else:
-        slopeE = env(e + dlt) - env(e - dlt)
-        phase = 0.5 + 0.5 * (slopeS * slopeE) / (abs(slopeS) * abs(slopeE) + 1e-9)  # 1 stessa fase, 0 opposta
-    # (1) fondamentale in fase (no click) — su note ferme è il criterio dominante
+        se = env(e + dlt) - env(e - dlt)
+        phase = 0.5 + 0.5 * (slopeS * se) / (abs(slopeS) * abs(se) + 1e-9)
     seg = mono[e - Wc:e]; dot = 0; en = 0
     for i in range(Wc):
         a = seg[i]; dot += a * refc[i]; en += a * a
     corr = max(0.0, dot / math.sqrt((en or 1) * refc_e))
-    return (lvl * lvl) * (0.4 + 0.6 * phase) * (0.2 + 0.8 * corr)
+    return lvl * (0.4 + 0.6 * phase) * (0.3 + 0.7 * corr)
 
-# ricerca grossolana (5 ms) + fine (campione)
-best_e, best = emin, -2.0
+best_e, best = emin, -1.0
 e = emin; step = int(0.005 * sr)
 while e <= emax:
     s = score(e)
@@ -84,18 +91,19 @@ for e in range(max(emin, best_e - step), min(emax, best_e + step) + 1):
     if s > best: best, best_e = s, e
 E = best_e
 
-# pareggio livello: rampa di guadagno lenta su [S..E] così livello(E)=livello(S)
-levelE = rms(E - Wl, E) or levelS
-gEnd = levelS / levelE
 out = [array.array('h', chans[c][:E]) for c in range(ch)]
+# Rampa di livello SOLO sull'ultimo tratto: porta livello(E)→livello(S) per il wrap,
+# senza toccare il corpo naturale (le note ≤ file mantengono l'inviluppo reale).
+levelE = rms(E - Wl, E) or bodyLevel
+levelS = rms(S, S + Wl) or bodyLevel
+target = levelS / levelE
+rampN = min(int(0.6 * sr), (E - S) // 2)
 for c in range(ch):
-    src = chans[c]
-    for pos in range(S, E):
-        g = 1.0 + (gEnd - 1.0) * (pos - S) / (E - S)
-        out[c][pos] = max(-32768, min(32767, int(src[pos] * g)))
-
-# crossfade coda corto: out[E-Xs..E] atterra su render[S] (half-sine)
-Xs = int(XF * sr)
+    for k in range(rampN):
+        pos = E - rampN + k
+        g = 1.0 + (target - 1.0) * (k / rampN)
+        out[c][pos] = max(-32768, min(32767, int(out[c][pos] * g)))
+# Crossfade coda corto: out[E-Xs..E] atterra su render[S-Xs..S] (wrap continuo a S).
 for c in range(ch):
     src = chans[c]
     for k in range(Xs):
@@ -111,14 +119,14 @@ def write(path, length, builder):
 
 write(outp, E, lambda c: out[c])
 
-# preview sample-accurate = attacco[0..S] + corpo[S..E] × nloops (= comportamento motore)
+# preview = comportamento motore: naturale [0..E], poi loop [S..E] × nloops
 if preview:
     body = [out[c][S:E] for c in range(ch)]
-    plen = S + (E - S) * nloops
-    def pbuild(c):
-        a = array.array('h', out[c][:S])
+    plen = E + (E - S) * nloops
+    def pb(c):
+        a = array.array('h', out[c][:E])
         for _ in range(nloops): a.extend(body[c])
         return a
-    write(preview, plen, pbuild)
+    write(preview, plen, pb)
 
-print(f'loopEnd={E/sr:.3f}s loopLen={(E-S)/sr:.3f}s corr*lvl={best:.3f} levelStepFix={20*math.log10(gEnd):+.1f}dB')
+print(f'loopStart={S/sr:.3f}s loopEnd={E/sr:.3f}s loopLen={(E-S)/sr:.3f}s fileLen={E/sr:.3f}s')

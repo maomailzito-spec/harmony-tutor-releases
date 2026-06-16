@@ -245,3 +245,34 @@ Deltas rispetto al piano qui sopra, da tenere presenti per la Fase 2:
 - Fase 2: tutti gli strumenti previsti sostituiti/aggiunti, verifica script +
   A/B, piano Salamander invariato, peso entro target. Commit (o commit per
   famiglia, per poter annullare un singolo strumento).
+
+---
+
+## Esito Fase 2A (implementato)
+
+Deltas rispetto al piano della Fase 2, dall'implementazione reale:
+
+- **Ambito reale = solo i 12 strumenti esposti** da `src/constants/instruments.ts`
+  (`gmToSoundfont`). viola/contrabass/trombone/tuba/timpani/pizzicato NON sono
+  selezionabili (cadono sul piano) → spostati alla **Fase 2B** (estendere il
+  selettore). Rimpiazzati 9 strumenti tenuti: `string_ensemble_1, cello, violin,
+  flute, oboe, clarinet, trumpet, french_horn, church_organ`. `choir_aahs` e
+  `harpsichord` **restano GM** (nessuna fonte in VSCO2 CE). `church_organ` invece
+  **si è potuto fare** (VSCO2 CE ha l'organo, CC0 → il "blocco licenza" era errato).
+- **Loop = "campione lungo + loop SOLO in coda"** (riscrittura di `_make_loop.py`).
+  Si tiene il campione naturale fino a `cap ~8s`; le note ≤ durata-file suonano
+  naturali, SENZA loop né giunta (come i sampler veri); il loop scatta solo per
+  tenute estreme. Motore invariato (loopStart fisso, loopEnd=durata). Questo ha
+  superato il limite del crossfade-loop corto, che dava "toc" percepibili.
+- **violin = violino SOLO** (`SViolinVib`), distinto da `string_ensemble_1` (la
+  sezione). I sorgenti solisti avevano **cambi d'arco** incisi (toc ~ogni pochi s):
+  ripuliti a mano in Logic (taglia+crossfade) sui 15 file `_f`, poi ri-renderizzati.
+- **Mono** (downmix): per un tutor armonico lo stereo non serve → asset ~93MB
+  invece di ~192MB. **Tutti a −18 LUFS**, bilanciati con `INSTRUMENT_GAIN` (0.32).
+- **In-place**: rimossi i vecchi `.mp3` GM dalle 9 cartelle (mai letti per gli
+  strumenti SUSTAINED: il loader prova `.flac` locale → poi CDN).
+
+## Fase 2B (da fare)
+Aggiungere strumenti nuovi (viola, contrabass, bassoon, trombone, tuba, pizzicato):
+estendere `INSTRUMENTS` in `src/constants/instruments.ts` + etichette i18n
+`instrument_<key>` + render con la stessa pipeline. Commit separato.

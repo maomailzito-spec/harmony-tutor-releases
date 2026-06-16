@@ -44,8 +44,19 @@ const pickVelocityLayer = (velocity: number | undefined, layers: number): number
  * `ext` is the local file format (FLAC for these; the historical mp3 stays the
  * default for everything else). Inert until the FLAC assets are present.
  */
+// Tutti i FLAC sono il campione NATURALE lungo (fino a ~8s) con loop SOLO in coda
+// (vedi prepare-orchestra.mjs): le note ≤ durata file suonano naturali, senza loop;
+// loopStart è dove la nota torna quando è tenuta oltre il file. loopEnd = durata.
 const SUSTAINED: Record<string, { loopStartSec: number; ext: 'flac' | 'mp3' }> = {
-  string_ensemble_1: { loopStartSec: 1.0, ext: 'flac' }, // Phase 1 test instrument (loopStart past the attack swell)
+  string_ensemble_1: { loopStartSec: 1.0, ext: 'flac' }, // sezione violini VSCO2 (Fase 1)
+  cello: { loopStartSec: 1.0, ext: 'flac' },             // sezione celli VSCO2
+  violin: { loopStartSec: 1.0, ext: 'flac' },            // violino SOLO VSCO2 (sorgenti ripuliti dai cambi d'arco)
+  flute: { loopStartSec: 1.0, ext: 'flac' },             // flauto VSCO2
+  oboe: { loopStartSec: 1.0, ext: 'flac' },              // oboe VSCO2
+  clarinet: { loopStartSec: 1.0, ext: 'flac' },          // clarinetto VSCO2
+  trumpet: { loopStartSec: 1.0, ext: 'flac' },           // tromba VSCO2
+  french_horn: { loopStartSec: 1.0, ext: 'flac' },       // corno VSCO2
+  church_organ: { loopStartSec: 1.0, ext: 'flac' },      // organo VSCO2 CE (CC0)
 };
 const instrumentExt = (instrument: string): 'flac' | 'mp3' => SUSTAINED[instrument]?.ext ?? 'mp3';
 
@@ -56,7 +67,17 @@ const instrumentExt = (instrument: string): 'flac' | 'mp3' => SUSTAINED[instrume
  * other, in ONE place, tunable by ear without re-rendering any asset. 1 = unity.
  */
 const INSTRUMENT_GAIN: Record<string, number> = {
-  string_ensemble_1: 0.32, // archi VSCO2 (rif. −18 LUFS) ≈ −10 dB → pareggia l'attacco del piano
+  // Tutti renderizzati a −18 LUFS; 0.32 (≈ −10 dB) pareggia l'attacco del piano.
+  // Punto di partenza uniforme, da tarare a orecchio per-strumento al gate.
+  string_ensemble_1: 0.32,
+  cello: 0.32,
+  violin: 0.32,
+  flute: 0.32,
+  oboe: 0.32,
+  clarinet: 0.32,
+  trumpet: 0.32,
+  french_horn: 0.32,
+  church_organ: 0.32,
 };
 const instrumentGain = (instrument: string): number => INSTRUMENT_GAIN[instrument] ?? 1;
 
