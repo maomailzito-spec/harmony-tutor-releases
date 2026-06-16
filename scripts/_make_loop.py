@@ -31,6 +31,31 @@ chans = [data[c::ch] for c in range(ch)]
 mono = chans[0] if ch == 1 else array.array('i', (chans[0][i] + chans[1][i] for i in range(len(chans[0]))))
 N = len(mono)
 
+# ── modalità ONE-SHOT (loopStartSec < 0): strumenti che DECADONO (piano, pizzicato,
+# percussioni) → nessun loop. Si tiene il decadimento naturale, si taglia il silenzio
+# finale (cap a capSec) con un fade-out corto al taglio. ──
+if S_sec < 0:
+    bl = int(0.02 * sr)
+    def rms0(lo, hi):
+        lo = max(0, lo); hi = min(N, hi); s = mono[lo:hi]
+        return math.sqrt(sum(x * x for x in s) / max(1, hi - lo))
+    peak = max((rms0(t, t + bl) for t in range(0, min(N, int(1.0 * sr)), bl)), default=1) or 1
+    thr = peak * 0.0025                       # ~ −52 dB sotto il picco = "silenzio"
+    end = min(N, int(CAP * sr)); t = end
+    while t > int(0.2 * sr) and rms0(t - bl, t) < thr: t -= bl
+    end = min(min(N, int(CAP * sr)), t + bl)
+    fo = min(int(0.05 * sr), end)
+    out = [array.array('h', chans[c][:end]) for c in range(ch)]
+    for c in range(ch):
+        for k in range(fo):
+            out[c][end - 1 - k] = int(out[c][end - 1 - k] * (k + 1) / fo)
+    inter = array.array('h', bytes(2 * end * ch))
+    for c in range(ch): inter[c::ch] = out[c]
+    ww = wave.open(outp, 'wb'); ww.setnchannels(ch); ww.setsampwidth(2); ww.setframerate(sr)
+    ww.writeframes(inter.tobytes()); ww.close()
+    print(f'one-shot len={end / sr:.3f}s (no loop)')
+    sys.exit(0)
+
 S = int(round(S_sec * sr))
 Xs = int(XF * sr)
 Wc = max(int(0.012 * sr), Xs)   # correlazione fondamentale = lunghezza crossfade (allinea ciò che si fonde)

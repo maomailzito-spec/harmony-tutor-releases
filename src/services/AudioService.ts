@@ -57,8 +57,19 @@ const SUSTAINED: Record<string, { loopStartSec: number; ext: 'flac' | 'mp3' }> =
   trumpet: { loopStartSec: 1.0, ext: 'flac' },           // tromba VSCO2
   french_horn: { loopStartSec: 1.0, ext: 'flac' },       // corno VSCO2
   church_organ: { loopStartSec: 1.0, ext: 'flac' },      // organo VSCO2 CE (CC0)
+  viola: { loopStartSec: 1.0, ext: 'flac' },             // sezione viole VSCO2 (Fase 2B)
+  contrabass: { loopStartSec: 1.0, ext: 'flac' },        // contrabbassi VSCO2 (Fase 2B)
+  bassoon: { loopStartSec: 1.0, ext: 'flac' },           // fagotto VSCO2 (Fase 2B)
+  trombone: { loopStartSec: 1.0, ext: 'flac' },          // trombone VSCO2 (Fase 2B)
+  tuba: { loopStartSec: 1.0, ext: 'flac' },              // tuba VSCO2 (Fase 2B)
 };
-const instrumentExt = (instrument: string): 'flac' | 'mp3' => SUSTAINED[instrument]?.ext ?? 'mp3';
+// Strumenti che DECADONO (one-shot): caricano comunque i .flac locali, ma NON sono in
+// SUSTAINED → nessun loop (vedi prepare-orchestra.mjs --no-loop).
+const ONESHOT_FLAC = new Set<string>([
+  'pizzicato_strings', 'upright_piano', 'timpani', 'marimba', 'glockenspiel', 'xylophone', 'tubular_bells',
+]);
+const instrumentExt = (instrument: string): 'flac' | 'mp3' =>
+  (SUSTAINED[instrument] || ONESHOT_FLAC.has(instrument)) ? 'flac' : 'mp3';
 
 /**
  * Per-instrument playback gain = the orchestral MIX TRIM. Samples are rendered
@@ -78,6 +89,19 @@ const INSTRUMENT_GAIN: Record<string, number> = {
   trumpet: 0.32,
   french_horn: 0.32,
   church_organ: 0.32,
+  // Fase 2B
+  viola: 0.32,
+  contrabass: 0.32,
+  bassoon: 0.32,
+  trombone: 0.32,
+  tuba: 0.32,
+  pizzicato_strings: 0.32,
+  upright_piano: 0.32,
+  timpani: 0.32,
+  marimba: 0.32,
+  glockenspiel: 0.32,
+  xylophone: 0.32,
+  tubular_bells: 0.32,
 };
 const instrumentGain = (instrument: string): number => INSTRUMENT_GAIN[instrument] ?? 1;
 

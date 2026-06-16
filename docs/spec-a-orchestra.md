@@ -272,7 +272,21 @@ Deltas rispetto al piano della Fase 2, dall'implementazione reale:
 - **In-place**: rimossi i vecchi `.mp3` GM dalle 9 cartelle (mai letti per gli
   strumenti SUSTAINED: il loader prova `.flac` locale → poi CDN).
 
-## Fase 2B (da fare)
-Aggiungere strumenti nuovi (viola, contrabass, bassoon, trombone, tuba, pizzicato):
-estendere `INSTRUMENTS` in `src/constants/instruments.ts` + etichette i18n
-`instrument_<key>` + render con la stessa pipeline. Commit separato.
+## Esito Fase 2B (implementato)
+
+Aggiunti **12 strumenti selezionabili** nuovi, estendendo `INSTRUMENTS` in
+`src/constants/instruments.ts` (+ chiavi GM uniche), le etichette i18n
+`instrument_<key>` (it/en), `SUSTAINED`/`ONESHOT_FLAC`/`INSTRUMENT_GAIN` nel
+motore, e il Program-Change MIDI ora via `soundfontToGm` (copre i nuovi):
+
+- **Tenuti** (loop in coda, come 2A): `viola` (ViolaEnsSusVib), `contrabass`
+  (ContrabassSusVB), `bassoon` (BassoonSus), `trombone` (TromboneSus), `tuba`
+  (TubaSus).
+- **One-shot** (decadono → nuova modalità pipeline `--no-loop`: niente loop,
+  taglio del silenzio finale): `pizzicato_strings` (4 sezioni pizz combinate per
+  registro C1–D6), `upright_piano` (UprightPiano, scelta EXTRA accanto al
+  Salamander), `timpani`, `glockenspiel`, `xylophone`, `marimba`, `tubular_bells`.
+- **Mono**, −18 LUFS, gain 0.32 di partenza. Le percussioni non intonate / kit
+  batteria restano fuori (servirebbe una traccia dedicata canale 10 — feature a sé).
+
+Asset totali orchestra (2A+2B) ≈ 166MB.

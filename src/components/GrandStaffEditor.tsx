@@ -13,7 +13,7 @@ declare global {
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
-import { gmToSoundfont } from '../constants/instruments';
+import { gmToSoundfont, soundfontToGm } from '../constants/instruments';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useNoteSelection } from '../hooks/useNoteSelection';
@@ -5606,16 +5606,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Send MIDI Program Change for each voice channel so external synths
         // (e.g. Logic Pro) know which instrument to use per channel.
         if (selectedMidiOutput) {
-            const INSTR_TO_GM: Record<string, number> = {
-                acoustic_grand_piano: 0, harpsichord: 6, church_organ: 19,
-                violin: 40, cello: 42, string_ensemble_1: 48,
-                choir_aahs: 52, trumpet: 56, french_horn: 60,
-                oboe: 68, clarinet: 71, flute: 73,
-            };
             for (let v = 1; v <= 4; v++) {
                 const ch = v - 1;
                 const instr = voiceInstrumentsRef.current[v] || 'acoustic_grand_piano';
-                const pc = INSTR_TO_GM[instr] ?? 0;
+                const pc = soundfontToGm(instr); // GM program dalla fonte di verità INSTRUMENTS
                 selectedMidiOutput.send([0xC0 + ch, pc]);
             }
             // Program Change for accompaniment tracks (channels 4+)

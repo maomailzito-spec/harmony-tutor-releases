@@ -20,18 +20,35 @@ export interface InstrumentOption {
 }
 
 export const INSTRUMENTS: InstrumentOption[] = [
+  // tastiere
   { gm: 0,  soundfont: 'acoustic_grand_piano', emoji: '🎹', i18nKey: 'piano' },
+  { gm: 1,  soundfont: 'upright_piano',        emoji: '🎹', i18nKey: 'upright_piano' },
   { gm: 19, soundfont: 'church_organ',         emoji: '⛪', i18nKey: 'organ' },
   { gm: 6,  soundfont: 'harpsichord',          emoji: '🎵', i18nKey: 'harpsichord' },
+  // archi
   { gm: 48, soundfont: 'string_ensemble_1',    emoji: '🎻', i18nKey: 'strings' },
+  { gm: 40, soundfont: 'violin',               emoji: '🎻', i18nKey: 'violin' },
+  { gm: 41, soundfont: 'viola',                emoji: '🎻', i18nKey: 'viola' },
+  { gm: 42, soundfont: 'cello',                emoji: '🎻', i18nKey: 'cello' },
+  { gm: 43, soundfont: 'contrabass',           emoji: '🎻', i18nKey: 'contrabass' },
+  { gm: 45, soundfont: 'pizzicato_strings',    emoji: '🎻', i18nKey: 'pizzicato' },
   { gm: 52, soundfont: 'choir_aahs',           emoji: '🎤', i18nKey: 'choir' },
+  // legni
   { gm: 73, soundfont: 'flute',                emoji: '🪈', i18nKey: 'flute' },
   { gm: 68, soundfont: 'oboe',                 emoji: '🎼', i18nKey: 'oboe' },
   { gm: 71, soundfont: 'clarinet',             emoji: '🎼', i18nKey: 'clarinet' },
+  { gm: 70, soundfont: 'bassoon',              emoji: '🎼', i18nKey: 'bassoon' },
+  // ottoni
   { gm: 56, soundfont: 'trumpet',              emoji: '🎺', i18nKey: 'trumpet' },
   { gm: 60, soundfont: 'french_horn',          emoji: '📯', i18nKey: 'horn' },
-  { gm: 40, soundfont: 'violin',               emoji: '🎻', i18nKey: 'violin' },
-  { gm: 42, soundfont: 'cello',                emoji: '🎻', i18nKey: 'cello' },
+  { gm: 57, soundfont: 'trombone',             emoji: '🎺', i18nKey: 'trombone' },
+  { gm: 58, soundfont: 'tuba',                 emoji: '🎺', i18nKey: 'tuba' },
+  // percussioni intonate
+  { gm: 47, soundfont: 'timpani',              emoji: '🥁', i18nKey: 'timpani' },
+  { gm: 9,  soundfont: 'glockenspiel',         emoji: '🔔', i18nKey: 'glockenspiel' },
+  { gm: 13, soundfont: 'xylophone',            emoji: '🎵', i18nKey: 'xylophone' },
+  { gm: 12, soundfont: 'marimba',              emoji: '🎵', i18nKey: 'marimba' },
+  { gm: 14, soundfont: 'tubular_bells',        emoji: '🔔', i18nKey: 'tubular_bells' },
 ];
 
 const DEFAULT_SOUNDFONT = 'acoustic_grand_piano';

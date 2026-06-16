@@ -49,6 +49,7 @@ const VEL = 100;          // velocity MIDI del render
 const ATTACK = parseFloat(opt('attack', '1.00'));    // = SUSTAINED.loopStartSec nel motore (S): dove la nota torna se tenuta oltre il file
 const CAP = parseFloat(opt('cap', '8.00'));          // lunghezza max del file: le note ≤ CAP suonano NATURALI (nessun loop)
 const XFADE = parseFloat(opt('xfade', '0.05'));      // crossfade del raro wrap di coda
+const NOLOOP = has('no-loop');                       // strumenti che decadono (piano, pizzicato, percussioni): nessun loop
 const LUFS = parseFloat(opt('lufs', '-18'));         // target integrated loudness
 const SR = 44100;
 // Tenere la nota oltre il cap così a CAP siamo ancora in sustain pieno (campioni lunghi).
@@ -119,7 +120,7 @@ for (const midi of targets) {
     const built = join(tmp, 'built.wav');
     const normd = join(tmp, 'norm.wav');
     const outFlac = join(OUT_DIR, `${name}.flac`);
-    run('python3', [join(scriptDir, '_make_loop.py'), raw, built, String(ATTACK), String(CAP), String(XFADE)]);
+    run('python3', [join(scriptDir, '_make_loop.py'), raw, built, NOLOOP ? '-1' : String(ATTACK), String(CAP), String(XFADE)]);
 
     // Normalizzazione LUFS con guadagno COSTANTE (loop-safe): misura → volume.
     const m = measureLoudness(built);
