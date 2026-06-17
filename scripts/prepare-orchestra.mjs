@@ -43,7 +43,7 @@ const SFIZZ = join(TOOL, 'bin', 'sfizz_render');
 const DYLD = join(TOOL, 'lib');
 
 // ── parametri timbro/loop (tarabili al gate d'ascolto) ───────────────────────
-const VEL = 100;          // velocity MIDI del render
+const VEL = parseInt(opt('vel', '100'), 10);   // velocity MIDI del render (sceglie il layer della sorgente)
 // loopStart DEVE cadere DOPO lo swell d'attacco, in zona stazionaria. Il file tiene
 // il campione naturale fino a ~CAP; il loop è solo in coda → note normali non loopano.
 const ATTACK = parseFloat(opt('attack', '1.00'));    // = SUSTAINED.loopStartSec nel motore (S): dove la nota torna se tenuta oltre il file

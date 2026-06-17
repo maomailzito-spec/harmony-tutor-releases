@@ -66,7 +66,7 @@ const SUSTAINED: Record<string, { loopStartSec: number; ext: 'flac' | 'mp3' }> =
 // Strumenti che DECADONO (one-shot): caricano comunque i .flac locali, ma NON sono in
 // SUSTAINED → nessun loop (vedi prepare-orchestra.mjs --no-loop).
 const ONESHOT_FLAC = new Set<string>([
-  'pizzicato_strings', 'upright_piano', 'timpani', 'marimba', 'glockenspiel', 'xylophone', 'tubular_bells',
+  'pizzicato_strings', 'timpani', 'marimba', 'glockenspiel', 'xylophone', 'tubular_bells',
 ]);
 const instrumentExt = (instrument: string): 'flac' | 'mp3' =>
   (SUSTAINED[instrument] || ONESHOT_FLAC.has(instrument)) ? 'flac' : 'mp3';
@@ -96,7 +96,6 @@ const INSTRUMENT_GAIN: Record<string, number> = {
   trombone: 0.32,
   tuba: 0.32,
   pizzicato_strings: 0.32,
-  upright_piano: 0.32,
   timpani: 0.32,
   marimba: 0.32,
   glockenspiel: 0.32,
@@ -370,7 +369,7 @@ export class AudioService {
     // Optional velocity→timbre low-pass (only for SINGLE-layer samples): darker at
     // low velocity, open at high. Skipped for real velocity-layered samples.
     let filterNode: BiquadFilterNode | null = null;
-    if (options?.velocity != null && !layered) {
+    if (options?.velocity != null && !layered && !ONESHOT_FLAC.has(instrument)) {
       filterNode = this.audioContext.createBiquadFilter();
       filterNode.type = 'lowpass';
       filterNode.frequency.value = velocityToCutoff(options.velocity);
@@ -459,7 +458,7 @@ export class AudioService {
       // Optional velocity→timbre low-pass (single-layer only; skipped for real
       // velocity-layered samples which already carry the timbral dynamics).
       let filterNode: BiquadFilterNode | null = null;
-      if (options?.velocity != null && !layered) {
+      if (options?.velocity != null && !layered && !ONESHOT_FLAC.has(instrument)) {
         filterNode = this.audioContext.createBiquadFilter();
         filterNode.type = 'lowpass';
         filterNode.frequency.value = velocityToCutoff(options.velocity);

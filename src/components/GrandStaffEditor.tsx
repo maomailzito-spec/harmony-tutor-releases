@@ -943,11 +943,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         }
 
-        // Monitoraggio area SATB / nessuna traccia ACC: stesso piano (Salamander) e
-        // stesso comportamento dell'ACC — nota tenuta con taglio anti-comb sulla
-        // ri-pressione — così SATB e ACC suonano identici.
+        // Monitoraggio area SATB: suona lo strumento ASSEGNATO alla voce attiva (non più
+        // sempre il piano), stesso comportamento dell'ACC — nota tenuta con taglio
+        // anti-comb sulla ri-pressione — così il monitor combacia col playback.
+        const satbInstr = voiceInstrumentsRef.current[selectedVoiceRef.current] || 'acoustic_grand_piano';
         monitorHandlesRef.current.get(midi)?.release(0.02);
-        const handle = audioService.playSustainedNote('acoustic_grand_piano', name, { volume: velocityToGain(velocity), velocity });
+        const handle = audioService.playSustainedNote(satbInstr, name, { volume: velocityToGain(velocity), velocity });
         monitorHandlesRef.current.set(midi, handle);
     }, [audioService, isRecording, resolveActiveAccIdx]);
     const playMidiPassthroughRef = useRef(playMidiPassthrough);
@@ -1715,6 +1716,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const voiceInstrumentsRef = useRef(voiceInstruments);
     const voiceVolumesRef = useRef(voiceVolumes);
     const mutedVoicesRef = useRef(mutedVoices);
+    // Voce SATB attiva (per il monitor tastiera: suona lo strumento assegnato, non il piano)
+    const selectedVoiceRef = useRef(selectedVoice);
+    useEffect(() => { selectedVoiceRef.current = selectedVoice; }, [selectedVoice]);
     // Per-voice gain nodes (twin of accTrackGainsRef): notes route through these so
     // mute/volume changes apply in real-time to already-scheduled playback.
     const voiceGainsRef = useRef<Map<number, GainNode>>(new Map());
@@ -2205,7 +2209,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return { ...track, notes: [...kept, ...newAccNotes].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
                 }));
                 setSelectedNoteIds(new Set(newAccNotes.map((n: any) => n.id)));
-                newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n); });
+                const accInstrBlk = gmToSoundfont(latestAccompanimentTracks.current?.[trackIdx]?.instrumentId);
+                newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk); });
                 return;
             }
 
@@ -2408,7 +2413,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setChordInputText('');
             setChordInputError(false);
             setSelectedNoteIds(new Set(accNotes.map(n => n.id)));
-            accNotes.forEach(n => { void playNoteRef.current?.(n); });
+            const accInstrChord = gmToSoundfont(latestAccompanimentTracks.current?.[firstVisibleIdx]?.instrumentId);
+            accNotes.forEach(n => { void playNoteRef.current?.(n, 0.8, accInstrChord); });
             return { startTick, durTicks };
         }
 
@@ -4841,7 +4847,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         output.send([0x80 + ch, midi, 0], t0 + durationSec * 1000);
     }, [playbackTransposeSemitones]);
 
-    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8) => {
+    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string) => {
                 if (!isAudioReady || !audioService.audioContext || note.isRest) return;
                 await audioService.ensureAudioIsReady();
                 const midi = (note.midi ?? 0) + playbackTransposeSemitones;
@@ -4860,15 +4866,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const safeBpm = Math.max(20, Math.min(300, bpm || 120));
                     durationSecFinal = durBeatsBase * (60 / safeBpm);
                 }
-                await audioService.playNote(midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal });
+                // Anteprima con lo strumento ASSEGNATO: override esplicito (es. traccia ACC,
+                // passato dal chiamante) altrimenti lo strumento della voce SATB della nota.
+                const v = Number((note as any).voice);
+                const instr = instrumentOverride
+                    ?? (v >= 1 && v <= 4 ? (voiceInstrumentsRef.current[v] || 'acoustic_grand_piano') : 'acoustic_grand_piano');
+                await audioService.playNoteForInstrument(instr, midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal, velocity: (note as any).velocity });
     }, [audioService, isAudioReady, midiToName, playbackTransposeSemitones]);
 
-    const playNote = useCallback(async (note: StaffNote, durationSec = 0.8) => {
+    const playNote = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string) => {
         if (selectedMidiOutput) {
             sendMidiNote(note, selectedMidiOutput, durationSec, window.performance.now());
             return;
         }
-        await playNoteSound(note, durationSec);
+        await playNoteSound(note, durationSec, instrumentOverride);
     }, [playNoteSound, selectedMidiOutput, sendMidiNote]);
     playNoteRef.current = playNote;
 
@@ -6571,7 +6582,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (didSelect && n && !n.isRest) {
             // Use normalizedRawNotes for correct MIDI (handles stale fields in legacy files).
             const normalized = (normalizedRawNotes || []).find((nn: any) => nn.id === noteId) ?? n;
-            void playNote(normalized, 0.6);
+            // Nota ACC: suona lo strumento della TRACCIA (non il piano di default).
+            const accInfoForPlay = isAccNote ? findAccTrackForNote(noteId, latestAccompanimentTracks.current) : null;
+            const clickInstr = accInfoForPlay
+                ? gmToSoundfont(latestAccompanimentTracks.current[accInfoForPlay.trackIndex]?.instrumentId)
+                : undefined;
+            void playNote(normalized, 0.6, clickInstr);
         }
     }, [getPlayheadPosForAbsBeat, normalizedRawNotes, playNote, rawNotes, selectedNoteIds, timeSignature, tool, violations]);
 
@@ -8076,8 +8092,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }));
                 setSelectedNoteIds(new Set([accNote.id]));
                 justInsertedNoteRef.current = accNote.id;
-                // Audition the inserted ACC note
-                void playNote(accNote);
+                // Audition the inserted ACC note con lo strumento della traccia (non il piano)
+                const accInstrClick = gmToSoundfont(latestAccompanimentTracks.current?.find(t => t.id === targetTrackId)?.instrumentId);
+                void playNote(accNote, 0.8, accInstrClick);
                 // Advance playhead to the next position (same as SATB insertion)
                 try {
                     const nextAbsBeat = (startTick + durationTicks) / TICKS_PER_QUARTER;

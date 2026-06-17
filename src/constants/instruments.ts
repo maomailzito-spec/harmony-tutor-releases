@@ -22,7 +22,6 @@ export interface InstrumentOption {
 export const INSTRUMENTS: InstrumentOption[] = [
   // tastiere
   { gm: 0,  soundfont: 'acoustic_grand_piano', emoji: '🎹', i18nKey: 'piano' },
-  { gm: 1,  soundfont: 'upright_piano',        emoji: '🎹', i18nKey: 'upright_piano' },
   { gm: 19, soundfont: 'church_organ',         emoji: '⛪', i18nKey: 'organ' },
   { gm: 6,  soundfont: 'harpsichord',          emoji: '🎵', i18nKey: 'harpsichord' },
   // archi
