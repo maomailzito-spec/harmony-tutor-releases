@@ -43,6 +43,12 @@ interface VexflowGrandStaffProps {
    *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
    *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
   accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean }>;
+  /** Geometria REALE dei righi batteria (per agganciare il click del mouse alle righe
+   *  effettivamente renderizzate → coincidenza click/nota). `trackIdx` = indice nella lista
+   *  tracce VISIBILI (== visIdx lato click). Emesso ad ogni layout. */
+  onDrumStavesLayout?: (info: Array<{ trackIdx: number; topLineY: number; lineSpacing: number }>) => void;
+  /** Etichette dei pezzi per la LEGENDA sul rigo batteria, per kit. `line` = posizione VexFlow. */
+  drumPalettes?: { orchestral: Array<{ midi: number; label: string; line: string }>; rock: Array<{ midi: number; label: string; line: string }> };
 }
 
 const DEFAULT_WIDTH = 900;
@@ -255,12 +261,37 @@ const DRUM_VEX_KEY: Record<number, string> = {
   53: 'e/5/x2', 54: 'e/5/x2', 55: 'e/5/x2',        // tamburello
   56: 'f/5/x2',                                    // cowbell
 };
+// Kit ROCK (Salamander) — notazione batteria GM standard: cassa in basso, rullante 3° spazio,
+// tom su spazi, charleston/ride/crash/piatti sopra con testa ✕.
+const DRUM_VEX_KEY_ROCK: Record<number, string> = {
+  35: 'f/4', 36: 'f/4',                            // cassa
+  37: 'c/5/x2',                                    // rimshot / side stick (✕)
+  38: 'c/5', 40: 'c/5',                            // rullante
+  41: 'a/4', 43: 'a/4', 45: 'a/4',                 // tom bassi / floor
+  47: 'e/5', 48: 'e/5', 50: 'e/5',                 // tom medi / alti
+  44: 'd/4/x2',                                    // hi-hat pedale (✕, sotto)
+  42: 'g/5/x2', 46: 'g/5/x2',                      // hi-hat chiuso/aperto (✕, alto)
+  51: 'f/5/x2', 53: 'f/5/x2', 59: 'f/5/x2',        // ride / campana ride (✕, riga sup.)
+  49: 'a/5/x2', 57: 'a/5/x2',                      // crash (✕, sopra)
+  52: 'b/5/x2',                                    // china (✕)
+  55: 'c/6/x2',                                    // splash (✕)
+  56: 'd/5/x2',                                    // cowbell (✕)
+};
 const isPercussionClef = (clef: ClefType): boolean => (clef as any) === 'percussion';
-const drumPieceToVexKey = (midi: number): string => DRUM_VEX_KEY[Number(midi)] ?? 'c/5';
+const drumPieceToVexKey = (midi: number, kit?: string): string =>
+  ((kit === 'rock' ? DRUM_VEX_KEY_ROCK : DRUM_VEX_KEY)[Number(midi)] ?? 'c/5');
 const vexKeyForNote = (n: StaffNote, clef: ClefType): string =>
   isPercussionClef(clef)
-    ? drumPieceToVexKey(Number((n as any).midi))
+    ? drumPieceToVexKey(Number((n as any).midi), (n as any).__drumKit)
     : `${staffNoteToVexflowKeyName(n)}/${(n as any).octave ?? 4}`;
+// Numero di linea VexFlow (per stave.getYForLine) da una chiave tipo 'f/5':
+// riga superiore del rigo (F5) = 0, +0.5 per ogni passo diatonico verso il basso.
+const VEX_LETTER_IDX: Record<string, number> = { c: 0, d: 1, e: 2, f: 3, g: 4, a: 5, b: 6 };
+const lineForVexKey = (vexKey: string): number => {
+  const [l, o] = vexKey.split('/');
+  const step = (parseInt(o, 10) * 7) + (VEX_LETTER_IDX[l.toLowerCase()] ?? 0);
+  return (38 - step) / 2; // 38 = step di F5 (riga superiore in chiave di violino/percussione)
+};
 
 const makeVfNote = (
   n: StaffNote,
@@ -548,6 +579,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   accompanimentStaffMode = 'grandstaff',
   accompanimentTracks,
   satbName,
+  onDrumStavesLayout,
+  drumPalettes,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const enableEngravingEnhancements = engravingMode === 'enhanced';
@@ -745,6 +778,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       color?: string;
       voiced?: boolean;
       isDrum?: boolean;
+      drumKit?: 'orchestral' | 'rock';
     };
     let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
     // Robustness: if asked to show acc staves but no track metadata arrived, draw one
@@ -755,13 +789,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const accTrebleOffsets = accompanimentTrackTrebleOffsets(accVisibleTracks);
     const accBlocks: AccBlock[] = accVisibleTracks.map((t, i) => {
       const isDrum = !!(t as any).isDrum;
-      // Traccia batteria: rigo singolo a 5 linee con CHIAVE DI PERCUSSIONE (neutra).
+      const drumKit = (t as any).drumKit === 'rock' ? 'rock' : 'orchestral';
+      // Traccia batteria: rigo a 5 linee con CHIAVE DI PERCUSSIONE neutra (come Logic/Pro
+      // Tools/Sibelius). La posizione e la testa (✕ per piatti/charleston) vengono da
+      // DRUM_VEX_KEY[midi] via il ramo isPercussionClef di vexKeyForNote; il `midi` è
+      // l'elemento GM (suono). 'percussion' non è in ClefType → cast locale per evitare il
+      // ripple sui Record<ClefType,…>; il valore esce solo verso VexFlow.
       const mode = isDrum ? 'treble_only' : (t.staffMode ?? 'grandstaff');
-      const clef: ClefType = isDrum ? ('percussion' as any) : (mode === 'grandstaff' ? 'treble' : (t.clef ?? 'treble'));
+      const clef: ClefType = isDrum ? ('percussion' as ClefType) : (mode === 'grandstaff' ? 'treble' : (t.clef ?? 'treble'));
       const trebleY = accTrebleY + accTrebleOffsets[i];
       const treble = new Stave(STAFF_MARGIN, trebleY, staffWidth);
       const bass = mode === 'grandstaff' ? new Stave(STAFF_MARGIN, trebleY + ACCOMPANIMENT_GS_SPAN, staffWidth) : null;
-      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum };
+      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -907,6 +946,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         rect.setAttribute('fill', block.color);
         svgElForLabels.appendChild(rect);
       }
+    }
+
+    // Geometria REALE dei righi batteria → il click del mouse si aggancia alle righe
+    // effettivamente renderizzate (coincidenza click/nota). getYForLine dà la Y vera.
+    if (onDrumStavesLayout) {
+      const info = accBlocks
+        .filter(b => b.isDrum)
+        .map(b => ({
+          trackIdx: b.trackIdx,
+          topLineY: b.treble.getYForLine(0),
+          lineSpacing: b.treble.getYForLine(1) - b.treble.getYForLine(0),
+        }));
+      onDrumStavesLayout(info);
     }
 
     // Time signature changes (draw with VexFlow glyphs to match staff style)
@@ -3569,8 +3621,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             if (tn.length > 0) drawNotesAtX(tn, block.treble, 'treble', !!block.voiced);
             if (bn.length > 0) drawNotesAtX(bn, block.bass, 'bass', !!block.voiced);
           } else {
-            // single staff: position all notes by the block's clef.
-            const single = trackNotes.map(n => ({ ...n, clef: block.clef }));
+            // single staff: position all notes by the block's clef. Per la batteria taggo
+            // ogni nota col KIT del blocco, così le posizioni sul rigo seguono la mappa giusta.
+            const single = trackNotes.map(n => ({ ...n, clef: block.clef, __drumKit: block.drumKit } as any));
             drawNotesAtX(single, block.treble, block.clef);
           }
         }

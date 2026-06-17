@@ -258,6 +258,9 @@ export type AccompanimentTrack = {
    *  (one-shot) invece di `instrumentId`, si incide su rigo percussioni, e in uscita MIDI
    *  va sempre sul canale 10. `staffMode`/`voiced` ignorati. */
   isDrum?: boolean;
+  /** Quale kit suona una traccia batteria: 'orchestral' (VSCO2, default) o 'rock' (Salamander).
+   *  Determina il soundfont ('drums' vs 'drumkit'), la mappa pezzi e le posizioni sul rigo. */
+  drumKit?: 'orchestral' | 'rock';
 };
 
 /**

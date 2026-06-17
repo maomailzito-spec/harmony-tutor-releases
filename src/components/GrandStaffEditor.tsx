@@ -56,6 +56,7 @@ import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
 import MixerPanel from './MixerPanel';
+import DrumPalettePanel from './DrumPalettePanel';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -152,6 +153,81 @@ const flatKeyValues = ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
 
 const sharpKeyOptions = keySignatureOptions.filter(k => sharpKeyValues.includes(k.value));
 const flatKeyOptions = keySignatureOptions.filter(k => flatKeyValues.includes(k.value));
+
+// Pezzi del kit per la MAPPA/aggancio. `line` = posizione sul rigo percussioni (deve combaciare
+// con DRUM_VEX_KEY in VexflowGrandStaff). Due kit: ORCHESTRALE (VSCO2) e ROCK (Salamander),
+// ognuno col suo set GM e le sue posizioni. L'inserimento dal rigo aggancia al pezzo la cui riga
+// è più vicina; i pezzi "difficili" (piatti) si mettono dalla mappa (al cursore).
+type DrumPiece = { midi: number; label: string; line: string };
+const DRUM_PALETTE_ORCH: DrumPiece[] = [
+  { midi: 36, label: 'Cassa',  line: 'f/4' },
+  { midi: 38, label: 'Rull.',  line: 'c/5' },
+  { midi: 42, label: 'Gong',   line: 'd/4' },
+  { midi: 49, label: 'Crash',  line: 'a/5' },
+  { midi: 51, label: 'Sosp.',  line: 'g/5' },
+  { midi: 53, label: 'Tamb.',  line: 'e/5' },
+  { midi: 56, label: 'Cowb.',  line: 'f/5' },
+];
+// Kit ROCK (Salamander) — set GM standard. Ordine mappa: dal basso (cassa) all'alto (piatti).
+const DRUM_PALETTE_ROCK: DrumPiece[] = [
+  { midi: 36, label: 'Cassa',     line: 'f/4' },
+  { midi: 38, label: 'Rullante',  line: 'c/5' },
+  { midi: 37, label: 'Rimshot',   line: 'c/5' },
+  { midi: 45, label: 'Tom basso', line: 'a/4' },
+  { midi: 50, label: 'Tom alto',  line: 'e/5' },
+  { midi: 44, label: 'HH pedale', line: 'd/4' },
+  { midi: 42, label: 'HH chiuso', line: 'g/5' },
+  { midi: 46, label: 'HH aperto', line: 'g/5' },
+  { midi: 51, label: 'Ride',      line: 'f/5' },
+  { midi: 53, label: 'Camp.ride', line: 'f/5' },
+  { midi: 49, label: 'Crash',     line: 'a/5' },
+  { midi: 52, label: 'China',     line: 'b/5' },
+  { midi: 55, label: 'Splash',    line: 'c/6' },
+  { midi: 56, label: 'Cowbell',   line: 'd/5' },
+];
+const drumSoundfont = (t: any): string => (t?.drumKit === 'rock' ? 'drumkit' : 'drums');
+const drumPaletteFor = (t: any): DrumPiece[] => (t?.drumKit === 'rock' ? DRUM_PALETTE_ROCK : DRUM_PALETTE_ORCH);
+const DRUM_LETTER_STEP: Record<string, number> = { c: 0, d: 1, e: 2, f: 3, g: 4, a: 5, b: 6 };
+const drumStepOf = (letter: string, octave: number) => octave * 7 + (DRUM_LETTER_STEP[String(letter).toLowerCase()] ?? 0);
+const drumLineStep = (line: string) => { const [l, o] = line.split('/'); return drumStepOf(l, parseInt(o, 10)); };
+// Numero di linea VexFlow per una posizione del kit (riga sup. F5 = 0, +0.5 per passo verso il basso).
+const drumVexLine = (line: string): number => (38 - drumLineStep(line)) / 2;
+
+// ── Mappa POSIZIONE↔ELEMENTO per la batteria (NOTAZIONE STANDARD) ────────────────────
+// Il rigo batteria si disegna in CHIAVE DI PERCUSSIONE: ogni elemento GM ha una posizione
+// CONVENZIONALE fissa (cassa spazio basso, rullante 3° spazio, charleston/piatti sopra con
+// testa ✕), come Logic/Pro Tools/Sibelius. La posizione viene dalla `line` della palette —
+// stessa di DRUM_VEX_KEY in VexflowGrandStaff (lì col suffisso /x2 = testa ✕). Il `midi`
+// resta l'ELEMENTO GM (suono + MIDI-out canale 10).
+// Posizione diatonica (schema editor: B4 middle line = pos 6) della riga standard del pezzo.
+// drumStepOf('b',4) = 34 → pos = step - 34 + 6 = step - 28.
+const posFromDrumLine = (line: string): number => drumLineStep(line) - 28;
+// Posizione diatonica canonica (sul rigo) di un elemento GM = la sua riga standard.
+const drumPosForElement = (element: number, palette: DrumPiece[]): number => {
+  const p = palette.find(pp => pp.midi === element) ?? palette[0];
+  return posFromDrumLine(p.line);
+};
+// Props nota batteria: ALTEZZA visiva = posizione STANDARD dell'elemento (nota normale, niente
+// alterazioni), `midi` = ELEMENTO GM. Usata da click, tastiera e pulsanti del kit → coincidono
+// sempre sulla stessa riga per lo stesso elemento. In rendering la clef è 'percussion' e la
+// testa (✕ per i piatti) viene da DRUM_VEX_KEY[midi].
+const makeDrumNoteProps = (element: number, palette: DrumPiece[], clef: ClefType, keySignature: KeySignature) => {
+  const pos = drumPosForElement(element, palette);
+  const dp = getNotePropertiesFromDiatonicPosition(pos, clef, keySignature);
+  return { ...dp, midi: element, explicitAccidental: null };
+};
+// Snap del click: elemento del kit la cui TESTA (riga standard) è più vicina alla Y cliccata.
+// Usa la geometria REALE del rigo batteria (topLineY = Y della riga superiore F5, lineSpacing =
+// distanza tra due righe) così il punto cliccato coincide con la testa risultante.
+const snapDrumElementAtY = (yCal: number, topLineY: number, lineSpacing: number, palette: DrumPiece[]): number => {
+  let best = palette[0], bd = Infinity;
+  for (const p of palette) {
+    const pieceY = topLineY + drumVexLine(p.line) * lineSpacing;
+    const d = Math.abs(pieceY - yCal);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best.midi;
+};
 
 // Overlay tuning: align adapter-drawn connections with VexFlow noteheads
 // (Empirical offsets requested by user; adjust if VexFlow layout changes.)
@@ -419,6 +495,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [accPushCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [isMixerOpen, setIsMixerOpen] = useState(false);
+    // Modulo percussioni flottante (apri/chiudi dalla toolbar; si auto-apre quando aggiungi
+    // una batteria). Sostituisce la vecchia barra inline "🥁 Mappa".
+    const [isDrumPanelOpen, setIsDrumPanelOpen] = useState(false);
 
     // Visibilità del rigo SATB (a 4 voci). Come per le tracce ACC, è SOLO display:
     // nasconde il pentagramma SATB (i righi ACC salgono in cima), ma l'audio
@@ -589,6 +668,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Rendi attiva la nuova traccia batteria, così tastiera/click la monitorano subito.
         activeAccTrackIdRef.current = id;
         setActiveStaffArea('accompaniment');
+        // Apri subito il modulo percussioni flottante (discoverability).
+        setIsDrumPanelOpen(true);
     }, []);
     // ...existing code...
     // copyPasteError now owned by useNoteSelection
@@ -755,6 +836,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [activeStaffArea, setActiveStaffArea] = useState<'satb' | 'accompaniment'>('satb');
     const activeStaffAreaRef = useRef<'satb' | 'accompaniment'>('satb');
     useEffect(() => { activeStaffAreaRef.current = activeStaffArea; }, [activeStaffArea]);
+    // Pezzo di batteria "armato" per l'inserimento col mouse su una traccia drum:
+    // cliccando sul rigo si inserisce QUESTO pezzo (nota GM), qualunque sia l'altezza del
+    // click → niente note vuote. Default = gran cassa (36). La tastiera MIDI resta libera.
     // Active accompaniment track: the last ACC staff clicked/edited. Used as the target
     // for paste and (future) recording, so they go to the track you're working on —
     // not always the first. Falls back to the first visible track when unset.
@@ -963,7 +1047,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // nota non si sovrappone a una copia identica del campione (comb/"scatto").
                 monitorHandlesRef.current.get(midi)?.release(0.02);
                 const handle = audioService.playSustainedNote(
-                    track.isDrum ? 'drums' : gmToSoundfont(track.instrumentId), name,
+                    track.isDrum ? drumSoundfont(track) : gmToSoundfont(track.instrumentId), name,
                     { volume: velocityToGain(velocity), output: trackGain, velocity },
                 );
                 monitorHandlesRef.current.set(midi, handle);
@@ -2238,7 +2322,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }));
                 setSelectedNoteIds(new Set(newAccNotes.map((n: any) => n.id)));
                 const accTrkBlk = latestAccompanimentTracks.current?.[trackIdx];
-                const accInstrBlk = accTrkBlk?.isDrum ? 'drums' : gmToSoundfont(accTrkBlk?.instrumentId);
+                const accInstrBlk = accTrkBlk?.isDrum ? drumSoundfont(accTrkBlk) : gmToSoundfont(accTrkBlk?.instrumentId);
                 newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk); });
                 return;
             }
@@ -2443,7 +2527,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setChordInputError(false);
             setSelectedNoteIds(new Set(accNotes.map(n => n.id)));
             const accTrkChord = latestAccompanimentTracks.current?.[firstVisibleIdx];
-            const accInstrChord = accTrkChord?.isDrum ? 'drums' : gmToSoundfont(accTrkChord?.instrumentId);
+            const accInstrChord = accTrkChord?.isDrum ? drumSoundfont(accTrkChord) : gmToSoundfont(accTrkChord?.instrumentId);
             accNotes.forEach(n => { void playNoteRef.current?.(n, 0.8, accInstrChord); });
             return { startTick, durTicks };
         }
@@ -5632,7 +5716,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const midi = isDrumTrk ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midi) || midi < 21 || midi > 108) continue;
                         const instr = accTrk
-                            ? (isDrumTrk ? 'drums' : gmToSoundfont(accTrk.instrumentId))
+                            ? (isDrumTrk ? drumSoundfont(accTrk) : gmToSoundfont(accTrk.instrumentId))
                             : (voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano');
                         if (!neededByInstrument.has(instr)) neededByInstrument.set(instr, new Set());
                         neededByInstrument.get(instr)!.add(midiToName(midi));
@@ -5883,7 +5967,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const isDrum = !!track.isDrum;
                         const midiT = isDrum ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
-                        const instr = isDrum ? 'drums' : gmToSoundfont(track.instrumentId);
+                        const instr = isDrum ? drumSoundfont(track) : gmToSoundfont(track.instrumentId);
                         const playDurSec = isDrum ? Math.max(durSec, 4.0) : durSec;
                         // Get-or-create persistent per-track gain node. Routing notes through
                         // it lets us mute/change volume in real-time (sample-accurate) even
@@ -6624,7 +6708,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const accInfoForPlay = isAccNote ? findAccTrackForNote(noteId, latestAccompanimentTracks.current) : null;
             const accTrkForPlay = accInfoForPlay ? latestAccompanimentTracks.current[accInfoForPlay.trackIndex] : null;
             const clickInstr = accTrkForPlay
-                ? (accTrkForPlay.isDrum ? 'drums' : gmToSoundfont(accTrkForPlay.instrumentId))
+                ? (accTrkForPlay.isDrum ? drumSoundfont(accTrkForPlay) : gmToSoundfont(accTrkForPlay.instrumentId))
                 : undefined;
             void playNote(normalized, 0.6, clickInstr);
         }
@@ -8081,9 +8165,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            let accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignature);
-            accProps = applyAutoLeadingToneInMinor(accProps);
-            accProps = applyActiveAccidental(accProps);
+            let accProps;
+            if ((accTrackObj as any)?.isDrum) {
+                // Traccia batteria (chiave di percussione): il click si AGGANCIA alla riga
+                // standard più vicina → l'elemento del kit la cui testa è lì. Uso la geometria
+                // REALE del rigo (riportata da onDrumStavesLayout) così il punto cliccato
+                // coincide con la testa risultante; `midi` = elemento GM (suono).
+                // NB: qui uso la `y` GREZZA (non `yCal`): la correzione −40 serve solo al
+                // percorso melodico, che usa le costanti STATICHE del modello editor; lo snap
+                // batteria confronta con getYForLine (già nello stesso spazio del puntatore).
+                const palette = drumPaletteFor(accTrackObj);
+                const layout = drumStavesLayoutRef.current.find(l => l.trackIdx === accTarget.visIdx);
+                let element: number;
+                if (layout) {
+                    element = snapDrumElementAtY(y, layout.topLineY, layout.lineSpacing, palette);
+                } else {
+                    // Fallback (layout non ancora noto): aggancia alla riga standard più vicina
+                    // alla posizione diatonica cliccata.
+                    let best = palette[0], bd = Infinity;
+                    for (const p of palette) { const d = Math.abs(posFromDrumLine(p.line) - pos); if (d < bd) { bd = d; best = p; } }
+                    element = best.midi;
+                }
+                accProps = makeDrumNoteProps(element, palette, accClef, keySignature);
+            } else {
+                accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignature);
+                accProps = applyAutoLeadingToneInMinor(accProps);
+                accProps = applyActiveAccidental(accProps);
+            }
 
             const accNote: StaffNote = {
                 id: crypto.randomUUID(),
@@ -8133,7 +8241,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 justInsertedNoteRef.current = accNote.id;
                 // Audition the inserted ACC note con lo strumento della traccia (kit se batteria)
                 const accTrkClick = latestAccompanimentTracks.current?.find(t => t.id === targetTrackId);
-                const accInstrClick = accTrkClick?.isDrum ? 'drums' : gmToSoundfont(accTrkClick?.instrumentId);
+                const accInstrClick = accTrkClick?.isDrum ? drumSoundfont(accTrkClick) : gmToSoundfont(accTrkClick?.instrumentId);
                 void playNote(accNote, 0.8, accInstrClick);
                 // Advance playhead to the next position (same as SATB insertion)
                 try {
@@ -8820,12 +8928,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             durBeatsBase *= tupletFactor;
             if (!isFinite(durBeatsBase) || durBeatsBase <= 0) durBeatsBase = 1;
             const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
-            // Cap snap at the 8th note so the playhead can land on the off-beat (levare)
-            // for longer notes too; Shift uses a finer step.
-            const snapCapTicks = Math.round(TICKS_PER_QUARTER / 2);
-            const _snapGcd3 = (a: number, b: number): number => { let x = Math.abs(a); let y = Math.abs(b); while (y) { [x, y] = [y, x % y]; } return x || 1; };
-            const baseSnapGridTicks = Math.max(1, _snapGcd3(Math.min(durationTicks, snapCapTicks), TICKS_PER_QUARTER));
-            return useFineStep ? Math.max(1, Math.floor(baseSnapGridTicks / 2)) : baseSnapGridTicks;
+            // Lo step delle frecce = il VALORE DI NOTA selezionato (semiminima → avanza di
+            // una semiminima, minima → di una minima, ecc., inclusi puntato e terzina).
+            // Shift dimezza per un posizionamento fine (es. levare/off-beat).
+            return useFineStep ? Math.max(1, Math.floor(durationTicks / 2)) : durationTicks;
         } catch {
             return TICKS_PER_QUARTER;
         }
@@ -8889,7 +8995,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     : (accStaffMode === 'grandstaff'
                         ? (midiNumber >= 60 ? 'treble' : 'bass')
                         : (((target as any).clef ?? 'treble') as ClefType));
-                const accPropsStep = getNotePropertiesFromMidi(midiNumber, keySignature, accClefStep, activeAccidentalRef.current ?? null);
+                // Batteria: la nota suonata È l'elemento GM → posizione canonica sul rigo
+                // (coincide col click sul rigo per lo stesso elemento). Altrimenti nota normale.
+                const accPropsStep = (target as any).isDrum
+                    ? makeDrumNoteProps(midiNumber, drumPaletteFor(target), 'treble', keySignature)
+                    : getNotePropertiesFromMidi(midiNumber, keySignature, accClefStep, activeAccidentalRef.current ?? null);
                 if (!accPropsStep || !Number.isFinite(accPropsStep.midi)) return;
                 const accNoteStep: StaffNote = {
                     id: crypto.randomUUID(),
@@ -8930,8 +9040,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // nota all'eventuale uscita MIDI esterna — altrimenti avremmo un doppio
                 // attacco (passthrough soundfont + anteprima piano interno).
                 if (selectedMidiOutputRef.current) void playNote(accNoteStep);
-                // Avanza la playhead (come SATB)
-                const nextAbsBeatAcc = accEndTickStep / TICKS_PER_QUARTER;
+                // Avanza la playhead (come SATB): fine della nota appena inserita.
+                const nextAbsBeatAcc = (startTick + durationTicks) / TICKS_PER_QUARTER;
                 playbackCursorAbsBeatRef.current = nextAbsBeatAcc;
                 const nextPosAcc = getPlayheadPosForAbsBeat(nextAbsBeatAcc);
                 if (nextPosAcc) {
@@ -9031,6 +9141,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Keep the MIDI step-input ref in sync with the latest callback.
     insertNoteFromMidiRef.current = insertNoteFromMidi;
+
+    // Mappa batteria: clic su un pezzo → inserisce quella nota GM al cursore (e avanza),
+    // riusando lo step-input MIDI. Target = traccia batteria attiva, o la prima visibile.
+    // Così i pezzi "difficili" (piatti, percussioni) si mettono dalla mappa senza dover
+    // cliccare l'altezza esatta sul rigo; la cassa/rullante restano inseribili dal rigo.
+    // Geometria reale dei righi batteria (emessa da VexflowGrandStaff): per ogni traccia drum
+    // la Y vera della riga superiore + l'interlinea, così il click si aggancia alla riga
+    // EFFETTIVAMENTE renderizzata (coincidenza click/nota). Chiave = indice traccia visibile.
+    const drumStavesLayoutRef = useRef<Array<{ trackIdx: number; topLineY: number; lineSpacing: number }>>([]);
+    const handleDrumStavesLayout = useCallback((info: Array<{ trackIdx: number; topLineY: number; lineSpacing: number }>) => {
+        drumStavesLayoutRef.current = info || [];
+    }, []);
+
+    const insertDrumPieceAtCursor = useCallback((pieceMidi: number) => {
+        const tracks = latestAccompanimentTracks.current || [];
+        let target = tracks.find(t => t.id === activeAccTrackIdRef.current && t.visible && (t as any).isDrum);
+        if (!target) target = tracks.find(t => t.visible && (t as any).isDrum);
+        if (!target) return;
+        activeAccTrackIdRef.current = target.id;
+        activeStaffAreaRef.current = 'accompaniment';
+        setActiveStaffArea('accompaniment');
+        insertNoteFromMidiRef.current(pieceMidi);
+    }, []);
 
     const handleBackgroundMouseDown = useCallback((e: MouseEvent, svg: SVGSVGElement, systemIndex: number) => {
         if (tool !== 'insert') return;
@@ -9175,9 +9308,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const accGhostClef: ClefType = accTargetGhost.clef;
             const accGhostPos: number = accTargetGhost.pos;
 
-            let accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignature);
-            accGhostProps = applyAutoLeadingToneInMinor(accGhostProps);
-            accGhostProps = applyActiveAccidental(accGhostProps);
+            const accGhostTrack = (latestAccompanimentTracks.current || []).find(t => t.id === accTargetGhost.trackId);
+            let accGhostProps;
+            if ((accGhostTrack as any)?.isDrum) {
+                // Anteprima batteria: stesso snap dell'inserimento (riga standard più vicina).
+                // Il blocco batteria renderizza in chiave di percussione, quindi il ghost mostra
+                // testa+posizione reali (✕ per i piatti) prima del click. `y` GREZZA (non
+                // `yCalGhost`): la geometria reale è già nello spazio del puntatore (vedi click).
+                const palette = drumPaletteFor(accGhostTrack);
+                const layout = drumStavesLayoutRef.current.find(l => l.trackIdx === accGhostTrackIdx);
+                let element: number;
+                if (layout) {
+                    element = snapDrumElementAtY(y, layout.topLineY, layout.lineSpacing, palette);
+                } else {
+                    let best = palette[0], bd = Infinity;
+                    for (const p of palette) { const d = Math.abs(posFromDrumLine(p.line) - accGhostPos); if (d < bd) { bd = d; best = p; } }
+                    element = best.midi;
+                }
+                accGhostProps = makeDrumNoteProps(element, palette, accGhostClef, keySignature);
+            } else {
+                accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignature);
+                accGhostProps = applyAutoLeadingToneInMinor(accGhostProps);
+                accGhostProps = applyActiveAccidental(accGhostProps);
+            }
 
             setGhostNote(prev => {
                 const next = {
@@ -10815,6 +10968,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 onChangeVoiceInstrument={(voice: number, instrument: string) => setVoiceInstruments(prev => ({ ...prev, [voice]: instrument }))}
                 isMixerOpen={isMixerOpen}
                 onToggleMixer={() => setIsMixerOpen(o => !o)}
+                hasDrumTrack={(accompanimentTracks || []).some(t => (t as any).isDrum)}
+                isDrumPanelOpen={isDrumPanelOpen}
+                onToggleDrumPanel={() => setIsDrumPanelOpen(o => !o)}
                 selectedInsertion={selectedInsertion}
                 setSelectedInsertion={setSelectedInsertion}
                 selectedNoteIds={selectedNoteIds}
@@ -10896,6 +11052,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 accLetRing={accSelectionHeld}
                 onToggleAccLetRing={handleToggleAccHold}
             />
+
+            {/* Modulo percussioni FLOTTANTE: si apre/chiude dalla toolbar (🥁) e si auto-apre
+                quando aggiungi una batteria. Clicca un pezzo → si inserisce al CURSORE (la
+                playhead avanza); i pezzi restano inseribili anche col clic diretto sul rigo. */}
+            {isDrumPanelOpen && (() => {
+                const drumTrack = (accompanimentTracks || []).find(t => (t as any).isDrum && t.id === activeAccTrackIdRef.current)
+                    ?? (accompanimentTracks || []).find(t => (t as any).isDrum);
+                if (!drumTrack) return null;
+                const kit = (drumTrack as any).drumKit === 'rock' ? 'rock' : 'orchestral';
+                const palette = drumPaletteFor(drumTrack);
+                const setKit = (k: 'orchestral' | 'rock') =>
+                    setAccompanimentTracks(prev => prev.map(t => t.id === drumTrack.id ? ({ ...t, drumKit: k }) : t));
+                const pieces = palette.map(p => ({ midi: p.midi, label: p.label }));
+                return (
+                    <DrumPalettePanel
+                        trackName={drumTrack.name}
+                        kit={kit}
+                        onSetKit={setKit}
+                        pieces={pieces}
+                        onInsertPiece={insertDrumPieceAtCursor}
+                        onClose={() => setIsDrumPanelOpen(false)}
+                    />
+                );
+            })()}
 
             <PreferencesModal
                 isOpen={isPreferencesOpen}
@@ -11487,6 +11667,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 showAccompanimentStaves={hasVisibleAccompaniment}
                                                                 accompanimentStaffMode={effectiveAccStaffMode}
                                                                 accompanimentTracks={visibleAccompanimentTracks}
+                                                                onDrumStavesLayout={handleDrumStavesLayout}
+                                                                drumPalettes={{ orchestral: DRUM_PALETTE_ORCH, rock: DRUM_PALETTE_ROCK }}
                                                                 satbName={satbVisible ? satbName : ''}
                               />
                                                                                                                                 );

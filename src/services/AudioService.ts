@@ -67,7 +67,8 @@ const SUSTAINED: Record<string, { loopStartSec: number; ext: 'flac' | 'mp3' }> =
 // SUSTAINED → nessun loop (vedi prepare-orchestra.mjs --no-loop).
 const ONESHOT_FLAC = new Set<string>([
   'pizzicato_strings', 'timpani', 'marimba', 'glockenspiel', 'xylophone', 'tubular_bells',
-  'drums', // kit batteria GM (canale 10): ogni "nota" = un pezzo del kit, one-shot
+  'drums',   // kit batteria ORCHESTRALE (VSCO2): ogni "nota" = un pezzo del kit, one-shot
+  'drumkit', // kit batteria ROCK (Salamander): idem, set GM standard
 ]);
 const instrumentExt = (instrument: string): 'flac' | 'mp3' =>
   (SUSTAINED[instrument] || ONESHOT_FLAC.has(instrument)) ? 'flac' : 'mp3';
@@ -102,7 +103,8 @@ const INSTRUMENT_GAIN: Record<string, number> = {
   glockenspiel: 0.32,
   xylophone: 0.32,
   tubular_bells: 0.32,
-  drums: 0.45, // kit batteria (livelli naturali del kit preservati); trim complessivo da tarare
+  drums: 0.45,   // kit batteria orchestrale; trim complessivo da tarare
+  drumkit: 0.45, // kit batteria rock (Salamander, picchi a -6 dBFS); trim da tarare a orecchio
 };
 const instrumentGain = (instrument: string): number => INSTRUMENT_GAIN[instrument] ?? 1;
 

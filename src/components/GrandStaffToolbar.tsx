@@ -126,6 +126,10 @@ type GrandStaffToolbarProps = {
     onChangeVoiceInstrument?: (voice: number, instrument: string) => void;
     isMixerOpen?: boolean;
     onToggleMixer?: () => void;
+    /** Modulo percussioni flottante: il pulsante 🥁 compare solo se esiste una batteria. */
+    hasDrumTrack?: boolean;
+    isDrumPanelOpen?: boolean;
+    onToggleDrumPanel?: () => void;
 
     selectedInsertion: InsertionElement;
     setSelectedInsertion: React.Dispatch<React.SetStateAction<InsertionElement>>;
@@ -302,6 +306,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         onChangeVoiceInstrument,
         isMixerOpen,
         onToggleMixer,
+        hasDrumTrack,
+        isDrumPanelOpen,
+        onToggleDrumPanel,
         selectedInsertion,
         setSelectedInsertion,
         selectedNoteIds,
@@ -705,14 +712,27 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 </select>
             </div>
         ) : null,
-        mixer: onToggleMixer ? (
-            <button
-                onClick={onToggleMixer}
-                title="Mixer"
-                className={`flex items-center gap-1 p-1 px-2 rounded-md text-xs font-semibold transition-colors ${isMixerOpen ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-                🎚 Mixer
-            </button>
+        mixer: (onToggleMixer || (hasDrumTrack && onToggleDrumPanel)) ? (
+            <div className="flex items-center gap-1">
+                {onToggleMixer && (
+                    <button
+                        onClick={onToggleMixer}
+                        title="Mixer"
+                        className={`flex items-center gap-1 p-1 px-2 rounded-md text-xs font-semibold transition-colors ${isMixerOpen ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                        🎚 Mixer
+                    </button>
+                )}
+                {hasDrumTrack && onToggleDrumPanel && (
+                    <button
+                        onClick={onToggleDrumPanel}
+                        title="Modulo percussioni (apri/chiudi)"
+                        className={`flex items-center gap-1 p-1 px-2 rounded-md text-xs font-semibold transition-colors ${isDrumPanelOpen ? 'bg-amber-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                        🥁
+                    </button>
+                )}
+            </div>
         ) : null,
         insert: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">

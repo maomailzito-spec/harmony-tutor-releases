@@ -25,6 +25,8 @@ dist-ssr
 
 # Local debug scratch
 .tmp-debug/
+# Drumkit render scratch (prepare-drumkit.mjs intermediate files)
+scripts/.drumkit-tmp/
 
 # Backups / local history exports (do not commit)
 recovered/
