@@ -50,7 +50,8 @@ const ATTACK = parseFloat(opt('attack', '1.00'));    // = SUSTAINED.loopStartSec
 const CAP = parseFloat(opt('cap', '8.00'));          // lunghezza max del file: le note ≤ CAP suonano NATURALI (nessun loop)
 const XFADE = parseFloat(opt('xfade', '0.05'));      // crossfade del raro wrap di coda
 const NOLOOP = has('no-loop');                       // strumenti che decadono (piano, pizzicato, percussioni): nessun loop
-const NONORM = has('no-normalize');                  // NON normalizzare LUFS per-nota (kit batteria: preserva il bilanciamento dei pezzi)
+const NONORM = has('no-normalize');                  // NON normalizzare LUFS per-nota (preserva il bilanciamento)
+const PEAK = has('peak') ? parseFloat(opt('peak', '-6')) : null; // normalizza ogni nota a questo PICCO dBFS (batteria: tutti i pezzi udibili/omogenei)
 const LUFS = parseFloat(opt('lufs', '-18'));         // target integrated loudness
 const SR = 44100;
 // Tenere la nota oltre il cap così a CAP siamo ancora in sustain pieno (campioni lunghi).
@@ -89,6 +90,14 @@ function measureLoudness(file) {
   return { i: i ? parseFloat(i[1]) : null, tp: tp ? parseFloat(tp[1]) : null };
 }
 
+/** Picco massimo (dBFS) via volumedetect — per la normalizzazione di PICCO (batteria:
+ *  ogni colpo allo stesso picco → tutti udibili e omogenei, come un kit di sampler). */
+function measurePeak(file) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-i', file, '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' });
+  const m = (r.stderr || '').match(/max_volume:\s*(-?[\d.]+)\s*dB/);
+  return m ? parseFloat(m[1]) : null;
+}
+
 // ── verifica strumenti ───────────────────────────────────────────────────────
 for (const [name, path] of [['sfizz_render', SFIZZ]]) if (!existsSync(path)) { console.error(`${name} non trovato in ${path}`); process.exit(1); }
 const verFlag = { ffmpeg: '-version', sox: '--version' };
@@ -123,10 +132,15 @@ for (const midi of targets) {
     const outFlac = join(OUT_DIR, `${name}.flac`);
     run('python3', [join(scriptDir, '_make_loop.py'), raw, built, NOLOOP ? '-1' : String(ATTACK), String(CAP), String(XFADE)]);
 
-    if (NONORM) {
-      // Niente normalizzazione LUFS per-nota: per i KIT di batteria va preservato il
-      // bilanciamento NATURALE tra i pezzi (cassa forte, charleston piano). Il livello
-      // complessivo si regola poi con INSTRUMENT_GAIN.
+    if (PEAK != null) {
+      // Normalizzazione di PICCO (batteria): ogni colpo portato allo stesso picco dBFS →
+      // tutti i pezzi udibili e omogenei (la libreria orchestrale ha livelli con 25+ dB di
+      // spread, che rende charleston/tom inudibili). Il bilancio fine si fa poi a orecchio.
+      const mv = measurePeak(built);
+      const gainDb = (mv != null) ? (PEAK - mv) : 0;
+      run('ffmpeg', ['-y', '-i', built, '-af', `volume=${gainDb.toFixed(2)}dB`, '-ar', String(SR), '-c:a', 'flac', outFlac]);
+    } else if (NONORM) {
+      // Niente normalizzazione LUFS per-nota: preserva il bilanciamento NATURALE.
       run('ffmpeg', ['-y', '-i', built, '-ar', String(SR), '-c:a', 'flac', outFlac]);
     } else {
       // Normalizzazione LUFS con guadagno COSTANTE (loop-safe): misura → volume.

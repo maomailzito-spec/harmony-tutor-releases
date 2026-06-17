@@ -240,6 +240,28 @@ const defaultRestLineForVoice = (voice: number, clef: ClefType): number | null =
   return null;
 };
 
+// ── Batteria: pezzo GM → posizione + testa sul rigo percussioni (VexFlow key) ──
+// Posizioni convenzionali su rigo a 5 linee (clef 'percussion'); il suffisso '/x2' è la
+// testa a ✕ (charleston/piatti); tamburi e tom usano testa normale.
+// Mappa per il kit ORCHESTRALE attuale (VSCO2 GM-StylePerc): gran cassa, rullante, gong,
+// piatto sospeso, piatto crash, tamburello, cowbell. (Un eventuale kit rock/pop userà una
+// mappa GM-standard separata quando verrà aggiunto.)
+const DRUM_VEX_KEY: Record<number, string> = {
+  35: 'f/4', 36: 'f/4',                            // gran cassa (basso)
+  37: 'c/5', 38: 'c/5', 39: 'c/5', 40: 'c/5', 41: 'c/5', // rullante (colpi/rulli)
+  42: 'd/4/x2', 46: 'd/4/x2',                      // gong (basso, testa ✕)
+  47: 'g/5/x2', 48: 'g/5/x2', 50: 'g/5/x2', 51: 'g/5/x2', 59: 'g/5/x2', // piatto sospeso (alto ✕)
+  49: 'a/5/x2',                                    // piatto crash (alto ✕)
+  53: 'e/5/x2', 54: 'e/5/x2', 55: 'e/5/x2',        // tamburello
+  56: 'f/5/x2',                                    // cowbell
+};
+const isPercussionClef = (clef: ClefType): boolean => (clef as any) === 'percussion';
+const drumPieceToVexKey = (midi: number): string => DRUM_VEX_KEY[Number(midi)] ?? 'c/5';
+const vexKeyForNote = (n: StaffNote, clef: ClefType): string =>
+  isPercussionClef(clef)
+    ? drumPieceToVexKey(Number((n as any).midi))
+    : `${staffNoteToVexflowKeyName(n)}/${(n as any).octave ?? 4}`;
+
 const makeVfNote = (
   n: StaffNote,
   clef: ClefType,
@@ -247,7 +269,7 @@ const makeVfNote = (
   hideStem?: boolean,
   restLineOverride?: number,
 ) => {
-  const key = `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`;
+  const key = vexKeyForNote(n, clef);
   const baseDur = durationToVexflow(n.duration);
   // Keep the duration string free of dots.
   // We render the dotted glyph ourselves as an SVG circle (more reliable when drawing
@@ -316,7 +338,7 @@ const makeVfNote = (
   }
   // Ghost preview: keep the exact accidental glyph on the note itself.
   // (Final notes use measure-state rules and add modifiers later.)
-  if (!n.isRest && n.id === '__ghost__') {
+  if (!n.isRest && n.id === '__ghost__' && !isPercussionClef(clef)) {
     const accidentalToShow: AccidentalType | null =
       normalizeAccidentalType((n as any).userAccidental)
       ?? (n.explicitAccidental != null ? n.explicitAccidental : null)
@@ -722,6 +744,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       trebleY: number;
       color?: string;
       voiced?: boolean;
+      isDrum?: boolean;
     };
     let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
     // Robustness: if asked to show acc staves but no track metadata arrived, draw one
@@ -731,12 +754,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     }
     const accTrebleOffsets = accompanimentTrackTrebleOffsets(accVisibleTracks);
     const accBlocks: AccBlock[] = accVisibleTracks.map((t, i) => {
-      const mode = (t.staffMode ?? 'grandstaff');
-      const clef: ClefType = mode === 'grandstaff' ? 'treble' : (t.clef ?? 'treble');
+      const isDrum = !!(t as any).isDrum;
+      // Traccia batteria: rigo singolo a 5 linee con CHIAVE DI PERCUSSIONE (neutra).
+      const mode = isDrum ? 'treble_only' : (t.staffMode ?? 'grandstaff');
+      const clef: ClefType = isDrum ? ('percussion' as any) : (mode === 'grandstaff' ? 'treble' : (t.clef ?? 'treble'));
       const trebleY = accTrebleY + accTrebleOffsets[i];
       const treble = new Stave(STAFF_MARGIN, trebleY, staffWidth);
       const bass = mode === 'grandstaff' ? new Stave(STAFF_MARGIN, trebleY + ACCOMPANIMENT_GS_SPAN, staffWidth) : null;
-      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced };
+      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -827,7 +852,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       block.treble
         .addClef(block.clef as any)
         .addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
-      block.treble.addKeySignature(keyString);
+      if (!block.isDrum) block.treble.addKeySignature(keyString); // la batteria non ha armatura
       block.treble.setContext(context).draw();
 
       if (block.bass) {
@@ -1209,7 +1234,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
         const makeVfChordNote = (notesInChord: StaffNote[]): { vf: StaveNote; primaryId: string; ids: string[] } => {
           const ids = notesInChord.map(n => n.id);
-          const keys = notesInChord.map(n => `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`);
+          const keys = notesInChord.map(n => vexKeyForNote(n, clef));
           const baseDur = durationToVexflow(notesInChord[0].duration);
           const vf = new StaveNote({ clef: clef as any, keys, duration: `${baseDur}` });
 
@@ -2167,7 +2192,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     const ks = `${staffNoteToVexflowKeyName(cn)}/${(cn as any).octave ?? 4}`;
                     const ki = keysArr.length ? keysArr.indexOf(ks) : -1;
                     const idx2 = ki >= 0 ? ki : ci;
-                    if (idx2 >= 0) ck.addModifier(new Accidental(g2), idx2);
+                    if (idx2 >= 0 && !isPercussionClef(clef)) ck.addModifier(new Accidental(g2), idx2);
                   });
                   ck.__accAddedAtCreation = true;
                 } catch { /* ignore */ }
@@ -2200,7 +2225,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     const idx = keyIdx >= 0 ? keyIdx : mergedIds.indexOf(n.id);
                     // Le alterazioni dell'accordo sono già state aggiunte alla creazione
                     // (vedi sopra); qui si applica solo lo stagger/posizionamento.
-                    if (idx >= 0 && !(vfNote as any).__accAddedAtCreation) {
+                    if (idx >= 0 && !(vfNote as any).__accAddedAtCreation && !isPercussionClef(clef)) {
                       const acc = new Accidental(vfGlyph);
                       (vfNote as any).addModifier(acc, idx);
 
@@ -2305,7 +2330,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                     }
                   } else {
                     const acc = new Accidental(vfGlyph);
-                    (vfNote as any).addModifier(acc, 0);
+                    if (!isPercussionClef(clef)) (vfNote as any).addModifier(acc, 0);
                     // Default spacing is usually correct, but in close-position multi-voice onsets
                     // accidentals may overlap; apply a small per-note stagger when needed.
                     // Skip custom stagger when 3+ accidentals share the same onset —
