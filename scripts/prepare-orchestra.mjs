@@ -50,6 +50,7 @@ const ATTACK = parseFloat(opt('attack', '1.00'));    // = SUSTAINED.loopStartSec
 const CAP = parseFloat(opt('cap', '8.00'));          // lunghezza max del file: le note ≤ CAP suonano NATURALI (nessun loop)
 const XFADE = parseFloat(opt('xfade', '0.05'));      // crossfade del raro wrap di coda
 const NOLOOP = has('no-loop');                       // strumenti che decadono (piano, pizzicato, percussioni): nessun loop
+const NONORM = has('no-normalize');                  // NON normalizzare LUFS per-nota (kit batteria: preserva il bilanciamento dei pezzi)
 const LUFS = parseFloat(opt('lufs', '-18'));         // target integrated loudness
 const SR = 44100;
 // Tenere la nota oltre il cap così a CAP siamo ancora in sustain pieno (campioni lunghi).
@@ -122,12 +123,19 @@ for (const midi of targets) {
     const outFlac = join(OUT_DIR, `${name}.flac`);
     run('python3', [join(scriptDir, '_make_loop.py'), raw, built, NOLOOP ? '-1' : String(ATTACK), String(CAP), String(XFADE)]);
 
-    // Normalizzazione LUFS con guadagno COSTANTE (loop-safe): misura → volume.
-    const m = measureLoudness(built);
-    let gainDb = (m.i != null) ? (LUFS - m.i) : 0;
-    if (m.tp != null) gainDb = Math.min(gainDb, -1.0 - m.tp); // evita clipping (TP ≤ -1 dBTP)
-    run('ffmpeg', ['-y', '-i', built, '-af', `volume=${gainDb.toFixed(2)}dB`, '-ar', String(SR), normd]);
-    run('ffmpeg', ['-y', '-i', normd, '-c:a', 'flac', outFlac]);
+    if (NONORM) {
+      // Niente normalizzazione LUFS per-nota: per i KIT di batteria va preservato il
+      // bilanciamento NATURALE tra i pezzi (cassa forte, charleston piano). Il livello
+      // complessivo si regola poi con INSTRUMENT_GAIN.
+      run('ffmpeg', ['-y', '-i', built, '-ar', String(SR), '-c:a', 'flac', outFlac]);
+    } else {
+      // Normalizzazione LUFS con guadagno COSTANTE (loop-safe): misura → volume.
+      const m = measureLoudness(built);
+      let gainDb = (m.i != null) ? (LUFS - m.i) : 0;
+      if (m.tp != null) gainDb = Math.min(gainDb, -1.0 - m.tp); // evita clipping (TP ≤ -1 dBTP)
+      run('ffmpeg', ['-y', '-i', built, '-af', `volume=${gainDb.toFixed(2)}dB`, '-ar', String(SR), normd]);
+      run('ffmpeg', ['-y', '-i', normd, '-c:a', 'flac', outFlac]);
+    }
     done++;
     if (done % 8 === 0) console.log(`  ...${done}/${targets.length}`);
   } catch (e) {

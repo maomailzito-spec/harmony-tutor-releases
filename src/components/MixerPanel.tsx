@@ -34,6 +34,7 @@ interface MixerPanelProps {
   accompanimentTracks: AccompanimentTrack[];
   onUpdateTrack: (trackId: string, updates: Partial<AccompanimentTrack>) => void;
   onAddEmptyTrack: () => void;
+  onAddDrumTrack: () => void;
   onDeleteTrack: (trackId: string) => void;
   /** Instantaneous output peak (0..1) for a SATB voice — drives the signal LEDs. */
   getVoiceLevel?: (voice: number) => number;
@@ -401,7 +402,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   voiceInstruments, voiceVolumes, mutedVoices, soloVoices,
   onChangeVoiceInstrument, onUpdateVoice, onToggleSolo,
   satbVisible, onToggleSatbVisible, satbName, onRenameSatb,
-  accompanimentTracks, onUpdateTrack, onAddEmptyTrack, onDeleteTrack,
+  accompanimentTracks, onUpdateTrack, onAddEmptyTrack, onAddDrumTrack, onDeleteTrack,
   getVoiceLevel, getTrackLevel,
   onClose,
 }) => {
@@ -537,13 +538,22 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         <section className="flex flex-col">
           <div className="flex items-center justify-between mb-1 px-1">
             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Tracce</span>
-            <button
-              onClick={onAddEmptyTrack}
-              title="Aggiungi nuova traccia vuota"
-              className="h-4 px-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[9px] font-bold rounded transition-colors"
-            >
-              + Nuova
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onAddEmptyTrack}
+                title="Aggiungi nuova traccia vuota"
+                className="h-4 px-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[9px] font-bold rounded transition-colors"
+              >
+                + Nuova
+              </button>
+              <button
+                onClick={onAddDrumTrack}
+                title="Aggiungi traccia di percussioni (batteria, MIDI canale 10)"
+                className="h-4 px-1.5 bg-amber-700 hover:bg-amber-600 text-white text-[9px] font-bold rounded transition-colors"
+              >
+                + Batteria
+              </button>
+            </div>
           </div>
           <div className="flex gap-1">
             {accompanimentTracks.length === 0 ? (

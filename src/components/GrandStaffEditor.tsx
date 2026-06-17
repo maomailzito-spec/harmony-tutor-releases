@@ -562,6 +562,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return next;
         });
     }, []);
+
+    // Traccia di PERCUSSIONI (MIDI ch.10): le note sono pezzi del kit GM (cassa 36,
+    // rullante 38, charleston 42…). Suona il kit `drums` (one-shot). La resa su rigo
+    // percussioni dedicata arriva in un secondo momento; per ora rigo singolo.
+    const handleAddDrumTrack = useCallback(() => {
+        const id = crypto.randomUUID();
+        setAccompanimentTracks(prev => {
+            const index = (prev || []).length + 1;
+            const newTrack: AccompanimentTrack = {
+                id,
+                name: `Batteria ${index}`,
+                instrumentId: 0,
+                notes: [],
+                muted: false,
+                visible: true,
+                volume: 0.8,
+                staffMode: 'treble_only',
+                clef: 'treble',
+                isDrum: true,
+            };
+            const next = [...(prev || []), newTrack];
+            latestAccompanimentTracks.current = next;
+            return next;
+        });
+        // Rendi attiva la nuova traccia batteria, così tastiera/click la monitorano subito.
+        activeAccTrackIdRef.current = id;
+        setActiveStaffArea('accompaniment');
+    }, []);
     // ...existing code...
     // copyPasteError now owned by useNoteSelection
     const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
@@ -935,7 +963,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // nota non si sovrappone a una copia identica del campione (comb/"scatto").
                 monitorHandlesRef.current.get(midi)?.release(0.02);
                 const handle = audioService.playSustainedNote(
-                    gmToSoundfont(track.instrumentId), name,
+                    track.isDrum ? 'drums' : gmToSoundfont(track.instrumentId), name,
                     { volume: velocityToGain(velocity), output: trackGain, velocity },
                 );
                 monitorHandlesRef.current.set(midi, handle);
@@ -2209,7 +2237,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return { ...track, notes: [...kept, ...newAccNotes].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
                 }));
                 setSelectedNoteIds(new Set(newAccNotes.map((n: any) => n.id)));
-                const accInstrBlk = gmToSoundfont(latestAccompanimentTracks.current?.[trackIdx]?.instrumentId);
+                const accTrkBlk = latestAccompanimentTracks.current?.[trackIdx];
+                const accInstrBlk = accTrkBlk?.isDrum ? 'drums' : gmToSoundfont(accTrkBlk?.instrumentId);
                 newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk); });
                 return;
             }
@@ -2413,7 +2442,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setChordInputText('');
             setChordInputError(false);
             setSelectedNoteIds(new Set(accNotes.map(n => n.id)));
-            const accInstrChord = gmToSoundfont(latestAccompanimentTracks.current?.[firstVisibleIdx]?.instrumentId);
+            const accTrkChord = latestAccompanimentTracks.current?.[firstVisibleIdx];
+            const accInstrChord = accTrkChord?.isDrum ? 'drums' : gmToSoundfont(accTrkChord?.instrumentId);
             accNotes.forEach(n => { void playNoteRef.current?.(n, 0.8, accInstrChord); });
             return { startTick, durTicks };
         }
@@ -5597,10 +5627,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (!n || n.isRest) continue;
                         // Preload samples for ALL voices/tracks regardless of mute/solo, so
                         // toggling them mid-playback (now real-time via gain nodes) works.
-                        const midi = (n.midi ?? 0) + playbackTransposeSemitones;
+                        const accTrk = it.accTrackIdx !== undefined ? accTracks[it.accTrackIdx] : undefined;
+                        const isDrumTrk = !!accTrk?.isDrum;
+                        const midi = isDrumTrk ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midi) || midi < 21 || midi > 108) continue;
-                        const instr = it.accTrackIdx !== undefined
-                            ? gmToSoundfont(accTracks[it.accTrackIdx]?.instrumentId)
+                        const instr = accTrk
+                            ? (isDrumTrk ? 'drums' : gmToSoundfont(accTrk.instrumentId))
                             : (voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano');
                         if (!neededByInstrument.has(instr)) neededByInstrument.set(instr, new Set());
                         neededByInstrument.get(instr)!.add(midiToName(midi));
@@ -5845,9 +5877,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const track = latestAccompanimentTracks.current[it.accTrackIdx];
                         if (!track) return;
                         const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
-                        const midiT = (n.midi ?? 0) + playbackTransposeSemitones;
+                        // Traccia batteria: la "nota" è un pezzo del kit (note GM perc.), NON
+                        // un'altezza → niente transpose; suona il kit `drums`; durata generosa
+                        // così i piatti risuonano (i pezzi corti finiscono comunque da soli).
+                        const isDrum = !!track.isDrum;
+                        const midiT = isDrum ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones;
                         if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
-                        const instr = gmToSoundfont(track.instrumentId);
+                        const instr = isDrum ? 'drums' : gmToSoundfont(track.instrumentId);
+                        const playDurSec = isDrum ? Math.max(durSec, 4.0) : durSec;
                         // Get-or-create persistent per-track gain node. Routing notes through
                         // it lets us mute/change volume in real-time (sample-accurate) even
                         // while notes are already scheduled in the Web Audio queue.
@@ -5864,7 +5901,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (trackGain) {
                             trackGain.gain.value = isTrackAudible(track) ? track.volume : 0;
                         }
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: trackGain, sustain: true, velocity: n.velocity });
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: trackGain, sustain: true, velocity: n.velocity });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -6582,10 +6619,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (didSelect && n && !n.isRest) {
             // Use normalizedRawNotes for correct MIDI (handles stale fields in legacy files).
             const normalized = (normalizedRawNotes || []).find((nn: any) => nn.id === noteId) ?? n;
-            // Nota ACC: suona lo strumento della TRACCIA (non il piano di default).
+            // Nota ACC: suona lo strumento della TRACCIA (kit `drums` se traccia batteria,
+            // altrimenti lo strumento GM), non il piano di default.
             const accInfoForPlay = isAccNote ? findAccTrackForNote(noteId, latestAccompanimentTracks.current) : null;
-            const clickInstr = accInfoForPlay
-                ? gmToSoundfont(latestAccompanimentTracks.current[accInfoForPlay.trackIndex]?.instrumentId)
+            const accTrkForPlay = accInfoForPlay ? latestAccompanimentTracks.current[accInfoForPlay.trackIndex] : null;
+            const clickInstr = accTrkForPlay
+                ? (accTrkForPlay.isDrum ? 'drums' : gmToSoundfont(accTrkForPlay.instrumentId))
                 : undefined;
             void playNote(normalized, 0.6, clickInstr);
         }
@@ -8092,8 +8131,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }));
                 setSelectedNoteIds(new Set([accNote.id]));
                 justInsertedNoteRef.current = accNote.id;
-                // Audition the inserted ACC note con lo strumento della traccia (non il piano)
-                const accInstrClick = gmToSoundfont(latestAccompanimentTracks.current?.find(t => t.id === targetTrackId)?.instrumentId);
+                // Audition the inserted ACC note con lo strumento della traccia (kit se batteria)
+                const accTrkClick = latestAccompanimentTracks.current?.find(t => t.id === targetTrackId);
+                const accInstrClick = accTrkClick?.isDrum ? 'drums' : gmToSoundfont(accTrkClick?.instrumentId);
                 void playNote(accNote, 0.8, accInstrClick);
                 // Advance playhead to the next position (same as SATB insertion)
                 try {
@@ -11016,6 +11056,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     accompanimentTracks={accompanimentTracks}
                     onUpdateTrack={handleUpdateTrack}
                     onAddEmptyTrack={handleAddEmptyTrack}
+                    onAddDrumTrack={handleAddDrumTrack}
                     onDeleteTrack={handleDeleteTrack}
                     getVoiceLevel={getVoiceLevel}
                     getTrackLevel={getTrackLevel}

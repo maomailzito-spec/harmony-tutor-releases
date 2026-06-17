@@ -253,6 +253,11 @@ export type AccompanimentTrack = {
   /** Colore personalizzato della traccia (hex, es. "#38bdf8"). Mostrato come banda
    *  verticale a fianco del rigo e usato per colorare le note in modalità colore. */
   color?: string;
+  /** Traccia di PERCUSSIONI (MIDI canale 10): le note non sono altezze ma pezzi del kit
+   *  (note GM percussione: 36=cassa, 38=rullante, 42=charleston…). Suona il kit `drums`
+   *  (one-shot) invece di `instrumentId`, si incide su rigo percussioni, e in uscita MIDI
+   *  va sempre sul canale 10. `staffMode`/`voiced` ignorati. */
+  isDrum?: boolean;
 };
 
 /**
