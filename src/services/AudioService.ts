@@ -67,6 +67,9 @@ const SUSTAINED: Record<string, { loopStartSec: number; ext: 'flac' | 'mp3' }> =
 // SUSTAINED → nessun loop (vedi prepare-orchestra.mjs --no-loop).
 const ONESHOT_FLAC = new Set<string>([
   'pizzicato_strings', 'timpani', 'marimba', 'glockenspiel', 'xylophone', 'tubular_bells',
+  // bassi pizzicato/elettrici: note che decadono → one-shot, niente loop. FLAC locali
+  // renderizzati da SFZ (range del set), oltre il quale ripiegano sul GM remoto (mp3).
+  'double_bass_pizz', 'electric_bass_finger', 'electric_bass_pick',
   'drums',   // kit batteria ORCHESTRALE (VSCO2): ogni "nota" = un pezzo del kit, one-shot
   'drumkit', // kit batteria ROCK (Salamander): idem, set GM standard
 ]);
@@ -103,10 +106,38 @@ const INSTRUMENT_GAIN: Record<string, number> = {
   glockenspiel: 0.32,
   xylophone: 0.32,
   tubular_bells: 0.32,
+  // bassi: FLAC one-shot normalizzati per ATTACCO uniforme (vedi _normalize_attack.py).
+  // I tre hanno livelli d'attacco diversi → gain per pareggiarli tra loro e col piano.
+  // STIME DI PARTENZA — da affinare a orecchio (l'attacco normalizzato non predice la
+  // loudness percepita vs gli strumenti tenuti).
+  double_bass_pizz: 1.00,
+  electric_bass_finger: 0.40,
+  electric_bass_pick: 0.50,
   drums: 0.45,   // kit batteria orchestrale; trim complessivo da tarare
   drumkit: 0.45, // kit batteria rock (Salamander, picchi a -6 dBFS); trim da tarare a orecchio
 };
 const instrumentGain = (instrument: string): number => INSTRUMENT_GAIN[instrument] ?? 1;
+
+/**
+ * Coda di release per-strumento (s). La coda lunga di default (0.5s) su una linea
+ * o arpeggio di basso si SOMMA nota dopo nota → "effetto pedale"/accavallamento.
+ * Per i bassi una coda corta tronca la nota appena prima della successiva: niente
+ * pile-up, ma fade morbido (no click). Vale SOLO per questi strumenti; gli altri
+ * mantengono la coda lunga (legato/risonanza naturale).
+ */
+const SHORT_RELEASE: Record<string, number> = {
+  double_bass_pizz: 0.06,
+  electric_bass_finger: 0.06,
+  electric_bass_pick: 0.06,
+};
+const instrumentRelease = (instrument: string): number => SHORT_RELEASE[instrument] ?? 0.5;
+
+/**
+ * Strumenti SOLO-LOCALI: nessun fallback GM remoto. Sono i bassi custom (FLAC
+ * renderizzati da SFZ): oltre il range renderizzato la nota resta muta, invece di
+ * passare a un campione GM con timbro/livello diversi (il "calo" al confine).
+ */
+const LOCAL_ONLY = new Set<string>(['double_bass_pizz', 'electric_bass_finger', 'electric_bass_pick']);
 
 /** Handle for a sustained (note-on/note-off) monitored note. */
 export interface SustainHandle {
@@ -288,11 +319,14 @@ export class AudioService {
     if (this.audioBuffers.has(key) || this.failedLoads.has(key)) return;
 
     // Try local bundled file first (FLAC for sustained instruments, else mp3),
-    // then fall back to remote CDN (mp3 only).
+    // then fall back to remote CDN (mp3 only). Per gli strumenti LOCAL_ONLY (i bassi
+    // custom) NIENTE fallback GM: oltre il range renderizzato la nota resta muta invece
+    // di passare a un timbro/livello GM diverso (era il "calo" percepito al confine).
     const localUrl = `./sounds/${instrument}/${audioFile}.${instrumentExt(instrument)}`;
     const remoteUrl = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/${audioFile}.mp3`;
+    const urls = LOCAL_ONLY.has(instrument) ? [localUrl] : [localUrl, remoteUrl];
 
-    for (const url of [localUrl, remoteUrl]) {
+    for (const url of urls) {
       try {
         const response = await fetch(url);
         if (!response.ok) continue;
@@ -385,7 +419,7 @@ export class AudioService {
     }
     const startTime = options?.when ?? this.audioContext.currentTime;
     const noteDurationInSeconds = options?.duration ?? audioBuffer.duration;
-    const releaseDurationInSeconds = 0.5;
+    const releaseDurationInSeconds = instrumentRelease(instrument);
     const noteEndTime = startTime + noteDurationInSeconds;
     const vol = (options?.volume ?? 1) * instrumentGain(instrument);
     if (options?.sustain) {

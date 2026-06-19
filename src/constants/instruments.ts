@@ -30,6 +30,11 @@ export const INSTRUMENTS: InstrumentOption[] = [
   { gm: 41, soundfont: 'viola',                emoji: '🎻', i18nKey: 'viola' },
   { gm: 42, soundfont: 'cello',                emoji: '🎻', i18nKey: 'cello' },
   { gm: 43, soundfont: 'contrabass',           emoji: '🎻', i18nKey: 'contrabass' },
+  // bassi (sezione ritmica) — one-shot, niente loop (vedi ONESHOT_FLAC). FLAC locali
+  // renderizzati da SFZ; oltre il range mappato ripiegano sul GM remoto (mp3).
+  { gm: 32, soundfont: 'double_bass_pizz',     emoji: '🎻', i18nKey: 'double_bass_pizz' },
+  { gm: 33, soundfont: 'electric_bass_finger', emoji: '🎸', i18nKey: 'electric_bass_finger' },
+  { gm: 34, soundfont: 'electric_bass_pick',   emoji: '🎸', i18nKey: 'electric_bass_pick' },
   { gm: 45, soundfont: 'pizzicato_strings',    emoji: '🎻', i18nKey: 'pizzicato' },
   { gm: 52, soundfont: 'choir_aahs',           emoji: '🎤', i18nKey: 'choir' },
   // legni

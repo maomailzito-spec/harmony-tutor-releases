@@ -250,6 +250,12 @@ export type AccompanimentTrack = {
    *  Permette righi strumentali/vocali in chiavi diverse (violino, basso, soprano,
    *  contralto, tenore). Default 'treble' se assente. Ignorata in 'grandstaff'. */
   clef?: ClefType;
+  /** Trasposizione d'OTTAVA in SUONO per strumenti traspositori (chitarra e basso
+   *  suonano un'ottava SOTTO il scritto). In ottave: -1 = 8vb (un'ottava sotto),
+   *  +1 = 8va, 0/assente = nessuna trasposizione. Riguarda solo il suono (riproduzione
+   *  e uscita MIDI): la notazione resta invariata e la chiave mostra un "8" sotto/sopra.
+   *  Solo per staffMode === 'treble_only' (chiave singola); ignorata per batteria. */
+  octaveTranspose?: number;
   /** Colore personalizzato della traccia (hex, es. "#38bdf8"). Mostrato come banda
    *  verticale a fianco del rigo e usato per colorare le note in modalità colore. */
   color?: string;
@@ -261,6 +267,10 @@ export type AccompanimentTrack = {
   /** Quale kit suona una traccia batteria: 'orchestral' (VSCO2, default) o 'rock' (Salamander).
    *  Determina il soundfont ('drums' vs 'drumkit'), la mappa pezzi e le posizioni sul rigo. */
   drumKit?: 'orchestral' | 'rock';
+  /** Canale MIDI in USCITA (1-16) verso l'uscita MIDI esterna. Se assente/0 = automatico
+   *  (batteria → 10; tracce intonate → da 5 in su saltando il 10). Permette di instradare
+   *  ogni traccia su un canale preciso in un DAW esterno (es. Logic). */
+  midiChannel?: number;
 };
 
 /**

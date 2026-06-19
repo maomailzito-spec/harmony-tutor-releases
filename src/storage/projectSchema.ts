@@ -29,6 +29,9 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'teacherPasswordHash',
   'analysisLockOptions',
   'accompanimentTracks',
+  'satbName',
+  'satbVisible',
+  'masterVolumes',
 ] as const;
 
 const KNOWN_KEY_SET: ReadonlySet<string> = new Set(PROJECT_KNOWN_KEYS_V1 as readonly string[]);
@@ -79,6 +82,10 @@ export type ProjectDataV1 = {
   /** Tracce di accompagnamento (opzionale, retrocompatibile).
    *  Non soggette ad analisi armonica né a voice-leading checker. */
   accompanimentTracks?: AccompanimentTrack[];
+
+  /** Volumi dei fader MASTER del mixer (gain lineare 0..1): gruppo SATB, gruppo ACC
+   *  e master globale. Assenti = 1 (0 dB). */
+  masterVolumes?: { satb?: number; acc?: number; mixer?: number };
 };
 
 export type AnalysisLockOptions = NonNullable<ProjectDataV1['analysisLockOptions']>;

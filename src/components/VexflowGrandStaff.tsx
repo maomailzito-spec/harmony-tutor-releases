@@ -42,7 +42,7 @@ interface VexflowGrandStaffProps {
   /** Tracce di accompagnamento VISIBILI, in ordine. Ogni traccia disegna il proprio
    *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
    *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
-  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean }>;
+  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean; octaveTranspose?: number }>;
   /** Geometria REALE dei righi batteria (per agganciare il click del mouse alle righe
    *  effettivamente renderizzate → coincidenza click/nota). `trackIdx` = indice nella lista
    *  tracce VISIBILI (== visIdx lato click). Emesso ad ogni layout. */
@@ -779,6 +779,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       voiced?: boolean;
       isDrum?: boolean;
       drumKit?: 'orchestral' | 'rock';
+      /** Annotazione d'ottava sulla chiave ('8vb'/'8va') per i righi traspositori. */
+      clefOctaveAnnotation?: '8va' | '8vb';
     };
     let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
     // Robustness: if asked to show acc staves but no track metadata arrived, draw one
@@ -800,7 +802,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const trebleY = accTrebleY + accTrebleOffsets[i];
       const treble = new Stave(STAFF_MARGIN, trebleY, staffWidth);
       const bass = mode === 'grandstaff' ? new Stave(STAFF_MARGIN, trebleY + ACCOMPANIMENT_GS_SPAN, staffWidth) : null;
-      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit };
+      // Righi traspositori (solo rigo singolo, non batteria): la chiave mostra un "8"
+      // sotto ('8vb', es. chitarra/basso) o sopra ('8va'); il suono è gestito a parte.
+      const octT = (t as any).octaveTranspose;
+      const clefOctaveAnnotation: '8va' | '8vb' | undefined =
+        (mode === 'treble_only' && !isDrum)
+          ? (octT === -1 ? '8vb' : octT === 1 ? '8va' : undefined)
+          : undefined;
+      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -889,7 +898,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
     for (const block of accBlocks) {
       block.treble
-        .addClef(block.clef as any)
+        .addClef(block.clef as any, undefined, block.clefOctaveAnnotation)
         .addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       if (!block.isDrum) block.treble.addKeySignature(keyString); // la batteria non ha armatura
       block.treble.setContext(context).draw();

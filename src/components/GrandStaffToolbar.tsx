@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import type { AccidentalType, NoteDuration, StaffNote, Voice } from '../types';
-import { INSTRUMENTS } from '../constants/instruments';
+import { INSTRUMENTS, gmToSoundfont, soundfontToGm } from '../constants/instruments';
 import {
     WholeNoteIcon,
     HalfNoteIcon,
@@ -122,8 +122,15 @@ type GrandStaffToolbarProps = {
     onReassignSelectionToVoice?: (voice: Voice) => void;
     soloVoices?: Set<number>;
     onToggleSolo?: (voice: number) => void;
+    /** Copia l'INTERA voce SATB (tutte le note nel brano). Esposto via tasto destro
+     *  sui pulsanti S/A/T/B (oltre alla scorciatoia ⇧⌘C). */
+    onCopyVoice?: (voice: Voice) => void;
     voiceInstruments?: Record<number, string>;
     onChangeVoiceInstrument?: (voice: number, instrument: string) => void;
+    /** Traccia ACC attiva (quando activeStaffArea === 'accompaniment'): il selettore
+     *  strumento della toolbar agisce su di essa invece che sulla voce SATB. */
+    activeAccTrack?: { id: string; name: string; instrumentId: number; isDrum?: boolean } | null;
+    onChangeAccTrackInstrument?: (trackId: string, gm: number) => void;
     isMixerOpen?: boolean;
     onToggleMixer?: () => void;
     /** Modulo percussioni flottante: il pulsante 🥁 compare solo se esiste una batteria. */
@@ -302,8 +309,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         onReassignSelectionToVoice,
         soloVoices,
         onToggleSolo,
+        onCopyVoice,
         voiceInstruments,
         onChangeVoiceInstrument,
+        activeAccTrack,
+        onChangeAccTrackInstrument,
         isMixerOpen,
         onToggleMixer,
         hasDrumTrack,
@@ -390,6 +400,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     const voiceName = useCallback((v: number): string => {
         return tT(v === 1 ? 'voice_soprano' : v === 2 ? 'voice_alto' : v === 3 ? 'voice_tenor' : 'voice_bass');
     }, [tT]);
+
+    // Context menu (tasto destro) sui pulsanti voce S/A/T/B → "Copia intera voce".
+    const [voiceCopyMenu, setVoiceCopyMenu] = useState<{ x: number; y: number; voice: Voice } | null>(null);
+    useEffect(() => {
+        if (!voiceCopyMenu) return;
+        const close = () => setVoiceCopyMenu(null);
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setVoiceCopyMenu(null); };
+        window.addEventListener('mousedown', close);
+        window.addEventListener('keydown', onKey);
+        return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', onKey); };
+    }, [voiceCopyMenu]);
 
     const durations: { duration: NoteDuration; label: string }[] = useMemo(() => ([
         { duration: 'whole', label: tT('duration_whole') },
@@ -691,27 +712,44 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         key={v}
                         onClick={() => { setSelectedVoice(v as Voice); if (hasNoteSelection) onReassignSelectionToVoice?.(v as Voice); }}
                         onDoubleClick={(e) => { e.preventDefault(); onToggleSolo?.(v); }}
+                        onContextMenu={onCopyVoice ? (e) => { e.preventDefault(); setVoiceCopyMenu({ x: e.clientX, y: e.clientY, voice: v as Voice }); } : undefined}
                         className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${soloVoices?.has(v) ? 'ring-2 ring-yellow-400 ' : ''}${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
-                        title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${hasNoteSelection ? tT('voice_reassign_suffix') : tT('voice_tooltip_suffix')}`}
+                        title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${hasNoteSelection ? tT('voice_reassign_suffix') : tT('voice_tooltip_suffix')}${onCopyVoice ? ' · tasto destro: copia intera voce' : ''}`}
                     >
                         {v === 1 ? 'S' : v === 2 ? 'A' : v === 3 ? 'T' : 'B'}
                     </button>
                 ))}
             </div>
         ),
-        voiceInstrument: onChangeVoiceInstrument ? (
-            <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={tT('voice_instrument_tooltip', { voice: voiceName(selectedVoice) })}>
-                <select
-                    className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
-                    value={voiceInstruments?.[selectedVoice] || 'acoustic_grand_piano'}
-                    onChange={(e) => onChangeVoiceInstrument(selectedVoice, e.target.value)}
-                >
-                    {INSTRUMENTS.map(opt => (
-                        <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
-                    ))}
-                </select>
-            </div>
-        ) : null,
+        voiceInstrument: (
+            // Quando l'area attiva è una traccia ACC, il selettore agisce sullo strumento
+            // della TRACCIA (per GM); altrimenti sulla voce SATB selezionata (per soundfont).
+            (activeStaffArea === 'accompaniment' && activeAccTrack && onChangeAccTrackInstrument) ? (
+                <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={`Strumento traccia: ${activeAccTrack.name}`}>
+                    <select
+                        className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
+                        value={gmToSoundfont(activeAccTrack.instrumentId)}
+                        onChange={(e) => onChangeAccTrackInstrument(activeAccTrack.id, soundfontToGm(e.target.value))}
+                    >
+                        {INSTRUMENTS.map(opt => (
+                            <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
+                        ))}
+                    </select>
+                </div>
+            ) : onChangeVoiceInstrument ? (
+                <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={tT('voice_instrument_tooltip', { voice: voiceName(selectedVoice) })}>
+                    <select
+                        className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
+                        value={voiceInstruments?.[selectedVoice] || 'acoustic_grand_piano'}
+                        onChange={(e) => onChangeVoiceInstrument(selectedVoice, e.target.value)}
+                    >
+                        {INSTRUMENTS.map(opt => (
+                            <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
+                        ))}
+                    </select>
+                </div>
+            ) : null
+        ),
         mixer: (onToggleMixer || (hasDrumTrack && onToggleDrumPanel)) ? (
             <div className="flex items-center gap-1">
                 {onToggleMixer && (
@@ -1287,6 +1325,22 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         {showQuickInsertBar && <span className="px-1.5 py-0.5 rounded bg-slate-700">Quick Insert: ON</span>}
                         {showHarmonyDebug && <span className="px-1.5 py-0.5 rounded bg-slate-700">Harmony Debug: ON</span>}
                     </div>
+                </div>
+            )}
+
+            {/* Context menu (tasto destro su S/A/T/B): copia l'intera voce. */}
+            {voiceCopyMenu && onCopyVoice && (
+                <div
+                    style={{ position: 'fixed', left: voiceCopyMenu.x, top: voiceCopyMenu.y, zIndex: 9999 }}
+                    className="bg-slate-700 border border-slate-600 rounded shadow-lg py-1"
+                    onMouseDown={(e) => e.stopPropagation()}
+                >
+                    <button
+                        onClick={() => { onCopyVoice(voiceCopyMenu.voice); setVoiceCopyMenu(null); }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
+                    >
+                        Copia intera voce {voiceName(voiceCopyMenu.voice)}
+                    </button>
                 </div>
             )}
         </>

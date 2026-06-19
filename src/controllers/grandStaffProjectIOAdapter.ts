@@ -69,10 +69,16 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 
         /** Mixer per-voce SATB: strumento, volume (0-1) e mute per voce 1-4. */
         voiceInstruments?: Record<number, string>;
+        voiceMidiChannels?: Record<number, number>;
         voiceVolumes?: Record<number, number>;
         mutedVoices?: Set<number>;
         /** Custom SATB group name (like ACC track names). */
         satbName?: string;
+        /** Visibilità del rigo SATB nel layout (toggle dal mixer). Salvato solo quando
+         *  nascosto; in apertura, assente = visibile. */
+        satbVisible?: boolean;
+        /** Volumi dei fader master (gruppo SATB, gruppo ACC, master globale). */
+        masterVolumes?: { satb?: number; acc?: number; mixer?: number };
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -95,6 +101,9 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 				inferredContextSuppressions: args.inferredContextSuppressions || [],		doubleBarlineMeasures: args.doubleBarlineMeasures,
 		repeatBarlines: args.repeatBarlines,
 		voltaBrackets: args.voltaBrackets,
+		// Curve di tempo (rallentando/accelerando): salvate sempre, anche vuote, per
+		// round-trip pulito (prima non venivano scritte → sparivano alla riapertura).
+		tempoCurves: args.tempoCurves || [],
 		harmonyOverrides: args.latestHarmonyOverrides.current,
 		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
 		bpm: args.bpm,
@@ -114,11 +123,19 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 			? { accompanimentTracks: args.accompanimentTracks }
 			: {}),
 		...(args.satbName ? { satbName: args.satbName } : {}),
+		// SATB nascosto: persistito solo quando false (default = visibile) per file leggeri.
+		...(args.satbVisible === false ? { satbVisible: false } : {}),
 		// Mixer per-voce SATB (strumento/volume/mute). mutedVoices serializzato come array.
 		...(args.voiceInstruments ? { voiceInstruments: args.voiceInstruments } : {}),
+		...((args.voiceMidiChannels && Object.keys(args.voiceMidiChannels).length > 0) ? { voiceMidiChannels: args.voiceMidiChannels } : {}),
 		...(args.voiceVolumes ? { voiceVolumes: args.voiceVolumes } : {}),
 		...((args.mutedVoices && args.mutedVoices.size > 0)
 			? { mutedVoices: Array.from(args.mutedVoices) }
+			: {}),
+		// Master del mixer: salvati solo se almeno uno è diverso dall'unità (file leggeri).
+		...((args.masterVolumes && [args.masterVolumes.satb, args.masterVolumes.acc, args.masterVolumes.mixer]
+			.some(v => typeof v === 'number' && v !== 1))
+			? { masterVolumes: args.masterVolumes }
 			: {}),
 	};
 
@@ -158,6 +175,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setDoubleBarlineMeasures: (next: any) => void;
 	setRepeatBarlines: (next: any) => void;
 	setVoltaBrackets: (next: any) => void;
+	setTempoCurves?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
 	setAutoLeadingToneInMinor: (next: any) => void;
@@ -208,9 +226,14 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 
 	setAccompanimentTracks?: (next: AccompanimentTrack[]) => void;
 	setSatbName?: (name: string) => void;
+	setSatbVisible?: (next: boolean) => void;
 	setVoiceInstruments?: (next: Record<number, string>) => void;
+	setVoiceMidiChannels?: (next: Record<number, number>) => void;
 	setVoiceVolumes?: (next: Record<number, number>) => void;
 	setMutedVoices?: (next: Set<number>) => void;
+	setSatbMasterVolume?: (v: number) => void;
+	setAccMasterVolume?: (v: number) => void;
+	setMixerMasterVolume?: (v: number) => void;
 
 	timeSignature: TimeSignature;
 };
@@ -230,6 +253,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setDoubleBarlineMeasures([]);
 		args.setRepeatBarlines({});
 		args.setVoltaBrackets([]);
+		args.setTempoCurves?.([]);
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
 		args.setAutoLeadingToneInMinor(true);
@@ -252,8 +276,13 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setSessionUnlocked?.(false);
 		args.setAccompanimentTracks?.([]);
 		args.setVoiceInstruments?.({ 1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano', 3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano' });
+		args.setVoiceMidiChannels?.({});
 		args.setVoiceVolumes?.({ 1: 1, 2: 1, 3: 1, 4: 1 });
 		args.setMutedVoices?.(new Set());
+		args.setSatbMasterVolume?.(1);
+		args.setAccMasterVolume?.(1);
+		args.setMixerMasterVolume?.(1);
+		args.setSatbVisible?.(true);
 		args.projectExtrasRef.current = {};
 		return;
 	}
@@ -282,6 +311,11 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setVoiceInstruments?.({ 1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano', 3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano' });
 	args.setVoiceVolumes?.({ 1: 1, 2: 1, 3: 1, 4: 1 });
 	args.setMutedVoices?.(new Set());
+	args.setSatbMasterVolume?.(1);
+	args.setAccMasterVolume?.(1);
+	args.setMixerMasterVolume?.(1);
+	// Default a visibile; i file salvati col SATB nascosto lo reimpostano sotto.
+	args.setSatbVisible?.(true);
 	args.setBpm(120);
 	args.setIsBpmActive(false);
 	args.setIsMetronomeOn(false);
@@ -453,6 +487,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (Array.isArray(loadedProject.voltaBrackets)) {
 				args.setVoltaBrackets(loadedProject.voltaBrackets);
 			}
+			// Curve di tempo: ripristina dal file, oppure azzera (file vecchi senza il campo
+			// → niente carry-over dalla sessione precedente).
+			args.setTempoCurves?.(Array.isArray(loadedProject.tempoCurves) ? loadedProject.tempoCurves : []);
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
 			}
@@ -489,15 +526,28 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			}
 
 			if (typeof loadedProject.satbName === 'string') args.setSatbName?.(loadedProject.satbName);
+			// SATB nascosto: ripristina dal file (assente = visibile, già impostato sopra).
+			if (typeof (loadedProject as any).satbVisible === 'boolean') args.setSatbVisible?.((loadedProject as any).satbVisible);
 			// Mixer per-voce SATB (assente nei file vecchi → restano i default già impostati sopra).
 			if (loadedProject.voiceInstruments && typeof loadedProject.voiceInstruments === 'object') {
 				args.setVoiceInstruments?.(loadedProject.voiceInstruments as Record<number, string>);
+			}
+			// Canali MIDI per-voce (assente nei file vecchi → resta {} = auto, già impostato sopra).
+			if (loadedProject.voiceMidiChannels && typeof loadedProject.voiceMidiChannels === 'object') {
+				args.setVoiceMidiChannels?.(loadedProject.voiceMidiChannels as Record<number, number>);
 			}
 			if (loadedProject.voiceVolumes && typeof loadedProject.voiceVolumes === 'object') {
 				args.setVoiceVolumes?.(loadedProject.voiceVolumes as Record<number, number>);
 			}
 			if (Array.isArray(loadedProject.mutedVoices)) {
 				args.setMutedVoices?.(new Set(loadedProject.mutedVoices as number[]));
+			}
+			// Master del mixer (assente nei file vecchi → restano 1, già impostati sopra).
+			const mv = (loadedProject as any).masterVolumes;
+			if (mv && typeof mv === 'object') {
+				if (typeof mv.satb === 'number') args.setSatbMasterVolume?.(mv.satb);
+				if (typeof mv.acc === 'number') args.setAccMasterVolume?.(mv.acc);
+				if (typeof mv.mixer === 'number') args.setMixerMasterVolume?.(mv.mixer);
 			}
 
 			args.setCurrentProjectFilePath(cmd.filePath);
@@ -556,6 +606,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setDoubleBarlineMeasures([]);
 		args.apply.setRepeatBarlines({});
 		args.apply.setVoltaBrackets([]);
+		args.apply.setTempoCurves?.([]);
 		args.apply.setMinMeasureCount(4);
 		args.apply.setMeasuresPerLine(4);
 		args.apply.setIsMinorMode(false);
@@ -584,6 +635,10 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setIsToolbarCustomizeOpen(false);
 		args.apply.setMidiOutputs([]);
 		args.apply.setSelectedMidiOutput(null);
+		args.apply.setSatbVisible?.(true);
+		args.apply.setSatbMasterVolume?.(1);
+		args.apply.setAccMasterVolume?.(1);
+		args.apply.setMixerMasterVolume?.(1);
 		setCurrentProjectFilePath(null);
 		args.apply.projectExtrasRef.current = {};
 		return true;
@@ -666,8 +721,12 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 	}
 
 	if (action === 'new') {
-		const confirmed = window.confirm('Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.');
-		if (!confirmed) return true;
+		// Dal dialog di setup la conferma è già stata data (pulsante "Crea progetto"),
+		// quindi si salta il confirm nativo.
+		if (!payload?.skipConfirm) {
+			const confirmed = window.confirm('Vuoi davvero creare un nuovo progetto? I dati non salvati andranno persi.');
+			if (!confirmed) return true;
+		}
 		applyGrandStaffProjectIOCommand({ type: 'new' }, args.apply);
 		return true;
 	}

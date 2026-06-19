@@ -57,6 +57,7 @@ import ModulationContextMenu from './ModulationContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
 import MixerPanel from './MixerPanel';
 import DrumPalettePanel from './DrumPalettePanel';
+import NewProjectDialog, { type NewProjectConfig } from './NewProjectDialog';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -186,6 +187,27 @@ const DRUM_PALETTE_ROCK: DrumPiece[] = [
   { midi: 56, label: 'Cowbell',   line: 'd/5' },
 ];
 const drumSoundfont = (t: any): string => (t?.drumKit === 'rock' ? 'drumkit' : 'drums');
+// Canale MIDI in uscita per una traccia ACC: la BATTERIA va sul canale 10 (indice 9,
+// convenzione GM per le percussioni); le tracce intonate partono da 4 SALTANDO il 9, così
+// non finiscono mai sul canale batteria (evita che note di basso/piano suonino come kick/tom
+// in un synth esterno). Le voci SATB usano i canali 0-3.
+const accMidiChannel = (t: any, idx: number): number => {
+  // Canale esplicito scelto dall'utente (1-16) → indice 0-15.
+  const explicit = Number(t?.midiChannel);
+  if (Number.isFinite(explicit) && explicit >= 1 && explicit <= 16) return explicit - 1;
+  // Automatico: batteria → 10 (idx 9); intonate → da 5 in su saltando il 10.
+  if (t?.isDrum) return 9;
+  let ch = 4 + idx;
+  if (ch >= 9) ch += 1; // salta il canale 9 (riservato alla batteria, MIDI 10)
+  return Math.min(15, ch);
+};
+// Canale MIDI in uscita per una voce SATB (1-4): canale esplicito scelto dall'utente
+// (1-16) → indice 0-15; altrimenti automatico (voce 1→ch1 … voce 4→ch4).
+const satbVoiceMidiChannel = (channels: Record<number, number> | undefined, v: number): number => {
+  const c = Number(channels?.[v]);
+  if (Number.isFinite(c) && c >= 1 && c <= 16) return c - 1;
+  return Math.max(0, Math.min(15, v - 1));
+};
 const drumPaletteFor = (t: any): DrumPiece[] => (t?.drumKit === 'rock' ? DRUM_PALETTE_ROCK : DRUM_PALETTE_ORCH);
 const DRUM_LETTER_STEP: Record<string, number> = { c: 0, d: 1, e: 2, f: 3, g: 4, a: 5, b: 6 };
 const drumStepOf = (letter: string, octave: number) => octave * 7 + (DRUM_LETTER_STEP[String(letter).toLowerCase()] ?? 0);
@@ -324,6 +346,15 @@ class RenderErrorBoundary extends React.Component<
 
 function isAccompanimentNote(noteId: string, accompanimentTracks: AccompanimentTrack[]): boolean {
     return accompanimentTracks.some(track => track.notes.some(note => note.id === noteId));
+}
+
+/** Semitoni di trasposizione in SUONO per una traccia ACC. Gli strumenti traspositori
+ *  (chitarra, basso) suonano un'ottava SOTTO il scritto: `octaveTranspose = -1` → −12.
+ *  Solo riproduzione/uscita MIDI; la notazione resta invariata. La batteria non traspone. */
+function accTransposeSemitones(track?: { isDrum?: boolean; octaveTranspose?: number } | null): number {
+    if (!track || track.isDrum) return 0;
+    const oct = track.octaveTranspose;
+    return (typeof oct === 'number' && Number.isFinite(oct)) ? oct * 12 : 0;
 }
 
 function findAccTrackForNote(noteId: string, accompanimentTracks: AccompanimentTrack[]): {
@@ -499,6 +530,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // una batteria). Sostituisce la vecchia barra inline "🥁 Mappa".
     const [isDrumPanelOpen, setIsDrumPanelOpen] = useState(false);
 
+    // Dialog di setup mostrato alla creazione di un NUOVO progetto: scelta tracce
+    // iniziali (SATB / ACC / batteria) + template riutilizzabili.
+    const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+
     // Visibilità del rigo SATB (a 4 voci). Come per le tracce ACC, è SOLO display:
     // nasconde il pentagramma SATB (i righi ACC salgono in cima), ma l'audio
     // continua (per silenziarlo si usa il Mute nel mixer). Lo shift di clip in px
@@ -520,6 +555,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // the gain maps (voice number / accompaniment-track index).
     const accTrackAnalysersRef = useRef<Map<number, AnalyserNode>>(new Map());
     const voiceAnalysersRef = useRef<Map<number, AnalyserNode>>(new Map());
+    // ── Master bus (fader master) ──
+    // Routing: per-voice gains → SATB master → mixer master → destination; per-track
+    // gains → ACC master → mixer master → destination. Each master has its own analyser
+    // tap for the LED meter. Created lazily by ensureMasterChain() (below).
+    const satbMasterGainRef = useRef<GainNode | null>(null);
+    const accMasterGainRef = useRef<GainNode | null>(null);
+    const mixerMasterGainRef = useRef<GainNode | null>(null);
+    const satbMasterAnalyserRef = useRef<AnalyserNode | null>(null);
+    const accMasterAnalyserRef = useRef<AnalyserNode | null>(null);
+    const mixerMasterAnalyserRef = useRef<AnalyserNode | null>(null);
     const meterScratchRef = useRef<Uint8Array>(new Uint8Array(256));
     // Instantaneous output peak (0..1) of an analyser, from its time-domain data.
     const readAnalyserPeak = useCallback((an: AnalyserNode | undefined): number => {
@@ -536,6 +581,54 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, []);
     const getVoiceLevel = useCallback((voice: number) => readAnalyserPeak(voiceAnalysersRef.current.get(voice)), [readAnalyserPeak]);
     const getTrackLevel = useCallback((trackIndex: number) => readAnalyserPeak(accTrackAnalysersRef.current.get(trackIndex)), [readAnalyserPeak]);
+
+    // ── Master fader volumes (linear gain 0..1) ──
+    // Persisted with the project. Refs mirror the state for the lazy chain builder and
+    // for applying changes to the live nodes from the volume-sync effects below.
+    const [satbMasterVolume, setSatbMasterVolume] = useState(1);
+    const [accMasterVolume, setAccMasterVolume] = useState(1);
+    const [mixerMasterVolume, setMixerMasterVolume] = useState(1);
+    const satbMasterVolumeRef = useRef(1);
+    const accMasterVolumeRef = useRef(1);
+    const mixerMasterVolumeRef = useRef(1);
+    useEffect(() => { satbMasterVolumeRef.current = satbMasterVolume; if (satbMasterGainRef.current) satbMasterGainRef.current.gain.value = satbMasterVolume; }, [satbMasterVolume]);
+    useEffect(() => { accMasterVolumeRef.current = accMasterVolume; if (accMasterGainRef.current) accMasterGainRef.current.gain.value = accMasterVolume; }, [accMasterVolume]);
+    useEffect(() => { mixerMasterVolumeRef.current = mixerMasterVolume; if (mixerMasterGainRef.current) mixerMasterGainRef.current.gain.value = mixerMasterVolume; }, [mixerMasterVolume]);
+
+    // Build (once) the master bus and wire SATB/ACC masters into the global mixer master.
+    // Idempotent: safe to call before creating any per-channel gain node.
+    const ensureMasterChain = useCallback(() => {
+        const ctx = audioService.audioContext;
+        if (!ctx) return;
+        if (!mixerMasterGainRef.current) {
+            const m = ctx.createGain();
+            m.gain.value = mixerMasterVolumeRef.current;
+            m.connect(ctx.destination);
+            const an = ctx.createAnalyser(); an.fftSize = 256; m.connect(an);
+            mixerMasterAnalyserRef.current = an;
+            mixerMasterGainRef.current = m;
+        }
+        if (!satbMasterGainRef.current) {
+            const s = ctx.createGain();
+            s.gain.value = satbMasterVolumeRef.current;
+            s.connect(mixerMasterGainRef.current);
+            const an = ctx.createAnalyser(); an.fftSize = 256; s.connect(an);
+            satbMasterAnalyserRef.current = an;
+            satbMasterGainRef.current = s;
+        }
+        if (!accMasterGainRef.current) {
+            const a = ctx.createGain();
+            a.gain.value = accMasterVolumeRef.current;
+            a.connect(mixerMasterGainRef.current);
+            const an = ctx.createAnalyser(); an.fftSize = 256; a.connect(an);
+            accMasterAnalyserRef.current = an;
+            accMasterGainRef.current = a;
+        }
+    }, [audioService]);
+
+    const getSatbMasterLevel = useCallback(() => readAnalyserPeak(satbMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
+    const getAccMasterLevel = useCallback(() => readAnalyserPeak(accMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
+    const getMixerMasterLevel = useCallback(() => readAnalyserPeak(mixerMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
 
     // Re-apply the correct gain to EVERY live voice/track gain node based on the
     // current mute/solo/volume state. Needed because playback pre-schedules all
@@ -666,10 +759,58 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return next;
         });
         // Rendi attiva la nuova traccia batteria, così tastiera/click la monitorano subito.
-        activeAccTrackIdRef.current = id;
+        setActiveAccTrack(id);
         setActiveStaffArea('accompaniment');
         // Apri subito il modulo percussioni flottante (discoverability).
         setIsDrumPanelOpen(true);
+    }, []);
+
+    // Applica la configurazione scelta nel dialog "Nuovo progetto" DOPO il reset:
+    // imposta la visibilità SATB e crea le tracce ACC/batteria richieste.
+    const applyNewProjectConfig = useCallback((config: NewProjectConfig) => {
+        setSatbVisible(config.satb !== false);
+        let accIdx = 0;
+        let drumIdx = 0;
+        const tracks: AccompanimentTrack[] = (config.tracks || []).map(spec => {
+            if (spec.type === 'drums') {
+                drumIdx++;
+                return {
+                    id: crypto.randomUUID(),
+                    name: `Batteria ${drumIdx}`,
+                    instrumentId: 0,
+                    notes: [],
+                    muted: false,
+                    visible: true,
+                    volume: 0.8,
+                    staffMode: 'treble_only',
+                    clef: 'treble',
+                    isDrum: true,
+                } as AccompanimentTrack;
+            }
+            accIdx++;
+            return {
+                id: crypto.randomUUID(),
+                name: `Traccia ${accIdx}`,
+                instrumentId: spec.instrumentId ?? 0,
+                notes: [],
+                muted: false,
+                visible: true,
+                volume: 0.8,
+                staffMode: 'treble_only',
+                clef: 'treble',
+            } as AccompanimentTrack;
+        });
+        setAccompanimentTracks(tracks);
+        latestAccompanimentTracks.current = tracks;
+        // Se il SATB è nascosto, porta il focus d'inserimento sulla prima traccia ACC.
+        if (config.satb === false && tracks.length > 0) {
+            setActiveAccTrack(tracks[0].id);
+            setActiveStaffArea('accompaniment');
+        } else {
+            setActiveStaffArea('satb');
+        }
+        // Apri il modulo percussioni se è stata creata almeno una batteria.
+        if (tracks.some(t => (t as any).isDrum)) setIsDrumPanelOpen(true);
     }, []);
     // ...existing code...
     // copyPasteError now owned by useNoteSelection
@@ -780,6 +921,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano',
         3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano',
     });
+    // Canale MIDI in uscita per voce SATB (1-16). Assente = automatico (voce → canale 1-4).
+    // Impostando più voci sullo stesso canale si invia tutto l'SATB a un unico strumento DAW.
+    const [voiceMidiChannels, setVoiceMidiChannels] = useState<Record<number, number>>({});
+    const voiceMidiChannelsRef = useRef(voiceMidiChannels);
+    useEffect(() => { voiceMidiChannelsRef.current = voiceMidiChannels; }, [voiceMidiChannels]);
     // Per-voice volume (0-1) and mute, mirroring the accompaniment track mixer model.
     const [voiceVolumes, setVoiceVolumes] = useState<Record<number, number>>({ 1: 1, 2: 1, 3: 1, 4: 1 });
     const [mutedVoices, setMutedVoices] = useState<Set<number>>(new Set());
@@ -843,6 +989,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // for paste and (future) recording, so they go to the track you're working on —
     // not always the first. Falls back to the first visible track when unset.
     const activeAccTrackIdRef = useRef<string | null>(null);
+    // State mirror of the ref so the toolbar instrument selector re-renders when the
+    // active ACC track changes (the ref alone drives hot paths but doesn't trigger render).
+    const [activeAccTrackId, setActiveAccTrackIdState] = useState<string | null>(null);
+    /** Set the active ACC track in BOTH the ref (hot path) and the state (UI). */
+    const setActiveAccTrack = useCallback((id: string | null) => {
+        activeAccTrackIdRef.current = id;
+        setActiveAccTrackIdState(id);
+    }, []);
     // Resolve the ACC track to target (monitoring / recording / quantize): the one
     // you last clicked (activeAccTrackIdRef) if it's still visible, else the first
     // visible track. Returns the INDEX in the tracks array (-1 if none visible).
@@ -928,7 +1082,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
 
     // Stable ref to playNote — updated after playNote is defined (avoids TDZ in handleChordInsert)
-    const playNoteRef = useRef<((note: StaffNote, durationSec?: number) => Promise<void>) | null>(null);
+    const playNoteRef = useRef<((note: StaffNote, durationSec?: number, instrumentOverride?: string, midiChannel?: number, extraTransposeSemitones?: number) => Promise<void>) | null>(null);
 
     const project = useMemo(() => ({
         notes: rawNotes,
@@ -1033,8 +1187,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const track = latestAccompanimentTracks.current[idx];
                 let trackGain = accTrackGainsRef.current.get(idx);
                 if (!trackGain) {
+                    ensureMasterChain();
                     trackGain = audioService.audioContext.createGain();
-                    trackGain.connect(audioService.audioContext.destination);
+                    trackGain.connect(accMasterGainRef.current ?? audioService.audioContext.destination);
                     accTrackGainsRef.current.set(idx, trackGain);
                     const an = audioService.audioContext.createAnalyser();
                     an.fftSize = 256;
@@ -1042,12 +1197,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     accTrackAnalysersRef.current.set(idx, an);
                 }
                 trackGain.gain.value = track.muted ? 0 : track.volume;
+                // Strumento traspositore (basso/chitarra): il monitor suona un'ottava sotto
+                // come in playback, così live e registrato coincidono col scritto.
+                const accShift = accTransposeSemitones(track);
+                const accMidi = midi + accShift;
+                const accName = accShift !== 0
+                    ? `${noteNamesWithFlats[((accMidi % 12) + 12) % 12]}${Math.floor(accMidi / 12) - 1}`
+                    : name;
                 // Taglia velocemente QUALSIASI istanza precedente di questa nota — sia
                 // tenuta sia ancora in coda di rilascio dopo il note-off — così la nuova
                 // nota non si sovrappone a una copia identica del campione (comb/"scatto").
                 monitorHandlesRef.current.get(midi)?.release(0.02);
                 const handle = audioService.playSustainedNote(
-                    track.isDrum ? drumSoundfont(track) : gmToSoundfont(track.instrumentId), name,
+                    track.isDrum ? drumSoundfont(track) : gmToSoundfont(track.instrumentId), accName,
                     { volume: velocityToGain(velocity), output: trackGain, velocity },
                 );
                 monitorHandlesRef.current.set(midi, handle);
@@ -1574,12 +1736,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             activeStaffAreaRef.current = 'accompaniment';
             setActiveStaffArea('accompaniment');
             const owner = latestAccompanimentTracks.current.find(t => t.notes.some(n => n.id === accSelected[0].id));
-            if (owner) activeAccTrackIdRef.current = owner.id;
+            if (owner) setActiveAccTrack(owner.id);
         } else {
             activeStaffAreaRef.current = 'satb';
             setActiveStaffArea('satb');
         }
         const copied = source.map(n => { const { xPosition, ...rest } = n as any; return rest as StaffNote; });
+        setClipboard(copied);
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
+        }
+        return copied;
+    }, [setClipboard, setCopyPasteError]);
+
+    // Copia un'INTERA voce SATB (tutte le sue note nel brano, comprese le pause per
+    // preservare la posizione) negli appunti, così da incollarla in blocco su una
+    // traccia ACC (orchestrazione: ogni voce su uno strumento diverso). Non serve
+    // selezionare nulla: prende tutta la voce indicata. Restituisce le note copiate.
+    const copyEntireVoiceToClipboard = useCallback((voice: number): StaffNote[] => {
+        const all = (latestRawNotes.current || []).filter(n => Number((n as any).voice ?? 1) === voice);
+        if (all.length === 0) { setCopyPasteError(`La voce ${(['', 'S', 'A', 'T', 'B'][voice] ?? voice)} è vuota: niente da copiare.`); return []; }
+        const copied = all
+            .slice()
+            .sort((a: any, b: any) => ((a.startTick ?? 0) - (b.startTick ?? 0)) || ((a.midi ?? 0) - (b.midi ?? 0)))
+            .map(n => { const { xPosition, ...rest } = n as any; return rest as StaffNote; });
+        // La sorgente è SATB: rendi attiva quell'area (coerente con copySelectedToClipboard).
+        activeStaffAreaRef.current = 'satb';
+        setActiveStaffArea('satb');
         setClipboard(copied);
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(JSON.stringify(copied)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
@@ -2323,7 +2506,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setSelectedNoteIds(new Set(newAccNotes.map((n: any) => n.id)));
                 const accTrkBlk = latestAccompanimentTracks.current?.[trackIdx];
                 const accInstrBlk = accTrkBlk?.isDrum ? drumSoundfont(accTrkBlk) : gmToSoundfont(accTrkBlk?.instrumentId);
-                newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk); });
+                const accChBlk = accTrkBlk ? accMidiChannel(accTrkBlk, trackIdx) : undefined;
+                newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk, accChBlk, accTransposeSemitones(accTrkBlk)); });
                 return;
             }
 
@@ -2528,7 +2712,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setSelectedNoteIds(new Set(accNotes.map(n => n.id)));
             const accTrkChord = latestAccompanimentTracks.current?.[firstVisibleIdx];
             const accInstrChord = accTrkChord?.isDrum ? drumSoundfont(accTrkChord) : gmToSoundfont(accTrkChord?.instrumentId);
-            accNotes.forEach(n => { void playNoteRef.current?.(n, 0.8, accInstrChord); });
+            const accChChord = accTrkChord ? accMidiChannel(accTrkChord, firstVisibleIdx) : undefined;
+            accNotes.forEach(n => { void playNoteRef.current?.(n, 0.8, accInstrChord, accChChord, accTransposeSemitones(accTrkChord)); });
             return { startTick, durTicks };
         }
 
@@ -3112,6 +3297,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const handleMenuActionLegacy = useCallback(async (action: MenuAction, payload: any) => {
         const api = window.electronAPI;
 
+        // Nuovo progetto: apri il dialog di setup (scelta tracce + template) invece
+        // del confirm diretto. Sarà il dialog a ridispacciare 'new' con il config
+        // e il flag __fromDialog, che salta questa intercettazione.
+        if (action === 'new' && !payload?.__fromDialog) {
+            setNewProjectDialogOpen(true);
+            return;
+        }
+
         if (action === 'increase-title-font') {
             setTitleFontSize(s => Math.min(72, s + 1));
             return;
@@ -3571,8 +3764,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     analysisLockOptions,
                     accompanimentTracks,
                     voiceInstruments,
+                    voiceMidiChannels,
                     voiceVolumes,
                     mutedVoices,
+                    masterVolumes: { satb: satbMasterVolume, acc: accMasterVolume, mixer: mixerMasterVolume },
+                    satbName,
+                    satbVisible,
                 },
                 apply: {
                     projectExtrasRef,
@@ -3580,6 +3777,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setRawNotes,
                     setProjectTitle,
                     setSatbName,
+                    setSatbVisible,
                     setCurrentProjectFilePath,
                     setKeySignatureRoot,
                     setIsMinorMode,
@@ -3637,8 +3835,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setSessionUnlocked,
                     setAccompanimentTracks,
                     setVoiceInstruments,
+                    setVoiceMidiChannels,
                     setVoiceVolumes,
                     setMutedVoices,
+                    setSatbMasterVolume,
+                    setAccMasterVolume,
+                    setMixerMasterVolume,
                     timeSignature,
                 },
             });
@@ -3650,6 +3852,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         .filter(Boolean);
                     if (romans.length >= 2) recordAnalysedTransitions(romans);
                 } catch { /* silent */ }
+            }
+            // Nuovo progetto creato dal dialog: applica la configurazione tracce
+            // DOPO il reset (che azzera ACC/SATB ai default).
+            if (action === 'new' && payload?.trackConfig) {
+                applyNewProjectConfig(payload.trackConfig as NewProjectConfig);
             }
             return;
         } else if (action === MENU_ACTIONS.IMPORT_MUSICXML) {
@@ -3747,7 +3954,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } else if (action === 'toggle-analysis-lock') {
             setIsAnalysisLockModalOpen(true);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi, importMidiAsAccompaniment, pickMidiFile, askMidiImportDestination, setAccompanimentTracks]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi, importMidiAsAccompaniment, pickMidiFile, askMidiImportDestination, setAccompanimentTracks, applyNewProjectConfig]);
 
     // Routing: single source of truth for where actions are handled.
     const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {
@@ -3765,12 +3972,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
         tonicizationHints, inferredContextSuppressions,
-        accompanimentTracks, voiceInstruments, voiceVolumes, mutedVoices, satbName,
+        accompanimentTracks, voiceInstruments, voiceMidiChannels, voiceVolumes, mutedVoices, satbName, satbVisible,
     };
 
     // Auto-save: periodically trigger 'save' if a file path is already set.
@@ -3888,12 +4095,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if ((p as any).voiceInstruments && typeof (p as any).voiceInstruments === 'object') {
                     setVoiceInstruments((p as any).voiceInstruments);
                 }
+                setVoiceMidiChannels(((p as any).voiceMidiChannels && typeof (p as any).voiceMidiChannels === 'object') ? (p as any).voiceMidiChannels : {});
                 if ((p as any).voiceVolumes && typeof (p as any).voiceVolumes === 'object') {
                     setVoiceVolumes((p as any).voiceVolumes);
                 }
                 if (Array.isArray((p as any).mutedVoices)) {
                     setMutedVoices(new Set((p as any).mutedVoices as number[]));
                 }
+                {
+                    const mv = (p as any).masterVolumes;
+                    setSatbMasterVolume(typeof mv?.satb === 'number' ? mv.satb : 1);
+                    setAccMasterVolume(typeof mv?.acc === 'number' ? mv.acc : 1);
+                    setMixerMasterVolume(typeof mv?.mixer === 'number' ? mv.mixer : 1);
+                }
+                if (typeof (p as any).satbName === 'string') setSatbName((p as any).satbName);
+                setSatbVisible((p as any).satbVisible !== false);
                 setCurrentProjectFilePath(draft.filePath || null);
                 localStorage.removeItem(DRAFT_KEY);
             } catch {
@@ -4946,9 +5162,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return `${n}${octave}`;
     }, []);
 
-    const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number, whenMs?: number, channel = 0) => {
+    const sendMidiNote = useCallback((note: StaffNote, output: any, durationSec: number, whenMs?: number, channel = 0, extraTransposeSemitones = 0) => {
         if (!output || note.isRest) return;
-        const midi = (note.midi ?? 0) + playbackTransposeSemitones;
+        const midi = (note.midi ?? 0) + playbackTransposeSemitones + extraTransposeSemitones;
         if (!Number.isFinite(midi) || midi <= 0) return;
         // Honor the captured dynamics on external MIDI output too (default 100 for
         // manually-entered notes that have no velocity).
@@ -4961,10 +5177,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         output.send([0x80 + ch, midi, 0], t0 + durationSec * 1000);
     }, [playbackTransposeSemitones]);
 
-    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string) => {
+    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, extraTransposeSemitones = 0) => {
                 if (!isAudioReady || !audioService.audioContext || note.isRest) return;
                 await audioService.ensureAudioIsReady();
-                const midi = (note.midi ?? 0) + playbackTransposeSemitones;
+                const midi = (note.midi ?? 0) + playbackTransposeSemitones + extraTransposeSemitones;
                 if (!Number.isFinite(midi) || midi < 21 || midi > 108) return;
                 // Calcola la durata in secondi usando durationTicks se presente
                 let durationSecFinal = durationSec;
@@ -4988,12 +5204,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 await audioService.playNoteForInstrument(instr, midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal, velocity: (note as any).velocity });
     }, [audioService, isAudioReady, midiToName, playbackTransposeSemitones]);
 
-    const playNote = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string) => {
+    const playNote = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, midiChannel?: number, extraTransposeSemitones = 0) => {
         if (selectedMidiOutput) {
-            sendMidiNote(note, selectedMidiOutput, durationSec, window.performance.now());
+            // Inoltro all'uscita MIDI esterna sul canale corretto: se il chiamante passa
+            // midiChannel (tracce ACC) usa quello; altrimenti deriva dalla voce SATB
+            // (1-4 → canale scelto/Auto). Prima andava sempre sul canale 1.
+            const ch = (typeof midiChannel === 'number')
+                ? midiChannel
+                : satbVoiceMidiChannel(voiceMidiChannelsRef.current, (note.voice ?? 1) as number);
+            sendMidiNote(note, selectedMidiOutput, durationSec, window.performance.now(), ch, extraTransposeSemitones);
             return;
         }
-        await playNoteSound(note, durationSec, instrumentOverride);
+        await playNoteSound(note, durationSec, instrumentOverride, extraTransposeSemitones);
     }, [playNoteSound, selectedMidiOutput, sendMidiNote]);
     playNoteRef.current = playNote;
 
@@ -5482,7 +5704,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // Use them directly so chord notes (same tick) share the same absStartBeat.
                 const mIdx = n.measureIndex ?? 0;
                 const beat = n.beat ?? 1;
-                const absStartBeat = measureStartBeat(mIdx) + (beat - 1);
+                let absStartBeat = measureStartBeat(mIdx) + (beat - 1);
                 // Prefer playbackDurationTicks (original sustain before any trim),
                 // then durationTicks (high-resolution actual length), then fall
                 // back to the duration label.
@@ -5490,9 +5712,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const sustainTicks = (typeof pbTicks === 'number' && pbTicks > 0)
                     ? pbTicks
                     : ((typeof n.durationTicks === 'number' && n.durationTicks > 0) ? n.durationTicks : 0);
-                const durationBeats = sustainTicks > 0
+                let durationBeats = sustainTicks > 0
                     ? sustainTicks / TICKS_PER_QUARTER
                     : DURATION_VALUES[n.duration || 'quarter'] * (n.isDotted ? 1.5 : 1);
+                // Swing (ottavi terzinati): stesso mapping playback-only del SATB
+                // (vedi sopra), così anche le tracce ACC e la batteria seguono il
+                // terzinato invece di restare dritte. Gli ottavi sulla griglia
+                // (battere x.0 / levare x.5) vengono mappati su 2/3 + 1/3; gli altri
+                // valori restano col loro sustain tick-based.
+                if (
+                    isSwing
+                    && (n.duration || 'quarter') === 'eighth'
+                    && !n.isDotted
+                    && !n.isTriplet
+                    && !n.isDuplet
+                ) {
+                    const eps = 1e-6;
+                    const frac = ((absStartBeat % 1) + 1) % 1;
+                    if (Math.abs(frac - 0) < eps) {
+                        durationBeats = 2 / 3;
+                    } else if (Math.abs(frac - 0.5) < eps) {
+                        absStartBeat = Math.floor(absStartBeat) + (2 / 3);
+                        durationBeats = 1 / 3;
+                    }
+                }
                 trackItems.push({ note: n, absStartBeat, durationBeats, skip: false, accTrackIdx: trackIdx });
             }
 
@@ -5713,7 +5956,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // toggling them mid-playback (now real-time via gain nodes) works.
                         const accTrk = it.accTrackIdx !== undefined ? accTracks[it.accTrackIdx] : undefined;
                         const isDrumTrk = !!accTrk?.isDrum;
-                        const midi = isDrumTrk ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones;
+                        const midi = isDrumTrk ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones + accTransposeSemitones(accTrk);
                         if (!Number.isFinite(midi) || midi < 21 || midi > 108) continue;
                         const instr = accTrk
                             ? (isDrumTrk ? drumSoundfont(accTrk) : gmToSoundfont(accTrk.instrumentId))
@@ -5734,16 +5977,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // (e.g. Logic Pro) know which instrument to use per channel.
         if (selectedMidiOutput) {
             for (let v = 1; v <= 4; v++) {
-                const ch = v - 1;
+                const ch = satbVoiceMidiChannel(voiceMidiChannelsRef.current, v);
                 const instr = voiceInstrumentsRef.current[v] || 'acoustic_grand_piano';
                 const pc = soundfontToGm(instr); // GM program dalla fonte di verità INSTRUMENTS
                 selectedMidiOutput.send([0xC0 + ch, pc]);
             }
-            // Program Change for accompaniment tracks (channels 4+)
+            // Program Change for accompaniment tracks (batteria → ch.10, intonate → ≠10)
             accTracks.forEach((track, idx) => {
                 if (!track || track.muted) return;
-                const ch = 4 + idx;
-                if (ch > 15) return;
+                const ch = accMidiChannel(track, idx);
                 selectedMidiOutput.send([0xC0 + ch, track.instrumentId & 0x7F]);
             });
         }
@@ -5896,8 +6138,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (it.accTrackIdx !== undefined) {
                             const track = latestAccompanimentTracks.current[it.accTrackIdx];
                             if (!track || track.muted) return;
-                            const ch = Math.max(0, Math.min(15, 4 + it.accTrackIdx));
-                            const midiT = (n.midi ?? 0) + playbackTransposeSemitones;
+                            const ch = accMidiChannel(track, it.accTrackIdx);
+                            // Batteria: la nota è un pezzo del kit (note GM perc.) → niente transpose.
+                            const midiT = (track as any).isDrum ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones + accTransposeSemitones(track);
                             if (!Number.isFinite(midiT) || midiT <= 0) return;
                             const vel = Math.round(Math.min(127, Math.max(1, track.volume * 100)));
                             try { out.send([0x90 + ch, midiT, vel], midiWhenMs); } catch (_) {}
@@ -5905,7 +6148,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             return;
                         }
                         if (soloVoicesRef.current.size > 0 && !soloVoicesRef.current.has((n.voice ?? 1) as number)) return;
-                        const ch = Math.max(0, Math.min(15, ((n.voice ?? 1) as number) - 1));
+                        const ch = satbVoiceMidiChannel(voiceMidiChannelsRef.current, (n.voice ?? 1) as number);
                         const midiT = ((n.midi ?? 0) + playbackTransposeSemitones);
                         if (!Number.isFinite(midiT) || midiT <= 0) return;
                         const vel = 100;
@@ -5965,7 +6208,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // un'altezza → niente transpose; suona il kit `drums`; durata generosa
                         // così i piatti risuonano (i pezzi corti finiscono comunque da soli).
                         const isDrum = !!track.isDrum;
-                        const midiT = isDrum ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones;
+                        const midiT = isDrum ? (n.midi ?? 0) : (n.midi ?? 0) + playbackTransposeSemitones + accTransposeSemitones(track);
                         if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
                         const instr = isDrum ? drumSoundfont(track) : gmToSoundfont(track.instrumentId);
                         const playDurSec = isDrum ? Math.max(durSec, 4.0) : durSec;
@@ -5974,8 +6217,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // while notes are already scheduled in the Web Audio queue.
                         let trackGain = accTrackGainsRef.current.get(it.accTrackIdx);
                         if (!trackGain && audioService.audioContext) {
+                            ensureMasterChain();
                             trackGain = audioService.audioContext.createGain();
-                            trackGain.connect(audioService.audioContext.destination);
+                            trackGain.connect(accMasterGainRef.current ?? audioService.audioContext.destination);
                             accTrackGainsRef.current.set(it.accTrackIdx, trackGain);
                             const an = audioService.audioContext.createAnalyser();
                             an.fftSize = 256;
@@ -5998,8 +6242,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // (same model as the accompaniment tracks above).
                     let voiceGain = voiceGainsRef.current.get(v);
                     if (!voiceGain && audioService.audioContext) {
+                        ensureMasterChain();
                         voiceGain = audioService.audioContext.createGain();
-                        voiceGain.connect(audioService.audioContext.destination);
+                        voiceGain.connect(satbMasterGainRef.current ?? audioService.audioContext.destination);
                         voiceGainsRef.current.set(v, voiceGain);
                         const an = audioService.audioContext.createAnalyser();
                         an.fftSize = 256;
@@ -6595,7 +6840,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (isAccNote) {
             const accInfo = findAccTrackForNote(noteId, latestAccompanimentTracks.current);
             if (accInfo) {
-                activeAccTrackIdRef.current = latestAccompanimentTracks.current[accInfo.trackIndex]?.id ?? null;
+                setActiveAccTrack(latestAccompanimentTracks.current[accInfo.trackIndex]?.id ?? null);
                 setActiveStaffArea('accompaniment');
             }
         } else if (nInRaw) {
@@ -6710,7 +6955,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const clickInstr = accTrkForPlay
                 ? (accTrkForPlay.isDrum ? drumSoundfont(accTrkForPlay) : gmToSoundfont(accTrkForPlay.instrumentId))
                 : undefined;
-            void playNote(normalized, 0.6, clickInstr);
+            const clickCh = accTrkForPlay ? accMidiChannel(accTrkForPlay, accInfoForPlay!.trackIndex) : undefined;
+            void playNote(normalized, 0.6, clickInstr, clickCh, accTransposeSemitones(accTrkForPlay));
         }
     }, [getPlayheadPosForAbsBeat, normalizedRawNotes, playNote, rawNotes, selectedNoteIds, timeSignature, tool, violations]);
 
@@ -8085,7 +8331,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const accTarget = resolveAccTarget(yCal, ACC_TREBLE_TOP_Y);
             if (!accTarget) return;
             // Remember the clicked track as the active ACC target (for paste/REC).
-            activeAccTrackIdRef.current = accTarget.trackId;
+            setActiveAccTrack(accTarget.trackId);
 
             // Plain click: just pick this track as the paste destination. The paste
             // caret was already positioned at the clicked X by the snap block above,
@@ -8240,9 +8486,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setSelectedNoteIds(new Set([accNote.id]));
                 justInsertedNoteRef.current = accNote.id;
                 // Audition the inserted ACC note con lo strumento della traccia (kit se batteria)
-                const accTrkClick = latestAccompanimentTracks.current?.find(t => t.id === targetTrackId);
+                const accClickIdx = latestAccompanimentTracks.current?.findIndex(t => t.id === targetTrackId) ?? -1;
+                const accTrkClick = accClickIdx >= 0 ? latestAccompanimentTracks.current[accClickIdx] : undefined;
                 const accInstrClick = accTrkClick?.isDrum ? drumSoundfont(accTrkClick) : gmToSoundfont(accTrkClick?.instrumentId);
-                void playNote(accNote, 0.8, accInstrClick);
+                void playNote(accNote, 0.8, accInstrClick, accTrkClick ? accMidiChannel(accTrkClick, accClickIdx) : undefined, accTransposeSemitones(accTrkClick));
                 // Advance playhead to the next position (same as SATB insertion)
                 try {
                     const nextAbsBeat = (startTick + durationTicks) / TICKS_PER_QUARTER;
@@ -9035,11 +9282,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return { ...track, notes: [...filtered, accNoteStep].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)) };
                 }));
                 setSelectedNoteIds(new Set([accNoteStep.id]));
+                // Marca la nota come "appena inserita": così un successivo cambio di
+                // durata in toolbar NON la modifica retroattivamente (deseleziona e
+                // aggiorna solo il valore d'inserimento), come per l'inserimento col
+                // mouse. Senza questo, dopo aver inserito una percussione il cambio
+                // valore alterava la nota precedente invece del prossimo inserimento.
+                justInsertedNoteRef.current = accNoteStep.id;
                 // Anteprima audio: la suona già il monitoraggio passthrough (con lo
                 // strumento giusto della traccia). Qui suoniamo solo per inoltrare la
                 // nota all'eventuale uscita MIDI esterna — altrimenti avremmo un doppio
                 // attacco (passthrough soundfont + anteprima piano interno).
-                if (selectedMidiOutputRef.current) void playNote(accNoteStep);
+                if (selectedMidiOutputRef.current) {
+                    const accStepIdx = (latestAccompanimentTracks.current || []).findIndex(t => t.id === target.id);
+                    void playNote(accNoteStep, 0.8, undefined, accMidiChannel(target, accStepIdx), accTransposeSemitones(target));
+                }
                 // Avanza la playhead (come SATB): fine della nota appena inserita.
                 const nextAbsBeatAcc = (startTick + durationTicks) / TICKS_PER_QUARTER;
                 playbackCursorAbsBeatRef.current = nextAbsBeatAcc;
@@ -9108,6 +9364,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
             });
             setSelectedNoteIds(new Set([newNote.id]));
+            // Vedi ramo ACC: marca la nota come "appena inserita" così il cambio di
+            // durata in toolbar non la riscrive, ma vale per il prossimo inserimento.
+            justInsertedNoteRef.current = newNote.id;
             // Anteprima già fornita dal monitoraggio passthrough; qui solo per
             // l'inoltro all'uscita MIDI esterna (evita il doppio attacco).
             if (selectedMidiOutputRef.current) void playNote(newNote);
@@ -9159,11 +9418,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         let target = tracks.find(t => t.id === activeAccTrackIdRef.current && t.visible && (t as any).isDrum);
         if (!target) target = tracks.find(t => t.visible && (t as any).isDrum);
         if (!target) return;
-        activeAccTrackIdRef.current = target.id;
+        setActiveAccTrack(target.id);
         activeStaffAreaRef.current = 'accompaniment';
         setActiveStaffArea('accompaniment');
         insertNoteFromMidiRef.current(pieceMidi);
-    }, []);
+        // Feedback audio: il pulsante del modulo percussioni NON passa dal monitoraggio
+        // live (non è un tasto premuto), quindi l'inserimento sarebbe muto. Suoniamo qui
+        // il colpo del kit (stesso soundfont della traccia) per dare riscontro sonoro.
+        try {
+            void audioService.ensureAudioIsReady().then(() =>
+                audioService.playNoteForInstrument(drumSoundfont(target), midiToName(pieceMidi), { duration: 2.0, velocity: 110 })
+            );
+        } catch { /* audio non pronto: ignora */ }
+    }, [audioService, midiToName]);
 
     const handleBackgroundMouseDown = useCallback((e: MouseEvent, svg: SVGSVGElement, systemIndex: number) => {
         if (tool !== 'insert') return;
@@ -10040,6 +10307,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
                 toggleMetronome();
+                return;
+            }
+
+            // Cmd/Ctrl+Shift+C: copy the ENTIRE selected SATB voice (all its notes in the
+            // piece), to paste in one shot onto an ACC track for orchestration.
+            if (isMod && e.shiftKey && key === 'c') {
+                if (lockHidesRef.current.export) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                copyEntireVoiceToClipboard(selectedVoiceRef.current);
                 return;
             }
 
@@ -10964,8 +11245,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 onReassignSelectionToVoice={reassignSelectionToVoice}
                 soloVoices={soloVoices}
                 onToggleSolo={handleToggleVoiceSolo}
+                onCopyVoice={(voice) => copyEntireVoiceToClipboard(voice)}
                 voiceInstruments={voiceInstruments}
-                onChangeVoiceInstrument={(voice: number, instrument: string) => setVoiceInstruments(prev => ({ ...prev, [voice]: instrument }))}
+                onChangeVoiceInstrument={(voice: number, instrument: string) => {
+                    // Multi-selezione: se ci sono note selezionate appartenenti a più voci
+                    // SATB, applica lo strumento a TUTTE quelle voci insieme; altrimenti
+                    // solo alla voce passata (voce attiva).
+                    const sel = latestSelectedNoteIds.current;
+                    const voicesInSel = new Set<number>();
+                    if (sel && sel.size > 0) {
+                        for (const n of (latestRawNotes.current || [])) {
+                            if (sel.has(n.id)) { const vv = Number((n as any).voice ?? 1); if (vv >= 1 && vv <= 4) voicesInSel.add(vv); }
+                        }
+                    }
+                    const targets = voicesInSel.size > 0 ? [...voicesInSel] : [voice];
+                    setVoiceInstruments(prev => { const next = { ...prev }; for (const vv of targets) next[vv] = instrument; return next; });
+                }}
+                activeAccTrack={activeStaffArea === 'accompaniment'
+                    ? ((accompanimentTracks || []).find(t => t.id === activeAccTrackId) ?? null)
+                    : null}
+                onChangeAccTrackInstrument={(trackId: string, gm: number) => {
+                    // Multi-selezione: se ci sono note selezionate in più tracce ACC, applica
+                    // lo strumento a tutte; altrimenti solo alla traccia passata (attiva).
+                    const sel = latestSelectedNoteIds.current;
+                    const trackIds = new Set<string>();
+                    if (sel && sel.size > 0) {
+                        for (const t of (latestAccompanimentTracks.current || [])) {
+                            if (t.notes.some(n => sel.has(n.id))) trackIds.add(t.id);
+                        }
+                    }
+                    const targets = trackIds.size > 0 ? trackIds : new Set([trackId]);
+                    setAccompanimentTracks(prev => prev.map(t => targets.has(t.id) ? { ...t, instrumentId: gm } : t));
+                }}
                 isMixerOpen={isMixerOpen}
                 onToggleMixer={() => setIsMixerOpen(o => !o)}
                 hasDrumTrack={(accompanimentTracks || []).some(t => (t as any).isDrum)}
@@ -11137,6 +11448,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }}
             />
 
+            <NewProjectDialog
+                open={newProjectDialogOpen}
+                onCancel={() => setNewProjectDialogOpen(false)}
+                onCreate={(config) => {
+                    setNewProjectDialogOpen(false);
+                    // Ridispaccia 'new' col config: salta intercettazione (__fromDialog)
+                    // e confirm nativo (skipConfirm); il reset + applyNewProjectConfig
+                    // avvengono nel routing IO.
+                    dispatchMenuActionRef.current?.('new' as any, { __fromDialog: true, skipConfirm: true, trackConfig: config });
+                }}
+            />
+
             {midiImportDialogOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -11223,6 +11546,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             {isMixerOpen && (
                 <MixerPanel
                     voiceInstruments={voiceInstruments}
+                    voiceMidiChannels={voiceMidiChannels}
+                    onChangeVoiceMidiChannel={(voice, ch) => setVoiceMidiChannels(prev => { const next = { ...prev }; if (ch == null) delete next[voice]; else next[voice] = ch; return next; })}
                     voiceVolumes={voiceVolumes}
                     mutedVoices={mutedVoices}
                     soloVoices={soloVoices}
@@ -11240,6 +11565,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onDeleteTrack={handleDeleteTrack}
                     getVoiceLevel={getVoiceLevel}
                     getTrackLevel={getTrackLevel}
+                    satbMasterVolume={satbMasterVolume}
+                    accMasterVolume={accMasterVolume}
+                    mixerMasterVolume={mixerMasterVolume}
+                    onChangeSatbMasterVolume={setSatbMasterVolume}
+                    onChangeAccMasterVolume={setAccMasterVolume}
+                    onChangeMixerMasterVolume={setMixerMasterVolume}
+                    getSatbMasterLevel={getSatbMasterLevel}
+                    getAccMasterLevel={getAccMasterLevel}
+                    getMixerMasterLevel={getMixerMasterLevel}
                     onClose={() => setIsMixerOpen(false)}
                 />
             )}
@@ -11783,7 +12117,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                                                         {/* Overlay: chord insert input */}
                                                         {chordInsertMode && playheadPosition?.systemIndex === systemIndex && (
-                                                            <div style={{ position: 'absolute', left: Math.max(4, playheadPosition.x - 2), top: VF_TREBLE_Y - 38, zIndex: 9999 }}>
+                                                            // Con SATB NASCOSTO il sistema è traslato in alto di SATB_HIDE_SHIFT_PX
+                                                            // (overflow:hidden + altezza ridotta): il box, ancorato sopra il rigo di
+                                                            // violino, finirebbe ritagliato fuori dal bordo. Compensa lo shift così
+                                                            // ricade alla stessa posizione visiva in cima all'area visibile.
+                                                            <div style={{ position: 'absolute', left: Math.max(4, playheadPosition.x - 2), top: (satbVisible ? 0 : SATB_HIDE_SHIFT_PX) + VF_TREBLE_Y - 38, zIndex: 9999 }}>
                                                                 <div className="flex items-center gap-1 bg-slate-800 border border-cyan-500 rounded-lg shadow-xl px-2 py-1">
                                                                     <input
                                                                         autoFocus

@@ -18,6 +18,9 @@ import { INSTRUMENTS, instrumentEmoji, soundfontToGm } from '../constants/instru
 interface MixerPanelProps {
   // SATB voices
   voiceInstruments: Record<number, string>;
+  /** Canale MIDI in uscita per voce (1-16); assente = auto (voce → 1-4). */
+  voiceMidiChannels?: Record<number, number>;
+  onChangeVoiceMidiChannel?: (voice: number, ch: number | null) => void;
   voiceVolumes: Record<number, number>;
   mutedVoices: Set<number>;
   soloVoices: Set<number>;
@@ -40,6 +43,16 @@ interface MixerPanelProps {
   getVoiceLevel?: (voice: number) => number;
   /** Instantaneous output peak (0..1) for an ACC track (by array index). */
   getTrackLevel?: (trackIndex: number) => number;
+  // Master faders (linear gain 0..1): SATB group, ACC group, and global mixer out.
+  satbMasterVolume?: number;
+  accMasterVolume?: number;
+  mixerMasterVolume?: number;
+  onChangeSatbMasterVolume?: (v: number) => void;
+  onChangeAccMasterVolume?: (v: number) => void;
+  onChangeMixerMasterVolume?: (v: number) => void;
+  getSatbMasterLevel?: () => number;
+  getAccMasterLevel?: () => number;
+  getMixerMasterLevel?: () => number;
   onClose: () => void;
 }
 
@@ -51,20 +64,25 @@ const VOICE_ACCENTS: Record<number, string> = { 1: '#2563eb', 2: '#f97316', 3: '
 // Per-track staff options. "grandstaff" = treble+bass (keyboard); the others are a
 // single staff with the given clef (instrumental/vocal lines). Encoded as
 // { staffMode, clef } applied to the AccompanimentTrack.
-type StaffChoice = { value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType; voiced?: boolean };
+type StaffChoice = { value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType; voiced?: boolean; octaveTranspose?: number };
 const STAFF_OPTIONS: StaffChoice[] = [
   { value: 'grandstaff',        label: 'Grandstaff',        staffMode: 'grandstaff' },
   { value: 'grandstaff-voiced', label: 'Grand staff a voci', staffMode: 'grandstaff', voiced: true },
-  { value: 'single-treble',  label: '𝄞 Violino',   staffMode: 'treble_only', clef: 'treble' },
-  { value: 'single-bass',    label: '𝄢 Basso',     staffMode: 'treble_only', clef: 'bass' },
-  { value: 'single-soprano', label: 'Soprano',     staffMode: 'treble_only', clef: 'soprano' },
-  { value: 'single-alto',    label: 'Contralto',   staffMode: 'treble_only', clef: 'alto' },
-  { value: 'single-tenor',   label: 'Tenore',      staffMode: 'treble_only', clef: 'tenor' },
+  { value: 'single-treble',      label: '𝄞 Violino',          staffMode: 'treble_only', clef: 'treble' },
+  // Chiavi traspositrici (8vb): suonano un'ottava SOTTO il scritto, come chitarra e basso.
+  { value: 'single-treble-8vb',  label: '𝄞 Chitarra (8vb)',   staffMode: 'treble_only', clef: 'treble', octaveTranspose: -1 },
+  { value: 'single-bass',        label: '𝄢 Basso',            staffMode: 'treble_only', clef: 'bass' },
+  { value: 'single-bass-8vb',    label: '𝄢 Basso (8vb)',      staffMode: 'treble_only', clef: 'bass', octaveTranspose: -1 },
+  { value: 'single-soprano',     label: 'Soprano',            staffMode: 'treble_only', clef: 'soprano' },
+  { value: 'single-alto',        label: 'Contralto',          staffMode: 'treble_only', clef: 'alto' },
+  { value: 'single-tenor',       label: 'Tenore',             staffMode: 'treble_only', clef: 'tenor' },
 ];
-const staffChoiceValue = (track: AccompanimentTrack): string =>
-  track.staffMode === 'grandstaff'
-    ? (track.voiced ? 'grandstaff-voiced' : 'grandstaff')
-    : `single-${track.clef ?? 'treble'}`;
+const staffChoiceValue = (track: AccompanimentTrack): string => {
+  if (track.staffMode === 'grandstaff') return track.voiced ? 'grandstaff-voiced' : 'grandstaff';
+  const clef = track.clef ?? 'treble';
+  if (track.octaveTranspose === -1 && (clef === 'treble' || clef === 'bass')) return `single-${clef}-8vb`;
+  return `single-${clef}`;
+};
 
 // ── Fader / level helpers ───────────────────────────────────────────────────
 // The stored `volume` stays a LINEAR gain in [0..1] (0 dB at unity), so the
@@ -262,6 +280,8 @@ const ChannelStrip: React.FC<{
   onToggleVisible?: () => void;
   /** Optional staff/clef selector (ACC tracks only). */
   staffControl?: React.ReactNode;
+  /** Optional MIDI output channel selector (ACC tracks only). */
+  midiChannelControl?: React.ReactNode;
   /** Optional rename handler (ACC tracks only): makes the label an editable input. */
   onRename?: (name: string) => void;
   /** Optional track color + handler (ACC tracks only): shows a color swatch. */
@@ -272,7 +292,7 @@ const ChannelStrip: React.FC<{
   onContextMenu?: (e: React.MouseEvent) => void;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
-  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, onRename, color, onChangeColor, getLevel, onContextMenu,
+  muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, midiChannelControl, onRename, color, onChangeColor, getLevel, onContextMenu,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
@@ -321,6 +341,9 @@ const ChannelStrip: React.FC<{
 
     {/* Staff/clef selector (ACC tracks only) */}
     {staffControl}
+
+    {/* MIDI output channel selector (ACC tracks only) */}
+    {midiChannelControl}
 
     {/* Track color picker (ACC tracks only) */}
     {onChangeColor && (
@@ -398,12 +421,43 @@ const ChannelStrip: React.FC<{
   </div>
 );
 
+/** Master/group strip: just a label, a console fader with its meter, and a dB
+ *  readout. Used for the SATB-group, ACC-group and global mixer master buses. The
+ *  fader sits near the bottom to line up with the channel-strip faders alongside. */
+const MasterStrip: React.FC<{
+  label: string;
+  accent: string;
+  volume: number;
+  onChangeVolume: (v: number) => void;
+  getLevel?: () => number;
+}> = ({ label, accent, volume, onChangeVolume, getLevel }) => (
+  <div
+    className="flex flex-col items-center px-1.5 py-2 rounded bg-slate-900/60 border border-slate-700"
+    style={{ width: 66 }}
+  >
+    <div className="text-[10px] font-bold w-full text-center truncate leading-tight" style={{ color: accent }} title={label}>
+      {label}
+    </div>
+    {/* Spacer so the fader bottom aligns with the channel-strip faders */}
+    <div className="flex-1" style={{ minHeight: 8 }} />
+    <div className="flex flex-col items-center gap-0.5">
+      <ConsoleFader value={volume} onChange={onChangeVolume} accent={accent} getLevel={getLevel} />
+      <span className="text-[8px] text-gray-300 font-mono leading-none tabular-nums">
+        {gainToDb(volume) <= DB_FLOOR + 0.1 ? '−∞' : `${gainToDb(volume) > 0 ? '+' : ''}${gainToDb(volume).toFixed(1)}`} dB
+      </span>
+    </div>
+  </div>
+);
+
 const MixerPanel: React.FC<MixerPanelProps> = ({
-  voiceInstruments, voiceVolumes, mutedVoices, soloVoices,
+  voiceInstruments, voiceMidiChannels, onChangeVoiceMidiChannel, voiceVolumes, mutedVoices, soloVoices,
   onChangeVoiceInstrument, onUpdateVoice, onToggleSolo,
   satbVisible, onToggleSatbVisible, satbName, onRenameSatb,
   accompanimentTracks, onUpdateTrack, onAddEmptyTrack, onAddDrumTrack, onDeleteTrack,
   getVoiceLevel, getTrackLevel,
+  satbMasterVolume = 1, accMasterVolume = 1, mixerMasterVolume = 1,
+  onChangeSatbMasterVolume, onChangeAccMasterVolume, onChangeMixerMasterVolume,
+  getSatbMasterLevel, getAccMasterLevel, getMixerMasterLevel,
   onClose,
 }) => {
   const { t: tT } = useTranslation('toolbar');
@@ -436,6 +490,20 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   // --- Context menu (delete ACC track) ---
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; trackId: string } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // --- "+" add-track menu (replaces the inline +Nuova / +Batteria buttons) ---
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) setAddMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAddMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [addMenuOpen]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -526,8 +594,34 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 solo={soloVoices.has(v)}
                 onToggleSolo={() => onToggleSolo(v)}
                 getLevel={getVoiceLevel ? () => getVoiceLevel(v) : undefined}
+                midiChannelControl={onChangeVoiceMidiChannel ? (
+                  <select
+                    value={voiceMidiChannels?.[v] ?? 0}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      onChangeVoiceMidiChannel(v, val === 0 ? null : val);
+                    }}
+                    title="Canale MIDI in uscita (verso DAW esterno)"
+                    aria-label="Canale MIDI in uscita"
+                    className="w-full bg-slate-700 text-gray-200 text-[8px] rounded px-0.5 py-0.5 border border-slate-600 cursor-pointer"
+                  >
+                    <option value={0}>MIDI: Auto</option>
+                    {Array.from({ length: 16 }, (_, i) => i + 1).map(c => (
+                      <option key={c} value={c}>MIDI ch. {c}</option>
+                    ))}
+                  </select>
+                ) : undefined}
               />
             ))}
+            {/* SATB group master */}
+            <div className="w-px bg-slate-700/70 self-stretch mx-0.5" />
+            <MasterStrip
+              label="SATB"
+              accent="#a78bfa"
+              volume={satbMasterVolume}
+              onChangeVolume={(v) => onChangeSatbMasterVolume?.(v)}
+              getLevel={getSatbMasterLevel}
+            />
           </div>
         </section>
 
@@ -538,21 +632,39 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         <section className="flex flex-col">
           <div className="flex items-center justify-between mb-1 px-1">
             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Tracce</span>
-            <div className="flex items-center gap-1">
+            {/* Single "+" that opens a small menu — keeps the fader area uncluttered. */}
+            <div className="relative" ref={addMenuRef}>
               <button
-                onClick={onAddEmptyTrack}
-                title="Aggiungi nuova traccia vuota"
-                className="h-4 px-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[9px] font-bold rounded transition-colors"
+                onClick={() => setAddMenuOpen(o => !o)}
+                title="Aggiungi traccia"
+                aria-haspopup="menu"
+                aria-expanded={addMenuOpen}
+                className={`w-5 h-5 flex items-center justify-center rounded text-white text-sm font-bold leading-none transition-colors ${addMenuOpen ? 'bg-cyan-600' : 'bg-cyan-700 hover:bg-cyan-600'}`}
               >
-                + Nuova
+                +
               </button>
-              <button
-                onClick={onAddDrumTrack}
-                title="Aggiungi traccia di percussioni (batteria, MIDI canale 10)"
-                className="h-4 px-1.5 bg-amber-700 hover:bg-amber-600 text-white text-[9px] font-bold rounded transition-colors"
-              >
-                + Batteria
-              </button>
+              {addMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-1 z-20 bg-slate-700 border border-slate-600 rounded shadow-lg py-1 min-w-[140px]"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => { onAddEmptyTrack(); setAddMenuOpen(false); }}
+                    className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
+                  >
+                    🎵 Nuova traccia
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => { onAddDrumTrack(); setAddMenuOpen(false); }}
+                    className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
+                  >
+                    🥁 Batteria
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-1">
@@ -587,7 +699,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                       value={staffChoiceValue(track)}
                       onChange={(e) => {
                         const opt = STAFF_OPTIONS.find(o => o.value === e.target.value);
-                        if (opt) onUpdateTrack(track.id, { staffMode: opt.staffMode, clef: opt.clef, voiced: !!opt.voiced });
+                        if (opt) onUpdateTrack(track.id, { staffMode: opt.staffMode, clef: opt.clef, voiced: !!opt.voiced, octaveTranspose: opt.octaveTranspose ?? 0 });
                       }}
                       title="Tipo di rigo / chiave"
                       aria-label="Tipo di rigo"
@@ -598,10 +710,55 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                       ))}
                     </select>
                   }
+                  midiChannelControl={
+                    <select
+                      value={track.midiChannel ?? 0}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        onUpdateTrack(track.id, { midiChannel: v === 0 ? undefined : v });
+                      }}
+                      title="Canale MIDI in uscita (verso DAW esterno)"
+                      aria-label="Canale MIDI in uscita"
+                      className="w-full bg-slate-700 text-gray-200 text-[8px] rounded px-0.5 py-0.5 border border-slate-600 cursor-pointer"
+                    >
+                      <option value={0}>MIDI: Auto</option>
+                      {Array.from({ length: 16 }, (_, i) => i + 1).map(c => (
+                        <option key={c} value={c}>MIDI ch. {c}</option>
+                      ))}
+                    </select>
+                  }
                   onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, trackId: track.id }); }}
                 />
               ))
             )}
+            {/* ACC group master */}
+            <div className="w-px bg-slate-700/70 self-stretch mx-0.5" />
+            <MasterStrip
+              label="ACC"
+              accent="#2dd4bf"
+              volume={accMasterVolume}
+              onChangeVolume={(v) => onChangeAccMasterVolume?.(v)}
+              getLevel={getAccMasterLevel}
+            />
+          </div>
+        </section>
+
+        {/* Divider */}
+        <div className="w-px bg-slate-600 self-stretch" />
+
+        {/* MASTER section (global mixer out) */}
+        <section className="flex flex-col">
+          <div className="flex items-center mb-1 px-1">
+            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Master</span>
+          </div>
+          <div className="flex gap-1">
+            <MasterStrip
+              label="MIX"
+              accent="#38bdf8"
+              volume={mixerMasterVolume}
+              onChangeVolume={(v) => onChangeMixerMasterVolume?.(v)}
+              getLevel={getMixerMasterLevel}
+            />
           </div>
         </section>
       </div>
