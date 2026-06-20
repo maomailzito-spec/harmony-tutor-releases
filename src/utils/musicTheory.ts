@@ -8297,10 +8297,20 @@ export function applyHarmonyRules(
 
             const aS = a.byVoice.get(1);
             const bS = b.byVoice.get(1);
+            // Append the local tonality when the cadence lands in a key other than the
+            // home key (i.e. inside a tonicization/modulation), so the marker reads e.g.
+            // "Cadenza plagale · in B♭ maggiore". Re-applied from releases (fd26761),
+            // adapted to the spelling-first markCadence helper.
+            const _localCtx = getContextAtAbsBeat(b.absBeat);
+            let _descr = description;
+            if (_localCtx.tonic !== keyTonic || _localCtx.isMinor !== isMinor) {
+                const _mode = _localCtx.isMinor ? 'minore' : 'maggiore';
+                _descr = description + ` · in ${_localCtx.tonic} ${_mode}`;
+            }
             addViolation({
                 ruleId,
                 severity: 'exception',
-                description,
+                description: _descr,
                 suggestion,
                 noteIds: withEndpoints([aS?.id, bS?.id].filter(Boolean) as string[], aBass.id, bBass.id),
             });
