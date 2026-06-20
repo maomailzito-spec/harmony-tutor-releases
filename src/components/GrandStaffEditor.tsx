@@ -3770,6 +3770,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     masterVolumes: { satb: satbMasterVolume, acc: accMasterVolume, mixer: mixerMasterVolume },
                     satbName,
                     satbVisible,
+                    computedLabelsRef: _harmonyLabelsRef,
                 },
                 apply: {
                     projectExtrasRef,
@@ -3848,7 +3849,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (action === 'save' || action === 'save-as') {
                 try {
                     const romans = (_harmonyLabelsRef.current || [])
-                        .flatMap((sys: any[]) => sys.map((l: any) => l.roman))
+                        .flatMap((sys: any[]) => sys.map((l: any) => l.romanDisplay || l.roman))
                         .filter(Boolean);
                     if (romans.length >= 2) recordAnalysedTransitions(romans);
                 } catch { /* silent */ }
