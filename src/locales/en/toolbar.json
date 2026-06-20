@@ -115,6 +115,8 @@
   "more_format_label": "Format",
   "more_format_page": "Page",
   "more_format_landscape": "Landscape",
+  "more_format_show_page_breaks": "Show page breaks",
+  "more_format_page_break": "Page",
   "more_drag_to_reorder": "Drag to reorder",
 
   "midi_label": "MIDI",

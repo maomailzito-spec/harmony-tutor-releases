@@ -191,6 +191,9 @@ type GrandStaffToolbarProps = {
     setStaffLayoutMode: (value: StaffLayoutMode | ((prev: StaffLayoutMode) => StaffLayoutMode)) => void;
     canvasFormat: CanvasFormat;
     setCanvasFormat: (value: CanvasFormat) => void;
+    /** Opt-in guide: draw approximate page breaks between systems in the editor. */
+    showPageBreaks?: boolean;
+    onToggleShowPageBreaks?: () => void;
     isMidiMenuOpen: boolean;
     setIsMidiMenuOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
     selectedMidiOutput: any | null;
@@ -365,6 +368,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         setStaffLayoutMode,
         canvasFormat,
         setCanvasFormat,
+        showPageBreaks,
+        onToggleShowPageBreaks,
         isMidiMenuOpen,
         setIsMidiMenuOpen,
         selectedMidiOutput,
@@ -1130,6 +1135,16 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             <span>{tT('more_format_landscape')}</span>
                             <span className="text-[11px]">{canvasFormat === 'landscape' ? '●' : '○'}</span>
                         </button>
+                        {onToggleShowPageBreaks && (
+                            <button
+                                onClick={onToggleShowPageBreaks}
+                                className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                title={tT('more_format_show_page_breaks')}
+                            >
+                                <span>{tT('more_format_show_page_breaks')}</span>
+                                <span className="text-[11px]">{showPageBreaks ? '☑' : '☐'}</span>
+                            </button>
+                        )}
                         <div className="my-2 h-px bg-slate-700" />
                         <button
                             onClick={async () => {

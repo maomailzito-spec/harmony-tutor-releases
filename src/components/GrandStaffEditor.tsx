@@ -11,6 +11,7 @@ declare global {
     }
 }
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
+import { useTranslation } from 'react-i18next';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
 import { gmToSoundfont, soundfontToGm } from '../constants/instruments';
@@ -838,6 +839,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [autoLeadingToneInMinor, setAutoLeadingToneInMinor] = useState(true);
     const [viewMode, setViewMode] = useState<ViewMode>('page');
     const [canvasFormat, setCanvasFormat] = useState<CanvasFormat>('landscape');
+    // Opt-in page-break guide: draw approximate A4 page breaks between systems in
+    // the editor (off by default; export-excluded so it never prints).
+    const [showPageBreaks, setShowPageBreaks] = useState(false);
+    const { t: tPB } = useTranslation('toolbar');
     const [measuresPerLine, setMeasuresPerLine] = useState<number>(4);
     const [minMeasureCount, setMinMeasureCount] = useState<number>(4);
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
@@ -4809,6 +4814,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Keep a ref to the latest layoutData so async callbacks can read current layout
     const layoutDataRef = useRef(layoutData);
     useEffect(() => { layoutDataRef.current = layoutData; }, [layoutData]);
+
+    // Page-break guide (opt-in): estimate where A4 page breaks fall so they can be
+    // drawn between systems in the editor. Systems have a uniform height; orientation
+    // comes from canvasFormat. APPROXIMATE — the authoritative pagination is the print
+    // engine's (this only helps avoid the blind print→adjust→reprint loop).
+    const pageBreakLayout = useMemo(() => {
+        const breakBefore = new Set<number>();
+        const pageOf = new Map<number, number>();
+        const sys = layoutData?.systemsParams;
+        if (!showPageBreaks || !sys || sys.length === 0) return { breakBefore, pageOf };
+        const effH = (satbVisible ? systemHeightPx : Math.max(0, systemHeightPx - SATB_HIDE_SHIFT_PX)) || 1;
+        const contentW = Math.max(1, ...sys.map((s: any) => Number(s.width) || 0));
+        const portrait = canvasFormat === 'page';
+        // A4 @96dpi usable area (minus ~8mm margins + body padding), per orientation.
+        const usableW = portrait ? 734 : 1063;
+        const usableH = portrait ? 1040 : 720;
+        const scale = Math.max(0.45, Math.min(1, usableW / contentW));
+        const perPage = Math.max(1, Math.floor(usableH / Math.max(1, effH * scale)));
+        let page = 1, count = 0;
+        for (let i = 0; i < sys.length; i++) {
+            if (i > 0 && count >= perPage) { breakBefore.add(i); page += 1; count = 0; }
+            pageOf.set(i, page);
+            count += 1;
+        }
+        return { breakBefore, pageOf };
+    }, [showPageBreaks, layoutData, canvasFormat, satbVisible, systemHeightPx]);
 
     // Highest measure index that currently contains any note. The per-system
     // metric-validation block uses this as the "currently being edited"
@@ -11336,6 +11367,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }}
                 canvasFormat={canvasFormat}
                 setCanvasFormat={setCanvasFormat}
+                showPageBreaks={showPageBreaks}
+                onToggleShowPageBreaks={() => setShowPageBreaks(v => !v)}
                 isMidiMenuOpen={isMidiMenuOpen}
                 setIsMidiMenuOpen={setIsMidiMenuOpen}
                 selectedMidiOutput={selectedMidiOutput}
@@ -11904,6 +11937,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             }
                         } catch (_) {}
                         const showHarmony = isAnalysisEnabled && systemHarmonyLabels.length > 0;
+                        // Opt-in page-break guide: this system starts a new printed page.
+                        const _pageBreakHere = pageBreakLayout.breakBefore.has(systemIndex);
 
                                                 return (
                                                     <div
@@ -11914,9 +11949,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 else map.delete(systemIndex);
                                                         }}
                             className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'} ${satbVisible ? '' : 'ht-satb-hidden'}`}
-                            style={{ width: actualSystemWidth, height: satbVisible ? systemHeightPx : Math.max(0, systemHeightPx - SATB_HIDE_SHIFT_PX), overflow: satbVisible ? undefined : 'hidden' }}
+                            style={{ width: actualSystemWidth, height: satbVisible ? systemHeightPx : Math.max(0, systemHeightPx - SATB_HIDE_SHIFT_PX), overflow: satbVisible ? undefined : 'hidden', marginTop: _pageBreakHere ? 46 : undefined }}
                                                         data-system-index={systemIndex}
                           >
+                                                        {_pageBreakHere && (
+                                                            <div className="export-exclude" style={{ position: 'absolute', left: 0, right: 0, top: -26, height: 0, pointerEvents: 'none', zIndex: 6 }} aria-hidden="true">
+                                                                <div style={{ borderTop: '2px dashed #f59e0b' }} />
+                                                                <span style={{ position: 'absolute', left: 8, top: -9, background: '#fff7ed', color: '#b45309', border: '1px solid #f59e0b', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '0 6px', lineHeight: '16px', whiteSpace: 'nowrap' }}>
+                                                                    ▽ {tPB('more_format_page_break')} {pageBreakLayout.pageOf.get(systemIndex)}
+                                                                </span>
+                                                            </div>
+                                                        )}
                                                         {systemIndex === 0 && keyChangeMode === 'modal' && modeInfo?.label && (
                                                                 <div
                                                                         className="absolute text-xs font-semibold text-slate-700"
