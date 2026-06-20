@@ -2,12 +2,13 @@
 
 > Documento di lavoro per l'aggiornamento del manuale. Raccoglie le nuove
 > funzioni, le modifiche e i fix introdotti **dopo** il tag `v1.0.17`
-> (24 mag 2026) fino al 5 giu 2026.
+> (24 mag 2026) fino al rilascio **1.1.0** (giu 2026). Le sezioni 1–14
+> coprono il lavoro fino al 5 giu; le sezioni 15–22 gli aggiornamenti di
+> giugno confluiti nella 1.1.0.
 >
 > Nota: il tag `v1.0.17` conteneva solo fix di licenza, quindi il confine è
-> netto. Tutto ciò che segue è lavoro successivo (79 commit). Il
-> `package.json` riporta ancora `1.0.11` ma non è affidabile: la versione
-> reale è gestita dai tag git.
+> netto. La versione reale è gestita dai **tag git**; con la 1.1.0 il
+> `package.json` è stato allineato a `1.1.0`.
 
 ---
 
@@ -325,6 +326,60 @@ Non è una funzione visibile ma **cambia il comportamento dell'analisi**:
   (`tsx scripts/respell-notes-file.ts <file.htp|cartella> [--dry-run] [--no-backup]`).
 - Numerosi fix di correttezza su **modulazioni/sequenze/tonicizzazioni** che
   impattano l'etichettatura di brani specifici, non l'uso quotidiano.
+
+---
+
+# Aggiornamenti giugno 2026 (verso la 1.1.0)
+
+> Lavoro successivo al 5 giugno, incluso nel rilascio **1.1.0**.
+
+## 15. Traccia di batteria (percussioni)
+Nuova traccia ACC di **batteria** (MIDI canale 10): notazione standard (chiave di
+percussione, teste ✕ per piatti/charleston), kit **orchestrale** o **rock**,
+inserimento col mouse sul rigo e da un **modulo percussioni flottante** (toggle 🥁
+in toolbar).
+
+## 16. Mixer — fader master, menu "+", canale MIDI
+- **Tre fader MASTER**: gruppo **SATB**, gruppo **ACC** e **MIX** globale, con
+  routing gerarchico (canale → master di gruppo → master globale), LED di livello
+  propri e i tre valori salvati nel progetto.
+- Pulsante **"+"** unico nell'header TRACCE che apre un menu (*Nuova traccia* /
+  *Batteria*), al posto dei due bottoni separati — area dei fader più pulita.
+- **Selettore di canale MIDI in uscita** per ogni voce e traccia (Auto, oppure un
+  canale fisso 1–16; con Auto: voci 1–4, tracce ACC dal 5 in su, batteria sempre 10).
+
+## 17. Strumento dalla toolbar anche per le ACC + multi-selezione
+Il selettore strumento in toolbar ora agisce anche sulla **traccia ACC attiva** (non
+solo sulle voci SATB) e, se sono selezionate note appartenenti a **più voci/tracce**,
+applica lo strumento a **tutte** in una sola volta.
+
+## 18. Chiavi traspositrici (8vb)
+Per le tracce a rigo singolo: opzioni **"𝄞 Chitarra (8vb)"** e **"𝄢 Basso (8vb)"** —
+la notazione mostra un "8" sotto la chiave e il suono è **un'ottava sotto** lo scritto
+(chitarra, contrabbasso/basso elettrico). La notazione resta invariata; campo
+`octaveTranspose` su `AccompanimentTrack`.
+
+## 19. Copia un'INTERA voce SATB
+Copia tutte le note di una voce nell'intero brano in un colpo solo (per incollarle in
+blocco su una traccia ACC → orchestrazione): **tasto destro** sui pulsanti S/A/T/B,
+oppure scorciatoia **⇧⌘/Ctrl+C**.
+
+## 20. Nuovo progetto con scelta tracce e template
+Creando un nuovo progetto si apre un dialog: rigo **SATB** on/off, aggiunta di
+strumenti/batteria iniziali, e **template** salvabili/ricaricabili (conservati
+localmente, offerti a ogni nuovo progetto).
+
+## 21. Suoni — sezione ritmica (bassi)
+Aggiunti **contrabbasso pizzicato**, **basso elettrico (dita)** e **basso elettrico
+(plettro)** come strumenti selezionabili (campioni one-shot locali).
+
+## 22. Motore d'analisi della 1.1.0 (nota di rilascio)
+La 1.1.0 adotta il **motore spelling-first** della riscrittura. I 16 hotfix d'analisi
+usciti su `releases` dopo la 1.0.17 sono stati verificati uno per uno in fase di
+merge: la maggior parte è già gestita dal nuovo motore con una sua implementazione;
+**due** sono stati ri-applicati esplicitamente — *tonalità locale nella descrizione
+della cadenza* e *sensibile libera sulla cadenza d'inganno V→vi*. Suite di
+regressione alla baseline del refactor, **nessuna regressione introdotta**.
 
 ---
 
