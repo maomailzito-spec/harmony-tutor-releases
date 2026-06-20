@@ -381,6 +381,20 @@ merge: la maggior parte è già gestita dal nuovo motore con una sua implementaz
 della cadenza* e *sensibile libera sulla cadenza d'inganno V→vi*. Suite di
 regressione alla baseline del refactor, **nessuna regressione introdotta**.
 
+## 23. Export MIDI e stampa/PDF
+- **Program Change nell'export MIDI su file**: il `.mid` esportato ora scrive, per
+  ogni voce SATB, il Program Change con lo **strumento assegnato** nel mixer (GM),
+  sia in multi-traccia (Type 1) sia in traccia unica (Type 0). Prima il file
+  conteneva solo nomi traccia + note, e in una DAW partiva tutto su pianoforte.
+- **Stampa/PDF — niente righi tagliati**: un esercizio lungo non viene più spezzato
+  a metà su un rigo tra una pagina e l'altra (`break-inside: avoid` sui sistemi).
+- **Guida ai salti pagina (opzionale)**: nuovo interruttore **"Mostra salti pagina"**
+  nel menù ⋯ (sezione *Format*), spento di default. Acceso, mostra un separatore
+  tratteggiato **"▽ Pagina N"** negli spazi tra i righi, dove cadrebbe il taglio
+  pagina A4, così si regola il layout (misure per riga) senza dover stampare alla
+  cieca. Segue l'orientamento Page/Landscape. È una stima (l'impaginazione vera
+  resta quella del motore di stampa) e non compare in stampa/PDF.
+
 ---
 
 # Scorciatoie da tastiera — novità dalla 1.0.17
