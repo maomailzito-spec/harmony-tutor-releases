@@ -11465,9 +11465,12 @@ export function applyHarmonyRules(
                         const arrInterval = mod12(arrRootPc - ctxTonicPc);
                         // arrInterval: 0 = I, 9 = vi (major), 8 = vi (minor)
                         const isTonicChord = arrInterval === 0;
-                        const isVI = ctx.isMinor ? arrInterval === 8 : arrInterval === 9;
-                        if (!isTonicChord && !isVI) {
-                            // Non-cadential destination: leading tone is free
+                        if (!isTonicChord) {
+                            // Non-I destination: the leading tone is melodically free.
+                            // V→vi (deceptive cadence) is NOT V→I, so the leading tone has
+                            // no obligation to resolve to the tonic here (an inner voice may
+                            // fall to avoid doubling the 3rd of vi).
+                            // Re-applied from releases fix 896dfdd, lost in the rewrite.
                             const stepDown = (n1.midi ?? 0) - (n2.midi ?? 0);
                             const descr = (stepDown >= 1 && stepDown <= 2)
                                 ? 'Risoluzione libera della sensibile (discesa per grado congiunto)'
@@ -11476,7 +11479,7 @@ export function applyHarmonyRules(
                                 ruleId: 'EXC-LT-FREE',
                                 severity: 'exception',
                                 description: descr,
-                                suggestion: 'L\'accordo di destinazione non è I né vi: la sensibile è melodicamente libera in contesto non cadenzale.',
+                                suggestion: 'L\'accordo di destinazione non è I (es. cadenza d\'inganno V→vi): la sensibile è melodicamente libera.',
                                 noteIds: [n1.id, n2.id],
                             });
                             handledLeadingToneIds.add(n1.id);
