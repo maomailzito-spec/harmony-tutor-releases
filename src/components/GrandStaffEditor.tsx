@@ -3254,7 +3254,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                               html{overflow:visible !important;}
                               body{background:white;margin:0;padding:8px;overflow:visible !important;width:100% !important;box-sizing:border-box;}
                               .ht-staff-container{width:100% !important;max-width:100% !important;overflow:visible !important;}
-                              [data-system-index]{width:100% !important;max-width:100% !important;overflow:visible !important;}
+                              /* Keep each staff system (a row of music) whole on one page —
+                                 the print engine must not cut a system across a page break. */
+                              [data-system-index]{width:100% !important;max-width:100% !important;overflow:visible !important;break-inside:avoid;page-break-inside:avoid;}
                               svg{max-width:100%;width:100%;height:auto;overflow:visible !important;}
               /* Export/print mode: hide interactive overlays and analysis layers */
               .export-exclude{display:none !important;}
