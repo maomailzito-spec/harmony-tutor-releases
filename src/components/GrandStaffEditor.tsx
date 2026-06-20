@@ -1091,7 +1091,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         keySignatureRoot,
         isMinorMode,
         bpm,
-    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm]);
+        voiceInstruments,
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments]);
 
     const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
         setRawNotes(next.notes || []);

@@ -3,6 +3,7 @@ import type { AccompanimentTrack, StaffNote, TimeSignature, TimeSignatureChange,
 import { TICKS_PER_QUARTER } from '../constants';
 import { getKeySignature, getNotePropertiesFromMidi } from '../utils/musicTheory';
 import { buildMidiFile } from '../utils/midiWriter';
+import { soundfontToGm } from '../constants/instruments';
 import { parseMidi, type ParsedMidiNote } from '../utils/midiParser';
 import { electronBridge } from '../services/electronBridge';
 import { usePreference } from '../preferences/usePreference';
@@ -14,6 +15,8 @@ export type GrandStaffMidiProject = {
   keySignatureRoot: string;
   isMinorMode: boolean;
   bpm?: number;
+  /** Soundfont name per SATB voice (1-4) — converted to a GM program for MIDI export. */
+  voiceInstruments?: Record<number, string>;
 };
 
 export type UseGrandStaffMidiArgs = {
@@ -1416,11 +1419,19 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
   }, []);
 
   const exportMidi = useCallback(async () => {
+    // Map each voice's assigned soundfont to a GM program for Program Change events.
+    const voicePrograms: Record<number, number> = {};
+    const vi = project.voiceInstruments || {};
+    for (const k of Object.keys(vi)) {
+      const v = Number(k);
+      if (Number.isFinite(v)) voicePrograms[v] = soundfontToGm(vi[v]);
+    }
     const midiBytes = buildMidiFile({
       notes: project.notes || [],
       timeSignature: project.timeSignature,
       bpm: project.bpm ?? 120,
       midiType: (midiExportType === '0' ? 0 : 1) as 0 | 1,
+      voicePrograms,
     });
 
     const base64 = bytesToBase64(midiBytes);

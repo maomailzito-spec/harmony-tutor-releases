@@ -95,7 +95,17 @@ export type MidiWriterProject = {
   bpm?: number;
   /** 0 = single track (all voices merged), 1 = multi-track (one per voice). Default: 1 */
   midiType?: 0 | 1;
+  /** General-MIDI program (0-127) per SATB voice (1-4). When present, a Program
+   *  Change is written at the start of each voice's channel so a DAW/synth loads
+   *  the assigned instrument. Absent voices default to program 0 (piano). */
+  voicePrograms?: Record<number, number>;
 };
+
+/** GM program for a voice (0-127), clamped; defaults to 0 (acoustic grand piano). */
+function voiceProgram(voicePrograms: Record<number, number> | undefined, voiceNum: number): number {
+  const p = voicePrograms?.[voiceNum];
+  return Number.isFinite(p) ? Math.max(0, Math.min(127, Math.round(p as number))) : 0;
+}
 
 export function buildMidiFile(project: MidiWriterProject): Uint8Array {
   const midiType = project.midiType ?? 1;
@@ -133,6 +143,9 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
     const nameBytes = Array.from(new TextEncoder().encode(name));
     events.push({ tick: 0, order: 0, bytes: [0xff, 0x03, ...encodeVlq(nameBytes.length), ...nameBytes] });
 
+    // Program Change: load the voice's assigned instrument on its channel.
+    events.push({ tick: 0, order: 1, bytes: [0xc0 | ch, voiceProgram(project.voicePrograms, voiceNum)] });
+
     for (const note of voiceNotes) {
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
@@ -167,6 +180,11 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
     const allEvents: MidiEvent[] = [];
     allEvents.push({ tick: 0, order: 0, bytes: tempoMetaEventBpm(project.bpm ?? 120) });
     allEvents.push({ tick: 0, order: 1, bytes: timeSignatureMetaEvent(timeSignature) });
+    // Program Change per voice channel so each voice loads its assigned instrument.
+    for (const v of voiceNums) {
+      const vch = Math.max(0, Math.min(15, v - 1));
+      allEvents.push({ tick: 0, order: 1, bytes: [0xc0 | vch, voiceProgram(project.voicePrograms, v)] });
+    }
     for (const note of notes) {
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
