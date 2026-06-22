@@ -36,6 +36,8 @@ interface MixerPanelProps {
   // Accompaniment tracks
   accompanimentTracks: AccompanimentTrack[];
   onUpdateTrack: (trackId: string, updates: Partial<AccompanimentTrack>) => void;
+  /** Pezzi del kit (midi+label) per una traccia batteria → alimenta i fader per-pezzo. */
+  getDrumPieces?: (track: AccompanimentTrack) => { midi: number; label: string }[];
   onAddEmptyTrack: () => void;
   onAddDrumTrack: () => void;
   onDeleteTrack: (trackId: string) => void;
@@ -259,6 +261,84 @@ const ConsoleFader: React.FC<{
   );
 };
 
+// ── Drum per-piece faders (mixer batteria) ──────────────────────────────────
+// Fader SNELLI per pezzo (cassa, rullante, charleston…): solo groove+cap+label+valore,
+// niente strumento/colore/ch. Trim a centro-neutro: metà = ×1.0, su = boost (fino a ×2),
+// giù = silenzio. Doppio-click = reset a 1.0. Stesso linguaggio visivo del resto.
+const PIECE_FADER_H = 92;
+const PIECE_CAP_H = 11;
+const posToGainTrim = (p: number): number => Math.max(0, Math.min(1, p)) * 2; // centro(0.5)=1.0, top=2.0
+const gainToPosTrim = (g: number): number => Math.max(0, Math.min(1, g / 2));
+
+const PieceFader: React.FC<{ value: number; onChange: (g: number) => void; accent: string }> = ({ value, onChange, accent }) => {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const pos = gainToPosTrim(value);
+  const setFromClientY = useCallback((clientY: number) => {
+    const el = trackRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const p = Math.max(0, Math.min(1, 1 - (clientY - r.top) / r.height));
+    onChange(posToGainTrim(p));
+  }, [onChange]);
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    setFromClientY(e.clientY);
+    const move = (ev: PointerEvent) => setFromClientY(ev.clientY);
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const onWheel = (e: React.WheelEvent) => {
+    const np = Math.max(0, Math.min(1, pos - Math.sign(e.deltaY) * 0.04));
+    onChange(posToGainTrim(np));
+  };
+  const capTop = (1 - pos) * (PIECE_FADER_H - PIECE_CAP_H);
+  return (
+    <div
+      ref={trackRef}
+      onPointerDown={onPointerDown}
+      onWheel={onWheel}
+      onDoubleClick={() => onChange(1)}
+      title={`×${value.toFixed(2)} — trascina; doppio-click = 1.0`}
+      style={{ position: 'relative', width: 22, height: PIECE_FADER_H, cursor: 'ns-resize', touchAction: 'none' }}
+    >
+      {/* groove */}
+      <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 5, transform: 'translateX(-50%)', borderRadius: 3, background: '#0b1220', boxShadow: 'inset 0 0 2px #000, inset 0 0 0 1px #334155' }} />
+      {/* centro (unity ×1.0) */}
+      <div style={{ position: 'absolute', left: 2, right: 2, top: '50%', height: 1, background: '#475569' }} />
+      {/* accent fill sotto il cap */}
+      <div style={{ position: 'absolute', left: '50%', width: 5, transform: 'translateX(-50%)', bottom: 0, top: `${(1 - pos) * 100}%`, borderRadius: 3, background: accent, opacity: 0.8 }} />
+      {/* cap */}
+      <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: capTop, width: 22, height: PIECE_CAP_H, borderRadius: 3, background: 'linear-gradient(180deg,#e2e8f0 0%,#94a3b8 55%,#64748b 100%)', border: '1px solid #0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+        <div style={{ position: 'absolute', left: 2, right: 2, top: '50%', height: 2, transform: 'translateY(-50%)', background: accent, borderRadius: 1 }} />
+      </div>
+    </div>
+  );
+};
+
+/** Sezione apribile coi fader per-pezzo del kit (appare inline accanto allo strip batteria). */
+const DrumPieceFaders: React.FC<{
+  pieces: { midi: number; label: string }[];
+  pieceVolumes: Record<number, number>;
+  accent: string;
+  onChange: (midi: number, gain: number) => void;
+}> = ({ pieces, pieceVolumes, accent, onChange }) => (
+  <div className="flex flex-col items-center px-1.5 py-2 rounded bg-slate-900/60 border border-slate-700 self-stretch">
+    <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: accent }}>🥁 Drum Mix</div>
+    <div className="flex gap-1 items-start">
+      {pieces.map(p => {
+        const v = Number.isFinite(pieceVolumes?.[p.midi]) ? pieceVolumes[p.midi] : 1;
+        return (
+          <div key={p.midi} className="flex flex-col items-center gap-0.5" style={{ width: 30 }}>
+            <PieceFader value={v} accent={accent} onChange={(g) => onChange(p.midi, g)} />
+            <span className="text-[8px] text-gray-300 leading-none w-full text-center truncate" title={p.label}>{p.label}</span>
+            <span className="text-[7px] text-gray-500 leading-none">×{v.toFixed(2)}</span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
 /** A single vertical channel strip (shared layout for voices and tracks). */
 const ChannelStrip: React.FC<{
   /** Translator for the 'toolbar' namespace (instrument labels). */
@@ -290,9 +370,14 @@ const ChannelStrip: React.FC<{
   /** Instantaneous output peak (0..1) for the signal LEDs. */
   getLevel?: () => number;
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** Drum tracks only: toggle for the per-piece faders section (rendered inline beside the strip). */
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
   muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, midiChannelControl, onRename, color, onChangeColor, getLevel, onContextMenu,
+  expandable, expanded, onToggleExpand,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
@@ -397,6 +482,19 @@ const ChannelStrip: React.FC<{
       </button>
     )}
 
+    {/* Per-piece drum mixer toggle (drum tracks only) */}
+    {expandable && (
+      <button
+        onClick={onToggleExpand}
+        title={expanded ? 'Nascondi Drum Mix (fader per-pezzo)' : 'Mostra Drum Mix — fader per pezzo (Kick, Snare, Hi-Hat…)'}
+        className={`w-full h-5 rounded text-[9px] font-semibold flex items-center justify-center gap-0.5 transition-colors ${
+          expanded ? 'bg-amber-600 text-white' : 'bg-slate-700 text-amber-300/90 hover:bg-slate-600'
+        }`}
+      >
+        🎚 {expanded ? '▾' : '▸'}
+      </button>
+    )}
+
     {/* Volume fader (console style) + dB readout */}
     <div className="flex flex-col items-center gap-0.5 mt-0.5">
       <ConsoleFader
@@ -453,7 +551,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   voiceInstruments, voiceMidiChannels, onChangeVoiceMidiChannel, voiceVolumes, mutedVoices, soloVoices,
   onChangeVoiceInstrument, onUpdateVoice, onToggleSolo,
   satbVisible, onToggleSatbVisible, satbName, onRenameSatb,
-  accompanimentTracks, onUpdateTrack, onAddEmptyTrack, onAddDrumTrack, onDeleteTrack,
+  accompanimentTracks, onUpdateTrack, getDrumPieces, onAddEmptyTrack, onAddDrumTrack, onDeleteTrack,
   getVoiceLevel, getTrackLevel,
   satbMasterVolume = 1, accMasterVolume = 1, mixerMasterVolume = 1,
   onChangeSatbMasterVolume, onChangeAccMasterVolume, onChangeMixerMasterVolume,
@@ -494,6 +592,12 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   // --- "+" add-track menu (replaces the inline +Nuova / +Batteria buttons) ---
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
+
+  // --- Mixer batteria: quali tracce drum hanno la sezione fader per-pezzo aperta ---
+  const [expandedDrumIds, setExpandedDrumIds] = useState<Set<string>>(new Set());
+  const toggleDrumExpand = useCallback((id: string) => {
+    setExpandedDrumIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  }, []);
   useEffect(() => {
     if (!addMenuOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -674,8 +778,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
               </div>
             ) : (
               accompanimentTracks.map((track, idx) => (
+                <React.Fragment key={track.id}>
                 <ChannelStrip
-                  key={track.id}
                   tT={tT}
                   label={track.name}
                   title={track.name}
@@ -728,7 +832,23 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                     </select>
                   }
                   onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, trackId: track.id }); }}
+                  expandable={!!track.isDrum}
+                  expanded={expandedDrumIds.has(track.id)}
+                  onToggleExpand={() => toggleDrumExpand(track.id)}
                 />
+                {track.isDrum && expandedDrumIds.has(track.id) && getDrumPieces && (
+                  <DrumPieceFaders
+                    pieces={getDrumPieces(track)}
+                    pieceVolumes={track.pieceVolumes || {}}
+                    accent={track.color || '#f59e0b'}
+                    onChange={(midi, gain) => {
+                      const next = { ...(track.pieceVolumes || {}) };
+                      if (Math.abs(gain - 1) < 1e-3) delete next[midi]; else next[midi] = gain;
+                      onUpdateTrack(track.id, { pieceVolumes: next });
+                    }}
+                  />
+                )}
+                </React.Fragment>
               ))
             )}
             {/* ACC group master */}

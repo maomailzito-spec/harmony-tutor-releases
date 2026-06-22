@@ -267,6 +267,11 @@ export type AccompanimentTrack = {
   /** Quale kit suona una traccia batteria: 'orchestral' (VSCO2, default) o 'rock' (Salamander).
    *  Determina il soundfont ('drums' vs 'drumkit'), la mappa pezzi e le posizioni sul rigo. */
   drumKit?: 'orchestral' | 'rock';
+  /** Solo batteria: volume PER-PEZZO (chiave = nota GM del pezzo, es. 36=cassa, 42=charleston),
+   *  gain lineare ~0..1.5, default 1 (assente = 1). Permette di bilanciare i singoli elementi
+   *  del kit (cassa/rullante su, charleston giù) dal mixer batteria, oltre al volume di traccia.
+   *  Moltiplica il gain di playback del singolo colpo; non tocca l'export MIDI. */
+  pieceVolumes?: Record<number, number>;
   /** Canale MIDI in USCITA (1-16) verso l'uscita MIDI esterna. Se assente/0 = automatico
    *  (batteria → 10; tracce intonate → da 5 in su saltando il 10). Permette di instradare
    *  ogni traccia su un canale preciso in un DAW esterno (es. Logic). */

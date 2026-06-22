@@ -161,27 +161,29 @@ const flatKeyOptions = keySignatureOptions.filter(k => flatKeyValues.includes(k.
 // ognuno col suo set GM e le sue posizioni. L'inserimento dal rigo aggancia al pezzo la cui riga
 // è più vicina; i pezzi "difficili" (piatti) si mettono dalla mappa (al cursore).
 type DrumPiece = { midi: number; label: string; line: string };
+// Nomi degli elementi in INGLESE (terminologia batteria standard, uguale in IT/EN → niente
+// divergenza tra le versioni). Usati sia nel modulo 🥁 sia nei fader del mixer batteria.
 const DRUM_PALETTE_ORCH: DrumPiece[] = [
-  { midi: 36, label: 'Cassa',  line: 'f/4' },
-  { midi: 38, label: 'Rull.',  line: 'c/5' },
-  { midi: 42, label: 'Gong',   line: 'd/4' },
-  { midi: 49, label: 'Crash',  line: 'a/5' },
-  { midi: 51, label: 'Sosp.',  line: 'g/5' },
-  { midi: 53, label: 'Tamb.',  line: 'e/5' },
-  { midi: 56, label: 'Cowb.',  line: 'f/5' },
+  { midi: 36, label: 'Bass Drum',  line: 'f/4' },
+  { midi: 38, label: 'Snare',      line: 'c/5' },
+  { midi: 42, label: 'Gong',       line: 'd/4' },
+  { midi: 49, label: 'Crash',      line: 'a/5' },
+  { midi: 51, label: 'Sus. Cym.',  line: 'g/5' },
+  { midi: 53, label: 'Tambourine', line: 'e/5' },
+  { midi: 56, label: 'Cowbell',    line: 'f/5' },
 ];
-// Kit ROCK (Salamander) — set GM standard. Ordine mappa: dal basso (cassa) all'alto (piatti).
+// Kit ROCK (Salamander) — set GM standard. Ordine mappa: dal basso (kick) all'alto (piatti).
 const DRUM_PALETTE_ROCK: DrumPiece[] = [
-  { midi: 36, label: 'Cassa',     line: 'f/4' },
-  { midi: 38, label: 'Rullante',  line: 'c/5' },
+  { midi: 36, label: 'Kick',      line: 'f/4' },
+  { midi: 38, label: 'Snare',     line: 'c/5' },
   { midi: 37, label: 'Rimshot',   line: 'c/5' },
-  { midi: 45, label: 'Tom basso', line: 'a/4' },
-  { midi: 50, label: 'Tom alto',  line: 'e/5' },
-  { midi: 44, label: 'HH pedale', line: 'd/4' },
-  { midi: 42, label: 'HH chiuso', line: 'g/5' },
-  { midi: 46, label: 'HH aperto', line: 'g/5' },
+  { midi: 45, label: 'Low Tom',   line: 'a/4' },
+  { midi: 50, label: 'High Tom',  line: 'e/5' },
+  { midi: 44, label: 'HH Pedal',  line: 'd/4' },
+  { midi: 42, label: 'HH Closed', line: 'g/5' },
+  { midi: 46, label: 'HH Open',   line: 'g/5' },
   { midi: 51, label: 'Ride',      line: 'f/5' },
-  { midi: 53, label: 'Camp.ride', line: 'f/5' },
+  { midi: 53, label: 'Ride Bell', line: 'f/5' },
   { midi: 49, label: 'Crash',     line: 'a/5' },
   { midi: 52, label: 'China',     line: 'b/5' },
   { midi: 55, label: 'Splash',    line: 'c/6' },
@@ -210,6 +212,12 @@ const satbVoiceMidiChannel = (channels: Record<number, number> | undefined, v: n
   return Math.max(0, Math.min(15, v - 1));
 };
 const drumPaletteFor = (t: any): DrumPiece[] => (t?.drumKit === 'rock' ? DRUM_PALETTE_ROCK : DRUM_PALETTE_ORCH);
+// Voce/gambo convenzionale del pezzo di batteria: PIEDI (gran cassa 35/36, charleston a
+// pedale 44) → voce 2 (gambi GIÙ); MANI (tutto il resto) → voce 1 (gambi SU). All'inserimento
+// la nota prende questa voce, così i gambi sono coerenti per layer. L'override (Flip Stem)
+// sposta il pezzo nell'altra voce: gambo + travatura si muovono insieme.
+const DRUM_FOOT_PIECES = new Set<number>([35, 36, 44]);
+const drumPieceVoice = (midi: number): number => (DRUM_FOOT_PIECES.has(Number(midi)) ? 2 : 1);
 const DRUM_LETTER_STEP: Record<string, number> = { c: 0, d: 1, e: 2, f: 3, g: 4, a: 5, b: 6 };
 const drumStepOf = (letter: string, octave: number) => octave * 7 + (DRUM_LETTER_STEP[String(letter).toLowerCase()] ?? 0);
 const drumLineStep = (line: string) => { const [l, o] = line.split('/'); return drumStepOf(l, parseInt(o, 10)); };
@@ -549,6 +557,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // to audioContext.destination. Notes from playback route THROUGH this gain node, so
     // changing .gain.value here affects all currently-playing AND future-scheduled notes.
     const accTrackGainsRef = useRef<Map<number, GainNode>>(new Map());
+    // Mixer batteria: nodo gain PER-PEZZO persistente (chiave `${accTrackIdx}:${midi}`).
+    // Il colpo di batteria passa per questo nodo (→ nodo traccia → master), così muovere il
+    // fader del pezzo agisce in TEMPO REALE anche sulle note già accodate (come il volume di
+    // traccia). Aggiornato da refreshAudibilityGains() a ogni cambio dei pieceVolumes.
+    const accDrumPieceGainsRef = useRef<Map<string, GainNode>>(new Map());
 
     // Per-channel analyser nodes feeding the mixer's signal LEDs. Created lazily
     // alongside the gain nodes (gain → analyser tap; the analyser is not connected
@@ -648,6 +661,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (!track) return;
             const audible = (!anySolo || !!track.solo) && !track.muted;
             gain.gain.value = audible ? track.volume : 0;
+        });
+        // Volumi PER-PEZZO della batteria (mute/solo li applica già il nodo traccia a valle):
+        // qui solo il gain del pezzo, così il fader agisce in tempo reale durante il playback.
+        accDrumPieceGainsRef.current.forEach((gain, key) => {
+            const sep = key.indexOf(':');
+            const idx = Number(key.slice(0, sep));
+            const midi = Number(key.slice(sep + 1));
+            const pv = (latestAccompanimentTracks.current[idx] as any)?.pieceVolumes?.[midi];
+            gain.gain.value = Number.isFinite(pv) ? pv : 1;
         });
     }, []);
 
@@ -5254,6 +5276,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [playNoteSound, selectedMidiOutput, sendMidiNote]);
     playNoteRef.current = playNote;
 
+    // Mixer batteria: spinge i volumi PER-PEZZO nel motore audio (mappa `instrument:sample`
+    // → gain), così il bilanciamento dei singoli elementi copre TUTTI i percorsi di playback
+    // (schedulato, audition, palette) senza toccare ogni call site. Ricalcola al cambio tracce.
+    useEffect(() => {
+        const map: Record<string, number> = {};
+        for (const t of accompanimentTracks) {
+            const pv = (t as any).pieceVolumes as Record<string, number> | undefined;
+            if (!(t as any).isDrum || !pv) continue;
+            const instr = drumSoundfont(t);
+            for (const [k, v] of Object.entries(pv)) {
+                const vol = Number(v);
+                if (!Number.isFinite(vol) || vol === 1) continue; // 1 = neutro → non in mappa
+                map[`${instr}:${midiToName(Number(k))}`] = vol;
+            }
+        }
+        audioService.setDrumPieceGains(map);
+    }, [accompanimentTracks, midiToName]);
+
     // stopPlayback now in usePlayback
 
     const getPlayheadPosForAbsBeat = useCallback((absBeat: number): { x: number; systemIndex: number } | null => {
@@ -6264,7 +6304,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (trackGain) {
                             trackGain.gain.value = isTrackAudible(track) ? track.volume : 0;
                         }
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: trackGain, sustain: true, velocity: n.velocity });
+                        // Batteria: instrada il colpo per un nodo gain PER-PEZZO persistente
+                        // (nodo-pezzo → nodo-traccia → master). Così muovere il fader del pezzo
+                        // agisce in tempo reale anche sulle note già accodate. Il per-pezzo NON
+                        // viene ri-applicato in AudioService (applyDrumPieceGain:false).
+                        let drumOut: GainNode | undefined = trackGain;
+                        if (isDrum && trackGain && audioService.audioContext) {
+                            const pkey = `${it.accTrackIdx}:${midiT}`;
+                            let pieceGain = accDrumPieceGainsRef.current.get(pkey);
+                            if (!pieceGain) {
+                                pieceGain = audioService.audioContext.createGain();
+                                pieceGain.connect(trackGain);
+                                accDrumPieceGainsRef.current.set(pkey, pieceGain);
+                            }
+                            const pv = (track as any).pieceVolumes?.[midiT];
+                            pieceGain.gain.value = Number.isFinite(pv) ? pv : 1;
+                            drumOut = pieceGain;
+                        }
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: drumOut, sustain: true, velocity: n.velocity, applyDrumPieceGain: !isDrum });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -8389,6 +8446,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // ── Rest insertion into the clicked ACC track (mirror of the SATB rest path) ──
             if (selectedInsertion.type === 'rest') {
+                // Batteria: la pausa va nel LAYER scelto dalla metà cliccata del rigo —
+                // metà BASSA → voce 2 (piedi/cassa, gambi giù), metà ALTA → voce 1 (mani) —
+                // e sovrascrive SOLO quel layer (la pausa cassa non tocca il charleston).
+                let drumRestVoice: number | null = null;
+                if ((accTrackObj as any)?.isDrum) {
+                    const layout = drumStavesLayoutRef.current.find(l => l.trackIdx === accTarget.visIdx);
+                    const midY = layout ? layout.topLineY + 2 * layout.lineSpacing : null;
+                    drumRestVoice = (midY != null && y > midY) ? 2 : 1;
+                }
+                const restVoice = drumRestVoice ?? accVoiceClick;
                 const accRest: StaffNote = {
                     id: crypto.randomUUID(),
                     pitch: 'B',
@@ -8406,17 +8473,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     startTick,
                     durationTicks,
                     clef: accClef,
-                    voice: accVoiceClick as any,
+                    voice: restVoice as any,
                 };
                 const targetTrackId = accTarget.trackId;
                 const endTick = startTick + durationTicks;
                 setAccompanimentTracks(prev => prev.map((track) => {
                     if (track.id !== targetTrackId) return track;
-                    // Overwrite events overlapping this rest's tick window. Voiced: per-VOCE
-                    // (una pausa della voce 1 non tocca la 2/3/4); altrimenti per-chiave.
+                    // Overwrite events overlapping this rest's tick window. Voiced/batteria:
+                    // per-VOCE (una pausa della voce 2 non tocca la voce 1); altrimenti per-chiave.
                     const filtered = track.notes.filter(n => {
-                        if (isVoicedClick) {
-                            if (Number((n as any).voice ?? 0) !== accVoiceClick) return true;
+                        if (isVoicedClick || drumRestVoice != null) {
+                            if (Number((n as any).voice ?? 0) !== restVoice) return true;
                         } else if ((n.clef ?? 'treble') !== accClef) return true;
                         const s = (n as any).startTick ?? 0;
                         const d = (n as any).durationTicks ?? 0;
@@ -8447,6 +8514,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             let accProps;
+            let drumVoiceClick: number | null = null;
             if ((accTrackObj as any)?.isDrum) {
                 // Traccia batteria (chiave di percussione): il click si AGGANCIA alla riga
                 // standard più vicina → l'elemento del kit la cui testa è lì. Uso la geometria
@@ -8468,6 +8536,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     element = best.midi;
                 }
                 accProps = makeDrumNoteProps(element, palette, accClef, keySignature);
+                drumVoiceClick = drumPieceVoice(element); // mani→1 (su), piedi→2 (giù)
             } else {
                 accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignature);
                 accProps = applyAutoLeadingToneInMinor(accProps);
@@ -8487,7 +8556,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 startTick,
                 durationTicks,
                 clef: accClef,
-                voice: accVoiceClick as any,
+                voice: (drumVoiceClick ?? accVoiceClick) as any,
             };
 
             {
@@ -9282,6 +9351,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const accPropsStep = (target as any).isDrum
                     ? makeDrumNoteProps(midiNumber, drumPaletteFor(target), 'treble', keySignature)
                     : getNotePropertiesFromMidi(midiNumber, keySignature, accClefStep, activeAccidentalRef.current ?? null);
+                // Batteria: voce per pezzo (mani→1 gambi su, piedi→2 gambi giù).
+                const drumVoiceStep = (target as any).isDrum ? drumPieceVoice(midiNumber) : null;
                 if (!accPropsStep || !Number.isFinite(accPropsStep.midi)) return;
                 const accNoteStep: StaffNote = {
                     id: crypto.randomUUID(),
@@ -9296,7 +9367,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     startTick,
                     durationTicks,
                     clef: accClefStep,
-                    voice: accVoiceStep as any,
+                    voice: (drumVoiceStep ?? accVoiceStep) as any,
                 };
                 const targetId = target.id;
                 setAccompanimentTracks(prev => prev.map(track => {
@@ -10962,19 +11033,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const accIdsSelected = [...selectedNoteIds].filter(id => isAccompanimentNote(id, accTracks));
         if (accIdsSelected.length > 0) {
             const accIdSet = new Set(accIdsSelected);
-            setAccompanimentTracks(prev => prev.map(track => ({
-                ...track,
-                notes: track.notes.map(n => {
-                    if (!accIdSet.has(n.id)) return n;
-                    const cur = (n as any).manualStemDirection as ('up' | 'down' | undefined);
-                    const next = cur === undefined ? 'up' : (cur === 'up' ? 'down' : undefined);
-                    if (!next) {
-                        const { manualStemDirection, ...rest } = n as any;
-                        return rest;
-                    }
-                    return { ...(n as any), manualStemDirection: next };
-                }),
-            })));
+            setAccompanimentTracks(prev => prev.map(track => {
+                if (!track.notes.some(n => accIdSet.has(n.id))) return track;
+                if ((track as any).isDrum) {
+                    // Override batteria: sposta i pezzi selezionati nell'ALTRA voce
+                    // (mani↔piedi) → gambo E travatura si spostano insieme (a 2 voci il
+                    // gambo è deciso dalla voce, non da manualStemDirection).
+                    return {
+                        ...track,
+                        notes: track.notes.map(n => {
+                            if (!accIdSet.has(n.id)) return n;
+                            // Vale anche per le PAUSE: spostano layer (la pos. verticale segue la voce).
+                            const cur = Number((n as any).voice) === 2 ? 2 : 1;
+                            return { ...(n as any), voice: (cur === 1 ? 2 : 1) as any };
+                        }),
+                    };
+                }
+                return {
+                    ...track,
+                    notes: track.notes.map(n => {
+                        if (!accIdSet.has(n.id)) return n;
+                        const cur = (n as any).manualStemDirection as ('up' | 'down' | undefined);
+                        const next = cur === undefined ? 'up' : (cur === 'up' ? 'down' : undefined);
+                        if (!next) {
+                            const { manualStemDirection, ...rest } = n as any;
+                            return rest;
+                        }
+                        return { ...(n as any), manualStemDirection: next };
+                    }),
+                };
+            }));
         }
     }, [selectedNoteIds, selectedTiePair, setRawNotes, setAccompanimentTracks]);
 
@@ -11597,6 +11685,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onRenameSatb={(name) => setSatbName(name)}
                     accompanimentTracks={accompanimentTracks}
                     onUpdateTrack={handleUpdateTrack}
+                    getDrumPieces={drumPaletteFor}
                     onAddEmptyTrack={handleAddEmptyTrack}
                     onAddDrumTrack={handleAddDrumTrack}
                     onDeleteTrack={handleDeleteTrack}

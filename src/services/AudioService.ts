@@ -113,8 +113,8 @@ const INSTRUMENT_GAIN: Record<string, number> = {
   double_bass_pizz: 1.00,
   electric_bass_finger: 0.40,
   electric_bass_pick: 0.50,
-  drums: 0.45,   // kit batteria orchestrale; trim complessivo da tarare
-  drumkit: 0.45, // kit batteria rock (Salamander, picchi a -6 dBFS); trim da tarare a orecchio
+  drums: 0.8,    // kit batteria orchestrale; alzato (era 0.45) per pareggiare il SATB a parità di fader — da rifinire a orecchio
+  drumkit: 0.8,  // kit batteria rock (Salamander, picchi a -6 dBFS); alzato (era 0.45) — da rifinire a orecchio
 };
 const instrumentGain = (instrument: string): number => INSTRUMENT_GAIN[instrument] ?? 1;
 
@@ -156,6 +156,19 @@ export class AudioService {
   // load, so we don't re-fetch the same missing sample on every play (avoids a
   // storm of repeated 404s).
   private failedLoads: Set<string> = new Set();
+  // Per-piece drum gain (mixer batteria): chiave = `${instrument}:${audioFile}` (es.
+  // 'drums:C2'), valore = moltiplicatore lineare. Settato dal componente quando cambiano
+  // i pieceVolumes della traccia; applicato in playNoteForInstrument così copre TUTTI i
+  // percorsi di playback (schedulato, audition, palette). Strumenti non-batteria non sono
+  // mai nella mappa → moltiplicatore 1.
+  private drumPieceGains: Record<string, number> = {};
+  public setDrumPieceGains(m: Record<string, number> | null | undefined): void {
+    this.drumPieceGains = m || {};
+  }
+  private drumPieceGain(instrument: string, audioFile: string): number {
+    const g = this.drumPieceGains[`${instrument}:${audioFile}`];
+    return Number.isFinite(g) ? (g as number) : 1;
+  }
 
   public async init(): Promise<void> {
     if (this.audioContext) return;
@@ -385,7 +398,7 @@ export class AudioService {
     return { buffer: this.audioBuffers.get(key), layered: false };
   }
 
-  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number }) {
+  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean }) {
     if (!this.audioContext) return;
     const { buffer: audioBuffer, layered } = await this._getBufferFor(instrument, audioFile, options?.velocity);
     if (!audioBuffer) return;
@@ -421,7 +434,9 @@ export class AudioService {
     const noteDurationInSeconds = options?.duration ?? audioBuffer.duration;
     const releaseDurationInSeconds = instrumentRelease(instrument);
     const noteEndTime = startTime + noteDurationInSeconds;
-    const vol = (options?.volume ?? 1) * instrumentGain(instrument);
+    // applyDrumPieceGain:false → il per-pezzo è già gestito a valle da un nodo gain
+    // persistente (playback batteria real-time); qui NON ri-applicarlo (evita il doppio).
+    const vol = (options?.volume ?? 1) * instrumentGain(instrument) * (options?.applyDrumPieceGain === false ? 1 : this.drumPieceGain(instrument, audioFile));
     if (options?.sustain) {
       // Natural envelope: INSTANT attack (the sample starts from silence, so no
       // click — keeps the percussive transient and lets it scale with velocity),
@@ -456,7 +471,7 @@ export class AudioService {
   public playSustainedNote(
     instrument: string,
     audioFile: string,
-    options?: { volume?: number; output?: AudioNode; velocity?: number },
+    options?: { volume?: number; output?: AudioNode; velocity?: number; applyDrumPieceGain?: boolean },
   ): SustainHandle {
     const handle: SustainHandle = {
       _released: false,
@@ -506,7 +521,7 @@ export class AudioService {
       } else {
         source.connect(gainNode);
       }
-      const vol = (options?.volume ?? 1) * instrumentGain(instrument);
+      const vol = (options?.volume ?? 1) * instrumentGain(instrument) * (options?.applyDrumPieceGain === false ? 1 : this.drumPieceGain(instrument, audioFile));
       const now = this.audioContext.currentTime;
       // Instant attack (the sample already starts from silence, so no click): keeps
       // the natural percussive transient and lets the attack scale with velocity.
