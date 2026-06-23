@@ -79,6 +79,14 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         satbVisible?: boolean;
         /** Volumi dei fader master (gruppo SATB, gruppo ACC, master globale). */
         masterVolumes?: { satb?: number; acc?: number; mixer?: number };
+        /** FX per-voce SATB: pan (-1..+1) e mandata riverbero (0..1). Le tracce ACC salvano
+         *  pan/reverbSend dentro accompanimentTracks. */
+        voicePans?: Record<number, number>;
+        voiceReverbSends?: Record<number, number>;
+        /** Riverbero globale: preset IR + livello wet (return). */
+        reverb?: { preset?: 'off' | 'room' | 'hall' | 'plate'; wet?: number };
+        /** Compressore sul master: on/off + threshold (dB) + ratio + attack/release (s) + makeup (dB). */
+        comp?: { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -137,6 +145,11 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 			.some(v => typeof v === 'number' && v !== 1))
 			? { masterVolumes: args.masterVolumes }
 			: {}),
+		// FX mixer: pan/send riverbero per-voce (solo se valorizzati) + riverbero globale.
+		...((args.voicePans && Object.keys(args.voicePans).length > 0) ? { voicePans: args.voicePans } : {}),
+		...((args.voiceReverbSends && Object.keys(args.voiceReverbSends).length > 0) ? { voiceReverbSends: args.voiceReverbSends } : {}),
+		...(args.reverb ? { reverb: args.reverb } : {}),
+		...(args.comp && args.comp.enabled ? { comp: args.comp } : {}),
 	};
 
 	// Persist final computed harmony labels for corpus accuracy
@@ -234,6 +247,16 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setSatbMasterVolume?: (v: number) => void;
 	setAccMasterVolume?: (v: number) => void;
 	setMixerMasterVolume?: (v: number) => void;
+	setVoicePans?: (next: Record<number, number>) => void;
+	setVoiceReverbSends?: (next: Record<number, number>) => void;
+	setReverbPreset?: (p: 'off' | 'room' | 'hall' | 'plate') => void;
+	setReverbWet?: (v: number) => void;
+	setCompEnabled?: (v: boolean) => void;
+	setCompThreshold?: (v: number) => void;
+	setCompRatio?: (v: number) => void;
+	setCompAttack?: (v: number) => void;
+	setCompRelease?: (v: number) => void;
+	setCompMakeup?: (v: number) => void;
 
 	timeSignature: TimeSignature;
 };
@@ -282,6 +305,16 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setSatbMasterVolume?.(1);
 		args.setAccMasterVolume?.(1);
 		args.setMixerMasterVolume?.(1);
+		args.setVoicePans?.({});
+		args.setVoiceReverbSends?.({});
+		args.setReverbPreset?.('room');
+		args.setReverbWet?.(0.85);
+		args.setCompEnabled?.(false);
+		args.setCompThreshold?.(-18);
+		args.setCompRatio?.(3);
+		args.setCompAttack?.(0.01);
+		args.setCompRelease?.(0.15);
+		args.setCompMakeup?.(0);
 		args.setSatbVisible?.(true);
 		args.projectExtrasRef.current = {};
 		return;
@@ -314,6 +347,16 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setSatbMasterVolume?.(1);
 	args.setAccMasterVolume?.(1);
 	args.setMixerMasterVolume?.(1);
+	args.setVoicePans?.({});
+	args.setVoiceReverbSends?.({});
+	args.setReverbPreset?.('room');
+	args.setReverbWet?.(0.85);
+	args.setCompEnabled?.(false);
+	args.setCompThreshold?.(-18);
+	args.setCompRatio?.(3);
+	args.setCompAttack?.(0.01);
+	args.setCompRelease?.(0.15);
+	args.setCompMakeup?.(0);
 	// Default a visibile; i file salvati col SATB nascosto lo reimpostano sotto.
 	args.setSatbVisible?.(true);
 	args.setBpm(120);
@@ -548,6 +591,29 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				if (typeof mv.satb === 'number') args.setSatbMasterVolume?.(mv.satb);
 				if (typeof mv.acc === 'number') args.setAccMasterVolume?.(mv.acc);
 				if (typeof mv.mixer === 'number') args.setMixerMasterVolume?.(mv.mixer);
+			}
+			// FX mixer per-voce + riverbero globale (assenti nei file vecchi → restano i default).
+			if (loadedProject.voicePans && typeof loadedProject.voicePans === 'object') {
+				args.setVoicePans?.(loadedProject.voicePans as Record<number, number>);
+			}
+			if (loadedProject.voiceReverbSends && typeof loadedProject.voiceReverbSends === 'object') {
+				args.setVoiceReverbSends?.(loadedProject.voiceReverbSends as Record<number, number>);
+			}
+			const rv = (loadedProject as any).reverb;
+			if (rv && typeof rv === 'object') {
+				if (typeof rv.preset === 'string') args.setReverbPreset?.(rv.preset);
+				if (typeof rv.wet === 'number') args.setReverbWet?.(rv.wet);
+			}
+			const cp = (loadedProject as any).comp;
+			if (cp && typeof cp === 'object') {
+				if (typeof cp.enabled === 'boolean') args.setCompEnabled?.(cp.enabled);
+				if (typeof cp.threshold === 'number') args.setCompThreshold?.(cp.threshold);
+				if (typeof cp.ratio === 'number') args.setCompRatio?.(cp.ratio);
+				if (typeof cp.attack === 'number') args.setCompAttack?.(cp.attack);
+				if (typeof cp.release === 'number') args.setCompRelease?.(cp.release);
+				if (typeof cp.makeup === 'number') args.setCompMakeup?.(cp.makeup);
+			} else {
+				args.setCompEnabled?.(false); // assente → compressore off
 			}
 
 			args.setCurrentProjectFilePath(cmd.filePath);

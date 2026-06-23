@@ -267,6 +267,16 @@ export type AccompanimentTrack = {
   /** Quale kit suona una traccia batteria: 'orchestral' (VSCO2, default) o 'rock' (Salamander).
    *  Determina il soundfont ('drums' vs 'drumkit'), la mappa pezzi e le posizioni sul rigo. */
   drumKit?: 'orchestral' | 'rock';
+  /** Posizione stereo (pan) del canale: -1 = tutto a sinistra, 0 = centro (default/assente), +1 = destra.
+   *  Applicata da uno StereoPannerNode tra il gain di traccia e il master. Solo suono. */
+  pan?: number;
+  /** Compressore INSERT per-traccia: on/off + threshold (dB) + ratio + attack/release (s) + makeup (dB).
+   *  Inserito nella catena gain → comp → makeup → panner. Bypass = ratio 1/threshold 0/makeup 0dB. */
+  comp?: { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
+  /** Quantità di mandata al RIVERBERO globale (send per-canale, 0..1; assente = default ~0.25).
+   *  È il "send" sul fader della traccia: il segnale post-fader va anche al bus riverbero in
+   *  questa misura. Il tipo di riverbero (preset) e il livello globale stanno sul master. */
+  reverbSend?: number;
   /** Solo batteria: volume PER-PEZZO (chiave = nota GM del pezzo, es. 36=cassa, 42=charleston),
    *  gain lineare ~0..1.5, default 1 (assente = 1). Permette di bilanciare i singoli elementi
    *  del kit (cassa/rullante su, charleston giù) dal mixer batteria, oltre al volume di traccia.

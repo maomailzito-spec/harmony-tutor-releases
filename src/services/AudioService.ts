@@ -398,7 +398,7 @@ export class AudioService {
     return { buffer: this.audioBuffers.get(key), layered: false };
   }
 
-  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean }) {
+  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean, slotSec?: number }) {
     if (!this.audioContext) return;
     const { buffer: audioBuffer, layered } = await this._getBufferFor(instrument, audioFile, options?.velocity);
     if (!audioBuffer) return;
@@ -432,7 +432,22 @@ export class AudioService {
     }
     const startTime = options?.when ?? this.audioContext.currentTime;
     const noteDurationInSeconds = options?.duration ?? audioBuffer.duration;
-    const releaseDurationInSeconds = instrumentRelease(instrument);
+    // Coda di rilascio. Per gli strumenti SOSTENUTI (archi/fiati: corpo loopato, non
+    // decadono) la coda fissa di 0.5s OLTRE la fine si accavalla con la nota successiva
+    // della stessa linea → suona come "due esecutori" (bug violino/basso). Se lo scheduler
+    // passa `slotSec` (tempo dall'attacco di questa nota al PROSSIMO attacco della stessa
+    // voce/traccia) e la nota è SEQUENZIALE (il prossimo attacco arriva dopo la fine del
+    // corpo), cappa la coda così corpo+coda finiscono entro lo slot. Se invece la nota si
+    // sovrappone al prossimo attacco (accordo/pad tenuto, slotSec < durata) NON cappare:
+    // è polifonia voluta. Gli strumenti che decadono (piano, pizz, mallet, batteria) non
+    // sono SUSTAINED → coda naturale invariata.
+    let releaseDurationInSeconds = instrumentRelease(instrument);
+    if (SUSTAINED[instrument] && options?.slotSec != null) {
+      const maxRelease = options.slotSec - noteDurationInSeconds;
+      if (maxRelease >= 0) {
+        releaseDurationInSeconds = Math.max(0.05, Math.min(releaseDurationInSeconds, maxRelease));
+      }
+    }
     const noteEndTime = startTime + noteDurationInSeconds;
     // applyDrumPieceGain:false → il per-pezzo è già gestito a valle da un nodo gain
     // persistente (playback batteria real-time); qui NON ri-applicarlo (evita il doppio).

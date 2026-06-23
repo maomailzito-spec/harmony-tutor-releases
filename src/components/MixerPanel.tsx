@@ -55,6 +55,22 @@ interface MixerPanelProps {
   getSatbMasterLevel?: () => number;
   getAccMasterLevel?: () => number;
   getMixerMasterLevel?: () => number;
+  // Riverbero globale (bus a convoluzione): preset IR + quantità wet (0..1).
+  reverbPreset?: 'off' | 'room' | 'hall' | 'plate';
+  reverbWet?: number;
+  onChangeReverbPreset?: (p: 'off' | 'room' | 'hall' | 'plate') => void;
+  onChangeReverbWet?: (v: number) => void;
+  /** Mandata riverbero PER-VOCE SATB (1-4), 0..1. Le tracce ACC usano track.reverbSend via onUpdateTrack. */
+  voiceReverbSends?: Record<number, number>;
+  onChangeVoiceReverb?: (voice: number, amount: number) => void;
+  /** Pan PER-VOCE SATB (1-4), −1..+1. Le tracce ACC usano track.pan via onUpdateTrack. */
+  voicePans?: Record<number, number>;
+  onChangeVoicePan?: (voice: number, pan: number) => void;
+  /** Compressore sul master: stato attivo (per evidenziare il pulsante) + apertura della finestra FX. */
+  compEnabled?: boolean;
+  onOpenCompressor?: () => void;
+  /** Apre il compressore INSERT di una TRACCIA ACC (finestra per-canale). */
+  onOpenTrackComp?: (trackId: string) => void;
   onClose: () => void;
 }
 
@@ -67,17 +83,19 @@ const VOICE_ACCENTS: Record<number, string> = { 1: '#2563eb', 2: '#f97316', 3: '
 // single staff with the given clef (instrumental/vocal lines). Encoded as
 // { staffMode, clef } applied to the AccompanimentTrack.
 type StaffChoice = { value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType; voiced?: boolean; octaveTranspose?: number };
+// Etichette CHIAVE-centriche (non nomi di strumento): "Chiave di violino" non si confonde
+// con lo strumento "violino". Sono i tipi di rigo/chiave della traccia.
 const STAFF_OPTIONS: StaffChoice[] = [
-  { value: 'grandstaff',        label: 'Grandstaff',        staffMode: 'grandstaff' },
-  { value: 'grandstaff-voiced', label: 'Grand staff a voci', staffMode: 'grandstaff', voiced: true },
-  { value: 'single-treble',      label: '𝄞 Violino',          staffMode: 'treble_only', clef: 'treble' },
-  // Chiavi traspositrici (8vb): suonano un'ottava SOTTO il scritto, come chitarra e basso.
-  { value: 'single-treble-8vb',  label: '𝄞 Chitarra (8vb)',   staffMode: 'treble_only', clef: 'treble', octaveTranspose: -1 },
-  { value: 'single-bass',        label: '𝄢 Basso',            staffMode: 'treble_only', clef: 'bass' },
-  { value: 'single-bass-8vb',    label: '𝄢 Basso (8vb)',      staffMode: 'treble_only', clef: 'bass', octaveTranspose: -1 },
-  { value: 'single-soprano',     label: 'Soprano',            staffMode: 'treble_only', clef: 'soprano' },
-  { value: 'single-alto',        label: 'Contralto',          staffMode: 'treble_only', clef: 'alto' },
-  { value: 'single-tenor',       label: 'Tenore',             staffMode: 'treble_only', clef: 'tenor' },
+  { value: 'grandstaff',        label: 'Grand staff',         staffMode: 'grandstaff' },
+  { value: 'grandstaff-voiced', label: 'Grand staff a voci',  staffMode: 'grandstaff', voiced: true },
+  { value: 'single-treble',      label: '𝄞 Chiave di violino',     staffMode: 'treble_only', clef: 'treble' },
+  // Chiavi traspositrici (8vb): suonano un'ottava SOTTO il scritto (chitarra, contrabbasso…).
+  { value: 'single-treble-8vb',  label: '𝄞 Chiave di violino 8vb', staffMode: 'treble_only', clef: 'treble', octaveTranspose: -1 },
+  { value: 'single-bass',        label: '𝄢 Chiave di basso',       staffMode: 'treble_only', clef: 'bass' },
+  { value: 'single-bass-8vb',    label: '𝄢 Chiave di basso 8vb',   staffMode: 'treble_only', clef: 'bass', octaveTranspose: -1 },
+  { value: 'single-soprano',     label: 'Chiave di soprano',       staffMode: 'treble_only', clef: 'soprano' },
+  { value: 'single-alto',        label: 'Chiave di contralto',     staffMode: 'treble_only', clef: 'alto' },
+  { value: 'single-tenor',       label: 'Chiave di tenore',        staffMode: 'treble_only', clef: 'tenor' },
 ];
 const staffChoiceValue = (track: AccompanimentTrack): string => {
   if (track.staffMode === 'grandstaff') return track.voiced ? 'grandstaff-voiced' : 'grandstaff';
@@ -101,7 +119,7 @@ const gainToPos = (g: number): number => (g <= 0 ? 0 : Math.sqrt(Math.min(1, g))
 
 const FADER_H = 104;       // px height of the fader travel
 const CAP_H = 13;          // px height of the fader cap
-const LED_COUNT = 20;      // segments in the signal meter
+const LED_COUNT = 30;      // segments in the signal meter (più fini = lettura più precisa)
 const METER_FLOOR_DB = -48; // bottom of the LED meter scale
 
 /** Per-segment colour ramp (green → yellow → orange → red as we climb toward
@@ -235,8 +253,8 @@ const ConsoleFader: React.FC<{
       >
         {/* groove */}
         <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 5, transform: 'translateX(-50%)', borderRadius: 3, background: '#0b1220', boxShadow: 'inset 0 0 2px #000, inset 0 0 0 1px #334155' }} />
-        {/* accent fill below the cap */}
-        <div style={{ position: 'absolute', left: '50%', width: 5, transform: 'translateX(-50%)', bottom: 0, top: `${(1 - pos) * 100}%`, borderRadius: 3, background: accent, opacity: 0.85 }} />
+        {/* accent fill below the cap (banda più sottile e lineare) */}
+        <div style={{ position: 'absolute', left: '50%', width: 2.5, transform: 'translateX(-50%)', bottom: 0, top: `${(1 - pos) * 100}%`, borderRadius: 2, background: accent, opacity: 0.9 }} />
         {/* 0 dB reference tick (top) */}
         <div style={{ position: 'absolute', left: 3, right: 3, top: 0, height: 1, background: '#475569' }} />
         {/* fader cap */}
@@ -265,7 +283,7 @@ const ConsoleFader: React.FC<{
 // Fader SNELLI per pezzo (cassa, rullante, charleston…): solo groove+cap+label+valore,
 // niente strumento/colore/ch. Trim a centro-neutro: metà = ×1.0, su = boost (fino a ×2),
 // giù = silenzio. Doppio-click = reset a 1.0. Stesso linguaggio visivo del resto.
-const PIECE_FADER_H = 92;
+const PIECE_FADER_H = 84;  // ~−20% (molti fader ravvicinati nel Drum Mix)
 const PIECE_CAP_H = 11;
 const posToGainTrim = (p: number): number => Math.max(0, Math.min(1, p)) * 2; // centro(0.5)=1.0, top=2.0
 const gainToPosTrim = (g: number): number => Math.max(0, Math.min(1, g / 2));
@@ -299,16 +317,16 @@ const PieceFader: React.FC<{ value: number; onChange: (g: number) => void; accen
       onWheel={onWheel}
       onDoubleClick={() => onChange(1)}
       title={`×${value.toFixed(2)} — trascina; doppio-click = 1.0`}
-      style={{ position: 'relative', width: 22, height: PIECE_FADER_H, cursor: 'ns-resize', touchAction: 'none' }}
+      style={{ position: 'relative', width: 20, height: PIECE_FADER_H, cursor: 'ns-resize', touchAction: 'none' }}
     >
       {/* groove */}
       <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 5, transform: 'translateX(-50%)', borderRadius: 3, background: '#0b1220', boxShadow: 'inset 0 0 2px #000, inset 0 0 0 1px #334155' }} />
       {/* centro (unity ×1.0) */}
-      <div style={{ position: 'absolute', left: 2, right: 2, top: '50%', height: 1, background: '#475569' }} />
-      {/* accent fill sotto il cap */}
-      <div style={{ position: 'absolute', left: '50%', width: 5, transform: 'translateX(-50%)', bottom: 0, top: `${(1 - pos) * 100}%`, borderRadius: 3, background: accent, opacity: 0.8 }} />
-      {/* cap */}
-      <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: capTop, width: 22, height: PIECE_CAP_H, borderRadius: 3, background: 'linear-gradient(180deg,#e2e8f0 0%,#94a3b8 55%,#64748b 100%)', border: '1px solid #0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+      <div style={{ position: 'absolute', left: 3, right: 3, top: '50%', height: 1, background: '#475569' }} />
+      {/* accent fill sotto il cap (banda sottile, come i fader principali) */}
+      <div style={{ position: 'absolute', left: '50%', width: 2.5, transform: 'translateX(-50%)', bottom: 0, top: `${(1 - pos) * 100}%`, borderRadius: 2, background: accent, opacity: 0.9 }} />
+      {/* cap (stesso stile metallico dei fader principali) */}
+      <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: capTop, width: 21, height: PIECE_CAP_H, borderRadius: 3, background: 'linear-gradient(180deg,#e2e8f0 0%,#94a3b8 55%,#64748b 100%)', border: '1px solid #0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
         <div style={{ position: 'absolute', left: 2, right: 2, top: '50%', height: 2, transform: 'translateY(-50%)', background: accent, borderRadius: 1 }} />
       </div>
     </div>
@@ -323,12 +341,12 @@ const DrumPieceFaders: React.FC<{
   onChange: (midi: number, gain: number) => void;
 }> = ({ pieces, pieceVolumes, accent, onChange }) => (
   <div className="flex flex-col items-center px-1.5 py-2 rounded bg-slate-900/60 border border-slate-700 self-stretch">
-    <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: accent }}>🥁 Drum Mix</div>
-    <div className="flex gap-1 items-start">
+    <div className="text-[9px] font-medium uppercase tracking-wider mb-1" style={{ color: accent }}>🥁 Drum Mix</div>
+    <div className="flex gap-2 items-start">
       {pieces.map(p => {
         const v = Number.isFinite(pieceVolumes?.[p.midi]) ? pieceVolumes[p.midi] : 1;
         return (
-          <div key={p.midi} className="flex flex-col items-center gap-0.5" style={{ width: 30 }}>
+          <div key={p.midi} className="flex flex-col items-center gap-0.5" style={{ width: 25 }}>
             <PieceFader value={v} accent={accent} onChange={(g) => onChange(p.midi, g)} />
             <span className="text-[8px] text-gray-300 leading-none w-full text-center truncate" title={p.label}>{p.label}</span>
             <span className="text-[7px] text-gray-500 leading-none">×{v.toFixed(2)}</span>
@@ -338,6 +356,71 @@ const DrumPieceFaders: React.FC<{
     </div>
   </div>
 );
+
+/** Controllo orizzontale compatto "send/quantità" (es. mandata riverbero sullo strip). 0..1.
+ *  Trascina in orizzontale; doppio-click = 0. Stesso linguaggio visivo (groove + fill accent). */
+const SendBar: React.FC<{ value: number; onChange: (v: number) => void; accent: string; label: string; title?: string }> = ({ value, onChange, accent, label, title }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const set = useCallback((clientX: number) => {
+    const el = ref.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    onChange(Math.max(0, Math.min(1, (clientX - r.left) / r.width)));
+  }, [onChange]);
+  const down = (e: React.PointerEvent) => {
+    e.preventDefault(); set(e.clientX);
+    const mv = (ev: PointerEvent) => set(ev.clientX);
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="w-full flex flex-col items-center gap-0.5 mt-0.5">
+      <div className="flex items-center justify-between w-full px-0.5 leading-none">
+        <span className="text-[7px] text-gray-400 uppercase tracking-wide">{label}</span>
+        <span className="text-[7px] text-gray-500 tabular-nums">{Math.round(value * 100)}</span>
+      </div>
+      <div ref={ref} onPointerDown={down} onDoubleClick={() => onChange(0)} title={title ?? `${label}: ${Math.round(value * 100)}%`}
+        style={{ position: 'relative', width: '100%', height: 7, borderRadius: 4, background: '#0b1220', boxShadow: 'inset 0 0 0 1px #334155', cursor: 'ew-resize', touchAction: 'none' }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value * 100}%`, borderRadius: 4, background: accent, opacity: 0.85 }} />
+      </div>
+    </div>
+  );
+};
+
+/** Controllo PAN bipolare compatto (−1 L … 0 C … +1 R), tacca al centro + detent.
+ *  Trascina in orizzontale; doppio-click = centro. */
+const PanBar: React.FC<{ value: number; onChange: (v: number) => void; accent: string }> = ({ value, onChange, accent }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const set = useCallback((clientX: number) => {
+    const el = ref.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    let v = Math.max(-1, Math.min(1, ((clientX - r.left) / r.width) * 2 - 1));
+    if (Math.abs(v) < 0.06) v = 0; // detent al centro
+    onChange(v);
+  }, [onChange]);
+  const down = (e: React.PointerEvent) => {
+    e.preventDefault(); set(e.clientX);
+    const mv = (ev: PointerEvent) => set(ev.clientX);
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  };
+  const pct = ((value + 1) / 2) * 100;
+  const lo = Math.min(50, pct), hi = Math.max(50, pct);
+  const label = value === 0 ? 'C' : `${value < 0 ? 'L' : 'R'}${Math.round(Math.abs(value) * 100)}`;
+  return (
+    <div className="w-full flex flex-col items-center gap-0.5 mt-0.5">
+      <div className="flex items-center justify-between w-full px-0.5 leading-none">
+        <span className="text-[7px] text-gray-400 uppercase tracking-wide">Pan</span>
+        <span className="text-[7px] text-gray-500 tabular-nums">{label}</span>
+      </div>
+      <div ref={ref} onPointerDown={down} onDoubleClick={() => onChange(0)} title={`Pan: ${label} (doppio-click = centro)`}
+        style={{ position: 'relative', width: '100%', height: 7, borderRadius: 4, background: '#0b1220', boxShadow: 'inset 0 0 0 1px #334155', cursor: 'ew-resize', touchAction: 'none' }}>
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: '#475569', transform: 'translateX(-50%)' }} />
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${lo}%`, width: `${hi - lo}%`, borderRadius: 4, background: accent, opacity: 0.8 }} />
+        <div style={{ position: 'absolute', top: -1, height: 9, width: 2, borderRadius: 1, background: '#e2e8f0', left: `calc(${pct}% - 1px)` }} />
+      </div>
+    </div>
+  );
+};
 
 /** A single vertical channel strip (shared layout for voices and tracks). */
 const ChannelStrip: React.FC<{
@@ -374,10 +457,21 @@ const ChannelStrip: React.FC<{
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpand?: () => void;
+  /** Override the instrument-button emoji (es. 🥁 per la batteria, che suona il kit e non instrumentId). */
+  emojiOverride?: string;
+  /** Mandata riverbero del canale (0..1) + handler. Se presente, sostituisce il placeholder FX. */
+  reverbSend?: number;
+  onChangeReverbSend?: (v: number) => void;
+  /** Pan del canale (−1..+1) + handler. */
+  pan?: number;
+  onChangePan?: (v: number) => void;
+  /** Compressore insert del canale: apertura finestra + stato attivo (evidenzia il pulsante). */
+  onOpenComp?: () => void;
+  compActive?: boolean;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
   muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, midiChannelControl, onRename, color, onChangeColor, getLevel, onContextMenu,
-  expandable, expanded, onToggleExpand,
+  expandable, expanded, onToggleExpand, emojiOverride, reverbSend, onChangeReverbSend, pan, onChangePan, onOpenComp, compActive,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
@@ -389,14 +483,14 @@ const ChannelStrip: React.FC<{
       <input
         value={label}
         onChange={(e) => onRename(e.target.value)}
-        title="Rinomina traccia"
-        aria-label="Nome traccia"
-        className="text-[10px] font-bold w-full text-center leading-tight bg-transparent border-b border-transparent hover:border-slate-600 focus:border-cyan-500 focus:bg-slate-900/60 outline-none rounded-sm"
+        title="Rinomina track"
+        aria-label="Nome track"
+        className="text-[10px] font-medium w-full text-center leading-tight bg-transparent border-b border-transparent hover:border-slate-600 focus:border-cyan-500 focus:bg-slate-900/60 outline-none rounded-sm"
         style={{ color: accent ?? '#cbd5e1' }}
       />
     ) : (
       <div
-        className="text-[10px] font-bold w-full text-center truncate leading-tight"
+        className="text-[10px] font-medium w-full text-center truncate leading-tight"
         style={{ color: accent ?? '#cbd5e1' }}
         title={title}
       >
@@ -407,10 +501,10 @@ const ChannelStrip: React.FC<{
     {/* Instrument selector (emoji button with an invisible native <select> overlay) */}
     <div
       className="relative w-7 h-6"
-      title={`${tT('instrument_' + (INSTRUMENTS.find(o => o.gm === gm)?.i18nKey ?? 'piano'))}`}
+      title={emojiOverride ? 'Drum (kit)' : `${tT('instrument_' + (INSTRUMENTS.find(o => o.gm === gm)?.i18nKey ?? 'piano'))}`}
     >
       <div className="w-full h-full rounded bg-slate-600 flex items-center justify-center text-[13px] pointer-events-none">
-        {instrumentEmoji(gm)}
+        {emojiOverride ?? instrumentEmoji(gm)}
       </div>
       <select
         value={gm}
@@ -430,19 +524,32 @@ const ChannelStrip: React.FC<{
     {/* MIDI output channel selector (ACC tracks only) */}
     {midiChannelControl}
 
+    {/* Drum Mix toggle (tracce batteria): sotto chiave+MIDI, della stessa larghezza dei select */}
+    {expandable && (
+      <button
+        onClick={onToggleExpand}
+        title={expanded ? 'Nascondi Drum Mix (fader per-pezzo)' : 'Mostra Drum Mix — fader per pezzo (Kick, Snare, Hi-Hat…)'}
+        className={`w-full rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${
+          expanded ? 'bg-slate-700 text-amber-200 border-amber-500/50' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'
+        }`}
+      >
+        Mix {expanded ? '▾' : '▸'}
+      </button>
+    )}
+
     {/* Track color picker (ACC tracks only) */}
     {onChangeColor && (
       <label
-        className="relative w-7 h-4 rounded cursor-pointer border border-slate-600 overflow-hidden"
+        className="relative w-5 h-3 rounded cursor-pointer border border-slate-600 overflow-hidden"
         style={{ backgroundColor: color || '#64748b' }}
-        title="Colore traccia"
+        title="Colore track"
       >
         <input
           type="color"
           value={color || '#64748b'}
           onChange={(e) => onChangeColor(e.target.value)}
           className="absolute inset-0 opacity-0 cursor-pointer"
-          aria-label="Colore traccia"
+          aria-label="Colore track"
         />
       </label>
     )}
@@ -452,7 +559,7 @@ const ChannelStrip: React.FC<{
       <button
         onClick={onToggleMute}
         title={muted ? 'Riattiva' : 'Silenzia'}
-        className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center transition-colors ${
+        className={`w-[17px] h-[17px] rounded text-[9px] font-semibold flex items-center justify-center transition-colors ${
           muted ? 'bg-red-600 text-white' : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
         }`}
       >
@@ -461,7 +568,7 @@ const ChannelStrip: React.FC<{
       <button
         onClick={onToggleSolo}
         title={solo ? 'Disattiva solo' : 'Solo'}
-        className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center transition-colors ${
+        className={`w-[17px] h-[17px] rounded text-[9px] font-semibold flex items-center justify-center transition-colors ${
           solo ? 'bg-yellow-500 text-black' : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
         }`}
       >
@@ -469,29 +576,15 @@ const ChannelStrip: React.FC<{
       </button>
     </div>
 
-    {/* Visibility (ACC only) */}
+    {/* Visibility (ACC only) — toggle a pallino acceso/spento (niente icona "inquietante") */}
     {onToggleVisible && (
       <button
         onClick={onToggleVisible}
-        title={visible ? 'Nascondi pentagramma' : 'Mostra pentagramma'}
-        className={`w-6 h-6 rounded text-[11px] flex items-center justify-center transition-colors ${
-          visible ? 'bg-slate-600 text-gray-300 hover:bg-slate-500' : 'bg-slate-700 text-gray-600 hover:bg-slate-600'
-        }`}
+        title={visible ? 'Pentagramma visibile — clic per nascondere' : 'Pentagramma nascosto — clic per mostrare'}
+        className="flex items-center justify-center rounded transition-colors"
+        style={{ width: 17, height: 17, background: visible ? '#1e293b' : '#0f172a', border: `1px solid ${visible ? '#475569' : '#1e293b'}` }}
       >
-        {visible ? '👁' : '🚫'}
-      </button>
-    )}
-
-    {/* Per-piece drum mixer toggle (drum tracks only) */}
-    {expandable && (
-      <button
-        onClick={onToggleExpand}
-        title={expanded ? 'Nascondi Drum Mix (fader per-pezzo)' : 'Mostra Drum Mix — fader per pezzo (Kick, Snare, Hi-Hat…)'}
-        className={`w-full h-5 rounded text-[9px] font-semibold flex items-center justify-center gap-0.5 transition-colors ${
-          expanded ? 'bg-amber-600 text-white' : 'bg-slate-700 text-amber-300/90 hover:bg-slate-600'
-        }`}
-      >
-        🎚 {expanded ? '▾' : '▸'}
+        <span style={{ width: 7, height: 7, borderRadius: 99, background: visible ? (accent ?? '#38bdf8') : '#334155', boxShadow: visible ? `0 0 5px ${accent ?? '#38bdf8'}` : 'none', transition: 'all 120ms' }} />
       </button>
     )}
 
@@ -508,14 +601,34 @@ const ChannelStrip: React.FC<{
       </span>
     </div>
 
-    {/* FX placeholder (layout only — future insert slots) */}
-    <button
-      disabled
-      title="Effetti (in arrivo)"
-      className="w-full h-5 mt-0.5 rounded border border-dashed border-slate-600 text-[8px] text-slate-500 cursor-not-allowed"
-    >
-      + FX
-    </button>
+    {/* Pan del canale */}
+    {onChangePan && (
+      <PanBar value={pan ?? 0} onChange={onChangePan} accent="#22d3ee" />
+    )}
+
+    {/* Reverb send del canale (sostituisce il vecchio placeholder FX) */}
+    {onChangeReverbSend ? (
+      <SendBar value={reverbSend ?? 0} onChange={onChangeReverbSend} accent="#a78bfa" label="Rev" title="Mandata riverbero (tipo e livello globale dal master)" />
+    ) : (
+      <button
+        disabled
+        title="Effetti (in arrivo)"
+        className="w-full h-5 mt-0.5 rounded border border-dashed border-slate-600 text-[8px] text-slate-500 cursor-not-allowed"
+      >
+        + FX
+      </button>
+    )}
+
+    {/* Compressore INSERT del canale (apre la finestra del compressore di questa traccia) */}
+    {onOpenComp && (
+      <button
+        onClick={onOpenComp}
+        title="Compressore della traccia — apri/chiudi"
+        className={`w-full mt-1 rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${compActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'}`}
+      >
+        Comp{compActive ? ' •' : ''}
+      </button>
+    )}
   </div>
 );
 
@@ -533,7 +646,7 @@ const MasterStrip: React.FC<{
     className="flex flex-col items-center px-1.5 py-2 rounded bg-slate-900/60 border border-slate-700"
     style={{ width: 66 }}
   >
-    <div className="text-[10px] font-bold w-full text-center truncate leading-tight" style={{ color: accent }} title={label}>
+    <div className="text-[10px] font-medium w-full text-center truncate leading-tight" style={{ color: accent }} title={label}>
       {label}
     </div>
     {/* Spacer so the fader bottom aligns with the channel-strip faders */}
@@ -556,6 +669,9 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   satbMasterVolume = 1, accMasterVolume = 1, mixerMasterVolume = 1,
   onChangeSatbMasterVolume, onChangeAccMasterVolume, onChangeMixerMasterVolume,
   getSatbMasterLevel, getAccMasterLevel, getMixerMasterLevel,
+  reverbPreset = 'off', reverbWet = 0, onChangeReverbPreset, onChangeReverbWet,
+  voiceReverbSends, onChangeVoiceReverb, voicePans, onChangeVoicePan,
+  compEnabled = false, onOpenCompressor, onOpenTrackComp,
   onClose,
 }) => {
   const { t: tT } = useTranslation('toolbar');
@@ -625,7 +741,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
 
   const handleDelete = (trackId: string) => {
     const track = accompanimentTracks.find(t => t.id === trackId);
-    if (window.confirm(`Eliminare la traccia '${track?.name ?? ''}'?`)) onDeleteTrack(trackId);
+    if (window.confirm(`Eliminare la track '${track?.name ?? ''}'?`)) onDeleteTrack(trackId);
     setContextMenu(null);
   };
 
@@ -639,7 +755,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         onMouseDown={onTitleMouseDown}
         className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded-t-lg cursor-move"
       >
-        <span className="text-[11px] font-bold text-gray-300 tracking-wide">🎚 Mixer</span>
+        <span className="text-[11px] font-medium text-gray-300 tracking-wide">🎚 Mixer</span>
         <button
           onClick={onClose}
           title="Chiudi mixer"
@@ -661,20 +777,19 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 placeholder="Voci (SATB)"
                 title="Rinomina il gruppo SATB"
                 aria-label="Nome SATB"
-                className="text-[9px] font-bold text-gray-300 uppercase tracking-wider w-24 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-cyan-500 focus:bg-slate-900/60 outline-none rounded-sm"
+                className="text-[9px] font-medium text-gray-300 uppercase tracking-wider w-24 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-cyan-500 focus:bg-slate-900/60 outline-none rounded-sm"
               />
             ) : (
-              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Voci (SATB)</span>
+              <span className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">Voci (SATB)</span>
             )}
             {onToggleSatbVisible && (
               <button
                 onClick={onToggleSatbVisible}
-                title={satbVisible ? 'Nascondi rigo SATB' : 'Mostra rigo SATB'}
-                className={`h-4 px-1 rounded text-[10px] leading-none flex items-center justify-center transition-colors ${
-                  satbVisible ? 'bg-slate-600 text-gray-300 hover:bg-slate-500' : 'bg-slate-700 text-gray-600 hover:bg-slate-600'
-                }`}
+                title={satbVisible ? 'Rigo SATB visibile — clic per nascondere' : 'Rigo SATB nascosto — clic per mostrare'}
+                className="flex items-center justify-center rounded transition-colors"
+                style={{ width: 17, height: 17, background: satbVisible ? '#1e293b' : '#0f172a', border: `1px solid ${satbVisible ? '#475569' : '#1e293b'}` }}
               >
-                {satbVisible ? '👁' : '🚫'}
+                <span style={{ width: 7, height: 7, borderRadius: 99, background: satbVisible ? '#38bdf8' : '#334155', boxShadow: satbVisible ? '0 0 5px #38bdf8' : 'none', transition: 'all 120ms' }} />
               </button>
             )}
           </div>
@@ -698,6 +813,10 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 solo={soloVoices.has(v)}
                 onToggleSolo={() => onToggleSolo(v)}
                 getLevel={getVoiceLevel ? () => getVoiceLevel(v) : undefined}
+                reverbSend={voiceReverbSends?.[v] ?? 0.25}
+                onChangeReverbSend={(amt) => onChangeVoiceReverb?.(v, amt)}
+                pan={voicePans?.[v] ?? 0}
+                onChangePan={(p) => onChangeVoicePan?.(v, p)}
                 midiChannelControl={onChangeVoiceMidiChannel ? (
                   <select
                     value={voiceMidiChannels?.[v] ?? 0}
@@ -735,15 +854,15 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         {/* TRACCE section */}
         <section className="flex flex-col">
           <div className="flex items-center justify-between mb-1 px-1">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Tracce</span>
+            <span className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">Track</span>
             {/* Single "+" that opens a small menu — keeps the fader area uncluttered. */}
             <div className="relative" ref={addMenuRef}>
               <button
                 onClick={() => setAddMenuOpen(o => !o)}
-                title="Aggiungi traccia"
+                title="Aggiungi track"
                 aria-haspopup="menu"
                 aria-expanded={addMenuOpen}
-                className={`w-5 h-5 flex items-center justify-center rounded text-white text-sm font-bold leading-none transition-colors ${addMenuOpen ? 'bg-cyan-600' : 'bg-cyan-700 hover:bg-cyan-600'}`}
+                className={`w-5 h-5 flex items-center justify-center rounded text-white text-sm font-medium leading-none transition-colors ${addMenuOpen ? 'bg-cyan-600' : 'bg-cyan-700 hover:bg-cyan-600'}`}
               >
                 +
               </button>
@@ -758,14 +877,14 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                     onClick={() => { onAddEmptyTrack(); setAddMenuOpen(false); }}
                     className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
                   >
-                    🎵 Nuova traccia
+                    🎵 Nuova track
                   </button>
                   <button
                     role="menuitem"
                     onClick={() => { onAddDrumTrack(); setAddMenuOpen(false); }}
                     className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
                   >
-                    🥁 Batteria
+                    🥁 Drum
                   </button>
                 </div>
               )}
@@ -774,7 +893,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
           <div className="flex gap-1">
             {accompanimentTracks.length === 0 ? (
               <div className="text-gray-500 text-[9px] text-center px-3 py-6 leading-tight self-center">
-                Nessuna<br />traccia
+                Nessuna<br />track
               </div>
             ) : (
               accompanimentTracks.map((track, idx) => (
@@ -785,6 +904,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   title={track.name}
                   accent={track.color}
                   gm={track.instrumentId}
+                  emojiOverride={track.isDrum ? '🥁' : undefined}
                   onChangeInstrument={(gm) => onUpdateTrack(track.id, { instrumentId: gm })}
                   volume={track.volume}
                   onChangeVolume={(vol) => onUpdateTrack(track.id, { volume: vol })}
@@ -798,22 +918,12 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   color={track.color}
                   onChangeColor={(c) => onUpdateTrack(track.id, { color: c })}
                   getLevel={getTrackLevel ? () => getTrackLevel(idx) : undefined}
-                  staffControl={
-                    <select
-                      value={staffChoiceValue(track)}
-                      onChange={(e) => {
-                        const opt = STAFF_OPTIONS.find(o => o.value === e.target.value);
-                        if (opt) onUpdateTrack(track.id, { staffMode: opt.staffMode, clef: opt.clef, voiced: !!opt.voiced, octaveTranspose: opt.octaveTranspose ?? 0 });
-                      }}
-                      title="Tipo di rigo / chiave"
-                      aria-label="Tipo di rigo"
-                      className="w-full bg-slate-700 text-gray-200 text-[8px] rounded px-0.5 py-0.5 border border-slate-600 cursor-pointer"
-                    >
-                      {STAFF_OPTIONS.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  }
+                  reverbSend={track.reverbSend ?? 0.25}
+                  onChangeReverbSend={(amt) => onUpdateTrack(track.id, { reverbSend: amt })}
+                  pan={track.pan ?? 0}
+                  onChangePan={(p) => onUpdateTrack(track.id, { pan: p })}
+                  onOpenComp={onOpenTrackComp ? () => onOpenTrackComp(track.id) : undefined}
+                  compActive={!!track.comp?.enabled}
                   midiChannelControl={
                     <select
                       value={track.midiChannel ?? 0}
@@ -869,16 +979,48 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         {/* MASTER section (global mixer out) */}
         <section className="flex flex-col">
           <div className="flex items-center mb-1 px-1">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Master</span>
+            <span className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">Master</span>
           </div>
-          <div className="flex gap-1">
-            <MasterStrip
-              label="MIX"
-              accent="#38bdf8"
-              volume={mixerMasterVolume}
-              onChangeVolume={(v) => onChangeMixerMasterVolume?.(v)}
-              getLevel={getMixerMasterLevel}
-            />
+          <div className="flex gap-1 items-stretch">
+            <div className="flex flex-col items-center gap-1">
+              <MasterStrip
+                label="MIX"
+                accent="#38bdf8"
+                volume={mixerMasterVolume}
+                onChangeVolume={(v) => onChangeMixerMasterVolume?.(v)}
+                getLevel={getMixerMasterLevel}
+              />
+              {/* Compressore master: pulsantino solo-testo in linea col master (apre/chiude la finestra) */}
+              <button
+                onClick={onOpenCompressor}
+                title="Compressore (master) — apri/chiudi la finestra"
+                className={`w-full h-5 rounded text-[9px] font-medium transition-colors border ${compEnabled ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}
+              >
+                Comp{compEnabled ? ' •' : ''}
+              </button>
+            </div>
+            {/* FX: riverbero globale (preset IR + quantità wet) */}
+            <div className="flex flex-col items-center px-1.5 py-2 rounded bg-slate-900/60 border border-slate-700">
+              <div className="text-[9px] font-medium uppercase tracking-wider mb-1" style={{ color: '#a78bfa' }}>Reverb</div>
+              <select
+                value={reverbPreset}
+                onChange={(e) => onChangeReverbPreset?.(e.target.value as 'off' | 'room' | 'hall' | 'plate')}
+                title="Tipo di riverbero"
+                aria-label="Tipo di riverbero"
+                className="w-full bg-slate-700 text-gray-200 text-[9px] rounded px-0.5 py-0.5 border border-slate-600 cursor-pointer mb-1"
+              >
+                <option value="off">Off</option>
+                <option value="room">Room</option>
+                <option value="hall">Hall</option>
+                <option value="plate">Plate</option>
+              </select>
+              <ConsoleFader
+                value={reverbWet}
+                onChange={(v) => onChangeReverbWet?.(v)}
+                accent="#a78bfa"
+              />
+              <div className="text-[8px] text-gray-400 mt-0.5">wet</div>
+            </div>
           </div>
         </section>
       </div>
@@ -895,7 +1037,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
             onClick={() => handleDelete(contextMenu.trackId)}
             className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-slate-600 whitespace-nowrap"
           >
-            Elimina traccia
+            Elimina track
           </button>
         </div>
       )}

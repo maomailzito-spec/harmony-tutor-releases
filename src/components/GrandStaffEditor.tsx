@@ -57,6 +57,7 @@ import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
 import MixerPanel from './MixerPanel';
+import CompressorWindow from './CompressorWindow';
 import DrumPalettePanel from './DrumPalettePanel';
 import NewProjectDialog, { type NewProjectConfig } from './NewProjectDialog';
 
@@ -212,12 +213,73 @@ const satbVoiceMidiChannel = (channels: Record<number, number> | undefined, v: n
   return Math.max(0, Math.min(15, v - 1));
 };
 const drumPaletteFor = (t: any): DrumPiece[] => (t?.drumKit === 'rock' ? DRUM_PALETTE_ROCK : DRUM_PALETTE_ORCH);
+// Chiavi/tipo-rigo per traccia ACC — selezionabili cliccando la chiave SUL pentagramma
+// (manipolazione diretta). Etichette chiave-centriche (non nomi di strumento).
+const ACC_STAFF_OPTIONS: Array<{ value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType; voiced?: boolean; octaveTranspose?: number }> = [
+  { value: 'grandstaff',        label: 'Grand staff',             staffMode: 'grandstaff' },
+  { value: 'grandstaff-voiced', label: 'Grand staff a voci',      staffMode: 'grandstaff', voiced: true },
+  { value: 'single-treble',     label: '𝄞 Chiave di violino',     staffMode: 'treble_only', clef: 'treble' },
+  { value: 'single-treble-8vb', label: '𝄞 Chiave di violino 8vb', staffMode: 'treble_only', clef: 'treble', octaveTranspose: -1 },
+  { value: 'single-bass-8vb',   label: '𝄢 Chiave di basso 8vb',   staffMode: 'treble_only', clef: 'bass', octaveTranspose: -1 },
+  // Chiavi "vocali" + basso normale, dalla più GRAVE alla più ACUTA.
+  { value: 'single-bass',       label: '𝄢 Chiave di basso',       staffMode: 'treble_only', clef: 'bass' },
+  { value: 'single-tenor',      label: 'Chiave di tenore',        staffMode: 'treble_only', clef: 'tenor' },
+  { value: 'single-alto',       label: 'Chiave di contralto',     staffMode: 'treble_only', clef: 'alto' },
+  { value: 'single-soprano',    label: 'Chiave di soprano',       staffMode: 'treble_only', clef: 'soprano' },
+];
 // Voce/gambo convenzionale del pezzo di batteria: PIEDI (gran cassa 35/36, charleston a
 // pedale 44) → voce 2 (gambi GIÙ); MANI (tutto il resto) → voce 1 (gambi SU). All'inserimento
 // la nota prende questa voce, così i gambi sono coerenti per layer. L'override (Flip Stem)
 // sposta il pezzo nell'altra voce: gambo + travatura si muovono insieme.
 const DRUM_FOOT_PIECES = new Set<number>([35, 36, 44]);
 const drumPieceVoice = (midi: number): number => (DRUM_FOOT_PIECES.has(Number(midi)) ? 2 : 1);
+
+// ── Riverbero: IR sintetica (niente asset esterni) ───────────────────────────
+// Rumore che DECADE esponenzialmente + leggero lowpass a un polo (smorza il "fizz"
+// metallico → coda più scura/naturale). Canali decorrelati = immagine stereo. Generata
+// una volta per preset e caricata in un ConvolverNode. Non è una sala campionata, ma toglie
+// gran parte del "secco/plasticoso" senza scaricare file. Sostituibile con IR reali in futuro.
+export type ReverbPreset = 'off' | 'room' | 'hall' | 'plate';
+const REVERB_SPECS: Record<Exclude<ReverbPreset, 'off'>, { seconds: number; decay: number; lp: number }> = {
+  room:  { seconds: 1.0, decay: 3.2, lp: 0.18 }, // stanza: corta, scura
+  hall:  { seconds: 2.8, decay: 2.2, lp: 0.12 }, // sala: lunga, ampia
+  plate: { seconds: 1.8, decay: 2.6, lp: 0.30 }, // piatto: media, più brillante
+};
+const makeReverbIR = (ctx: AudioContext, preset: Exclude<ReverbPreset, 'off'>): AudioBuffer => {
+  const { seconds, decay, lp } = REVERB_SPECS[preset];
+  const rate = ctx.sampleRate;
+  const len = Math.max(1, Math.floor(seconds * rate));
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      const env = Math.pow(1 - t, decay);          // decadimento esponenziale
+      const white = Math.random() * 2 - 1;
+      last = last + lp * (white - last);            // lowpass a un polo → coda più morbida
+      data[i] = last * env;
+    }
+  }
+  return buf;
+};
+// Mandata riverbero di default per un canale (quando reverbSend è assente).
+const DEFAULT_REVERB_SEND = 0.25;
+// dB → gain lineare (per il makeup del compressore).
+const dbToGain = (db: number): number => Math.pow(10, db / 20);
+// Impostazioni di default del compressore (per canale e master).
+type CompSettings = { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
+const COMP_DEFAULTS: Required<Omit<CompSettings, 'enabled'>> = { threshold: -18, ratio: 3, attack: 0.01, release: 0.15, makeup: 0 };
+// Applica le impostazioni a un nodo comp + makeup gain. Bypass (off) = trasparente.
+const applyCompSettings = (comp: DynamicsCompressorNode, makeup: GainNode, c?: CompSettings): void => {
+  const on = !!c?.enabled;
+  comp.knee.value = 24;
+  comp.threshold.value = on ? (c?.threshold ?? COMP_DEFAULTS.threshold) : 0;
+  comp.ratio.value = on ? (c?.ratio ?? COMP_DEFAULTS.ratio) : 1;
+  comp.attack.value = on ? (c?.attack ?? COMP_DEFAULTS.attack) : 0.003;
+  comp.release.value = on ? (c?.release ?? COMP_DEFAULTS.release) : 0.25;
+  makeup.gain.value = on ? dbToGain(c?.makeup ?? COMP_DEFAULTS.makeup) : 1;
+};
 const DRUM_LETTER_STEP: Record<string, number> = { c: 0, d: 1, e: 2, f: 3, g: 4, a: 5, b: 6 };
 const drumStepOf = (letter: string, octave: number) => octave * 7 + (DRUM_LETTER_STEP[String(letter).toLowerCase()] ?? 0);
 const drumLineStep = (line: string) => { const [l, o] = line.split('/'); return drumStepOf(l, parseInt(o, 10)); };
@@ -535,6 +597,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [accPushCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [isMixerOpen, setIsMixerOpen] = useState(false);
+    // Finestra compressore: master (bus) oppure una traccia ACC (insert per-canale).
+    const [compWindow, setCompWindow] = useState<{ kind: 'master' } | { kind: 'track'; trackId: string } | null>(null);
+    // Menù chiavi: si apre cliccando la chiave SUL pentagramma di una traccia ACC.
+    const [clefMenu, setClefMenu] = useState<{ x: number; y: number; trackId: string; name: string } | null>(null);
     // Modulo percussioni flottante (apri/chiudi dalla toolbar; si auto-apre quando aggiungi
     // una batteria). Sostituisce la vecchia barra inline "🥁 Mappa".
     const [isDrumPanelOpen, setIsDrumPanelOpen] = useState(false);
@@ -579,6 +645,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const satbMasterAnalyserRef = useRef<AnalyserNode | null>(null);
     const accMasterAnalyserRef = useRef<AnalyserNode | null>(null);
     const mixerMasterAnalyserRef = useRef<AnalyserNode | null>(null);
+    // Riverbero globale (bus a convoluzione): i master SATB/ACC mandano al convolver,
+    // il "return" (livello wet) rientra nel mixer master. Preset = IR; wet = quantità.
+    const reverbConvolverRef = useRef<ConvolverNode | null>(null);
+    const reverbReturnRef = useRef<GainNode | null>(null);
+    const [reverbPreset, setReverbPreset] = useState<ReverbPreset>('room');
+    const [reverbWet, setReverbWet] = useState<number>(0.85); // livello globale (return); il dosaggio è per-canale
+    const reverbPresetRef = useRef<ReverbPreset>(reverbPreset);
+    const reverbWetRef = useRef<number>(reverbWet);
+    // Compressore sul MASTER (glue): DynamicsCompressorNode tra mixer master e destination.
+    // Bypass = ratio 1 (trasparente). enabled/threshold/ratio regolabili dal mixer.
+    const compressorRef = useRef<DynamicsCompressorNode | null>(null);
+    const compMakeupGainRef = useRef<GainNode | null>(null);
+    const [compEnabled, setCompEnabled] = useState<boolean>(false);
+    const [compThreshold, setCompThreshold] = useState<number>(-18); // dB
+    const [compRatio, setCompRatio] = useState<number>(3);
+    const [compAttack, setCompAttack] = useState<number>(0.01);   // s
+    const [compRelease, setCompRelease] = useState<number>(0.15); // s
+    const [compMakeup, setCompMakeup] = useState<number>(0);      // dB
+    const compEnabledRef = useRef(compEnabled);
+    const compThresholdRef = useRef(compThreshold);
+    const compRatioRef = useRef(compRatio);
+    const compAttackRef = useRef(compAttack);
+    const compReleaseRef = useRef(compRelease);
+    const compMakeupRef = useRef(compMakeup);
+    // Send riverbero PER-CANALE: ogni voce/traccia ha un nodo gain (post-fader → convolver).
+    // L'ampiezza è il "Rev" sullo strip. Mute/solo li gestisce il gain di voce/traccia a monte.
+    const voiceRevSendNodesRef = useRef<Map<number, GainNode>>(new Map());
+    const accRevSendNodesRef = useRef<Map<number, GainNode>>(new Map());
+    const [voiceReverbSends, setVoiceReverbSends] = useState<Record<number, number>>({});
+    const voiceReverbSendsRef = useRef<Record<number, number>>({});
+    // Pan per-canale: StereoPannerNode tra il gain (voce/traccia) e il master.
+    const voicePannersRef = useRef<Map<number, StereoPannerNode>>(new Map());
+    const accPannersRef = useRef<Map<number, StereoPannerNode>>(new Map());
+    // Compressore INSERT per-traccia ACC: nodo comp + makeup gain, inseriti gain→comp→makeup→panner.
+    const accCompNodesRef = useRef<Map<number, DynamicsCompressorNode>>(new Map());
+    const accCompMakeupRef = useRef<Map<number, GainNode>>(new Map());
+    const [voicePans, setVoicePans] = useState<Record<number, number>>({});
+    const voicePansRef = useRef<Record<number, number>>({});
     const meterScratchRef = useRef<Uint8Array>(new Uint8Array(256));
     // Instantaneous output peak (0..1) of an analyser, from its time-domain data.
     const readAnalyserPeak = useCallback((an: AnalyserNode | undefined): number => {
@@ -615,17 +719,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const ctx = audioService.audioContext;
         if (!ctx) return;
         if (!mixerMasterGainRef.current) {
-            const m = ctx.createGain();
+            const m = ctx.createGain();              // master fader, DOPO il compressore
             m.gain.value = mixerMasterVolumeRef.current;
             m.connect(ctx.destination);
-            const an = ctx.createAnalyser(); an.fftSize = 256; m.connect(an);
+            const an = ctx.createAnalyser(); an.fftSize = 256; m.connect(an); // meter = USCITA (post-comp+fader)
             mixerMasterAnalyserRef.current = an;
             mixerMasterGainRef.current = m;
+            // Makeup gain dopo il compressore (compensa il livello perso in compressione).
+            const mk = ctx.createGain();
+            mk.gain.value = compEnabledRef.current ? dbToGain(compMakeupRef.current) : 1;
+            mk.connect(m);
+            compMakeupGainRef.current = mk;
+            // Compressore PRIMA del master: tutto il mix entra qui → comp → makeup → master(fader+meter) → out.
+            // Così il meter del master misura ciò che ESCE (post-compressione). Bypass = ratio 1/threshold 0.
+            const comp = ctx.createDynamicsCompressor();
+            comp.knee.value = 24;
+            comp.attack.value = compEnabledRef.current ? compAttackRef.current : 0.003;
+            comp.release.value = compEnabledRef.current ? compReleaseRef.current : 0.25;
+            comp.threshold.value = compEnabledRef.current ? compThresholdRef.current : 0;
+            comp.ratio.value = compEnabledRef.current ? compRatioRef.current : 1;
+            comp.connect(mk);
+            compressorRef.current = comp;
         }
         if (!satbMasterGainRef.current) {
             const s = ctx.createGain();
             s.gain.value = satbMasterVolumeRef.current;
-            s.connect(mixerMasterGainRef.current);
+            s.connect(compressorRef.current ?? mixerMasterGainRef.current); // → compressore → makeup → master
             const an = ctx.createAnalyser(); an.fftSize = 256; s.connect(an);
             satbMasterAnalyserRef.current = an;
             satbMasterGainRef.current = s;
@@ -633,16 +752,156 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!accMasterGainRef.current) {
             const a = ctx.createGain();
             a.gain.value = accMasterVolumeRef.current;
-            a.connect(mixerMasterGainRef.current);
+            a.connect(compressorRef.current ?? mixerMasterGainRef.current); // → compressore → makeup → master
             const an = ctx.createAnalyser(); an.fftSize = 256; a.connect(an);
             accMasterAnalyserRef.current = an;
             accMasterGainRef.current = a;
         }
+        // Bus riverbero: convolver (IR del preset) → return (livello globale) → mixer master.
+        // Alimentato dai SEND PER-CANALE (voce/traccia), NON dai master: il riverbero si dosa
+        // dal fader di ogni traccia (come il pan); dal master si sceglie il preset e si abbassa
+        // tutto. Creato SEMPRE (anche con preset 'off' → return 0) così i send hanno dove andare.
+        if (!reverbReturnRef.current) {
+            const conv = ctx.createConvolver();
+            const p: Exclude<ReverbPreset, 'off'> = reverbPresetRef.current === 'off' ? 'room' : reverbPresetRef.current;
+            try { conv.buffer = makeReverbIR(ctx, p); } catch { /* ignore */ }
+            const ret = ctx.createGain();
+            ret.gain.value = reverbPresetRef.current === 'off' ? 0 : reverbWetRef.current;
+            conv.connect(ret);
+            ret.connect(compressorRef.current ?? mixerMasterGainRef.current!); // riverbero anch'esso nel comp
+            reverbConvolverRef.current = conv;
+            reverbReturnRef.current = ret;
+        }
     }, [audioService]);
+
+    // Riverbero live: aggiorna il wet del return e, al cambio preset, rigenera l'IR
+    // (creando il bus se non esiste ancora). 'off' → wet 0 (resta cablato, silenzioso).
+    useEffect(() => { reverbWetRef.current = reverbWet; if (reverbReturnRef.current) reverbReturnRef.current.gain.value = (reverbPresetRef.current === 'off' ? 0 : reverbWet); }, [reverbWet]);
+    useEffect(() => {
+        reverbPresetRef.current = reverbPreset;
+        const ctx = audioService.audioContext;
+        if (!ctx) return;
+        if (reverbPreset !== 'off') {
+            ensureMasterChain(); // crea il bus se serve
+            if (reverbConvolverRef.current) {
+                try { reverbConvolverRef.current.buffer = makeReverbIR(ctx, reverbPreset as Exclude<ReverbPreset, 'off'>); } catch { /* ignore */ }
+            }
+        }
+        if (reverbReturnRef.current) reverbReturnRef.current.gain.value = (reverbPreset === 'off' ? 0 : reverbWetRef.current);
+    }, [reverbPreset, audioService, ensureMasterChain]);
+
+    // Compressore master live: bypass (ratio 1, threshold 0, makeup 1) quando off,
+    // altrimenti applica threshold/ratio/attack/release + makeup gain.
+    useEffect(() => {
+        compEnabledRef.current = compEnabled;
+        compThresholdRef.current = compThreshold;
+        compRatioRef.current = compRatio;
+        compAttackRef.current = compAttack;
+        compReleaseRef.current = compRelease;
+        compMakeupRef.current = compMakeup;
+        const c = compressorRef.current;
+        if (c) {
+            c.threshold.value = compEnabled ? compThreshold : 0;
+            c.ratio.value = compEnabled ? compRatio : 1;
+            c.attack.value = compEnabled ? compAttack : 0.003;
+            c.release.value = compEnabled ? compRelease : 0.25;
+        }
+        if (compMakeupGainRef.current) compMakeupGainRef.current.gain.value = compEnabled ? dbToGain(compMakeup) : 1;
+    }, [compEnabled, compThreshold, compRatio, compAttack, compRelease, compMakeup]);
+
+    // Send riverbero per-canale: crea (una volta) il nodo gain del canale e lo collega
+    // post-fader → convolver; imposta l'ampiezza dal valore corrente. Idempotente.
+    const ensureVoiceRevSend = useCallback((v: number, srcGain: GainNode) => {
+        const ctx = audioService.audioContext;
+        if (!ctx || !reverbConvolverRef.current) return;
+        let send = voiceRevSendNodesRef.current.get(v);
+        if (!send) {
+            send = ctx.createGain();
+            // POST-PAN: preleva dal panner (post-fader+post-pan) così il riverbero SEGUE il pan
+            // (un segnale pannato a un lato manda al riverbero un segnale pannato, non centrato).
+            (voicePannersRef.current.get(v) ?? srcGain).connect(send);
+            send.connect(reverbConvolverRef.current);
+            voiceRevSendNodesRef.current.set(v, send);
+        }
+        send.gain.value = voiceReverbSendsRef.current[v] ?? DEFAULT_REVERB_SEND;
+    }, [audioService]);
+    const ensureTrackRevSend = useCallback((idx: number, srcGain: GainNode, track: AccompanimentTrack) => {
+        const ctx = audioService.audioContext;
+        if (!ctx || !reverbConvolverRef.current) return;
+        let send = accRevSendNodesRef.current.get(idx);
+        if (!send) {
+            send = ctx.createGain();
+            // POST-PAN: preleva dal panner così il riverbero segue il pan della traccia.
+            (accPannersRef.current.get(idx) ?? srcGain).connect(send);
+            send.connect(reverbConvolverRef.current);
+            accRevSendNodesRef.current.set(idx, send);
+        }
+        send.gain.value = (track as any)?.reverbSend ?? DEFAULT_REVERB_SEND;
+    }, [audioService]);
+    // Aggiorna in tempo reale i gain dei send quando cambiano i valori "Rev" sugli strip.
+    const refreshReverbSends = useCallback(() => {
+        voiceRevSendNodesRef.current.forEach((send, v) => { send.gain.value = voiceReverbSendsRef.current[v] ?? DEFAULT_REVERB_SEND; });
+        accRevSendNodesRef.current.forEach((send, idx) => {
+            const t = latestAccompanimentTracks.current[idx];
+            send.gain.value = (t as any)?.reverbSend ?? DEFAULT_REVERB_SEND;
+        });
+    }, []);
+    // Handler del send riverbero di una VOCE (twin di handleUpdateVoice): aggiorna stato+ref
+    // e applica subito al nodo (real-time anche su note già accodate).
+    const handleChangeVoiceReverb = useCallback((voice: number, amount: number) => {
+        voiceReverbSendsRef.current = { ...voiceReverbSendsRef.current, [voice]: amount };
+        setVoiceReverbSends(prev => ({ ...prev, [voice]: amount }));
+        refreshReverbSends();
+    }, [refreshReverbSends]);
+
+    // Pan: instrada il gain del canale → StereoPannerNode → master. Chiamato (una volta) alla
+    // creazione del nodo gain di voce/traccia, così il dry passa per il panner.
+    const wireVoiceWithPan = useCallback((v: number, gain: GainNode) => {
+        const ctx = audioService.audioContext; if (!ctx) return;
+        const master = satbMasterGainRef.current ?? ctx.destination;
+        let panner = voicePannersRef.current.get(v);
+        if (!panner) { panner = ctx.createStereoPanner(); voicePannersRef.current.set(v, panner); }
+        panner.pan.value = voicePansRef.current[v] ?? 0;
+        gain.connect(panner); panner.connect(master);
+    }, [audioService]);
+    const wireTrackWithPan = useCallback((idx: number, gain: GainNode, track?: AccompanimentTrack) => {
+        const ctx = audioService.audioContext; if (!ctx) return;
+        const master = accMasterGainRef.current ?? ctx.destination;
+        let panner = accPannersRef.current.get(idx);
+        if (!panner) { panner = ctx.createStereoPanner(); accPannersRef.current.set(idx, panner); }
+        const t = track ?? latestAccompanimentTracks.current[idx];
+        panner.pan.value = (t as any)?.pan ?? 0;
+        // Compressore INSERT per-traccia: catena gain → comp → makeup → panner → master.
+        let comp = accCompNodesRef.current.get(idx);
+        let mk = accCompMakeupRef.current.get(idx);
+        if (!comp) { comp = ctx.createDynamicsCompressor(); accCompNodesRef.current.set(idx, comp); }
+        if (!mk) { mk = ctx.createGain(); accCompMakeupRef.current.set(idx, mk); }
+        applyCompSettings(comp, mk, (t as any)?.comp);
+        gain.connect(comp); comp.connect(mk); mk.connect(panner); panner.connect(master);
+    }, [audioService]);
+    // Aggiorna in tempo reale i compressori per-traccia dai valori correnti (track.comp).
+    const refreshTrackComps = useCallback(() => {
+        accCompNodesRef.current.forEach((comp, idx) => {
+            const mk = accCompMakeupRef.current.get(idx);
+            if (mk) applyCompSettings(comp, mk, (latestAccompanimentTracks.current[idx] as any)?.comp);
+        });
+    }, []);
+    // Pan live: aggiorna i panner quando cambiano i valori sugli strip.
+    const refreshPans = useCallback(() => {
+        voicePannersRef.current.forEach((p, v) => { p.pan.value = voicePansRef.current[v] ?? 0; });
+        accPannersRef.current.forEach((p, idx) => { const t = latestAccompanimentTracks.current[idx]; p.pan.value = (t as any)?.pan ?? 0; });
+    }, []);
+    const handleChangeVoicePan = useCallback((voice: number, pan: number) => {
+        voicePansRef.current = { ...voicePansRef.current, [voice]: pan };
+        setVoicePans(prev => ({ ...prev, [voice]: pan }));
+        refreshPans();
+    }, [refreshPans]);
 
     const getSatbMasterLevel = useCallback(() => readAnalyserPeak(satbMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
     const getAccMasterLevel = useCallback(() => readAnalyserPeak(accMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
     const getMixerMasterLevel = useCallback(() => readAnalyserPeak(mixerMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
+    // Gain reduction corrente del compressore (dB positivi); 0 se off. Per il meter GR.
+    const getCompReduction = useCallback(() => (compEnabledRef.current && compressorRef.current) ? Math.abs(compressorRef.current.reduction) : 0, []);
 
     // Re-apply the correct gain to EVERY live voice/track gain node based on the
     // current mute/solo/volume state. Needed because playback pre-schedules all
@@ -684,9 +943,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Re-apply audibility to ALL channels so mute/solo/volume take effect in
             // real-time (solo on one track must silence the others, voices included).
             refreshAudibilityGains();
+            refreshReverbSends(); // send riverbero per-traccia in tempo reale
+            refreshPans();        // pan per-traccia in tempo reale
+            refreshTrackComps();  // compressore per-traccia in tempo reale
             return next;
         }, { undoable: false });
-    }, [refreshAudibilityGains]);
+    }, [refreshAudibilityGains, refreshReverbSends, refreshPans, refreshTrackComps]);
 
     // Per-voice mixer update (volume / mute), twin of handleUpdateTrack.
     // Applies the change live to the voice gain node so it takes effect immediately,
@@ -1217,7 +1479,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (!trackGain) {
                     ensureMasterChain();
                     trackGain = audioService.audioContext.createGain();
-                    trackGain.connect(accMasterGainRef.current ?? audioService.audioContext.destination);
+                    wireTrackWithPan(idx, trackGain); // gain → panner → master
                     accTrackGainsRef.current.set(idx, trackGain);
                     const an = audioService.audioContext.createAnalyser();
                     an.fftSize = 256;
@@ -3179,6 +3441,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Editor zoom (extracted to useEditorZoom hook)
     const { editorZoom, resetEditorZoom, handleScoreMouseDownCapture, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
 
+    // Click sulla CHIAVE di un rigo ACC (rettangolo invisibile [data-acc-clef-trackid] disegnato
+    // da VexflowGrandStaff) → apre il menù delle chiavi e blocca l'inserimento nota. Altrimenti
+    // delega allo zoom-capture. È la "manipolazione diretta sull'oggetto" (chiave = roba da score).
+    const handleScoreMouseDownWithClef = useCallback((e: React.MouseEvent) => {
+        const el = (e.target as Element | null)?.closest?.('[data-acc-clef-trackid]') as Element | null;
+        if (el) {
+            const trackId = el.getAttribute('data-acc-clef-trackid');
+            if (trackId) {
+                e.preventDefault();
+                e.stopPropagation();
+                setClefMenu({ x: e.clientX, y: e.clientY, trackId, name: el.getAttribute('data-acc-clef-name') || '' });
+                return;
+            }
+        }
+        handleScoreMouseDownCapture(e);
+    }, [handleScoreMouseDownCapture]);
+
+    // Applica la scelta di chiave/rigo alla traccia (stesso effetto del vecchio selettore mixer).
+    const applyClefChoice = useCallback((trackId: string, opt: (typeof ACC_STAFF_OPTIONS)[number]) => {
+        handleUpdateTrack(trackId, { staffMode: opt.staffMode, clef: opt.clef, voiced: !!opt.voiced, octaveTranspose: opt.octaveTranspose ?? 0 } as any);
+        setClefMenu(null);
+    }, [handleUpdateTrack]);
+
     const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = usePreference<boolean>('editor.selectOnlyCurrentVoice');
 
     const [exportIncludeTitle] = usePreference<boolean>('export.includeTitle');
@@ -3798,6 +4083,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     voiceVolumes,
                     mutedVoices,
                     masterVolumes: { satb: satbMasterVolume, acc: accMasterVolume, mixer: mixerMasterVolume },
+                    voicePans,
+                    voiceReverbSends,
+                    reverb: { preset: reverbPreset, wet: reverbWet },
+                    comp: { enabled: compEnabled, threshold: compThreshold, ratio: compRatio, attack: compAttack, release: compRelease, makeup: compMakeup },
                     satbName,
                     satbVisible,
                     computedLabelsRef: _harmonyLabelsRef,
@@ -3872,6 +4161,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setSatbMasterVolume,
                     setAccMasterVolume,
                     setMixerMasterVolume,
+                    setVoicePans: (next: Record<number, number>) => { voicePansRef.current = next; setVoicePans(next); refreshPans(); },
+                    setVoiceReverbSends: (next: Record<number, number>) => { voiceReverbSendsRef.current = next; setVoiceReverbSends(next); refreshReverbSends(); },
+                    setReverbPreset,
+                    setReverbWet,
+                    setCompEnabled,
+                    setCompThreshold,
+                    setCompRatio,
+                    setCompAttack,
+                    setCompRelease,
+                    setCompMakeup,
                     timeSignature,
                 },
             });
@@ -4138,6 +4437,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setSatbMasterVolume(typeof mv?.satb === 'number' ? mv.satb : 1);
                     setAccMasterVolume(typeof mv?.acc === 'number' ? mv.acc : 1);
                     setMixerMasterVolume(typeof mv?.mixer === 'number' ? mv.mixer : 1);
+                }
+                {
+                    // FX mixer per-voce + riverbero globale (assenti → default).
+                    const vp = (p as any).voicePans;
+                    const nextVp = (vp && typeof vp === 'object') ? vp : {};
+                    voicePansRef.current = nextVp; setVoicePans(nextVp);
+                    const vrs = (p as any).voiceReverbSends;
+                    const nextVrs = (vrs && typeof vrs === 'object') ? vrs : {};
+                    voiceReverbSendsRef.current = nextVrs; setVoiceReverbSends(nextVrs);
+                    const rv = (p as any).reverb;
+                    setReverbPreset((rv && typeof rv.preset === 'string') ? rv.preset : 'room');
+                    setReverbWet((rv && typeof rv.wet === 'number') ? rv.wet : 0.85);
+                    const cp = (p as any).comp;
+                    setCompEnabled(!!(cp && cp.enabled));
+                    setCompThreshold((cp && typeof cp.threshold === 'number') ? cp.threshold : -18);
+                    setCompRatio((cp && typeof cp.ratio === 'number') ? cp.ratio : 3);
+                    setCompAttack((cp && typeof cp.attack === 'number') ? cp.attack : 0.01);
+                    setCompRelease((cp && typeof cp.release === 'number') ? cp.release : 0.15);
+                    setCompMakeup((cp && typeof cp.makeup === 'number') ? cp.makeup : 0);
+                    refreshPans(); refreshReverbSends();
                 }
                 if (typeof (p as any).satbName === 'string') setSatbName((p as any).satbName);
                 setSatbVisible((p as any).satbVisible !== false);
@@ -5691,6 +6010,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 item.durationBeats = total;
             }
 
+            // Per ogni nota: GAP (in beat) fino al PROSSIMO attacco della STESSA voce
+            // (salta pause e legate assorbite). A valle cappa la coda degli strumenti
+            // sostenuti così non si accavalla con la nota dopo. Gap RELATIVO → regge le
+            // ripetizioni (sopravvive allo shift dell'espansione repeat).
+            for (let i = 0; i < voiceItems.length; i++) {
+                const it = voiceItems[i];
+                if (it.skip || it.note.isRest) continue;
+                for (let j = i + 1; j < voiceItems.length; j++) {
+                    const jt = voiceItems[j];
+                    if (jt.skip || jt.note.isRest) continue;
+                    if (jt.absStartBeat > it.absStartBeat + 1e-6) { (it as any)._slotBeats = jt.absStartBeat - it.absStartBeat; break; }
+                }
+            }
+
             allItems.push(...voiceItems);
         }
 
@@ -5855,6 +6188,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     curIdx = nextIdx;
                 }
                 item.durationBeats = total;
+            }
+
+            // GAP al prossimo attacco della STESSA traccia (vedi SATB). trackItems non ha
+            // pause. Per gli accordi (stesso attacco) il "prossimo" è l'attacco STRETTAMENTE
+            // successivo, così le note simultanee non si tagliano tra loro; il cap a valle
+            // scatta solo se la nota è sequenziale (non per pad/accordi tenuti sotto le note).
+            for (let i = 0; i < trackItems.length; i++) {
+                const it = trackItems[i];
+                if (it.skip) continue;
+                for (let j = i + 1; j < trackItems.length; j++) {
+                    const jt = trackItems[j];
+                    if (jt.skip) continue;
+                    if (jt.absStartBeat > it.absStartBeat + 1e-6) { (it as any)._slotBeats = jt.absStartBeat - it.absStartBeat; break; }
+                }
             }
 
             allItems.push(...trackItems);
@@ -6294,7 +6641,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (!trackGain && audioService.audioContext) {
                             ensureMasterChain();
                             trackGain = audioService.audioContext.createGain();
-                            trackGain.connect(accMasterGainRef.current ?? audioService.audioContext.destination);
+                            wireTrackWithPan(it.accTrackIdx!, trackGain, track); // gain → panner → master
                             accTrackGainsRef.current.set(it.accTrackIdx, trackGain);
                             const an = audioService.audioContext.createAnalyser();
                             an.fftSize = 256;
@@ -6303,6 +6650,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         }
                         if (trackGain) {
                             trackGain.gain.value = isTrackAudible(track) ? track.volume : 0;
+                            ensureTrackRevSend(it.accTrackIdx!, trackGain, track); // send riverbero per-traccia
                         }
                         // Batteria: instrada il colpo per un nodo gain PER-PEZZO persistente
                         // (nodo-pezzo → nodo-traccia → master). Così muovere il fader del pezzo
@@ -6321,7 +6669,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             pieceGain.gain.value = Number.isFinite(pv) ? pv : 1;
                             drumOut = pieceGain;
                         }
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: drumOut, sustain: true, velocity: n.velocity, applyDrumPieceGain: !isDrum });
+                        const slotSecAcc = ((it as any)._slotBeats != null) ? (beatToTime(it.absStartBeat + (it as any)._slotBeats) - beatToTime(it.absStartBeat)) : undefined;
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: drumOut, sustain: true, velocity: n.velocity, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -6336,7 +6685,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (!voiceGain && audioService.audioContext) {
                         ensureMasterChain();
                         voiceGain = audioService.audioContext.createGain();
-                        voiceGain.connect(satbMasterGainRef.current ?? audioService.audioContext.destination);
+                        wireVoiceWithPan(v, voiceGain); // gain → panner → master
                         voiceGainsRef.current.set(v, voiceGain);
                         const an = audioService.audioContext.createAnalyser();
                         an.fftSize = 256;
@@ -6345,8 +6694,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                     if (voiceGain) {
                         voiceGain.gain.value = isVoiceAudible(v) ? (voiceVolumesRef.current[v] ?? 1) : 0;
+                        ensureVoiceRevSend(v, voiceGain); // send riverbero per-voce
                     }
-                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: voiceGain, sustain: true, velocity: n.velocity });
+                    const slotSecV = ((it as any)._slotBeats != null) ? (beatToTime(it.absStartBeat + (it as any)._slotBeats) - beatToTime(it.absStartBeat)) : undefined;
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: voiceGain, sustain: true, velocity: n.velocity, slotSec: slotSecV });
                 });
             }
 
@@ -11700,15 +12051,97 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     getSatbMasterLevel={getSatbMasterLevel}
                     getAccMasterLevel={getAccMasterLevel}
                     getMixerMasterLevel={getMixerMasterLevel}
+                    reverbPreset={reverbPreset}
+                    reverbWet={reverbWet}
+                    onChangeReverbPreset={setReverbPreset}
+                    onChangeReverbWet={setReverbWet}
+                    voiceReverbSends={voiceReverbSends}
+                    onChangeVoiceReverb={handleChangeVoiceReverb}
+                    voicePans={voicePans}
+                    onChangeVoicePan={handleChangeVoicePan}
+                    compEnabled={compEnabled}
+                    onOpenCompressor={() => setCompWindow(w => (w?.kind === 'master' ? null : { kind: 'master' }))}
+                    onOpenTrackComp={(trackId) => setCompWindow(w => (w?.kind === 'track' && w.trackId === trackId ? null : { kind: 'track', trackId }))}
                     onClose={() => setIsMixerOpen(false)}
                 />
+            )}
+
+            {compWindow && compWindow.kind === 'master' && (
+                <CompressorWindow
+                    target="Master"
+                    enabled={compEnabled}
+                    threshold={compThreshold}
+                    ratio={compRatio}
+                    attack={compAttack}
+                    release={compRelease}
+                    makeup={compMakeup}
+                    onToggle={() => setCompEnabled(v => !v)}
+                    onChangeThreshold={setCompThreshold}
+                    onChangeRatio={setCompRatio}
+                    onChangeAttack={setCompAttack}
+                    onChangeRelease={setCompRelease}
+                    onChangeMakeup={setCompMakeup}
+                    getReduction={getCompReduction}
+                    onClose={() => setCompWindow(null)}
+                />
+            )}
+            {compWindow && compWindow.kind === 'track' && (() => {
+                const idx = accompanimentTracks.findIndex(t => t.id === compWindow.trackId);
+                const track = accompanimentTracks[idx];
+                if (!track) return null;
+                const c = (track as any).comp || {};
+                const upd = (patch: any) => handleUpdateTrack(track.id, { comp: { ...(track as any).comp, ...patch } } as any);
+                return (
+                    <CompressorWindow
+                        target={track.name || 'Traccia'}
+                        enabled={!!c.enabled}
+                        threshold={c.threshold ?? -18}
+                        ratio={c.ratio ?? 3}
+                        attack={c.attack ?? 0.01}
+                        release={c.release ?? 0.15}
+                        makeup={c.makeup ?? 0}
+                        onToggle={() => upd({ enabled: !c.enabled })}
+                        onChangeThreshold={(v) => upd({ threshold: v })}
+                        onChangeRatio={(v) => upd({ ratio: v })}
+                        onChangeAttack={(v) => upd({ attack: v })}
+                        onChangeRelease={(v) => upd({ release: v })}
+                        onChangeMakeup={(v) => upd({ makeup: v })}
+                        getReduction={() => { const n = accCompNodesRef.current.get(idx); return (n && c.enabled) ? Math.abs(n.reduction) : 0; }}
+                        onClose={() => setCompWindow(null)}
+                    />
+                );
+            })()}
+
+            {/* Menù chiavi (aperto cliccando la chiave sul pentagramma di una traccia ACC) */}
+            {clefMenu && (
+                <>
+                    <div className="fixed inset-0 z-[1100]" onMouseDown={() => setClefMenu(null)} />
+                    <div
+                        className="fixed z-[1101] bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-1"
+                        style={{ left: Math.min(clefMenu.x, window.innerWidth - 210), top: Math.min(clefMenu.y, window.innerHeight - 330) }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 border-b border-slate-700 mb-1 select-none">
+                            Chiave / rigo{clefMenu.name ? ` · ${clefMenu.name}` : ''}
+                        </div>
+                        {ACC_STAFF_OPTIONS.map(opt => (
+                            <button
+                                key={opt.value}
+                                onClick={() => applyClefChoice(clefMenu.trackId, opt)}
+                                className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                </>
             )}
 
             <div className="flex flex-row gap-1 flex-grow min-h-0">
                 <div
                     ref={scoreScrollRef}
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
-                    onMouseDownCapture={handleScoreMouseDownCapture}
+                    onMouseDownCapture={handleScoreMouseDownWithClef}
                     onClick={handleDeselectOnClickOutside}
                 >
                     <div style={{ position: 'relative' }}>

@@ -780,6 +780,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const accTrebleY = staffMode === 'satb_ancient' ? ACC_TREBLE_Y_SATB_ANCIENT : ACC_TREBLE_Y_GRANDSTAFF;
     type AccBlock = {
       trackIdx: number;
+      trackId?: string;
       mode: 'grandstaff' | 'treble_only';
       clef: ClefType;
       name?: string;
@@ -820,7 +821,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         (mode === 'treble_only' && !isDrum)
           ? (octT === -1 ? '8vb' : octT === 1 ? '8va' : undefined)
           : undefined;
-      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation };
+      return { trackIdx: i, trackId: (t as any).id, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -965,6 +966,32 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         rect.setAttribute('rx', '2');
         rect.setAttribute('fill', block.color);
         svgElForLabels.appendChild(rect);
+      }
+
+      // Chiave CLICCABILE (manipolazione diretta sull'oggetto): rettangolo trasparente sopra
+      // la chiave del rigo → il click apre il menù delle chiavi (gestito dal parent via
+      // [data-acc-clef-trackid]). Solo tracce intonate (la batteria ha chiave fissa di percussione).
+      if (!block.isDrum && block.trackId && svgElForLabels) {
+        const cTop = block.treble.getYForLine(0) - 6;
+        const cBottom = (block.bass ?? block.treble).getYForLine(4) + 6;
+        const cx = block.treble.getX();
+        const cw = Math.max(16, Math.min(block.treble.getNoteStartX() - cx, 30));
+        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        hit.setAttribute('x', String(cx));
+        hit.setAttribute('y', String(cTop));
+        hit.setAttribute('width', String(cw));
+        hit.setAttribute('height', String(Math.max(0, cBottom - cTop)));
+        hit.setAttribute('rx', '4');
+        hit.setAttribute('fill', 'transparent');           // invisibile finché non ci passi sopra
+        hit.setAttribute('stroke', 'none');                // niente bordo ereditato dal contesto VexFlow
+        hit.setAttribute('data-acc-clef-trackid', String(block.trackId));
+        hit.setAttribute('data-acc-clef-name', block.name ?? '');
+        (hit as any).style.cursor = 'pointer';
+        (hit as any).style.transition = 'fill 90ms';
+        // Hover: evidenzia la chiave (segnala che è cliccabile) senza riquadro fisso.
+        hit.addEventListener('mouseenter', () => hit.setAttribute('fill', 'rgba(59,130,246,0.18)'));
+        hit.addEventListener('mouseleave', () => hit.setAttribute('fill', 'transparent'));
+        svgElForLabels.appendChild(hit);
       }
     }
 

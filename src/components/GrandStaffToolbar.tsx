@@ -730,17 +730,25 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             // Quando l'area attiva è una traccia ACC, il selettore agisce sullo strumento
             // della TRACCIA (per GM); altrimenti sulla voce SATB selezionata (per soundfont).
             (activeStaffArea === 'accompaniment' && activeAccTrack && onChangeAccTrackInstrument) ? (
-                <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={`Strumento traccia: ${activeAccTrack.name}`}>
-                    <select
-                        className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
-                        value={gmToSoundfont(activeAccTrack.instrumentId)}
-                        onChange={(e) => onChangeAccTrackInstrument(activeAccTrack.id, soundfontToGm(e.target.value))}
-                    >
-                        {INSTRUMENTS.map(opt => (
-                            <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
-                        ))}
-                    </select>
-                </div>
+                activeAccTrack.isDrum ? (
+                    // La batteria suona un KIT (non uno strumento GM) → niente menu strumenti, una
+                    // chip che chiarisce il contesto (il kit Orchestra/Rock si sceglie dal modulo 🥁).
+                    <div className="flex items-center gap-1 p-1 px-2 bg-slate-700 rounded-md text-[10px] font-medium text-amber-300" title={`${activeAccTrack.name} — kit di batteria (il kit si sceglie dal modulo 🥁)`}>
+                        🥁 Drum
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={`Strumento traccia: ${activeAccTrack.name}`}>
+                        <select
+                            className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
+                            value={gmToSoundfont(activeAccTrack.instrumentId)}
+                            onChange={(e) => onChangeAccTrackInstrument(activeAccTrack.id, soundfontToGm(e.target.value))}
+                        >
+                            {INSTRUMENTS.map(opt => (
+                                <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
+                            ))}
+                        </select>
+                    </div>
+                )
             ) : onChangeVoiceInstrument ? (
                 <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md" title={tT('voice_instrument_tooltip', { voice: voiceName(selectedVoice) })}>
                     <select
