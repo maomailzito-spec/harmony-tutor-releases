@@ -273,6 +273,9 @@ export type AccompanimentTrack = {
   /** Compressore INSERT per-traccia: on/off + threshold (dB) + ratio + attack/release (s) + makeup (dB).
    *  Inserito nella catena gain → comp → makeup → panner. Bypass = ratio 1/threshold 0/makeup 0dB. */
   comp?: { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
+  /** EQ INSERT per-traccia a 3 bande (low shelf / mid peak / high shelf), inserito PRIMA del comp
+   *  (gain → eq → comp). Bypass = guadagni a 0 dB. */
+  eq?: { enabled?: boolean; low?: { freq?: number; gain?: number }; mid?: { freq?: number; gain?: number; q?: number }; high?: { freq?: number; gain?: number } };
   /** Quantità di mandata al RIVERBERO globale (send per-canale, 0..1; assente = default ~0.25).
    *  È il "send" sul fader della traccia: il segnale post-fader va anche al bus riverbero in
    *  questa misura. Il tipo di riverbero (preset) e il livello globale stanno sul master. */

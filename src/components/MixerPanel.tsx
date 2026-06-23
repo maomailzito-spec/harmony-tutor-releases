@@ -71,6 +71,16 @@ interface MixerPanelProps {
   onOpenCompressor?: () => void;
   /** Apre il compressore INSERT di una TRACCIA ACC (finestra per-canale). */
   onOpenTrackComp?: (trackId: string) => void;
+  /** Compressore per VOCE SATB: apertura finestra + stato attivo per voce (1-4). */
+  onOpenVoiceComp?: (voice: number) => void;
+  voiceComps?: Record<number, { enabled?: boolean }>;
+  /** EQ per TRACCIA ACC e per VOCE SATB: apertura finestra + stato attivo. */
+  onOpenTrackEq?: (trackId: string) => void;
+  onOpenVoiceEq?: (voice: number) => void;
+  voiceEqs?: Record<number, { enabled?: boolean }>;
+  /** EQ sul master: apertura finestra + stato attivo. */
+  onOpenMasterEq?: () => void;
+  masterEqActive?: boolean;
   onClose: () => void;
 }
 
@@ -468,10 +478,13 @@ const ChannelStrip: React.FC<{
   /** Compressore insert del canale: apertura finestra + stato attivo (evidenzia il pulsante). */
   onOpenComp?: () => void;
   compActive?: boolean;
+  /** EQ insert del canale: apertura finestra + stato attivo. */
+  onOpenEq?: () => void;
+  eqActive?: boolean;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
   muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, midiChannelControl, onRename, color, onChangeColor, getLevel, onContextMenu,
-  expandable, expanded, onToggleExpand, emojiOverride, reverbSend, onChangeReverbSend, pan, onChangePan, onOpenComp, compActive,
+  expandable, expanded, onToggleExpand, emojiOverride, reverbSend, onChangeReverbSend, pan, onChangePan, onOpenComp, compActive, onOpenEq, eqActive,
 }) => (
   <div
     className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
@@ -619,15 +632,28 @@ const ChannelStrip: React.FC<{
       </button>
     )}
 
-    {/* Compressore INSERT del canale (apre la finestra del compressore di questa traccia) */}
-    {onOpenComp && (
-      <button
-        onClick={onOpenComp}
-        title="Compressore della traccia — apri/chiudi"
-        className={`w-full mt-1 rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${compActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'}`}
-      >
-        Comp{compActive ? ' •' : ''}
-      </button>
+    {/* Insert FX del canale: EQ + Comp (aprono le rispettive finestre) */}
+    {(onOpenEq || onOpenComp) && (
+      <div className="flex gap-0.5 w-full mt-1">
+        {onOpenEq && (
+          <button
+            onClick={onOpenEq}
+            title="EQ del canale — apri/chiudi"
+            className={`flex-1 rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${eqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'}`}
+          >
+            EQ{eqActive ? ' •' : ''}
+          </button>
+        )}
+        {onOpenComp && (
+          <button
+            onClick={onOpenComp}
+            title="Compressore del canale — apri/chiudi"
+            className={`flex-1 rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${compActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'}`}
+          >
+            Comp{compActive ? ' •' : ''}
+          </button>
+        )}
+      </div>
     )}
   </div>
 );
@@ -671,7 +697,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   getSatbMasterLevel, getAccMasterLevel, getMixerMasterLevel,
   reverbPreset = 'off', reverbWet = 0, onChangeReverbPreset, onChangeReverbWet,
   voiceReverbSends, onChangeVoiceReverb, voicePans, onChangeVoicePan,
-  compEnabled = false, onOpenCompressor, onOpenTrackComp,
+  compEnabled = false, onOpenCompressor, onOpenTrackComp, onOpenVoiceComp, voiceComps,
+  onOpenTrackEq, onOpenVoiceEq, voiceEqs, onOpenMasterEq, masterEqActive,
   onClose,
 }) => {
   const { t: tT } = useTranslation('toolbar');
@@ -817,6 +844,10 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 onChangeReverbSend={(amt) => onChangeVoiceReverb?.(v, amt)}
                 pan={voicePans?.[v] ?? 0}
                 onChangePan={(p) => onChangeVoicePan?.(v, p)}
+                onOpenComp={onOpenVoiceComp ? () => onOpenVoiceComp(v) : undefined}
+                compActive={!!voiceComps?.[v]?.enabled}
+                onOpenEq={onOpenVoiceEq ? () => onOpenVoiceEq(v) : undefined}
+                eqActive={!!voiceEqs?.[v]?.enabled}
                 midiChannelControl={onChangeVoiceMidiChannel ? (
                   <select
                     value={voiceMidiChannels?.[v] ?? 0}
@@ -924,6 +955,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   onChangePan={(p) => onUpdateTrack(track.id, { pan: p })}
                   onOpenComp={onOpenTrackComp ? () => onOpenTrackComp(track.id) : undefined}
                   compActive={!!track.comp?.enabled}
+                  onOpenEq={onOpenTrackEq ? () => onOpenTrackEq(track.id) : undefined}
+                  eqActive={!!track.eq?.enabled}
                   midiChannelControl={
                     <select
                       value={track.midiChannel ?? 0}
@@ -990,14 +1023,23 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 onChangeVolume={(v) => onChangeMixerMasterVolume?.(v)}
                 getLevel={getMixerMasterLevel}
               />
-              {/* Compressore master: pulsantino solo-testo in linea col master (apre/chiude la finestra) */}
-              <button
-                onClick={onOpenCompressor}
-                title="Compressore (master) — apri/chiudi la finestra"
-                className={`w-full h-5 rounded text-[9px] font-medium transition-colors border ${compEnabled ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}
-              >
-                Comp{compEnabled ? ' •' : ''}
-              </button>
+              {/* FX sul master, in linea col master: EQ + Comp (aprono/chiudono le finestre) */}
+              <div className="flex gap-0.5 w-full">
+                <button
+                  onClick={onOpenMasterEq}
+                  title="EQ (master) — apri/chiudi"
+                  className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${masterEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}
+                >
+                  EQ{masterEqActive ? ' •' : ''}
+                </button>
+                <button
+                  onClick={onOpenCompressor}
+                  title="Compressore (master) — apri/chiudi"
+                  className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${compEnabled ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}
+                >
+                  Comp{compEnabled ? ' •' : ''}
+                </button>
+              </div>
             </div>
             {/* FX: riverbero globale (preset IR + quantità wet) */}
             <div className="flex flex-col items-center px-1.5 py-2 rounded bg-slate-900/60 border border-slate-700">

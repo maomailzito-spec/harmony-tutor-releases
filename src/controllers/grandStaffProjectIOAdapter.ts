@@ -50,6 +50,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	isBpmActive: boolean;
 	isMetronomeOn: boolean;
 	metronomeUnit: any;
+	isSwing?: boolean;
         computedLabelsRef?: { current: any[] | null };
 
         analysisLocked?: boolean;
@@ -87,6 +88,12 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         reverb?: { preset?: 'off' | 'room' | 'hall' | 'plate'; wet?: number };
         /** Compressore sul master: on/off + threshold (dB) + ratio + attack/release (s) + makeup (dB). */
         comp?: { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
+        /** Compressore per-voce SATB (1-4). */
+        voiceComps?: Record<number, { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number }>;
+        /** EQ per-voce SATB (1-4). */
+        voiceEqs?: Record<number, any>;
+        /** EQ sul master. */
+        masterEq?: any;
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -118,6 +125,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		isBpmActive: args.isBpmActive,
 		isMetronomeOn: args.isMetronomeOn,
 		metronomeUnit: args.metronomeUnit,
+		isSwing: !!args.isSwing,
 		toolbarGroupOrder: args.toolbarGroupOrder,
 		analysisLocked: args.analysisLocked,
 		teacherPasswordHash: args.teacherPasswordHash,
@@ -150,6 +158,9 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		...((args.voiceReverbSends && Object.keys(args.voiceReverbSends).length > 0) ? { voiceReverbSends: args.voiceReverbSends } : {}),
 		...(args.reverb ? { reverb: args.reverb } : {}),
 		...(args.comp && args.comp.enabled ? { comp: args.comp } : {}),
+		...((args.voiceComps && Object.keys(args.voiceComps).length > 0) ? { voiceComps: args.voiceComps } : {}),
+		...((args.voiceEqs && Object.keys(args.voiceEqs).length > 0) ? { voiceEqs: args.voiceEqs } : {}),
+		...(args.masterEq && args.masterEq.enabled ? { masterEq: args.masterEq } : {}),
 	};
 
 	// Persist final computed harmony labels for corpus accuracy
@@ -249,6 +260,9 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setMixerMasterVolume?: (v: number) => void;
 	setVoicePans?: (next: Record<number, number>) => void;
 	setVoiceReverbSends?: (next: Record<number, number>) => void;
+	setVoiceComps?: (next: Record<number, any>) => void;
+	setVoiceEqs?: (next: Record<number, any>) => void;
+	setMasterEq?: (next: any) => void;
 	setReverbPreset?: (p: 'off' | 'room' | 'hall' | 'plate') => void;
 	setReverbWet?: (v: number) => void;
 	setCompEnabled?: (v: boolean) => void;
@@ -307,6 +321,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setMixerMasterVolume?.(1);
 		args.setVoicePans?.({});
 		args.setVoiceReverbSends?.({});
+		args.setVoiceComps?.({});
+		args.setVoiceEqs?.({});
+		args.setMasterEq?.({});
 		args.setReverbPreset?.('room');
 		args.setReverbWet?.(0.85);
 		args.setCompEnabled?.(false);
@@ -349,6 +366,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setMixerMasterVolume?.(1);
 	args.setVoicePans?.({});
 	args.setVoiceReverbSends?.({});
+	args.setVoiceComps?.({});
+	args.setVoiceEqs?.({});
+	args.setMasterEq?.({});
 	args.setReverbPreset?.('room');
 	args.setReverbWet?.(0.85);
 	args.setCompEnabled?.(false);
@@ -560,6 +580,8 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (loadedProject.metronomeUnit === 'quarter' || loadedProject.metronomeUnit === 'eighth' || loadedProject.metronomeUnit === 'dotted-quarter') {
 				args.setMetronomeUnit(loadedProject.metronomeUnit);
 			}
+			// Swing (ottavi terzinati, playback): assente nei file vecchi → off.
+			args.setIsSwing(typeof (loadedProject as any).isSwing === 'boolean' ? (loadedProject as any).isSwing : false);
 
 			// Tracce di accompagnamento: retrocompatibilità totale con file vecchi.
 			if (Array.isArray(loadedProject.accompanimentTracks)) {
@@ -599,6 +621,13 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (loadedProject.voiceReverbSends && typeof loadedProject.voiceReverbSends === 'object') {
 				args.setVoiceReverbSends?.(loadedProject.voiceReverbSends as Record<number, number>);
 			}
+			if ((loadedProject as any).voiceComps && typeof (loadedProject as any).voiceComps === 'object') {
+				args.setVoiceComps?.((loadedProject as any).voiceComps);
+			}
+			if ((loadedProject as any).voiceEqs && typeof (loadedProject as any).voiceEqs === 'object') {
+				args.setVoiceEqs?.((loadedProject as any).voiceEqs);
+			}
+			args.setMasterEq?.(((loadedProject as any).masterEq && typeof (loadedProject as any).masterEq === 'object') ? (loadedProject as any).masterEq : {});
 			const rv = (loadedProject as any).reverb;
 			if (rv && typeof rv === 'object') {
 				if (typeof rv.preset === 'string') args.setReverbPreset?.(rv.preset);

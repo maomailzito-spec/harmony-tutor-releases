@@ -58,6 +58,7 @@ import ModulationContextMenu from './ModulationContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
 import MixerPanel from './MixerPanel';
 import CompressorWindow from './CompressorWindow';
+import EqWindow from './EqWindow';
 import DrumPalettePanel from './DrumPalettePanel';
 import NewProjectDialog, { type NewProjectConfig } from './NewProjectDialog';
 
@@ -279,6 +280,25 @@ const applyCompSettings = (comp: DynamicsCompressorNode, makeup: GainNode, c?: C
   comp.attack.value = on ? (c?.attack ?? COMP_DEFAULTS.attack) : 0.003;
   comp.release.value = on ? (c?.release ?? COMP_DEFAULTS.release) : 0.25;
   makeup.gain.value = on ? dbToGain(c?.makeup ?? COMP_DEFAULTS.makeup) : 1;
+};
+// EQ a 3 bande (low shelf / mid peak / high shelf).
+type EqBand = { freq?: number; gain?: number; q?: number };
+type EqSettings = { enabled?: boolean; low?: EqBand; mid?: EqBand; high?: EqBand };
+const EQ_DEFAULTS = { low: { freq: 120, gain: 0 }, mid: { freq: 1000, gain: 0, q: 1 }, high: { freq: 6000, gain: 0 } };
+const applyEqSettings = (low: BiquadFilterNode, mid: BiquadFilterNode, high: BiquadFilterNode, eq?: EqSettings): void => {
+  const on = !!eq?.enabled;
+  low.type = 'lowshelf';  low.frequency.value = eq?.low?.freq ?? EQ_DEFAULTS.low.freq;   low.gain.value = on ? (eq?.low?.gain ?? 0) : 0;
+  mid.type = 'peaking';   mid.frequency.value = eq?.mid?.freq ?? EQ_DEFAULTS.mid.freq;   mid.Q.value = eq?.mid?.q ?? EQ_DEFAULTS.mid.q; mid.gain.value = on ? (eq?.mid?.gain ?? 0) : 0;
+  high.type = 'highshelf'; high.frequency.value = eq?.high?.freq ?? EQ_DEFAULTS.high.freq; high.gain.value = on ? (eq?.high?.gain ?? 0) : 0;
+};
+// Merge profondo di un patch EQ: le bande (low/mid/high) si fondono campo per campo; le altre
+// chiavi (es. enabled) si sovrascrivono. Usato dai due percorsi (voce/traccia).
+const mergeEq = (cur: EqSettings | undefined, patch: any): EqSettings => {
+  const out: any = { ...(cur || {}) };
+  for (const k of Object.keys(patch)) {
+    out[k] = (k === 'low' || k === 'mid' || k === 'high') ? { ...((cur as any)?.[k] || {}), ...patch[k] } : patch[k];
+  }
+  return out;
 };
 const DRUM_LETTER_STEP: Record<string, number> = { c: 0, d: 1, e: 2, f: 3, g: 4, a: 5, b: 6 };
 const drumStepOf = (letter: string, octave: number) => octave * 7 + (DRUM_LETTER_STEP[String(letter).toLowerCase()] ?? 0);
@@ -598,7 +618,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [isMixerOpen, setIsMixerOpen] = useState(false);
     // Finestra compressore: master (bus) oppure una traccia ACC (insert per-canale).
-    const [compWindow, setCompWindow] = useState<{ kind: 'master' } | { kind: 'track'; trackId: string } | null>(null);
+    const [compWindow, setCompWindow] = useState<{ kind: 'master' } | { kind: 'track'; trackId: string } | { kind: 'voice'; voice: number } | null>(null);
+    // Finestra EQ: traccia ACC oppure voce SATB (insert per-canale).
+    const [eqWindow, setEqWindow] = useState<{ kind: 'track'; trackId: string } | { kind: 'voice'; voice: number } | { kind: 'master' } | null>(null);
     // Menù chiavi: si apre cliccando la chiave SUL pentagramma di una traccia ACC.
     const [clefMenu, setClefMenu] = useState<{ x: number; y: number; trackId: string; name: string } | null>(null);
     // Modulo percussioni flottante (apri/chiudi dalla toolbar; si auto-apre quando aggiungi
@@ -681,6 +703,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Compressore INSERT per-traccia ACC: nodo comp + makeup gain, inseriti gain→comp→makeup→panner.
     const accCompNodesRef = useRef<Map<number, DynamicsCompressorNode>>(new Map());
     const accCompMakeupRef = useRef<Map<number, GainNode>>(new Map());
+    // Compressore INSERT per-voce SATB (twin del per-traccia).
+    const voiceCompNodesRef = useRef<Map<number, DynamicsCompressorNode>>(new Map());
+    const voiceCompMakeupRef = useRef<Map<number, GainNode>>(new Map());
+    const [voiceComps, setVoiceComps] = useState<Record<number, CompSettings>>({});
+    const voiceCompsRef = useRef<Record<number, CompSettings>>({});
+    // EQ INSERT a 3 bande per canale (low/mid/high), inserito gain → eq → comp.
+    type EqNodes = { low: BiquadFilterNode; mid: BiquadFilterNode; high: BiquadFilterNode };
+    const accEqRef = useRef<Map<number, EqNodes>>(new Map());
+    const voiceEqRef = useRef<Map<number, EqNodes>>(new Map());
+    const [voiceEqs, setVoiceEqs] = useState<Record<number, EqSettings>>({});
+    const voiceEqsRef = useRef<Record<number, EqSettings>>({});
+    // EQ sul MASTER (3 bande), inserito sorgenti → masterEQ → comp master.
+    const masterEqNodesRef = useRef<EqNodes | null>(null);
+    const [masterEq, setMasterEq] = useState<EqSettings>({});
+    const masterEqRef = useRef<EqSettings>({});
     const [voicePans, setVoicePans] = useState<Record<number, number>>({});
     const voicePansRef = useRef<Record<number, number>>({});
     const meterScratchRef = useRef<Uint8Array>(new Uint8Array(256));
@@ -740,11 +777,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             comp.ratio.value = compEnabledRef.current ? compRatioRef.current : 1;
             comp.connect(mk);
             compressorRef.current = comp;
+            // EQ master PRIMA del compressore: sorgenti → masterEQ(low→mid→high) → comp.
+            const eqLow = ctx.createBiquadFilter(), eqMid = ctx.createBiquadFilter(), eqHigh = ctx.createBiquadFilter();
+            applyEqSettings(eqLow, eqMid, eqHigh, masterEqRef.current);
+            eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(comp);
+            masterEqNodesRef.current = { low: eqLow, mid: eqMid, high: eqHigh };
         }
         if (!satbMasterGainRef.current) {
             const s = ctx.createGain();
             s.gain.value = satbMasterVolumeRef.current;
-            s.connect(compressorRef.current ?? mixerMasterGainRef.current); // → compressore → makeup → master
+            s.connect(masterEqNodesRef.current?.low ?? compressorRef.current ?? mixerMasterGainRef.current); // → EQ → compressore → makeup → master
             const an = ctx.createAnalyser(); an.fftSize = 256; s.connect(an);
             satbMasterAnalyserRef.current = an;
             satbMasterGainRef.current = s;
@@ -752,7 +794,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!accMasterGainRef.current) {
             const a = ctx.createGain();
             a.gain.value = accMasterVolumeRef.current;
-            a.connect(compressorRef.current ?? mixerMasterGainRef.current); // → compressore → makeup → master
+            a.connect(masterEqNodesRef.current?.low ?? compressorRef.current ?? mixerMasterGainRef.current); // → EQ → compressore → makeup → master
             const an = ctx.createAnalyser(); an.fftSize = 256; a.connect(an);
             accMasterAnalyserRef.current = an;
             accMasterGainRef.current = a;
@@ -768,7 +810,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const ret = ctx.createGain();
             ret.gain.value = reverbPresetRef.current === 'off' ? 0 : reverbWetRef.current;
             conv.connect(ret);
-            ret.connect(compressorRef.current ?? mixerMasterGainRef.current!); // riverbero anch'esso nel comp
+            ret.connect(masterEqNodesRef.current?.low ?? compressorRef.current ?? mixerMasterGainRef.current!); // riverbero anch'esso nell'EQ→comp
             reverbConvolverRef.current = conv;
             reverbReturnRef.current = ret;
         }
@@ -808,6 +850,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         if (compMakeupGainRef.current) compMakeupGainRef.current.gain.value = compEnabled ? dbToGain(compMakeup) : 1;
     }, [compEnabled, compThreshold, compRatio, compAttack, compRelease, compMakeup]);
+
+    // EQ master live.
+    useEffect(() => {
+        masterEqRef.current = masterEq;
+        const n = masterEqNodesRef.current;
+        if (n) applyEqSettings(n.low, n.mid, n.high, masterEq);
+    }, [masterEq]);
 
     // Send riverbero per-canale: crea (una volta) il nodo gain del canale e lo collega
     // post-fader → convolver; imposta l'ampiezza dal valore corrente. Idempotente.
@@ -862,8 +911,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         let panner = voicePannersRef.current.get(v);
         if (!panner) { panner = ctx.createStereoPanner(); voicePannersRef.current.set(v, panner); }
         panner.pan.value = voicePansRef.current[v] ?? 0;
-        gain.connect(panner); panner.connect(master);
+        // Catena INSERT per-voce: gain → EQ(low→mid→high) → comp → makeup → panner → master.
+        let eq = voiceEqRef.current.get(v);
+        if (!eq) { eq = { low: ctx.createBiquadFilter(), mid: ctx.createBiquadFilter(), high: ctx.createBiquadFilter() }; voiceEqRef.current.set(v, eq); }
+        applyEqSettings(eq.low, eq.mid, eq.high, voiceEqsRef.current[v]);
+        let comp = voiceCompNodesRef.current.get(v);
+        let mk = voiceCompMakeupRef.current.get(v);
+        if (!comp) { comp = ctx.createDynamicsCompressor(); voiceCompNodesRef.current.set(v, comp); }
+        if (!mk) { mk = ctx.createGain(); voiceCompMakeupRef.current.set(v, mk); }
+        applyCompSettings(comp, mk, voiceCompsRef.current[v]);
+        gain.connect(eq.low); eq.low.connect(eq.mid); eq.mid.connect(eq.high); eq.high.connect(comp); comp.connect(mk); mk.connect(panner); panner.connect(master);
     }, [audioService]);
+    const refreshVoiceEqs = useCallback(() => {
+        voiceEqRef.current.forEach((eq, v) => applyEqSettings(eq.low, eq.mid, eq.high, voiceEqsRef.current[v]));
+    }, []);
+    const handleChangeVoiceEq = useCallback((voice: number, patch: any) => {
+        const next = mergeEq(voiceEqsRef.current[voice], patch);
+        voiceEqsRef.current = { ...voiceEqsRef.current, [voice]: next };
+        setVoiceEqs(prev => ({ ...prev, [voice]: next }));
+        refreshVoiceEqs();
+    }, [refreshVoiceEqs]);
+    // Aggiorna in tempo reale i compressori per-voce + handler (twin del per-traccia).
+    const refreshVoiceComps = useCallback(() => {
+        voiceCompNodesRef.current.forEach((comp, v) => {
+            const mk = voiceCompMakeupRef.current.get(v);
+            if (mk) applyCompSettings(comp, mk, voiceCompsRef.current[v]);
+        });
+    }, []);
+    const handleChangeVoiceComp = useCallback((voice: number, patch: CompSettings) => {
+        const next = { ...(voiceCompsRef.current[voice] || {}), ...patch };
+        voiceCompsRef.current = { ...voiceCompsRef.current, [voice]: next };
+        setVoiceComps(prev => ({ ...prev, [voice]: next }));
+        refreshVoiceComps();
+    }, [refreshVoiceComps]);
     const wireTrackWithPan = useCallback((idx: number, gain: GainNode, track?: AccompanimentTrack) => {
         const ctx = audioService.audioContext; if (!ctx) return;
         const master = accMasterGainRef.current ?? ctx.destination;
@@ -871,14 +951,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!panner) { panner = ctx.createStereoPanner(); accPannersRef.current.set(idx, panner); }
         const t = track ?? latestAccompanimentTracks.current[idx];
         panner.pan.value = (t as any)?.pan ?? 0;
-        // Compressore INSERT per-traccia: catena gain → comp → makeup → panner → master.
+        // Catena INSERT per-traccia: gain → EQ(low→mid→high) → comp → makeup → panner → master.
+        let eq = accEqRef.current.get(idx);
+        if (!eq) { eq = { low: ctx.createBiquadFilter(), mid: ctx.createBiquadFilter(), high: ctx.createBiquadFilter() }; accEqRef.current.set(idx, eq); }
+        applyEqSettings(eq.low, eq.mid, eq.high, (t as any)?.eq);
         let comp = accCompNodesRef.current.get(idx);
         let mk = accCompMakeupRef.current.get(idx);
         if (!comp) { comp = ctx.createDynamicsCompressor(); accCompNodesRef.current.set(idx, comp); }
         if (!mk) { mk = ctx.createGain(); accCompMakeupRef.current.set(idx, mk); }
         applyCompSettings(comp, mk, (t as any)?.comp);
-        gain.connect(comp); comp.connect(mk); mk.connect(panner); panner.connect(master);
+        gain.connect(eq.low); eq.low.connect(eq.mid); eq.mid.connect(eq.high); eq.high.connect(comp); comp.connect(mk); mk.connect(panner); panner.connect(master);
     }, [audioService]);
+    // Aggiorna in tempo reale gli EQ per-traccia dai valori correnti (track.eq).
+    const refreshTrackEqs = useCallback(() => {
+        accEqRef.current.forEach((eq, idx) => applyEqSettings(eq.low, eq.mid, eq.high, (latestAccompanimentTracks.current[idx] as any)?.eq));
+    }, []);
     // Aggiorna in tempo reale i compressori per-traccia dai valori correnti (track.comp).
     const refreshTrackComps = useCallback(() => {
         accCompNodesRef.current.forEach((comp, idx) => {
@@ -946,9 +1033,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             refreshReverbSends(); // send riverbero per-traccia in tempo reale
             refreshPans();        // pan per-traccia in tempo reale
             refreshTrackComps();  // compressore per-traccia in tempo reale
+            refreshTrackEqs();    // EQ per-traccia in tempo reale
             return next;
         }, { undoable: false });
-    }, [refreshAudibilityGains, refreshReverbSends, refreshPans, refreshTrackComps]);
+    }, [refreshAudibilityGains, refreshReverbSends, refreshPans, refreshTrackComps, refreshTrackEqs]);
 
     // Per-voice mixer update (volume / mute), twin of handleUpdateTrack.
     // Applies the change live to the voice gain node so it takes effect immediately,
@@ -4074,6 +4162,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isBpmActive,
                     isMetronomeOn,
                     metronomeUnit,
+                    isSwing,
                     analysisLocked,
                     teacherPasswordHash,
                     analysisLockOptions,
@@ -4085,6 +4174,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     masterVolumes: { satb: satbMasterVolume, acc: accMasterVolume, mixer: mixerMasterVolume },
                     voicePans,
                     voiceReverbSends,
+                    voiceComps,
+                    voiceEqs,
+                    masterEq,
                     reverb: { preset: reverbPreset, wet: reverbWet },
                     comp: { enabled: compEnabled, threshold: compThreshold, ratio: compRatio, attack: compAttack, release: compRelease, makeup: compMakeup },
                     satbName,
@@ -4163,6 +4255,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setMixerMasterVolume,
                     setVoicePans: (next: Record<number, number>) => { voicePansRef.current = next; setVoicePans(next); refreshPans(); },
                     setVoiceReverbSends: (next: Record<number, number>) => { voiceReverbSendsRef.current = next; setVoiceReverbSends(next); refreshReverbSends(); },
+                    setVoiceComps: (next: Record<number, any>) => { voiceCompsRef.current = next; setVoiceComps(next); refreshVoiceComps(); },
+                    setVoiceEqs: (next: Record<number, any>) => { voiceEqsRef.current = next; setVoiceEqs(next); refreshVoiceEqs(); },
+                    setMasterEq: (next: any) => { masterEqRef.current = next || {}; setMasterEq(next || {}); const n = masterEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, next || {}); },
                     setReverbPreset,
                     setReverbWet,
                     setCompEnabled,
@@ -4244,6 +4339,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setIsBpmActive(false);
                 setIsMetronomeOn(false);
                 setMetronomeUnit('quarter');
+                setIsSwing(false);
 
                 try {
                     const maxIdx = importedNotes.reduce((mx, n: any) => Math.max(mx, Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : -1), -1);
@@ -4411,6 +4507,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setIsBpmActive(!!p.isBpmActive);
                 setIsMetronomeOn(!!p.isMetronomeOn);
                 setMetronomeUnit(p.metronomeUnit || 'quarter');
+                setIsSwing(!!(p as any).isSwing);
                 if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
                 if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
                 if (p.toolbarGroupOrder) setToolbarGroupOrder(p.toolbarGroupOrder);
@@ -4456,7 +4553,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setCompAttack((cp && typeof cp.attack === 'number') ? cp.attack : 0.01);
                     setCompRelease((cp && typeof cp.release === 'number') ? cp.release : 0.15);
                     setCompMakeup((cp && typeof cp.makeup === 'number') ? cp.makeup : 0);
-                    refreshPans(); refreshReverbSends();
+                    const vc = (p as any).voiceComps;
+                    const nextVc = (vc && typeof vc === 'object') ? vc : {};
+                    voiceCompsRef.current = nextVc; setVoiceComps(nextVc);
+                    const ve = (p as any).voiceEqs;
+                    const nextVe = (ve && typeof ve === 'object') ? ve : {};
+                    voiceEqsRef.current = nextVe; setVoiceEqs(nextVe);
+                    const me = (p as any).masterEq;
+                    const nextMe = (me && typeof me === 'object') ? me : {};
+                    masterEqRef.current = nextMe; setMasterEq(nextMe);
+                    { const n = masterEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, nextMe); }
+                    refreshPans(); refreshReverbSends(); refreshVoiceComps(); refreshVoiceEqs();
                 }
                 if (typeof (p as any).satbName === 'string') setSatbName((p as any).satbName);
                 setSatbVisible((p as any).satbVisible !== false);
@@ -12062,6 +12169,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     compEnabled={compEnabled}
                     onOpenCompressor={() => setCompWindow(w => (w?.kind === 'master' ? null : { kind: 'master' }))}
                     onOpenTrackComp={(trackId) => setCompWindow(w => (w?.kind === 'track' && w.trackId === trackId ? null : { kind: 'track', trackId }))}
+                    onOpenVoiceComp={(voice) => setCompWindow(w => (w?.kind === 'voice' && w.voice === voice ? null : { kind: 'voice', voice }))}
+                    voiceComps={voiceComps}
+                    onOpenTrackEq={(trackId) => setEqWindow(w => (w?.kind === 'track' && w.trackId === trackId ? null : { kind: 'track', trackId }))}
+                    onOpenVoiceEq={(voice) => setEqWindow(w => (w?.kind === 'voice' && w.voice === voice ? null : { kind: 'voice', voice }))}
+                    voiceEqs={voiceEqs}
+                    onOpenMasterEq={() => setEqWindow(w => (w?.kind === 'master' ? null : { kind: 'master' }))}
+                    masterEqActive={!!masterEq.enabled}
                     onClose={() => setIsMixerOpen(false)}
                 />
             )}
@@ -12108,6 +12222,81 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         onChangeMakeup={(v) => upd({ makeup: v })}
                         getReduction={() => { const n = accCompNodesRef.current.get(idx); return (n && c.enabled) ? Math.abs(n.reduction) : 0; }}
                         onClose={() => setCompWindow(null)}
+                    />
+                );
+            })()}
+            {compWindow && compWindow.kind === 'voice' && (() => {
+                const v = compWindow.voice;
+                const c = voiceComps[v] || {};
+                const upd = (patch: CompSettings) => handleChangeVoiceComp(v, patch);
+                const vName = ({ 1: 'Soprano', 2: 'Contralto', 3: 'Tenore', 4: 'Basso' } as Record<number, string>)[v] || `Voce ${v}`;
+                return (
+                    <CompressorWindow
+                        target={vName}
+                        enabled={!!c.enabled}
+                        threshold={c.threshold ?? -18}
+                        ratio={c.ratio ?? 3}
+                        attack={c.attack ?? 0.01}
+                        release={c.release ?? 0.15}
+                        makeup={c.makeup ?? 0}
+                        onToggle={() => upd({ enabled: !c.enabled })}
+                        onChangeThreshold={(x) => upd({ threshold: x })}
+                        onChangeRatio={(x) => upd({ ratio: x })}
+                        onChangeAttack={(x) => upd({ attack: x })}
+                        onChangeRelease={(x) => upd({ release: x })}
+                        onChangeMakeup={(x) => upd({ makeup: x })}
+                        getReduction={() => { const n = voiceCompNodesRef.current.get(v); return (n && c.enabled) ? Math.abs(n.reduction) : 0; }}
+                        onClose={() => setCompWindow(null)}
+                    />
+                );
+            })()}
+            {eqWindow && eqWindow.kind === 'track' && (() => {
+                const track = accompanimentTracks.find(t => t.id === eqWindow.trackId);
+                if (!track) return null;
+                const e = (track as any).eq || {};
+                return (
+                    <EqWindow
+                        target={track.name || 'Traccia'}
+                        enabled={!!e.enabled}
+                        low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
+                        mid={{ freq: e.mid?.freq ?? 1000, gain: e.mid?.gain ?? 0, q: e.mid?.q ?? 1 }}
+                        high={{ freq: e.high?.freq ?? 6000, gain: e.high?.gain ?? 0 }}
+                        onToggle={() => handleUpdateTrack(track.id, { eq: mergeEq((track as any).eq, { enabled: !e.enabled }) } as any)}
+                        onChange={(patch) => handleUpdateTrack(track.id, { eq: mergeEq((track as any).eq, patch) } as any)}
+                        onClose={() => setEqWindow(null)}
+                    />
+                );
+            })()}
+            {eqWindow && eqWindow.kind === 'voice' && (() => {
+                const v = eqWindow.voice;
+                const e = voiceEqs[v] || {};
+                const vName = ({ 1: 'Soprano', 2: 'Contralto', 3: 'Tenore', 4: 'Basso' } as Record<number, string>)[v] || `Voce ${v}`;
+                return (
+                    <EqWindow
+                        target={vName}
+                        enabled={!!e.enabled}
+                        low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
+                        mid={{ freq: e.mid?.freq ?? 1000, gain: e.mid?.gain ?? 0, q: e.mid?.q ?? 1 }}
+                        high={{ freq: e.high?.freq ?? 6000, gain: e.high?.gain ?? 0 }}
+                        onToggle={() => handleChangeVoiceEq(v, { enabled: !e.enabled })}
+                        onChange={(patch) => handleChangeVoiceEq(v, patch)}
+                        onClose={() => setEqWindow(null)}
+                    />
+                );
+            })()}
+            {eqWindow && eqWindow.kind === 'master' && (() => {
+                const e = masterEq;
+                const upd = (patch: any) => setMasterEq(prev => mergeEq(prev, patch));
+                return (
+                    <EqWindow
+                        target="Master"
+                        enabled={!!e.enabled}
+                        low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
+                        mid={{ freq: e.mid?.freq ?? 1000, gain: e.mid?.gain ?? 0, q: e.mid?.q ?? 1 }}
+                        high={{ freq: e.high?.freq ?? 6000, gain: e.high?.gain ?? 0 }}
+                        onToggle={() => upd({ enabled: !e.enabled })}
+                        onChange={upd}
+                        onClose={() => setEqWindow(null)}
                     />
                 );
             })()}

@@ -23,6 +23,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'isBpmActive',
   'isMetronomeOn',
   'metronomeUnit',
+  'isSwing',
   'toolbarGroupOrder',
   'tempoCurves',
   'analysisLocked',
@@ -36,6 +37,9 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'voiceReverbSends',
   'reverb',
   'comp',
+  'voiceComps',
+  'voiceEqs',
+  'masterEq',
 ] as const;
 
 const KNOWN_KEY_SET: ReadonlySet<string> = new Set(PROJECT_KNOWN_KEYS_V1 as readonly string[]);
@@ -67,6 +71,7 @@ export type ProjectDataV1 = {
   isBpmActive?: boolean;
   isMetronomeOn?: boolean;
   metronomeUnit?: 'quarter' | 'eighth' | 'dotted-quarter';
+  isSwing?: boolean;
 
   toolbarGroupOrder?: any[];
 
@@ -96,6 +101,12 @@ export type ProjectDataV1 = {
   voiceReverbSends?: Record<number, number>;
   reverb?: { preset?: 'off' | 'room' | 'hall' | 'plate'; wet?: number };
   comp?: { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
+  /** Compressore per-voce SATB (1-4). */
+  voiceComps?: Record<number, { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number }>;
+  /** EQ per-voce SATB (1-4), 3 bande. */
+  voiceEqs?: Record<number, any>;
+  /** EQ sul master (3 bande). */
+  masterEq?: any;
 };
 
 export type AnalysisLockOptions = NonNullable<ProjectDataV1['analysisLockOptions']>;
