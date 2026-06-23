@@ -40,6 +40,11 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'voiceComps',
   'voiceEqs',
   'masterEq',
+  'satbEq',
+  'satbComp',
+  'accEq',
+  'accComp',
+  'voiceSoundBanks',
 ] as const;
 
 const KNOWN_KEY_SET: ReadonlySet<string> = new Set(PROJECT_KNOWN_KEYS_V1 as readonly string[]);
@@ -107,6 +112,13 @@ export type ProjectDataV1 = {
   voiceEqs?: Record<number, any>;
   /** EQ sul master (3 bande). */
   masterEq?: any;
+  /** EQ + Comp sui bus di gruppo SATB e ACC. */
+  satbEq?: any;
+  satbComp?: any;
+  accEq?: any;
+  accComp?: any;
+  /** Banco timbrico per voce SATB (1-4): 'orchestral' (FLAC locali, default) o 'gm'. */
+  voiceSoundBanks?: Record<number, 'orchestral' | 'gm'>;
 };
 
 export type AnalysisLockOptions = NonNullable<ProjectDataV1['analysisLockOptions']>;

@@ -36,6 +36,8 @@ interface MixerPanelProps {
   // Accompaniment tracks
   accompanimentTracks: AccompanimentTrack[];
   onUpdateTrack: (trackId: string, updates: Partial<AccompanimentTrack>) => void;
+  /** Riordina una traccia ACC di una posizione (sx/dx) — riordina mixer E score. */
+  onMoveTrack?: (trackId: string, dir: -1 | 1) => void;
   /** Pezzi del kit (midi+label) per una traccia batteria → alimenta i fader per-pezzo. */
   getDrumPieces?: (track: AccompanimentTrack) => { midi: number; label: string }[];
   onAddEmptyTrack: () => void;
@@ -81,6 +83,15 @@ interface MixerPanelProps {
   /** EQ sul master: apertura finestra + stato attivo. */
   onOpenMasterEq?: () => void;
   masterEqActive?: boolean;
+  /** EQ + Comp sui BUS di gruppo SATB e ACC: apertura finestre + stato attivo. */
+  onOpenSatbEq?: () => void;
+  satbEqActive?: boolean;
+  onOpenSatbComp?: () => void;
+  satbCompActive?: boolean;
+  onOpenAccEq?: () => void;
+  accEqActive?: boolean;
+  onOpenAccComp?: () => void;
+  accCompActive?: boolean;
   onClose: () => void;
 }
 
@@ -207,7 +218,9 @@ const ConsoleFader: React.FC<{
   onChange: (gain: number) => void;
   accent: string;
   getLevel?: () => number;
-}> = ({ value, onChange, accent, getLevel }) => {
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+}> = ({ value, onChange, accent, getLevel, onDragStart, onDragEnd }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const pos = gainToPos(value);
 
@@ -221,9 +234,11 @@ const ConsoleFader: React.FC<{
 
   const onPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
+    onDragStart?.();
     setFromClientY(e.clientY);
     const move = (ev: PointerEvent) => setFromClientY(ev.clientY);
     const up = () => {
+      onDragEnd?.();
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
@@ -389,8 +404,8 @@ const SendBar: React.FC<{ value: number; onChange: (v: number) => void; accent: 
         <span className="text-[7px] text-gray-500 tabular-nums">{Math.round(value * 100)}</span>
       </div>
       <div ref={ref} onPointerDown={down} onDoubleClick={() => onChange(0)} title={title ?? `${label}: ${Math.round(value * 100)}%`}
-        style={{ position: 'relative', width: '100%', height: 7, borderRadius: 4, background: '#0b1220', boxShadow: 'inset 0 0 0 1px #334155', cursor: 'ew-resize', touchAction: 'none' }}>
-        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value * 100}%`, borderRadius: 4, background: accent, opacity: 0.85 }} />
+        style={{ position: 'relative', width: '100%', height: 4, borderRadius: 3, background: '#0b1220', boxShadow: 'inset 0 0 0 1px #334155', cursor: 'ew-resize', touchAction: 'none' }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value * 100}%`, borderRadius: 3, background: accent, opacity: 0.85 }} />
       </div>
     </div>
   );
@@ -481,16 +496,33 @@ const ChannelStrip: React.FC<{
   /** EQ insert del canale: apertura finestra + stato attivo. */
   onOpenEq?: () => void;
   eqActive?: boolean;
+  /** Multi-selezione: stato + toggle; callback di drag del fader (per i fader collegati). */
+  selected?: boolean;
+  onToggleSelect?: (e: React.MouseEvent) => void;
+  onVolumeDragStart?: () => void;
+  onVolumeDragEnd?: () => void;
 }> = ({
   tT, label, title, accent, gm, onChangeInstrument, volume, onChangeVolume,
   muted, onToggleMute, solo, onToggleSolo, visible, onToggleVisible, staffControl, midiChannelControl, onRename, color, onChangeColor, getLevel, onContextMenu,
   expandable, expanded, onToggleExpand, emojiOverride, reverbSend, onChangeReverbSend, pan, onChangePan, onOpenComp, compActive, onOpenEq, eqActive,
+  selected, onToggleSelect, onVolumeDragStart, onVolumeDragEnd,
 }) => (
   <div
-    className="flex flex-col items-center gap-1.5 px-1.5 py-2 rounded bg-slate-900/40"
-    style={{ width: 66 }}
+    className={`flex flex-col items-center gap-1.5 px-1.5 py-2 rounded ${selected ? 'bg-slate-800/70' : 'bg-slate-900/40'}`}
+    style={{ width: 66, boxShadow: selected ? `inset 0 0 0 1.5px ${accent ?? '#38bdf8'}` : undefined }}
     onContextMenu={onContextMenu}
   >
+    {/* Indicatore di selezione (per azioni multiple): clic = seleziona/deseleziona */}
+    {onToggleSelect && (
+      <button
+        onClick={onToggleSelect}
+        title={selected ? 'Deseleziona canale' : 'Seleziona canale (per azioni multiple)'}
+        className="flex items-center justify-center w-full -mt-1"
+        style={{ height: 10 }}
+      >
+        <span style={{ width: 9, height: 9, borderRadius: '50%', border: `1.5px solid ${selected ? (accent ?? '#38bdf8') : '#475569'}`, background: selected ? (accent ?? '#38bdf8') : 'transparent', transition: 'all 120ms' }} />
+      </button>
+    )}
     {/* Label — editable input for ACC tracks, static text for voices */}
     {onRename ? (
       <input
@@ -537,18 +569,6 @@ const ChannelStrip: React.FC<{
     {/* MIDI output channel selector (ACC tracks only) */}
     {midiChannelControl}
 
-    {/* Drum Mix toggle (tracce batteria): sotto chiave+MIDI, della stessa larghezza dei select */}
-    {expandable && (
-      <button
-        onClick={onToggleExpand}
-        title={expanded ? 'Nascondi Drum Mix (fader per-pezzo)' : 'Mostra Drum Mix — fader per pezzo (Kick, Snare, Hi-Hat…)'}
-        className={`w-full rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${
-          expanded ? 'bg-slate-700 text-amber-200 border-amber-500/50' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'
-        }`}
-      >
-        Mix {expanded ? '▾' : '▸'}
-      </button>
-    )}
 
     {/* Track color picker (ACC tracks only) */}
     {onChangeColor && (
@@ -608,6 +628,8 @@ const ChannelStrip: React.FC<{
         onChange={onChangeVolume}
         accent={accent ?? '#38bdf8'}
         getLevel={getLevel}
+        onDragStart={onVolumeDragStart}
+        onDragEnd={onVolumeDragEnd}
       />
       <span className="text-[8px] text-gray-300 font-mono leading-none tabular-nums">
         {gainToDb(volume) <= DB_FLOOR + 0.1 ? '−∞' : `${gainToDb(volume) > 0 ? '+' : ''}${gainToDb(volume).toFixed(1)}`} dB
@@ -655,6 +677,19 @@ const ChannelStrip: React.FC<{
         )}
       </div>
     )}
+
+    {/* Drum Mix toggle (tracce batteria): IN FONDO allo strip → i fader restano allineati */}
+    {expandable && (
+      <button
+        onClick={onToggleExpand}
+        title={expanded ? 'Nascondi Drum Mix (fader per-pezzo)' : 'Mostra Drum Mix — fader per pezzo (Kick, Snare, Hi-Hat…)'}
+        className={`w-full mt-1 rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${
+          expanded ? 'bg-slate-700 text-amber-200 border-amber-500/50' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'
+        }`}
+      >
+        Mix {expanded ? '▾' : '▸'}
+      </button>
+    )}
   </div>
 );
 
@@ -690,7 +725,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   voiceInstruments, voiceMidiChannels, onChangeVoiceMidiChannel, voiceVolumes, mutedVoices, soloVoices,
   onChangeVoiceInstrument, onUpdateVoice, onToggleSolo,
   satbVisible, onToggleSatbVisible, satbName, onRenameSatb,
-  accompanimentTracks, onUpdateTrack, getDrumPieces, onAddEmptyTrack, onAddDrumTrack, onDeleteTrack,
+  accompanimentTracks, onUpdateTrack, onMoveTrack, getDrumPieces, onAddEmptyTrack, onAddDrumTrack, onDeleteTrack,
   getVoiceLevel, getTrackLevel,
   satbMasterVolume = 1, accMasterVolume = 1, mixerMasterVolume = 1,
   onChangeSatbMasterVolume, onChangeAccMasterVolume, onChangeMixerMasterVolume,
@@ -699,9 +734,65 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   voiceReverbSends, onChangeVoiceReverb, voicePans, onChangeVoicePan,
   compEnabled = false, onOpenCompressor, onOpenTrackComp, onOpenVoiceComp, voiceComps,
   onOpenTrackEq, onOpenVoiceEq, voiceEqs, onOpenMasterEq, masterEqActive,
+  onOpenSatbEq, satbEqActive, onOpenSatbComp, satbCompActive,
+  onOpenAccEq, accEqActive, onOpenAccComp, accCompActive,
   onClose,
 }) => {
   const { t: tT } = useTranslation('toolbar');
+
+  // --- Multi-selezione canali + operazioni batch (mute/solo/elimina/fader collegati) ---
+  // Chiavi: 'v'+voce (1-4) per le voci SATB, 't'+id per le tracce ACC.
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set());
+  const toggleSelect = useCallback((key: string) => {
+    setSelectedChannels(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  }, []);
+  const clearSelection = useCallback(() => setSelectedChannels(new Set()), []);
+  // Selezione a intervallo (shift-clic): ordine lineare = voci 1-4, poi tracce ACC in fila.
+  // Clic normale = toggle singolo + àncora; shift-clic = aggiunge tutto fra àncora e cliccato.
+  const selectAnchorRef = useRef<string | null>(null);
+  const handleSelect = (key: string, e: React.MouseEvent) => {
+    const ordered = ['v1', 'v2', 'v3', 'v4', ...accompanimentTracks.map(t => 't' + t.id)];
+    if (e.shiftKey && selectAnchorRef.current && selectAnchorRef.current !== key) {
+      const a = ordered.indexOf(selectAnchorRef.current), b = ordered.indexOf(key);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        setSelectedChannels(prev => new Set([...prev, ...ordered.slice(lo, hi + 1)]));
+        return;
+      }
+    }
+    toggleSelect(key);
+    selectAnchorRef.current = key;
+  };
+  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+  const channelVolume = useCallback((key: string): number => key[0] === 'v'
+    ? (voiceVolumes[parseInt(key.slice(1), 10)] ?? 1)
+    : (accompanimentTracks.find(t => t.id === key.slice(1))?.volume ?? 1), [voiceVolumes, accompanimentTracks]);
+  const setChannelVolume = useCallback((key: string, vol: number) => {
+    if (key[0] === 'v') onUpdateVoice(parseInt(key.slice(1), 10), { volume: vol });
+    else onUpdateTrack(key.slice(1), { volume: vol });
+  }, [onUpdateVoice, onUpdateTrack]);
+  // Fader collegati: al pointer-down su un canale selezionato (selezione multipla) fotografo i
+  // volumi; durante il drag applico lo STESSO delta (relativo, stile DAW) a tutti i selezionati.
+  const faderSnapshotRef = useRef<Map<string, number> | null>(null);
+  const onChannelVolumeDragStart = useCallback((key: string) => {
+    if (selectedChannels.has(key) && selectedChannels.size > 1) {
+      const m = new Map<string, number>(); selectedChannels.forEach(k => m.set(k, channelVolume(k))); faderSnapshotRef.current = m;
+    } else faderSnapshotRef.current = null;
+  }, [selectedChannels, channelVolume]);
+  const handleChannelVolume = useCallback((key: string, newVol: number) => {
+    const snap = faderSnapshotRef.current;
+    if (snap && snap.has(key)) {
+      const delta = newVol - (snap.get(key) ?? newVol);
+      snap.forEach((startV, k) => setChannelVolume(k, clamp01(startV + delta)));
+    } else setChannelVolume(key, newVol);
+  }, [setChannelVolume]);
+  const onChannelVolumeDragEnd = useCallback(() => { faderSnapshotRef.current = null; }, []);
+  const selKeys = [...selectedChannels];
+  const isChMuted = (key: string) => key[0] === 'v' ? mutedVoices.has(parseInt(key.slice(1), 10)) : !!accompanimentTracks.find(t => t.id === key.slice(1))?.muted;
+  const isChSolo = (key: string) => key[0] === 'v' ? soloVoices.has(parseInt(key.slice(1), 10)) : !!accompanimentTracks.find(t => t.id === key.slice(1))?.solo;
+  const batchMute = () => { const target = !selKeys.every(isChMuted); selKeys.forEach(k => { if (k[0] === 'v') onUpdateVoice(parseInt(k.slice(1), 10), { muted: target }); else onUpdateTrack(k.slice(1), { muted: target }); }); };
+  const batchSolo = () => { const target = !selKeys.every(isChSolo); selKeys.forEach(k => { if (k[0] === 'v') { const v = parseInt(k.slice(1), 10); if (soloVoices.has(v) !== target) onToggleSolo(v); } else onUpdateTrack(k.slice(1), { solo: target }); }); };
+  const batchDelete = () => { const tk = selKeys.filter(k => k[0] === 't'); if (tk.length === 0) return; if (window.confirm(`Eliminare ${tk.length} track selezionate?`)) { tk.forEach(k => onDeleteTrack(k.slice(1))); clearSelection(); } };
 
   // --- Floating window position + drag (standard mousemove/mouseup pattern) ---
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 120, y: 120 });
@@ -728,9 +819,19 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
     };
   }, []);
 
-  // --- Context menu (delete ACC track) ---
+  // --- Context menu (sposta / copia-incolla impostazioni / elimina ACC track) ---
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; trackId: string } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Clipboard delle IMPOSTAZIONI di traccia (chiave/rigo + strumento + colore + FX), per copia/incolla.
+  const [fxClip, setFxClip] = useState<Partial<AccompanimentTrack> | null>(null);
+  const copyTrackSettings = (track: AccompanimentTrack) => {
+    setFxClip({
+      staffMode: track.staffMode, clef: track.clef, voiced: track.voiced, octaveTranspose: track.octaveTranspose,
+      instrumentId: track.instrumentId, color: track.color,
+      pan: track.pan, reverbSend: track.reverbSend, comp: track.comp, eq: track.eq,
+    });
+    setContextMenu(null);
+  };
 
   // --- "+" add-track menu (replaces the inline +Nuova / +Batteria buttons) ---
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -792,6 +893,18 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         </button>
       </div>
 
+      {/* Barra azioni multi-selezione (compare quando ci sono canali selezionati) */}
+      {selectedChannels.size > 0 && (
+        <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-800/90 border-b border-slate-600 text-[10px]">
+          <span className="text-cyan-300 font-semibold">{selectedChannels.size} selezionati</span>
+          <div className="flex-1" />
+          <button onClick={batchMute} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-red-600/70 text-gray-200 transition-colors">Mute</button>
+          <button onClick={batchSolo} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-yellow-500/80 hover:text-black text-gray-200 transition-colors">Solo</button>
+          <button onClick={batchDelete} title="Elimina le track ACC selezionate (le voci SATB non si eliminano)" className="px-2 py-0.5 rounded bg-slate-700 hover:bg-red-700 text-gray-200 transition-colors">Elimina</button>
+          <button onClick={clearSelection} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-gray-300 transition-colors">Deseleziona</button>
+        </div>
+      )}
+
       {/* Body: VOCI | TRACCE */}
       <div className="flex items-stretch gap-3 p-2 max-w-[80vw] overflow-x-auto">
         {/* VOCI section */}
@@ -834,7 +947,11 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   onChangeVoiceInstrument(v, sf);
                 }}
                 volume={voiceVolumes[v] ?? 1}
-                onChangeVolume={(vol) => onUpdateVoice(v, { volume: vol })}
+                onChangeVolume={(vol) => handleChannelVolume('v' + v, vol)}
+                onVolumeDragStart={() => onChannelVolumeDragStart('v' + v)}
+                onVolumeDragEnd={onChannelVolumeDragEnd}
+                selected={selectedChannels.has('v' + v)}
+                onToggleSelect={(e) => handleSelect('v' + v, e)}
                 muted={mutedVoices.has(v)}
                 onToggleMute={() => onUpdateVoice(v, { muted: !mutedVoices.has(v) })}
                 solo={soloVoices.has(v)}
@@ -869,13 +986,25 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
             ))}
             {/* SATB group master */}
             <div className="w-px bg-slate-700/70 self-stretch mx-0.5" />
-            <MasterStrip
-              label="SATB"
-              accent="#a78bfa"
-              volume={satbMasterVolume}
-              onChangeVolume={(v) => onChangeSatbMasterVolume?.(v)}
-              getLevel={getSatbMasterLevel}
-            />
+            <div className="flex flex-col items-center gap-1">
+              <MasterStrip
+                label="SATB"
+                accent="#a78bfa"
+                volume={satbMasterVolume}
+                onChangeVolume={(v) => onChangeSatbMasterVolume?.(v)}
+                getLevel={getSatbMasterLevel}
+              />
+              {(onOpenSatbEq || onOpenSatbComp) && (
+                <div className="flex gap-0.5 w-full">
+                  {onOpenSatbEq && (
+                    <button onClick={onOpenSatbEq} title="EQ (gruppo SATB) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${satbEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>EQ{satbEqActive ? ' •' : ''}</button>
+                  )}
+                  {onOpenSatbComp && (
+                    <button onClick={onOpenSatbComp} title="Compressore (gruppo SATB) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${satbCompActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>Comp{satbCompActive ? ' •' : ''}</button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -938,7 +1067,11 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                   emojiOverride={track.isDrum ? '🥁' : undefined}
                   onChangeInstrument={(gm) => onUpdateTrack(track.id, { instrumentId: gm })}
                   volume={track.volume}
-                  onChangeVolume={(vol) => onUpdateTrack(track.id, { volume: vol })}
+                  onChangeVolume={(vol) => handleChannelVolume('t' + track.id, vol)}
+                  onVolumeDragStart={() => onChannelVolumeDragStart('t' + track.id)}
+                  onVolumeDragEnd={onChannelVolumeDragEnd}
+                  selected={selectedChannels.has('t' + track.id)}
+                  onToggleSelect={(e) => handleSelect('t' + track.id, e)}
                   muted={track.muted}
                   onToggleMute={() => onUpdateTrack(track.id, { muted: !track.muted })}
                   solo={!!track.solo}
@@ -996,13 +1129,25 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
             )}
             {/* ACC group master */}
             <div className="w-px bg-slate-700/70 self-stretch mx-0.5" />
-            <MasterStrip
-              label="ACC"
-              accent="#2dd4bf"
-              volume={accMasterVolume}
-              onChangeVolume={(v) => onChangeAccMasterVolume?.(v)}
-              getLevel={getAccMasterLevel}
-            />
+            <div className="flex flex-col items-center gap-1">
+              <MasterStrip
+                label="ACC"
+                accent="#2dd4bf"
+                volume={accMasterVolume}
+                onChangeVolume={(v) => onChangeAccMasterVolume?.(v)}
+                getLevel={getAccMasterLevel}
+              />
+              {(onOpenAccEq || onOpenAccComp) && (
+                <div className="flex gap-0.5 w-full">
+                  {onOpenAccEq && (
+                    <button onClick={onOpenAccEq} title="EQ (gruppo ACC) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${accEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>EQ{accEqActive ? ' •' : ''}</button>
+                  )}
+                  {onOpenAccComp && (
+                    <button onClick={onOpenAccComp} title="Compressore (gruppo ACC) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${accCompActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>Comp{accCompActive ? ' •' : ''}</button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -1068,21 +1213,31 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
       </div>
 
       {/* Context menu */}
-      {contextMenu && (
-        <div
-          ref={menuRef}
-          style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 9999 }}
-          className="bg-slate-700 border border-slate-600 rounded shadow-lg py-1"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => handleDelete(contextMenu.trackId)}
-            className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-slate-600 whitespace-nowrap"
+      {contextMenu && (() => {
+        const idx = accompanimentTracks.findIndex(t => t.id === contextMenu.trackId);
+        const track = accompanimentTracks[idx];
+        const itemCls = 'w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-600 whitespace-nowrap disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default';
+        return (
+          <div
+            ref={menuRef}
+            style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 9999 }}
+            className="bg-slate-700 border border-slate-600 rounded shadow-lg py-1 min-w-[180px]"
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            Elimina track
-          </button>
-        </div>
-      )}
+            {onMoveTrack && (
+              <>
+                <button disabled={idx <= 0} onClick={() => { onMoveTrack(contextMenu.trackId, -1); setContextMenu(null); }} className={itemCls}>◀ Sposta a sinistra</button>
+                <button disabled={idx < 0 || idx >= accompanimentTracks.length - 1} onClick={() => { onMoveTrack(contextMenu.trackId, 1); setContextMenu(null); }} className={itemCls}>Sposta a destra ▶</button>
+                <div className="h-px bg-slate-600 my-1" />
+              </>
+            )}
+            <button onClick={() => track && copyTrackSettings(track)} className={itemCls}>Copia impostazioni (chiave + FX)</button>
+            <button disabled={!fxClip} onClick={() => { if (fxClip) onUpdateTrack(contextMenu.trackId, fxClip); setContextMenu(null); }} className={itemCls}>Incolla impostazioni</button>
+            <div className="h-px bg-slate-600 my-1" />
+            <button onClick={() => handleDelete(contextMenu.trackId)} className="w-full text-left px-3 py-1.5 text-[12px] text-red-400 hover:bg-slate-600 whitespace-nowrap">Elimina track</button>
+          </div>
+        );
+      })()}
     </div>
   );
 };

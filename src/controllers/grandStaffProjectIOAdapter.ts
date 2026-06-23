@@ -70,6 +70,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 
         /** Mixer per-voce SATB: strumento, volume (0-1) e mute per voce 1-4. */
         voiceInstruments?: Record<number, string>;
+        voiceSoundBanks?: Record<number, 'orchestral' | 'gm'>;
         voiceMidiChannels?: Record<number, number>;
         voiceVolumes?: Record<number, number>;
         mutedVoices?: Set<number>;
@@ -94,6 +95,10 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         voiceEqs?: Record<number, any>;
         /** EQ sul master. */
         masterEq?: any;
+        satbEq?: any;
+        satbComp?: any;
+        accEq?: any;
+        accComp?: any;
 };
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
@@ -143,6 +148,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		...(args.satbVisible === false ? { satbVisible: false } : {}),
 		// Mixer per-voce SATB (strumento/volume/mute). mutedVoices serializzato come array.
 		...(args.voiceInstruments ? { voiceInstruments: args.voiceInstruments } : {}),
+		...(args.voiceSoundBanks ? { voiceSoundBanks: args.voiceSoundBanks } : {}),
 		...((args.voiceMidiChannels && Object.keys(args.voiceMidiChannels).length > 0) ? { voiceMidiChannels: args.voiceMidiChannels } : {}),
 		...(args.voiceVolumes ? { voiceVolumes: args.voiceVolumes } : {}),
 		...((args.mutedVoices && args.mutedVoices.size > 0)
@@ -161,6 +167,10 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		...((args.voiceComps && Object.keys(args.voiceComps).length > 0) ? { voiceComps: args.voiceComps } : {}),
 		...((args.voiceEqs && Object.keys(args.voiceEqs).length > 0) ? { voiceEqs: args.voiceEqs } : {}),
 		...(args.masterEq && args.masterEq.enabled ? { masterEq: args.masterEq } : {}),
+		...(args.satbEq && args.satbEq.enabled ? { satbEq: args.satbEq } : {}),
+		...(args.satbComp && args.satbComp.enabled ? { satbComp: args.satbComp } : {}),
+		...(args.accEq && args.accEq.enabled ? { accEq: args.accEq } : {}),
+		...(args.accComp && args.accComp.enabled ? { accComp: args.accComp } : {}),
 	};
 
 	// Persist final computed harmony labels for corpus accuracy
@@ -252,6 +262,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setSatbName?: (name: string) => void;
 	setSatbVisible?: (next: boolean) => void;
 	setVoiceInstruments?: (next: Record<number, string>) => void;
+	setVoiceSoundBanks?: (next: Record<number, 'orchestral' | 'gm'>) => void;
 	setVoiceMidiChannels?: (next: Record<number, number>) => void;
 	setVoiceVolumes?: (next: Record<number, number>) => void;
 	setMutedVoices?: (next: Set<number>) => void;
@@ -263,6 +274,10 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setVoiceComps?: (next: Record<number, any>) => void;
 	setVoiceEqs?: (next: Record<number, any>) => void;
 	setMasterEq?: (next: any) => void;
+	setSatbEq?: (next: any) => void;
+	setSatbComp?: (next: any) => void;
+	setAccEq?: (next: any) => void;
+	setAccComp?: (next: any) => void;
 	setReverbPreset?: (p: 'off' | 'room' | 'hall' | 'plate') => void;
 	setReverbWet?: (v: number) => void;
 	setCompEnabled?: (v: boolean) => void;
@@ -313,6 +328,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setSessionUnlocked?.(false);
 		args.setAccompanimentTracks?.([]);
 		args.setVoiceInstruments?.({ 1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano', 3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano' });
+		args.setVoiceSoundBanks?.({ 1: 'orchestral', 2: 'orchestral', 3: 'orchestral', 4: 'orchestral' });
 		args.setVoiceMidiChannels?.({});
 		args.setVoiceVolumes?.({ 1: 1, 2: 1, 3: 1, 4: 1 });
 		args.setMutedVoices?.(new Set());
@@ -324,6 +340,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setVoiceComps?.({});
 		args.setVoiceEqs?.({});
 		args.setMasterEq?.({});
+		args.setSatbEq?.({}); args.setSatbComp?.({}); args.setAccEq?.({}); args.setAccComp?.({});
 		args.setReverbPreset?.('room');
 		args.setReverbWet?.(0.85);
 		args.setCompEnabled?.(false);
@@ -359,6 +376,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setSessionUnlocked?.(false);
 	args.setAccompanimentTracks?.([]);
 	args.setVoiceInstruments?.({ 1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano', 3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano' });
+	args.setVoiceSoundBanks?.({ 1: 'orchestral', 2: 'orchestral', 3: 'orchestral', 4: 'orchestral' });
 	args.setVoiceVolumes?.({ 1: 1, 2: 1, 3: 1, 4: 1 });
 	args.setMutedVoices?.(new Set());
 	args.setSatbMasterVolume?.(1);
@@ -369,6 +387,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setVoiceComps?.({});
 	args.setVoiceEqs?.({});
 	args.setMasterEq?.({});
+	args.setSatbEq?.({}); args.setSatbComp?.({}); args.setAccEq?.({}); args.setAccComp?.({});
 	args.setReverbPreset?.('room');
 	args.setReverbWet?.(0.85);
 	args.setCompEnabled?.(false);
@@ -597,6 +616,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (loadedProject.voiceInstruments && typeof loadedProject.voiceInstruments === 'object') {
 				args.setVoiceInstruments?.(loadedProject.voiceInstruments as Record<number, string>);
 			}
+			if ((loadedProject as any).voiceSoundBanks && typeof (loadedProject as any).voiceSoundBanks === 'object') {
+				args.setVoiceSoundBanks?.((loadedProject as any).voiceSoundBanks as Record<number, 'orchestral' | 'gm'>);
+			}
 			// Canali MIDI per-voce (assente nei file vecchi → resta {} = auto, già impostato sopra).
 			if (loadedProject.voiceMidiChannels && typeof loadedProject.voiceMidiChannels === 'object') {
 				args.setVoiceMidiChannels?.(loadedProject.voiceMidiChannels as Record<number, number>);
@@ -628,6 +650,10 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				args.setVoiceEqs?.((loadedProject as any).voiceEqs);
 			}
 			args.setMasterEq?.(((loadedProject as any).masterEq && typeof (loadedProject as any).masterEq === 'object') ? (loadedProject as any).masterEq : {});
+			args.setSatbEq?.(((loadedProject as any).satbEq && typeof (loadedProject as any).satbEq === 'object') ? (loadedProject as any).satbEq : {});
+			args.setSatbComp?.(((loadedProject as any).satbComp && typeof (loadedProject as any).satbComp === 'object') ? (loadedProject as any).satbComp : {});
+			args.setAccEq?.(((loadedProject as any).accEq && typeof (loadedProject as any).accEq === 'object') ? (loadedProject as any).accEq : {});
+			args.setAccComp?.(((loadedProject as any).accComp && typeof (loadedProject as any).accComp === 'object') ? (loadedProject as any).accComp : {});
 			const rv = (loadedProject as any).reverb;
 			if (rv && typeof rv === 'object') {
 				if (typeof rv.preset === 'string') args.setReverbPreset?.(rv.preset);

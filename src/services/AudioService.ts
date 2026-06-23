@@ -119,6 +119,15 @@ const INSTRUMENT_GAIN: Record<string, number> = {
 const instrumentGain = (instrument: string): number => INSTRUMENT_GAIN[instrument] ?? 1;
 
 /**
+ * Banco GM FORZATO: l'utente può scegliere, per voce/traccia, di suonare il vecchio
+ * campione GM remoto invece dell'orchestrale locale. I FLAC orchestrali sono tarati a
+ * 0.32; i campioni GM (gleitz) hanno un livello loro → gain dedicato. PUNTO DI PARTENZA,
+ * da affinare a orecchio.
+ */
+const GM_GAIN = 0.5;
+const gmGain = (_instrument: string): number => GM_GAIN;
+
+/**
  * Coda di release per-strumento (s). La coda lunga di default (0.5s) su una linea
  * o arpeggio di basso si SOMMA nota dopo nota → "effetto pedale"/accavallamento.
  * Per i bassi una coda corta tronca la nota appena prima della successiva: niente
@@ -356,6 +365,25 @@ export class AudioService {
     this.failedLoads.add(key);
   }
 
+  /** Carica SOLO il campione GM remoto (banco forzato), cache separata `gm::inst::nota`
+   *  così non collide col buffer orchestrale locale dello stesso strumento/nota. */
+  private async _loadGmFile(instrument: string, audioFile: string): Promise<void> {
+    if (!this.audioContext) return;
+    const key = `gm::${instrument}::${audioFile}`;
+    if (this.audioBuffers.has(key) || this.failedLoads.has(key)) return;
+    const url = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/${audioFile}.mp3`;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) { this.failedLoads.add(key); return; }
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength < 100) { this.failedLoads.add(key); return; }
+      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      this.audioBuffers.set(key, audioBuffer);
+    } catch {
+      this.failedLoads.add(key);
+    }
+  }
+
   /** Load one velocity-layer sample (`./sounds/{dir}/{note}_v{layer}.mp3`). */
   private async _loadLayeredSample(dir: string, note: string, layer: number, cacheKey: string): Promise<void> {
     if (!this.audioContext || this.audioBuffers.has(cacheKey) || this.failedLoads.has(cacheKey)) return;
@@ -379,7 +407,12 @@ export class AudioService {
    * `layered` flag tells the caller to skip the velocity→timbre filter (real
    * layers already carry the timbral dynamics).
    */
-  private async _getBufferFor(instrument: string, audioFile: string, velocity?: number): Promise<{ buffer: AudioBuffer | undefined; layered: boolean }> {
+  private async _getBufferFor(instrument: string, audioFile: string, velocity?: number, forceGm?: boolean): Promise<{ buffer: AudioBuffer | undefined; layered: boolean }> {
+    if (forceGm) {
+      const gkey = `gm::${instrument}::${audioFile}`;
+      if (!this.audioBuffers.has(gkey)) await this._loadGmFile(instrument, audioFile);
+      return { buffer: this.audioBuffers.get(gkey), layered: false };
+    }
     const cfg = VELOCITY_LAYERED[instrument];
     if (cfg) {
       const layer = pickVelocityLayer(velocity, cfg.layers);
@@ -398,16 +431,18 @@ export class AudioService {
     return { buffer: this.audioBuffers.get(key), layered: false };
   }
 
-  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean, slotSec?: number }) {
+  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean, slotSec?: number, bank?: 'orchestral' | 'gm' }) {
     if (!this.audioContext) return;
-    const { buffer: audioBuffer, layered } = await this._getBufferFor(instrument, audioFile, options?.velocity);
+    const forceGm = options?.bank === 'gm';
+    const { buffer: audioBuffer, layered } = await this._getBufferFor(instrument, audioFile, options?.velocity, forceGm);
     if (!audioBuffer) return;
 
     const source = this.audioContext.createBufferSource();
     source.buffer = audioBuffer;
     // Sustained instruments: loop the body so a held note doesn't cut off when
     // the sample ends. Loop region = [loopStartSec .. end] (body after attack).
-    const sus = SUSTAINED[instrument];
+    // Banco GM: niente loop sostenuto (è il vecchio campione GM, decade naturale).
+    const sus = forceGm ? undefined : SUSTAINED[instrument];
     if (sus && audioBuffer.duration > sus.loopStartSec + 0.05) {
       source.loop = true;
       source.loopStart = sus.loopStartSec;
@@ -442,7 +477,7 @@ export class AudioService {
     // è polifonia voluta. Gli strumenti che decadono (piano, pizz, mallet, batteria) non
     // sono SUSTAINED → coda naturale invariata.
     let releaseDurationInSeconds = instrumentRelease(instrument);
-    if (SUSTAINED[instrument] && options?.slotSec != null) {
+    if (!forceGm && SUSTAINED[instrument] && options?.slotSec != null) {
       const maxRelease = options.slotSec - noteDurationInSeconds;
       if (maxRelease >= 0) {
         releaseDurationInSeconds = Math.max(0.05, Math.min(releaseDurationInSeconds, maxRelease));
@@ -486,7 +521,7 @@ export class AudioService {
   public playSustainedNote(
     instrument: string,
     audioFile: string,
-    options?: { volume?: number; output?: AudioNode; velocity?: number; applyDrumPieceGain?: boolean },
+    options?: { volume?: number; output?: AudioNode; velocity?: number; applyDrumPieceGain?: boolean; bank?: 'orchestral' | 'gm' },
   ): SustainHandle {
     const handle: SustainHandle = {
       _released: false,
@@ -508,14 +543,15 @@ export class AudioService {
 
     void (async () => {
       if (!this.audioContext) return;
-      const { buffer: audioBuffer, layered } = await this._getBufferFor(instrument, audioFile, options?.velocity);
+      const forceGm = options?.bank === 'gm';
+      const { buffer: audioBuffer, layered } = await this._getBufferFor(instrument, audioFile, options?.velocity, forceGm);
       if (!audioBuffer || handle._released || !this.audioContext) return;
 
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
       // Sustained instruments: loop the body so a long held key keeps ringing
       // (matches the played-back behaviour). Loop region = [loopStartSec .. end].
-      const sus = SUSTAINED[instrument];
+      const sus = forceGm ? undefined : SUSTAINED[instrument];
       if (sus && audioBuffer.duration > sus.loopStartSec + 0.05) {
         source.loop = true;
         source.loopStart = sus.loopStartSec;
@@ -536,7 +572,7 @@ export class AudioService {
       } else {
         source.connect(gainNode);
       }
-      const vol = (options?.volume ?? 1) * instrumentGain(instrument) * (options?.applyDrumPieceGain === false ? 1 : this.drumPieceGain(instrument, audioFile));
+      const vol = (options?.volume ?? 1) * (forceGm ? gmGain(instrument) : instrumentGain(instrument)) * (options?.applyDrumPieceGain === false ? 1 : this.drumPieceGain(instrument, audioFile));
       const now = this.audioContext.currentTime;
       // Instant attack (the sample already starts from silence, so no click): keeps
       // the natural percussive transient and lets the attack scale with velocity.

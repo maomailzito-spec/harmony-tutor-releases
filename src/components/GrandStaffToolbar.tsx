@@ -131,6 +131,10 @@ type GrandStaffToolbarProps = {
      *  strumento della toolbar agisce su di essa invece che sulla voce SATB. */
     activeAccTrack?: { id: string; name: string; instrumentId: number; isDrum?: boolean } | null;
     onChangeAccTrackInstrument?: (trackId: string, gm: number) => void;
+    voiceSoundBank?: 'orchestral' | 'gm';
+    onChangeVoiceSoundBank?: (voice: number, bank: 'orchestral' | 'gm') => void;
+    activeAccTrackBank?: 'orchestral' | 'gm';
+    onChangeAccTrackSoundBank?: (trackId: string, bank: 'orchestral' | 'gm') => void;
     isMixerOpen?: boolean;
     onToggleMixer?: () => void;
     /** Modulo percussioni flottante: il pulsante 🥁 compare solo se esiste una batteria. */
@@ -317,6 +321,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         onChangeVoiceInstrument,
         activeAccTrack,
         onChangeAccTrackInstrument,
+        voiceSoundBank,
+        onChangeVoiceSoundBank,
+        activeAccTrackBank,
+        onChangeAccTrackSoundBank,
         isMixerOpen,
         onToggleMixer,
         hasDrumTrack,
@@ -747,6 +755,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
                             ))}
                         </select>
+                        {onChangeAccTrackSoundBank && (
+                            <select
+                                className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
+                                title="Banco timbrico: Orchestrale (campioni locali) o GM"
+                                value={activeAccTrackBank ?? 'orchestral'}
+                                onChange={(e) => onChangeAccTrackSoundBank(activeAccTrack.id, e.target.value as 'orchestral' | 'gm')}
+                            >
+                                <option value="orchestral">🎻 Orch</option>
+                                <option value="gm">🎹 GM</option>
+                            </select>
+                        )}
                     </div>
                 )
             ) : onChangeVoiceInstrument ? (
@@ -760,6 +779,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             <option key={opt.soundfont} value={opt.soundfont}>{opt.emoji} {tT('instrument_' + opt.i18nKey)}</option>
                         ))}
                     </select>
+                    {onChangeVoiceSoundBank && (
+                        <select
+                            className="bg-slate-800 text-gray-200 text-[10px] rounded px-1 py-0.5 border border-slate-600 cursor-pointer"
+                            title="Banco timbrico: Orchestrale (campioni locali) o GM"
+                            value={voiceSoundBank ?? 'orchestral'}
+                            onChange={(e) => onChangeVoiceSoundBank(selectedVoice, e.target.value as 'orchestral' | 'gm')}
+                        >
+                            <option value="orchestral">🎻 Orch</option>
+                            <option value="gm">🎹 GM</option>
+                        </select>
+                    )}
                 </div>
             ) : null
         ),

@@ -618,9 +618,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [isMixerOpen, setIsMixerOpen] = useState(false);
     // Finestra compressore: master (bus) oppure una traccia ACC (insert per-canale).
-    const [compWindow, setCompWindow] = useState<{ kind: 'master' } | { kind: 'track'; trackId: string } | { kind: 'voice'; voice: number } | null>(null);
+    const [compWindow, setCompWindow] = useState<{ kind: 'master' } | { kind: 'satbMaster' } | { kind: 'accMaster' } | { kind: 'track'; trackId: string } | { kind: 'voice'; voice: number } | null>(null);
     // Finestra EQ: traccia ACC oppure voce SATB (insert per-canale).
-    const [eqWindow, setEqWindow] = useState<{ kind: 'track'; trackId: string } | { kind: 'voice'; voice: number } | { kind: 'master' } | null>(null);
+    const [eqWindow, setEqWindow] = useState<{ kind: 'track'; trackId: string } | { kind: 'voice'; voice: number } | { kind: 'master' } | { kind: 'satbMaster' } | { kind: 'accMaster' } | null>(null);
     // Menù chiavi: si apre cliccando la chiave SUL pentagramma di una traccia ACC.
     const [clefMenu, setClefMenu] = useState<{ x: number; y: number; trackId: string; name: string } | null>(null);
     // Modulo percussioni flottante (apri/chiudi dalla toolbar; si auto-apre quando aggiungi
@@ -718,6 +718,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const masterEqNodesRef = useRef<EqNodes | null>(null);
     const [masterEq, setMasterEq] = useState<EqSettings>({});
     const masterEqRef = useRef<EqSettings>({});
+    // EQ + Comp sui BUS di gruppo SATB e ACC (insert tra il fader di gruppo e l'EQ/comp master globale).
+    const [satbEq, setSatbEq] = useState<EqSettings>({});
+    const busSatbEqRef = useRef<EqSettings>({});
+    const [satbComp, setSatbComp] = useState<CompSettings>({});
+    const busSatbCompRef = useRef<CompSettings>({});
+    const [accEq, setAccEq] = useState<EqSettings>({});
+    const busAccEqRef = useRef<EqSettings>({});
+    const [accComp, setAccComp] = useState<CompSettings>({});
+    const busAccCompRef = useRef<CompSettings>({});
+    const busSatbEqNodesRef = useRef<EqNodes | null>(null);
+    const busSatbCompNodeRef = useRef<DynamicsCompressorNode | null>(null);
+    const busSatbMakeupRef = useRef<GainNode | null>(null);
+    const busAccEqNodesRef = useRef<EqNodes | null>(null);
+    const busAccCompNodeRef = useRef<DynamicsCompressorNode | null>(null);
+    const busAccMakeupRef = useRef<GainNode | null>(null);
     const [voicePans, setVoicePans] = useState<Record<number, number>>({});
     const voicePansRef = useRef<Record<number, number>>({});
     const meterScratchRef = useRef<Uint8Array>(new Uint8Array(256));
@@ -786,7 +801,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!satbMasterGainRef.current) {
             const s = ctx.createGain();
             s.gain.value = satbMasterVolumeRef.current;
-            s.connect(masterEqNodesRef.current?.low ?? compressorRef.current ?? mixerMasterGainRef.current); // → EQ → compressore → makeup → master
+            // INSERT del bus SATB: gain → EQ(low→mid→high) → comp → makeup → EQ/comp master globale.
+            const dest = masterEqNodesRef.current?.low ?? compressorRef.current ?? mixerMasterGainRef.current!;
+            const eqLow = ctx.createBiquadFilter(), eqMid = ctx.createBiquadFilter(), eqHigh = ctx.createBiquadFilter();
+            applyEqSettings(eqLow, eqMid, eqHigh, busSatbEqRef.current);
+            const comp = ctx.createDynamicsCompressor(); const mk = ctx.createGain();
+            applyCompSettings(comp, mk, busSatbCompRef.current);
+            s.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(comp); comp.connect(mk); mk.connect(dest);
+            busSatbEqNodesRef.current = { low: eqLow, mid: eqMid, high: eqHigh };
+            busSatbCompNodeRef.current = comp; busSatbMakeupRef.current = mk;
             const an = ctx.createAnalyser(); an.fftSize = 256; s.connect(an);
             satbMasterAnalyserRef.current = an;
             satbMasterGainRef.current = s;
@@ -794,7 +817,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!accMasterGainRef.current) {
             const a = ctx.createGain();
             a.gain.value = accMasterVolumeRef.current;
-            a.connect(masterEqNodesRef.current?.low ?? compressorRef.current ?? mixerMasterGainRef.current); // → EQ → compressore → makeup → master
+            // INSERT del bus ACC: gain → EQ(low→mid→high) → comp → makeup → EQ/comp master globale.
+            const dest = masterEqNodesRef.current?.low ?? compressorRef.current ?? mixerMasterGainRef.current!;
+            const eqLow = ctx.createBiquadFilter(), eqMid = ctx.createBiquadFilter(), eqHigh = ctx.createBiquadFilter();
+            applyEqSettings(eqLow, eqMid, eqHigh, busAccEqRef.current);
+            const comp = ctx.createDynamicsCompressor(); const mk = ctx.createGain();
+            applyCompSettings(comp, mk, busAccCompRef.current);
+            a.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(comp); comp.connect(mk); mk.connect(dest);
+            busAccEqNodesRef.current = { low: eqLow, mid: eqMid, high: eqHigh };
+            busAccCompNodeRef.current = comp; busAccMakeupRef.current = mk;
             const an = ctx.createAnalyser(); an.fftSize = 256; a.connect(an);
             accMasterAnalyserRef.current = an;
             accMasterGainRef.current = a;
@@ -857,6 +888,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const n = masterEqNodesRef.current;
         if (n) applyEqSettings(n.low, n.mid, n.high, masterEq);
     }, [masterEq]);
+    // EQ + Comp dei bus di gruppo SATB/ACC live.
+    useEffect(() => { busSatbEqRef.current = satbEq; const n = busSatbEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, satbEq); }, [satbEq]);
+    useEffect(() => { busSatbCompRef.current = satbComp; const c = busSatbCompNodeRef.current, mk = busSatbMakeupRef.current; if (c && mk) applyCompSettings(c, mk, satbComp); }, [satbComp]);
+    useEffect(() => { busAccEqRef.current = accEq; const n = busAccEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, accEq); }, [accEq]);
+    useEffect(() => { busAccCompRef.current = accComp; const c = busAccCompNodeRef.current, mk = busAccMakeupRef.current; if (c && mk) applyCompSettings(c, mk, accComp); }, [accComp]);
 
     // Send riverbero per-canale: crea (una volta) il nodo gain del canale e lo collega
     // post-fader → convolver; imposta l'ampiezza dal valore corrente. Idempotente.
@@ -1086,6 +1122,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, []);
 
+    // Riordina una traccia ACC di una posizione (sx/dx): riordina la struttura → mixer E
+    // score (i righi si renderizzano nell'ordine dell'array). I nodi audio per-traccia sono
+    // index-keyed, quindi ri-derivo i parametri (volume/pan/comp/eq/reverb) dalle tracce
+    // riordinate così ogni indice riprende le impostazioni giuste.
+    const handleMoveTrack = useCallback((trackId: string, dir: -1 | 1) => {
+        setAccompanimentTracks(prev => {
+            const i = prev.findIndex(t => t.id === trackId);
+            const j = i + dir;
+            if (i < 0 || j < 0 || j >= prev.length) return prev;
+            const next = [...prev];
+            [next[i], next[j]] = [next[j], next[i]];
+            latestAccompanimentTracks.current = next;
+            refreshAudibilityGains(); refreshPans(); refreshReverbSends(); refreshTrackComps(); refreshTrackEqs();
+            return next;
+        }, { undoable: false });
+    }, [refreshAudibilityGains, refreshPans, refreshReverbSends, refreshTrackComps, refreshTrackEqs]);
+
     const handleAddEmptyTrack = useCallback(() => {
         setAccompanimentTracks(prev => {
             const index = (prev || []).length + 1;
@@ -1297,6 +1350,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [voiceInstruments, setVoiceInstruments] = useState<Record<number, string>>({
         1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano',
         3: 'acoustic_grand_piano', 4: 'acoustic_grand_piano',
+    });
+    // Banco timbrico per voce SATB: 'orchestral' (FLAC locali, default) o 'gm' (soundfont remoto).
+    const [voiceSoundBanks, setVoiceSoundBanks] = useState<Record<number, 'orchestral' | 'gm'>>({
+        1: 'orchestral', 2: 'orchestral', 3: 'orchestral', 4: 'orchestral',
     });
     // Canale MIDI in uscita per voce SATB (1-16). Assente = automatico (voce → canale 1-4).
     // Impostando più voci sullo stesso canale si invia tutto l'SATB a un unico strumento DAW.
@@ -2387,6 +2444,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // metronomeFlashStartTimeoutRef, metronomeFlashTimeoutRef now in usePlayback
     const soloVoicesRef = useRef(soloVoices);
     const voiceInstrumentsRef = useRef(voiceInstruments);
+    const voiceSoundBanksRef = useRef(voiceSoundBanks);
     const voiceVolumesRef = useRef(voiceVolumes);
     const mutedVoicesRef = useRef(mutedVoices);
     // Voce SATB attiva (per il monitor tastiera: suona lo strumento assegnato, non il piano)
@@ -2442,6 +2500,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // isPlayingRef sync now in usePlayback
     useEffect(() => { soloVoicesRef.current = soloVoices; }, [soloVoices]);
     useEffect(() => { voiceInstrumentsRef.current = voiceInstruments; }, [voiceInstruments]);
+    useEffect(() => { voiceSoundBanksRef.current = voiceSoundBanks; }, [voiceSoundBanks]);
     useEffect(() => { voiceVolumesRef.current = voiceVolumes; }, [voiceVolumes]);
     useEffect(() => { mutedVoicesRef.current = mutedVoices; }, [mutedVoices]);
 
@@ -4168,6 +4227,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     analysisLockOptions,
                     accompanimentTracks,
                     voiceInstruments,
+                    voiceSoundBanks,
                     voiceMidiChannels,
                     voiceVolumes,
                     mutedVoices,
@@ -4177,6 +4237,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     voiceComps,
                     voiceEqs,
                     masterEq,
+                    satbEq,
+                    satbComp,
+                    accEq,
+                    accComp,
                     reverb: { preset: reverbPreset, wet: reverbWet },
                     comp: { enabled: compEnabled, threshold: compThreshold, ratio: compRatio, attack: compAttack, release: compRelease, makeup: compMakeup },
                     satbName,
@@ -4247,6 +4311,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setSessionUnlocked,
                     setAccompanimentTracks,
                     setVoiceInstruments,
+                    setVoiceSoundBanks,
                     setVoiceMidiChannels,
                     setVoiceVolumes,
                     setMutedVoices,
@@ -4258,6 +4323,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setVoiceComps: (next: Record<number, any>) => { voiceCompsRef.current = next; setVoiceComps(next); refreshVoiceComps(); },
                     setVoiceEqs: (next: Record<number, any>) => { voiceEqsRef.current = next; setVoiceEqs(next); refreshVoiceEqs(); },
                     setMasterEq: (next: any) => { masterEqRef.current = next || {}; setMasterEq(next || {}); const n = masterEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, next || {}); },
+                    setSatbEq: (next: any) => { busSatbEqRef.current = next || {}; setSatbEq(next || {}); const n = busSatbEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, next || {}); },
+                    setSatbComp: (next: any) => { busSatbCompRef.current = next || {}; setSatbComp(next || {}); const c = busSatbCompNodeRef.current, mk = busSatbMakeupRef.current; if (c && mk) applyCompSettings(c, mk, next || {}); },
+                    setAccEq: (next: any) => { busAccEqRef.current = next || {}; setAccEq(next || {}); const n = busAccEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, next || {}); },
+                    setAccComp: (next: any) => { busAccCompRef.current = next || {}; setAccComp(next || {}); const c = busAccCompNodeRef.current, mk = busAccMakeupRef.current; if (c && mk) applyCompSettings(c, mk, next || {}); },
                     setReverbPreset,
                     setReverbWet,
                     setCompEnabled,
@@ -4403,7 +4472,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
         tonicizationHints, inferredContextSuppressions,
-        accompanimentTracks, voiceInstruments, voiceMidiChannels, voiceVolumes, mutedVoices, satbName, satbVisible,
+        accompanimentTracks, voiceInstruments, voiceSoundBanks, voiceMidiChannels, voiceVolumes, mutedVoices, satbName, satbVisible,
     };
 
     // Auto-save: periodically trigger 'save' if a file path is already set.
@@ -4522,6 +4591,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if ((p as any).voiceInstruments && typeof (p as any).voiceInstruments === 'object') {
                     setVoiceInstruments((p as any).voiceInstruments);
                 }
+                if ((p as any).voiceSoundBanks && typeof (p as any).voiceSoundBanks === 'object') {
+                    setVoiceSoundBanks((p as any).voiceSoundBanks);
+                }
                 setVoiceMidiChannels(((p as any).voiceMidiChannels && typeof (p as any).voiceMidiChannels === 'object') ? (p as any).voiceMidiChannels : {});
                 if ((p as any).voiceVolumes && typeof (p as any).voiceVolumes === 'object') {
                     setVoiceVolumes((p as any).voiceVolumes);
@@ -4563,6 +4635,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const nextMe = (me && typeof me === 'object') ? me : {};
                     masterEqRef.current = nextMe; setMasterEq(nextMe);
                     { const n = masterEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, nextMe); }
+                    { const x = (p as any).satbEq; const nx = (x && typeof x === 'object') ? x : {}; busSatbEqRef.current = nx; setSatbEq(nx); const n = busSatbEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, nx); }
+                    { const x = (p as any).satbComp; const nx = (x && typeof x === 'object') ? x : {}; busSatbCompRef.current = nx; setSatbComp(nx); const c = busSatbCompNodeRef.current, mk = busSatbMakeupRef.current; if (c && mk) applyCompSettings(c, mk, nx); }
+                    { const x = (p as any).accEq; const nx = (x && typeof x === 'object') ? x : {}; busAccEqRef.current = nx; setAccEq(nx); const n = busAccEqNodesRef.current; if (n) applyEqSettings(n.low, n.mid, n.high, nx); }
+                    { const x = (p as any).accComp; const nx = (x && typeof x === 'object') ? x : {}; busAccCompRef.current = nx; setAccComp(nx); const c = busAccCompNodeRef.current, mk = busAccMakeupRef.current; if (c && mk) applyCompSettings(c, mk, nx); }
                     refreshPans(); refreshReverbSends(); refreshVoiceComps(); refreshVoiceEqs();
                 }
                 if (typeof (p as any).satbName === 'string') setSatbName((p as any).satbName);
@@ -5660,7 +5736,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         output.send([0x80 + ch, midi, 0], t0 + durationSec * 1000);
     }, [playbackTransposeSemitones]);
 
-    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, extraTransposeSemitones = 0) => {
+    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, extraTransposeSemitones = 0, soundBankOverride?: 'orchestral' | 'gm') => {
                 if (!isAudioReady || !audioService.audioContext || note.isRest) return;
                 await audioService.ensureAudioIsReady();
                 const midi = (note.midi ?? 0) + playbackTransposeSemitones + extraTransposeSemitones;
@@ -5684,7 +5760,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const v = Number((note as any).voice);
                 const instr = instrumentOverride
                     ?? (v >= 1 && v <= 4 ? (voiceInstrumentsRef.current[v] || 'acoustic_grand_piano') : 'acoustic_grand_piano');
-                await audioService.playNoteForInstrument(instr, midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal, velocity: (note as any).velocity });
+                const bank = soundBankOverride ?? (v >= 1 && v <= 4 ? (voiceSoundBanksRef.current[v] ?? 'orchestral') : 'orchestral');
+                await audioService.playNoteForInstrument(instr, midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal, velocity: (note as any).velocity, bank });
     }, [audioService, isAudioReady, midiToName, playbackTransposeSemitones]);
 
     const playNote = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, midiChannel?: number, extraTransposeSemitones = 0) => {
@@ -6777,7 +6854,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             drumOut = pieceGain;
                         }
                         const slotSecAcc = ((it as any)._slotBeats != null) ? (beatToTime(it.absStartBeat + (it as any)._slotBeats) - beatToTime(it.absStartBeat)) : undefined;
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: drumOut, sustain: true, velocity: n.velocity, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc });
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: drumOut, sustain: true, velocity: n.velocity, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc, bank: isDrum ? 'orchestral' : (((track as any).soundBank) ?? 'orchestral') });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -6804,7 +6881,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         ensureVoiceRevSend(v, voiceGain); // send riverbero per-voce
                     }
                     const slotSecV = ((it as any)._slotBeats != null) ? (beatToTime(it.absStartBeat + (it as any)._slotBeats) - beatToTime(it.absStartBeat)) : undefined;
-                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: voiceGain, sustain: true, velocity: n.velocity, slotSec: slotSecV });
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: voiceGain, sustain: true, velocity: n.velocity, slotSec: slotSecV, bank: voiceSoundBanksRef.current[v] ?? 'orchestral' });
                 });
             }
 
@@ -11842,6 +11919,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const targets = voicesInSel.size > 0 ? [...voicesInSel] : [voice];
                     setVoiceInstruments(prev => { const next = { ...prev }; for (const vv of targets) next[vv] = instrument; return next; });
                 }}
+                voiceSoundBank={voiceSoundBanks[selectedVoice] ?? 'orchestral'}
+                onChangeVoiceSoundBank={(voice: number, bank: 'orchestral' | 'gm') => {
+                    const sel = latestSelectedNoteIds.current;
+                    const voicesInSel = new Set<number>();
+                    if (sel && sel.size > 0) {
+                        for (const n of (latestRawNotes.current || [])) {
+                            if (sel.has(n.id)) { const vv = Number((n as any).voice ?? 1); if (vv >= 1 && vv <= 4) voicesInSel.add(vv); }
+                        }
+                    }
+                    const targets = voicesInSel.size > 0 ? [...voicesInSel] : [voice];
+                    setVoiceSoundBanks(prev => { const next = { ...prev }; for (const vv of targets) next[vv] = bank; return next; });
+                }}
                 activeAccTrack={activeStaffArea === 'accompaniment'
                     ? ((accompanimentTracks || []).find(t => t.id === activeAccTrackId) ?? null)
                     : null}
@@ -11857,6 +11946,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                     const targets = trackIds.size > 0 ? trackIds : new Set([trackId]);
                     setAccompanimentTracks(prev => prev.map(t => targets.has(t.id) ? { ...t, instrumentId: gm } : t));
+                }}
+                activeAccTrackBank={(() => { const tt = (accompanimentTracks || []).find(t => t.id === activeAccTrackId); return (((tt as any)?.soundBank) ?? 'orchestral') as 'orchestral' | 'gm'; })()}
+                onChangeAccTrackSoundBank={(trackId: string, bank: 'orchestral' | 'gm') => {
+                    const sel = latestSelectedNoteIds.current;
+                    const trackIds = new Set<string>();
+                    if (sel && sel.size > 0) {
+                        for (const t of (latestAccompanimentTracks.current || [])) {
+                            if (t.notes.some(n => sel.has(n.id))) trackIds.add(t.id);
+                        }
+                    }
+                    const targets = trackIds.size > 0 ? trackIds : new Set([trackId]);
+                    setAccompanimentTracks(prev => prev.map(t => targets.has(t.id) ? { ...t, soundBank: bank } : t));
                 }}
                 isMixerOpen={isMixerOpen}
                 onToggleMixer={() => setIsMixerOpen(o => !o)}
@@ -12143,6 +12244,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onRenameSatb={(name) => setSatbName(name)}
                     accompanimentTracks={accompanimentTracks}
                     onUpdateTrack={handleUpdateTrack}
+                    onMoveTrack={handleMoveTrack}
                     getDrumPieces={drumPaletteFor}
                     onAddEmptyTrack={handleAddEmptyTrack}
                     onAddDrumTrack={handleAddDrumTrack}
@@ -12176,6 +12278,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     voiceEqs={voiceEqs}
                     onOpenMasterEq={() => setEqWindow(w => (w?.kind === 'master' ? null : { kind: 'master' }))}
                     masterEqActive={!!masterEq.enabled}
+                    onOpenSatbComp={() => setCompWindow(w => (w?.kind === 'satbMaster' ? null : { kind: 'satbMaster' }))}
+                    onOpenAccComp={() => setCompWindow(w => (w?.kind === 'accMaster' ? null : { kind: 'accMaster' }))}
+                    onOpenSatbEq={() => setEqWindow(w => (w?.kind === 'satbMaster' ? null : { kind: 'satbMaster' }))}
+                    onOpenAccEq={() => setEqWindow(w => (w?.kind === 'accMaster' ? null : { kind: 'accMaster' }))}
+                    satbEqActive={!!satbEq.enabled}
+                    satbCompActive={!!satbComp.enabled}
+                    accEqActive={!!accEq.enabled}
+                    accCompActive={!!accComp.enabled}
                     onClose={() => setIsMixerOpen(false)}
                 />
             )}
@@ -12290,6 +12400,85 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return (
                     <EqWindow
                         target="Master"
+                        enabled={!!e.enabled}
+                        low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
+                        mid={{ freq: e.mid?.freq ?? 1000, gain: e.mid?.gain ?? 0, q: e.mid?.q ?? 1 }}
+                        high={{ freq: e.high?.freq ?? 6000, gain: e.high?.gain ?? 0 }}
+                        onToggle={() => upd({ enabled: !e.enabled })}
+                        onChange={upd}
+                        onClose={() => setEqWindow(null)}
+                    />
+                );
+            })()}
+
+            {compWindow && compWindow.kind === 'satbMaster' && (() => {
+                const c = satbComp || {};
+                const upd = (patch: CompSettings) => setSatbComp(prev => ({ ...prev, ...patch }));
+                return (
+                    <CompressorWindow
+                        target="SATB (gruppo)"
+                        enabled={!!c.enabled}
+                        threshold={c.threshold ?? -18}
+                        ratio={c.ratio ?? 3}
+                        attack={c.attack ?? 0.01}
+                        release={c.release ?? 0.15}
+                        makeup={c.makeup ?? 0}
+                        onToggle={() => upd({ enabled: !c.enabled })}
+                        onChangeThreshold={(x) => upd({ threshold: x })}
+                        onChangeRatio={(x) => upd({ ratio: x })}
+                        onChangeAttack={(x) => upd({ attack: x })}
+                        onChangeRelease={(x) => upd({ release: x })}
+                        onChangeMakeup={(x) => upd({ makeup: x })}
+                        getReduction={() => { const n = busSatbCompNodeRef.current; return (n && c.enabled) ? Math.abs(n.reduction) : 0; }}
+                        onClose={() => setCompWindow(null)}
+                    />
+                );
+            })()}
+            {compWindow && compWindow.kind === 'accMaster' && (() => {
+                const c = accComp || {};
+                const upd = (patch: CompSettings) => setAccComp(prev => ({ ...prev, ...patch }));
+                return (
+                    <CompressorWindow
+                        target="ACC (gruppo)"
+                        enabled={!!c.enabled}
+                        threshold={c.threshold ?? -18}
+                        ratio={c.ratio ?? 3}
+                        attack={c.attack ?? 0.01}
+                        release={c.release ?? 0.15}
+                        makeup={c.makeup ?? 0}
+                        onToggle={() => upd({ enabled: !c.enabled })}
+                        onChangeThreshold={(x) => upd({ threshold: x })}
+                        onChangeRatio={(x) => upd({ ratio: x })}
+                        onChangeAttack={(x) => upd({ attack: x })}
+                        onChangeRelease={(x) => upd({ release: x })}
+                        onChangeMakeup={(x) => upd({ makeup: x })}
+                        getReduction={() => { const n = busAccCompNodeRef.current; return (n && c.enabled) ? Math.abs(n.reduction) : 0; }}
+                        onClose={() => setCompWindow(null)}
+                    />
+                );
+            })()}
+            {eqWindow && eqWindow.kind === 'satbMaster' && (() => {
+                const e = satbEq;
+                const upd = (patch: any) => setSatbEq(prev => mergeEq(prev, patch));
+                return (
+                    <EqWindow
+                        target="SATB (gruppo)"
+                        enabled={!!e.enabled}
+                        low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
+                        mid={{ freq: e.mid?.freq ?? 1000, gain: e.mid?.gain ?? 0, q: e.mid?.q ?? 1 }}
+                        high={{ freq: e.high?.freq ?? 6000, gain: e.high?.gain ?? 0 }}
+                        onToggle={() => upd({ enabled: !e.enabled })}
+                        onChange={upd}
+                        onClose={() => setEqWindow(null)}
+                    />
+                );
+            })()}
+            {eqWindow && eqWindow.kind === 'accMaster' && (() => {
+                const e = accEq;
+                const upd = (patch: any) => setAccEq(prev => mergeEq(prev, patch));
+                return (
+                    <EqWindow
+                        target="ACC (gruppo)"
                         enabled={!!e.enabled}
                         low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
                         mid={{ freq: e.mid?.freq ?? 1000, gain: e.mid?.gain ?? 0, q: e.mid?.q ?? 1 }}

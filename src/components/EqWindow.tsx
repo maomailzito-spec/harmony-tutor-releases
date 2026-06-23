@@ -97,8 +97,18 @@ const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w:
       <path d={area} fill="url(#eqfill)" />
       <polyline points={pts.join(' ')} fill="none" stroke="#dbeafe" strokeWidth="1" strokeLinejoin="round" />
       {bands.map(({ key, b }) => (
-        <circle key={key} cx={fToX(b.freq)} cy={gToY(b.gain)} r="6" fill={BAND_COLORS[key]} fillOpacity={enabled ? 0.9 : 0.4} stroke="#0b1220" strokeWidth="1.5"
-          style={{ cursor: enabled ? 'grab' : 'default' }} onPointerDown={enabled ? onDown(key) : undefined} />
+        <g key={key}>
+          {/* hit-area generosa: drag su tutte le bande, scroll = Q solo sul mid (peaking) */}
+          <circle cx={fToX(b.freq)} cy={gToY(b.gain)} r="13" fill="transparent"
+            style={{ cursor: enabled ? 'grab' : 'default' }}
+            onPointerDown={enabled ? onDown(key) : undefined}
+            onWheel={enabled && key === 'mid' ? (e) => {
+              e.stopPropagation();
+              const nq = Math.max(0.3, Math.min(8, (mid.q ?? 1) - Math.sign(e.deltaY) * 0.2));
+              onChange({ mid: { q: Math.round(nq * 10) / 10 } } as any);
+            } : undefined} />
+          <circle cx={fToX(b.freq)} cy={gToY(b.gain)} r="6" fill={BAND_COLORS[key]} fillOpacity={enabled ? 0.9 : 0.4} stroke="#0b1220" strokeWidth="1.5" style={{ pointerEvents: 'none' }} />
+        </g>
       ))}
     </svg>
   );

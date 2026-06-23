@@ -227,6 +227,9 @@ export type AccompanimentTrack = {
   name: string;
   /** Strumento General MIDI (0-127) */
   instrumentId: number;
+  /** Banco timbrico della traccia: 'orchestral' (FLAC locali, default) o 'gm'
+   *  (vecchio soundfont GM remoto). Scelta utente per-traccia. Ignorato per batteria. */
+  soundBank?: 'orchestral' | 'gm';
   /** Note della traccia — stessa struttura di StaffNote ma con voice sempre = 0 */
   notes: StaffNote[];
   /** Traccia silenziata */
