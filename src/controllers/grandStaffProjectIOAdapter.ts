@@ -626,9 +626,8 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (loadedProject.voiceVolumes && typeof loadedProject.voiceVolumes === 'object') {
 				args.setVoiceVolumes?.(loadedProject.voiceVolumes as Record<number, number>);
 			}
-			if (Array.isArray(loadedProject.mutedVoices)) {
-				args.setMutedVoices?.(new Set(loadedProject.mutedVoices as number[]));
-			}
+			// Azzera SEMPRE il mute al load (file pre-mixer privo del campo → niente mute fantasma ereditato).
+			args.setMutedVoices?.(Array.isArray(loadedProject.mutedVoices) ? new Set(loadedProject.mutedVoices as number[]) : new Set());
 			// Master del mixer (assente nei file vecchi → restano 1, già impostati sopra).
 			const mv = (loadedProject as any).masterVolumes;
 			if (mv && typeof mv === 'object') {

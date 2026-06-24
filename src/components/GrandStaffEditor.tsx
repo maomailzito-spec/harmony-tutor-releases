@@ -4598,9 +4598,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if ((p as any).voiceVolumes && typeof (p as any).voiceVolumes === 'object') {
                     setVoiceVolumes((p as any).voiceVolumes);
                 }
-                if (Array.isArray((p as any).mutedVoices)) {
-                    setMutedVoices(new Set((p as any).mutedVoices as number[]));
-                }
+                // Azzera SEMPRE mute/solo al caricamento: un file pre-mixer (privo di questi campi)
+                // altrimenti EREDITA lo stato mute/solo della sessione precedente → "mute fantasma"
+                // = silenzio totale finché non si tocca il mixer. (soloVoices è transitorio, non salvato.)
+                setMutedVoices(Array.isArray((p as any).mutedVoices) ? new Set((p as any).mutedVoices as number[]) : new Set());
+                setSoloVoices(new Set());
                 {
                     const mv = (p as any).masterVolumes;
                     setSatbMasterVolume(typeof mv?.satb === 'number' ? mv.satb : 1);
