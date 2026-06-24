@@ -1,3 +1,45 @@
+## Novità in v1.2.0
+
+### 🥁 Batteria evoluta
+- **Traccia di batteria a 2 voci con stem separati**, pause indipendenti per layer e **Drum Mix per-pezzo in tempo reale** (cassa, rullante, charleston… regolabili mentre suona).
+
+### 🎚️ Mixer — suite effetti completa
+- **Catena FX per ogni canale**: pan, mandata **riverbero** (Room / Hall / Plate), **EQ a 3 bande** e **compressore**, in finestre flottanti stile plug-in (grafici, meter di riduzione; rotella sul punto centrale dell'EQ = regola il Q). Gli stessi EQ e compressore sono disponibili anche sul **master** e — novità della 1.2.0 — **sui bus di gruppo SATB e ACC**, per modellare coro e accompagnamento separatamente.
+- **Chiave selezionabile direttamente cliccando sul pentagramma**.
+
+### 🎻🎹 Suoni — scelta del banco
+- **Banco timbrico per voce e traccia: Orchestrale o GM**, scegli e mescola liberamente (es. GM sulle parti interne, Orchestrale sulla melodia).
+
+### ✅ Selezione multipla nel mixer
+- **Canali selezionabili** (pallino in cima allo strip, **Shift-clic** per intervalli) con **azioni d'insieme**: Mute, Solo, Elimina; e **fader collegati** (trascinandone uno, si muovono insieme tutti i selezionati mantenendo il bilanciamento).
+
+### 🐛 Fix
+- Violino: livellata la fascia **B–D** (copre una "buca" timbrica percepita).
+- **Mute/Solo azzerati all'apertura di un progetto**: i file vecchi (pre-mixer) non restano più silenziati ereditando lo stato mute/solo della sessione precedente.
+
+## Novità in v1.1.0
+
+### 🎚️ Mixer unificato
+- Nuova **finestra mixer flottante** per le voci SATB e le tracce ACC: **colore** e **rigo/chiave** per traccia, **fader master** SATB / ACC / MIX, menu **"+"** per aggiungere tracce, **canale MIDI in uscita** per ciascun canale.
+
+### 🎹 Tracce di accompagnamento (ACC)
+- Editing manuale completo, **pattern di inserimento** (Block / Arpeggi), **copia/incolla cross-track** SATB ⇄ ACC, **copia di un'intera voce SATB**, **chiavi traspositrici 8vb** (basso e chitarra).
+
+### ⏺ MIDI e dinamiche
+- **Registrazione MIDI in tempo reale** con quantizzazione, **dinamiche (velocity)**, **import MIDI** migliorato, **output MIDI esterno** (Program Change per voce verso la DAW).
+
+### 🎼 Analisi e tempo
+- **Analisi armonica guidata dall'accompagnamento**; curve di **Rallentando / Accelerando**.
+
+### 🖨️ Export e stampa
+- **Export MIDI** e **stampa/PDF** con impaginazione e guida ai salti pagina.
+
+### 🆕 Altro
+- **Nuovo progetto** con scelta tracce e template; menu **"Informazioni…"**; nuovi suoni per la **sezione ritmica** (bassi).
+
+### 🔧 Sotto il cofano
+- Riscrittura **"spelling-first"** del riconoscimento accordi; vari fix, inclusi quelli di **licenza su Windows**.
+
 ## Novità in v1.0.17
 
 ### 🐛 Fix critico attivazione su Windows (trial scaduto)

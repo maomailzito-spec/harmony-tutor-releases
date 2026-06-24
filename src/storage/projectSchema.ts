@@ -23,6 +23,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'isBpmActive',
   'isMetronomeOn',
   'metronomeUnit',
+  'isSwing',
   'toolbarGroupOrder',
   'tempoCurves',
   'analysisLocked',
@@ -32,6 +33,18 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'satbName',
   'satbVisible',
   'masterVolumes',
+  'voicePans',
+  'voiceReverbSends',
+  'reverb',
+  'comp',
+  'voiceComps',
+  'voiceEqs',
+  'masterEq',
+  'satbEq',
+  'satbComp',
+  'accEq',
+  'accComp',
+  'voiceSoundBanks',
 ] as const;
 
 const KNOWN_KEY_SET: ReadonlySet<string> = new Set(PROJECT_KNOWN_KEYS_V1 as readonly string[]);
@@ -63,6 +76,7 @@ export type ProjectDataV1 = {
   isBpmActive?: boolean;
   isMetronomeOn?: boolean;
   metronomeUnit?: 'quarter' | 'eighth' | 'dotted-quarter';
+  isSwing?: boolean;
 
   toolbarGroupOrder?: any[];
 
@@ -86,6 +100,25 @@ export type ProjectDataV1 = {
   /** Volumi dei fader MASTER del mixer (gain lineare 0..1): gruppo SATB, gruppo ACC
    *  e master globale. Assenti = 1 (0 dB). */
   masterVolumes?: { satb?: number; acc?: number; mixer?: number };
+
+  /** FX mixer: pan (-1..+1) e mandata riverbero (0..1) per voce SATB; riverbero globale. */
+  voicePans?: Record<number, number>;
+  voiceReverbSends?: Record<number, number>;
+  reverb?: { preset?: 'off' | 'room' | 'hall' | 'plate'; wet?: number };
+  comp?: { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
+  /** Compressore per-voce SATB (1-4). */
+  voiceComps?: Record<number, { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number }>;
+  /** EQ per-voce SATB (1-4), 3 bande. */
+  voiceEqs?: Record<number, any>;
+  /** EQ sul master (3 bande). */
+  masterEq?: any;
+  /** EQ + Comp sui bus di gruppo SATB e ACC. */
+  satbEq?: any;
+  satbComp?: any;
+  accEq?: any;
+  accComp?: any;
+  /** Banco timbrico per voce SATB (1-4): 'orchestral' (FLAC locali, default) o 'gm'. */
+  voiceSoundBanks?: Record<number, 'orchestral' | 'gm'>;
 };
 
 export type AnalysisLockOptions = NonNullable<ProjectDataV1['analysisLockOptions']>;

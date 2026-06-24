@@ -227,6 +227,9 @@ export type AccompanimentTrack = {
   name: string;
   /** Strumento General MIDI (0-127) */
   instrumentId: number;
+  /** Banco timbrico della traccia: 'orchestral' (FLAC locali, default) o 'gm'
+   *  (vecchio soundfont GM remoto). Scelta utente per-traccia. Ignorato per batteria. */
+  soundBank?: 'orchestral' | 'gm';
   /** Note della traccia — stessa struttura di StaffNote ma con voice sempre = 0 */
   notes: StaffNote[];
   /** Traccia silenziata */
@@ -267,6 +270,24 @@ export type AccompanimentTrack = {
   /** Quale kit suona una traccia batteria: 'orchestral' (VSCO2, default) o 'rock' (Salamander).
    *  Determina il soundfont ('drums' vs 'drumkit'), la mappa pezzi e le posizioni sul rigo. */
   drumKit?: 'orchestral' | 'rock';
+  /** Posizione stereo (pan) del canale: -1 = tutto a sinistra, 0 = centro (default/assente), +1 = destra.
+   *  Applicata da uno StereoPannerNode tra il gain di traccia e il master. Solo suono. */
+  pan?: number;
+  /** Compressore INSERT per-traccia: on/off + threshold (dB) + ratio + attack/release (s) + makeup (dB).
+   *  Inserito nella catena gain → comp → makeup → panner. Bypass = ratio 1/threshold 0/makeup 0dB. */
+  comp?: { enabled?: boolean; threshold?: number; ratio?: number; attack?: number; release?: number; makeup?: number };
+  /** EQ INSERT per-traccia a 3 bande (low shelf / mid peak / high shelf), inserito PRIMA del comp
+   *  (gain → eq → comp). Bypass = guadagni a 0 dB. */
+  eq?: { enabled?: boolean; low?: { freq?: number; gain?: number }; mid?: { freq?: number; gain?: number; q?: number }; high?: { freq?: number; gain?: number } };
+  /** Quantità di mandata al RIVERBERO globale (send per-canale, 0..1; assente = default ~0.25).
+   *  È il "send" sul fader della traccia: il segnale post-fader va anche al bus riverbero in
+   *  questa misura. Il tipo di riverbero (preset) e il livello globale stanno sul master. */
+  reverbSend?: number;
+  /** Solo batteria: volume PER-PEZZO (chiave = nota GM del pezzo, es. 36=cassa, 42=charleston),
+   *  gain lineare ~0..1.5, default 1 (assente = 1). Permette di bilanciare i singoli elementi
+   *  del kit (cassa/rullante su, charleston giù) dal mixer batteria, oltre al volume di traccia.
+   *  Moltiplica il gain di playback del singolo colpo; non tocca l'export MIDI. */
+  pieceVolumes?: Record<number, number>;
   /** Canale MIDI in USCITA (1-16) verso l'uscita MIDI esterna. Se assente/0 = automatico
    *  (batteria → 10; tracce intonate → da 5 in su saltando il 10). Permette di instradare
    *  ogni traccia su un canale preciso in un DAW esterno (es. Logic). */

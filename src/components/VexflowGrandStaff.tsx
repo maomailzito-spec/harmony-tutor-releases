@@ -242,6 +242,11 @@ const defaultRestLineForVoice = (voice: number, clef: ClefType): number | null =
   } else if (clef === 'bass') {
     if (voice === 3) return 5; // Tenor: above lower staff (between staves)
     if (voice === 4) return 1; // Bass: inside lower staff
+  } else if ((clef as any) === 'percussion') {
+    // Batteria a 2 voci: pausa MANI (voce 1) nella metà ALTA, pausa PIEDI (voce 2)
+    // nella metà BASSA del rigo → si legge a quale layer appartiene.
+    if (voice === 2) return 1; // piedi (cassa): parte bassa
+    return 3;                  // mani (voce 1, e fallback voce 0): parte alta
   }
   return null;
 };
@@ -278,6 +283,12 @@ const DRUM_VEX_KEY_ROCK: Record<number, string> = {
   56: 'd/5/x2',                                    // cowbell (✕)
 };
 const isPercussionClef = (clef: ClefType): boolean => (clef as any) === 'percussion';
+// Voce/gambo convenzionale del pezzo di batteria: PIEDI (gran cassa 35/36, charleston a
+// pedale 44) → voce 2 (gambi GIÙ); MANI (rullante, charleston, piatti, tom…) → voce 1
+// (gambi SU). Così i gambi sono COERENTI per layer invece di seguire l'altezza sul rigo
+// (che dava gambi misti e confusi). Le note vecchie a voce 0 ricevono questa voce in resa.
+const DRUM_FOOT_PIECES = new Set<number>([35, 36, 44]);
+const drumPieceVoice = (midi: number): number => (DRUM_FOOT_PIECES.has(Number(midi)) ? 2 : 1);
 const drumPieceToVexKey = (midi: number, kit?: string): string =>
   ((kit === 'rock' ? DRUM_VEX_KEY_ROCK : DRUM_VEX_KEY)[Number(midi)] ?? 'c/5');
 const vexKeyForNote = (n: StaffNote, clef: ClefType): string =>
@@ -769,6 +780,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const accTrebleY = staffMode === 'satb_ancient' ? ACC_TREBLE_Y_SATB_ANCIENT : ACC_TREBLE_Y_GRANDSTAFF;
     type AccBlock = {
       trackIdx: number;
+      trackId?: string;
       mode: 'grandstaff' | 'treble_only';
       clef: ClefType;
       name?: string;
@@ -809,7 +821,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         (mode === 'treble_only' && !isDrum)
           ? (octT === -1 ? '8vb' : octT === 1 ? '8va' : undefined)
           : undefined;
-      return { trackIdx: i, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation };
+      return { trackIdx: i, trackId: (t as any).id, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -954,6 +966,32 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         rect.setAttribute('rx', '2');
         rect.setAttribute('fill', block.color);
         svgElForLabels.appendChild(rect);
+      }
+
+      // Chiave CLICCABILE (manipolazione diretta sull'oggetto): rettangolo trasparente sopra
+      // la chiave del rigo → il click apre il menù delle chiavi (gestito dal parent via
+      // [data-acc-clef-trackid]). Solo tracce intonate (la batteria ha chiave fissa di percussione).
+      if (!block.isDrum && block.trackId && svgElForLabels) {
+        const cTop = block.treble.getYForLine(0) - 6;
+        const cBottom = (block.bass ?? block.treble).getYForLine(4) + 6;
+        const cx = block.treble.getX();
+        const cw = Math.max(16, Math.min(block.treble.getNoteStartX() - cx, 30));
+        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        hit.setAttribute('x', String(cx));
+        hit.setAttribute('y', String(cTop));
+        hit.setAttribute('width', String(cw));
+        hit.setAttribute('height', String(Math.max(0, cBottom - cTop)));
+        hit.setAttribute('rx', '4');
+        hit.setAttribute('fill', 'transparent');           // invisibile finché non ci passi sopra
+        hit.setAttribute('stroke', 'none');                // niente bordo ereditato dal contesto VexFlow
+        hit.setAttribute('data-acc-clef-trackid', String(block.trackId));
+        hit.setAttribute('data-acc-clef-name', block.name ?? '');
+        (hit as any).style.cursor = 'pointer';
+        (hit as any).style.transition = 'fill 90ms';
+        // Hover: evidenzia la chiave (segnala che è cliccabile) senza riquadro fisso.
+        hit.addEventListener('mouseenter', () => hit.setAttribute('fill', 'rgba(59,130,246,0.18)'));
+        hit.addEventListener('mouseleave', () => hit.setAttribute('fill', 'transparent'));
+        svgElForLabels.appendChild(hit);
       }
     }
 
@@ -3629,6 +3667,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const bn = trackNotes.filter(n => effClef(n) === 'bass');
             if (tn.length > 0) drawNotesAtX(tn, block.treble, 'treble', !!block.voiced);
             if (bn.length > 0) drawNotesAtX(bn, block.bass, 'bass', !!block.voiced);
+          } else if (block.isDrum) {
+            // Batteria a 2 voci: ogni pezzo va in voce 1 (mani → gambi su) o voce 2
+            // (piedi → gambi giù), così i gambi sono coerenti e i due layer si travano
+            // separatamente. Le note vecchie a voce 0 ricevono la voce dal pezzo. Le
+            // pause restano com'erano. isVoicedAcc=true: note simultanee di voci diverse
+            // restano a gambi separati (charleston su + cassa giù), mentre i colpi della
+            // STESSA voce allo stesso attacco si fondono in un solo gambo (testa multipla).
+            const single = trackNotes.map(n => {
+              if (n.isRest) return { ...n, clef: block.clef, __drumKit: block.drumKit } as any;
+              const v = Number((n as any).voice);
+              const dv = (v === 1 || v === 2) ? v : drumPieceVoice(Number((n as any).midi));
+              return { ...n, clef: block.clef, __drumKit: block.drumKit, voice: dv } as any;
+            });
+            drawNotesAtX(single, block.treble, block.clef, true);
           } else {
             // single staff: position all notes by the block's clef. Per la batteria taggo
             // ogni nota col KIT del blocco, così le posizioni sul rigo seguono la mappa giusta.
