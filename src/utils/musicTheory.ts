@@ -9775,6 +9775,22 @@ export function applyHarmonyRules(
                 };
 
                 const windowLen = beatsPerMeasLocal * 2;
+
+                // Pitch-class of a key tonic name.
+                const pcOfTonicName = (t: string): number | null => {
+                    const i = (noteNameToIndex as any)[String(t || '')];
+                    return Number.isFinite(i) ? mod12(Number(i)) : null;
+                };
+                // True when a and b are relative major/minor (identical pitch content),
+                // e.g. Gb major <-> Eb minor.
+                const areRelativeKeys = (a: WindowBest, b: WindowBest): boolean => {
+                    if (!!a.isMinor === !!b.isMinor) return false;
+                    const maj = a.isMinor ? b : a;
+                    const min = a.isMinor ? a : b;
+                    const pMin = pcOfTonicName(min.tonic), pMaj = pcOfTonicName(maj.tonic);
+                    if (pMin == null || pMaj == null) return false;
+                    return mod12(pMin + 3) === pMaj;
+                };
                 for (const sAbs of downbeats) {
                     // Do not override a manual context.
                     const hasManual = (analysisContexts || []).some(c => Math.abs(ctxAbsBeat(c) - sAbs) < 1e-6);
@@ -9783,8 +9799,14 @@ export function applyHarmonyRules(
                     const best0 = bestKeyForWindow(sAbs, windowLen);
                     const best1 = bestKeyForWindow(sAbs + beatsPerMeasLocal, windowLen);
                     if (!best0 || !best1) continue;
+
                     const stableSameKey = String(best0.tonic) === String(best1.tonic) && !!best0.isMinor === !!best1.isMinor;
-                    if (!stableSameKey) continue;
+                    // Relative-key reconciliation: when adjacent windows flip between a key and
+                    // its relative (e.g. Eb minor vs Gb major over a ii–V–I in Gb), treat the
+                    // region as stable and prefer the MAJOR reading (functional orientation).
+                    const relativePair = !stableSameKey && areRelativeKeys(best0, best1);
+                    if (!stableSameKey && !relativePair) continue;
+                    const chosen: WindowBest = relativePair ? (best0.isMinor ? best1 : best0) : best0;
 
                     const ctx = (() => {
                         try {
@@ -9799,7 +9821,7 @@ export function applyHarmonyRules(
                             return { tonic: keyTonic, isMinor };
                         }
                     })();
-                    const sameAsCurrent = String(best0.tonic) === String(ctx.tonic) && !!best0.isMinor === !!ctx.isMinor;
+                    const sameAsCurrent = String(chosen.tonic) === String(ctx.tonic) && !!chosen.isMinor === !!ctx.isMinor;
                     if (sameAsCurrent) continue;
 
                     // Do not infer a new *context* whose tonic is diatonic in the current context.
@@ -9811,20 +9833,25 @@ export function applyHarmonyRules(
                             // Inside a non-global inferred region (e.g. Gb), allow diatonic sub-keys
                             // to be inferred if the window fit strongly prefers them.
                         } else {
-                        const idx = (noteNameToIndex as any)[String(best0.tonic || '')];
+                        const idx = (noteNameToIndex as any)[String(chosen.tonic || '')];
                         const tonicPc = Number.isFinite(idx) ? mod12(Number(idx)) : null;
                         if (tonicPc != null) {
                             const dia = diatonicSetForKey(ctx.tonic, ctx.isMinor);
-                            if (dia && dia.has(tonicPc)) continue;
+                            // A reconciled relative pair, or a strongly-established remote key, is
+                            // allowed through even though its tonic pc is a diatonic degree of the
+                            // current key (e.g. Gb whose tonic pc doubles as G minor's leading tone).
+                            const strongRemote = Number(chosen.out) <= 0 && Number(chosen.tonicHits) >= 1 && Number(chosen.supportHits) >= 1 && Number(chosen.improvement) >= 3;
+                            const bypass = relativePair || strongRemote;
+                            if (dia && dia.has(tonicPc) && !bypass) continue;
                         }
                         }
                     } catch { /* ignore */ }
 
                     // Require a clear and musically meaningful improvement.
-                    const improvement = best0.improvement;
-                    const bestOut = best0.out;
-                    const allowStrongFunctionalTonicization = Number(best0.supportHits) >= 1
-                        && Number(best0.tonicHits) >= 1
+                    const improvement = chosen.improvement;
+                    const bestOut = chosen.out;
+                    const allowStrongFunctionalTonicization = Number(chosen.supportHits) >= 1
+                        && Number(chosen.tonicHits) >= 1
                         && Number.isFinite(bestOut)
                         && bestOut <= 1
                         && Number.isFinite(improvement)
@@ -9832,13 +9859,13 @@ export function applyHarmonyRules(
                     if (!(Number.isFinite(improvement) && (improvement >= 3 || allowStrongFunctionalTonicization))) continue;
                     if (!(Number.isFinite(bestOut) && (bestOut <= 2 || allowStrongFunctionalTonicization))) continue;
 
-                    const score = 10 + Math.max(0, improvement) + Math.max(0, best0.pcsCount - 5) + Math.max(0, Number(best0.supportHits) || 0);
+                    const score = 10 + Math.max(0, improvement) + Math.max(0, chosen.pcsCount - 5) + Math.max(0, Number(chosen.supportHits) || 0);
                     const absKey = qAbs(sAbs);
                     const cand: InferredCand = {
                         absBeat: sAbs,
-                        newTonic: best0.tonic,
-                        newIsMinor: best0.isMinor,
-                        label: `[ ${best0.tonic} ${best0.isMinor ? 'min' : 'maj'} ]`,
+                        newTonic: chosen.tonic,
+                        newIsMinor: chosen.isMinor,
+                        label: `[ ${chosen.tonic} ${chosen.isMinor ? 'min' : 'maj'} ]`,
                         score,
                     };
                     const prev = bestByAbsBeat.get(absKey);
