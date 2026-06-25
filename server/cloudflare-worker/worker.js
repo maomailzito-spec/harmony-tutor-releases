@@ -16,6 +16,21 @@
 
 const LEMON_API = 'https://api.lemonsqueezy.com/v1/licenses';
 
+// Licenses "frozen" for updates: these installs keep working on their current
+// version but stop receiving auto-updates. Managed via the FROZEN_LICENSES
+// environment variable in the Cloudflare dashboard (license keys separated by
+// commas or spaces). Empty by default → nobody is frozen.
+function isUpdateFrozen(licenseKey, env) {
+  try {
+    const raw = String(env.FROZEN_LICENSES || '');
+    if (!raw.trim() || !licenseKey) return false;
+    const list = raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+    return list.includes(String(licenseKey));
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request, env) {
     // CORS preflight
@@ -79,6 +94,7 @@ async function handleActivate({ licenseKey, instanceName }, env) {
     customerName: data.license_key?.customer_name || data.meta?.customer_name || null,
     customerEmail: data.license_key?.customer_email || data.meta?.customer_email || null,
     expiresAt: data.license_key?.expires_at || null,
+    updatesEnabled: !isUpdateFrozen(data.license_key?.key || licenseKey, env),
   }, 200, env);
 }
 
@@ -107,6 +123,7 @@ async function handleValidate({ licenseKey, instanceId }, env) {
     expiresAt: data.license_key?.expires_at || null,
     activationLimit: data.license_key?.activation_limit || null,
     activationsUsed: data.license_key?.activations_used || 0,
+    updatesEnabled: !isUpdateFrozen(data.license_key?.key || licenseKey, env),
   }, 200, env);
 }
 

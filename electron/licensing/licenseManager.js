@@ -95,6 +95,9 @@ async function activateLicense(licenseKey) {
         activatedAt: new Date().toISOString(),
         lastValidated: new Date().toISOString(),
         expiresAt: result.expiresAt || null,
+        // Server-controlled update entitlement. Default: enabled. Only an explicit
+        // `updatesEnabled: false` from the server freezes this install's auto-updates.
+        updatesEnabled: result.updatesEnabled !== false,
         machineId,
       };
       writeLicense(licenseData);
@@ -151,6 +154,10 @@ async function checkLicense() {
     if (result.valid) {
       // Update lastValidated
       license.lastValidated = new Date().toISOString();
+      // Refresh the server-controlled update entitlement (default: enabled).
+      // This is how a specific install gets frozen: set updatesEnabled=false on the
+      // server, and it propagates here at the next online revalidation (≤7 days).
+      license.updatesEnabled = result.updatesEnabled !== false;
       writeLicense(license);
       return {
         status: 'licensed',
@@ -211,10 +218,28 @@ function getLicenseInfo() {
   };
 }
 
+/**
+ * Whether auto-updates are allowed for this install.
+ * Reads the locally stored, server-controlled entitlement.
+ * Fail-open: missing license / missing field / read error → updates enabled,
+ * so trial users and everyone else are unaffected. Only an explicit
+ * server-side `updatesEnabled: false` (refreshed at revalidation) freezes updates.
+ */
+function areUpdatesEnabled() {
+  try {
+    const license = readLicense();
+    if (!license) return true;
+    return license.updatesEnabled !== false;
+  } catch {
+    return true;
+  }
+}
+
 module.exports = {
   activateLicense,
   checkLicense,
   deactivateLicense,
   getLicenseInfo,
+  areUpdatesEnabled,
   LICENSE_SERVER_URL,
 };

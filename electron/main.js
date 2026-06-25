@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const { checkTrial, getTrialInfo } = require('./licensing/trialManager');
-const { activateLicense, checkLicense, deactivateLicense, getLicenseInfo } = require('./licensing/licenseManager');
+const { activateLicense, checkLicense, deactivateLicense, getLicenseInfo, areUpdatesEnabled } = require('./licensing/licenseManager');
 
 // -----------------------------------------------------------------------------
 // Stdio hardening (macOS / dev): when Electron is launched without an attached
@@ -1796,7 +1796,19 @@ app.whenReady().then(async () => {
       }
     });
 
-    autoUpdater.checkForUpdatesAndNotify();
+    // Entitlement gate: a license can be frozen server-side (updatesEnabled=false),
+    // in which case this install stops checking for updates. Default is enabled, so
+    // this is a no-op for trial users and every license that isn't explicitly frozen.
+    // We refresh the license first so a freeze flipped on the server takes effect at
+    // the next online revalidation (≤7 days); failures fail-open (updates proceed).
+    (async () => {
+      try { await checkLicense(); } catch { /* ignore — fail open below */ }
+      if (areUpdatesEnabled()) {
+        autoUpdater.checkForUpdatesAndNotify();
+      } else {
+        safeStdioWrite(process.stdout, '[AutoUpdate] Skipped: updates disabled for this license.');
+      }
+    })();
   }
 
   app.on('activate', function () {
