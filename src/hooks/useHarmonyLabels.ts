@@ -3825,9 +3825,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         : rAcc === 'double-flat' ? rPitch + 'bb'
                         : rPitch;
 
-                    const tonicCandidates: Array<{ tonic: string; isMinor: boolean }> = [];
+                    // Candidate keys. The home/global key (#1) is always a legitimate reference.
+                    // The tonicization candidates (relative #2, chord-root #3) are GATED: shown only
+                    // when the local context backs them up — a neighbouring chord acting as the
+                    // DOMINANT (V / V7 / vii°) of the proposed key — so we stop proposing
+                    // "by-protocol" tonicizations that no surrounding harmony supports.
+                    const tonicCandidates: Array<{ tonic: string; isMinor: boolean; gated: boolean }> = [];
                     if (currentTonic && currentTonic !== contextTonic) {
-                        tonicCandidates.push({ tonic: currentTonic, isMinor: isMinorMode });
+                        tonicCandidates.push({ tonic: currentTonic, isMinor: isMinorMode, gated: false });
                     }
                     // Relativa minore/maggiore della tonica corrente: B°7 in C maj → ii° in Am
                     {
@@ -3837,17 +3842,39 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             const relIsMinor = !isMinorMode;
                             const relTonic = pcToNoteName(relTonicPc, { tonic: currentTonic, isMinor: isMinorMode });
                             if (relTonic && relTonic !== contextTonic && relTonic !== currentTonic) {
-                                tonicCandidates.push({ tonic: relTonic, isMinor: relIsMinor });
+                                tonicCandidates.push({ tonic: relTonic, isMinor: relIsMinor, gated: true });
                             }
                         }
                     }
-                    if (rootName && rootName !== contextTonic && rootName !== currentTonic) {
-                        tonicCandidates.push({ tonic: rootName, isMinor: false });
+                    // Chord-root-as-tonic: only when the chord is itself a plausible tonic (a plain
+                    // major/minor triad or 7th — not dim/aug/dominant) and with its ACTUAL quality
+                    // (an Eb-minor chord → "i in Eb", not the old hardcoded "I in Eb").
+                    {
+                        const rootType = String((topCand as any)?.type || '');
+                        const rootIsTonicizable = /major|minor/i.test(rootType) && !/dim|aug|°|\+|dominant/i.test(rootType);
+                        const rootIsMinorQ = /minor/i.test(rootType);
+                        if (rootName && rootName !== contextTonic && rootName !== currentTonic && rootIsTonicizable) {
+                            tonicCandidates.push({ tonic: rootName, isMinor: rootIsMinorQ, gated: true });
+                        }
                     }
+
+                    // Real-context support: is an adjacent chord the dominant of `key`?
+                    const _prevNotes = (timelineFiltered[eventIndex - 1] as any)?.notes || [];
+                    const _nextNotes = (timelineFiltered[eventIndex + 1] as any)?.notes || [];
+                    const hasDominantNeighbor = (key: string, keyMinor: boolean): boolean => {
+                        const isDom = (ns: any[]): boolean => {
+                            if (!ns || !ns.length) return false;
+                            const r = String(getRomanAnalysis(ns as any, key, keyMinor, { ornamentOverrides: ornOverrideRecord })?.roman || '').replace(/\s+/g, '');
+                            if (!r || r.includes('/')) return false;
+                            return /^[Vv](?![iI])/.test(r) || /^vii[°ø]/.test(r);
+                        };
+                        return isDom(_prevNotes) || isDom(_nextNotes);
+                    };
 
                     const altResults: import('../utils/computeHarmonyLabelsBySystem').AlternativeLabel[] = [];
                     const seenRomans = new Set<string>([roman]);
                     for (const tc of tonicCandidates) {
+                        if (tc.gated && !hasDominantNeighbor(tc.tonic, tc.isMinor)) continue;
                         const altR = getRomanAnalysis(altNotes, tc.tonic, tc.isMinor, { ornamentOverrides: ornOverrideRecord });
                         const altRoman = altR?.roman ?? '';
                         if (!altRoman || seenRomans.has(altRoman)) continue;
