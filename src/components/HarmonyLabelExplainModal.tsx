@@ -26,6 +26,7 @@ export type HarmonyExplainData = {
             figures: string[];
             symbol: string;
             impliedTonic: string;
+            impliedIsMinor?: boolean;
             score: number;
         }>;
     };
@@ -226,7 +227,12 @@ const HarmonyLabelExplainModal: React.FC<{
                                                 onMouseDown={(e) => {
                                                     e.stopPropagation();
                                                     onApplyAlternative(
-                                                        { impliedTonic: alt.impliedTonic, isMinor: /^[a-z]/.test(alt.roman) },
+                                                        {
+                                                            impliedTonic: alt.impliedTonic,
+                                                            // Use the implied key's real mode; fall back to the
+                                                            // roman's case only if the engine didn't provide it.
+                                                            isMinor: alt.impliedIsMinor ?? /^[a-z]/.test(alt.roman),
+                                                        },
                                                         data.absBeat,
                                                     );
                                                     onClose();

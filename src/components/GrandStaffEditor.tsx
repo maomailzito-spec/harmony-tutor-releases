@@ -4930,7 +4930,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     };
 
     const handleApplyContext = (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => {
-        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e-6);
+        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
 
         setAnalysisContexts(prev => {
             const next = (prev || []).filter(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) > 1e-6);
@@ -14522,7 +14522,16 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                 onClose={closeExplain}
                 data={explainData}
                 onApplyAlternative={(alt, absBeat) => {
-                    handleApplyTonicizationHint(absBeat, alt.impliedTonic, alt.isMinor);
+                    // An alternative pointing back to the HOME key is a context CORRECTION
+                    // (override a wrong inferred modulation) → set a real analysis context, since a
+                    // self-exhausting tonicization hint toward home is never honoured. Any other key
+                    // is a genuine local tonicization → use the hint.
+                    const isHome = alt.impliedTonic === currentTonic && !!alt.isMinor === !!isMinorMode;
+                    if (isHome) {
+                        handleApplyContext(absBeat, currentTonic, isMinorMode);
+                    } else {
+                        handleApplyTonicizationHint(absBeat, alt.impliedTonic, alt.isMinor);
+                    }
                 }}
             />
 

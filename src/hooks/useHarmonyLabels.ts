@@ -3890,6 +3890,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             figures: altR?.figures ?? [],
                             symbol: altSymbol,
                             impliedTonic: tc.tonic,
+                            impliedIsMinor: tc.isMinor,
                             score: 0,
                         });
                         if (altResults.length >= 2) break;

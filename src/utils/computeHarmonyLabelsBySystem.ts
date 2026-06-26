@@ -30,6 +30,7 @@ export type AlternativeLabel = {
     figures: string[];
     symbol: string;
     impliedTonic: string; // es. "Bb" — la tonica in cui questo grado avrebbe senso
+    impliedIsMinor?: boolean; // modo della tonica implicita (per applicare la tonicizzazione col modo giusto)
     score: number;
 };
 
@@ -2115,6 +2116,7 @@ export function computeHarmonyLabelsBySystem(opts: {
                         figures: altR?.figures ?? [],
                         symbol: altSymbol,
                         impliedTonic: tc.tonic,
+                        impliedIsMinor: tc.isMinor,
                         score: 0,
                     });
                     if (altResults.length >= 2) break; // max 2 alternative
