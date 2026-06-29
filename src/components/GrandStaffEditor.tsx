@@ -22,7 +22,7 @@ import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
 import { useNoteEditor } from '../hooks/useNoteEditor';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
-import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, VOICING_DISPOSITIONS, type VoicingDisposition } from '../utils/parseChordSymbol';
+import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing } from '../utils/parseChordSymbol';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -2853,9 +2853,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const uniqueTicks = new Set<number>(selNotes.map((n: any) => Number(n.startTick ?? 0)));
 
             // ── Multi-tick path: arpeggio / broken ──
-            // Reuse the EXACT Block-SATB cycling logic (revoiceChordAtTick + VOICING_DISPOSITIONS):
+            // Reuse the EXACT Block-SATB cycling logic (revoiceChordAtTick + nextRevoicing):
             // 1) dedup pitches, 2) build a fake-voiced block at chordStartTick,
-            // 3) loop through dispositions until one yields a voicing different from current,
+            // 3) nextRevoicing finds the next DISTINCT per-type position (no dupes),
             // 4) apply the current toolbar pattern to the resulting block.
             // Also enter this path when notes are all at the same tick (block chord)
             // but the current pattern is not 'block' — so switching back from block
@@ -2890,27 +2890,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     beat: chordBeat,
                 }));
 
-                // Find the next disposition that actually produces a DIFFERENT voicing.
-                // (For triads, dispositions 4-6 duplicate 1-3 — looping skips those.)
-                const currentKey = sortedPitches.map((p: any) => Number(p.midi)).sort((a, b) => a - b).join(',');
+                // Cicla solo sulle posizioni DISTINTE (per-tipo) che cambiano davvero
+                // il voicing — unica fonte di verità in nextRevoicing (niente più
+                // slot duplicati né pressioni "a vuoto").
                 const measureActiveAcc = buildMeasureAccidentals(accNotes as any, measureIndex, chordStartTick);
-
-                let foundIdx = revoiceDispIdx;
-                let foundNotes: StaffNote[] | null = null;
-                for (let k = 1; k <= VOICING_DISPOSITIONS.length; k++) {
-                    const tryIdx = (revoiceDispIdx + k) % VOICING_DISPOSITIONS.length;
-                    const disposition = VOICING_DISPOSITIONS[tryIdx] as VoicingDisposition;
-                    const candidate = revoiceChordAtTick(fakeNotes as any, chordStartTick, disposition, keySignature, null, measureActiveAcc);
-                    if (!candidate || candidate.length === 0) continue;
-                    const candKey = candidate.map((n: any) => Number(n.midi)).sort((a, b) => a - b).join(',');
-                    if (candKey !== currentKey) {
-                        foundIdx = tryIdx;
-                        foundNotes = candidate;
-                        break;
-                    }
-                }
-                if (!foundNotes) return;
-                setRevoiceDispIdx(foundIdx);
+                const probe = nextRevoicing(fakeNotes as any, chordStartTick, revoiceDispIdx, keySignature, null, measureActiveAcc);
+                if (!probe) return;
+                setRevoiceDispIdx(probe.idx);
+                const foundNotes: StaffNote[] = probe.notes;
 
                 // Map SATB-voiced result to voice=0 block notes for the pattern engine.
                 const blockBase: StaffNote[] = foundNotes.map((n: any) => ({
@@ -2949,9 +2936,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             // ── Single-tick path: block chord ─ existing revoice logic ──
-            const nextIdx = (revoiceDispIdx + 1) % VOICING_DISPOSITIONS.length;
-            setRevoiceDispIdx(nextIdx);
-            const disposition = VOICING_DISPOSITIONS[nextIdx] as VoicingDisposition;
+            // Avanza alla prossima posizione DISTINTA usando il primo accordo come sonda
+            // (niente più slot duplicati / pressioni a vuoto).
+            const sortedUniqueTicks = Array.from(uniqueTicks).sort((a, b) => a - b);
+            const probeTick = sortedUniqueTicks[0];
+            const probeAtTick = accNotes.filter((n: any) => Number(n.startTick ?? 0) === probeTick && !n.isRest);
+            const probeSorted = [...probeAtTick].sort((a: any, b: any) => Number(a.midi) - Number(b.midi));
+            const probeFakeVoices: (1|2|3|4)[] = [4, 3, 2, 1];
+            const probeFake = probeSorted.map((n: any, i: number) => ({ ...n, voice: probeFakeVoices[Math.min(i, probeFakeVoices.length - 1)] }));
+            const probeMeasure = (probeAtTick[0] as any)?.measureIndex ?? 0;
+            const probeAcc = buildMeasureAccidentals(accNotes as any, probeMeasure, probeTick);
+            const blockProbe = nextRevoicing(probeFake as any, probeTick, revoiceDispIdx, keySignature, null, probeAcc);
+            if (!blockProbe) return;
+            setRevoiceDispIdx(blockProbe.idx);
+            const disposition = blockProbe.disposition;
 
             const accReplacements = new Map<string, any>();
             let accPrevVoicing: { soprano: number; alto: number; tenor: number; bass: number } | null = null;
@@ -3013,11 +3011,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         if (tickGroups.size === 0) return;
 
-        // Avanza all'indice successivo
-        const nextIdx = (revoiceDispIdx + 1) % VOICING_DISPOSITIONS.length;
-        setRevoiceDispIdx(nextIdx);
-        const disposition = VOICING_DISPOSITIONS[nextIdx] as VoicingDisposition;
-
         // Ordina i tick per applicare voice leading progressivo
         const sortedTicks = Array.from(tickGroups.keys()).sort((a, b) => a - b);
 
@@ -3038,6 +3031,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             }
         } catch { /* ignora */ }
+
+        // Avanza alla prossima posizione DISTINTA (per-tipo, niente duplicati) usando
+        // il primo accordo selezionato come sonda; poi applica quella disposizione a
+        // tutti gli accordi selezionati (con voice leading progressivo).
+        const firstTickMeasure = (allNotes.find((n: any) => Number(n.startTick) === sortedTicks[0]) as any)?.measureIndex ?? 0;
+        const firstTickAcc = buildMeasureAccidentals(allNotes as any, firstTickMeasure, sortedTicks[0], selectedNoteIds);
+        const satbProbe = nextRevoicing(allNotes as any, sortedTicks[0], revoiceDispIdx, keySignature, prevVoicing, firstTickAcc);
+        if (!satbProbe) return;
+        setRevoiceDispIdx(satbProbe.idx);
+        const disposition = satbProbe.disposition;
 
         const replacements = new Map<string, any>();
         for (const tick of sortedTicks) {

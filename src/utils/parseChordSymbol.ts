@@ -770,3 +770,78 @@ export function revoiceChordAtTick(
         } as StaffNote;
     }).filter(Boolean) as StaffNote[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ciclo "revoice" senza duplicati.
+//
+// VOICING_DISPOSITIONS ha 7 slot, ma la meccanica di revoiceChordAtTick produce
+// solo posizioni di SOPRANO distinte: 3 per le triadi (Radice, 3ª, 5ª) e 4 per le
+// settime (7ª, 3ª, 5ª, Radice). Gli slot extra erano duplicati esatti → pressioni
+// "a vuoto". Qui definiamo i cicli effettivamente distinti per tipo d'accordo;
+// i token riusano la stessa indicizzazione su VOICING_DISPOSITIONS, quindi
+// revoiceChordAtTick li interpreta senza modifiche.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Triadi: auto → S=Radice → S=3ª → S=5ª (4 posizioni distinte). */
+export const TRIAD_REVOICE_CYCLE: VoicingDisposition[]   = ['auto', 'R358', 'R538', 'R835'];
+/** Settime: auto → S=7ª → S=3ª → S=5ª → S=Radice (5 posizioni distinte). */
+export const SEVENTH_REVOICE_CYCLE: VoicingDisposition[] = ['auto', 'R358', 'R538', 'R835', 'R385'];
+
+/** Etichette UI parallele ai cicli (stesso ordine/indice). */
+export const TRIAD_REVOICE_LABELS   = ['auto', 'S:R', 'S:3', 'S:5'];
+export const SEVENTH_REVOICE_LABELS = ['auto', 'S:7', 'S:3', 'S:5', 'S:R'];
+
+/** True se l'accordo al tick è una 7ª (≥4 PC distinti, o chordPcs salvato ≥4). */
+export function chordAtTickHas7th(notes: StaffNote[], startTick: number): boolean {
+    const chordNotes = (notes as any[]).filter(
+        n => n.startTick === startTick && !n.isRest && [1, 2, 3, 4].includes(Number(n.voice))
+    );
+    for (const n of chordNotes) {
+        if (Array.isArray((n as any).chordPcs) && (n as any).chordPcs.length >= 4) return true;
+    }
+    const pcs = new Set(chordNotes.map((n: any) => ((Number(n.midi) % 12) + 12) % 12));
+    return pcs.size >= 4;
+}
+
+/**
+ * Prossima posizione del ciclo revoice (per-tipo, senza duplicati) che produce un
+ * voicing DIVERSO da quello corrente. Unica fonte di verità per tutti i percorsi
+ * (SATB, ACC block, ACC arpeggio).
+ *
+ * @param notes     - array con l'accordo già disposto sulle voci 1-4 al tick
+ * @param startTick - tick dell'accordo
+ * @param currentCycleIdx - indice corrente NEL CICLO per-tipo (non in VOICING_DISPOSITIONS)
+ * @returns { idx, disposition, notes, label } della prossima posizione distinta, o null
+ */
+export function nextRevoicing(
+    notes: StaffNote[],
+    startTick: number,
+    currentCycleIdx: number,
+    keySignature: KeySignature,
+    prevVoicing?: { soprano: number; alto: number; tenor: number; bass: number } | null,
+    activeAccidentals?: Record<string, string>,
+): { idx: number; disposition: VoicingDisposition; notes: StaffNote[]; label: string } | null {
+    const has7th = chordAtTickHas7th(notes, startTick);
+    const cycle  = has7th ? SEVENTH_REVOICE_CYCLE : TRIAD_REVOICE_CYCLE;
+    const labels = has7th ? SEVENTH_REVOICE_LABELS : TRIAD_REVOICE_LABELS;
+
+    const currentMidis = (notes as any[])
+        .filter(n => n.startTick === startTick && !n.isRest && [1, 2, 3, 4].includes(Number(n.voice)))
+        .map((n: any) => Number(n.midi))
+        .sort((a, b) => a - b)
+        .join(',');
+
+    // Parti dall'indice successivo e cerca la prima posizione che cambia davvero
+    // il voicing (salta auto≡R, ecc.). Al più un giro completo del ciclo.
+    for (let k = 1; k <= cycle.length; k++) {
+        const tryIdx = ((currentCycleIdx % cycle.length) + k) % cycle.length;
+        const disposition = cycle[tryIdx];
+        const cand = revoiceChordAtTick(notes, startTick, disposition, keySignature, prevVoicing, activeAccidentals);
+        if (!cand || cand.length === 0) continue;
+        const candMidis = cand.map((n: any) => Number(n.midi)).sort((a, b) => a - b).join(',');
+        if (candMidis !== currentMidis) {
+            return { idx: tryIdx, disposition, notes: cand, label: labels[tryIdx] };
+        }
+    }
+    return null;
+}

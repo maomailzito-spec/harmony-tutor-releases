@@ -1220,17 +1220,52 @@ export function realizeFirstChord(
     while (innerTones.length < 2) innerTones.push(tones[0]); // double root
     if (innerTones.length > 2) innerTones.length = 2;
 
-    // Assign tenor, then alto — close position above bass, below soprano
     const innerRanges = [VOICE_RANGES.tenor, VOICE_RANGES.alto];
+
+    // Enumerate every tenor×alto placement and pick the best via the unified
+    // scoring function (which penalizes spacing > octave, voice crossing,
+    // unisons …). Mirrors realizeNextChord's fixed-soprano branch with prev=null,
+    // so an ISOLATED chord gets the same spacing guarantees as a voice-led one.
+    // (The old greedy "closest above bass" placement ignored spacing and could
+    // leave alto-soprano well over an octave apart.)
+    const innerPerms = [[0, 1], [1, 0]];
+    let bestVoicing: SATBVoicing | null = null;
+    let bestCost = Infinity;
+
+    for (const perm of innerPerms) {
+      const allCandidates: number[][] = [];
+      let valid = true;
+      for (let vi = 0; vi < 2; vi++) {
+        const tone = innerTones[perm[vi]];
+        const candidates = pitchesInRange(tone, innerRanges[vi]);
+        if (candidates.length === 0) { valid = false; break; }
+        allCandidates.push(candidates);
+      }
+      if (!valid || allCandidates.length < 2) continue;
+
+      const maxCombos = 64;
+      let combos = 0;
+      for (const tenor of allCandidates[0]) {
+        for (const alto of allCandidates[1]) {
+          if (++combos > maxCombos) break;
+          const cand: SATBVoicing = { soprano: fixedSoprano, alto, tenor, bass: bassMidi };
+          const cost = scoreVoicing({ curr: cand, prev: null, rules, tonicPc, tones, prevSeventhPc: null, ...styleCtx });
+          if (cost < bestCost) { bestCost = cost; bestVoicing = cand; }
+        }
+      }
+    }
+
+    if (bestVoicing) return bestVoicing;
+
+    // Safety net: if scoring found nothing (empty ranges), fall back to the old
+    // greedy "closest above bass, below soprano" placement.
     const innerMidis: number[] = [];
     let lastMidi = bassMidi;
-
     for (let vi = 0; vi < 2; vi++) {
       const tone = innerTones[vi];
       const candidates = pitchesInRange(tone, innerRanges[vi])
         .filter(c => c > bassMidi && c < fixedSoprano);
       if (candidates.length === 0) {
-        // Fallback: any candidate in range
         const fallback = pitchesInRange(tone, innerRanges[vi]);
         if (fallback.length === 0) return null;
         let best = fallback[0];
@@ -1239,7 +1274,6 @@ export function realizeFirstChord(
         }
         innerMidis.push(best);
       } else {
-        // Pick closest above lastMidi
         let best = candidates[0];
         for (const c of candidates) {
           if (c >= lastMidi && (c - lastMidi) < (best - lastMidi)) best = c;

@@ -1002,8 +1002,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     title={`Re-voice: ricalcola il voicing delle note selezionate (ciclo disposizioni)`}
                 >
                     {selectedNotesHave7th
-                        ? ['auto','S:7','S:3','S:5','S:R','S:7','S:3'][revoiceDispIdx % 7]
-                        : ['auto','S:R','S:3','S:5','S:R','S:3','S:5'][revoiceDispIdx % 7]}
+                        ? ['auto','S:7','S:3','S:5','S:R'][revoiceDispIdx % 5]
+                        : ['auto','S:R','S:3','S:5'][revoiceDispIdx % 4]}
                 </button>
                 {activeStaffArea === 'accompaniment' && (
                     <>
