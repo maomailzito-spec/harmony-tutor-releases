@@ -459,6 +459,30 @@ function findAccTrackForNote(noteId: string, accompanimentTracks: AccompanimentT
     return null;
 }
 
+/**
+ * Espande una selezione ACC all'INTERO accordo. Funziona sia per accordi inseriti da
+ * sigla (raggruppati per `chordGroupId`) sia per accordi inseriti A MANO (che NON hanno
+ * un chordGroupId): in quel caso ricade sull'onset condiviso (stesso `startTick`).
+ * Così selezionando una sola nota si prende comunque tutto l'accordo.
+ */
+function expandAccChordSelection(accNotes: any[], selectedNoteIds: Set<string>): any[] {
+    const rawSel = accNotes.filter((n: any) => selectedNoteIds.has(n.id) && !n.isRest);
+    if (rawSel.length === 0) return [];
+    const groups = new Set<string>();
+    const ticks = new Set<number>();
+    for (const n of rawSel) {
+        if (n.chordGroupId) groups.add(String(n.chordGroupId));
+        ticks.add(Number(n.startTick ?? 0));
+    }
+    return accNotes.filter((n: any) => {
+        if (n.isRest) return false;
+        if (selectedNoteIds.has(n.id)) return true;
+        const gid = n.chordGroupId ? String(n.chordGroupId) : null;
+        // Con gruppo: solo lo stesso gruppo. Senza gruppo (inserito a mano): stesso onset.
+        return gid ? groups.has(gid) : ticks.has(Number(n.startTick ?? 0));
+    });
+}
+
 /** Mappa la velocity MIDI (1..127) in un fattore di volume per il playback.
  *  Le note senza velocity (inserite a mano) restituiscono 1 (volume pieno),
  *  così il comportamento esistente non cambia. La curva è leggermente
@@ -2705,6 +2729,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         subdivisionTicks: number,
         pattern: AccompanimentPattern,
         letRing: boolean,
+        compact: boolean = true,
     ): StaffNote[] => {
         if (pattern === 'block' || baseNotes.length === 0) return baseNotes;
 
@@ -2712,9 +2737,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // octaves (e.g. C3–G3–E4–C5). For arpeggio patterns every note should
         // be within 1 octave of the lowest so the pattern stays in a sensible
         // register (C3–E3–G3–C4 instead of C3–G3–E4–C5).
+        // Skipped when compact === false: applying a pattern to a USER-chosen
+        // voicing must keep its exact heights/octaves untouched.
         const rawSorted = [...baseNotes].sort((a, b) => ((a as any).midi ?? 0) - ((b as any).midi ?? 0));
         const lowestMidi = Number((rawSorted[0] as any)?.midi ?? 48);
-        const sorted = rawSorted.map((n) => {
+        const sorted = !compact ? rawSorted : rawSorted.map((n) => {
             const orig = Number((n as any).midi ?? 0);
             let m = orig;
             while (m > lowestMidi + 12) m -= 12;
@@ -2728,7 +2755,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 noteName: ((n as any).noteName ?? '').replace(/\/(\d+)$/, (_: string, o: string) => `/${parseInt(o) + octaveDelta}`),
                 clef: (m >= 60 ? 'treble' : 'bass') as 'treble' | 'bass',
             };
-        }).sort((a, b) => ((a as any).midi ?? 0) - ((b as any).midi ?? 0));
+        }).sort((a, b) => ((a as any).midi ?? 0) - ((b as any).midi ?? 0)) as StaffNote[];
         const slot = Math.max(60, subdivisionTicks); // minimum 1/64 note
         const info = ticksToDurationInfo(slot);
         const baseBeat = Number((sorted[0] as any)?.beat) || 1;
@@ -2771,7 +2798,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         if (pattern === 'albertino') {
             const n = sorted.length;
-            const idxPat = n < 3 ? [0, 1] : [0, 2, 1, 2];
+            // <3 voci: alternanza semplice. 3 voci: Alberti classico (basso-alto-medio-alto).
+            // ≥4 voci: includi TUTTE le note (niente sparizioni) mantenendo il moto albertino.
+            const idxPat = n < 3 ? [0, 1] : n === 3 ? [0, 2, 1, 2] : [0, 2, 1, 3];
             return generateFromIndexPattern(idxPat);
         }
         if (pattern === 'ondulato') {
@@ -2837,18 +2866,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const accNotes = accTrack.notes as any[];
             const staffMode = (accTrack as any).staffMode ?? 'grandstaff';
 
-            // Collect selected non-rest notes, then expand by chordGroupId so that even
-            // a single selected note from an arpeggio/broken pattern revoices the whole chord.
-            const rawSelNotes = accNotes.filter((n: any) => selectedNoteIds.has(n.id) && !n.isRest);
-            if (rawSelNotes.length === 0) return;
-            const selectedGroupIds = new Set<string>();
-            for (const n of rawSelNotes) {
-                const gid = (n as any).chordGroupId;
-                if (gid) selectedGroupIds.add(String(gid));
-            }
-            const selNotes = selectedGroupIds.size > 0
-                ? accNotes.filter((n: any) => !n.isRest && (selectedNoteIds.has(n.id) || (n.chordGroupId && selectedGroupIds.has(String(n.chordGroupId)))))
-                : rawSelNotes;
+            // Espandi all'intero accordo (per gruppo, o per onset se inserito a mano),
+            // così anche selezionando UNA sola nota si revoice tutto l'accordo.
+            const selNotes = expandAccChordSelection(accNotes, selectedNoteIds);
+            if (selNotes.length === 0) return;
 
             const uniqueTicks = new Set<number>(selNotes.map((n: any) => Number(n.startTick ?? 0)));
 
@@ -3064,6 +3085,95 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (replacements.size === 0) return;
         setRawNotes(prev => (prev || []).map(n => replacements.get((n as any).id) ?? n));
     }, [selectedNoteIds, revoiceDispIdx, keySignature, quantizeGrid, applyAccPattern, setRawNotes, setAccompanimentTracks, setSelectedNoteIds]);
+
+    /**
+     * Applica un pattern di accompagnamento alla selezione ACC PRESERVANDO il voicing
+     * dell'utente: usa le altezze esatte delle note selezionate (niente revoice corale,
+     * niente compattazione entro l'ottava). Il pattern "cammina" sulle note così come
+     * sono state disposte. No-op se la selezione non è sull'accompagnamento.
+     */
+    const applyPatternToSelectionAsIs = useCallback((pattern: AccompanimentPattern) => {
+        if (selectedNoteIds.size === 0) return;
+        const firstSelId = [...selectedNoteIds][0];
+        if (!isAccompanimentNote(firstSelId, latestAccompanimentTracks.current)) return;
+        const accInfo = findAccTrackForNote(firstSelId, latestAccompanimentTracks.current);
+        if (!accInfo) return;
+        const trackIdx = accInfo.trackIndex;
+        const accTrack = latestAccompanimentTracks.current[trackIdx];
+        if (!accTrack) return;
+        const accNotes = accTrack.notes as any[];
+        const staffMode = (accTrack as any).staffMode ?? 'grandstaff';
+
+        // Espandi all'intero accordo (per gruppo, o per onset se inserito a mano),
+        // così selezionare UNA sola nota basta per applicare il pattern a tutto.
+        const selNotes = expandAccChordSelection(accNotes, selectedNoteIds);
+        if (selNotes.length === 0) return;
+
+        // Altezze ESATTE dell'utente: dedup per midi, ordine grave→acuto, ottave intatte.
+        const byMidi = new Map<number, any>();
+        for (const n of selNotes) {
+            const m = Number(n.midi ?? 0);
+            if (!byMidi.has(m)) byMidi.set(m, n);
+        }
+        const sortedPitches = [...byMidi.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n);
+        if (sortedPitches.length === 0) return;
+
+        const chordStartTick = Math.min(...selNotes.map((n: any) => Number(n.startTick ?? 0)));
+        const chordEndTick   = Math.max(...selNotes.map((n: any) => Number(n.startTick ?? 0) + Number(n.durationTicks ?? 0)));
+        const totalDurTicks  = chordEndTick - chordStartTick;
+        const measureIndex   = Number(selNotes[0].measureIndex ?? 0);
+        const chordBeat      = Number(selNotes[0].beat ?? 1);
+        const existingGroupId = (selNotes[0] as any).chordGroupId || crypto.randomUUID();
+
+        // Block-base coi pitch esatti dell'utente (voice 0). Niente revoice: ogni nota
+        // conserva midi/ottava/grafia; ricalcoliamo solo la chiave e azzeriamo l'eventuale
+        // coda "let ring" ereditata.
+        const blockBase: StaffNote[] = sortedPitches.map((p: any) => ({
+            ...p,
+            id: crypto.randomUUID(),
+            voice: 0 as any,
+            clef: (staffMode === 'treble_only' ? 'treble' : (Number(p.midi) >= 60 ? 'treble' : 'bass')) as 'treble' | 'bass',
+            startTick: chordStartTick,
+            durationTicks: totalDurTicks,
+            measureIndex,
+            beat: chordBeat,
+            chordGroupId: existingGroupId,
+            playbackDurationTicks: undefined,
+        }));
+
+        const subdivTicks = ({
+            'sixteenth': TICKS_PER_QUARTER / 4,
+            'eighth':    TICKS_PER_QUARTER / 2,
+            'quarter':   TICKS_PER_QUARTER,
+            'half':      TICKS_PER_QUARTER * 2,
+        } as Record<string, number>)[quantizeGrid] ?? (TICKS_PER_QUARTER / 2);
+
+        // compact === false → le altezze restano quelle scelte dall'utente.
+        const newAccNotes = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, pattern, accLetRingRef.current, false);
+
+        const replaceIds = new Set(selNotes.map((n: any) => n.id));
+        setAccompanimentTracks(prev => prev.map((track, i) => {
+            if (i !== trackIdx) return track;
+            const kept = track.notes.filter((n: any) => !replaceIds.has(n.id));
+            return { ...track, notes: [...kept, ...newAccNotes].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
+        }));
+        setSelectedNoteIds(new Set(newAccNotes.map((n: any) => n.id)));
+
+        const accTrk = latestAccompanimentTracks.current?.[trackIdx];
+        const accInstr = accTrk?.isDrum ? drumSoundfont(accTrk) : gmToSoundfont(accTrk?.instrumentId);
+        const accCh = accTrk ? accMidiChannel(accTrk, trackIdx) : undefined;
+        newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstr, accCh, accTransposeSemitones(accTrk)); });
+    }, [selectedNoteIds, quantizeGrid, applyAccPattern, setAccompanimentTracks, setSelectedNoteIds]);
+
+    /**
+     * Click su un pulsante pattern in toolbar: lo imposta come default per i prossimi
+     * inserimenti e, se c'è una selezione ACC, lo applica subito a quelle note esatte.
+     */
+    const handleSelectAccPattern = useCallback((pattern: AccompanimentPattern) => {
+        setAccPattern(pattern);
+        accPatternRef.current = pattern;
+        applyPatternToSelectionAsIs(pattern);
+    }, [applyPatternToSelectionAsIs]);
 
     /** Inserisce un accordo dalla sigla (es. "Cmaj7/E") alla posizione della playhead.
      * Restituisce { startTick, durTicks } per permettere al chiamante di avanzare il caret,
@@ -12047,7 +12157,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return selNotes.some(n => Array.isArray(n.chordPcs) && n.chordPcs.length >= 4);
                 })()}
                 accPattern={accPattern}
-                onSetAccPattern={setAccPattern}
+                onSetAccPattern={handleSelectAccPattern}
                 activeStaffArea={activeStaffArea}
                 accLetRing={accSelectionHeld}
                 onToggleAccLetRing={handleToggleAccHold}
