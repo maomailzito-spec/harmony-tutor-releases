@@ -227,6 +227,9 @@ type GrandStaffToolbarProps = {
     activeStaffArea: 'satb' | 'accompaniment';
     accLetRing: boolean;
     onToggleAccLetRing: () => void;
+    transformMode: 'tonal' | 'real';
+    onToggleTransformMode: () => void;
+    onMelodicTransform: (kind: 'transpose' | 'invert' | 'retrograde' | 'retrogradeInvert', opts?: { amount?: number }) => void;
 };
 
 const IconComponent: React.FC<{ type: 'note' | 'rest'; duration: NoteDuration; className?: string }> = ({ type, duration, className }) => {
@@ -404,6 +407,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         activeStaffArea,
         accLetRing,
         onToggleAccLetRing,
+        transformMode,
+        onToggleTransformMode,
+        onMelodicTransform,
     } = props;
 
     const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
@@ -1031,6 +1037,60 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accLetRing ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                         >
                             Ped
+                        </button>
+                    </>
+                )}
+                {/* Trasformazioni melodiche sulla selezione (motivo): inserite DOPO l'originale */}
+                {hasSelectedNotes && (
+                    <>
+                        <div className="w-px h-5 bg-slate-600 mx-0.5" />
+                        <button
+                            onClick={onToggleTransformMode}
+                            title={transformMode === 'tonal'
+                                ? 'Trasformazioni TONALI (in chiave, per gradi). Clicca per passare a Reali (cromatiche).'
+                                : 'Trasformazioni REALI (cromatiche, per semitoni). ⚠ Inversione e retro-inverso reali sono cromatici (escono dalla tonalità). Clicca per tornare a Tonali.'}
+                            className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'tonal' ? 'bg-cyan-600 text-white' : 'bg-amber-600 text-white'}`}
+                        >
+                            {transformMode === 'tonal' ? 'Ton' : 'Real'}
+                        </button>
+                        <button
+                            onClick={() => onMelodicTransform('transpose', { amount: 1 })}
+                            title={transformMode === 'tonal' ? 'Trasponi su di un grado (in chiave)' : 'Trasponi su di un semitono'}
+                            className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
+                        >
+                            T▲
+                        </button>
+                        <button
+                            onClick={() => onMelodicTransform('transpose', { amount: -1 })}
+                            title={transformMode === 'tonal' ? 'Trasponi giù di un grado (in chiave)' : 'Trasponi giù di un semitono'}
+                            className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
+                        >
+                            T▼
+                        </button>
+                        <button
+                            onClick={() => onMelodicTransform('invert')}
+                            title={transformMode === 'real'
+                                ? '⚠ Inversione REALE = cromatica: esce dalla tonalità (per contesti atonali/dodecafonici). Per un risultato in chiave passa a Ton.'
+                                : "Inversione tonale (in chiave): ogni voce si specchia attorno alla propria prima nota. Inserita dopo l'originale."}
+                            className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
+                        >
+                            {transformMode === 'real' ? 'Inv⚠' : 'Inv'}
+                        </button>
+                        <button
+                            onClick={() => onMelodicTransform('retrograde')}
+                            title="Retrogrado: ordine temporale rovesciato (note e ritmo). Inserito dopo l'originale."
+                            className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
+                        >
+                            Retr
+                        </button>
+                        <button
+                            onClick={() => onMelodicTransform('retrogradeInvert')}
+                            title={transformMode === 'real'
+                                ? "⚠ Retrogrado-inverso REALE: contiene l'inversione cromatica → esce dalla tonalità. Per un risultato in chiave passa a Ton."
+                                : "Retrogrado-inverso tonale (in chiave). Inserito dopo l'originale."}
+                            className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
+                        >
+                            {transformMode === 'real' ? 'R+I⚠' : 'R+I'}
                         </button>
                     </>
                 )}

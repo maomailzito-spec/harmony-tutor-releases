@@ -21,8 +21,9 @@ import { useNoteSelection } from '../hooks/useNoteSelection';
 import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
 import { useNoteEditor } from '../hooks/useNoteEditor';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, calculateAccidentalWithMeasureContext, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
 import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing } from '../utils/parseChordSymbol';
+import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody, spelledNoteName, keyAccidentalNotes, type TransformMode } from '../utils/melodicTransforms';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -1470,6 +1471,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [accPattern, setAccPattern] = useState<AccompanimentPattern>('block');
     const accPatternRef = useRef<AccompanimentPattern>('block');
     useEffect(() => { accPatternRef.current = accPattern; }, [accPattern]);
+    // Modalità delle trasformazioni melodiche (toolbar): tonale (in chiave, per gradi)
+    // oppure reale (cromatica, per semitoni). Default tonale.
+    const [transformMode, setTransformMode] = useState<TransformMode>('tonal');
     // accLetRing: ring automatico per i PATTERN (arpeggi) all'inserimento. Il pedale
     // manuale è ora un'azione su selezione (handleToggleAccHold), non un toggle globale.
     const [accLetRing] = useState(false);
@@ -8343,6 +8347,92 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return { measureIndex, beat };
     }, [layoutData, timeSignature]);
 
+    /**
+     * Trasformazione melodica sulla LINEA selezionata (motivo): trasposizione (tonale/
+     * reale), inversione, retrogrado, retrogrado-inverso. Il risultato viene INSERITO
+     * DOPO l'originale (contiguo, NON distruttivo: coesiste con note già presenti).
+     * Funziona su SATB (rawNotes) e su accompagnamento.
+     */
+    const applyMelodicTransform = useCallback((
+        kind: 'transpose' | 'invert' | 'retrograde' | 'retrogradeInvert',
+        opts?: { amount?: number },
+    ) => {
+        if (selectedNoteIds.size === 0) return;
+        const firstSelId = [...selectedNoteIds][0];
+        const isAcc = isAccompanimentNote(firstSelId, latestAccompanimentTracks.current);
+
+        // La LINEA = le note esatte selezionate (incluse le pause), ordinate per onset.
+        // Niente espansione ad accordo: è una trasformazione di motivo, non di voicing.
+        let lineSource: any[];
+        let trackIdx = -1;
+        if (isAcc) {
+            const accInfo = findAccTrackForNote(firstSelId, latestAccompanimentTracks.current);
+            if (!accInfo) return;
+            trackIdx = accInfo.trackIndex;
+            const accTrack = latestAccompanimentTracks.current[trackIdx];
+            if (!accTrack) return;
+            lineSource = (accTrack.notes as any[]).filter(n => selectedNoteIds.has(n.id));
+        } else {
+            lineSource = (latestRawNotes.current as any[]).filter(n => selectedNoteIds.has(n.id));
+        }
+        const line = lineSource
+            .filter(n => Number.isFinite(Number(n.startTick)))
+            .sort((a, b) => Number(a.startTick) - Number(b.startTick));
+        if (line.length === 0) return;
+
+        // Motore puro
+        let transformed: StaffNote[];
+        if (kind === 'transpose')       transformed = transposeMelody(line as any, keySignature, { mode: transformMode, amount: opts?.amount ?? 0 });
+        else if (kind === 'invert')     transformed = invertMelody(line as any, keySignature, { mode: transformMode });
+        else if (kind === 'retrograde') transformed = retrogradeMelody(line as any);
+        else                            transformed = retrogradeInvertMelody(line as any, keySignature, { mode: transformMode });
+
+        // "Inserisci dopo": offset = durata totale della selezione → placement contiguo.
+        const spanStart = Math.min(...line.map(n => Number(n.startTick)));
+        const spanEnd   = Math.max(...line.map(n => Number(n.startTick) + Number(n.durationTicks ?? 0)));
+        const offset = spanEnd - spanStart;
+        if (offset <= 0) return;
+
+        const placed: StaffNote[] = transformed.map((n: any) => {
+            const newStartTick = Number(n.startTick) + offset;
+            const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(newStartTick / TICKS_PER_QUARTER);
+            return { ...n, id: crypto.randomUUID(), startTick: newStartTick, measureIndex, beat } as StaffNote;
+        });
+        if (placed.length === 0) return;
+
+        // ── Correzione accidenti col CONTESTO DI MISURA ──
+        // getNotePropertiesFromMidi/calculateAccidental guardano solo l'armatura: un
+        // bequadro che annulla un bemolle/diesis PRECEDENTE nella stessa misura non
+        // veniva disegnato (es. B C trasposto −1 → Bb B: il B restava letto come Bb,
+        // rompendo l'imitazione). Rielaboriamo explicitAccidental in ordine di tick,
+        // tenendo conto delle note già presenti nelle stesse misure (coesistenza).
+        const keyAccList = keyAccidentalNotes(keySignature);
+        const contextStore: any[] = isAcc
+            ? [...((latestAccompanimentTracks.current[trackIdx]?.notes as any[]) ?? [])]
+            : [...((latestRawNotes.current as any[]) ?? [])];
+        const working: any[] = contextStore.filter((n: any) => !n.isRest);
+        for (const n of [...placed].sort((a: any, b: any) => Number(a.startTick) - Number(b.startTick)) as any[]) {
+            if (n.isRest) continue;
+            const measureIdx = Number(n.measureIndex ?? 0);
+            const clef = (n.clef ?? (Number(n.voice) <= 2 ? 'treble' : 'bass')) as string;
+            const map = buildMeasureAccidentals(working as any, measureIdx, Number(n.startTick));
+            const clefAcc: Record<string, string> = {};
+            for (const [k, v] of Object.entries(map)) if (k.startsWith(clef + '-')) clefAcc[k.slice(clef.length + 1)] = v;
+            n.explicitAccidental = calculateAccidentalWithMeasureContext(spelledNoteName(n), keyAccList, clefAcc);
+            working.push(n);
+        }
+
+        if (isAcc) {
+            setAccompanimentTracks(prev => prev.map((track, i) => {
+                if (i !== trackIdx) return track;
+                return { ...track, notes: [...track.notes, ...placed].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
+            }));
+        } else {
+            setRawNotes(prev => [...(prev || []), ...placed].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)));
+        }
+        setSelectedNoteIds(new Set(placed.map(n => (n as any).id)));
+    }, [selectedNoteIds, keySignature, transformMode, getMeasureIndexAndBeatFromAbsBeat, setRawNotes, setAccompanimentTracks, setSelectedNoteIds]);
+
     const fillEmptyMeasuresWithRests = useCallback((voice: number, upToMeasureIndex: number) => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
@@ -12161,6 +12251,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 activeStaffArea={activeStaffArea}
                 accLetRing={accSelectionHeld}
                 onToggleAccLetRing={handleToggleAccHold}
+                transformMode={transformMode}
+                onToggleTransformMode={() => setTransformMode(m => m === 'tonal' ? 'real' : 'tonal')}
+                onMelodicTransform={applyMelodicTransform}
             />
 
             {/* Modulo percussioni FLOTTANTE: si apre/chiude dalla toolbar (🥁) e si auto-apre
