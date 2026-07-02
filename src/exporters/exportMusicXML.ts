@@ -8,6 +8,18 @@ import { TICKS_PER_QUARTER } from '../constants';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+/** Etichetta d'analisi armonica da serializzare, agganciata a un onset (beat). */
+export interface HarmonyExportLabel {
+  /** Indice di misura (0-based) a cui appartiene l'etichetta. */
+  measureIndex: number;
+  /** Tick assoluto dell'onset (coincide con lo startTick delle note a quel beat). */
+  tick: number;
+  /** Testo del numero romano già nella forma visualizzata (sequenziato/override inclusi). */
+  roman?: string;
+  /** Cifre del basso figurato, es. ["6","4"]. */
+  figures?: string[];
+}
+
 export interface ExportMusicXMLOptions {
   notes: StaffNote[];
   title?: string;
@@ -17,6 +29,9 @@ export interface ExportMusicXMLOptions {
   isMinorMode?: boolean;
   keySignatureRoot?: string;
   totalMeasures?: number;
+  /** Analisi armonica opzionale: serializzata come <direction>(romano) + <figured-bass>(cifre).
+   *  Non modifica la serializzazione delle note. */
+  harmonyLabels?: HarmonyExportLabel[];
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -160,6 +175,45 @@ function emitNote(
   w('      </note>');
 }
 
+// ── Harmony emitters ───────────────────────────────────────────────────────
+
+/** Romano come annotazione testuale (scelta v1: massima leggibilità per screen reader/
+ *  Braille; il <numeral> semantico di MusicXML 4.0 è un enhancement successivo). */
+function emitHarmonyDirection(w: (s: string) => void, roman: string, staffNum: number): void {
+  w('      <direction placement="above">');
+  w('        <direction-type>');
+  w(`          <words>${escapeXml(roman)}</words>`);
+  w('        </direction-type>');
+  w(`        <staff>${staffNum}</staff>`);
+  w('      </direction>');
+}
+
+const FIG_ACC_WORD: Record<string, string> = { '#': 'sharp', '+': 'sharp', 'b': 'flat', '♮': 'natural', 'n': 'natural' };
+
+/** Scompone una cifra tipo "6", "#4", "b6", "5" in prefix/number (accidente + numero). */
+function parseFigure(f: string): { prefix?: string; number?: string; raw: string } {
+  const s = String(f).trim();
+  const m = s.match(/^([#b♮n+]?)(\d+)$/);
+  if (m) return { prefix: m[1] ? FIG_ACC_WORD[m[1]] : undefined, number: m[2], raw: s };
+  // Cifra non standard (es. "6/5", solo accidente): resa come testo in figure-number.
+  return { raw: s };
+}
+
+/** Basso figurato col tag dedicato <figured-bass> (ben supportato, storico). */
+function emitFiguredBass(w: (s: string) => void, figures: string[]): void {
+  const figs = figures.map(f => String(f).trim()).filter(Boolean);
+  if (figs.length === 0) return;
+  w('      <figured-bass>');
+  for (const f of figs) {
+    const p = parseFigure(f);
+    w('        <figure>');
+    if (p.prefix) w(`          <prefix>${p.prefix}</prefix>`);
+    w(`          <figure-number>${escapeXml(p.number ?? p.raw)}</figure-number>`);
+    w('        </figure>');
+  }
+  w('      </figured-bass>');
+}
+
 // ── Main Export ────────────────────────────────────────────────────────────
 
 export function exportMusicXML(opts: ExportMusicXMLOptions): string {
@@ -170,6 +224,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     timeSignature,
     isMinorMode = false,
     keySignatureRoot,
+    harmonyLabels = [],
   } = opts;
 
   // Group notes by measure
@@ -179,6 +234,20 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     const m = n.measureIndex ?? 0;
     if (!notesByMeasure.has(m)) notesByMeasure.set(m, []);
     notesByMeasure.get(m)!.push(n);
+  }
+
+  // Armonia per misura → { localTick → {roman, figures} }. localTick calcolato con la
+  // STESSA convenzione delle note (tick − m·numerator·DIVISIONS) così coincide con gli onset.
+  const harmonyByMeasure = new Map<number, Map<number, { roman?: string; figures?: string[] }>>();
+  for (const h of harmonyLabels) {
+    const mi = h.measureIndex ?? 0;
+    const localTick = h.tick - mi * timeSignature.numerator * DIVISIONS;
+    if (!harmonyByMeasure.has(mi)) harmonyByMeasure.set(mi, new Map());
+    const existing = harmonyByMeasure.get(mi)!.get(localTick) || {};
+    harmonyByMeasure.get(mi)!.set(localTick, {
+      roman: h.roman ?? existing.roman,
+      figures: (h.figures && h.figures.length) ? h.figures : existing.figures,
+    });
   }
 
   const maxMeasure = opts.totalMeasures
@@ -247,6 +316,12 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     const measureNotes = notesByMeasure.get(m) || [];
     const measureTotalTicks = timeSignature.numerator * (4 / timeSignature.denominator) * DIVISIONS;
 
+    // Armonia di questa misura, agganciata per localTick (onset). Ogni etichetta emessa
+    // UNA sola volta: il romano sul rigo acuto, le cifre sul rigo grave.
+    const hMap = harmonyByMeasure.get(m);
+    const emittedRoman = new Set<number>();
+    const emittedFig = new Set<number>();
+
     // Separate notes into staff 1 (treble: voices 1,2) and staff 2 (bass: voices 3,4)
     const staffNotes: [StaffNote[], StaffNote[]] = [[], []];
     for (const n of measureNotes) {
@@ -314,6 +389,18 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
             w(`        <staff>${staffNum}</staff>`);
             w('      </forward>');
             currentTick = onsetTick;
+          }
+
+          // Armonia PRIMA della nota a questo onset (non consuma durata).
+          if (hMap) {
+            if (staffIdx === 0 && !emittedRoman.has(onsetTick)) {
+              const roman = hMap.get(onsetTick)?.roman;
+              if (roman) { emitHarmonyDirection(w, roman, staffNum); emittedRoman.add(onsetTick); }
+            }
+            if (staffIdx === 1 && !emittedFig.has(onsetTick)) {
+              const figures = hMap.get(onsetTick)?.figures;
+              if (figures && figures.length) { emitFiguredBass(w, figures); emittedFig.add(onsetTick); }
+            }
           }
 
           let isFirstInChord = true;

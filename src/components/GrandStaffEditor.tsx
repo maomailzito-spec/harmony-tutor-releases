@@ -4288,14 +4288,43 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (action === MENU_ACTIONS.EXPORT_MUSICXML) {
             try {
+                const exportNotes = latestRawNotes.current || [];
+                // Analisi armonica: raccogliamo le etichette ATTUALMENTE VISUALIZZATE (unica
+                // fonte, coerente con lo schermo — niente ricalcolo divergente). Se l'analisi
+                // è spenta la lista è vuota → export note-only, coerente col fatto che a
+                // schermo non c'è analisi.
+                const measureByTick = new Map<number, number>();
+                for (const n of exportNotes as any[]) {
+                    if (typeof n?.startTick === 'number' && typeof n?.measureIndex === 'number' && !measureByTick.has(n.startTick)) {
+                        measureByTick.set(n.startTick, n.measureIndex);
+                    }
+                }
+                const bpmMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+                const seenTick = new Set<number>();
+                const harmonyLabels: Array<{ measureIndex: number; tick: number; roman?: string; figures?: string[] }> = [];
+                for (const l of (_harmonyLabelsRef.current || []).flat() as any[]) {
+                    if (!l || l.hiddenMarker) continue;
+                    // Stessa catena del rendering: forma romano effettivamente visualizzata.
+                    const roman = String(l.romanDisplay ?? l.sequenceRomanFunctional ?? l.sequenceRoman ?? l.roman ?? '').trim();
+                    const figures = Array.isArray(l.figures) ? l.figures.map((x: any) => String(x).trim()).filter(Boolean) : [];
+                    if (!roman && figures.length === 0) continue;
+                    const absBeat = Number(l.absBeat);
+                    if (!Number.isFinite(absBeat)) continue;
+                    const tick = Math.round(absBeat * TICKS_PER_QUARTER);
+                    if (seenTick.has(tick)) continue;
+                    seenTick.add(tick);
+                    const measureIndex = measureByTick.get(tick) ?? Math.max(0, Math.floor(absBeat / bpmMeasure));
+                    harmonyLabels.push({ measureIndex, tick, roman: roman || undefined, figures: figures.length ? figures : undefined });
+                }
                 const xml = exportMusicXML({
-                    notes: latestRawNotes.current || [],
+                    notes: exportNotes,
                     title: projectTitle || 'Untitled',
                     keySignature: getKeySignature(keySignatureRoot, 'Major'),
                     timeSignature,
                     timeSignatureChanges,
                     isMinorMode,
                     keySignatureRoot,
+                    harmonyLabels,
                 });
                 await electronBridge.exportMusicXml(xml);
             } catch {
