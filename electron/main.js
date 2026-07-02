@@ -735,6 +735,7 @@ function createMenu() {
         },
         {
           label: mt('exportXml'),
+          accelerator: 'CmdOrCtrl+Shift+X',
           click: () => { sendAction(MENU_ACTIONS.EXPORT_MUSICXML); }
         },
         {
