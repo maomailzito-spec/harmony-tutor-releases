@@ -15,6 +15,8 @@ interface VexflowGrandStaffProps {
   onNoteClick?: (noteId: string, e: MouseEvent) => void;
   onTieClick?: (fromNoteId: string, toNoteId: string, e: MouseEvent) => void;
   selectedNoteIds?: string[];
+  /** Evidenziazione dei MOTIVI melodici rilevati: id-nota → colore (modello/imitazione). */
+  motifStyleById?: Record<string, { fill: string; stroke: string }>;
   onStaffClick?: (x: number, y: number, e: MouseEvent) => void;
   onStaffRightClick?: (x: number, y: number, e: MouseEvent) => void;
   onMouseMoveStaff?: (x: number, y: number, modKey: boolean) => void;
@@ -576,6 +578,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onNoteClick,
   onTieClick,
   selectedNoteIds = [],
+  motifStyleById,
   onStaffClick,
   onStaffRightClick,
   onMouseMoveStaff,
@@ -2616,6 +2619,30 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   }
                 } catch {
                   // ignore
+                }
+              } catch {
+                vfNote.setStyle(baseStyle);
+              }
+            } else if (motifStyleById && motifStyleById[n.id] && !(n as any).errorType) {
+              // Evidenziazione MOTIVI: sotto selezione/errori, sopra i voice-color.
+              const ms = motifStyleById[n.id];
+              const baseStyle: any = { fillStyle: ms.fill, strokeStyle: ms.stroke };
+              try {
+                const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
+                const setKey = typeof (vfNote as any)?.setKeyStyle === 'function';
+                if (keysArr.length > 1 && setKey) {
+                  // StaveNote MULTI-KEY (più voci in un'unica nota): colora la notehead
+                  // GIUSTA per altezza (keyStr), altrimenti si colora quella sbagliata
+                  // (es. l'alto invece del soprano → il soprano resta nero).
+                  const keyStr = `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`;
+                  const mergedIds: string[] | undefined = (vfNote as any)?.__mergedIds;
+                  let idx = keysArr.indexOf(keyStr);
+                  if (idx < 0 && Array.isArray(mergedIds)) idx = mergedIds.indexOf(n.id);
+                  if (idx >= 0) (vfNote as any).setKeyStyle(idx, baseStyle);
+                  else vfNote.setStyle(baseStyle);
+                } else {
+                  vfNote.setStyle(baseStyle);
+                  if (setKey) { try { (vfNote as any).setKeyStyle(0, baseStyle); } catch { /* */ } }
                 }
               } catch {
                 vfNote.setStyle(baseStyle);

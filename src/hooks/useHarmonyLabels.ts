@@ -13,6 +13,16 @@ import { usePreference } from '../preferences/usePreference';
 import { evaluateCadentialPatterns, type ChordEvent, pcToNoteName, noteNameToPc, qualityFamily, getScalePcs } from '../utils/cadentialPatterns';
 import { CADENTIAL_PATTERN_RECOGNITION_KEY, ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY } from '../storage/storageKeys';
 import { detectVoiceLeadingSequences } from '../utils/sequenceDetector';
+import { detectMotifTransformations, type MotifMatch, type MotifTransformType } from '../utils/melodicMotifDetector';
+
+/** Colore FISSO per tipo di trasformazione melodica (modello=bracket, imitazione=note). */
+const MOTIF_TYPE_COLOR: Record<MotifTransformType, { fill: string; stroke: string }> = {
+    invert:           { fill: '#7c3aed', stroke: '#6d28d9' }, // viola
+    retrograde:       { fill: '#0d9488', stroke: '#0f766e' }, // teal
+    retrogradeInvert: { fill: '#c026d3', stroke: '#a21caf' }, // fucsia
+    transpose:        { fill: '#db2777', stroke: '#be185d' }, // rosa
+};
+const MOTIF_TYPE_ABBR: Record<MotifTransformType, string> = { transpose: 'T', invert: 'I', retrograde: 'R', retrogradeInvert: 'RI' };
 import { detectChromaticModulations } from '../utils/chromaticModulationDetector';
 import { getBigramProbability, type StyleProfile } from '../engine/choralStyleProfile';
 import { TICKS_PER_QUARTER, CHORD_FORMULAS, NOTE_NAMES, ALL_NOTE_SPELLINGS, DURATION_VALUES } from '../constants';
@@ -62,6 +72,7 @@ export interface UseHarmonyLabelsParams {
     isMinorMode: boolean;
     isAnalysisEnabled: boolean;
     isSequencesEnabled: boolean;
+    isMotifsEnabled?: boolean;
     staffSystemMode: string;
     notes: StaffNote[];
     analyzedNotes: StaffNote[];
@@ -117,7 +128,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
     const {
         layoutData, timeSignature, timeSignatureChanges,
         analysisContexts, harmonyOverrides,
-        currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled,
+        currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes,
         analysisContextAbsBeat, timeSignatureChangeAbsBeat,
         harmonyLabelMinSpanBeats,
@@ -5691,6 +5702,118 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
     }, [layoutData, timeSignature, timeSignatureChangeAbsBeat, timeSignatureChanges]);
 
 
+    // ── Trasformazioni MELODICHE (idea "simmetria"): T/I/R/RI, dentro-voce e
+    // cross-voce, tonale+reale. Banda sotto il MODELLO + bracket con etichetta
+    // sull'IMITAZIONE, in lane/colori distinti dalle sequenze armoniche. ──
+    const motifMatches = useMemo<MotifMatch[]>(() => {
+        if (!isMotifsEnabled) return [];
+        try { return detectMotifTransformations(notes, { minLen: 5, maxMatches: 120 }); }
+        catch { return []; }
+    }, [isMotifsEnabled, notes]);
+
+    const motifData = useMemo(() => {
+        const styleById: Record<string, { fill: string; stroke: string }> = {};
+        const shown: Array<MotifMatch & { color: string }> = [];
+        if (!motifMatches.length) return { styleById, shown };
+
+        // Seleziona i match da EVIDENZIARE: priorità a I/R/RI (le simmetrie "non ovvie",
+        // il punto dell'articolo) sulle trasposizioni (rumorose in musica tonale, in
+        // parte coperte dal rilevatore armonico); niente sovrapposizioni (per non
+        // confondere i colori su note condivise); con un tetto.
+        const MAX_SHOWN = 12;
+        const occupied: Array<[number, number]> = [];
+        const overlaps = (a: number, b: number) => occupied.some(([s, e]) => a < e && s < b);
+        const score = (m: MotifMatch) => m.length + (m.type !== 'transpose' ? 100 : 0);
+        const shownRaw: MotifMatch[] = [];
+        for (const m of [...motifMatches].sort((x, y) => score(y) - score(x))) {
+            if (overlaps(m.modelStartTick, m.modelEndTick) || overlaps(m.imitationStartTick, m.imitationEndTick)) continue;
+            occupied.push([m.modelStartTick, m.modelEndTick], [m.imitationStartTick, m.imitationEndTick]);
+            shownRaw.push(m);
+            if (shownRaw.length >= MAX_SHOWN) break;
+        }
+
+        // COLORE FISSO PER TIPO (così la legenda mappa tipo→colore). Il MODELLO avrà una
+        // bracket in questo colore; l'IMITAZIONE avrà le NOTE piene in questo colore.
+        shownRaw.forEach((m) => {
+            const tc = MOTIF_TYPE_COLOR[m.type];
+            // Sia il MODELLO sia l'IMITAZIONE hanno le note colorate (stesso colore del
+            // tipo) → si vede su QUALE voce sono; il modello in più ha la bracket.
+            for (const id of m.modelNoteIds) styleById[id] = { fill: tc.fill, stroke: tc.stroke };
+            for (const id of m.imitationNoteIds) styleById[id] = { fill: tc.fill, stroke: tc.stroke };
+            shown.push({ ...m, color: tc.stroke });
+        });
+        return { styleById, shown };
+    }, [motifMatches]);
+
+    // Bracket sul MODELLO (colore del tipo + sigla), per sistema. L'imitazione è
+    // evidenziata sulle note (motifNoteStyles), quindi qui solo il modello.
+    const motifBracketsBySystem = useMemo(() => {
+        const bySystem: Array<Array<{ id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string; color: string }>> =
+            layoutData ? layoutData.systemsParams.map(() => []) : [];
+        if (!layoutData || !motifData.shown.length) return bySystem;
+
+        const laneY = (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 36) : (TOP_STAFF_TOP + 36)) - 16;
+        const textY = laneY - 5;
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
+        const measureBeatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
+        const beatsFallback = timeSignature.numerator * (4 / timeSignature.denominator);
+        const beatsInMeasure = (m: number) => { const b = (measureBeatsPerMeasure && typeof measureBeatsPerMeasure[m] === 'number') ? Number(measureBeatsPerMeasure[m]) : beatsFallback; return Number.isFinite(b) && b > 0 ? b : beatsFallback; };
+        const startAbsForMeasure = (m: number) => (measureStartAbsBeat && typeof measureStartAbsBeat[m] === 'number') ? Number(measureStartAbsBeat[m]) : m * beatsFallback;
+        const findMeasureIndexForAbsBeat = (ab: number) => {
+            if (!measureStartAbsBeat || measureStartAbsBeat.length === 0) return Math.floor(ab / beatsFallback);
+            for (let m = measureStartAbsBeat.length - 1; m >= 0; m--) if (ab >= (measureStartAbsBeat[m] ?? 0) - 1e-9) return m;
+            return 0;
+        };
+        const getXForAbsBeat = (absBeat: number, system: any) => {
+            const measures = system.measureIndices || [];
+            let local: { m: number; idx: number } | null = null;
+            for (let i = 0; i < measures.length; i++) {
+                const m = measures[i]; const start = startAbsForMeasure(m); const end = start + beatsInMeasure(m);
+                if (absBeat >= start - 1e-6 && absBeat < end - 1e-6) { local = { m, idx: i }; break; }
+            }
+            const measureIndex = local ? local.m : findMeasureIndexForAbsBeat(absBeat);
+            const bpm = beatsInMeasure(measureIndex);
+            const startAbs = startAbsForMeasure(measureIndex);
+            const beatInMeasure = (absBeat - startAbs) + 1;
+            const idx = local ? local.idx : system.measureIndices.indexOf(measureIndex);
+            if (idx === -1) return system.startMeasuresX?.[0] ?? 0;
+            const startX = system.startMeasuresX[idx];
+            const endX = idx < system.measureIndices.length - 1 ? system.startMeasuresX[idx + 1] : (system.width - START_X);
+            const measureWidth = Math.max(1, endX - startX);
+            const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
+            const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / bpm));
+            return startX + MEASURE_PADDING_X + (rel * contentWidth);
+        };
+
+        motifData.shown.forEach((m, k) => {
+            const absStart = m.modelStartTick / TICKS_PER_QUARTER;
+            const absEnd = Math.max(m.modelStartTick, m.modelEndTick - 1) / TICKS_PER_QUARTER;
+            if (!(absEnd > absStart + 1e-9)) return;
+            for (let si = 0; si < layoutData.systemsParams.length; si++) {
+                const system = layoutData.systemsParams[si];
+                const sysMeasures = system.measureIndices || [];
+                if (!sysMeasures.length) continue;
+                const sysMin = Math.min(...sysMeasures), sysMax = Math.max(...sysMeasures);
+                const sysAbsStart = startAbsForMeasure(sysMin);
+                const sysAbsEnd = startAbsForMeasure(sysMax) + beatsInMeasure(sysMax);
+                const oStart = Math.max(absStart, sysAbsStart);
+                // Clamp appena DENTRO l'ultima misura del rigo: sysAbsEnd è l'inizio della
+                // misura successiva (sul rigo dopo) e getXForAbsBeat non la troverebbe nel
+                // sistema corrente → x sbagliata e bracket "bucata" al confine di sistema.
+                const oEnd = Math.min(absEnd, sysAbsEnd - 1e-3);
+                if (!(oEnd > oStart + 1e-6)) continue;
+                let x1 = getXForAbsBeat(oStart, system), x2 = getXForAbsBeat(oEnd, system);
+                if (!Number.isFinite(x1) || !Number.isFinite(x2)) continue;
+                if (x2 < x1) [x1, x2] = [x2, x1];
+                const xx1 = x1 + 4, xx2 = x2 - 4;
+                if (!(xx2 > xx1 + 2)) continue;
+                const isFirst = absStart >= sysAbsStart - 1e-6 && absStart <= sysAbsEnd + 1e-6;
+                bySystem[si].push({ id: `motif-model-${k}-${si}`, x1: xx1, x2: xx2, midX: (xx1 + xx2) / 2, y: laneY, textY, label: isFirst ? MOTIF_TYPE_ABBR[m.type] : '', color: m.color });
+            }
+        });
+        return bySystem;
+    }, [layoutData, motifData.shown, staffSystemMode, timeSignature]);
+
     return {
         harmonyLabelsBySystemSequenced,
         progressionMarkersBySystem,
@@ -5699,5 +5822,8 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         contextMarkersBySystem,
         timeSignatureMarkersBySystem,
         sequenceMatches,
+        motifNoteStyles: motifData.styleById,
+        motifBracketsBySystem,
+        motifMatches: motifData.shown,
     };
 }

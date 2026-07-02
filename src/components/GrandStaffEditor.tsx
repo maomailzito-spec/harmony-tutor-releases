@@ -2255,6 +2255,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         try { localStorage.setItem('harmony.analysis.sequencesEnabled.v1', isSequencesEnabled ? '1' : '0'); } catch { /* ignore */ }
     }, [isSequencesEnabled]);
+    // Rilevatore di trasformazioni MELODICHE (motivi: T/I/R/RI, dentro/cross-voce). Off di default.
+    const [isMotifsEnabled, setIsMotifsEnabled] = useState(() => {
+        try { return String(localStorage.getItem('harmony.analysis.motifsEnabled.v1') || '').trim() === '1'; } catch { return false; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('harmony.analysis.motifsEnabled.v1', isMotifsEnabled ? '1' : '0'); } catch { /* ignore */ }
+    }, [isMotifsEnabled]);
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
     const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
     const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
@@ -5753,9 +5760,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Timeline-based harmony labels per system (roman+figures and symbol)
     // ADAPTER LAYER — harmony analysis overlay data (extracted to useHarmonyLabels hook)
-    const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, sequenceMatches } = useHarmonyLabels({
+    const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, sequenceMatches, motifNoteStyles, motifBracketsBySystem, motifMatches } = useHarmonyLabels({
         layoutData, timeSignature, timeSignatureChanges, analysisContexts: effectiveAnalysisContexts, harmonyOverrides,
-        currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled,
+        currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
         harmonyLabelMinSpanBeats: Number(harmonyLabelMinSpanBeats) || 0,
         useStatisticalCorrection: !!useStatisticalCorrection,
@@ -13141,6 +13148,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 staffMode={staffSystemMode}
                                                                 enableProximityPick={tool !== 'insert'}
                                 selectedNoteIds={Array.from(selectedNoteIds)}
+                                motifStyleById={isMotifsEnabled ? motifNoteStyles : undefined}
                                 onNoteClick={(noteId, e) => handleNoteClick(noteId, systemIndex, e as any)}
                                                                 onStaffClick={(x, y, e) => handleBackgroundClick(x, y, systemIndex, e)}
                                                                                                                                 onStaffRightClick={(x, y, e) => handleStaffRightClick(x, y, systemIndex, e)}
@@ -13549,7 +13557,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             )}
 
                             {/* Overlay: analysis labels + violation highlights (adapter output) */}
-                                                        {((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0))) && (
+                                                        {((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers */}
                                                                 {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
@@ -13633,6 +13641,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                     fontWeight={700}
                                                                                     fill="#0f172a"
                                                                                 >
+                                                                                    {p.label}
+                                                                                </text>
+                                                                            ) : null}
+                                                                        </g>
+                                                                    );
+                                                                })}
+
+                                                                {/* Motivi melodici: bracket sul MODELLO (colore del tipo + sigla). L'imitazione è colorata sulle note. */}
+                                                                {isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).map((p: { id: string; x1: number; x2: number; midX: number; y: number; textY: number; label: string; color: string }) => {
+                                                                    const hook = 7;
+                                                                    const y = p.y;
+                                                                    return (
+                                                                        <g key={p.id} opacity={0.95}>
+                                                                            <path
+                                                                                d={`M ${p.x1} ${y} L ${p.x1} ${y + hook} M ${p.x1} ${y} L ${p.x2} ${y} M ${p.x2} ${y} L ${p.x2} ${y + hook}`}
+                                                                                fill="none"
+                                                                                stroke={p.color}
+                                                                                strokeWidth={1.6}
+                                                                            />
+                                                                            {p.label ? (
+                                                                                <text x={p.midX} y={p.textY} textAnchor="middle" fontSize={10} fontWeight={800} fill={p.color}>
                                                                                     {p.label}
                                                                                 </text>
                                                                             ) : null}
@@ -14694,6 +14723,9 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                 sequenceMatches={sequenceMatches}
                                 sequencesEnabled={isSequencesEnabled}
                                 onToggleSequences={() => setIsSequencesEnabled(prev => !prev)}
+                                motifsEnabled={isMotifsEnabled}
+                                onToggleMotifs={() => setIsMotifsEnabled(prev => !prev)}
+                                motifMatches={isMotifsEnabled ? motifMatches : []}
                                 onHoverViolation={setHoveredViolationNotes}
                                 selectedViolationIndex={selectedViolationIndex}
                                 onSelectViolation={index => {

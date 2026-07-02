@@ -9,6 +9,9 @@ interface HarmonyAnalysisPanelProps {
     sequenceMatches?: SequenceMatch[];
     sequencesEnabled?: boolean;
     onToggleSequences?: () => void;
+    motifsEnabled?: boolean;
+    onToggleMotifs?: () => void;
+    motifMatches?: Array<{ type: string; mode: string; modelVoice: number; imitationVoice: number; length: number; color: string }>;
     onHoverViolation: (noteIds: string[] | null) => void;
     selectedViolationIndex?: number | null;
     onSelectViolation?: (index: number) => void;
@@ -40,7 +43,11 @@ const ExceptionIcon: React.FC = () => (
 );
 
 
-const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
+const VOICE_ABBR: Record<number, string> = { 0: 'Acc', 1: 'S', 2: 'A', 3: 'T', 4: 'B' };
+const MOTIF_TYPE_LABEL: Record<string, string> = { transpose: 'Trasposizione', invert: 'Inversione', retrograde: 'Retrogrado', retrogradeInvert: 'Retro-inverso' };
+const MOTIF_TYPE_HUE: Record<string, string> = { invert: '#6d28d9', retrograde: '#0f766e', retrogradeInvert: '#a21caf', transpose: '#be185d' };
+
+const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, motifsEnabled, onToggleMotifs, motifMatches, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     const { t } = useTranslation('analysis');
     const [filters, setFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [ruleSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
@@ -282,6 +289,52 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                     </div>
                 </div>
             </div>
+
+            {typeof onToggleMotifs === 'function' && (
+                <div className="mb-4">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="text-xs uppercase tracking-wide text-gray-400">Motivi melodici (T/I/R/RI)</p>
+                        <button
+                            onClick={onToggleMotifs}
+                            className={`px-2 py-0.5 text-[11px] font-semibold rounded-md border transition-colors ${motifsEnabled ? 'bg-violet-600 text-white border-violet-500' : 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600'}`}
+                            title="Rileva trasposizioni / inversioni / retrogradi di un motivo (dentro e tra le voci). Banda viola = modello, bracket = imitazione."
+                        >
+                            {motifsEnabled ? 'On' : 'Off'}
+                        </button>
+                    </div>
+                    {motifsEnabled ? (
+                        <>
+                            <p className="text-[11px] text-gray-400 mb-1">
+                                Note colorate = motivo (modello e imitazione, stesso colore). Il <span className="font-semibold">modello</span> ha in più la <span className="font-semibold">bracket</span> con la sigla. Colore FISSO per tipo:
+                            </p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1 mb-2">
+                                {(['invert', 'retrograde', 'retrogradeInvert', 'transpose'] as const).map(tp => (
+                                    <span key={tp} className="flex items-center gap-1 text-[11px] text-gray-300">
+                                        <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: MOTIF_TYPE_HUE[tp] }} />
+                                        {MOTIF_TYPE_LABEL[tp]}
+                                    </span>
+                                ))}
+                            </div>
+                            {(motifMatches && motifMatches.length > 0) ? (
+                                <ul className="space-y-1">
+                                    {motifMatches.map((m, i) => (
+                                        <li key={i} className="flex items-center gap-2 text-[11px] text-gray-300">
+                                            <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: m.color }} />
+                                            <span>
+                                                {MOTIF_TYPE_LABEL[m.type] ?? m.type} <span className="text-gray-400">{m.mode === 'tonal' ? 'tonale' : 'reale'}</span>
+                                                {' · '}{VOICE_ABBR[m.modelVoice] ?? m.modelVoice}→{VOICE_ABBR[m.imitationVoice] ?? m.imitationVoice}
+                                                {' · '}{m.length} note
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-[11px] text-gray-500">Nessun motivo trasformato rilevato.</p>
+                            )}
+                        </>
+                    ) : null}
+                </div>
+            )}
 
             {(typeof onToggleSequences === 'function' || sequences.length > 0) && (
                 <div className="mb-4">
