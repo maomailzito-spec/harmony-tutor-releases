@@ -2668,7 +2668,29 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // two genuinely different chords look identical by pitch-class set.
             const harmonicSig = signatureFromNotes(analysisNotes);
             const fullSig = signatureFromNotes(fullNotes || []);
-            if (!harmonicSig || baseHarmonicNotes.length < 2) return;
+            if (!harmonicSig || baseHarmonicNotes.length < 2) {
+                // Un override MANUALE con contenuto (es. Opt+Shift+H su un arpeggio: il beat
+                // d'áncora ha una sola nota ma l'accordo è quello scelto dall'utente sull'INSIEME
+                // della selezione) va reso comunque, come per gli eventi sintetici. Senza questo,
+                // se l'áncora cade su una singola nota dell'arpeggio l'etichetta sparisce.
+                // Un override "vuoto" (soppressione) resta correttamente soppresso.
+                const _ovr = overrideByAbsBeat.get(qAbs(Number(event.absBeat)));
+                const _ovrHasContent = !!((_ovr?.roman && String(_ovr.roman).trim())
+                    || (_ovr?.symbol && String(_ovr.symbol).trim())
+                    || (Array.isArray(_ovr?.figures) && _ovr.figures.length));
+                if (_ovrHasContent) {
+                    labelsBySystem[systemIndex].push({
+                        id: `lbl-${event.absBeat}`,
+                        x: getXForAbsBeat(event.absBeat, system),
+                        roman: String(_ovr!.roman ?? ''),
+                        figures: Array.isArray(_ovr!.figures) ? (_ovr!.figures as string[]) : [],
+                        symbol: String(_ovr!.symbol ?? ''),
+                        absBeat: event.absBeat,
+                        isOverride: true,
+                    });
+                }
+                return;
+            }
 
             const applicableContext = ctxAtAbsBeat(event.absBeat);
             let contextTonic = applicableContext ? applicableContext.newTonic : currentTonic;
