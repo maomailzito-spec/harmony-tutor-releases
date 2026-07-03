@@ -21,6 +21,7 @@ export type GrandStaffProjectIOCommand =
 export type BuildGrandStaffProjectSnapshotArgs = {
 	latestRawNotes: { current: any[] };
 	latestHarmonyOverrides: { current: any[] };
+	latestAccHarmonyOverrides?: { current: any[] };
 	latestOrnamentOverrides?: { current: any[] };
 	projectExtrasRef: { current: Record<string, unknown> };
 
@@ -126,6 +127,10 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		tempoCurves: args.tempoCurves || [],
 		harmonyOverrides: args.latestHarmonyOverrides.current,
 		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
+		// Override manuali dell'analisi ACC — solo se presenti, per file leggeri.
+		...((args.latestAccHarmonyOverrides?.current && args.latestAccHarmonyOverrides.current.length > 0)
+			? { accHarmonyOverrides: args.latestAccHarmonyOverrides.current }
+			: {}),
 		bpm: args.bpm,
 		isBpmActive: args.isBpmActive,
 		isMetronomeOn: args.isMetronomeOn,
@@ -201,6 +206,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setIsMinorMode: (next: any) => void;
 	setTimeSignature: (next: any) => void;
 	setHarmonyOverrides: (next: any) => void;
+	setAccHarmonyOverrides?: (next: any) => void;
 	setOrnamentOverrides: (next: any) => void;
 	setAnalysisContexts: (next: any) => void;
 	setTonicizationHints?: (next: any) => void;
@@ -299,6 +305,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setIsMinorMode(false);
 		args.setTimeSignature({ numerator: 4, denominator: 4 });
 		args.setHarmonyOverrides([]);
+		args.setAccHarmonyOverrides?.([]);
 		args.setOrnamentOverrides([]);
 		args.setAnalysisContexts([]);
 		args.setTimeSignatureChanges([]);
@@ -369,6 +376,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setModalTonicOverride('');
 	args.setAnalysisContexts([]);
 	args.setHarmonyOverrides([]);
+	args.setAccHarmonyOverrides?.([]);
 	args.setOrnamentOverrides([]);
 	args.setAnalysisLocked(false);
 	args.setTeacherPasswordHash(undefined);
@@ -575,6 +583,8 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
 			}
+			// Override manuali dell'analisi ACC: sempre (reset a [] se assenti → no carry-over).
+			args.setAccHarmonyOverrides?.(Array.isArray((loadedProject as any).accHarmonyOverrides) ? (loadedProject as any).accHarmonyOverrides : []);
 			if (Array.isArray(loadedProject.ornamentOverrides)) {
 				args.setOrnamentOverrides(loadedProject.ornamentOverrides);
 			}
@@ -747,6 +757,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setPasteCaretImmediate(null);
 		args.apply.setAnalysisContexts([]);
 		args.apply.setHarmonyOverrides([]);
+		args.apply.setAccHarmonyOverrides?.([]);
 		args.apply.setOrnamentOverrides([]);
 		args.apply.setContextMenu(null);
 		args.apply.setShowRomanAnalysis(true);

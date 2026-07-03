@@ -18,6 +18,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'modalTonicOverride',
   'analysisContexts',
   'harmonyOverrides',
+  'accHarmonyOverrides',
   'doubleBarlineMeasures',
   'bpm',
   'isBpmActive',
@@ -70,6 +71,8 @@ export type ProjectDataV1 = {
 
   analysisContexts?: any[];
   harmonyOverrides?: any[];
+  /** Override manuali dell'analisi delle tracce ACC (collasso Opt+Shift+H in modo ACC). */
+  accHarmonyOverrides?: any[];
   doubleBarlineMeasures?: number[];
 
   bpm?: number;

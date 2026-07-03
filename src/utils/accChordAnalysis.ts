@@ -71,8 +71,26 @@ export function computeAccChordAnalysis(opts: {
     ornOverrides?: Record<string, string>;
 }): AccChordLabel[] {
     const { notes, keySignature, keySignatureRoot, isMinorMode, ornOverrides } = opts;
+
+    // Marcatura ri-orientata sulla traccia ACC: una nota marcata come ORNAMENTALE
+    // (passaggio/volta/appoggiatura…, cioè un tipo ≠ 'structural') viene ESCLUSA dalla
+    // lettura dell'accordo — sigla, romano e chiarezza. 'structural' la tiene (di fatto
+    // già inclusa: il default ACC è "tutte le note"). Stessa logica del percorso SATB.
+    const isOrnamentExcluded = (n: any): boolean => {
+        if (!ornOverrides) return false;
+        const t1 = ornOverrides[n.id];
+        if (t1 && t1 !== 'structural') return true;
+        const midi = Number(n.midi);
+        if (Number.isFinite(midi)) {
+            const t2 = ornOverrides[`${midi}-${n.measureIndex ?? -1}-${n.beat ?? -1}`];
+            if (t2 && t2 !== 'structural') return true;
+        }
+        return false;
+    };
+
     const pitched = (notes || []).filter(n =>
-        n && !n.isRest && Number.isFinite(Number(n.midi)) && Number.isFinite(Number(n.startTick)));
+        n && !n.isRest && Number.isFinite(Number(n.midi)) && Number.isFinite(Number(n.startTick))
+        && !isOrnamentExcluded(n));
     if (pitched.length < 2) return [];
 
     const TPQ = TICKS_PER_QUARTER;

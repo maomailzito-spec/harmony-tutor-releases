@@ -84,6 +84,9 @@ type StaffLayoutMode = 'parti_late' | 'parti_strette';
 type StaffSystemMode = 'grandstaff' | 'treble_only' | 'satb_ancient';
 type EngravingMode = 'legacy' | 'enhanced';
 type AccompanimentPattern = 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken' | 'albertino' | 'ondulato';
+// Override manuale dell'analisi ACC (collasso Opt+Shift+H in modo ACC): per traccia,
+// fissa un accordo (sigla/roman) su [spanStart,spanEnd] sostituendo la lettura automatica.
+type AccHarmonyOverride = { trackId: string; absBeat: number; spanStart: number; spanEnd: number; roman?: string; sigla?: string; figures?: string[] };
 
 const LINE_HEIGHT = 12;
 
@@ -2240,6 +2243,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [inferredContextSuppressions, setInferredContextSuppressions] = useState<number[]>([]);
     const latestHarmonyOverrides = useRef<HarmonyLabelOverride[]>([]);
     useEffect(() => { latestHarmonyOverrides.current = harmonyOverrides || []; }, [harmonyOverrides]);
+    // Override MANUALE dell'analisi ACC (collasso Opt+Shift+H in modo ACC): per traccia,
+    // ogni voce fissa un accordo su [spanStart,spanEnd] rimpiazzando la lettura automatica.
+    const [accHarmonyOverrides, setAccHarmonyOverrides] = useState<AccHarmonyOverride[]>([]);
+    const latestAccHarmonyOverrides = useRef<AccHarmonyOverride[]>([]);
+    useEffect(() => { latestAccHarmonyOverrides.current = accHarmonyOverrides || []; }, [accHarmonyOverrides]);
     const latestOrnamentOverrides = useRef<OrnamentOverride[]>([]);
     useEffect(() => { latestOrnamentOverrides.current = ornamentOverrides || []; }, [ornamentOverrides]);
     const [harmonyOverrideMenu, setHarmonyOverrideMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
@@ -4362,6 +4370,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 snapshot: {
                     latestRawNotes,
                     latestHarmonyOverrides,
+                    latestAccHarmonyOverrides,
                     latestOrnamentOverrides,
                     projectExtrasRef,
                     staffSystemMode,
@@ -4425,6 +4434,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setIsMinorMode,
                     setTimeSignature,
                     setHarmonyOverrides,
+                    setAccHarmonyOverrides,
                     setOrnamentOverrides,
                     setAnalysisContexts,
                     setTonicizationHints,
@@ -4561,6 +4571,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setModalTonicOverride('');
                 setAnalysisContexts([]);
                 setHarmonyOverrides([]);
+                setAccHarmonyOverrides([]);
                 setTonicizationHints([]);
                 setInferredContextSuppressions([]);
                 setOrnamentOverrides([]);
@@ -4629,7 +4640,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Keep draft snapshot args current every render (used by backup timer + beforeunload).
     draftArgsRef.current = {
-        latestRawNotes, latestHarmonyOverrides, latestOrnamentOverrides, projectExtrasRef,
+        latestRawNotes, latestHarmonyOverrides, latestAccHarmonyOverrides, latestOrnamentOverrides, projectExtrasRef,
         staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
@@ -4726,6 +4737,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setTimeSignature(p.timeSignature || { numerator: 4, denominator: 4 });
                 setTimeSignatureChanges(p.timeSignatureChanges || []);
                 setHarmonyOverrides(p.harmonyOverrides || []);
+                setAccHarmonyOverrides((p as any).accHarmonyOverrides || []);
                 setOrnamentOverrides(p.ornamentOverrides || []);
                 setAnalysisContexts(p.analysisContexts || []);
                 setTonicizationHints((p as any).tonicizationHints || []);
@@ -6042,15 +6054,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const accHarmonyLabels = useMemo(() => {
         if (!isAnalysisEnabled || !analysisAccTrack || (analysisAccTrack as any).isDrum) return [];
         try {
-            return computeAccChordAnalysis({
+            // Marcatura 'structural'/ornamentale (Opt+H / Opt+O) → mappa per il motore ACC,
+            // chiavi per noteId E per midi-misura-beat (come il percorso SATB).
+            const ornMap: Record<string, string> = {};
+            for (const o of (ornamentOverrides || [])) {
+                if (!o) continue;
+                ornMap[o.noteId] = o.type;
+                if (o.midi != null) ornMap[`${o.midi}-${o.measureIndex ?? -1}-${o.beat ?? -1}`] = o.type;
+            }
+            let labels = computeAccChordAnalysis({
                 notes: analysisAccTrack.notes as any,
                 keySignature: getKeySignature(keySignatureRoot, 'Major'),
                 keySignatureRoot,
                 isMinorMode,
                 timeSignature,
+                ornOverrides: ornMap,
             });
+            // Override manuali (collasso Opt+Shift+H in modo ACC): per ogni voce di questa
+            // traccia sopprimo le etichette automatiche nello span e fisso l'accordo scelto.
+            const ovs = (accHarmonyOverrides || []).filter(o => o.trackId === analysisAccTrack.id);
+            if (ovs.length) {
+                labels = labels.filter(l => !ovs.some(o => l.absBeat >= o.spanStart - 1e-6 && l.absBeat <= o.spanEnd + 1e-6));
+                for (const o of ovs) {
+                    if (o.roman || o.sigla) labels.push({ absBeat: o.absBeat, roman: o.roman, sigla: o.sigla, figures: o.figures });
+                }
+                labels.sort((a, b) => a.absBeat - b.absBeat);
+            }
+            return labels;
         } catch { return []; }
-    }, [isAnalysisEnabled, analysisAccTrack, keySignatureRoot, isMinorMode, timeSignature]);
+    }, [isAnalysisEnabled, analysisAccTrack, keySignatureRoot, isMinorMode, timeSignature, ornamentOverrides, accHarmonyOverrides]);
 
     // Y (locale al sistema) del rigo della traccia analizzata, dalla geometria riportata.
     // Y del rigo ACC selezionato: sopra (top) per la sigla, sotto (bottom) per il romano — stile SATB.
@@ -8936,17 +8968,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Gather the selected notes from BOTH the SATB staff and the ACC tracks, each with
         // its absBeat (SATB: measure+beat; ACC: startTick → quarter units).
+        // In modo ACC il soggetto è la traccia ACC analizzata: raccolgo SOLO le sue note
+        // selezionate (l'override andrà sulla lettura di quella traccia). In modo SATB
+        // raccolgo SATB + tutte le ACC (comportamento storico dell'hint sul SATB).
+        const accMode = analysisSubject === 'acc';
         const sel: { note: any; absBeat: number }[] = [];
-        for (const n of (latestRawNotes.current || []) as StaffNote[]) {
-            if (!ids.has(n.id) || n.isRest || !Number.isFinite((n as any).midi)) continue;
-            sel.push({ note: n, absBeat: absBeatFromMeasure(n) });
-        }
-        for (const track of (latestAccompanimentTracks.current || [])) {
+        if (accMode) {
+            const track = analysisAccTrack;
+            if (!track) return;
             for (const n of (track.notes || []) as any[]) {
                 if (!ids.has(n.id) || n.isRest || !Number.isFinite(n.midi) || !n.midi) continue;
                 const st = Number(n.startTick);
                 const absBeat = Number.isFinite(st) ? st / TICKS_PER_QUARTER : absBeatFromMeasure(n);
                 sel.push({ note: n, absBeat });
+            }
+        } else {
+            for (const n of (latestRawNotes.current || []) as StaffNote[]) {
+                if (!ids.has(n.id) || n.isRest || !Number.isFinite((n as any).midi)) continue;
+                sel.push({ note: n, absBeat: absBeatFromMeasure(n) });
+            }
+            for (const track of (latestAccompanimentTracks.current || [])) {
+                for (const n of (track.notes || []) as any[]) {
+                    if (!ids.has(n.id) || n.isRest || !Number.isFinite(n.midi) || !n.midi) continue;
+                    const st = Number(n.startTick);
+                    const absBeat = Number.isFinite(st) ? st / TICKS_PER_QUARTER : absBeatFromMeasure(n);
+                    sel.push({ note: n, absBeat });
+                }
             }
         }
         if (sel.length < 2) return;
@@ -9006,6 +9053,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Nothing recognizable — leave the score untouched.
         if (!roman && !symbol && figures.length === 0) return;
 
+        // ── Modo ACC: override MANUALE dell'analisi della traccia ACC analizzata ──
+        // Fisso l'accordo scelto (sigla=symbol, roman) su tutto lo span della selezione,
+        // rimpiazzando le voci automatiche che vi cadono. Persistito col file.
+        if (accMode && analysisAccTrack) {
+            const trackId = analysisAccTrack.id;
+            const spanStart = Math.min(...sel.map(s => s.absBeat));
+            const spanEnd = Math.max(...sel.map(s => s.absBeat));
+            setAccHarmonyOverrides(prev => {
+                // togli le voci sovrapposte sulla stessa traccia, poi aggiungi la nuova
+                const arr = (prev || []).filter(o =>
+                    !(o.trackId === trackId && o.spanStart <= spanEnd + 1e-6 && o.spanEnd >= spanStart - 1e-6));
+                arr.push({ trackId, absBeat: anchorAbs, spanStart, spanEnd, roman: roman || undefined, sigla: symbol || undefined, figures: figures.length ? figures : undefined });
+                return arr.sort((a, b) => a.absBeat - b.absBeat);
+            });
+            return;
+        }
+
         // 1) Pin the full chord label at the anchor beat.
         applyHarmonyOverride(anchorQ, roman, figures, symbol);
         // 2) Blank the other onset beats so the scattered arpeggio collapses to one label.
@@ -9030,7 +9094,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return arr;
         });
-    }, [selectedNoteIds, timeSignature, currentTonic, keySignatureRoot, keySignature, isMinorMode, qAbsForOverrides, applyHarmonyOverride, setOrnamentOverrides]);
+    }, [selectedNoteIds, timeSignature, currentTonic, keySignatureRoot, keySignature, isMinorMode, qAbsForOverrides, applyHarmonyOverride, setOrnamentOverrides, analysisSubject, analysisAccTrack, setAccHarmonyOverrides]);
 
     const handleApplyOrnamentOverride = useCallback((type: string) => {
         if (selectedNoteIds.size === 0) return;
@@ -12506,6 +12570,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         setRawNotes(notes as any);
                         setAnalysisContexts([]);
                         setHarmonyOverrides([]);
+                        setAccHarmonyOverrides([]);
                         setTonicizationHints([]);
                         setInferredContextSuppressions([]);
                         setOrnamentOverrides([]);
