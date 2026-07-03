@@ -24,6 +24,7 @@ import { useNoteEditor } from '../hooks/useNoteEditor';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, calculateAccidentalWithMeasureContext, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
 import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing } from '../utils/parseChordSymbol';
 import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody, spelledNoteName, keyAccidentalNotes, type TransformMode } from '../utils/melodicTransforms';
+import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -2262,6 +2263,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         try { localStorage.setItem('harmony.analysis.motifsEnabled.v1', isMotifsEnabled ? '1' : '0'); } catch { /* ignore */ }
     }, [isMotifsEnabled]);
+    // Soggetto d'analisi: SATB (default, corale) o ACC (traccia strumentale d'accompagnamento).
+    // Esclusivi: in modo ACC l'analisi SATB non si mostra. La traccia analizzata è scelta da
+    // un selettore (stabile), non la traccia attiva per l'editing.
+    const [analysisSubject, setAnalysisSubject] = useState<'satb' | 'acc'>(() => {
+        try { return localStorage.getItem('harmony.analysis.subject.v1') === 'acc' ? 'acc' : 'satb'; } catch { return 'satb'; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('harmony.analysis.subject.v1', analysisSubject); } catch { /* ignore */ }
+    }, [analysisSubject]);
+    const [analysisAccTrackId, setAnalysisAccTrackId] = useState<string | null>(null);
+    type AccStaffLayout = { trackIdx: number; trackId?: string; topLineY: number; bottomLineY: number; lineSpacing: number; isDrum?: boolean };
+    const [accStavesLayout, setAccStavesLayout] = useState<AccStaffLayout[]>([]);
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
     const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
     const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
@@ -6014,6 +6027,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         return null;
     }, [layoutData, timeSignature]);
+
+    // ── Analisi ACC: una traccia strumentale come SOGGETTO → riduzione accordale →
+    // etichette (sigla/romano) sopra il suo rigo. Percorso parallelo, non tocca il SATB. ──
+    const analysisAccTrack = useMemo(() => {
+        if (analysisSubject !== 'acc') return null;
+        const byId = analysisAccTrackId ? accompanimentTracks.find(t => t.id === analysisAccTrackId) : null;
+        return byId
+            || accompanimentTracks.find(t => t.visible && !(t as any).isDrum)
+            || accompanimentTracks.find(t => !(t as any).isDrum)
+            || null;
+    }, [analysisSubject, analysisAccTrackId, accompanimentTracks]);
+
+    const accHarmonyLabels = useMemo(() => {
+        if (!isAnalysisEnabled || !analysisAccTrack || (analysisAccTrack as any).isDrum) return [];
+        try {
+            return computeAccChordAnalysis({
+                notes: analysisAccTrack.notes as any,
+                keySignature: getKeySignature(keySignatureRoot, 'Major'),
+                keySignatureRoot,
+                isMinorMode,
+                timeSignature,
+            });
+        } catch { return []; }
+    }, [isAnalysisEnabled, analysisAccTrack, keySignatureRoot, isMinorMode, timeSignature]);
+
+    // Y (locale al sistema) del rigo della traccia analizzata, dalla geometria riportata.
+    // Y del rigo ACC selezionato: sopra (top) per la sigla, sotto (bottom) per il romano — stile SATB.
+    const accLabelY = useMemo(() => {
+        const e = accStavesLayout.find(s => s.trackId === analysisAccTrack?.id);
+        return e ? { top: e.topLineY, bottom: e.bottomLineY } : null;
+    }, [accStavesLayout, analysisAccTrack]);
+
+    // Etichette ACC per sistema: X via getPlayheadPosForAbsBeat (già absBeat→x per sistema).
+    const accLabelsBySystem = useMemo(() => {
+        const bySystem: Array<Array<{ id: string; x: number; roman?: string; sigla?: string }>> =
+            layoutData ? (layoutData as any).systemsParams.map(() => []) : [];
+        if (!layoutData || !accHarmonyLabels.length) return bySystem;
+        accHarmonyLabels.forEach((l, k) => {
+            const pos = getPlayheadPosForAbsBeat(l.absBeat);
+            if (!pos || pos.systemIndex < 0 || pos.systemIndex >= bySystem.length) return;
+            bySystem[pos.systemIndex].push({ id: `acc-lbl-${k}`, x: pos.x, roman: l.roman, sigla: l.sigla });
+        });
+        return bySystem;
+    }, [layoutData, accHarmonyLabels, getPlayheadPosForAbsBeat]);
 
     const pasteMarkerPos = useMemo(() => {
         if (!pasteMarker || !layoutData) return null;
@@ -10290,9 +10347,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Geometria reale dei righi batteria (emessa da VexflowGrandStaff): per ogni traccia drum
     // la Y vera della riga superiore + l'interlinea, così il click si aggancia alla riga
     // EFFETTIVAMENTE renderizzata (coincidenza click/nota). Chiave = indice traccia visibile.
-    const drumStavesLayoutRef = useRef<Array<{ trackIdx: number; topLineY: number; lineSpacing: number }>>([]);
-    const handleDrumStavesLayout = useCallback((info: Array<{ trackIdx: number; topLineY: number; lineSpacing: number }>) => {
-        drumStavesLayoutRef.current = info || [];
+    const drumStavesLayoutRef = useRef<AccStaffLayout[]>([]);
+    const handleDrumStavesLayout = useCallback((info: AccStaffLayout[]) => {
+        const next = info || [];
+        drumStavesLayoutRef.current = next;
+        // Aggiorna lo state SOLO se cambiato (il callback rifira a ogni render → eviterebbe un loop).
+        setAccStavesLayout(prev => (
+            prev.length === next.length && prev.every((p, i) => p.trackId === next[i].trackId && p.topLineY === next[i].topLineY && p.bottomLineY === next[i].bottomLineY && p.lineSpacing === next[i].lineSpacing)
+        ) ? prev : next);
     }, []);
 
     const insertDrumPieceAtCursor = useCallback((pieceMidi: number) => {
@@ -12241,6 +12303,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setShowRomanAnalysis={setShowRomanAnalysis}
                 showSymbolAnalysis={showSymbolAnalysis}
                 setShowSymbolAnalysis={setShowSymbolAnalysis}
+                analysisSubject={analysisSubject}
+                setAnalysisSubject={setAnalysisSubject}
+                accTracksForAnalysis={accompanimentTracks.filter(t => !(t as any).isDrum).map(t => ({ id: t.id, name: t.name }))}
+                analysisAccTrackId={analysisAccTrackId ?? (analysisAccTrack?.id ?? null)}
+                setAnalysisAccTrackId={setAnalysisAccTrackId}
                 moreMenuRef={moreMenuRef}
                 isMoreMenuOpen={isMoreMenuOpen}
                 setIsMoreMenuOpen={setIsMoreMenuOpen}
@@ -12841,7 +12908,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const systemDuplets = dupletGroupsBySystem[systemIndex] || [];
                         const systemTriplets = tripletGroupsBySystem[systemIndex] || [];
 
-                        const systemHarmonyLabels = (harmonyLabelsBySystemSequenced?.[systemIndex] || []);
+                        // In modo ACC l'analisi SATB non si mostra (esclusività SATB/ACC).
+                        const systemHarmonyLabels = analysisSubject === 'acc' ? [] : (harmonyLabelsBySystemSequenced?.[systemIndex] || []);
+                        const systemAccLabels = analysisSubject === 'acc' ? (accLabelsBySystem?.[systemIndex] || []) : [];
 
                         const invalidMeasureRects = (() => {
                             try {
@@ -13080,7 +13149,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 }
                             }
                         } catch (_) {}
-                        const showHarmony = isAnalysisEnabled && systemHarmonyLabels.length > 0;
+                        const showHarmony = isAnalysisEnabled && (systemHarmonyLabels.length > 0 || systemAccLabels.length > 0);
                         // Opt-in page-break guide: this system starts a new printed page.
                         const _pageBreakHere = pageBreakLayout.breakBefore.has(systemIndex);
 
@@ -13698,6 +13767,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     );
                                                                 })}
 
+
+                                {/* Analisi ACC (stile SATB): SIGLA sopra il rigo, ROMANO sotto il rigo della traccia analizzata */}
+                                {showHarmony && analysisSubject === 'acc' && accLabelY != null && systemAccLabels.map((p) => (
+                                    <g key={p.id}>
+                                        {showSymbolAnalysis && p.sigla ? (
+                                            <text x={p.x + 20} y={accLabelY.top - 42} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">{p.sigla}</text>
+                                        ) : null}
+                                        {showRomanAnalysis && p.roman ? (
+                                            <text x={p.x + 20} y={accLabelY.bottom + 20} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1e3a8a">{p.roman}</text>
+                                        ) : null}
+                                    </g>
+                                ))}
 
                                 {/* Harmony labels (roman/symbol) + figured bass */}
                                 {showHarmony && systemHarmonyLabels.map((lbl, lblIndex) => {

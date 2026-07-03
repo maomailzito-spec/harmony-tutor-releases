@@ -184,6 +184,11 @@ type GrandStaffToolbarProps = {
     setShowRomanAnalysis: (value: boolean | ((prev: boolean) => boolean)) => void;
     showSymbolAnalysis: boolean;
     setShowSymbolAnalysis: (value: boolean | ((prev: boolean) => boolean)) => void;
+    analysisSubject: 'satb' | 'acc';
+    setAnalysisSubject: (value: 'satb' | 'acc') => void;
+    accTracksForAnalysis: Array<{ id: string; name: string }>;
+    analysisAccTrackId: string | null;
+    setAnalysisAccTrackId: (value: string | null) => void;
 
     moreMenuRef: React.RefObject<HTMLDivElement>;
     isMoreMenuOpen: boolean;
@@ -369,6 +374,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         setShowRomanAnalysis,
         showSymbolAnalysis,
         setShowSymbolAnalysis,
+        analysisSubject,
+        setAnalysisSubject,
+        accTracksForAnalysis,
+        analysisAccTrackId,
+        setAnalysisAccTrackId,
         moreMenuRef,
         isMoreMenuOpen,
         setIsMoreMenuOpen,
@@ -1140,6 +1150,32 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 >
                     <span>{isAnalysisEnabled ? t('toolbar_analysis_on') : t('toolbar_analysis_off')}</span>
                 </button>
+                {isAnalysisEnabled && (
+                    <div className="flex items-center gap-1 ml-2 text-xs">
+                        <div className="flex items-center p-0.5 bg-gray-900/50 rounded-md">
+                            <button
+                                onClick={() => setAnalysisSubject('satb')}
+                                className={`px-2 rounded-sm py-0.5 font-semibold transition-all ${analysisSubject === 'satb' ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
+                                title="Analizza il coro SATB"
+                            >SATB</button>
+                            <button
+                                onClick={() => setAnalysisSubject('acc')}
+                                className={`px-2 rounded-sm py-0.5 font-semibold transition-all ${analysisSubject === 'acc' ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
+                                title="Analizza una traccia di accompagnamento (piano/chitarra)"
+                            >ACC</button>
+                        </div>
+                        {analysisSubject === 'acc' && accTracksForAnalysis.length > 0 && (
+                            <select
+                                value={analysisAccTrackId ?? ''}
+                                onChange={(e) => setAnalysisAccTrackId(e.target.value || null)}
+                                className="bg-gray-700 text-gray-100 rounded-sm px-1 py-0.5 text-xs border border-gray-600 max-w-[10rem]"
+                                title="Traccia da analizzare"
+                            >
+                                {accTracksForAnalysis.map(tk => <option key={tk.id} value={tk.id}>{tk.name}</option>)}
+                            </select>
+                        )}
+                    </div>
+                )}
                 {isAnalysisEnabled && (
                     <div className="flex items-center gap-1 p-0.5 bg-gray-900/50 rounded-md text-xs ml-2">
                         <button

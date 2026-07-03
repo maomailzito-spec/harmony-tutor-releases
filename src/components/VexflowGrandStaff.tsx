@@ -48,7 +48,7 @@ interface VexflowGrandStaffProps {
   /** Geometria REALE dei righi batteria (per agganciare il click del mouse alle righe
    *  effettivamente renderizzate → coincidenza click/nota). `trackIdx` = indice nella lista
    *  tracce VISIBILI (== visIdx lato click). Emesso ad ogni layout. */
-  onDrumStavesLayout?: (info: Array<{ trackIdx: number; topLineY: number; lineSpacing: number }>) => void;
+  onDrumStavesLayout?: (info: Array<{ trackIdx: number; trackId?: string; topLineY: number; bottomLineY: number; lineSpacing: number; isDrum?: boolean }>) => void;
   /** Etichette dei pezzi per la LEGENDA sul rigo batteria, per kit. `line` = posizione VexFlow. */
   drumPalettes?: { orchestral: Array<{ midi: number; label: string; line: string }>; rock: Array<{ midi: number; label: string; line: string }> };
 }
@@ -1001,11 +1001,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // Geometria REALE dei righi batteria → il click del mouse si aggancia alle righe
     // effettivamente renderizzate (coincidenza click/nota). getYForLine dà la Y vera.
     if (onDrumStavesLayout) {
+      // Geometria di TUTTI i righi ACC (batteria E melodici piano/chitarra): serve
+      // sia al click-mapping batteria sia al posizionamento delle etichette d'analisi
+      // ACC sopra il rigo giusto.
       const info = accBlocks
-        .filter(b => b.isDrum)
+        .filter(b => b.treble)
         .map(b => ({
           trackIdx: b.trackIdx,
+          trackId: (b as any).trackId,
+          isDrum: !!b.isDrum,
           topLineY: b.treble.getYForLine(0),
+          // fondo del rigo: pentagramma di basso se c'è (grande rigo), altrimenti il violino
+          bottomLineY: (b.bass ?? b.treble).getYForLine(4),
           lineSpacing: b.treble.getYForLine(1) - b.treble.getYForLine(0),
         }));
       onDrumStavesLayout(info);
