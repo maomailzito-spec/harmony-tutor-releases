@@ -14454,9 +14454,11 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                     };
 
                                                                     const connectionLevel = (c: ErrorConnection): 'error' | 'warning' | 'exception' => {
-                                                                        if (c.severity) return c.severity;
-                                                                        // Prefer a violation that explicitly contains both endpoints.
-                                                                        let level: 'error' | 'warning' | 'exception' | undefined;
+                                                                        // Parti dalla severità della connection, ma se sullo STESSO paio di note
+                                                                        // esiste una violazione più severa (es. R-07 error che coesiste con un
+                                                                        // warning) vince la PIÙ SEVERA (error>exception>warning) → linea rossa,
+                                                                        // non arancione. Prima c'era un corto-circuito su c.severity.
+                                                                        let level: 'error' | 'warning' | 'exception' | undefined = c.severity;
                                                                         for (const v of (violations as any[])) {
                                                                             const ids: string[] = Array.isArray((v as any)?.noteIds) ? (v as any).noteIds : [];
                                                                             if (ids.includes(c.noteId1) && ids.includes(c.noteId2)) {
