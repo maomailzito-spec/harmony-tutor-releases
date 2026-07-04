@@ -133,6 +133,9 @@ const MEASURE_PADDING_X = 20;
 // is offset relative to the rendered VexFlow stave by ~1 staff (≈40px).
 // Adjust here to keep the ghost note under the cursor.
 const VF_TREBLE_MOUSE_Y_ADJUST_PX = -40;
+// L'area ACC (righi stampati più in basso) ha un offset puntatore→resa maggiore del SATB
+// treble: col solo -40 la ghost/nota ACC restava ~40px troppo in basso. Adjust dedicato.
+const VF_ACC_MOUSE_Y_ADJUST_PX = -80;
 
 const relativeMinors: { [major: string]: string } = {
     'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
@@ -7179,7 +7182,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Y di base del marcatore: sopra il rigo di violino per il SATB; sopra il
         // rigo della traccia ACC per le curve ACC (così non appare "sul SATB").
         const satbMarkerY = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 10;
-        const ACC_TREBLE_TOP_Y_LOCAL = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — prima traccia ACC
+        const ACC_TREBLE_TOP_Y_LOCAL = (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100; // 310 grandstaff / 480 antico — prima traccia ACC
         const visAccTracks = (accompanimentTracks || []).filter(t => t && t.visible);
         const accTrebleOffsets = accompanimentTrackTrebleOffsets(visAccTracks);
         const resolvePos = (noteId: string): { sys: number; x: number; y: number } | null => {
@@ -7463,7 +7466,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData) return systems;
         if (!hasVisibleAccompaniment) return systems;
 
-        const ACC_TREBLE_TOP_Y_LOCAL = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — first block treble top
+        const ACC_TREBLE_TOP_Y_LOCAL = (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100; // 310 grandstaff / 480 antico — first block treble top
         // Diatonic position (C4=0) of each clef's TOP staff line.
         const ACC_TOP_LINE_POS: Record<ClefType, number> = { treble: 10, bass: -2, alto: 4, tenor: 2, soprano: 8 };
         const accVis = (accompanimentTracks || []).filter(t => t && t.visible);
@@ -9310,16 +9313,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // ACC bass stave:   top line Y = 440, bottom line Y = 480
         // Threshold conservative: clicks well below SATB bass ledger lines AND
         // close enough to ACC area to be intentional.
-        const ACC_TREBLE_TOP_Y = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — first acc block's treble top
-        const ACC_AREA_THRESHOLD_Y = ACC_TREBLE_TOP_Y - 30;             // 280 — allows ~3 ledger lines above ACC treble
+        // Y del primo rigo ACC — MODE-AWARE: in chiavi antiche il blocco SATB (4 righi) è più
+        // alto, quindi l'area ACC comincia molto più in basso. Con un valore fisso grandstaff il
+        // tenore/basso antichi finivano oltre soglia e venivano scambiati per area ACC.
+        const ACC_TREBLE_TOP_Y = (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100; // 310 grandstaff / 480 antico
+        const ACC_AREA_THRESHOLD_Y = ACC_TREBLE_TOP_Y - 30;             // ~3 righe addizionali sopra il rigo ACC
         if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y) {
             if (e?.altKey) return;
             setActiveStaffArea('accompaniment');
             // In chord insert mode, just position the caret — don't insert a single note.
             if (chordInsertModeRef.current) return;
-            // Empirical calibration: the pointer Y reported to the editor is offset
-            // relative to the rendered VexFlow stave by ~40px (same as SATB treble).
-            const yCal = y + VF_TREBLE_MOUSE_Y_ADJUST_PX;
+            // Calibrazione puntatore→resa specifica dell'area ACC (offset maggiore del SATB).
+            const yCal = y + VF_ACC_MOUSE_Y_ADJUST_PX;
 
             // Resolve which track block (and clef/position) the click lands on, so the
             // note is inserted into the clicked track's own staff — not always the first.
@@ -10548,12 +10553,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData) return;
 
         // ── ACC area: show ACC ghost note (suppresses SATB ghost) ──
-        const ACC_TREBLE_TOP_Y_GHOST = VF_BASS_Y + 4 * VF_LINE_SPACING + 100; // 310 — first acc block's treble top
-        const ACC_AREA_THRESHOLD_Y_GHOST = ACC_TREBLE_TOP_Y_GHOST - 30;       // 280
+        // MODE-AWARE (vedi handler di inserimento): area ACC più in basso con le chiavi antiche.
+        const ACC_TREBLE_TOP_Y_GHOST = (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100; // 310 grandstaff / 480 antico
+        const ACC_AREA_THRESHOLD_Y_GHOST = ACC_TREBLE_TOP_Y_GHOST - 30;
         if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y_GHOST) {
             const hitGhost = getSystemMeasureAtX(systemIndex, x);
             if (!hitGhost) { setGhostNote(null); return; }
-            const yCalGhost = y + VF_TREBLE_MOUSE_Y_ADJUST_PX;
+            const yCalGhost = y + VF_ACC_MOUSE_Y_ADJUST_PX;
             // Resolve the target track block so the ghost previews on the clicked staff.
             const accTargetGhost = resolveAccTarget(yCalGhost, ACC_TREBLE_TOP_Y_GHOST);
             if (!accTargetGhost) { setGhostNote(null); return; }
