@@ -11400,7 +11400,6 @@ export function applyHarmonyRules(
             const n2 = next?.note;
             const idx2 = next?.index;
             if (!n2) return;
-
             // Do not enforce leading-tone resolution on non-chord tones/ornaments.
             if (isOrnamental(n1) || isOrnamental(n2)) return;
 
@@ -13297,6 +13296,10 @@ export function applyHarmonyRules(
         const exceptionPairs = new Set<string>();
         for (const v of (violations || [])) {
             if (!v || v.severity !== 'exception') continue;
+            // Solo le eccezioni di SENSIBILE (EXC-LT-*) sopprimono R-07: altrimenti un'eccezione
+            // qualunque (es. EXC-Hidden-Stepwise sulle voci esterne) che tocca le stesse note
+            // cancellerebbe R-07 a torto — era la causa della mancata rilevazione.
+            if (!String(v.ruleId || '').startsWith('EXC-LT')) continue;
             const ids = Array.isArray(v.noteIds) ? v.noteIds : [];
             const norm = ids.filter(Boolean).map(x => String(x));
             if (norm.length < 2) continue;
