@@ -9,5 +9,7 @@
    Tutte le coordinate interne (overlay, click, playhead) restano invariate:
    vengono solo traslate uniformemente, quindi click e disegno restano allineati. */
 .ht-satb-hidden > * {
-  transform: translateY(-270px);
+  /* Quantità impostata da JS (mode-aware): 270px grandstaff, ~440px chiavi antiche.
+     Con un valore fisso, in chiavi antiche restavano visibili tenore/basso. */
+  transform: translateY(calc(-1 * var(--ht-satb-hide-shift, 270px)));
 }

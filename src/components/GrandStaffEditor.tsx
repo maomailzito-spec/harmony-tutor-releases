@@ -670,7 +670,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [satbVisible, setSatbVisible] = useState(true);
     // Custom name for the SATB group (like ACC track names). Empty = no staff label.
     const [satbName, setSatbName] = useState('');
-    const SATB_HIDE_SHIFT_PX = (VF_BASS_Y + 4 * VF_LINE_SPACING + 100) - VF_TREBLE_Y; // 270
 
     // Per-track gain nodes for real-time mute/volume control without restarting playback.
     // Index = position in accompanimentTracks; each gain node persists and is connected
@@ -2082,6 +2081,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         : 0;
     const systemHeightPx = (staffSystemMode === 'satb_ancient' ? VF_SATB_SYSTEM_HEIGHT : TOTAL_SYSTEM_HEIGHT)
         + accExtraPx;
+    // Traslazione verso l'alto quando il SATB è NASCOSTO: deve coprire TUTTA l'altezza del
+    // blocco SATB. MODE-AWARE: in chiavi antiche il blocco è 4 righi (fino a ~380) → shift ~440;
+    // in grandstaff ~270. Con un valore fisso grandstaff, in antico tenore/basso restavano visibili.
+    const SATB_HIDE_SHIFT_PX = ((staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100) - VF_TREBLE_Y; // 270 grandstaff / 440 antico
     const playheadYTopPx = staffSystemMode === 'satb_ancient'
         ? (VF_SATB_SOPRANO_Y + PLAYHEAD_Y_OFFSET_PX - 3)
         : PLAYHEAD_Y_TOP;
@@ -13239,7 +13242,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 else map.delete(systemIndex);
                                                         }}
                             className={`relative ${viewMode === 'page' ? 'mb-8' : 'mb-0'} ${satbVisible ? '' : 'ht-satb-hidden'}`}
-                            style={{ width: actualSystemWidth, height: satbVisible ? systemHeightPx : Math.max(0, systemHeightPx - SATB_HIDE_SHIFT_PX), overflow: satbVisible ? undefined : 'hidden', marginTop: _pageBreakHere ? 46 : undefined }}
+                            style={{ width: actualSystemWidth, height: satbVisible ? systemHeightPx : Math.max(0, systemHeightPx - SATB_HIDE_SHIFT_PX), overflow: satbVisible ? undefined : 'hidden', marginTop: _pageBreakHere ? 46 : undefined, ...(satbVisible ? {} : { ['--ht-satb-hide-shift' as any]: `${SATB_HIDE_SHIFT_PX}px` }) }}
                                                         data-system-index={systemIndex}
                           >
                                                         {_pageBreakHere && (
