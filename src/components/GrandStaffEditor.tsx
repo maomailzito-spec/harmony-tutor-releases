@@ -9061,11 +9061,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const spanStart = Math.min(...sel.map(s => s.absBeat));
             const spanEnd = Math.max(...sel.map(s => s.absBeat));
             setAccHarmonyOverrides(prev => {
-                // togli le voci sovrapposte sulla stessa traccia, poi aggiungi la nuova
-                const arr = (prev || []).filter(o =>
+                const arr = (prev || []);
+                // TOGGLE: ri-applicare sulla STESSA selezione (stesso span) rimuove l'override
+                // → torna l'analisi automatica su quello span (rimozione = stessa procedura).
+                const same = arr.find(o => o.trackId === trackId
+                    && Math.abs(o.spanStart - spanStart) < 1e-6 && Math.abs(o.spanEnd - spanEnd) < 1e-6);
+                if (same) return arr.filter(o => o !== same);
+                // Altrimenti aggiungo, rimpiazzando eventuali override sovrapposti sulla stessa traccia.
+                const kept = arr.filter(o =>
                     !(o.trackId === trackId && o.spanStart <= spanEnd + 1e-6 && o.spanEnd >= spanStart - 1e-6));
-                arr.push({ trackId, absBeat: anchorAbs, spanStart, spanEnd, roman: roman || undefined, sigla: symbol || undefined, figures: figures.length ? figures : undefined });
-                return arr.sort((a, b) => a.absBeat - b.absBeat);
+                kept.push({ trackId, absBeat: anchorAbs, spanStart, spanEnd, roman: roman || undefined, sigla: symbol || undefined, figures: figures.length ? figures : undefined });
+                return kept.sort((a, b) => a.absBeat - b.absBeat);
             });
             return;
         }
