@@ -11330,9 +11330,13 @@ export function applyHarmonyRules(
                             }
                             // else: n2 introduces the pitch letter fresh → real false relation
                         }
-                        // Symmetric attenuation: chromatic motion in the *same voice* of n1.
+                        // Symmetric attenuation: la falsa relazione si attenua solo se la voce di n1
+                        // fa un vero MOTO CROMATICO nella propria parte (STESSA lettera, accidente
+                        // diverso: es. basso G#→G). Serve `pNext === p1`: senza, un semplice SALTO a
+                        // un'altra nota (es. basso G#→C) veniva scambiato per attenuazione e la falsa
+                        // relazione (basso G# vs contralto G) non veniva segnalata.
                         const accNext = (nextSameVoice.explicitAccidental ?? nextSameVoice.accidental ?? null) as AccidentalType | null;
-                        if (normAcc(accNext) !== normAcc(acc1)) {
+                        if (pNext === p1 && normAcc(accNext) !== normAcc(acc1)) {
                             continue;
                         }
                     } catch {
