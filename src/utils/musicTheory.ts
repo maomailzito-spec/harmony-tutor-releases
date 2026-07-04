@@ -12523,48 +12523,25 @@ export function applyHarmonyRules(
                         } catch { /* ignore */ }
                     }
 
-                    // EXC-7m01 transferred resolution: resolution note appears in another voice.
-                    // (Or the original voice is silent/absent, but another voice contains the resolution.)
-                    const resolutionMidiCandidates = [n7.midi - 1, n7.midi - 2];
-                    const transferredResolution = (() => {
-                        // Prefer -1 semitone, then -2.
-                        // Accept the resolution even if it appears in another octave (pitch-class match).
-                        // Use the *structural arrival event* (not just the immediate next scanpoint),
-                        // otherwise micro-events can hide the resolution note.
-                        const candidates = ((evBFor7 as any)?.notes || b.notes || []).filter((n: any) => n && !n.isRest) as StaffNote[];
-
-                        // 1) Exact MIDI match first.
-                        for (const targetMidi of resolutionMidiCandidates) {
-                            const hit = candidates
-                                .slice()
-                                .sort((a, b) => (a.voice ?? 1) - (b.voice ?? 1))
-                                .find(n => n.midi === targetMidi);
-                            if (hit) return hit;
-                        }
-
-                        // 2) Pitch-class match (different octave).
-                        const targets = resolutionMidiCandidates.map(m => ({ midi: m, pc: mod12(m) }));
-                        let best: { note: StaffNote; score: number } | null = null;
-                        for (const cand of candidates) {
-                            const pc = mod12(cand.midi);
-                            for (const t of targets) {
-                                if (pc !== t.pc) continue;
-                                // Score: prefer closer register to the expected resolution MIDI.
-                                const score = Math.abs(cand.midi - t.midi);
-                                if (!best || score < best.score) best = { note: cand, score };
-                            }
-                        }
-                        return best?.note ?? null;
-                    })();
-
-                    if (transferredResolution) {
+                    // EXC-7m01 risoluzione trasferita: la nota di risoluzione è presa in carico da
+                    // una voce AMMESSA — basso, soprano o la voce immediatamente inferiore alla 7ª
+                    // (prassi moderna, Delamont "transference"). NON da una voce qualunque: la mera
+                    // presenza della nota di risoluzione come 3ª d'accordo (sempre presente in un I
+                    // completo) non è un trasferimento e non deve esentare la 7ª non risolta.
+                    // Solo carrier AMMESSI (basso/soprano/voce-immediatamente-sotto): il fallback
+                    // "qualsiasi voce" (kind 'other', es. la E come 3ª al tenore) NON è un trasferimento.
+                    const transferredResolution = findResolutionCarrierAtB();
+                    if (transferredResolution && transferredResolution.kind !== 'other') {
                         addViolation({
                             ruleId: 'EXC-7m01',
                             severity: 'exception',
                             description: 'Risoluzione della settima trasferita',
-                            suggestion: 'Eccezione: la nota di risoluzione compare in un’altra voce.',
+                            suggestion: 'Eccezione: la nota di risoluzione è presa in carico '
+                                + (transferredResolution.kind === 'bass' ? 'dal basso'
+                                    : transferredResolution.kind === 'soprano' ? 'dal soprano'
+                                    : 'dalla voce immediatamente inferiore') + '.',
                             // Keep it to 2 noteIds so the editor can render the green connection line.
-                            noteIds: [n7.id, transferredResolution.id],
+                            noteIds: [n7.id, transferredResolution.note.id],
                         });
                         return;
                     }
@@ -12616,13 +12593,15 @@ export function applyHarmonyRules(
                         } catch { /* ignore */ }
                     }
 
-                    // No transferred resolution note exists; if the voice continues, flag the error.
+                    // Nessuna eccezione ammessa si applica: la 7ª non risolve. NON silenziare mai —
+                    // se il contesto è "stretto" (triade/7ª pulita, root certa) è un ERRORE; altrimenti
+                    // (pc>4, root inferita, sonorità ambigua) almeno un WARNING, così qualcosa compare.
                     if (!nNext) return;
 
-                    if (strictR12 && !rootInferredForR12) {
+                    {
                         addViolation({
                             ruleId: 'R-12',
-                            severity: 'error',
+                            severity: (strictR12 && !rootInferredForR12) ? 'error' : 'warning',
                             description: 'Risoluzione errata della settima dell’accordo',
                             noteIds: [n7.id, nNext.id],
                         });
