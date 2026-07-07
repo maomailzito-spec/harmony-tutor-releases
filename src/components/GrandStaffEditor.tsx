@@ -29,6 +29,9 @@ import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
 import { exportMusicXML } from '../exporters/exportMusicXML';
+import { exportMuseScoreMscx } from '../exporters/exportMuseScoreMscx';
+import { functionalToken, absoluteToken, spokenPhrase, normalizeRoman } from '../exporters/spokenHarmony';
+import ExportMusicXMLModal, { type ExportMusicXMLChoice } from './ExportMusicXMLModal';
 import { useEditorZoom } from '../hooks/useEditorZoom';
 import { useHarmonyLabels } from '../hooks/useHarmonyLabels';
 import { useHarmonyExplain } from '../hooks/useHarmonyExplain';
@@ -668,6 +671,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // continua (per silenziarlo si usa il Mute nel mixer). Lo shift di clip in px
     // corrisponde all'altezza del blocco SATB sopra gli ACC (ACC treble 310 → 40).
     const [satbVisible, setSatbVisible] = useState(true);
+    // Dialogo di export MusicXML (Standard vs Screen reader + livello).
+    const [exportXmlModalOpen, setExportXmlModalOpen] = useState(false);
     // Custom name for the SATB group (like ACC track names). Empty = no staff label.
     const [satbName, setSatbName] = useState('');
 
@@ -4314,49 +4319,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
 
         if (action === MENU_ACTIONS.EXPORT_MUSICXML) {
-            try {
-                const exportNotes = latestRawNotes.current || [];
-                // Analisi armonica: raccogliamo le etichette ATTUALMENTE VISUALIZZATE (unica
-                // fonte, coerente con lo schermo — niente ricalcolo divergente). Se l'analisi
-                // è spenta la lista è vuota → export note-only, coerente col fatto che a
-                // schermo non c'è analisi.
-                const measureByTick = new Map<number, number>();
-                for (const n of exportNotes as any[]) {
-                    if (typeof n?.startTick === 'number' && typeof n?.measureIndex === 'number' && !measureByTick.has(n.startTick)) {
-                        measureByTick.set(n.startTick, n.measureIndex);
-                    }
-                }
-                const bpmMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
-                const seenTick = new Set<number>();
-                const harmonyLabels: Array<{ measureIndex: number; tick: number; roman?: string; figures?: string[] }> = [];
-                for (const l of (_harmonyLabelsRef.current || []).flat() as any[]) {
-                    if (!l || l.hiddenMarker) continue;
-                    // Stessa catena del rendering: forma romano effettivamente visualizzata.
-                    const roman = String(l.romanDisplay ?? l.sequenceRomanFunctional ?? l.sequenceRoman ?? l.roman ?? '').trim();
-                    const figures = Array.isArray(l.figures) ? l.figures.map((x: any) => String(x).trim()).filter(Boolean) : [];
-                    if (!roman && figures.length === 0) continue;
-                    const absBeat = Number(l.absBeat);
-                    if (!Number.isFinite(absBeat)) continue;
-                    const tick = Math.round(absBeat * TICKS_PER_QUARTER);
-                    if (seenTick.has(tick)) continue;
-                    seenTick.add(tick);
-                    const measureIndex = measureByTick.get(tick) ?? Math.max(0, Math.floor(absBeat / bpmMeasure));
-                    harmonyLabels.push({ measureIndex, tick, roman: roman || undefined, figures: figures.length ? figures : undefined });
-                }
-                const xml = exportMusicXML({
-                    notes: exportNotes,
-                    title: projectTitle || 'Untitled',
-                    keySignature: getKeySignature(keySignatureRoot, 'Major'),
-                    timeSignature,
-                    timeSignatureChanges,
-                    isMinorMode,
-                    keySignatureRoot,
-                    harmonyLabels,
-                });
-                await electronBridge.exportMusicXml(xml);
-            } catch {
-                // ignore
-            }
+            // Apre il dialogo (Standard vs Screen reader). Il flusso standard resta veloce:
+            // il modale parte su Standard con focus su Esporta → Invio conferma subito.
+            setExportXmlModalOpen(true);
             return;
         }
 
@@ -5840,6 +5805,75 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Keep a ref to latest harmony labels for save-time corpus recording
     const _harmonyLabelsRef = useRef(harmonyLabelsBySystemSequenced);
     _harmonyLabelsRef.current = harmonyLabelsBySystemSequenced;
+
+    // Export MusicXML: Standard (romani + basso figurato, invariato) oppure Screen reader
+    // (analisi in italiano parlato). Fonte = etichette VISUALIZZATE (_harmonyLabelsRef).
+    const runXmlExport = useCallback(async (choice: ExportMusicXMLChoice) => {
+        try {
+            const exportNotes = latestRawNotes.current || [];
+            const measureByTick = new Map<number, number>();
+            for (const n of exportNotes as any[]) {
+                if (typeof n?.startTick === 'number' && typeof n?.measureIndex === 'number' && !measureByTick.has(n.startTick)) {
+                    measureByTick.set(n.startTick, n.measureIndex);
+                }
+            }
+            const bpmMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+
+            const seenTick = new Set<number>();
+            const harmonyLabels: Array<{ measureIndex: number; tick: number; roman?: string; figures?: string[]; token?: string }> = [];
+            for (const l of (_harmonyLabelsRef.current || []).flat() as any[]) {
+                if (!l || l.hiddenMarker) continue;
+                const roman = String(l.romanDisplay ?? l.sequenceRomanFunctional ?? l.sequenceRoman ?? l.roman ?? '').trim();
+                const figures = Array.isArray(l.figures) ? l.figures.map((x: any) => String(x).trim()).filter(Boolean) : [];
+                if (!roman && figures.length === 0) continue;
+                const absBeat = Number(l.absBeat);
+                if (!Number.isFinite(absBeat)) continue;
+                const tick = Math.round(absBeat * TICKS_PER_QUARTER);
+                if (seenTick.has(tick)) continue;
+                seenTick.add(tick);
+                const measureIndex = measureByTick.get(tick) ?? Math.max(0, Math.floor(absBeat / bpmMeasure));
+                if (choice.mode === 'standard') {
+                    // Standard: MusicXML — romano sopra + cifre reali sotto (uso visivo).
+                    harmonyLabels.push({ measureIndex, tick, roman: roman || undefined, figures: figures.length ? figures : undefined });
+                } else {
+                    // .mscx NATIVO: il testo del <FiguredBass> (l'unico elemento letto da VoiceOver
+                    // navigando il basso). Parlata = FRASE italiana (nessun dizionario). Token =
+                    // sigla compatta (richiede dizionario): funzionale (V7) o assoluto (Bb7).
+                    let tok: string;
+                    if (choice.mode === 'spoken') tok = spokenPhrase({ roman, figures });
+                    else if (choice.mode === 'functional') tok = functionalToken({ roman, figures });
+                    else tok = absoluteToken({ symbol: String(l.symbol || ''), figures }) || functionalToken({ roman, figures });
+                    const text = tok || normalizeRoman(roman) || figures.join('');
+                    if (text) harmonyLabels.push({ measureIndex, tick, token: text });
+                }
+            }
+
+            const baseOpts = {
+                notes: exportNotes,
+                title: projectTitle || 'Untitled',
+                keySignature: getKeySignature(keySignatureRoot, 'Major'),
+                timeSignature,
+                timeSignatureChanges,
+                isMinorMode,
+                keySignatureRoot,
+                harmonyLabels,
+            };
+
+            if (choice.mode === 'standard') {
+                await electronBridge.exportMusicXml(exportMusicXML(baseOpts));
+            } else {
+                // Salva un .mscx nativo di MuseScore 4 (via SAVE_BINARY_FILE, base64 UTF-8).
+                // Font piccolo solo per la "parlata" (frasi lunghe → niente gonfiore pagine).
+                const mscx = exportMuseScoreMscx(baseOpts, choice.mode === 'spoken');
+                const bytes = new TextEncoder().encode(mscx);
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                await electronBridge.saveBinaryFile(btoa(bin), undefined, [{ name: 'MuseScore 4', extensions: ['mscx'] }]);
+            }
+        } catch {
+            // ignore
+        }
+    }, [timeSignature, timeSignatureChanges, projectTitle, keySignatureRoot, isMinorMode]);
 
     // Chord identity card (explain modal)
     const { isExplainOpen, explainData, openExplain, closeExplain } = useHarmonyExplain({ analyzedNotes, analysisContexts, currentTonic, isMinorMode, analysisContextAbsBeat, timeSignature });
@@ -12462,6 +12496,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 );
             })()}
 
+            <ExportMusicXMLModal
+                open={exportXmlModalOpen}
+                onClose={() => setExportXmlModalOpen(false)}
+                onConfirm={(choice) => { setExportXmlModalOpen(false); void runXmlExport(choice); }}
+            />
             <PreferencesModal
                 isOpen={isPreferencesOpen}
                 onClose={() => {

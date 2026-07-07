@@ -18,6 +18,9 @@ export interface HarmonyExportLabel {
   roman?: string;
   /** Cifre del basso figurato, es. ["6","4"]. */
   figures?: string[];
+  /** Token compatto già pronto (V7, IV43, Bb65…) per l'export nativo .mscx accessibile.
+   *  Usato SOLO da exportMuseScoreMscx come testo del <FiguredBass>. */
+  token?: string;
 }
 
 export interface ExportMusicXMLOptions {
