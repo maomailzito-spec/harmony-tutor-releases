@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-export type ExportMusicXMLMode = 'standard' | 'spoken' | 'functional' | 'absolute';
+export type ExportMusicXMLMode = 'midi' | 'standard' | 'spoken' | 'functional' | 'absolute';
 export type ExportMusicXMLChoice = { mode: ExportMusicXMLMode };
 
 type Props = {
@@ -9,27 +10,34 @@ type Props = {
     onConfirm: (choice: ExportMusicXMLChoice) => void;
 };
 
-type Main = 'standard' | 'spoken' | 'token';
-
-const MAIN: Array<{ v: Main; title: string; fmt: string; desc: string }> = [
-    { v: 'standard', title: 'Standard (visivo)', fmt: '.musicxml · tutti i software', desc: 'Romani sopra + cifre reali sotto. Formato universale (MuseScore, Finale, Sibelius, Dorico…).' },
-    { v: 'spoken', title: 'Parlata (non vedenti)', fmt: '.mscx · solo MuseScore', desc: 'Analisi scritta in italiano nel basso figurato, letta da VoiceOver. Niente da installare.' },
-    { v: 'token', title: 'Token (per dizionario VoiceOver)', fmt: '.mscx · solo MuseScore', desc: 'Sigle compatte nel basso figurato; richiede un dizionario di pronuncia VoiceOver.' },
-];
-
-const SUB: Array<{ v: 'functional' | 'absolute'; title: string }> = [
-    { v: 'functional', title: 'Funzionale — grado (V7, IV43)' },
-    { v: 'absolute', title: 'Assoluto — sigla (Bb7, F#65)' },
-];
+type Main = 'midi' | 'standard' | 'spoken' | 'token';
 
 /**
- * Dialogo di export dell'analisi. Si apre su "Standard" con il focus su Esporta → Invio conferma
- * subito. Il ramo "Token" espone due sotto-scelte (funzionale / assoluto).
+ * Dialogo di export della musica. Si apre su "MusicXML" con il focus su Esporta → Invio conferma
+ * subito. Il ramo "Token" espone due sotto-scelte (funzionale / assoluto). MIDI e MusicXML sono
+ * formati generali; Parlata e Token stanno sotto l'intestazione "Per non vedenti".
+ * Stringhe localizzate via i18next (italiano come defaultValue, inglese in en/ui.json).
  */
 export default function ExportMusicXMLModal({ open, onClose, onConfirm }: Props) {
+    const { t } = useTranslation('ui');
     const [main, setMain] = useState<Main>('standard');
     const [sub, setSub] = useState<'functional' | 'absolute'>('functional');
     const confirmRef = useRef<HTMLButtonElement | null>(null);
+
+    // group: 'main' = formati generali; 'a11y' = flusso per non vedenti (intestazione dedicata).
+    // NB: 'standard' è l'enum INTERNO della modalità MusicXML — la label mostrata è "MusicXML",
+    // ma la chiave non cambia (baseline di regressione dell'export invariata).
+    const MAIN: Array<{ v: Main; title: string; fmt: string; desc: string; group: 'main' | 'a11y' }> = [
+        { v: 'midi', title: 'MIDI', fmt: t('export_music_midi_fmt', { defaultValue: '.mid · sequencer, DAW, notazione' }), desc: t('export_music_midi_desc', { defaultValue: 'Le note del brano come file MIDI (senza analisi). Per DAW, editor di notazione e sintetizzatori.' }), group: 'main' },
+        { v: 'standard', title: 'MusicXML', fmt: t('export_music_xml_fmt', { defaultValue: '.musicxml · tutti i software' }), desc: t('export_music_xml_desc', { defaultValue: 'Romani sopra + cifre reali sotto. Formato universale (MuseScore, Finale, Sibelius, Dorico…).' }), group: 'main' },
+        { v: 'spoken', title: t('export_music_spoken_title', { defaultValue: 'Parlata (non vedenti)' }), fmt: t('export_music_mscx_fmt', { defaultValue: '.mscx · solo MuseScore' }), desc: t('export_music_spoken_desc', { defaultValue: 'Analisi scritta in italiano nel basso figurato, letta da VoiceOver. Niente da installare.' }), group: 'a11y' },
+        { v: 'token', title: t('export_music_token_title', { defaultValue: 'Token (per dizionario VoiceOver)' }), fmt: t('export_music_mscx_fmt', { defaultValue: '.mscx · solo MuseScore' }), desc: t('export_music_token_desc', { defaultValue: 'Sigle compatte nel basso figurato; richiede un dizionario di pronuncia VoiceOver.' }), group: 'a11y' },
+    ];
+
+    const SUB: Array<{ v: 'functional' | 'absolute'; title: string }> = [
+        { v: 'functional', title: t('export_music_sub_functional', { defaultValue: 'Funzionale — grado (V7, IV43)' }) },
+        { v: 'absolute', title: t('export_music_sub_absolute', { defaultValue: 'Assoluto — sigla (Bb7, F#65)' }) },
+    ];
 
     useEffect(() => {
         if (!open) return;
@@ -54,11 +62,15 @@ export default function ExportMusicXMLModal({ open, onClose, onConfirm }: Props)
             onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div className="w-[470px] max-w-[92vw] rounded-lg border border-slate-700 bg-slate-800 p-5 text-slate-100 shadow-2xl">
-                <div className="mb-3 text-base font-semibold">Esporta analisi</div>
+                <div className="mb-3 text-base font-semibold">{t('export_music_title', { defaultValue: 'Esporta musica' })}</div>
 
                 <div className="space-y-2">
-                    {MAIN.map(m => (
+                    {MAIN.map((m, i) => (
                         <div key={m.v}>
+                            {/* Intestazione di sezione: appare prima del primo item "Per non vedenti". */}
+                            {m.group === 'a11y' && MAIN[i - 1]?.group !== 'a11y' && (
+                                <div className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('export_music_a11y_header', { defaultValue: 'Per non vedenti' })}</div>
+                            )}
                             <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-700 p-2 hover:bg-slate-700/40">
                                 <input type="radio" name="xml-main" className="mt-1" checked={main === m.v} onChange={() => setMain(m.v)} />
                                 <span>
@@ -82,8 +94,8 @@ export default function ExportMusicXMLModal({ open, onClose, onConfirm }: Props)
                 </div>
 
                 <div className="mt-4 flex justify-end gap-2">
-                    <button type="button" className="rounded-md px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700" onClick={onClose}>Annulla</button>
-                    <button ref={confirmRef} type="button" className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500" onClick={confirm}>Esporta</button>
+                    <button type="button" className="rounded-md px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700" onClick={onClose}>{t('export_music_cancel', { defaultValue: 'Annulla' })}</button>
+                    <button ref={confirmRef} type="button" className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500" onClick={confirm}>{t('export_music_confirm', { defaultValue: 'Esporta' })}</button>
                 </div>
             </div>
         </div>

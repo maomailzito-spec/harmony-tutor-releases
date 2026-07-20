@@ -3595,7 +3595,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // displayed key after a MIDI import.
             try {
                 const targetKeySignature = getKeySignature(nextRoot, 'Major');
-                setRawNotes(prev => prev.map((n) => {
+                // Re-spell a single note enharmonically for the target key, keeping its
+                // sounding pitch (midi) and id. Shared by SATB and ACC so the accompaniment
+                // staves follow the key change exactly like the SATB voices.
+                const respell = (n: StaffNote): StaffNote => {
                     try {
                         if (n.isRest || !Number.isFinite(n.midi)) return n;
                         const currentClef = (n.clef || 'treble') as ClefType;
@@ -3614,14 +3617,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             midi: n.midi,
                         };
                     } catch { return n; }
-                }));
+                };
+                setRawNotes(prev => prev.map(respell));
+                // ACC tracks were previously left untouched here, so an accompaniment
+                // imported before the key was set kept its import-time spelling
+                // (e.g. A# instead of Bb in D minor). Re-spell them too, like the SATB.
+                setAccompanimentTracks(prev => (prev || []).map(track => ({
+                    ...track,
+                    notes: (track.notes || []).map(respell),
+                })));
             } catch { /* ignore */ }
         }
 
         // Record last key change so the transpose checkbox can apply/revert even if toggled after.
         lastKeyChangeRef.current = { fromRoot, toRoot: nextRoot, transposedApplied: isTranspose };
         setKeySignatureRoot(nextRoot);
-    }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, setRawNotes, transposeAllNotesToKey]);
+    }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, setRawNotes, setAccompanimentTracks, transposeAllNotesToKey]);
 
     const { currentTonic, currentQuality } = useMemo(() => {
         if (isMinorMode) {
@@ -5810,6 +5821,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // (analisi in italiano parlato). Fonte = etichette VISUALIZZATE (_harmonyLabelsRef).
     const runXmlExport = useCallback(async (choice: ExportMusicXMLChoice) => {
         try {
+            // MIDI ora vive dentro il dialogo "Esporta musica": nessuna logica nuova,
+            // riusa l'export MIDI esistente (già raggiungibile prima dal menu dedicato).
+            if (choice.mode === 'midi') {
+                await exportMidi();
+                return;
+            }
             const exportNotes = latestRawNotes.current || [];
             const measureByTick = new Map<number, number>();
             for (const n of exportNotes as any[]) {
@@ -5873,7 +5890,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch {
             // ignore
         }
-    }, [timeSignature, timeSignatureChanges, projectTitle, keySignatureRoot, isMinorMode]);
+    }, [timeSignature, timeSignatureChanges, projectTitle, keySignatureRoot, isMinorMode, exportMidi]);
 
     // Chord identity card (explain modal)
     const { isExplainOpen, explainData, openExplain, closeExplain } = useHarmonyExplain({ analyzedNotes, analysisContexts, currentTonic, isMinorMode, analysisContextAbsBeat, timeSignature });
@@ -6105,7 +6122,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             let labels = computeAccChordAnalysis({
                 notes: analysisAccTrack.notes as any,
                 keySignature: getKeySignature(keySignatureRoot, 'Major'),
-                keySignatureRoot,
+                // TONICA effettiva (Re minore → 'D'), non il root del maggiore relativo ('F'):
+                // altrimenti i romani escono nel relativo maggiore (Dm=vi invece di i).
+                tonic: currentTonic,
                 isMinorMode,
                 timeSignature,
                 ornOverrides: ornMap,
@@ -6122,7 +6141,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return labels;
         } catch { return []; }
-    }, [isAnalysisEnabled, analysisAccTrack, keySignatureRoot, isMinorMode, timeSignature, ornamentOverrides, accHarmonyOverrides]);
+    }, [isAnalysisEnabled, analysisAccTrack, keySignatureRoot, currentTonic, isMinorMode, timeSignature, ornamentOverrides, accHarmonyOverrides]);
 
     // Y (locale al sistema) del rigo della traccia analizzata, dalla geometria riportata.
     // Y del rigo ACC selezionato: sopra (top) per la sigla, sotto (bottom) per il romano — stile SATB.

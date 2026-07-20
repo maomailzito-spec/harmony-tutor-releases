@@ -80,6 +80,31 @@ function noteDurationFromType(type: string): NoteDuration | null {
   }
 }
 
+// Notated durations as beats (quarter = 1), longest first — used to reconcile the
+// duration LABEL with the real <duration>.
+const DURATION_BEATS: Array<[NoteDuration, number]> = [
+  ['whole', 4], ['half', 2], ['quarter', 1], ['eighth', 0.5],
+  ['sixteenth', 0.25], ['thirty-second', 0.125], ['sixty-fourth', 0.0625],
+];
+
+/**
+ * Sceglie il label di durata (+ eventuale punto) la cui lunghezza SUONATA è più vicina a `beats`.
+ * Serve perché il playback ricostruisce gli onset SOMMANDO i label: per le pause importate il label
+ * deve valere quanto la durata reale, altrimenti le note successive slittano. (Es. semibreve = 4,
+ * mezza col punto = 3.) Considera anche i valori puntati.
+ */
+function inferDurationFromBeats(beats: number): { duration: NoteDuration; dotted: boolean } {
+  let best: { duration: NoteDuration; dotted: boolean } = { duration: 'quarter', dotted: false };
+  let bestDiff = Infinity;
+  for (const [dur, base] of DURATION_BEATS) {
+    for (const dotted of [false, true]) {
+      const diff = Math.abs(base * (dotted ? 1.5 : 1) - beats);
+      if (diff < bestDiff - 1e-9) { bestDiff = diff; best = { duration: dur, dotted }; }
+    }
+  }
+  return best;
+}
+
 function clefFromMusicXML(sign: string, line: number | null): ClefType {
   const s = String(sign || '').trim().toUpperCase();
   if (s === 'F') return 'bass';
@@ -374,8 +399,30 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           : 0;
 
         const typeRaw = textOf(noteEl.querySelector('type'));
-        const duration = noteDurationFromType(typeRaw) || 'quarter';
-        const dots = noteEl.querySelectorAll('dot').length;
+        const parsedType = noteDurationFromType(typeRaw);
+        const xmlDots = noteEl.querySelectorAll('dot').length;
+        const hasTimeMod = !!noteEl.querySelector('time-modification');
+
+        // Il playback somma i LABEL di durata per ricostruire gli onset, quindi il label deve
+        // riflettere la durata reale (l'authority MusicXML per il timing è <duration>). Riconcilio:
+        //  · terzine/duine (time-modification): tengo il label parsato — il playback applica il rapporto;
+        //  · PAUSE (con o senza <type>) e note SENZA <type>: inferisco label + punto da <duration>,
+        //    così una pausa di misura MuseScore (semibreve, senza <type>) non diventa una semiminima;
+        //  · note normali con <type>: label invariato (comportamento storico).
+        let duration: NoteDuration;
+        let isDotted: boolean;
+        if (hasTimeMod) {
+          duration = parsedType || 'quarter';
+          isDotted = xmlDots > 0;
+        } else if (isRest || !parsedType) {
+          const beats = (divisions > 0) ? (durDiv / divisions) : 1;
+          const inf = inferDurationFromBeats(beats);
+          duration = inf.duration;
+          isDotted = inf.dotted;
+        } else {
+          duration = parsedType;
+          isDotted = xmlDots > 0;
+        }
 
         const tm = noteEl.querySelector('time-modification');
         const actualNotes = intOf(tm?.querySelector('actual-notes'));
@@ -411,7 +458,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           noteIndex,
           duration,
           isRest,
-          isDotted: dots > 0,
+          isDotted,
           isTriplet,
           isDuplet,
           isTiedToNext: tieStarts || undefined,

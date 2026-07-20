@@ -21,7 +21,7 @@
 
 import type { StaffNote, KeySignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
-import { getChordSymbol, getRomanAnalysis, identifyChordCandidates } from './musicTheory';
+import { getChordSymbol, getRomanAnalysis, identifyChordCandidates, normalizeNotePitchFieldsWithKey } from './musicTheory';
 
 export type AccChordLabel = {
     absBeat: number;
@@ -64,13 +64,19 @@ function clarityOf(segNotes: StaffNote[], orn?: Record<string, string>): number 
 export function computeAccChordAnalysis(opts: {
     notes: StaffNote[];
     keySignature: KeySignature;
-    keySignatureRoot: string;
+    /** TONICA effettiva (es. 'D' per Re minore), NON il root del maggiore relativo:
+     *  getRomanAnalysis calcola i gradi rispetto a questa. */
+    tonic: string;
     isMinorMode: boolean;
     timeSignature?: { numerator: number; denominator: number };
     /** Marcatura 'structural' (ri-orientata sulla traccia ACC): rifinisce l'analisi. */
     ornOverrides?: Record<string, string>;
 }): AccChordLabel[] {
-    const { notes, keySignature, keySignatureRoot, isMinorMode, ornOverrides } = opts;
+    const { keySignature, tonic, isMinorMode, ornOverrides } = opts;
+    // Rendi ESPLICITO l'accidente implicito dall'armatura (dal midi): una nota scritta 'B'
+    // sotto 1♭ è Si♭, ma getChordSymbol/getRomanAnalysis leggono lettera+accidente e senza
+    // questo la leggerebbero come Si naturale (Bb → B°). Solo per l'analisi, non tocca la notazione.
+    const notes = (opts.notes || []).map(n => normalizeNotePitchFieldsWithKey(n, keySignature));
 
     // Marcatura ri-orientata sulla traccia ACC: una nota marcata come ORNAMENTALE
     // (passaggio/volta/appoggiatura…, cioè un tipo ≠ 'structural') viene ESCLUSA dalla
@@ -115,7 +121,7 @@ export function computeAccChordAnalysis(opts: {
         const chord = [...seen.values()];
         if (chord.length < 2) return;
         const sigla = getChordSymbol(chord as any, keySignature) || undefined;
-        const rr = getRomanAnalysis(chord as any, keySignatureRoot, isMinorMode,
+        const rr = getRomanAnalysis(chord as any, tonic, isMinorMode,
             ornOverrides ? { ornamentOverrides: ornOverrides } : undefined);
         const roman = rr?.roman || undefined;
         const figures = (rr?.figures && rr.figures.length) ? rr.figures : undefined;

@@ -410,7 +410,7 @@ function createMenu() {
       file: 'File', edit: 'Modifica', view: 'Vista', tools: 'Strumenti', help: 'Aiuto',
       preferences: 'Preferenze…', newProject: 'Nuovo Progetto', open: 'Apri...',
       importMidi: 'Importa MIDI...', importXml: 'Importa MusicXML...',
-      exportMidi: 'Esporta MIDI...', exportXml: 'Esporta analisi…',
+      exportXml: 'Esporta musica…',
       exportPdf: 'Esporta PDF…', exportPng: 'Esporta PNG…',
       print: 'Stampa', save: 'Salva', saveAs: 'Salva con nome...',
       closeProject: 'Chiudi progetto', undo: 'Annulla', redo: 'Ripeti',
@@ -433,7 +433,7 @@ function createMenu() {
       file: 'File', edit: 'Edit', view: 'View', tools: 'Tools', help: 'Help',
       preferences: 'Preferences…', newProject: 'New Project', open: 'Open...',
       importMidi: 'Import MIDI...', importXml: 'Import MusicXML...',
-      exportMidi: 'Export MIDI...', exportXml: 'Export analysis…',
+      exportXml: 'Export music…',
       exportPdf: 'Export PDF…', exportPng: 'Export PNG…',
       print: 'Print', save: 'Save', saveAs: 'Save As...',
       closeProject: 'Close project', undo: 'Undo', redo: 'Redo',
@@ -469,7 +469,7 @@ function createMenu() {
           'Cmd/Ctrl+N — Nuovo progetto',
           'Cmd/Ctrl+O — Apri…',
           'Cmd/Ctrl+I — Importa MIDI…',
-          'Cmd/Ctrl+Shift+E — Esporta MIDI…',
+          'Cmd/Ctrl+Shift+E — Esporta musica…',
           'Cmd/Ctrl+Shift+P — Esporta PDF…',
           'Cmd/Ctrl+Shift+G — Esporta PNG…',
           'Cmd/Ctrl+P — Stampa',
@@ -729,13 +729,8 @@ function createMenu() {
           }
         },
         {
-          label: mt('exportMidi'),
-          accelerator: 'CmdOrCtrl+Shift+E',
-          click: () => { sendAction(MENU_ACTIONS.EXPORT_MIDI); }
-        },
-        {
           label: mt('exportXml'),
-          accelerator: 'CmdOrCtrl+Shift+X',
+          accelerator: 'CmdOrCtrl+Shift+E',
           click: () => { sendAction(MENU_ACTIONS.EXPORT_MUSICXML); }
         },
         {
