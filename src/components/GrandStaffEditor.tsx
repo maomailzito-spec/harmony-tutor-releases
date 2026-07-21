@@ -21,7 +21,7 @@ import { useNoteSelection } from '../hooks/useNoteSelection';
 import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
 import { useNoteEditor } from '../hooks/useNoteEditor';
-import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, calculateAccidentalWithMeasureContext, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
+import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, calculateAccidentalWithMeasureContext, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, leadingTonePcInMinor, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
 import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing } from '../utils/parseChordSymbol';
 import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody, spelledNoteName, keyAccidentalNotes, type TransformMode } from '../utils/melodicTransforms';
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
@@ -1590,7 +1590,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // MIDI import destination dialog. The resolver lets the async menu handler
     // await the user's choice between SATB / Accompaniment / Cancel.
-    type MidiImportChoice = 'satb' | 'accompaniment' | null;
+    type MidiImportChoice = 'satb' | 'acc-separate' | 'acc-grandstaff' | null;
     const [midiImportDialogOpen, setMidiImportDialogOpen] = useState(false);
     const midiImportResolverRef = useRef<((choice: MidiImportChoice) => void) | null>(null);
     const askMidiImportDestination = useCallback((): Promise<MidiImportChoice> => {
@@ -3574,6 +3574,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }));
     }, [mod12Local, setRawNotes]);
 
+    // Re-spelling enarmonico delle SOLE tracce ACC per una tonalità target, con inferenza della
+    // SENSIBILE in minore: il MIDI non porta la grafia, quindi il pitch class della sensibile
+    // (tonica−1) viene scritto col DIESIS (Do# in Re minore) invece del bemolle d'armatura.
+    // Il SATB NON è toccato (ha la sua "Auto leading-tone" in inserimento).
+    const respellAccTracksForKey = useCallback((root: string, isMinor: boolean) => {
+        try {
+            const targetSig = getKeySignature(root, 'Major');
+            const ltPc = leadingTonePcInMinor(root, isMinor); // pc della sensibile, o null
+            const respellAcc = (n: StaffNote): StaffNote => {
+                try {
+                    if (n.isRest || !Number.isFinite(n.midi)) return n;
+                    const clef = (n.clef || 'treble') as ClefType;
+                    const pref = (ltPc != null && (((n.midi % 12) + 12) % 12) === ltPc) ? ('sharp' as const) : null;
+                    const recalculated = getNotePropertiesFromMidi(n.midi, targetSig, clef, pref);
+                    return {
+                        ...n,
+                        ...recalculated,
+                        accidental: recalculated.explicitAccidental,
+                        userAccidental: undefined,
+                        id: n.id,
+                        midi: n.midi,
+                    };
+                } catch { return n; }
+            };
+            setAccompanimentTracks(prev => (prev || []).map(track => ({
+                ...track,
+                notes: (track.notes || []).map(respellAcc),
+            })));
+        } catch { /* ignore */ }
+    }, [setAccompanimentTracks]);
+
     const handleKeySignatureRootChange = useCallback((nextRoot: string) => {
         if (nextRoot === keySignatureRoot) return;
 
@@ -3619,20 +3650,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     } catch { return n; }
                 };
                 setRawNotes(prev => prev.map(respell));
-                // ACC tracks were previously left untouched here, so an accompaniment
-                // imported before the key was set kept its import-time spelling
-                // (e.g. A# instead of Bb in D minor). Re-spell them too, like the SATB.
-                setAccompanimentTracks(prev => (prev || []).map(track => ({
-                    ...track,
-                    notes: (track.notes || []).map(respell),
-                })));
             } catch { /* ignore */ }
+            // ACC: re-spelling separato, con inferenza della sensibile in minore (il SATB
+            // resta com'è). Prima le tracce ACC non venivano riscritte affatto → l'accompagnamento
+            // importato teneva la grafia d'import (es. A# invece di Bb, o Db invece di Do#).
+            respellAccTracksForKey(nextRoot, isMinorMode);
         }
 
         // Record last key change so the transpose checkbox can apply/revert even if toggled after.
         lastKeyChangeRef.current = { fromRoot, toRoot: nextRoot, transposedApplied: isTranspose };
         setKeySignatureRoot(nextRoot);
-    }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, setRawNotes, setAccompanimentTracks, transposeAllNotesToKey]);
+    }, [keyChangeMode, keySignatureRoot, reinterpretAllNotesModallyInKey, setKeySignatureRoot, setRawNotes, respellAccTracksForKey, isMinorMode, transposeAllNotesToKey]);
+
+    // Toggle Maj/min: ri-scrive la SENSIBILE delle tracce ACC per il nuovo modo (Do#↔Re♭)
+    // così anche impostando "min" DOPO l'import l'accompagnamento prende la grafia giusta.
+    // Il SATB non è coinvolto. Le altre scritture di isMinorMode (load/import) restano dirette.
+    const handleMinorModeToggle = useCallback((next: boolean) => {
+        respellAccTracksForKey(keySignatureRoot, next);
+        setIsMinorMode(next);
+    }, [keySignatureRoot, respellAccTracksForKey, setIsMinorMode]);
 
     const { currentTonic, currentQuality } = useMemo(() => {
         if (isMinorMode) {
@@ -4290,9 +4326,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (choice === 'satb') {
                     await importMidi(source);
                 } else {
-                    const result = await importMidiAsAccompaniment(source);
+                    // 'acc-separate' = un rigo per parte/traccia; 'acc-grandstaff' = tutto fuso in un grand staff.
+                    const result = await importMidiAsAccompaniment(source, choice === 'acc-grandstaff' ? 'grandstaff' : 'separate');
                     if (result) {
-                        setAccompanimentTracks(prev => [...(prev || []), result.track]);
+                        // Un file MIDI multi-traccia (format 1, es. 4 pentagrammi MuseScore)
+                        // porta più parti a rigo singolo: le aggiungo tutte, non una sola.
+                        setAccompanimentTracks(prev => [...(prev || []), ...result.tracks]);
                         // Apply the file's tempo + time signature to the project (the
                         // SATB import path already does this; the ACC path previously
                         // dropped them → bpm stuck at 120 and notes mis-barred against
@@ -6119,8 +6158,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 ornMap[o.noteId] = o.type;
                 if (o.midi != null) ornMap[`${o.midi}-${o.measureIndex ?? -1}-${o.beat ?? -1}`] = o.type;
             }
+            // ANALISI D'INSIEME: se la traccia analizzata appartiene a un gruppo (groupId),
+            // combino le note di TUTTE le tracce del gruppo (le 4 parti importate separate)
+            // così vengono lette come un tutt'uno; altrimenti la sola traccia.
+            const gid = (analysisAccTrack as any).groupId as string | undefined;
+            const groupTracks = gid
+                ? accompanimentTracks.filter(t => !(t as any).isDrum && (t as any).groupId === gid)
+                : [analysisAccTrack];
+            const combinedNotes = groupTracks.length > 1
+                ? groupTracks.flatMap(t => (t.notes as any[]) || []).slice().sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0))
+                : (analysisAccTrack.notes as any);
             let labels = computeAccChordAnalysis({
-                notes: analysisAccTrack.notes as any,
+                notes: combinedNotes as any,
                 keySignature: getKeySignature(keySignatureRoot, 'Major'),
                 // TONICA effettiva (Re minore → 'D'), non il root del maggiore relativo ('F'):
                 // altrimenti i romani escono nel relativo maggiore (Dm=vi invece di i).
@@ -6129,9 +6178,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 timeSignature,
                 ornOverrides: ornMap,
             });
-            // Override manuali (collasso Opt+Shift+H in modo ACC): per ogni voce di questa
-            // traccia sopprimo le etichette automatiche nello span e fisso l'accordo scelto.
-            const ovs = (accHarmonyOverrides || []).filter(o => o.trackId === analysisAccTrack.id);
+            // Override manuali (collasso Opt+Shift+H in modo ACC): valgono per qualunque traccia
+            // del gruppo analizzato.
+            const groupTrackIds = new Set(groupTracks.map(t => t.id));
+            const ovs = (accHarmonyOverrides || []).filter(o => groupTrackIds.has(o.trackId));
             if (ovs.length) {
                 labels = labels.filter(l => !ovs.some(o => l.absBeat >= o.spanStart - 1e-6 && l.absBeat <= o.spanEnd + 1e-6));
                 for (const o of ovs) {
@@ -6141,14 +6191,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return labels;
         } catch { return []; }
-    }, [isAnalysisEnabled, analysisAccTrack, keySignatureRoot, currentTonic, isMinorMode, timeSignature, ornamentOverrides, accHarmonyOverrides]);
+    }, [isAnalysisEnabled, analysisAccTrack, accompanimentTracks, keySignatureRoot, currentTonic, isMinorMode, timeSignature, ornamentOverrides, accHarmonyOverrides]);
 
-    // Y (locale al sistema) del rigo della traccia analizzata, dalla geometria riportata.
-    // Y del rigo ACC selezionato: sopra (top) per la sigla, sotto (bottom) per il romano — stile SATB.
+    // Y (locale al sistema) per le etichette: sul rigo della traccia analizzata; se questa è
+    // in un gruppo, sul rigo PIÙ ALTO del gruppo (le sigle/romani stanno in cima all'insieme).
     const accLabelY = useMemo(() => {
-        const e = accStavesLayout.find(s => s.trackId === analysisAccTrack?.id);
-        return e ? { top: e.topLineY, bottom: e.bottomLineY } : null;
-    }, [accStavesLayout, analysisAccTrack]);
+        const gid = (analysisAccTrack as any)?.groupId as string | undefined;
+        const candidates = gid
+            ? accStavesLayout.filter(s => { const t = accompanimentTracks.find(x => x.id === s.trackId); return !!t && (t as any).groupId === gid; })
+            : accStavesLayout.filter(s => s.trackId === analysisAccTrack?.id);
+        if (!candidates.length) return null;
+        const top = candidates.reduce((a, b) => (b.topLineY < a.topLineY ? b : a));
+        return { top: top.topLineY, bottom: top.bottomLineY };
+    }, [accStavesLayout, analysisAccTrack, accompanimentTracks]);
+
+    // Toggle "includi nell'analisi d'insieme" (dal menu della chiave del rigo ACC): unisce/stacca
+    // una traccia dal gruppo della traccia attualmente analizzata (crea il gruppo se non esiste).
+    const toggleAnalysisGroupMembership = useCallback((trackId: string) => {
+        const analyzed = analysisAccTrack;
+        const activeGid = (analyzed as any)?.groupId as string | undefined;
+        const clicked = accompanimentTracks.find(t => t.id === trackId);
+        if (!clicked) { setClefMenu(null); return; }
+        if (activeGid && (clicked as any).groupId === activeGid) {
+            handleUpdateTrack(trackId, { groupId: undefined } as Partial<AccompanimentTrack>);
+        } else {
+            let gid = activeGid;
+            if (!gid) {
+                gid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `grp-${trackId}`;
+                if (analyzed && analyzed.id !== trackId) handleUpdateTrack(analyzed.id, { groupId: gid } as Partial<AccompanimentTrack>);
+            }
+            handleUpdateTrack(trackId, { groupId: gid } as Partial<AccompanimentTrack>);
+        }
+        setClefMenu(null);
+    }, [analysisAccTrack, accompanimentTracks, handleUpdateTrack]);
 
     // Etichette ACC per sistema: X via getPlayheadPosForAbsBeat (già absBeat→x per sistema).
     const accLabelsBySystem = useMemo(() => {
@@ -12318,7 +12393,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setModalTonicOverride={setModalTonicOverride}
                 modalTonicOptions={modalTonicOptions}
                 isMinorMode={isMinorMode}
-                setIsMinorMode={setIsMinorMode}
+                setIsMinorMode={handleMinorModeToggle}
                 autoLeadingToneInMinor={autoLeadingToneInMinor}
                 setAutoLeadingToneInMinor={setAutoLeadingToneInMinor}
                 sharpKeyOptions={sharpKeyOptions}
@@ -12607,20 +12682,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             >✕</button>
                         </div>
                         <p className="text-xs text-gray-300">Dove vuoi importare le note?</p>
-                        <div className="flex gap-2 justify-end pt-2">
-                            <button
-                                onClick={() => resolveMidiImportChoice(null)}
-                                className="px-3 py-1.5 rounded border border-gray-600 text-gray-200 hover:bg-gray-800"
-                            >Annulla</button>
-                            <button
-                                onClick={() => resolveMidiImportChoice('accompaniment')}
-                                className="px-3 py-1.5 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
-                            >Accompagnamento</button>
+                        <div className="flex flex-col gap-2">
                             <button
                                 onClick={() => resolveMidiImportChoice('satb')}
-                                className="px-3 py-1.5 rounded bg-cyan-600 border border-cyan-500 text-white hover:bg-cyan-500"
+                                className="text-left px-3 py-2 rounded bg-cyan-600 border border-cyan-500 text-white hover:bg-cyan-500"
                                 autoFocus
-                            >SATB</button>
+                            >
+                                <span className="font-semibold">SATB</span>
+                                <span className="block text-[11px] text-cyan-100/90">4 voci sul grand staff (corale).</span>
+                            </button>
+                            <button
+                                onClick={() => resolveMidiImportChoice('acc-separate')}
+                                className="text-left px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
+                            >
+                                <span className="font-semibold">Accompagnamento — righi separati</span>
+                                <span className="block text-[11px] text-gray-400">Un rigo per traccia/parte del MIDI (es. 4 pentagrammi MuseScore).</span>
+                            </button>
+                            <button
+                                onClick={() => resolveMidiImportChoice('acc-grandstaff')}
+                                className="text-left px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
+                            >
+                                <span className="font-semibold">Accompagnamento — grand staff unico</span>
+                                <span className="block text-[11px] text-gray-400">Tutte le parti fuse in un grand staff (treble+bass).</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -12960,6 +13044,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 {opt.label}
                             </button>
                         ))}
+                        {/* Toggle analisi d'insieme: unisce/stacca questo rigo dal gruppo analizzato. */}
+                        {accompanimentTracks.filter(t => !(t as any).isDrum).length >= 2 && (() => {
+                            const track = accompanimentTracks.find(t => t.id === clefMenu.trackId);
+                            const activeGid = (analysisAccTrack as any)?.groupId as string | undefined;
+                            const inGroup = !!track && !!(track as any).groupId && (track as any).groupId === activeGid;
+                            return (
+                                <>
+                                    <div className="my-1 border-t border-slate-700" />
+                                    <button
+                                        onClick={() => toggleAnalysisGroupMembership(clefMenu.trackId)}
+                                        className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"
+                                    >
+                                        {inGroup ? '✓ Nell’analisi d’insieme' : 'Includi nell’analisi d’insieme'}
+                                    </button>
+                                </>
+                            );
+                        })()}
                     </div>
                 </>
             )}
@@ -13909,11 +14010,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 {/* Analisi ACC (stile SATB): SIGLA sopra il rigo, ROMANO sotto il rigo della traccia analizzata */}
                                 {showHarmony && analysisSubject === 'acc' && accLabelY != null && systemAccLabels.map((p) => (
                                     <g key={p.id}>
+                                        {/* Sigla e romano IMPILATI SOPRA il rigo alto del gruppo: sotto (bottom+20)
+                                            il romano veniva coperto dalle note gravi del rigo sottostante. */}
                                         {showSymbolAnalysis && p.sigla ? (
-                                            <text x={p.x + 20} y={accLabelY.top - 42} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">{p.sigla}</text>
+                                            <text x={p.x + 20} y={accLabelY.top - 44} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">{p.sigla}</text>
                                         ) : null}
                                         {showRomanAnalysis && p.roman ? (
-                                            <text x={p.x + 20} y={accLabelY.bottom + 20} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1e3a8a">{p.roman}</text>
+                                            <text x={p.x + 20} y={accLabelY.top - (showSymbolAnalysis && p.sigla ? 26 : 42)} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1e3a8a">{p.roman}</text>
                                         ) : null}
                                     </g>
                                 ))}

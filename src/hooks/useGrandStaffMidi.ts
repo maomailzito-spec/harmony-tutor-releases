@@ -1577,7 +1577,8 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
    *  to nothing (e.g. user cancelled the file picker). */
   const importMidiAsAccompaniment = useCallback(async (
     source?: File | ArrayBuffer | string,
-  ): Promise<{ track: AccompanimentTrack; bpm: number; timeSignature: TimeSignature } | null> => {
+    mode: 'separate' | 'grandstaff' = 'separate',
+  ): Promise<{ tracks: AccompanimentTrack[]; bpm: number; timeSignature: TimeSignature } | null> => {
     const arrayBuffer = await resolveMidiSource(source, pickMidiFile);
     if (!arrayBuffer) return null;
 
@@ -1598,93 +1599,92 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // to the project's current key so accidentals look reasonable on the staff.
     const keySig = getKeySignature(project.keySignatureRoot || 'C', project.isMinorMode ? 'Minor' : 'Major');
 
-    // Staff (clef) assignment: when the MIDI has ≥2 tracks (typically L/R hands),
-    // route each track to a staff by its mean pitch (low track → bass staff) so a
-    // low right-hand note doesn't fall onto the bass staff. Single-track MIDI keeps
-    // the per-note pitch heuristic.
-    const trackPitch = new Map<number, { sum: number; n: number }>();
-    for (const n of parsed.notes) {
-      const e = trackPitch.get(n.track) ?? { sum: 0, n: 0 };
-      e.sum += n.midi; e.n += 1; trackPitch.set(n.track, e);
-    }
-    const multiTrack = trackPitch.size >= 2;
-    const clefForTrack = (track: number): 'treble' | 'bass' | undefined => {
-      if (!multiTrack) return undefined;
-      const e = trackPitch.get(track);
-      return (e && e.n > 0 && e.sum / e.n < 60) ? 'bass' : 'treble';
+    // Raggruppa le note in PARTI, per rispettare i pentagrammi separati di MuseScore:
+    // per traccia MIDI se il file è multi-traccia (format 1), altrimenti per canale
+    // (format 0 con più canali), altrimenti una parte unica. Ogni parte → una
+    // AccompanimentTrack a RIGO SINGOLO con la sua chiave.
+    const tracksWithNotes = [...new Set(parsed.notes.map(n => n.track))];
+    const channelsWithNotes = [...new Set(parsed.notes.map(n => n.channel))];
+    let partIds: number[];
+    let partKey: (n: { track: number; channel: number }) => number;
+    let groupedByTrack = false;
+    if (mode === 'grandstaff') { partIds = [0]; partKey = () => 0; } // fusione richiesta: un'unica parte
+    else if (tracksWithNotes.length >= 2) { partIds = tracksWithNotes; partKey = n => n.track; groupedByTrack = true; }
+    else if (channelsWithNotes.length >= 2) { partIds = channelsWithNotes; partKey = n => n.channel; }
+    else { partIds = [0]; partKey = () => 0; }
+    const isMultiPart = partIds.length >= 2;
+
+    // Pipeline di una singola parte → StaffNote[] normalizzati (stessa catena di prima:
+    // de-pedalatura NOTAZIONE, separazione voci, terzine, gap-fill, quantize, trim, ritmo).
+    // forcedClef: nel multi-parte ogni parte ha UNA chiave (rigo singolo); nella parte unica
+    // resta l'inferenza per-nota (grandstaff).
+    const TPR = TICKS_PER_QUARTER;
+    const MAX_VOICES_PER_STAFF = 2;
+    const ticksPerMeasure = TICKS_PER_QUARTER * parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
+    const buildPartNotes = (partNotes: typeof parsed.notes, forcedClef?: 'treble' | 'bass'): StaffNote[] => {
+      const converted: StaffNote[] = partNotes.map((n, idx) => {
+        const sounding = n.durationTicks;
+        const notated = n.notatedTicks ?? sounding;
+        const dePedaled = notated < sounding ? { ...n, durationTicks: notated } : n;
+        const sn = convertParsedNoteToStaffNote(dePedaled, idx, tpq, beatsPerMeasure, keySig, 0, forcedClef);
+        if (notated < sounding) {
+          (sn as StaffNote).playbackDurationTicks = Math.max(1, Math.round((sounding / Math.max(1, tpq)) * TPR));
+        }
+        return sn;
+      });
+      const voiced: StaffNote[] = [
+        ...separateVoices(converted.filter(n => (n.clef ?? 'treble') === 'treble'), MAX_VOICES_PER_STAFF),
+        ...separateVoices(converted.filter(n => n.clef === 'bass'), MAX_VOICES_PER_STAFF),
+      ];
+      const tripletSnapped = quantizeTripletBeats(voiced);
+      const extended = extendNotesToNextOnset(tripletSnapped, ticksPerMeasure);
+      const quantized = quantizeMidiTimings(extended);
+      const trimmed = trimOverlappingNotes(quantized);
+      return normalizeRhythm(trimmed, parsed.timeSignature, [], true);
     };
 
-    // De-pedal the NOTATION: a 16th-note figure recorded with the sustain pedal
-    // (CC 64) reaches us with pedal-inflated durations (a 16th that rings a whole
-    // bar), which would otherwise be written as held/tied long values and force
-    // the figuration into spurious "held" voices. We notate the un-pedaled key
-    // length (`notatedTicks`) and keep the full ringing length only for playback
-    // (playbackDurationTicks). A genuinely long key-hold (a real independent
-    // voice) has notatedTicks == durationTicks, so it is untouched.
-    const TPR = TICKS_PER_QUARTER;
-    const convertedNotes: StaffNote[] = parsed.notes.map((n, idx) => {
-      const sounding = n.durationTicks;
-      const notated = n.notatedTicks ?? sounding;
-      const dePedaled = notated < sounding ? { ...n, durationTicks: notated } : n;
-      const sn = convertParsedNoteToStaffNote(dePedaled, idx, tpq, beatsPerMeasure, keySig, 0, clefForTrack(n.track));
-      if (notated < sounding) {
-        // Preserve the pedal-sustained sound for playback while the staff shows
-        // the real rhythm. trim only sets playbackDurationTicks when it is unset,
-        // so this value survives any later display-trim.
-        (sn as StaffNote).playbackDurationTicks = Math.max(1, Math.round((sounding / Math.max(1, tpq)) * TPR));
+    const newTrackId = (i: number): string =>
+      (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `acc-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Le parti importate insieme (righi separati) condividono un groupId → l'analisi
+    // armonica le legge come un tutt'uno pur restando su righi distinti.
+    const groupId = isMultiPart
+      ? ((typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `grp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+      : undefined;
+
+    const tracks: AccompanimentTrack[] = partIds.map((pid, i) => {
+      const partNotes = parsed.notes.filter(n => partKey(n) === pid);
+      let staffMode: 'grandstaff' | 'treble_only' = 'grandstaff';
+      let clef: 'treble' | 'bass' | undefined;
+      let forcedClef: 'treble' | 'bass' | undefined;
+      if (isMultiPart) {
+        // Una parte = un rigo singolo; chiave dalla tessitura media (soglia C4 = 60).
+        const mean = partNotes.reduce((s, n) => s + n.midi, 0) / Math.max(1, partNotes.length);
+        forcedClef = mean < 60 ? 'bass' : 'treble';
+        staffMode = 'treble_only';
+        clef = forcedClef;
       }
-      return sn;
-    });
-
-    // Voice separation per staff: notes overlapping in time go to separate voices,
-    // so a held melody over a moving arpeggio is no longer flattened into one
-    // rest-filled line. Up to 2 voices per staff (piano convention).
-    const MAX_VOICES_PER_STAFF = 2;
-    const voicedNotes: StaffNote[] = [
-      ...separateVoices(convertedNotes.filter(n => (n.clef ?? 'treble') === 'treble'), MAX_VOICES_PER_STAFF),
-      ...separateVoices(convertedNotes.filter(n => n.clef === 'bass'), MAX_VOICES_PER_STAFF),
-    ];
-
-    // Per-beat triplet detection FIRST: snaps triplet beats to the triplet grid
-    // and drops sub-grid fragments, so detached/imprecise triplets don't survive
-    // as 16th/64th clusters. Binary beats pass through untouched.
-    const tripletSnapped = quantizeTripletBeats(voicedNotes);
-
-    // Extend staccato notes to fill small gaps before the rest-filler runs.
-    // e.g. a chord played for 472 ticks (staccato quarter = 960 intended) is extended
-    // to its next onset so no spurious rest appears mid-beat.
-    const ticksPerMeasure = TICKS_PER_QUARTER * parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
-    const extendedNotes = extendNotesToNextOnset(tripletSnapped, ticksPerMeasure);
-
-    // Quantise MIDI timings before trim/normalise (see importMidi for rationale).
-    const quantizedNotes = quantizeMidiTimings(extendedNotes);
-
-    // Trim overlapping notes per (voice, clef). For voice=0 ACC this preserves
-    // cross-clef polyphony (a sustained bass note + a fast treble figure remain
-    // independent) and skips chord tones (same startTick).
-    const trimmedNotes = trimOverlappingNotes(quantizedNotes);
-
-    // Normalize rhythm (same as SATB import) — voice=0 stream for accompaniment.
-    // Splits notes/rests on beat boundaries and decomposes non-standard durations.
-    // omitEmptyVoiceMeasures: ACC may have a 2nd voice only in some bars; don't
-    // litter the monophonic bars with a phantom voice full of rests.
-    const notes = normalizeRhythm(trimmedNotes, parsed.timeSignature, [], true);
-
-    const newId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-      ? crypto.randomUUID()
-      : `acc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return {
-      track: {
-        id: newId,
-        name: 'Piano',
+      const notes = buildPartNotes(partNotes, forcedClef);
+      const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
+      const name = nm || (isMultiPart ? `Traccia ${i + 1}` : 'Piano');
+      return {
+        id: newTrackId(i),
+        name,
         instrumentId: 0,
         notes,
         muted: false,
         visible: true,
         volume: 1,
-        staffMode: 'grandstaff',
-      },
+        staffMode,
+        ...(clef ? { clef } : {}),
+        ...(groupId ? { groupId } : {}),
+      };
+    });
+
+    return {
+      tracks,
       bpm: parsed.tempoBpm,
       timeSignature: parsed.timeSignature,
     };

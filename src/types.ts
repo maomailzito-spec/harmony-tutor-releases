@@ -259,6 +259,11 @@ export type AccompanimentTrack = {
    *  e uscita MIDI): la notazione resta invariata e la chiave mostra un "8" sotto/sopra.
    *  Solo per staffMode === 'treble_only' (chiave singola); ignorata per batteria. */
   octaveTranspose?: number;
+  /** Gruppo d'analisi: le tracce con lo stesso groupId (es. le parti di un brano importato
+   *  multi-traccia) vengono lette INSIEME dall'analisi armonica ACC, pur restando su righi
+   *  distinti. Assente = traccia analizzata da sola. Assegnato dall'import "righi separati"
+   *  e modificabile col toggle nel menu della chiave. */
+  groupId?: string;
   /** Colore personalizzato della traccia (hex, es. "#38bdf8"). Mostrato come banda
    *  verticale a fianco del rigo e usato per colorare le note in modalità colore. */
   color?: string;

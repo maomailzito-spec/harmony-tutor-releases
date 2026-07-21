@@ -155,6 +155,20 @@ const flatMinorKeyRoots = new Set(['G', 'D', 'C', 'F', 'Bb', 'Eb', 'Ab']);
 const mod = (n: number, m: number) => ((n % m) + m) % m;
 const mod12 = (n: number) => mod(n, 12);
 
+/**
+ * Pitch class della SENSIBILE (7° grado alzato) di una tonalità minore, dato il root del
+ * MAGGIORE relativo (com'è memorizzato keySignatureRoot: es. 'F' per Re minore). Ritorna
+ * null se non minore o root sconosciuto. Serve a inferire la grafia dei MIDI importati: il
+ * tasto della sensibile va scritto col DIESIS (Do# in Re minore), non col bemolle d'armatura.
+ */
+export function leadingTonePcInMinor(relativeMajorRoot: string, isMinorMode: boolean): number | null {
+    if (!isMinorMode) return null;
+    const relMajPc = noteNameToIndex[relativeMajorRoot];
+    if (relMajPc === undefined) return null;
+    const tonicPc = mod12(relMajPc + 9); // tonica minore = 3 semitoni sotto il relativo maggiore
+    return mod12(tonicPc + 11);          // sensibile = 1 semitono sotto la tonica
+}
+
 const SEVENTH_EXCEPTIONAL_RESOLUTION_HELP =
     'Nelle situazioni in cui la settima non può risolvere regolarmente (ovvero scendendo di grado), i manuali indicano diverse eccezioni e licenze tecniche:\n'
     + '• Progressioni Imitate: nello svolgimento di una sequenza, la necessità di mantenere la simmetria del disegno prevale sulla condotta delle voci. In questi passaggi, la settima può non risolvere correttamente per permettere l’imitazione esatta del modello.\n'

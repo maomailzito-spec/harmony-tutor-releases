@@ -20,6 +20,8 @@ export type ParsedMidi = {
   timeSignature: { numerator: number; denominator: number };
   keySignature?: { sharps: number; isMinor: boolean };
   notes: ParsedMidiNote[];
+  /** Nome di ogni traccia (meta 0x03), indicizzato per numero di traccia. Voci vuote = senza nome. */
+  trackNames: string[];
 };
 
 function readU16(view: DataView, offset: number): number {
@@ -85,6 +87,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   type ActiveEntry = { tick: number; velocity: number; track: number; keyOffTick?: number };
   const active = new Map<string, Array<ActiveEntry>>();
   const notes: ParsedMidiNote[] = [];
+  const trackNames: string[] = [];
 
   // Sustain pedal (CC 64) state per channel. When ON, note-offs are deferred
   // so the note keeps "ringing" until the pedal releases — exactly the piano
@@ -200,6 +203,9 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
           // Key signature: sf = signed byte (-7..+7, neg=flats, pos=sharps), mi = 0 major / 1 minor
           keySharps = view.getInt8(pos);
           keyIsMinor = view.getUint8(pos + 1) === 1;
+        } else if (metaType === 0x03 && len.value > 0) {
+          // Track name (meta 0x03): usato per nominare le parti ACC importate. Primo per traccia.
+          if (!trackNames[t]) trackNames[t] = readStr(view, pos, len.value).trim();
         }
 
         pos += len.value;
@@ -307,5 +313,6 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     timeSignature: { numerator: tsNum, denominator: tsDen },
     ...(keySharps !== null ? { keySignature: { sharps: keySharps, isMinor: keyIsMinor } } : {}),
     notes,
+    trackNames,
   };
 }

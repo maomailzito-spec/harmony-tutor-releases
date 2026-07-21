@@ -44,7 +44,7 @@ interface VexflowGrandStaffProps {
   /** Tracce di accompagnamento VISIBILI, in ordine. Ogni traccia disegna il proprio
    *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
    *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
-  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean; octaveTranspose?: number }>;
+  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean; octaveTranspose?: number; groupId?: string }>;
   /** Geometria REALE dei righi batteria (per agganciare il click del mouse alle righe
    *  effettivamente renderizzate → coincidenza click/nota). `trackIdx` = indice nella lista
    *  tracce VISIBILI (== visIdx lato click). Emesso ad ogni layout. */
@@ -77,6 +77,10 @@ const MEASURE_PADDING_X = 20;
 // treble stave; the two used to collide at 100px. 140px = ~40px Roman row + ~30px
 // acc ledger headroom + breathing room between the two Grand Staffs.
 const ACCOMPANIMENT_STAFF_GAP = 140;
+// Gap TRA righi ACC consecutivi (dal 2° blocco in poi): molto più stretto del gap
+// iniziale (SATB→ACC), per compattare le parti di un brano multi-traccia e dare un
+// colpo d'occhio d'insieme. Il primo blocco resta a 140 (riga dei romani + ledger).
+const ACC_INTER_STAFF_GAP = 50;
 // Span between accompaniment treble and bass tops (mirrors SATB BASS_Y - TREBLE_Y = 130).
 const ACCOMPANIMENT_GS_SPAN = 130;
 // 5 lines * 10px per line.
@@ -106,7 +110,7 @@ export function accompanimentExtraPxForTracks(
   tracks: Array<{ staffMode?: 'grandstaff' | 'treble_only' }>
 ): number {
   return tracks.reduce(
-    (sum, t) => sum + ACCOMPANIMENT_STAFF_GAP + accBlockOccupied(t.staffMode ?? 'grandstaff'),
+    (sum, t, i) => sum + (i === 0 ? ACCOMPANIMENT_STAFF_GAP : ACC_INTER_STAFF_GAP) + accBlockOccupied(t.staffMode ?? 'grandstaff'),
     0
   );
 }
@@ -121,7 +125,7 @@ export function accompanimentTrackTrebleOffsets(
   tracks.forEach((_t, i) => {
     if (i === 0) { offsets.push(0); }
     else {
-      acc += ACCOMPANIMENT_STAFF_GAP + accBlockOccupied(tracks[i - 1].staffMode ?? 'grandstaff');
+      acc += ACC_INTER_STAFF_GAP + accBlockOccupied(tracks[i - 1].staffMode ?? 'grandstaff');
       offsets.push(acc);
     }
   });
@@ -796,6 +800,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       drumKit?: 'orchestral' | 'rock';
       /** Annotazione d'ottava sulla chiave ('8vb'/'8va') per i righi traspositori. */
       clefOctaveAnnotation?: '8va' | '8vb';
+      /** Gruppo d'analisi: righi consecutivi con lo stesso groupId vengono uniti da un
+       *  bracket + barline (le parti di un brano importato multi-traccia). */
+      groupId?: string;
     };
     let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
     // Robustness: if asked to show acc staves but no track metadata arrived, draw one
@@ -824,7 +831,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         (mode === 'treble_only' && !isDrum)
           ? (octT === -1 ? '8vb' : octT === 1 ? '8va' : undefined)
           : undefined;
-      return { trackIdx: i, trackId: (t as any).id, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation };
+      return { trackIdx: i, trackId: (t as any).id, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation, groupId: (t as any).groupId as string | undefined };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -998,6 +1005,34 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       }
     }
 
+    // ── Bracket + barline iniziale di GRUPPO (analisi d'insieme) ──
+    // Righi ACC consecutivi con lo stesso groupId (le parti di un brano importato
+    // multi-traccia) vengono uniti da un BRACKET a sinistra + linea iniziale, come un
+    // sistema unico — standard di notazione e colpo d'occhio d'insieme. Le barline di
+    // misura del gruppo sono unite più sotto (ranges).
+    {
+      let gi = 0;
+      while (gi < accBlocks.length) {
+        const gid = accBlocks[gi].groupId;
+        if (!gid) { gi++; continue; }
+        let gj = gi;
+        while (gj + 1 < accBlocks.length && accBlocks[gj + 1].groupId === gid) gj++;
+        if (gj > gi) {
+          const topStave = accBlocks[gi].treble;
+          const bottomStave = accBlocks[gj].bass ?? accBlocks[gj].treble;
+          try {
+            const bracket = new StaveConnector(topStave, bottomStave);
+            bracket.setType(StaveConnector.type.BRACKET);
+            bracket.setContext(context).draw();
+            const startLine = new StaveConnector(topStave, bottomStave);
+            startLine.setType(StaveConnector.type.SINGLE_LEFT);
+            startLine.setContext(context).draw();
+          } catch { /* VexFlow: non far crashare il rendering */ }
+        }
+        gi = gj + 1;
+      }
+    }
+
     // Geometria REALE dei righi batteria → il click del mouse si aggancia alle righe
     // effettivamente renderizzate (coincidenza click/nota). getYForLine dà la Y vera.
     if (onDrumStavesLayout) {
@@ -1065,8 +1100,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // matching standard engraving where each Grand Staff has its own bridged barlines.
       // For "treble_only" accompaniment, the range collapses to a single stave (top===bottom).
       const ranges: Array<{ top: Stave; bottom: Stave }> = [{ top: topStave, bottom: bottomStave }];
-      // One bridged barline range per accompaniment block (single staff → top===bottom).
-      for (const block of accBlocks) ranges.push({ top: block.treble, bottom: block.bass ?? block.treble });
+      // One bridged barline range per accompaniment block (single staff → top===bottom),
+      // MA i blocchi consecutivi dello stesso gruppo condividono un'unica range: così le
+      // barline di misura collegano verticalmente tutte le parti del brano.
+      {
+        let bi = 0;
+        while (bi < accBlocks.length) {
+          const gid = accBlocks[bi].groupId;
+          let bj = bi;
+          if (gid) { while (bj + 1 < accBlocks.length && accBlocks[bj + 1].groupId === gid) bj++; }
+          ranges.push({ top: accBlocks[bi].treble, bottom: accBlocks[bj].bass ?? accBlocks[bj].treble });
+          bi = bj + 1;
+        }
+      }
 
       const ctxAny = context as any;
       ctxAny.save?.();
