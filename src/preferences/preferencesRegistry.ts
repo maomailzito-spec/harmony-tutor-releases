@@ -44,6 +44,7 @@ export type PreferenceId =
   | 'editor.autoSaveInterval'
   | 'render.engravingMode'
   | 'analysis.showRomanAnalysis'
+  | 'analysis.romanBassMode'
   | 'analysis.showSymbolAnalysis'
   | 'analysis.profileBaseId'
   | 'analysis.profileCustomized'
@@ -278,6 +279,18 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     defaultValue: true,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  'analysis.romanBassMode': {
+    id: 'analysis.romanBassMode',
+    section: 'Analysis',
+    label: 'Numerazione scuola romana (grado del basso)',
+    i18nKey: 'pref_analysis_roman_bass_mode',
+    storageKey: 'ht.analysis.romanBassMode',
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 

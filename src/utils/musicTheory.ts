@@ -3387,6 +3387,43 @@ function calculateRomanFallbackPC(
     return roman;
 }
 
+/**
+ * "Scuola romana": numero romano — SEMPRE MAIUSCOLO — del grado della nota REALE al basso
+ * (la più grave) rispetto alla tonica, con eventuale alterazione cromatica (♯IV, ♭VI…).
+ * L'accordo NON è espresso dalla qualità del romano ma dalle cifre del basso figurato.
+ * Es. Do maggiore, Sol/Si → basso Si = VII; Re minore, La/Do# → basso Do# = ♯VII.
+ * Il grado è per LETTERA (tonica→basso); l'alterazione confronta l'altezza reale del basso
+ * col grado diatonico nell'armatura (maggiore o minore naturale).
+ */
+export function bassScaleDegreeRoman(chord: StaffNote[], tonic: string, isMinorMode: boolean): string {
+    const BASE_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    const DIATONIC = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+    const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+    const notes = (chord || []).filter(n => n && !(n as any).isRest && Number.isFinite(Number((n as any).midi)));
+    if (!notes.length) return '';
+    const bass = notes.reduce((lo, n) => (Number((n as any).midi) < Number((lo as any).midi) ? n : lo));
+    const bassLetter = String((bass as any).pitch || '').toUpperCase().charAt(0);
+    const tonicLetter = String(tonic || 'C').toUpperCase().charAt(0);
+    const ti = DIATONIC.indexOf(tonicLetter);
+    const bi = DIATONIC.indexOf(bassLetter);
+    if (ti < 0 || bi < 0 || !(bassLetter in BASE_PC)) return '';
+    const degree = ((bi - ti) % 7 + 7) % 7; // 0..6
+    // Alterazione del basso rispetto al suo grado DIATONICO nell'armatura della tonalità.
+    const keySig = getKeySignature(tonic, isMinorMode ? 'Minor' : 'Major');
+    const sharpOrder = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+    const flatOrder = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+    const keyAcc = (keySig.type === 'sharp' && keySig.count > 0) ? (sharpOrder.slice(0, keySig.count).includes(bassLetter) ? 1 : 0)
+        : (keySig.type === 'flat' && keySig.count > 0) ? (flatOrder.slice(0, keySig.count).includes(bassLetter) ? -1 : 0)
+        : 0;
+    const diatonicPc = mod12(BASE_PC[bassLetter] + keyAcc);
+    const actualPc = mod12(Number((bass as any).midi));
+    let d = mod12(actualPc - diatonicPc);
+    if (d > 6) d -= 12;                 // normalizza a [-6..6]
+    d = Math.max(-2, Math.min(2, d));   // doppie alterazioni al più
+    const acc = d > 0 ? '♯'.repeat(d) : d < 0 ? '♭'.repeat(-d) : '';
+    return acc + ROMAN[degree];
+}
+
 export function getRomanAnalysis(
     chord: StaffNote[],
     keySignatureRoot: string,

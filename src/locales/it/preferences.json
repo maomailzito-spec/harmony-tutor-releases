@@ -23,6 +23,8 @@
   "opt_engraving_legacy": "Legacy",
 
   "pref_analysis_show_roman": "Mostra numeri romani",
+  "pref_analysis_roman_bass_mode": "Numerazione scuola romana (grado del basso)",
+  "pref_analysis_roman_bass_mode_hint": "Il numero romano indica il grado della nota reale al basso (sempre maiuscolo); l’accordo è espresso dalle cifre. Richiede “Mostra numeri romani” attivo.",
   "pref_analysis_show_symbols": "Mostra sigle accordi",
 
   "pref_analysis_profile_base": "Profilo analisi (base)",

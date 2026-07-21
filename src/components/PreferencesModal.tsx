@@ -131,6 +131,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [profileCustomized, setProfileCustomized] = usePreference<boolean>('analysis.profileCustomized');
 
   const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
+  const [romanBassMode, setRomanBassMode] = usePreference<boolean>('analysis.romanBassMode');
   const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
   const [sequencesEnabled, setSequencesEnabled] = usePreference<boolean>('analysis.sequencesEnabled');
   const [enableInferredContexts, setEnableInferredContexts] = usePreference<boolean>('analysis.enableInferredContexts');
@@ -481,6 +482,19 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   />
                   <div>
                     <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_show_roman', 'Mostra numeri romani')}</div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!romanBassMode}
+                    onChange={(e) => setRomanBassMode(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_roman_bass_mode', 'Numerazione scuola romana (grado del basso)')}</div>
+                    <div className="text-[11px] text-slate-400">{tp('pref_analysis_roman_bass_mode_hint', 'Il numero romano indica il grado della nota reale al basso (sempre maiuscolo); l’accordo è espresso dalle cifre. Richiede “Mostra numeri romani” attivo.')}</div>
                   </div>
                 </label>
 

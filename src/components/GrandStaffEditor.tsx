@@ -2296,6 +2296,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     type AccStaffLayout = { trackIdx: number; trackId?: string; topLineY: number; bottomLineY: number; lineSpacing: number; isDrum?: boolean };
     const [accStavesLayout, setAccStavesLayout] = useState<AccStaffLayout[]>([]);
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
+    const [romanBassMode] = usePreference<boolean>('analysis.romanBassMode');
     const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
     const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
@@ -14087,7 +14088,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 : (Number(sys.width) - START_X);
                                                                             if (!Number.isFinite(startX) || !Number.isFinite(endX) || endX <= startX) return null;
 
-                                                                            const romanShown = String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
+                                                                            const romanShown = (romanBassMode && (lbl as any).romanBass)
+                                                                                ? String((lbl as any).romanBass)
+                                                                                : String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
                                                                             const romanBaseText = showHarmonyDebug
                                                                                 ? romanShown
                                                                                 : romanShown;
@@ -14158,7 +14161,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 <g>
                                                                                     {(() => {
 
-                                                                                        const romanBaseText = String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
+                                                                                        const romanBaseText = (romanBassMode && (lbl as any).romanBass)
+                                                                                            ? String((lbl as any).romanBass)
+                                                                                            : String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
                                                                                         const romanW = measureTextWidth(romanBaseText, romanFont);
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanW + 6;
@@ -14285,7 +14290,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     style={{ cursor: 'pointer', pointerEvents: 'all' }}
                     onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
                 >
-                    {String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '')}
+                    {romanBaseText}
                 </text>
 
                 {/* Indicatore ambiguità ≈ — visibile quando ci sono letture alternative */}

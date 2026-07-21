@@ -7,7 +7,7 @@
  */
 import { useMemo } from 'react';
 import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack } from '../types';
-import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol } from '../utils/musicTheory';
+import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol, bassScaleDegreeRoman } from '../utils/musicTheory';
 import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
 import { evaluateCadentialPatterns, type ChordEvent, pcToNoteName, noteNameToPc, qualityFamily, getScalePcs } from '../utils/cadentialPatterns';
@@ -1608,7 +1608,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         } catch { /* ignore */ }
 
         // For each system, collect all timeline events that fall within its measures
-        const labelsBySystem: { id: string; x: number; roman: string; romanDisplay?: string; sequenceRoman?: string; sequenceRomanFunctional?: string; sequenceRomanSource?: string; figures: string[]; symbol: string; absBeat?: number; hiddenMarker?: boolean; isOverride?: boolean; pcsSig?: string }[][] = layoutData.systemsParams.map(() => []);
+        const labelsBySystem: { id: string; x: number; roman: string; romanDisplay?: string; sequenceRoman?: string; sequenceRomanFunctional?: string; sequenceRomanSource?: string; figures: string[]; romanBass?: string; symbol: string; absBeat?: number; hiddenMarker?: boolean; isOverride?: boolean; pcsSig?: string }[][] = layoutData.systemsParams.map(() => []);
 
 
         // Helper: compute xPosition for a given absBeat in a system
@@ -4017,12 +4017,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             } catch { /* ignore — keep I6/4 on error */ }
 
             // ─────────────────────────────────────────────────────────────────
+            // "Scuola romana": grado della nota reale al basso, rispetto alla tonica LOCALE
+            // (contextTonic gestisce le modulazioni). Dalle stesse note del basso figurato.
+            const romanBass = bassScaleDegreeRoman(analysisNotes as any, contextTonic, contextIsMinor);
             labelsBySystem[systemIndex].push({
                 id: `lbl-${event.absBeat}`,
                 x,
                 roman,
                 romanDisplay,
                 figures,
+                romanBass,
                 symbol,
                 absBeat: event.absBeat,
                 isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)),

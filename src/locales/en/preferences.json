@@ -23,6 +23,8 @@
   "opt_engraving_legacy": "Legacy",
 
   "pref_analysis_show_roman": "Show Roman numerals",
+  "pref_analysis_roman_bass_mode": "Roman-school numbering (bass scale degree)",
+  "pref_analysis_roman_bass_mode_hint": "The Roman numeral shows the scale degree of the actual bass note (always uppercase); the chord is expressed by the figures. Requires “Show Roman numerals” on.",
   "pref_analysis_show_symbols": "Show chord symbols",
 
   "pref_analysis_profile_base": "Analysis profile (base)",
