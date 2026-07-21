@@ -1304,6 +1304,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // the editor (off by default; export-excluded so it never prints).
     const [showPageBreaks, setShowPageBreaks] = useState(false);
     const { t: tPB } = useTranslation('toolbar');
+    const { t: tUI } = useTranslation('ui');
     const [measuresPerLine, setMeasuresPerLine] = useState<number>(4);
     const [minMeasureCount, setMinMeasureCount] = useState<number>(4);
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
@@ -12674,14 +12675,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 >
                     <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4 text-sm text-gray-100">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-base font-bold">Importa MIDI</h2>
+                            <h2 className="text-base font-bold">{tUI('import_dest_title', { defaultValue: 'Importa MIDI' })}</h2>
                             <button
                                 onClick={() => resolveMidiImportChoice(null)}
                                 className="text-gray-400 hover:text-gray-200 text-lg leading-none"
-                                aria-label="Annulla"
+                                aria-label={tUI('import_dest_cancel', { defaultValue: 'Annulla' })}
                             >✕</button>
                         </div>
-                        <p className="text-xs text-gray-300">Dove vuoi importare le note?</p>
+                        <p className="text-xs text-gray-300">{tUI('import_dest_question', { defaultValue: 'Dove vuoi importare le note?' })}</p>
                         <div className="flex flex-col gap-2">
                             <button
                                 onClick={() => resolveMidiImportChoice('satb')}
@@ -12689,21 +12690,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 autoFocus
                             >
                                 <span className="font-semibold">SATB</span>
-                                <span className="block text-[11px] text-cyan-100/90">4 voci sul grand staff (corale).</span>
+                                <span className="block text-[11px] text-cyan-100/90">{tUI('import_dest_satb_desc', { defaultValue: '4 voci sul grand staff (corale).' })}</span>
                             </button>
                             <button
                                 onClick={() => resolveMidiImportChoice('acc-separate')}
                                 className="text-left px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
                             >
-                                <span className="font-semibold">Accompagnamento — righi separati</span>
-                                <span className="block text-[11px] text-gray-400">Un rigo per traccia/parte del MIDI (es. 4 pentagrammi MuseScore).</span>
+                                <span className="font-semibold">{tUI('import_dest_acc_separate', { defaultValue: 'Accompagnamento — righi separati' })}</span>
+                                <span className="block text-[11px] text-gray-400">{tUI('import_dest_acc_separate_desc', { defaultValue: 'Un rigo per traccia/parte del MIDI (es. 4 pentagrammi MuseScore).' })}</span>
                             </button>
                             <button
                                 onClick={() => resolveMidiImportChoice('acc-grandstaff')}
                                 className="text-left px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
                             >
-                                <span className="font-semibold">Accompagnamento — grand staff unico</span>
-                                <span className="block text-[11px] text-gray-400">Tutte le parti fuse in un grand staff (treble+bass).</span>
+                                <span className="font-semibold">{tUI('import_dest_acc_grandstaff', { defaultValue: 'Accompagnamento — grand staff unico' })}</span>
+                                <span className="block text-[11px] text-gray-400">{tUI('import_dest_acc_grandstaff_desc', { defaultValue: 'Tutte le parti fuse in un grand staff (treble+bass).' })}</span>
                             </button>
                         </div>
                     </div>
@@ -13029,7 +13030,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     <div className="fixed inset-0 z-[1100]" onMouseDown={() => setClefMenu(null)} />
                     <div
                         className="fixed z-[1101] bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-1"
-                        style={{ left: Math.min(clefMenu.x, window.innerWidth - 210), top: Math.min(clefMenu.y, window.innerHeight - 330) }}
+                        style={{ left: Math.min(clefMenu.x, window.innerWidth - 210), top: Math.min(clefMenu.y, Math.max(8, window.innerHeight - 380)), maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
                         onMouseDown={(e) => e.stopPropagation()}
                     >
                         <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 border-b border-slate-700 mb-1 select-none">
@@ -13056,7 +13057,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         onClick={() => toggleAnalysisGroupMembership(clefMenu.trackId)}
                                         className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"
                                     >
-                                        {inGroup ? '✓ Nell’analisi d’insieme' : 'Includi nell’analisi d’insieme'}
+                                        {inGroup
+                                            ? tUI('acc_group_toggle_in', { defaultValue: '✓ Nell’analisi d’insieme' })
+                                            : tUI('acc_group_toggle_add', { defaultValue: 'Includi nell’analisi d’insieme' })}
                                     </button>
                                 </>
                             );
