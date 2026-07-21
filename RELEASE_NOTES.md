@@ -1,3 +1,24 @@
+## Novità in v1.2.2
+
+### 🐛 Fix download macOS (Apple Silicon)
+- **Installer .dmg separati per architettura**: prima veniva pubblicato un solo `.dmg` (Intel) e i Mac **Apple Silicon** scaricavano dal sito la versione sbagliata. Ora vengono generati e pubblicati **due installer distinti** — Apple Silicon (arm64) e Intel (x64) — con nomi corretti anche nel manifest di auto-update.
+
+## Novità in v1.2.1
+
+### 🎹 Import MIDI multi-traccia + analisi d'insieme
+- **Import MIDI a più tracce**: un file su più pentagrammi (es. una partitura MuseScore) viene importato con **un rigo per parte**, con chiave e nome presi dal file. All'import si sceglie tra SATB, Accompagnamento a **righi separati** o Accompagnamento **grand staff unico**.
+- **Analisi armonica d'insieme**: le parti di uno stesso brano vengono lette **insieme** (sigla + numero romano sopra il gruppo), con un interruttore per includere/escludere una traccia; i righi del gruppo sono uniti da graffa e stanghette.
+
+### 🎼 Grafia e analisi
+- **Sensibile in minore all'import MIDI**: il tasto della sensibile viene scritto col **diesis** (es. Do# in Re minore) invece del bemolle d'armatura.
+
+### 🖨️ Export
+- **"Esporta musica"**: un unico dialogo unifica **MIDI**, **MusicXML** (con analisi visibile) e le modalità **per non vedenti** (Parlata / Token).
+
+### 🐛 Fix
+- **Import MusicXML**: le pause di misura senza `<type>` (tipiche di MuseScore) non slittano più l'audio.
+- Affinamenti visivi delle tracce di accompagnamento (romani sopra il rigo, righi compattati).
+
 ## Novità in v1.2.0
 
 ### 🥁 Batteria evoluta

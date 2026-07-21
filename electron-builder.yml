@@ -37,6 +37,10 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   identity: "ERMINIO ZITO (6VGJA5UP2N)"
+  # Nome artefatto con l'ARCH per zip E dmg, così arm64 e x64 non si sovrascrivono
+  # (prima il dmg era "…-mac.dmg" senza arch → restava un solo dmg, quello Intel, e i
+  #  Mac Apple Silicon scaricavano la versione sbagliata dal sito).
+  artifactName: "${productName}-${version}-${arch}-mac.${ext}"
 
 afterSign: build/notarize.js
 
@@ -47,7 +51,7 @@ fileAssociations:
     mimeType: application/x-harmony-tutor
 
 dmg:
-  artifactName: "${productName}-${version}-mac.${ext}"
+  artifactName: "${productName}-${version}-${arch}-mac.${ext}"
   contents:
     - x: 130
       y: 220
