@@ -2738,6 +2738,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // ─────────────────────────────────────────────────────────────────
 
             const ctxKey = `${contextTonic}::${contextIsMinor ? 'm' : 'M'}`;
+            // Armatura locale usata dalla cifratura del basso: un intervallo è cifrato con un
+            // accidente sse lo spelling della nota devia da ciò che questa tonalità dà alla sua lettera.
+            const figuresKeySignature = getKeySignature(contextTonic, contextIsMinor ? 'Minor' : 'Major');
             const prevSig = lastSigBySystem.get(systemIndex);
             const prevCtx = lastCtxBySystem.get(systemIndex);
             const prevBassPc = lastBassPcBySystem.get(systemIndex);
@@ -2963,7 +2966,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 // may have changed (e.g. root position → second inversion) producing
                 // different figures (e.g. "4" → "6/4"). In that case, emit the label.
                 try {
-                    const earlyFigures = computeFiguredBassFromNotes(analysisNotes as any, FIGURED_BASS_UI_OPTIONS).figures;
+                    const earlyFigures = computeFiguredBassFromNotes(analysisNotes as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: figuresKeySignature }).figures;
                     const prevFigs = lastFiguresBySystem.get(systemIndex) || [];
                     const _figKey = (f: string[]) => f.join('/');
                     if (_figKey(earlyFigures || []) !== _figKey(prevFigs)) {
@@ -3005,7 +3008,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             // L2: figures depend only on the actual vertical intervals above the real bass.
             // Never derive/overwrite them from roman/symbol/quality.
-            let figures: string[] = computeFiguredBassFromNotes(analysisNotes as any, FIGURED_BASS_UI_OPTIONS).figures;
+            let figures: string[] = computeFiguredBassFromNotes(analysisNotes as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: figuresKeySignature }).figures;
 
             let roman = '';
             let symbol = '';
@@ -3388,7 +3391,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         try {
                             // Compute onset figures from the *structural* notes at this event (including the held tone),
                             // otherwise we risk getting a sanitized chord that hides the suspension.
-                            const onsetFigures = (computeFiguredBassFromNotes((harmonicNotes || []) as any, FIGURED_BASS_UI_OPTIONS).figures || figures || [])
+                            const onsetFigures = (computeFiguredBassFromNotes((harmonicNotes || []) as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: figuresKeySignature }).figures || figures || [])
                                 .map(normalizeFigureString);
 
                             // Ensure the suspension-from figure(s) are present (double suspensions => multiple)
@@ -3465,7 +3468,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             // Use analysisNotes (which has suspension→resolution substitutions)
                             // so figured bass reflects the target harmony, not the suspended notes.
                             const figSource = (analysisNotes && analysisNotes.length >= 2) ? analysisNotes : (fullNotes || []);
-                            const fullFigures = computeFiguredBassFromNotes((figSource || []) as any, FIGURED_BASS_UI_OPTIONS).figures;
+                            const fullFigures = computeFiguredBassFromNotes((figSource || []) as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: figuresKeySignature }).figures;
                             if (fullFigures?.length) figures = fullFigures;
                             figures = (figures || []).map(normalizeFigureString);
                         } catch (_) {
@@ -3775,7 +3778,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         // figured bass follows the marked ACC bass too (e.g. ii 4/3 → 6/5 when
                         // a lower ACC note becomes the bass). Only when marked ACC notes joined.
                         if (hasMarkedAcc) {
-                            const reFig = computeFiguredBassFromNotes(mergedForSymbol as any, FIGURED_BASS_UI_OPTIONS).figures;
+                            const reFig = computeFiguredBassFromNotes(mergedForSymbol as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: figuresKeySignature }).figures;
                             if (reFig && reFig.length) { figures = reFig; _dt('Q6:figuresReconcile', figures.join('/')); }
                         }
                     }

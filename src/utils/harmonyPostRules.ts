@@ -381,6 +381,8 @@ export interface StatelessRulesInput {
     absBeat: number;
     autoOverrideByAbsBeat: Map<number, { roman?: string; symbol?: string; figures?: string[] }>;
     overrideByAbsBeat: Map<number, { roman?: string; symbol?: string; figures?: string[] }>;
+    /** Reliable armatura (written key signature) for figured-bass accidentals. */
+    figuresKeySignature?: import('../types').KeySignature | null;
 }
 
 /**
@@ -388,11 +390,11 @@ export interface StatelessRulesInput {
  * in the same order as the live hook.
  */
 export function applyStatelessRules(input: StatelessRulesInput): { roman: string; symbol: string; figures: string[] } {
-    const { analysisNotesForNaming, analysisNotes, fullNotes, contextTonic, contextIsMinor, bassPc, ornamentOverrides } = input;
+    const { analysisNotesForNaming, analysisNotes, fullNotes, contextTonic, contextIsMinor, bassPc, ornamentOverrides, figuresKeySignature } = input;
 
     // R0: base getRomanAnalysis
     const r = getRomanAnalysis(analysisNotesForNaming as any, contextTonic, contextIsMinor,
-        ornamentOverrides ? { ornamentOverrides } : undefined);
+        { ...(ornamentOverrides ? { ornamentOverrides } : {}), ...(figuresKeySignature !== undefined ? { figuresKeySignature } : {}) });
     let roman = r?.roman ?? '';
     let figures = r?.figures ?? [];
 

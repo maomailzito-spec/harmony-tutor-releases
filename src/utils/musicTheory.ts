@@ -444,6 +444,12 @@ export type BassInterval = {
     semitones: number;
     /** Alteration relative to major/perfect form of this diatonic interval (e.g. -1 => ♭). */
     alteration: number;
+    /**
+     * Figured-bass accidental to print for this interval, derived from the note's OWN spelling
+     * relative to the key signature (♮/♯/♭/×/♭♭). Undefined when no key signature was supplied
+     * (backward-compat path: the glyph is then derived numerically from `alteration`).
+     */
+    glyph?: string;
 };
 
 export type IntervalSet = {
@@ -834,11 +840,50 @@ const effectiveMidi = (n: any): number | null => {
     }
 };
 
+// Natural pitch-class of each letter (no accidental).
+const NATURAL_PC_BY_LETTER: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const KS_SHARP_LETTER_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+const KS_FLAT_LETTER_ORDER = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+
+/** Accidental the key signature imposes on a bare letter: +1 (♯), -1 (♭) or 0 (natural). */
+const keySignatureAccidentalForLetter = (ks: KeySignature | null | undefined, letter: string): number => {
+    if (!ks || !ks.count) return 0;
+    if (ks.type === 'sharp') return KS_SHARP_LETTER_ORDER.slice(0, ks.count).includes(letter) ? 1 : 0;
+    if (ks.type === 'flat') return KS_FLAT_LETTER_ORDER.slice(0, ks.count).includes(letter) ? -1 : 0;
+    return 0;
+};
+
+/** Figured-bass glyph for a note's own spelling accidental (unlike alterationToGlyph, 0 => ♮). */
+const spellingAccidentalGlyph = (spellingAcc: number): string =>
+    spellingAcc === 0 ? '♮' : alterationToGlyph(spellingAcc);
+
+/**
+ * Alteration of a note relative to the key signature (armatura), read from its SPELLING
+ * (letter + sounding pitch), independent of any written accidental. Returns the signed delta
+ * vs the armatura (0 => diatonic, not shown) and the glyph to print (from the note's own spelling,
+ * so a natural that cancels a key accidental prints ♮). Returns null on inconsistent letter/pitch.
+ */
+const intervalAccidentalVsKey = (
+    note: any,
+    ks: KeySignature | null | undefined
+): { alteration: number; glyph: string } | null => {
+    const letter = String(note?.pitch || '').charAt(0).toUpperCase();
+    const naturalPc = NATURAL_PC_BY_LETTER[letter];
+    const m = effectiveMidi(note);
+    if (naturalPc == null || m == null || !Number.isFinite(m)) return null;
+    const actualPc = ((Math.round(m as number) % 12) + 12) % 12;
+    let spellingAcc = (((actualPc - naturalPc) % 12) + 12) % 12; // 0..11
+    if (spellingAcc > 6) spellingAcc -= 12;                      // -> [-5..6]
+    if (spellingAcc < -2 || spellingAcc > 2) return null;        // inconsistent letter vs pitch: skip
+    const armaturaAcc = keySignatureAccidentalForLetter(ks, letter);
+    return { alteration: spellingAcc - armaturaAcc, glyph: spellingAccidentalGlyph(spellingAcc) };
+};
+
 /**
  * Livello 1: given simultaneous notes, return the real bass and the set of intervals above it.
  * NOTE: this function does not use key/tonality/roman/symbol.
  */
-export function collectIntervalsAboveBass(notes: StaffNote[]): IntervalSet | null {
+export function collectIntervalsAboveBass(notes: StaffNote[], keySignature?: KeySignature | null, legacyRedundantAccidentals?: boolean): IntervalSet | null {
     try {
         const sounding = (notes || []).filter(n => n && !n.isRest && Number.isFinite(effectiveMidi(n as any)));
         if (sounding.length < 2) return null;
@@ -883,18 +928,34 @@ export function collectIntervalsAboveBass(notes: StaffNote[]): IntervalSet | nul
             const semis = Math.max(0, (effectiveMidi(n as any) as number) - bassMidi);
             const expected = expectedSemitonesForMajorPerfect(diatonicNumber);
 
-            // For figured-bass accidentals, follow the written accidental policy:
-            // if a note has no explicit accidental, treat it as unaltered (implied by key signature).
-            // This keeps L2 independent from functional interpretation while matching notation conventions.
+            // Figured-bass accidental policy (additive), computed on the note's EFFECTIVE pitch.
+            // 1) Legacy interval-quality convention: an accidental is shown when the note is a
+            //    non-major/non-perfect interval above the bass (e.g. a minor third → ♭3) — but ONLY
+            //    when the note is genuinely chromatic vs the armatura. A written accidental that
+            //    leaves the note on its key-diatonic pitch is REDUNDANT (e.g. a courtesy ♮ on a
+            //    key-natural note) and must not yield a phantom figure (E7 in C w/ redundant ♮ → 7).
+            // 2) Additive armatura fix: when (1) leaves the interval UNmarked, still figure it if the
+            //    note's spelling is chromatic relative to the key signature — the accidental the
+            //    interval-quality convention misses (chromatic major third C♯/A in C → ♯3, B♮ → ♮3).
             const anyN = n as any;
-            const hasExplicitAccidental = anyN.explicitAccidental != null;
-            const alteration = hasExplicitAccidental ? (semis - expected) : 0;
+            const vsKey = keySignature ? intervalAccidentalVsKey(anyN, keySignature) : null;
+            // Redundant/functional distinction reduces to "diatonic vs chromatic" because the figure
+            // is midi-based: a functional accidental whose effective pitch is chromatic is still marked.
+            // legacyRedundantAccidentals: keep the pre-normalization gate (any written accidental
+            // counts). Used by the ROMAN analysis so figure normalization stays display-only.
+            const hasFunctionalAccidental = anyN.explicitAccidental != null && (legacyRedundantAccidentals ? true : (vsKey ? vsKey.alteration !== 0 : true));
+            let alteration = hasFunctionalAccidental ? (semis - expected) : 0;
+            let glyph: string | undefined = undefined;
+            if (alteration === 0 && vsKey && vsKey.alteration !== 0) {
+                alteration = vsKey.alteration;
+                glyph = vsKey.glyph;
+            }
 
             const key = `${diatonicNumber}:${alteration}`;
             if (seen.has(key)) continue;
             seen.add(key);
 
-            out.push({ number: diatonicNumber, semitones: semis, alteration });
+            out.push({ number: diatonicNumber, semitones: semis, alteration, glyph });
         }
 
         return { bass, intervals: out };
@@ -921,6 +982,20 @@ export type FiguredBassOptions = {
 
     /** If true, show a root-position added 9th as '9' (and omit the implied 3/5). Default: false. */
     showAdd9As9?: boolean;
+
+    /**
+     * Key signature (armatura) used to decide which interval accidentals to print: an interval is
+     * figured with an accidental iff the note's spelling deviates from what this key gives its letter.
+     * When omitted, the legacy written-accidental policy is used (backward compatible).
+     */
+    keySignature?: KeySignature | null;
+
+    /**
+     * If true, revert to the legacy accidental gate (ANY written accidental yields an
+     * interval-quality figure, incl. redundant ones). Used only by the Roman-numeral analysis so
+     * the redundant-accidental normalization stays confined to the *displayed* figures.
+     */
+    legacyRedundantAccidentals?: boolean;
 };
 
 // Single source of truth for how the app *displays* figured bass (L2) in the UI.
@@ -973,16 +1048,19 @@ export function computeFiguredBassFromIntervals(intervals: BassInterval[], optio
         // - altByRaw: keep 9/11/13 availability if the caller explicitly wants extensions
         const altBySimple = new Map<number, number>();
         const altByRaw = new Map<number, number>();
+        // Glyph to print for each interval, taken from the note's own spelling (♮/♯/♭/×/♭♭).
+        const glyphBySimple = new Map<number, string | undefined>();
+        const glyphByRaw = new Map<number, string | undefined>();
 
         for (const it of intervals) {
             const raw = normalizeIntervalNumberForFigures(it.number);
             if (!Number.isFinite(raw)) continue;
             if (raw === 1 || raw === 8) continue;
-            if (!altByRaw.has(raw)) altByRaw.set(raw, Math.round(it.alteration));
+            if (!altByRaw.has(raw)) { altByRaw.set(raw, Math.round(it.alteration)); glyphByRaw.set(raw, it.glyph); }
 
             const simple = reduceToSimpleFigureNumber(raw);
             if (simple === 1) continue;
-            if (!altBySimple.has(simple)) altBySimple.set(simple, Math.round(it.alteration));
+            if (!altBySimple.has(simple)) { altBySimple.set(simple, Math.round(it.alteration)); glyphBySimple.set(simple, it.glyph); }
         }
 
         const altByNum = altBySimple;
@@ -1091,7 +1169,11 @@ export function computeFiguredBassFromIntervals(intervals: BassInterval[], optio
             .map(n => {
                 // For compound intervals (9, 11, 13), get alteration from altByRaw
                 const a = (n >= 9 ? altByRaw.get(n) : alt(n)) ?? 0;
-                return `${alterationToGlyph(a)}${n}`;
+                if (a === 0) return `${n}`; // diatonic vs the armatura: no accidental
+                // Prefer the note's own spelling glyph (so a natural cancelling a key accidental
+                // prints ♮); fall back to the numeric alteration when no glyph was supplied.
+                const g = (n >= 9 ? glyphByRaw.get(n) : glyphBySimple.get(n));
+                return `${g != null ? g : alterationToGlyph(a)}${n}`;
             });
 
         return { figures: normalizeFiguresVertical(figures) };
@@ -1102,7 +1184,7 @@ export function computeFiguredBassFromIntervals(intervals: BassInterval[], optio
 
 /** Convenience: Livello 1 -> Livello 2 */
 export function computeFiguredBassFromNotes(notes: StaffNote[], options: FiguredBassOptions = {}): FigureResult {
-    const l1 = collectIntervalsAboveBass(notes);
+    const l1 = collectIntervalsAboveBass(notes, options.keySignature ?? null, options.legacyRedundantAccidentals);
     if (!l1) return { figures: [] };
     return computeFiguredBassFromIntervals(l1.intervals, options);
 }
@@ -3428,7 +3510,7 @@ export function getRomanAnalysis(
     chord: StaffNote[],
     keySignatureRoot: string,
     isMinorMode: boolean,
-    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string>; accHintPcs?: number[]; accLowestMidi?: number | null; accForced?: boolean }
+    opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string>; accHintPcs?: number[]; accLowestMidi?: number | null; accForced?: boolean; figuresKeySignature?: KeySignature | null }
 ): { roman: string; figures: string[]; aug6Variants?: string[] } | null {
     if (!chord || chord.length < 2) return null;
 
@@ -3604,7 +3686,12 @@ export function getRomanAnalysis(
     // Livello 2 (cifratura) is computed *only* from the vertical intervals,
     // independent of any roman/symbol/function interpretation.
     // IMPORTANT: keep suspensions here so 9-8 etc still show up as figures.
-    const figuresL2 = computeFiguredBassFromNotes(filteredChordForFigures, FIGURED_BASS_UI_OPTIONS).figures;
+    const figuresL2 = computeFiguredBassFromNotes(filteredChordForFigures, { ...FIGURED_BASS_UI_OPTIONS, keySignature: opts?.figuresKeySignature ?? keySig }).figures;
+    // Roman-numeral decisions read figure NUMBERS. To keep the redundant-accidental normalization
+    // confined to the *displayed* figures (figuresL2), the analysis below uses the legacy figuring
+    // (redundant accidentals still counted) so Roman labels stay identical to the pre-normalization
+    // behaviour. Display/return keeps figuresL2 (normalized).
+    const figuresL2ForRules = computeFiguredBassFromNotes(filteredChordForFigures, { ...FIGURED_BASS_UI_OPTIONS, keySignature: opts?.figuresKeySignature ?? keySig, legacyRedundantAccidentals: true }).figures;
 
     const minorScaleMode = (opts as any)?.minorScaleMode;
     const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode, minorScaleMode };
@@ -3613,7 +3700,7 @@ export function getRomanAnalysis(
     // If we remove dissonant suspension tones for Roman analysis, the 4th above the bass
     // (which is the tonic pitch-class in a cadential I6/4) can disappear, collapsing the sonority
     // to a dyad and producing wrong labels like iii6/4.
-    const hasFigureValue = (v: number) => (figuresL2 || []).some(f => extractFigureValue(f) === v);
+    const hasFigureValue = (v: number) => (figuresL2ForRules || []).some(f => extractFigureValue(f) === v);
     const has64 = hasFigureValue(6) && hasFigureValue(4);
 
     // Suspension-removal guardrail for inversions:
@@ -3987,7 +4074,7 @@ export function getRomanAnalysis(
         const isSeventhish = (() => {
             try {
                 if (pcs.length >= 4) return true;
-                const hasFig = (v: number) => (figuresL2 || []).some(f => extractFigureValue(String(f)) === v);
+                const hasFig = (v: number) => (figuresL2ForRules || []).some(f => extractFigureValue(String(f)) === v);
                 // Any explicit 7th-chord figure set.
                 return hasFig(7) || (hasFig(6) && hasFig(5)) || (hasFig(4) && hasFig(3)) || (hasFig(4) && hasFig(2));
             } catch {
@@ -8193,7 +8280,9 @@ export function applyHarmonyRules(
 
         // Helper: figured bass at an event.
         const figuresAt = (ev: ChordEvent) => {
-            return computeFiguredBassFromNotes(notesForRomanAt(ev), FIGURED_BASS_UI_OPTIONS).figures;
+            const c = getContextAtAbsBeat(ev.absBeat);
+            const ks = getKeySignature(c.tonic, c.isMinor ? 'Minor' : 'Major');
+            return computeFiguredBassFromNotes(notesForRomanAt(ev), { ...FIGURED_BASS_UI_OPTIONS, keySignature: ks }).figures;
         };
 
         // Suspensions are stored on the preparation note object (`isSuspension.fromAbsBeat` is

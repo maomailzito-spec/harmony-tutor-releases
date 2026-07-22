@@ -9184,7 +9184,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const roman = chordInfo ? (calculateRomanFromChordInfo(chordInfo as any, tonicRoot, isMinorMode) || '') : '';
         const symbol = getChordSymbol(forAnalysis as any, keySignature, tonicRoot) || '';
         let figures: string[] = [];
-        try { figures = computeFiguredBassFromNotes(forAnalysis as any, FIGURED_BASS_UI_OPTIONS).figures || []; } catch { figures = []; }
+        try { figures = computeFiguredBassFromNotes(forAnalysis as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: getKeySignature(tonicRoot, isMinorMode ? 'Minor' : 'Major') }).figures || []; } catch { figures = []; }
 
         // Nothing recognizable — leave the score untouched.
         if (!roman && !symbol && figures.length === 0) return;
