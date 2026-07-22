@@ -1458,7 +1458,7 @@
       "absBeat": 3,
       "roman": "Fr+",
       "figuresInclude": [
-        "♯6",
+        "6",
         "4",
         "8x"
       ]
@@ -1483,7 +1483,7 @@
       "absBeat": 7,
       "roman": "Fr+",
       "figuresInclude": [
-        "♯4",
+        "4",
         "2"
       ]
     },
@@ -1576,7 +1576,7 @@
       "roman": "♭II",
       "figuresInclude": [
         "7",
-        "5"
+        "♭5"
       ]
     },
     {

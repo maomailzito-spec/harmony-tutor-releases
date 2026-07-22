@@ -3526,25 +3526,33 @@
     },
     {
       "absBeat": 68,
-      "roman": "V/iii"
+      "roman": "V/iii",
+      "figuresInclude": [
+        "♯5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 69,
       "roman": "V/iii",
       "figuresInclude": [
-        "6",
+        "♯6",
         "4"
       ]
     },
     {
       "absBeat": 70,
-      "roman": "V/iii"
+      "roman": "V/iii",
+      "figuresInclude": [
+        "♯5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 71,
       "roman": "V/iii",
       "figuresInclude": [
-        "6",
+        "♯6",
         "4"
       ]
     },

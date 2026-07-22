@@ -799,7 +799,11 @@
     },
     {
       "absBeat": 10,
-      "roman": "♭VI"
+      "roman": "♭VI",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 12,

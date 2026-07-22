@@ -5267,7 +5267,11 @@
     },
     {
       "absBeat": 9,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 10,
@@ -5290,7 +5294,11 @@
     },
     {
       "absBeat": 14,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 16,
@@ -5309,7 +5317,11 @@
     },
     {
       "absBeat": 22,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 24,
@@ -5332,7 +5344,11 @@
     },
     {
       "absBeat": 27,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 28,
@@ -5361,7 +5377,7 @@
       "roman": "N",
       "figuresInclude": [
         "6",
-        "4"
+        "♭4"
       ]
     },
     {
@@ -5374,13 +5390,17 @@
     },
     {
       "absBeat": 38,
-      "roman": "V/ii°"
+      "roman": "V/ii°",
+      "figuresInclude": [
+        "♮5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 40,
       "roman": "V/V",
       "figuresInclude": [
-        "♭6",
+        "6",
         "♭3"
       ]
     },
@@ -5388,24 +5408,33 @@
       "absBeat": 41,
       "roman": "iii",
       "figuresInclude": [
-        "6"
+        "♮6",
+        "♮3"
       ]
     },
     {
       "absBeat": 42,
       "roman": "V/V",
       "figuresInclude": [
-        "6",
+        "♮6",
         "4"
       ]
     },
     {
       "absBeat": 43,
-      "roman": "V/ii°"
+      "roman": "V/ii°",
+      "figuresInclude": [
+        "♮5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 44,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "♮5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 46,
@@ -5417,7 +5446,11 @@
     },
     {
       "absBeat": 49,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 50,
@@ -5432,27 +5465,43 @@
     },
     {
       "absBeat": 52,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 54,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 56,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 58,
       "roman": "IV",
       "figuresInclude": [
-        "6",
+        "♮6",
         "4"
       ]
     },
     {
       "absBeat": 60,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 62,
@@ -5463,38 +5512,59 @@
     },
     {
       "absBeat": 64,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 65,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 66,
-      "roman": "vi"
+      "roman": "vi",
+      "figuresInclude": [
+        "♮5",
+        "3"
+      ]
     },
     {
       "absBeat": 67,
       "roman": "ii",
       "figuresInclude": [
-        "6"
+        "6",
+        "♮3"
       ]
     },
     {
       "absBeat": 68,
       "roman": "I",
       "figuresInclude": [
-        "6",
+        "♮6",
         "4"
       ]
     },
     {
       "absBeat": 70,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 72,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 73,
@@ -5505,7 +5575,11 @@
     },
     {
       "absBeat": 74,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 75,
@@ -5516,61 +5590,99 @@
     },
     {
       "absBeat": 76,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 77,
-      "roman": "III"
+      "roman": "III",
+      "figuresInclude": [
+        "♮5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 78,
-      "roman": "IV"
+      "roman": "IV",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 79,
       "roman": "ii",
       "figuresInclude": [
-        "6"
+        "6",
+        "♮3"
       ]
     },
     {
       "absBeat": 79.5,
       "roman": "ii",
       "figuresInclude": [
-        "6"
+        "6",
+        "♮3"
       ]
     },
     {
       "absBeat": 80,
       "roman": "I",
       "figuresInclude": [
-        "6",
+        "♮6",
         "4"
       ]
     },
     {
       "absBeat": 82,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 84,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 86,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 88,
-      "roman": "vi"
+      "roman": "vi",
+      "figuresInclude": [
+        "♮5",
+        "3"
+      ]
     },
     {
       "absBeat": 90,
-      "roman": "IV"
+      "roman": "IV",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 92,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     }
   ]
 }

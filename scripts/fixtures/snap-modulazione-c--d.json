@@ -828,13 +828,17 @@
     },
     {
       "absBeat": 2,
-      "roman": "V/ii"
+      "roman": "V/ii",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 3,
       "roman": "V/ii",
       "figuresInclude": [
-        "6",
+        "♯6",
         "4"
       ]
     },
@@ -856,7 +860,7 @@
       "absBeat": 8,
       "roman": "V/V",
       "figuresInclude": [
-        "6",
+        "♯6",
         "4"
       ]
     },
@@ -864,12 +868,17 @@
       "absBeat": 10,
       "roman": "V/ii",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
       "absBeat": 12,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 14,

@@ -1280,19 +1280,27 @@
     },
     {
       "absBeat": 6,
-      "roman": "♭VI"
+      "roman": "♭VI",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 7,
       "roman": "♭vi",
       "figuresInclude": [
-        "5",
+        "♭5",
         "2"
       ]
     },
     {
       "absBeat": 7.5,
-      "roman": "♭VI"
+      "roman": "♭VI",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 8,
@@ -1347,7 +1355,8 @@
       "roman": "Fr+",
       "figuresInclude": [
         "6",
-        "5"
+        "5",
+        "♭3"
       ]
     },
     {
@@ -1386,7 +1395,7 @@
       "absBeat": 19.5,
       "roman": "♭VI",
       "figuresInclude": [
-        "6",
+        "♭6",
         "♭3"
       ]
     },

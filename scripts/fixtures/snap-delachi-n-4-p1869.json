@@ -1811,7 +1811,11 @@
     },
     {
       "absBeat": 26,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 28,
@@ -1870,14 +1874,16 @@
       "absBeat": 44,
       "roman": "V",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
       "absBeat": 46,
       "roman": "V",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {

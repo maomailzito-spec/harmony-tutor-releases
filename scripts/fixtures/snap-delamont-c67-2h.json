@@ -922,14 +922,16 @@
       "absBeat": 7,
       "roman": "V/vi",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
       "absBeat": 7.5,
       "roman": "V/vi",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {

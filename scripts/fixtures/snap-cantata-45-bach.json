@@ -5280,7 +5280,7 @@
       "absBeat": 29,
       "roman": "vii°/V",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {
@@ -5315,7 +5315,11 @@
     },
     {
       "absBeat": 33,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 34,
@@ -5427,7 +5431,7 @@
       "absBeat": 47.5,
       "roman": "vii°/V",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {

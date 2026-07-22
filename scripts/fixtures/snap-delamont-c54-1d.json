@@ -815,7 +815,7 @@
       "absBeat": 12,
       "roman": "♭VII",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
@@ -840,7 +840,11 @@
     },
     {
       "absBeat": 16,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     }
   ]
 }

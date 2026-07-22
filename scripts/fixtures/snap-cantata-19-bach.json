@@ -4679,7 +4679,11 @@
     },
     {
       "absBeat": 34,
-      "roman": "V/ii"
+      "roman": "V/ii",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 35,

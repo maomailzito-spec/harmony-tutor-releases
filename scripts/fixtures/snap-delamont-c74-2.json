@@ -2226,18 +2226,23 @@
       "absBeat": 8,
       "roman": "V/V",
       "figuresInclude": [
-        "9"
+        "9",
+        "♯3"
       ]
     },
     {
       "absBeat": 9,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 10,
       "roman": "II",
       "figuresInclude": [
-        "9",
+        "♯9",
         "7"
       ]
     },
@@ -2251,14 +2256,19 @@
     },
     {
       "absBeat": 11,
-      "roman": "V/ii"
+      "roman": "V/ii",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 11.333333,
       "roman": "V/ii",
       "figuresInclude": [
-        "♭7",
-        "5"
+        "7",
+        "5",
+        "♯3"
       ]
     },
     {
@@ -2303,30 +2313,40 @@
       "absBeat": 15,
       "roman": "iv",
       "figuresInclude": [
-        "♭♭7"
+        "7"
       ]
     },
     {
       "absBeat": 15.5,
       "roman": "Ger+",
       "figuresInclude": [
-        "♭♭7",
-        "5"
+        "7",
+        "5",
+        "♮3"
       ]
     },
     {
       "absBeat": 16,
-      "roman": "V/ii"
+      "roman": "V/ii",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 17,
-      "roman": "V/ii"
+      "roman": "V/ii",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 17.5,
       "roman": "VI",
       "figuresInclude": [
-        "9"
+        "9",
+        "♯3"
       ]
     },
     {
@@ -2334,7 +2354,8 @@
       "roman": "V/vi",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♯3"
       ]
     },
     {
@@ -2348,7 +2369,11 @@
     },
     {
       "absBeat": 21,
-      "roman": "V/ii"
+      "roman": "V/ii",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 21.5,
@@ -2402,7 +2427,7 @@
       "roman": "♭VII",
       "figuresInclude": [
         "6",
-        "4"
+        "♮4"
       ]
     },
     {
@@ -2420,7 +2445,8 @@
       "absBeat": 27.5,
       "roman": "V",
       "figuresInclude": [
-        "7"
+        "7",
+        "♮3"
       ]
     },
     {

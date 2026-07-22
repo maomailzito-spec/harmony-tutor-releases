@@ -1317,7 +1317,7 @@
       "absBeat": 7.5,
       "roman": "v",
       "figuresInclude": [
-        "7",
+        "♮7",
         "5",
         "♭3"
       ]
@@ -1343,7 +1343,8 @@
       "roman": "Fr+",
       "figuresInclude": [
         "7",
-        "♭5"
+        "♭5",
+        "♮3"
       ]
     },
     {

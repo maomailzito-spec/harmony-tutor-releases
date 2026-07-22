@@ -945,7 +945,11 @@
     },
     {
       "absBeat": 4.5,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     }
   ]
 }

@@ -954,7 +954,11 @@
     },
     {
       "absBeat": 10,
-      "roman": "♭III"
+      "roman": "♭III",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 16,
@@ -979,7 +983,11 @@
     },
     {
       "absBeat": 26,
-      "roman": "♭V"
+      "roman": "♭V",
+      "figuresInclude": [
+        "♭5",
+        "♭3"
+      ]
     }
   ]
 }

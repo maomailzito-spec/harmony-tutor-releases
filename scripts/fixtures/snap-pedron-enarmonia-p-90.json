@@ -361,11 +361,7 @@
   "expects": [
     {
       "absBeat": 0,
-      "roman": "i",
-      "figuresInclude": [
-        "5",
-        "♭3"
-      ]
+      "roman": "i"
     },
     {
       "absBeat": 4,
@@ -373,11 +369,19 @@
     },
     {
       "absBeat": 8,
-      "roman": "VI"
+      "roman": "VI",
+      "figuresInclude": [
+        "♯5",
+        "×3"
+      ]
     },
     {
       "absBeat": 12,
-      "roman": "N"
+      "roman": "N",
+      "figuresInclude": [
+        "♯5",
+        "♯3"
+      ]
     }
   ]
 }

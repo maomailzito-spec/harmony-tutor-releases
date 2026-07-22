@@ -3,17 +3,105 @@
   "keySignatureRoot": "C",
   "keyTonic": "C",
   "isMinorMode": false,
-  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "timeSignature": {
+    "numerator": 4,
+    "denominator": 4
+  },
   "analysisContexts": [],
   "notes": [
-    { "id": "v4-c3", "pitch": "C", "octave": 3, "position": -7, "midi": 48, "noteIndex": 0, "clef": "bass", "duration": "quarter", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 4, "voice": 4 },
-    { "id": "v3-c4", "pitch": "C", "octave": 4, "position": 0, "midi": 60, "noteIndex": 0, "clef": "bass", "duration": "quarter", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 4, "voice": 3 },
-    { "id": "v2-e4", "pitch": "E", "octave": 4, "position": 2, "midi": 64, "noteIndex": 4, "clef": "treble", "duration": "quarter", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 4, "voice": 2 },
-
-    { "id": "v1-b4", "pitch": "B", "octave": 4, "position": 6, "midi": 71, "noteIndex": 11, "clef": "treble", "duration": "eighth", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 4, "voice": 1 },
-    { "id": "v1-a4", "pitch": "A", "octave": 4, "position": 5, "midi": 69, "noteIndex": 9, "clef": "treble", "duration": "eighth", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 4.5, "voice": 1 }
+    {
+      "id": "v4-c3",
+      "pitch": "C",
+      "octave": 3,
+      "position": -7,
+      "midi": 48,
+      "noteIndex": 0,
+      "clef": "bass",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 4,
+      "voice": 4
+    },
+    {
+      "id": "v3-c4",
+      "pitch": "C",
+      "octave": 4,
+      "position": 0,
+      "midi": 60,
+      "noteIndex": 0,
+      "clef": "bass",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 4,
+      "voice": 3
+    },
+    {
+      "id": "v2-e4",
+      "pitch": "E",
+      "octave": 4,
+      "position": 2,
+      "midi": 64,
+      "noteIndex": 4,
+      "clef": "treble",
+      "duration": "quarter",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 4,
+      "voice": 2
+    },
+    {
+      "id": "v1-b4",
+      "pitch": "B",
+      "octave": 4,
+      "position": 6,
+      "midi": 71,
+      "noteIndex": 11,
+      "clef": "treble",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 4,
+      "voice": 1
+    },
+    {
+      "id": "v1-a4",
+      "pitch": "A",
+      "octave": 4,
+      "position": 5,
+      "midi": 69,
+      "noteIndex": 9,
+      "clef": "treble",
+      "duration": "eighth",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 4.5,
+      "voice": 1
+    }
   ],
   "expects": [
-    { "absBeat": 3, "roman": "I" }
+    {
+      "absBeat": 3,
+      "roman": "I",
+      "figuresInclude": [
+        "7"
+      ]
+    }
   ]
 }

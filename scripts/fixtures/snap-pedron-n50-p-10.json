@@ -4338,11 +4338,19 @@
     },
     {
       "absBeat": 6,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 7,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 8,
@@ -4356,7 +4364,7 @@
       "roman": "V/iv",
       "figuresInclude": [
         "6",
-        "♭5"
+        "5"
       ]
     },
     {
@@ -4391,16 +4399,25 @@
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♮3"
       ]
     },
     {
       "absBeat": 22,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 23,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 24,
@@ -4425,7 +4442,7 @@
       "absBeat": 30,
       "roman": "♭VII",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
@@ -4497,7 +4514,7 @@
       "absBeat": 48,
       "roman": "♭VII",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
@@ -4508,7 +4525,7 @@
       "absBeat": 51,
       "roman": "♭VII",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
@@ -4549,7 +4566,8 @@
       "absBeat": 62,
       "roman": "III+",
       "figuresInclude": [
-        "6"
+        "6",
+        "♮3"
       ]
     },
     {
@@ -4590,7 +4608,8 @@
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♮3"
       ]
     },
     {
@@ -4632,13 +4651,17 @@
     },
     {
       "absBeat": 84,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 86,
       "roman": "V/iv",
       "figuresInclude": [
-        "4",
+        "♮4",
         "2"
       ]
     },
@@ -4670,7 +4693,8 @@
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♮3"
       ]
     },
     {

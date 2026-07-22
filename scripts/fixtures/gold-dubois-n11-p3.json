@@ -860,7 +860,11 @@
     },
     {
       "absBeat": 2,
-      "roman": "III"
+      "roman": "III",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 4,
@@ -872,7 +876,11 @@
     },
     {
       "absBeat": 8,
-      "roman": "III"
+      "roman": "III",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 12,
@@ -888,7 +896,11 @@
     },
     {
       "absBeat": 18,
-      "roman": "III"
+      "roman": "III",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 20,

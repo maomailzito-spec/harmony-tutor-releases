@@ -1736,12 +1736,18 @@
   "expects": [
     {
       "absBeat": 9,
-      "roman": "ii"
+      "roman": "ii",
+      "figuresInclude": [
+        "6"
+      ]
     },
     {
       "absBeat": 12,
       "roman": "V",
-      "symbolIncludes": "Bb7"
+      "symbolIncludes": "Bb7",
+      "figuresInclude": [
+        "7"
+      ]
     }
   ],
   "expectsSuspensions": [

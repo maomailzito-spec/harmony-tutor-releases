@@ -953,13 +953,17 @@
     },
     {
       "absBeat": 12,
-      "roman": "IV"
+      "roman": "IV",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 13,
       "roman": "IV",
       "figuresInclude": [
-        "6",
+        "♯6",
         "4"
       ]
     },
@@ -1012,7 +1016,11 @@
     },
     {
       "absBeat": 20,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     }
   ]
 }

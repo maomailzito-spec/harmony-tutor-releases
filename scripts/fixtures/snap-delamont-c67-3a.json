@@ -1236,14 +1236,14 @@
       "absBeat": 7,
       "roman": "♭II",
       "figuresInclude": [
-        "3"
+        "♯3"
       ]
     },
     {
       "absBeat": 7.5,
       "roman": "V/ii",
       "figuresInclude": [
-        "3"
+        "♯3"
       ]
     },
     {
@@ -1284,7 +1284,7 @@
       "absBeat": 11.5,
       "roman": "V",
       "figuresInclude": [
-        "♭7"
+        "7"
       ]
     },
     {

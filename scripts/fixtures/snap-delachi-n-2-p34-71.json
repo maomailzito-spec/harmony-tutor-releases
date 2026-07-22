@@ -2244,7 +2244,7 @@
       "absBeat": 18,
       "roman": "vii°/V",
       "figuresInclude": [
-        "6"
+        "♮6"
       ]
     },
     {
@@ -2348,7 +2348,8 @@
       "absBeat": 44,
       "roman": "V/vi",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {

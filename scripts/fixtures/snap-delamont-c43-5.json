@@ -1136,11 +1136,19 @@
   "expects": [
     {
       "absBeat": 0,
-      "roman": "N"
+      "roman": "N",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 1,
-      "roman": "N"
+      "roman": "N",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 2,

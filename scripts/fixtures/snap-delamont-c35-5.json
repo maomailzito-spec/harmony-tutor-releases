@@ -1077,7 +1077,8 @@
       "absBeat": 5,
       "roman": "IV",
       "figuresInclude": [
-        "7"
+        "7",
+        "♮3"
       ]
     },
     {
@@ -1085,7 +1086,8 @@
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♮3"
       ]
     },
     {

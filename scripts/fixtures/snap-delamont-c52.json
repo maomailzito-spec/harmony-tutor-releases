@@ -1677,8 +1677,7 @@
       "roman": "Sw+",
       "figuresInclude": [
         "♭♭7",
-        "♭♭5",
-        "♭3"
+        "♭♭5"
       ]
     },
     {
@@ -1808,7 +1807,7 @@
       "absBeat": 27,
       "roman": "V",
       "figuresInclude": [
-        "♭7",
+        "7",
         "5"
       ]
     },

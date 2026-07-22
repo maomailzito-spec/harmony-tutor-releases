@@ -238,17 +238,27 @@
   "expects": [
     {
       "absBeat": 0,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "4",
+        "3"
+      ]
     },
     {
       "absBeat": 2,
       "roman": "V",
-      "figuresInclude": ["4", "3"]
+      "figuresInclude": [
+        "4",
+        "3"
+      ]
     },
     {
       "absBeat": 3,
       "roman": "V",
-      "figuresInclude": ["4", "3"]
+      "figuresInclude": [
+        "4",
+        "3"
+      ]
     }
   ],
   "forbidsSuspensions": [

@@ -1856,7 +1856,7 @@
       "absBeat": 4,
       "roman": "vii°",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {
@@ -1876,11 +1876,19 @@
     },
     {
       "absBeat": 12,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 14,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 16,
@@ -1929,7 +1937,11 @@
     },
     {
       "absBeat": 30,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 32,
@@ -1967,7 +1979,11 @@
     },
     {
       "absBeat": 42,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 44,

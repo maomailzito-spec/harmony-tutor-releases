@@ -2747,7 +2747,11 @@
     },
     {
       "absBeat": 6,
-      "roman": "V/vi"
+      "roman": "V/vi",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 8,
@@ -2766,7 +2770,11 @@
     },
     {
       "absBeat": 12,
-      "roman": "V/vi"
+      "roman": "V/vi",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 16,
@@ -2859,7 +2867,7 @@
       "absBeat": 40,
       "roman": "vii°/vi",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {
@@ -2876,13 +2884,18 @@
     },
     {
       "absBeat": 46,
-      "roman": "V/vi"
+      "roman": "V/vi",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 47,
       "roman": "V/vi",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {

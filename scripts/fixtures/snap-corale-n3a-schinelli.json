@@ -4183,7 +4183,11 @@
     },
     {
       "absBeat": 12,
-      "roman": "V/vi"
+      "roman": "V/vi",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 16,
@@ -4268,7 +4272,8 @@
       "absBeat": 40,
       "roman": "V/ii",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
@@ -4299,7 +4304,8 @@
       "absBeat": 46,
       "roman": "V/V",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
@@ -4348,7 +4354,8 @@
       "absBeat": 64,
       "roman": "V/V",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
@@ -4359,7 +4366,7 @@
       "absBeat": 67,
       "roman": "V",
       "figuresInclude": [
-        "7",
+        "♯7",
         "5"
       ]
     },
@@ -4376,7 +4383,11 @@
     },
     {
       "absBeat": 74,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 76,
@@ -4403,7 +4414,11 @@
     },
     {
       "absBeat": 82,
-      "roman": "V/vi"
+      "roman": "V/vi",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 84,

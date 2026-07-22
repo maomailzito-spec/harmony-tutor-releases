@@ -956,6 +956,7 @@
       "roman": "♭II",
       "figuresInclude": [
         "6",
+        "♭5",
         "4"
       ]
     },
@@ -964,7 +965,7 @@
       "roman": "Ger+",
       "figuresInclude": [
         "6",
-        "5"
+        "♭5"
       ]
     },
     {
@@ -987,7 +988,7 @@
       "absBeat": 6,
       "roman": "ii",
       "figuresInclude": [
-        "7",
+        "♯7",
         "5"
       ]
     },

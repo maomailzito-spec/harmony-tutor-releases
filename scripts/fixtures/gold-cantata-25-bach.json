@@ -6166,18 +6166,13 @@
     },
     {
       "absBeat": 9,
-      "roman": "ii",
-      "figuresInclude": [
-        "5",
-        "♭3"
-      ]
+      "roman": "ii"
     },
     {
       "absBeat": 9.5,
       "roman": "vii°",
       "figuresInclude": [
-        "6",
-        "♭3"
+        "6"
       ]
     },
     {
@@ -6208,7 +6203,7 @@
       "roman": "V",
       "figuresInclude": [
         "6",
-        "♭5"
+        "5"
       ]
     },
     {
@@ -6290,18 +6285,13 @@
     },
     {
       "absBeat": 25,
-      "roman": "ii",
-      "figuresInclude": [
-        "5",
-        "♭3"
-      ]
+      "roman": "ii"
     },
     {
       "absBeat": 25.5,
       "roman": "vii°",
       "figuresInclude": [
-        "6",
-        "♭3"
+        "6"
       ]
     },
     {
@@ -6362,21 +6352,21 @@
       "absBeat": 33,
       "roman": "IV",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
       "absBeat": 33.5,
       "roman": "IV",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
       "absBeat": 33.75,
       "roman": "IV",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
@@ -6408,11 +6398,7 @@
     },
     {
       "absBeat": 37,
-      "roman": "ii",
-      "figuresInclude": [
-        "5",
-        "♭3"
-      ]
+      "roman": "ii"
     },
     {
       "absBeat": 37.5,
@@ -6431,7 +6417,11 @@
     },
     {
       "absBeat": 38,
-      "roman": "V/ii"
+      "roman": "V/ii",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 40,
@@ -6467,7 +6457,7 @@
       "absBeat": 44,
       "roman": "IV",
       "figuresInclude": [
-        "♭6"
+        "6"
       ]
     },
     {
@@ -6504,18 +6494,13 @@
     },
     {
       "absBeat": 50,
-      "roman": "ii",
-      "figuresInclude": [
-        "5",
-        "♭3"
-      ]
+      "roman": "ii"
     },
     {
       "absBeat": 50.5,
       "roman": "vii°",
       "figuresInclude": [
-        "6",
-        "♭3"
+        "6"
       ]
     },
     {
@@ -6598,18 +6583,13 @@
     },
     {
       "absBeat": 60,
-      "roman": "ii",
-      "figuresInclude": [
-        "5",
-        "♭3"
-      ]
+      "roman": "ii"
     },
     {
       "absBeat": 60.5,
       "roman": "vii°",
       "figuresInclude": [
-        "6",
-        "♭3"
+        "6"
       ]
     },
     {

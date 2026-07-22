@@ -5406,7 +5406,11 @@
   "expects": [
     {
       "absBeat": 3,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 4,
@@ -5431,7 +5435,7 @@
       "absBeat": 7.5,
       "roman": "vii°/iv",
       "figuresInclude": [
-        "6"
+        "♮6"
       ]
     },
     {
@@ -5462,7 +5466,7 @@
       "absBeat": 15,
       "roman": "vii°",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {
@@ -5478,11 +5482,19 @@
     },
     {
       "absBeat": 18,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 20,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 23,
@@ -5516,7 +5528,7 @@
       "absBeat": 25.5,
       "roman": "VI°",
       "figuresInclude": [
-        "6"
+        "♮6"
       ]
     },
     {
@@ -5658,16 +5670,24 @@
       "absBeat": 47,
       "roman": "VI°",
       "figuresInclude": [
-        "6"
+        "♮6"
       ]
     },
     {
       "absBeat": 48,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 51,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 52,
@@ -5690,7 +5710,11 @@
     },
     {
       "absBeat": 55,
-      "roman": "IV"
+      "roman": "IV",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 56,
@@ -5710,11 +5734,19 @@
     },
     {
       "absBeat": 58,
-      "roman": "IV"
+      "roman": "IV",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 60,
-      "roman": "IV"
+      "roman": "IV",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 63,
@@ -5784,7 +5816,11 @@
     },
     {
       "absBeat": 69,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 70,
@@ -5817,7 +5853,7 @@
       "absBeat": 75.5,
       "roman": "vii°/iv",
       "figuresInclude": [
-        "6"
+        "♮6"
       ]
     },
     {
@@ -5847,7 +5883,7 @@
       "absBeat": 79,
       "roman": "ii",
       "figuresInclude": [
-        "5",
+        "♮5",
         "4"
       ]
     },
@@ -5855,13 +5891,17 @@
       "absBeat": 79.5,
       "roman": "V/V",
       "figuresInclude": [
-        "5",
+        "♮5",
         "♭4"
       ]
     },
     {
       "absBeat": 80,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     }
   ]
 }

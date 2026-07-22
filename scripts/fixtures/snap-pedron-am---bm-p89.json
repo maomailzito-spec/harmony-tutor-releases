@@ -427,12 +427,17 @@
       "roman": "V/ii°",
       "figuresInclude": [
         "7",
-        "5"
+        "♯5",
+        "♯3"
       ]
     },
     {
       "absBeat": 8,
-      "roman": "ii"
+      "roman": "ii",
+      "figuresInclude": [
+        "♯5",
+        "3"
+      ]
     }
   ]
 }

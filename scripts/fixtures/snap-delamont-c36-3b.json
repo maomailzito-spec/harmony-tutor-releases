@@ -1104,7 +1104,11 @@
     },
     {
       "absBeat": 3,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 3.5,
@@ -1142,7 +1146,8 @@
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♮3"
       ]
     },
     {
@@ -1181,14 +1186,16 @@
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♮3"
       ]
     },
     {
       "absBeat": 11.5,
       "roman": "V",
       "figuresInclude": [
-        "7"
+        "7",
+        "♮3"
       ]
     },
     {

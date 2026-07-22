@@ -869,14 +869,19 @@
     },
     {
       "absBeat": 10,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "♮5",
+        "♮3"
+      ]
     },
     {
       "absBeat": 11,
       "roman": "V",
       "figuresInclude": [
-        "♭7",
-        "5"
+        "7",
+        "5",
+        "♮3"
       ]
     },
     {

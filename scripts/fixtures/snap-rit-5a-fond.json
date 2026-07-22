@@ -201,12 +201,17 @@
       "absBeat": 4,
       "roman": "III+",
       "figuresInclude": [
-        "6"
+        "6",
+        "♯3"
       ]
     },
     {
       "absBeat": 6,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     }
   ]
 }

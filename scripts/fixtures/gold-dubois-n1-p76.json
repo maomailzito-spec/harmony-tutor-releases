@@ -5215,7 +5215,7 @@
       "absBeat": 17,
       "roman": "vii°/V",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {
@@ -5239,7 +5239,11 @@
     },
     {
       "absBeat": 21,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 21.5,
@@ -5270,7 +5274,8 @@
       "absBeat": 25,
       "roman": "vii",
       "figuresInclude": [
-        "6"
+        "6",
+        "♯3"
       ]
     },
     {
@@ -5285,7 +5290,8 @@
       "roman": "V/V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♯3"
       ]
     },
     {
@@ -5323,7 +5329,11 @@
     },
     {
       "absBeat": 33,
-      "roman": "♭III"
+      "roman": "♭III",
+      "figuresInclude": [
+        "♮5",
+        "3"
+      ]
     },
     {
       "absBeat": 34,
@@ -5337,13 +5347,17 @@
       "absBeat": 35,
       "roman": "V/♭III",
       "figuresInclude": [
-        "6",
+        "♮6",
         "♭5"
       ]
     },
     {
       "absBeat": 36,
-      "roman": "♭III"
+      "roman": "♭III",
+      "figuresInclude": [
+        "♮5",
+        "3"
+      ]
     },
     {
       "absBeat": 37,
@@ -5354,18 +5368,26 @@
     },
     {
       "absBeat": 38,
-      "roman": "♭III"
+      "roman": "♭III",
+      "figuresInclude": [
+        "♮5",
+        "3"
+      ]
     },
     {
       "absBeat": 39,
-      "roman": "♭VI"
+      "roman": "♭VI",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 40,
       "roman": "V/♭III",
       "figuresInclude": [
         "4",
-        "2"
+        "♮2"
       ]
     },
     {
@@ -5410,7 +5432,11 @@
     },
     {
       "absBeat": 48,
-      "roman": "♭VI"
+      "roman": "♭VI",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 49,
@@ -5449,7 +5475,11 @@
     },
     {
       "absBeat": 54,
-      "roman": "♭III"
+      "roman": "♭III",
+      "figuresInclude": [
+        "♮5",
+        "3"
+      ]
     },
     {
       "absBeat": 56,

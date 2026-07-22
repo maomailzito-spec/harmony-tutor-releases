@@ -632,8 +632,8 @@
       "absBeat": 6,
       "roman": "VI°",
       "figuresInclude": [
-        "4",
-        "2"
+        "♯4",
+        "♯2"
       ]
     },
     {
@@ -654,7 +654,11 @@
     },
     {
       "absBeat": 12,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     }
   ]
 }

@@ -2195,7 +2195,11 @@
   "expects": [
     {
       "absBeat": 54,
-      "roman": "I"
+      "roman": "I",
+      "figuresInclude": [
+        "6",
+        "4"
+      ]
     }
   ],
   "forbidsSuspensions": [

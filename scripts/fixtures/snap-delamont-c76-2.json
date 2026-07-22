@@ -1687,7 +1687,7 @@
       "figuresInclude": [
         "5",
         "4",
-        "2"
+        "♭2"
       ]
     },
     {
@@ -1703,21 +1703,23 @@
       "absBeat": 15,
       "roman": "iv",
       "figuresInclude": [
-        "♭7"
+        "♭7",
+        "♭3"
       ]
     },
     {
       "absBeat": 15.5,
       "roman": "N",
       "figuresInclude": [
-        "♭6"
+        "♭6",
+        "♭3"
       ]
     },
     {
       "absBeat": 16,
       "roman": "iii",
       "figuresInclude": [
-        "7",
+        "♯7",
         "5"
       ]
     },
@@ -1725,7 +1727,7 @@
       "absBeat": 17.5,
       "roman": "iii",
       "figuresInclude": [
-        "7"
+        "♯7"
       ]
     },
     {

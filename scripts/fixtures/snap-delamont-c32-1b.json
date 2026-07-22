@@ -523,8 +523,9 @@
       "absBeat": 8,
       "roman": "i",
       "figuresInclude": [
-        "7",
-        "5"
+        "♯7",
+        "5",
+        "♮3"
       ]
     }
   ]

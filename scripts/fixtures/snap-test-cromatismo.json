@@ -629,37 +629,59 @@
   "expects": [
     {
       "absBeat": 0,
-      "roman": "N"
+      "roman": "N",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 2,
       "roman": "♭iii",
       "figuresInclude": [
-        "6"
+        "♭6",
+        "♭3"
       ]
     },
     {
       "absBeat": 4,
-      "roman": "♭VI"
+      "roman": "♭VI",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 6,
-      "roman": "N"
+      "roman": "N",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 8,
       "roman": "♭iii",
       "figuresInclude": [
-        "6"
+        "♭6",
+        "♭3"
       ]
     },
     {
       "absBeat": 10,
-      "roman": "♭VI"
+      "roman": "♭VI",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 12,
-      "roman": "N"
+      "roman": "N",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     }
   ]
 }

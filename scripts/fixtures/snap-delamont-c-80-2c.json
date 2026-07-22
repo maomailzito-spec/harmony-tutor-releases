@@ -1354,7 +1354,7 @@
       "roman": "Fr+",
       "figuresInclude": [
         "6",
-        "♭5",
+        "5",
         "♭♭3"
       ]
     },
@@ -1479,21 +1479,24 @@
       "absBeat": 16,
       "roman": "i",
       "figuresInclude": [
-        "7"
+        "♯7",
+        "♮3"
       ]
     },
     {
       "absBeat": 17,
       "roman": "iii",
       "figuresInclude": [
-        "6"
+        "♮6",
+        "♯3"
       ]
     },
     {
       "absBeat": 18,
       "roman": "i",
       "figuresInclude": [
-        "7"
+        "♯7",
+        "♮3"
       ]
     }
   ]

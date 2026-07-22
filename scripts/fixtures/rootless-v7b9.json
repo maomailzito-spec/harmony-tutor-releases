@@ -3,15 +3,97 @@
   "keySignatureRoot": "F",
   "keyTonic": "D",
   "isMinorMode": true,
-  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "timeSignature": {
+    "numerator": 4,
+    "denominator": 4
+  },
   "analysisContexts": [],
   "notes": [
-    { "id": "b", "pitch": "C", "octave": 3, "position": -7, "midi": 49, "noteIndex": 1, "clef": "bass", "explicitAccidental": "sharp", "accidental": "sharp", "userAccidental": "sharp", "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 4 },
-    { "id": "t", "pitch": "E", "octave": 3, "position": -5, "midi": 52, "noteIndex": 4, "clef": "bass", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 3 },
-    { "id": "a", "pitch": "G", "octave": 3, "position": -3, "midi": 55, "noteIndex": 7, "clef": "bass", "explicitAccidental": null, "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 2 },
-    { "id": "s", "pitch": "B", "octave": 3, "position": -1, "midi": 58, "noteIndex": 10, "clef": "bass", "explicitAccidental": "flat", "accidental": "flat", "userAccidental": "flat", "duration": "half", "isRest": false, "isTriplet": false, "isDuplet": false, "isDotted": false, "measureIndex": 0, "beat": 1, "voice": 1 }
+    {
+      "id": "b",
+      "pitch": "C",
+      "octave": 3,
+      "position": -7,
+      "midi": 49,
+      "noteIndex": 1,
+      "clef": "bass",
+      "explicitAccidental": "sharp",
+      "accidental": "sharp",
+      "userAccidental": "sharp",
+      "duration": "half",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 1,
+      "voice": 4
+    },
+    {
+      "id": "t",
+      "pitch": "E",
+      "octave": 3,
+      "position": -5,
+      "midi": 52,
+      "noteIndex": 4,
+      "clef": "bass",
+      "explicitAccidental": null,
+      "duration": "half",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 1,
+      "voice": 3
+    },
+    {
+      "id": "a",
+      "pitch": "G",
+      "octave": 3,
+      "position": -3,
+      "midi": 55,
+      "noteIndex": 7,
+      "clef": "bass",
+      "explicitAccidental": null,
+      "duration": "half",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 1,
+      "voice": 2
+    },
+    {
+      "id": "s",
+      "pitch": "B",
+      "octave": 3,
+      "position": -1,
+      "midi": 58,
+      "noteIndex": 10,
+      "clef": "bass",
+      "explicitAccidental": "flat",
+      "accidental": "flat",
+      "userAccidental": "flat",
+      "duration": "half",
+      "isRest": false,
+      "isTriplet": false,
+      "isDuplet": false,
+      "isDotted": false,
+      "measureIndex": 0,
+      "beat": 1,
+      "voice": 1
+    }
   ],
   "expects": [
-    { "absBeat": 0, "roman": "vii°", "figuresInclude": ["♭♭7"] }
+    {
+      "absBeat": 0,
+      "roman": "vii°",
+      "figuresInclude": [
+        "7",
+        "5"
+      ]
+    }
   ]
 }

@@ -469,20 +469,24 @@
       "absBeat": 4,
       "roman": "♭VII",
       "figuresInclude": [
-        "6",
-        "5"
+        "♭6",
+        "♭5"
       ]
     },
     {
       "absBeat": 6,
-      "roman": "♭III"
+      "roman": "♭III",
+      "figuresInclude": [
+        "♭5",
+        "3"
+      ]
     },
     {
       "absBeat": 7,
       "roman": "V/♭VI",
       "figuresInclude": [
         "♭7",
-        "5"
+        "♭5"
       ]
     },
     {

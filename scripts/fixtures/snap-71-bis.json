@@ -353,14 +353,15 @@
       "absBeat": 2,
       "roman": "vii°/V",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {
       "absBeat": 4,
       "roman": "V",
       "figuresInclude": [
-        "6"
+        "6",
+        "♯5"
       ]
     },
     {
@@ -373,7 +374,11 @@
     },
     {
       "absBeat": 6,
-      "roman": "V/iii"
+      "roman": "V/iii",
+      "figuresInclude": [
+        "♯5",
+        "♯3"
+      ]
     }
   ]
 }

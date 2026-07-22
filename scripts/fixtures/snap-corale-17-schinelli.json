@@ -6677,7 +6677,11 @@
     },
     {
       "absBeat": 10,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 12,
@@ -6768,7 +6772,8 @@
       "absBeat": 42,
       "roman": "V",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
@@ -6801,14 +6806,19 @@
     },
     {
       "absBeat": 50,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 51,
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♯3"
       ]
     },
     {
@@ -6879,7 +6889,8 @@
       "absBeat": 76,
       "roman": "IV",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
@@ -6897,7 +6908,7 @@
       "absBeat": 82,
       "roman": "I",
       "figuresInclude": [
-        "6",
+        "♯6",
         "4"
       ]
     },
@@ -6920,14 +6931,19 @@
     },
     {
       "absBeat": 90,
-      "roman": "V/iv"
+      "roman": "V/iv",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 91,
       "roman": "V/iv",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♯3"
       ]
     },
     {
@@ -6997,11 +7013,19 @@
     },
     {
       "absBeat": 118,
-      "roman": "V/V"
+      "roman": "V/V",
+      "figuresInclude": [
+        "♯5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 119,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 120,
@@ -7064,7 +7088,8 @@
       "absBeat": 134,
       "roman": "IV",
       "figuresInclude": [
-        "7"
+        "7",
+        "♯3"
       ]
     },
     {
@@ -7097,7 +7122,11 @@
     },
     {
       "absBeat": 146,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 148,
@@ -7128,14 +7157,19 @@
     },
     {
       "absBeat": 154,
-      "roman": "V"
+      "roman": "V",
+      "figuresInclude": [
+        "5",
+        "♯3"
+      ]
     },
     {
       "absBeat": 155,
       "roman": "V",
       "figuresInclude": [
         "7",
-        "5"
+        "5",
+        "♯3"
       ]
     },
     {

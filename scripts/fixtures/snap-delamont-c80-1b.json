@@ -1851,14 +1851,14 @@
       "absBeat": 6,
       "roman": "vii°/iii",
       "figuresInclude": [
-        "6"
+        "♯6"
       ]
     },
     {
       "absBeat": 7.333333,
       "roman": "vii°/V",
       "figuresInclude": [
-        "6",
+        "♯6",
         "5"
       ]
     },
@@ -1998,16 +1998,14 @@
       "roman": "ii",
       "figuresInclude": [
         "9",
-        "7",
-        "♭3"
+        "7"
       ]
     },
     {
       "absBeat": 21.333333,
       "roman": "ii",
       "figuresInclude": [
-        "7",
-        "♭3"
+        "7"
       ]
     },
     {
@@ -2015,7 +2013,7 @@
       "roman": "V",
       "figuresInclude": [
         "4",
-        "♭3"
+        "3"
       ]
     },
     {
