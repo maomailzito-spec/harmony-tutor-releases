@@ -603,6 +603,8 @@ const main = () => {
         absBeat: ev.absBeat,
         autoOverrideByAbsBeat: new Map(),
         overrideByAbsBeat: new Map(),
+        // Reliable armatura from the stored relative-major root (keyTonic is inconsistent across fixtures).
+        figuresKeySignature: getKeySignature(fx.keySignatureRoot, 'Major'),
       });
       const roman = stateless.roman;
       const figures = stateless.figures;
@@ -883,6 +885,7 @@ const computeExpects = (fx: any): any[] => {
       absBeat: ab,
       autoOverrideByAbsBeat: new Map(),
       overrideByAbsBeat: new Map(),
+      figuresKeySignature: getKeySignature(fx.keySignatureRoot, 'Major'),
     });
     const roman = stateless.roman;
     const figures = stateless.figures;
@@ -958,7 +961,42 @@ const updateNamedFixtures = (fileNames: string[]) => {
   console.log(`\nDone: ${updated} fixture(s) regenerated`);
 };
 
-if (process.argv.includes('--update-snapshots')) {
+// Refresh ONLY the `figuresInclude` of every existing expect, preserving each `roman`
+// (and absBeat / entry set) exactly. Use this when a change touches figured bass but must
+// not disturb the tracked Roman-numeral expectations (incl. known roman discrepancies).
+const updateFiguresOnly = () => {
+  let touchedFiles = 0, changedEntries = 0;
+  for (const f of fs.readdirSync(fixturesDir).filter(x => x.endsWith('.json')).sort()) {
+    const full = path.join(fixturesDir, f);
+    const obj = JSON.parse(fs.readFileSync(full, 'utf8'));
+    if (!obj || !Array.isArray(obj.notes) || !Array.isArray(obj.expects) || obj.expects.length === 0) continue;
+    if (!obj.keyTonic) obj.keyTonic = obj.keySignatureRoot;
+    let fresh: any[];
+    try { fresh = computeExpects(obj); } catch { continue; }
+    const figAt = new Map<number, string[] | undefined>();
+    for (const e of fresh) figAt.set(Math.round(e.absBeat * 1e6), e.figuresInclude);
+    let fileChanged = false;
+    for (const e of obj.expects) {
+      if (typeof e.absBeat !== 'number') continue;
+      const key = Math.round(e.absBeat * 1e6);
+      if (!figAt.has(key)) continue; // no matching event: leave untouched
+      const nf = figAt.get(key);
+      const before = JSON.stringify(e.figuresInclude ?? null);
+      if (nf && nf.length) e.figuresInclude = nf; else delete e.figuresInclude;
+      if (JSON.stringify(e.figuresInclude ?? null) !== before) { fileChanged = true; changedEntries++; }
+    }
+    if (fileChanged) {
+      fs.writeFileSync(full, JSON.stringify(obj, null, 2) + '\n');
+      touchedFiles++;
+      console.log(`UPDATED   ${f}  "${obj.name}"`);
+    }
+  }
+  console.log(`\nDone: ${changedEntries} figure entries updated in ${touchedFiles} file(s); romans preserved.`);
+};
+
+if (process.argv.includes('--update-figures')) {
+  updateFiguresOnly();
+} else if (process.argv.includes('--update-snapshots')) {
   updateSnapshots();
 } else if (process.argv.includes('--update-gold')) {
   const i = process.argv.indexOf('--update-gold');
