@@ -1317,7 +1317,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // the editor (off by default; export-excluded so it never prints).
     const [showPageBreaks, setShowPageBreaks] = useState(false);
     const { t: tPB } = useTranslation('toolbar');
-    const { t: tUI } = useTranslation('ui');
+    const { t: tUI, i18n } = useTranslation('ui');
     const [measuresPerLine, setMeasuresPerLine] = useState<number>(4);
     const [minMeasureCount, setMinMeasureCount] = useState<number>(4);
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
@@ -5013,7 +5013,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
             return { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
-    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides]);
+        // i18n.language: violation texts (title + multiline body) are localized at analysis time,
+        // so re-run when the language changes to refresh them (IT⇄EN switch).
+    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, i18n.language]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
