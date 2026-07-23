@@ -6408,6 +6408,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
     }, [isRecording, getElapsedBeats, setPlayheadPosition]);
 
+    // ── PERF: imperative playback playhead ───────────────────────────────────
+    // Driving the cursor with setPlayheadPosition() every animation frame re-renders
+    // GrandStaffEditor (all ~140 systems + overlays) → jerky, lagging cursor. Instead,
+    // each system renders ONE hidden <line> (ref below); during playback the rAF loop
+    // moves the active system's line via style.transform (no re-render), and only calls
+    // setPlayheadPosition() when the cursor CROSSES into a new system — which drives the
+    // existing auto-scroll effect and keeps React state roughly in sync. The React
+    // playhead is hidden while playing (see `!isPlaying` gate) so only one cursor shows.
+    const playheadLineRefs = useRef<Array<SVGLineElement | null>>([]);
+    const activePlaybackSystemRef = useRef<number>(-1);
+    const activePlaybackSysElRef = useRef<HTMLElement | null>(null);
+    const lastPlaybackPosRef = useRef<{ x: number; systemIndex: number } | null>(null);
+
     useEffect(() => {
         if (!isPlaying) return;
         if (!audioService.audioContext) return;
@@ -6432,8 +6445,53 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const visualBeat = playbackBeatToVisualBeatRef.current
                 ? playbackBeatToVisualBeatRef.current(curAbsBeat)
                 : curAbsBeat;
+            // Keep the shared cursor-beat ref current so that on stop the refine-playhead
+            // effect snaps to where playback actually stopped (not the start beat), and
+            // resume/replay continues from here. The per-frame React playhead is frozen
+            // during playback, so this ref is the single source of truth for "where are we".
+            playbackCursorAbsBeatRef.current = visualBeat;
             const pos = getPlayheadPosForAbsBeat(visualBeat);
-            if (pos) setPlayheadPosition(pos);
+            if (pos) {
+                const si = pos.systemIndex;
+                const ld: any = layoutDataRef.current;
+                const sysW = ld?.systemsParams?.[si]?.width ?? 0;
+                const x = sysW > 0 ? Math.min(pos.x, sysW - STAFF_MARGIN) : pos.x;
+                const container = staffContainerRef.current;
+                // Crossing into a new system: hide the previous line, cache the new
+                // system element, and vertical-scroll it into view — all imperative,
+                // NO setState, so playback never re-renders the score.
+                if (si !== activePlaybackSystemRef.current) {
+                    const prevLine = playheadLineRefs.current[activePlaybackSystemRef.current];
+                    if (prevLine) prevLine.style.visibility = 'hidden';
+                    activePlaybackSystemRef.current = si;
+                    const sysEl = container ? (container.querySelector(`[data-system-index="${si}"]`) as HTMLElement | null) : null;
+                    activePlaybackSysElRef.current = sysEl;
+                    if (container && sysEl) {
+                        const contRect = container.getBoundingClientRect();
+                        const sysRect = sysEl.getBoundingClientRect();
+                        const pad = 24;
+                        if (sysRect.top < contRect.top + pad) container.scrollTop += (sysRect.top - (contRect.top + pad));
+                        else if (sysRect.bottom > contRect.bottom - pad) container.scrollTop += (sysRect.bottom - (contRect.bottom - pad));
+                    }
+                }
+                // Per-frame: move the active system's line + horizontal follow (linear
+                // mode). No re-render — offsetLeft/scrollLeft reads don't force layout
+                // while the score is static during playback.
+                const line = playheadLineRefs.current[si];
+                if (line) {
+                    line.style.transform = `translateX(${x}px)`;
+                    line.style.visibility = 'visible';
+                }
+                const sysEl = activePlaybackSysElRef.current;
+                if (container && sysEl) {
+                    const xInContainer = sysEl.offsetLeft + x;
+                    const left = xInContainer - container.scrollLeft;
+                    const rightPad = 40;
+                    if (left < rightPad) container.scrollLeft = Math.max(0, xInContainer - rightPad);
+                    else if (left > container.clientWidth - rightPad) container.scrollLeft = Math.max(0, xInContainer - (container.clientWidth - rightPad));
+                }
+                lastPlaybackPosRef.current = pos;
+            }
 
             animationFrameRef.current = window.requestAnimationFrame(tick);
         };
@@ -6444,6 +6502,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 window.cancelAnimationFrame(animationFrameRef.current);
                 animationFrameRef.current = null;
             }
+            // Teardown: hide the active imperative line and sync React state to the
+            // exact stop position so the (now visible) React playhead lands there.
+            const activeLine = playheadLineRefs.current[activePlaybackSystemRef.current];
+            if (activeLine) activeLine.style.visibility = 'hidden';
+            activePlaybackSystemRef.current = -1;
+            activePlaybackSysElRef.current = null;
+            if (lastPlaybackPosRef.current) setPlayheadPosition(lastPlaybackPosRef.current);
         };
     }, [audioService.audioContext, bpm, getPlayheadPosForAbsBeat, isPlaying]);
 
@@ -13708,8 +13773,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             </svg>
                                                         )}
 
-                                                        {/* Overlay: playhead */}
-                                                        {playheadPosition && playheadPosition.systemIndex === systemIndex && (
+                                                        {/* Imperative playback playhead: one hidden line per system, moved via
+                                                            ref during playback (no per-frame React re-render). See the playback
+                                                            rAF loop / playheadLineRefs. Hidden except while playing. */}
+                                                        <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                                            <line
+                                                                ref={(el) => { playheadLineRefs.current[systemIndex] = el; }}
+                                                                x1={0}
+                                                                y1={playheadYTopPx}
+                                                                x2={0}
+                                                                y2={playheadYBottomPx}
+                                                                className="stroke-cyan-500"
+                                                                strokeWidth={2}
+                                                                opacity={0.7}
+                                                                style={{ visibility: 'hidden' }}
+                                                            />
+                                                        </svg>
+
+                                                        {/* Overlay: playhead (React-driven — click/seek/recording; hidden while
+                                                            playing, where the imperative line above takes over). */}
+                                                        {playheadPosition && playheadPosition.systemIndex === systemIndex && !isPlaying && (
                                                             <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {
                                                                     (() => {
