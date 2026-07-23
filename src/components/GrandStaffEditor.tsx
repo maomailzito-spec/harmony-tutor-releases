@@ -17,6 +17,7 @@ import { AudioService, type SustainHandle } from '../services/AudioService';
 import { gmToSoundfont, soundfontToGm } from '../constants/instruments';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
+import { useFeatureGate } from '../hooks/useFeatureGate';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
@@ -1290,6 +1291,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         selectedNotesBeamState, handleToggleBeamGroup,
         handleToggleTie, handleDeselectOnClickOutside,
     } = useNoteSelection({ rawNotes, setRawNotes, timeSignature, timeSignatureChanges });
+    // Commercial gate: limited mode (trial expired, no license). Editor/export/playback/revoice
+    // stay ON; automatic analysis and realization (chord→SATB, ACC patterns) are OFF.
+    const { limited: featuresLimited } = useFeatureGate();
+    const featuresLimitedRef = useRef(false);
+    useEffect(() => { featuresLimitedRef.current = featuresLimited; }, [featuresLimited]);
+    // Transient toast shown when a user attempts a locked (Pro) action in limited mode.
+    const [limitedToast, setLimitedToast] = useState<string | null>(null);
+    const notifyLimited = useCallback(() => {
+        setLimitedToast('Funzione Pro disabilitata (prova terminata). Attiva la licenza per riabilitarla.');
+        window.setTimeout(() => setLimitedToast(null), 3500);
+    }, []);
+
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
     const [projectTitle, setProjectTitle] = useState<string>('');
     const [titleFontSize, setTitleFontSize] = useState<number>(18);
@@ -2265,6 +2278,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [harmonyOverrideMenu, setHarmonyOverrideMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number; inferredTonicAtBeat?: { tonic: string; isMinor: boolean } | null } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
+    // Limited mode: force harmonic analysis OFF and prevent re-enabling it (gated setter).
+    useEffect(() => { if (featuresLimited) setIsAnalysisEnabled(false); }, [featuresLimited]);
+    const setIsAnalysisEnabledGated = useCallback<React.Dispatch<React.SetStateAction<boolean>>>((v) => {
+        if (featuresLimitedRef.current) { notifyLimited(); return; } // analysis is a Pro feature in limited mode
+        setIsAnalysisEnabled(v);
+    }, [notifyLimited]);
     const [isSequencesEnabled, setIsSequencesEnabled] = useState(() => {
         try {
             const raw = String(localStorage.getItem('harmony.analysis.sequencesEnabled.v1') || '').trim();
@@ -3215,6 +3234,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * inserimenti e, se c'è una selezione ACC, lo applica subito a quelle note esatte.
      */
     const handleSelectAccPattern = useCallback((pattern: AccompanimentPattern) => {
+        if (featuresLimitedRef.current) { notifyLimited(); return; } // pattern ACC = realizzazione (Pro)
         setAccPattern(pattern);
         accPatternRef.current = pattern;
         applyPatternToSelectionAsIs(pattern);
@@ -3224,6 +3244,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * Restituisce { startTick, durTicks } per permettere al chiamante di avanzare il caret,
      * oppure null se la sigla non è valida. */
     const handleChordInsert = useCallback((symbol: string): { startTick: number; durTicks: number } | null => {
+        if (featuresLimitedRef.current) { notifyLimited(); return null; } // realizzazione automatica (Pro)
         const parsed = parseChordSymbol(symbol);
         if (!parsed) { setChordInputError(true); return null; }
 
@@ -12354,6 +12375,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             >
                 ⚠
             </button>
+            {featuresLimited && (
+                <div className="w-full flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-500 text-amber-950 text-xs font-semibold shadow z-[55]">
+                    <span>⏳ Prova terminata — <b>analisi</b> e <b>realizzazione automatica</b> disabilitate. Editor, export, playback e stampa restano attivi.</span>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            try {
+                                const r = await (window as any).electronAPI?.showActivationDialog?.();
+                                if (r && r.activated) window.location.reload();
+                            } catch { /* ignore */ }
+                        }}
+                        className="shrink-0 px-2.5 py-1 rounded-md bg-amber-900 text-amber-50 hover:bg-amber-800 transition-colors"
+                    >Attiva licenza</button>
+                </div>
+            )}
+            {limitedToast && (
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-3 py-2 rounded-md bg-gray-900/90 text-amber-200 text-xs shadow-lg pointer-events-none">
+                    🔒 {limitedToast}
+                </div>
+            )}
             <GrandStaffToolbar
                 isPlaying={isPlaying}
                 togglePlayback={togglePlayback}
@@ -12507,7 +12548,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 isAnalysisEnabled={isAnalysisEnabled}
-                setIsAnalysisEnabled={setIsAnalysisEnabled}
+                setIsAnalysisEnabled={setIsAnalysisEnabledGated}
                 showRomanAnalysis={showRomanAnalysis}
                 setShowRomanAnalysis={setShowRomanAnalysis}
                 showSymbolAnalysis={showSymbolAnalysis}

@@ -64,6 +64,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deactivate: () => ipcRenderer.invoke(IPC_CHANNELS.DEACTIVATE_LICENSE),
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LICENSE_INFO),
   },
+  // Feature gate: { limited } — true only after trial expiry with no license (limited mode).
+  getFeatureGate: () => ipcRenderer.invoke(IPC_CHANNELS.GET_FEATURE_GATE),
+  // Open the activation dialog from the app; returns { activated } (true lifts limited mode).
+  showActivationDialog: () => ipcRenderer.invoke(IPC_CHANNELS.SHOW_ACTIVATION_DIALOG),
   // Auto-update progress listener
   onUpdateProgress: (callback) => {
     const subscription = (_event, data) => {

@@ -83,6 +83,12 @@ declare global {
         }>;
       };
 
+      /** Feature gate: `limited` is true only after trial expiry with no license (limited mode). */
+      getFeatureGate?: () => Promise<{ limited: boolean }>;
+
+      /** Open the activation dialog from the app; `activated: true` lifts limited mode. */
+      showActivationDialog?: () => Promise<{ activated: boolean }>;
+
       /** Auto-update download progress listener */
       onUpdateProgress?: (
         handler: (data: {

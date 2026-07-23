@@ -1071,8 +1071,12 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
 // before the activation HTTP request can complete. `isActivationFlowActive`
 // flag below tells the listener to skip the auto-quit during this flow.
 let isActivationFlowActive = false;
+// Limited mode: trial expired, no valid license, user chose "Continua (funzioni limitate)".
+// Editor + export + playback + revoice stay ON; analysis and auto-realization are OFF.
+// NEVER set for in-trial, licensed, or grace-period users.
+let gateLimited = false;
 
-async function showLicenseActivationDialog(extraMessage) {
+async function showLicenseActivationDialog(extraMessage, allowLimited = false) {
   const { shell } = require('electron');
   isActivationFlowActive = true;
   try {
@@ -1086,7 +1090,7 @@ async function showLicenseActivationDialog(extraMessage) {
       title: 'Attivazione Licenza — Harmony Tutor',
       message: msg,
       detail: 'Se non hai ancora una licenza, puoi acquistarla su harmonytutor.it',
-      buttons: ['Inserisci Chiave', 'Acquista Licenza', 'Chiudi'],
+      buttons: ['Inserisci Chiave', 'Acquista Licenza', allowLimited ? 'Continua (funzioni limitate)' : 'Chiudi'],
       defaultId: 0,
       cancelId: 2,
     });
@@ -1098,7 +1102,8 @@ async function showLicenseActivationDialog(extraMessage) {
     }
 
     if (result.response === 2) {
-      return null; // user wants to quit
+      // allowLimited: continue into the app in limited mode; otherwise quit.
+      return allowLimited ? { limited: true } : null;
     }
 
     // Ask for the license key via a simple prompt window
@@ -1132,7 +1137,7 @@ async function showLicenseActivationDialog(extraMessage) {
     }).then(r => {
       if (r.response === 1) extraMessage = '__cancel__';
     });
-    if (extraMessage === '__cancel__') return null;
+    if (extraMessage === '__cancel__') return allowLimited ? { limited: true } : null;
     extraMessage = null;
   }
   } finally {
@@ -1617,7 +1622,9 @@ ipcMain.handle(IPC_CHANNELS.GET_TRIAL_INFO, async () => {
 // ── License IPC ──
 ipcMain.handle(IPC_CHANNELS.ACTIVATE_LICENSE, async (_event, licenseKey) => {
   try {
-    return await activateLicense(licenseKey);
+    const res = await activateLicense(licenseKey);
+    if (res && res.success) gateLimited = false; // a valid license lifts limited mode (no restart)
+    return res;
   } catch (err) {
     return { success: false, error: String(err && err.message ? err.message : err) };
   }
@@ -1638,6 +1645,22 @@ ipcMain.handle(IPC_CHANNELS.GET_LICENSE_INFO, async () => {
     return { licensed: false };
   }
 });
+
+// Feature gate for the renderer. `limited` is true ONLY after trial expiry with no valid
+// license, when the user chose "Continua (funzioni limitate)". Off for dev/trial/licensed/grace.
+ipcMain.handle(IPC_CHANNELS.GET_FEATURE_GATE, async () => {
+  // QA hook: in dev only, `HT_FORCE_LIMITED=1` forces limited mode to test the UI (never in production).
+  const forced = !app.isPackaged && process.env.HT_FORCE_LIMITED === '1';
+  return { limited: gateLimited || forced };
+});
+
+// Show the activation dialog from within the app (limited-mode banner button). On success the
+// license lifts limited mode; the renderer then refreshes the gate.
+ipcMain.handle(IPC_CHANNELS.SHOW_ACTIVATION_DIALOG, async () => {
+  const r = await showLicenseActivationDialog(null, false);
+  if (r && !r.limited) { gateLimited = false; return { activated: true }; }
+  return { activated: false };
+});
 app.commandLine.appendSwitch('disable-background-timer-throttling')
 app.whenReady().then(async () => {
   // ── Trial / License gate (skip in dev mode) ──
@@ -1650,18 +1673,28 @@ app.whenReady().then(async () => {
     // Trial expired — check if user has a valid license
     licenseStatus = await checkLicense();
 
-    if (licenseStatus.status === 'no-license' || licenseStatus.status === 'invalid' || licenseStatus.status === 'grace-expired') {
-      // Show activation dialog
+    if (licenseStatus.status === 'grace-expired') {
+      // LICENSED user offline too long: activate or quit. Never demote a paying user to limited mode.
       const activationResult = await showLicenseActivationDialog(
-        licenseStatus.status === 'grace-expired'
-          ? 'Il periodo di grazia offline è scaduto. Connettiti a internet o inserisci una nuova licenza.'
-          : 'Il periodo di prova di 10 giorni è terminato.'
+        'Il periodo di grazia offline è scaduto. Connettiti a internet o inserisci una nuova licenza.',
+        false
       );
       if (!activationResult) {
         app.quit();
         return;
       }
       licenseStatus = { status: 'licensed', customerName: activationResult.customerName };
+    } else if (licenseStatus.status === 'no-license' || licenseStatus.status === 'invalid') {
+      // Trial expired, never licensed: offer activation OR continue in LIMITED mode (no forced quit).
+      const activationResult = await showLicenseActivationDialog(
+        'Il periodo di prova di 10 giorni è terminato.',
+        true
+      );
+      if (activationResult && !activationResult.limited) {
+        licenseStatus = { status: 'licensed', customerName: activationResult.customerName };
+      } else {
+        gateLimited = true; // editor + export + playback + revoice ON; analysis/realization OFF
+      }
     }
     // grace-period or licensed — proceed
   }
@@ -1688,7 +1721,9 @@ app.whenReady().then(async () => {
 
   // Show trial/license banner in title bar
   if (mainWindow) {
-    if (licenseStatus && licenseStatus.status === 'licensed') {
+    if (gateLimited) {
+      mainWindow.setTitle(mainWindow.getTitle() + ' — Funzioni limitate (prova terminata)');
+    } else if (licenseStatus && licenseStatus.status === 'licensed') {
       const name = licenseStatus.customerName ? ` — ${licenseStatus.customerName}` : ' — Licensed';
       mainWindow.setTitle(mainWindow.getTitle() + name);
     } else if (licenseStatus && licenseStatus.status === 'grace-period') {

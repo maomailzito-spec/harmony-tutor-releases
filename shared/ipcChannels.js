@@ -26,6 +26,8 @@ const IPC_CHANNELS = Object.freeze({
   ACTIVATE_LICENSE: 'activate-license',
   DEACTIVATE_LICENSE: 'deactivate-license',
   GET_LICENSE_INFO: 'get-license-info',
+  GET_FEATURE_GATE: 'get-feature-gate',
+  SHOW_ACTIVATION_DIALOG: 'show-activation-dialog',
 });
 
 module.exports = {
