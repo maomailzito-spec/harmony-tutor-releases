@@ -19,6 +19,8 @@ import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useFeatureGate } from '../hooks/useFeatureGate';
 import { enrichViolationsWithText } from '../utils/ruleTexts';
+import { getString } from '../storage/localStorage';
+import { ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
@@ -5002,21 +5004,69 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // priority so the UI stays responsive. Layout falls back to un-analyzed
     // notes while analysis catches up.
     const deferredNotes = useDeferredValue(notes);
+    // Latest deferred notes, read inside the worker's onmessage to rebuild analyzedNotes from the diff.
+    const deferredNotesRef = useRef(deferredNotes);
+    deferredNotesRef.current = deferredNotes;
 
-    // Synchronous analysis — correctness over performance.
-    const analysisResult = useMemo(() => {
-        if (!isAnalysisEnabled) {
-            return { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
-        }
+    // Analysis runs in a Web Worker (off the main thread) so editing never blocks: the layout uses
+    // live `notes` (instant), while analysis overlays (labels/violations/connections) update a moment
+    // later when the worker replies. Falls back to a synchronous run if Workers are unavailable
+    // (tests/SSR). Violation texts are localized at render (see `violations` below), so the analysis
+    // itself is i18n-free.
+    const [analysisResult, setAnalysisResult] = useState<HarmonyAnalysisResult>(
+        () => ({ analyzedNotes: notes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] })
+    );
+    const analysisWorkerRef = useRef<Worker | null>(null);
+    const analysisSeqRef = useRef(0);
+
+    // Create the analysis worker once.
+    useEffect(() => {
+        let w: Worker | null = null;
         try {
-            return applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides);
-        } catch (e) {
-            console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
-            return { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
+            w = new Worker(new URL('../workers/analysisWorker.ts', import.meta.url), { type: 'module' });
+            w.onmessage = (e: MessageEvent) => {
+                const d = (e.data || {}) as { seq?: number; ok?: boolean; result?: any };
+                if (d.seq !== analysisSeqRef.current) return; // stale result — a newer request superseded it
+                if (d.ok && d.result) {
+                    const r = d.result;
+                    // Rebuild analyzedNotes by merging the sparse diff onto the live notes (by id).
+                    const byId = new Map<any, any>();
+                    for (const n of (deferredNotesRef.current || [])) if (n && (n as any).id != null) byId.set((n as any).id, n);
+                    const analyzedNotes = (r.analyzedNotesSparse || []).map((sp: any) => {
+                        const base = sp && sp.id != null ? byId.get(sp.id) : undefined;
+                        return base ? { ...base, ...sp } : sp;
+                    });
+                    setAnalysisResult({ analyzedNotes, connections: r.connections || [], violations: r.violations || [], inferredAnalysisContexts: r.inferredAnalysisContexts || [] });
+                }
+            };
+            w.onerror = () => { analysisWorkerRef.current = null; }; // fall back to sync on the next run
+            analysisWorkerRef.current = w;
+        } catch { analysisWorkerRef.current = null; }
+        return () => { try { w?.terminate(); } catch { /* ignore */ } analysisWorkerRef.current = null; };
+    }, []);
+
+    // Dispatch analysis whenever the (deferred) notes or context change.
+    useEffect(() => {
+        const empty: HarmonyAnalysisResult = { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
+        if (!isAnalysisEnabled) { analysisSeqRef.current++; setAnalysisResult(empty); return; }
+        const seq = ++analysisSeqRef.current;
+        const opts = { learnedOrnamentsEnabled: getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0' };
+        const w = analysisWorkerRef.current;
+        if (w) {
+            try {
+                w.postMessage({ seq, args: { notes: deferredNotes, keySignature, keyTonic: currentTonic, isMinor: isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts } });
+            } catch {
+                try { setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts)); } catch { /* ignore */ }
+            }
+        } else {
+            try {
+                setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts));
+            } catch (e) {
+                console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
+                setAnalysisResult(empty);
+            }
         }
-        // Analysis is i18n-free: violation texts are localized at render (see `violations` below),
-        // so language changes do NOT re-run this expensive memo.
-    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides]);
+    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
