@@ -731,6 +731,37 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   };
   const downRef = useRef<DownState | null>(null);
 
+  // ── PERF: content signature gating the (expensive) full-redraw effect below ──
+  // The draw effect rebuilds the whole SVG (innerHTML='' + new Renderer + draw). It
+  // used to re-run on EVERY render because `notes`, `selectedNoteIds`, … arrive as
+  // fresh array references each time, so all ~140 systems redrew on every keystroke
+  // (~600ms/commit). We now depend the effect on a VALUE-based signature that is
+  // identical across renders when this system's drawn content is unchanged: only the
+  // edited system redraws. The signature MUST capture every prop the draw reads —
+  // including ones absent from the old dep array (engravingMode, motifStyleById,
+  // showVoiceColors, timeSignatureChanges, drumPalettes) which worked only because
+  // the effect ran every render. Big per-note maps (selection, motif) are localized
+  // to THIS system's note ids so a change elsewhere doesn't redraw here, and to keep
+  // the per-system cost O(system notes) rather than O(all notes).
+  const drawSignature = (() => {
+    try {
+      const idSet = new Set(notes.map(n => n.id));
+      const localSelected = (selectedNoteIds || []).filter(id => idSet.has(id));
+      const localMotif: Record<string, { fill: string; stroke: string }> = {};
+      if (motifStyleById) for (const n of notes) { const s = motifStyleById[n.id]; if (s) localMotif[n.id] = s; }
+      return JSON.stringify([
+        notes, localSelected, ghostNote ?? null, accompanimentNotes ?? null,
+        accompanimentTracks ?? null, localMotif, drumPalettes ?? null,
+        timeSignature, timeSignatureChanges ?? null, keySignature, barlines ?? null,
+        width, height, staffMode, engravingMode, showVoiceColors,
+        showAccompanimentStaves, accompanimentStaffMode, satbName,
+      ]);
+    } catch {
+      // Serialization failed → force a redraw (safe: never UNDER-draws).
+      return 'sig-' + Math.random();
+    }
+  })();
+
   useEffect(() => {
     if (!containerRef.current) return;
     containerRef.current.innerHTML = '';
@@ -3779,7 +3810,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       noteHitPointsRef.current = [];
       onNoteHitPoints?.([]);
     }
-  }, [notes, timeSignature, keySignature, barlines, width, height, staffMode, selectedNoteIds, ghostNote, accompanimentNotes, showAccompanimentStaves, accompanimentStaffMode, accompanimentTracks, satbName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawSignature]);
 
   // Attach pointer handlers ONCE to the persistent container. The SVG is frequently
   // re-created (ghost note updates), so attaching listeners to the SVG would
