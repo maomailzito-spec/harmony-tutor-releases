@@ -5109,6 +5109,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         [analysisResult.violations, i18n.language]
     );
 
+    // Precomputed lookup maps over analyzedNotes, built ONCE per analysis change. The overlay render
+    // uses these for O(1) lookups instead of scanning all notes per label (was O(labels × notes) →
+    // seconds of jank on large scores when moving a note). See usages below.
+    const analyzedNoteLookups = useMemo(() => {
+        const byId = new Map<string, any>();
+        const byChordId = new Map<any, any[]>();
+        const byMeasureBeat = new Map<string, any[]>();
+        const suspByAbsBeat = new Map<number, any[]>();
+        const byVoiceSorted = new Map<number, any[]>();
+        const push = (m: Map<any, any[]>, k: any, n: any) => { const a = m.get(k); if (a) a.push(n); else m.set(k, [n]); };
+        for (const n of ((analyzedNotes || []) as any[])) {
+            if (!n) continue;
+            if (n.id != null) byId.set(n.id, n);
+            if (n.chordId != null) push(byChordId, n.chordId, n);
+            push(byMeasureBeat, `${n.measureIndex ?? 0}:${n.beat ?? 0}`, n);
+            const fab = n.isSuspension?.fromAbsBeat;
+            if (n.isSuspension && Number.isFinite(fab)) push(suspByAbsBeat, Math.round(fab * 1e6), n);
+            push(byVoiceSorted, n.voice || 1, n);
+        }
+        for (const arr of byVoiceSorted.values()) {
+            arr.sort((a, b) => ((a.measureIndex ?? 0) * 1000 + (a.beat ?? 0)) - ((b.measureIndex ?? 0) * 1000 + (b.beat ?? 0)));
+        }
+        return { byId, byChordId, byMeasureBeat, suspByAbsBeat, byVoiceSorted };
+    }, [analyzedNotes]);
+
     const getNoteY = (position: number, staffTop: number, clef: ClefType): number => {
         // Legacy (non-VexFlow) approximation used only as a fallback when we don't have
         // VexFlow hit points yet. Treat C-clefs as “upper staff” for the fallback path.
@@ -14309,7 +14334,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                 // because the suspension renderer already draws its own line + resolution number.
                                                                                                 try {
                                                                                                     if (analyzedNotes && typeof absBeat === 'number') {
-                                                                                                        const suspHere = (analyzedNotes as any[]).some(n => n && n.isSuspension && Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - absBeat) < 1e-6);
+                                                                                                        const suspHere = (analyzedNoteLookups.suspByAbsBeat.get(Math.round(absBeat * 1e6))?.length ?? 0) > 0;
                                                                                                         if (suspHere) return null;
                                                                                                     }
                                                                                                 } catch { /* ignore */ }
@@ -14433,12 +14458,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                     try {
                                                                                                         const absBeat = (lbl as any).absBeat;
                                                                                                         if (!analyzedNotes || typeof absBeat !== 'number') return null;
-                                                                                                        const suspNotes = (analyzedNotes as any[]).filter(
-                                                                                                            n =>
-                                                                                                                n &&
-                                                                                                                n.isSuspension &&
-                                                                                                                Math.abs(((n as any).isSuspension?.fromAbsBeat ?? -1) - ((lbl as any).absBeat ?? -999)) < 1e-6,
-                                                                                                        );
+                                                                                                        const suspNotes = analyzedNoteLookups.suspByAbsBeat.get(Math.round(((lbl as any).absBeat ?? -999) * 1e6)) ?? [];
                                                                                                         if (!suspNotes.length) return null;
                                                                                                         // Deduplicate: keep only the most specific type per voice
                                                                                                         const _CLASSIC_SUSP = new Set(['4-3','6-5','7-6','7-8','8-7','9-8','2-3']);
@@ -14471,7 +14491,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                         const resolvedNotesById = new Map<string, any>();
                                                                                                         for (const { s } of suspInfos) {
                                                                                                             const rid = String((s as any).resolvedById);
-                                                                                                            const resolvedNote = (analyzedNotes as any[]).find(n => n && n.id === rid);
+                                                                                                            const resolvedNote = analyzedNoteLookups.byId.get(rid);
                                                                                                             if (resolvedNote) {
                                                                                                                 resolvedNotesById.set(rid, resolvedNote);
                                                                                                                 const pos = notePositions.get(resolvedNote.id);
@@ -14929,9 +14949,9 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                 lineY: anchor.y,
                                                                             };
                                                                         };
-                                                                        for (const n of analyzedNotes as any[]) {
+                                                                        for (const _oid of systemNoteIdSet) {
+                                                                            const n = analyzedNoteLookups.byId.get(_oid);
                                                                             if (!n || !n.id) continue;
-                                                                            if (!systemNoteIdSet.has(n.id)) continue;
                                                                             if (lockHides.ornaments) continue;
                                                                             const text = displayOrnamentText(n);
                                                                             if (!text) continue;
@@ -15004,21 +15024,8 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                             const p = notePositions.get(noteId);
                                                                             return p ? p.x : null;
                                                                         };
-                                                                        const byVoice = new Map<number, typeof analyzedNotes>();
-                                                                        for (const n of analyzedNotes) {
-                                                                            const v = n.voice || 1;
-                                                                            if (!byVoice.has(v)) byVoice.set(v, [] as any);
-                                                                            byVoice.get(v)!.push(n);
-                                                                        }
-
-                                                                        // Sort each voice by measureIndex then beat (fallback to 0)
-                                                                        for (const [v, arr] of Array.from(byVoice.entries())) {
-                                                                            arr.sort((a: any, b: any) => {
-                                                                                const ma = (a.measureIndex ?? 0) * 1000 + (a.beat ?? 0);
-                                                                                const mb = (b.measureIndex ?? 0) * 1000 + (b.beat ?? 0);
-                                                                                return ma - mb;
-                                                                            });
-                                                                        }
+                                                                        // Precomputed once (grouped by voice, sorted by measure/beat) — see analyzedNoteLookups.
+                                                                        const byVoice = analyzedNoteLookups.byVoiceSorted as Map<number, typeof analyzedNotes>;
 
                                                                         const results: JSX.Element[] = [];
 
@@ -15052,13 +15059,13 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                 // Compute previous chord center X. Prefer chordId grouping if present.
                                                                                 let prevCenterX: number | null = null;
                                                                                 if (prev.chordId) {
-                                                                                    const chordNotes = analyzedNotes.filter(n => n.chordId === prev.chordId);
+                                                                                    const chordNotes = analyzedNoteLookups.byChordId.get(prev.chordId) ?? [];
                                                                                     const xs: number[] = chordNotes.map(n => getOverlayX(n.id)).filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
                                                                                     if (xs.length) prevCenterX = xs.reduce((a, b) => a + b, 0) / xs.length;
                                                                                 }
                                                                                 if (prevCenterX === null) {
                                                                                     // Fallback: same measureIndex/beat
-                                                                                    const sameBeat = analyzedNotes.filter(n => (n.measureIndex === prev.measureIndex) && (n.beat === prev.beat));
+                                                                                    const sameBeat = analyzedNoteLookups.byMeasureBeat.get(`${prev.measureIndex ?? 0}:${prev.beat ?? 0}`) ?? [];
                                                                                     const xs = sameBeat.map(n => getOverlayX(n.id)).filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
                                                                                     if (xs.length) prevCenterX = xs.reduce((a, b) => a + b, 0) / xs.length;
                                                                                 }
