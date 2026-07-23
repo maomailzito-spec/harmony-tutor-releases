@@ -18,6 +18,7 @@ import { gmToSoundfont, soundfontToGm } from '../constants/instruments';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useFeatureGate } from '../hooks/useFeatureGate';
+import { enrichViolationsWithText } from '../utils/ruleTexts';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
@@ -5013,9 +5014,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
             return { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         }
-        // i18n.language: violation texts (title + multiline body) are localized at analysis time,
-        // so re-run when the language changes to refresh them (IT⇄EN switch).
-    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, i18n.language]);
+        // Analysis is i18n-free: violation texts are localized at render (see `violations` below),
+        // so language changes do NOT re-run this expensive memo.
+    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
@@ -5050,7 +5051,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return applySuppression([...(analysisContexts || []), ...inferred]) as any[];
     }, [analysisResult, analysisContexts, inferredContextSuppressions, enableInferredContexts]);
 
-    const { analyzedNotes, connections: errorConnections, violations } = analysisResult;
+    const { analyzedNotes, connections: errorConnections } = analysisResult;
+    // Localize violation texts on the main thread, reactive to the UI language (analysis stays
+    // i18n-free). Re-runs only on new violations or language change — never re-analyzes.
+    const violations = useMemo(
+        () => enrichViolationsWithText(analysisResult.violations),
+        [analysisResult.violations, i18n.language]
+    );
 
     const getNoteY = (position: number, staffTop: number, clef: ClefType): number => {
         // Legacy (non-VexFlow) approximation used only as a fallback when we don't have

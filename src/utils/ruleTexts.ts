@@ -735,6 +735,25 @@ export function getRuleText(ruleId: string): RuleText {
 }
 
 /**
+ * Applica ai violation i testi localizzati del registro ruleTexts (titolo tradotto, body multi-riga
+ * appeso, suggestion di default), nella lingua CORRENTE. Da chiamare sul MAIN THREAD dopo l'analisi
+ * (l'analisi resta i18n-free → eseguibile in un Web Worker; e si ri-localizza al cambio lingua senza
+ * rianalizzare). Logica identica a quella che prima era dentro applyHarmonyRules.
+ */
+export function enrichViolationsWithText<T extends { ruleId: string; description: string; suggestion?: string }>(violations: T[]): T[] {
+  if (!Array.isArray(violations)) return violations;
+  return violations.map((v) => {
+    let out = v;
+    const localizedTitle = localizeViolationTitle(v.ruleId, v.description);
+    if (localizedTitle !== v.description) out = { ...out, description: localizedTitle };
+    const rt = getRuleText(v.ruleId);
+    if (rt.body && !out.description.includes('\n')) out = { ...out, description: out.description + '\n' + rt.body };
+    if (rt.suggestion && !out.suggestion) out = { ...out, suggestion: rt.suggestion };
+    return out;
+  });
+}
+
+/**
  * Localizza la prima riga di una `description` di violazione.
  *
  * Match in due passi (sempre contro l'IT, perché il codice produce stringhe IT):

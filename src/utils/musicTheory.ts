@@ -96,7 +96,6 @@ import { NOTE_NAMES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, FRET_COUNT, G
 import { ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
-import { getRuleText, localizeViolationTitle } from './ruleTexts';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
 import {
     midiToOctave, staffNoteToSp, letterIndex, spToPc, spToString,
@@ -5054,7 +5053,10 @@ export function applyHarmonyRules(
     timeSignature?: TimeSignature,
     doubleBarlineMeasures?: number[],
     ornamentOverrides?: OrnamentOverride[],
-    harmonyOverrides?: HarmonyLabelOverride[]
+    harmonyOverrides?: HarmonyLabelOverride[],
+    // Preferences that would otherwise be read from localStorage — passed in so the analysis
+    // stays pure (needed to run it inside a Web Worker). Falls back to localStorage when omitted.
+    opts?: { learnedOrnamentsEnabled?: boolean }
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = (() => {
         try {
@@ -5341,21 +5343,10 @@ export function applyHarmonyRules(
 
     const addViolation = (v: RuleViolation) => {
         if (!v.noteIds || v.noteIds.length === 0) return;
-        // Localize the first line (title) of the description if a translation exists
-        // in the ruleTexts registry. Dynamic titles (template literals) without a
-        // matching IT entry pass through unchanged.
-        const _localizedTitle = localizeViolationTitle(v.ruleId, v.description);
-        if (_localizedTitle !== v.description) {
-            v = { ...v, description: _localizedTitle };
-        }
-        // Auto-enrich from ruleTexts registry (centralised educational texts).
-        const _rt = getRuleText(v.ruleId);
-        if (_rt.body && !v.description.includes('\n')) {
-            v = { ...v, description: v.description + '\n' + _rt.body };
-        }
-        if (_rt.suggestion && !v.suggestion) {
-            v = { ...v, suggestion: _rt.suggestion };
-        }
+        // NOTE: localized text (title/body/suggestion from the ruleTexts registry) is applied on the
+        // MAIN THREAD after analysis via enrichViolationsWithText(). Keeping it out of here makes the
+        // analysis i18n-free (so it can run in a Web Worker) and lets language switches re-localize
+        // without re-analyzing. Violations here carry the raw description + ruleId.
         // de-dupe by (ruleId + same set of noteIds at least)
         const key = `${v.ruleId}::${[...new Set(v.noteIds)].sort().join(',')}`;
         if ((addViolation as any)._seen?.has(key)) return;
@@ -13463,7 +13454,7 @@ export function applyHarmonyRules(
 
     // ── Learned ornament patterns (supplement auto-detection) ──
     try {
-        const _lrnEnabled = getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0';
+        const _lrnEnabled = opts?.learnedOrnamentsEnabled ?? (getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0');
         if (_lrnEnabled && ORNAMENT_LEARNED_PATTERNS && typeof ORNAMENT_LEARNED_PATTERNS === 'object') {
             const _LRN_MIN_PROB = 0.9;
             const _LRN_MIN_SAMPLES = 2;
