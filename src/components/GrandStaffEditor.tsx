@@ -107,6 +107,11 @@ const CONNECTOR_HEIGHT = 70;
 const EMPTY_EXTRAS: Record<string, unknown> = {};
 const TOTAL_SYSTEM_HEIGHT = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_HEIGHT;
 
+// Quiet period before harmony analysis re-runs after an edit. Bursts of edits
+// (holding ↑/↓, rapid nudges) coalesce into a single catch-up analysis so the
+// heavy overlay re-render happens once — after you pause — instead of per keystroke.
+const ANALYSIS_DEBOUNCE_MS = 300;
+
 // VexFlow stave geometry (must match values in VexflowGrandStaff.tsx)
 // Used for cursor->pitch mapping so the ghost note aligns with the pointer.
 const VF_TREBLE_Y = 40;
@@ -5046,27 +5051,42 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, []);
 
     // Dispatch analysis whenever the (deferred) notes or context change.
+    //
+    // PERF — "freeze the overlays while busy, catch up when quiet":
+    //  • DEBOUNCE: a burst of edits (holding ↑/↓, rapid nudges) coalesces into ONE
+    //    analysis after a short quiet period, instead of one heavy overlay re-render
+    //    per keystroke. The last result stays on screen the whole time (never cleared),
+    //    so the labels don't flicker/disappear — they just refresh once you pause.
+    //  • FREEZE DURING PLAYBACK: while playing we don't re-analyze at all (the score
+    //    isn't being edited); the frozen labels stay visible and the playhead render
+    //    path stays light. On stop the effect re-runs (isPlaying dep) and catches up.
+    //  • seq is bumped on EVERY run so any in-flight/late worker reply from a previous
+    //    burst (or from before playback started) is rejected as stale.
     useEffect(() => {
         const empty: HarmonyAnalysisResult = { analyzedNotes: deferredNotes, connections: [], violations: [], inferredAnalysisContexts: [] as any[] };
         if (!isAnalysisEnabled) { analysisSeqRef.current++; setAnalysisResult(empty); return; }
-        const seq = ++analysisSeqRef.current;
+        const seq = ++analysisSeqRef.current; // invalidate any in-flight/late reply immediately
+        if (isPlaying) return;                 // freeze: keep last labels; recompute when playback stops
         const opts = { learnedOrnamentsEnabled: getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0' };
-        const w = analysisWorkerRef.current;
-        if (w) {
-            try {
-                w.postMessage({ seq, args: { notes: deferredNotes, keySignature, keyTonic: currentTonic, isMinor: isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts } });
-            } catch {
-                try { setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts)); } catch { /* ignore */ }
+        const handle = window.setTimeout(() => {
+            const w = analysisWorkerRef.current;
+            if (w) {
+                try {
+                    w.postMessage({ seq, args: { notes: deferredNotes, keySignature, keyTonic: currentTonic, isMinor: isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts } });
+                } catch {
+                    try { setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts)); } catch { /* ignore */ }
+                }
+            } else {
+                try {
+                    setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts));
+                } catch (e) {
+                    console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
+                    setAnalysisResult(empty);
+                }
             }
-        } else {
-            try {
-                setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts));
-            } catch (e) {
-                console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
-                setAnalysisResult(empty);
-            }
-        }
-    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides]);
+        }, ANALYSIS_DEBOUNCE_MS);
+        return () => window.clearTimeout(handle);
+    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, isPlaying]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
