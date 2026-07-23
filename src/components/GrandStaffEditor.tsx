@@ -6421,6 +6421,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const activePlaybackSysElRef = useRef<HTMLElement | null>(null);
     const lastPlaybackPosRef = useRef<{ x: number; systemIndex: number } | null>(null);
 
+    // PERF: per-system cache of the (expensive) analysis-overlay elements. The overlay
+    // block builds hundreds of SVG elements per system and used to rebuild for ALL ~140
+    // systems on EVERY render (ghost move, playhead/selection). It depends only on the
+    // analysis output + layout + toggles + this system's VexFlow hit-points — never on
+    // ghost/playhead/selection — so we key the cache on exactly those (reference
+    // identity). On a hit we return the SAME element object and React skips reconciling
+    // the whole subtree; on those unrelated renders nothing is rebuilt.
+    const overlayCacheRef = useRef<Array<{ k: unknown[]; el: React.ReactNode } | undefined>>([]);
+
     useEffect(() => {
         if (!isPlaying) return;
         if (!audioService.audioContext) return;
@@ -14125,8 +14134,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 </svg>
                             )}
 
-                            {/* Overlay: analysis labels + violation highlights (adapter output) */}
-                                                        {((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
+                            {/* Overlay: analysis labels + violation highlights — memoized per-system (overlayCacheRef) */}
+                                                        {(() => {
+                                                            const _ovKey: unknown[] = [
+                                                                harmonyLabelsBySystemSequenced?.[systemIndex],
+                                                                accLabelsBySystem?.[systemIndex],
+                                                                contextMarkersBySystem?.[systemIndex],
+                                                                progressionMarkersBySystem?.[systemIndex],
+                                                                sequenceMarkersBySystem?.[systemIndex],
+                                                                sequenceModelMarkersBySystem?.[systemIndex],
+                                                                motifBracketsBySystem?.[systemIndex],
+                                                                analyzedNoteLookups, layoutData,
+                                                                systemNoteHitPointsRef.current[systemIndex],
+                                                                showRomanAnalysis, showSymbolAnalysis, isMotifsEnabled, isAnalysisEnabled, analysisSubject,
+                                                                actualSystemWidth, systemHeightPx, staffSystemMode, accLabelY,
+                                                                violationLevelByNoteId, analysisContexts, timeSignatureChanges,
+                                                                // notePositions / noteVoiceById intentionally NOT keyed: they are pure
+                                                                // derivations of layoutData (+ staffSystemMode), both already in the key,
+                                                                // and their useMemo identity is unstable every render (would defeat the cache).
+                                                                lockActive, analysisLockOptions, romanBassMode, satbVisible, timeSignature,
+                                                                analysisFilters, showHarmonyDebug, hoveredViolationNotes,
+                                                            ];
+                                                            const _ovC = overlayCacheRef.current[systemIndex];
+                                                            if (_ovC && _ovC.k.length === _ovKey.length && _ovC.k.every((v, i) => Object.is(v, _ovKey[i]))) return _ovC.el;
+                                                            const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers */}
                                                                 {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
@@ -15269,7 +15300,10 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                         return results;
                                                                     })()}
                               </svg>
-                            )}
+                            );
+                                                            overlayCacheRef.current[systemIndex] = { k: _ovKey, el: _ovEl };
+                                                            return _ovEl;
+                                                        })()}
                           </div>
                         );
                         })}
