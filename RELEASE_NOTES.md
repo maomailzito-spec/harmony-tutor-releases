@@ -1,3 +1,17 @@
+## Novità in v1.3.0
+
+### ⚡ Prestazioni — editing fluido con l'analisi attiva
+- **Analisi armonica off-thread**: il calcolo dell'analisi gira ora in un **Web Worker** separato e non blocca più l'interfaccia.
+- **Editing molto più reattivo su brani lunghi**: inserimento, spostamento e selezione delle note restano fluidi anche con l'analisi attiva su partiture di molte misure. Cursore di riproduzione e overlay d'analisi ridisegnati in modo imperativo, senza ricalcolare l'intero brano a ogni azione.
+
+### 🎼 Analisi — nuove numerazioni
+- **Numerazione "scuola romana"**: opzione per numerare col **grado reale della nota al basso** (in maiuscolo, con le alterazioni) per il SATB.
+- **Basso figurato più corretto**: le cifre rispettano l'**armatura di chiave** — aggiunta di ♯/♮ dove serve e soppressione degli accidenti ridondanti.
+
+### 🐛 Fix
+- **Spostamento cromatico delle note importate**: alzando o abbassando di un semitono una nota importata da MusicXML (es. un Mi♭ verso Mi in Do minore) ora compare correttamente il **♮** — prima la nota sembrava non essersi mossa.
+- **Spiegazioni dell'analisi**: si aggiornano correttamente al cambio di lingua.
+
 ## Novità in v1.2.2
 
 ### 🐛 Fix download macOS (Apple Silicon)
