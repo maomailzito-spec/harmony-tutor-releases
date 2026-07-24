@@ -21,6 +21,8 @@ export const IPC_CHANNELS: Readonly<{
   ACTIVATE_LICENSE: 'activate-license';
   DEACTIVATE_LICENSE: 'deactivate-license';
   GET_LICENSE_INFO: 'get-license-info';
+  GET_FEATURE_GATE: 'get-feature-gate';
+  SHOW_ACTIVATION_DIALOG: 'show-activation-dialog';
 }>;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
