@@ -4155,7 +4155,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         } catch { /* ignore */ }
 
         return labelsBySystem;
-    }, [_chromaticModulationEnabled, accHintEnabled, accompanimentTracks, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, layoutData, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions]);
+        // PERF: `layoutData` è USATO qui dentro (letto fresco alla ri-esecuzione via closure) ma
+        // VOLUTAMENTE ESCLUSO dalle dipendenze. È il singolo blocco da ~440ms sul main thread, e
+        // ricalcolarlo a ogni cambio-layout significava pagarlo DUE volte per edit: una sull'edit
+        // (contro analisi ancora vecchia → sprecata) e una sulla reply del worker. Escludendo
+        // layoutData, sull'edit NESSUNA dep cambia (l'analisi arriva solo dalla reply) → l'edit è
+        // istantaneo e i 440ms scattano una sola volta, sulla reply (già debounced). Tradeoff
+        // accettato: le etichette si riposizionano ~300ms dopo l'edit e restano ferme dopo un
+        // resize finestra finché non si fa un'altra modifica (il layout cambia senza cambiare l'analisi).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [_chromaticModulationEnabled, accHintEnabled, accompanimentTracks, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than

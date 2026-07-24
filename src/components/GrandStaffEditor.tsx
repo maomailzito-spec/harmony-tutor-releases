@@ -112,6 +112,14 @@ const TOTAL_SYSTEM_HEIGHT = TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT + BOTTOM_STAFF_H
 // heavy overlay re-render happens once — after you pause — instead of per keystroke.
 const ANALYSIS_DEBOUNCE_MS = 300;
 
+// While a burst of edits is in flight, FREEZE the analysis overlays (reuse the cached
+// per-system elements even though notes/layout changed) so each keystroke's render
+// stays light. When the burst goes quiet for this long, unfreeze and rebuild once.
+// Slightly longer than the analysis debounce so the catch-up analysis is already in
+// flight when we unfreeze. Positions of transposed notes don't change, so frozen
+// overlays aren't even visually stale during the common case (↑/↓ nudges).
+const OVERLAY_FREEZE_MS = 350;
+
 // VexFlow stave geometry (must match values in VexflowGrandStaff.tsx)
 // Used for cursor->pitch mapping so the ghost note aligns with the pointer.
 const VF_TREBLE_Y = 40;
@@ -1463,6 +1471,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const playheadPositionRef = useRef<{ x: number; systemIndex: number } | null>(null);
     useEffect(() => { playheadPositionRef.current = playheadPosition; }, [playheadPosition]);
     const [ghostNote, setGhostNote] = useState<(StaffNote & { systemIndex: number }) | null>(null);
+    // PERF: mirror in a ref (aggiornato in render) + clear guardato. Il solo movimento del mouse
+    // (senza Cmd) chiamava setGhostNote(null) a OGNI evento: anche con ghost già null, React
+    // ri-esegue una volta la funzione del componente (→ la map dei 140 sistemi rigira) prima di
+    // bail-out. clearGhost salta il setState se il ghost è già assente → zero render sul mouse fermo/mosso.
+    const ghostNoteRef = useRef(ghostNote);
+    ghostNoteRef.current = ghostNote;
+    const clearGhost = useCallback(() => { if (ghostNoteRef.current != null) setGhostNote(null); }, []);
 
     // Chord insert mode
     const [chordInsertMode, setChordInsertMode] = useState(false);
@@ -5646,6 +5661,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
     }, [notes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
 
+    // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
+    // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA
+    // il render deferred, ri-eseguendo i memo intermedi (ornOverrideMap/Record → nuova identità
+    // Map) e quindi il posizionamento etichette da ~440ms MOLTE volte per edit (la "tempesta").
+    // Alimentare il hook coi valori VIVI fa ricalcolare le etichette solo quando cambiano davvero
+    // (edit + reply worker), ~1-2 volte per edit, senza thrashing. Il 440ms resta ma non si moltiplica.
+
     // Compute current playhead measure for choral panel insertion.
     const playheadMeasureForChoral = useMemo(() => {
         if (pasteCaret) return pasteCaret.measureIndex;
@@ -5917,6 +5939,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         return out;
     }, [rawNotes]);
+
+    // PERF — ASSALTO AL MONOLITE, stadio 1: il calcolo per-sistema delle note da renderizzare
+    // (filter + calculateAccidental per nota, ~1400 chiamate sull'intero brano) viveva INLINE
+    // dentro la map dei 140 sistemi → rigirava a OGNI render del God component (anche solo per
+    // muovere il ghost o selezionare). Qui lo memoizziamo UNA VOLTA, con chiavi tutte stabili
+    // rispetto all'interazione: layoutData (cambia solo su edit), clefForVoice (layout mode),
+    // tiedFromPrevNoteIds (rawNotes), keyAccidentals (armatura). Su ghost/selezione questi non
+    // cambiano → il calcolo NON rigira. La map legge systemRenderDataBySystem[systemIndex].
+    const systemRenderDataBySystem = useMemo(() => {
+        if (!layoutData?.systemsParams) return [] as Array<{ systemNotes: StaffNote[]; systemNotesForRender: StaffNote[] }>;
+        return layoutData.systemsParams.map((system) => {
+            const measureSet = new Set(system.measureIndices);
+            const systemNotes = layoutData.positionedNotes.filter(note => measureSet.has(note.measureIndex ?? -1));
+            const systemNotesForRender = systemNotes.map((n) => {
+                const mappedClef: ClefType = clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat);
+                if (n.isRest) return { ...n, clef: mappedClef };
+                const tieFromPrev = tiedFromPrevNoteIds.has(n.id);
+                if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
+                try {
+                    const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
+                    const nextExplicit = calculateAccidental(noteName, keyAccidentals);
+                    return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
+                } catch {
+                    return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
+                }
+            });
+            return { systemNotes, systemNotesForRender };
+        });
+    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentals]);
 
     const scrollScoreToViolationIndex = useCallback((index: number) => {
         const v = violations?.[index];
@@ -6429,6 +6480,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // identity). On a hit we return the SAME element object and React skips reconciling
     // the whole subtree; on those unrelated renders nothing is rebuilt.
     const overlayCacheRef = useRef<Array<{ k: unknown[]; el: React.ReactNode } | undefined>>([]);
+
+    // PERF (edit bursts): a transpose/edit changes `notes` → `layoutData` gets a new
+    // identity → every overlay cache key changes → all overlays would rebuild PER
+    // keystroke. While editing we instead FREEZE the overlays: the cache returns the
+    // last-built element ignoring the key change, so each keystroke's render stays
+    // light. `notes` going quiet for OVERLAY_FREEZE_MS unfreezes and forces one rebuild
+    // (the debounced analysis is already in flight by then). Frozen overlays aren't
+    // visually stale for ↑/↓ nudges (positions don't move); an insert/reflow re-snaps
+    // on unfreeze.
+    const overlayFreezeActiveRef = useRef(false);
+    const overlayFreezeTimerRef = useRef<number | null>(null);
+    const prevNotesForFreezeRef = useRef(notes);
+    const [, setOverlayFreezeNonce] = useState(0);
+    // Detect the edit DURING render (not in an effect) so the very render that applies
+    // the edit is already frozen — otherwise a single nudge would rebuild all overlays
+    // once before an effect could set the flag. Setting a ref here is idempotent and the
+    // timer below always clears it.
+    if (notes !== prevNotesForFreezeRef.current) {
+        prevNotesForFreezeRef.current = notes;
+        overlayFreezeActiveRef.current = true;
+    }
+    // (Re)arm the unfreeze timer on every edit; when notes go quiet, unfreeze + rebuild.
+    useEffect(() => {
+        if (overlayFreezeTimerRef.current != null) window.clearTimeout(overlayFreezeTimerRef.current);
+        overlayFreezeTimerRef.current = window.setTimeout(() => {
+            overlayFreezeActiveRef.current = false;
+            overlayFreezeTimerRef.current = null;
+            setOverlayFreezeNonce(n => n + 1); // force ONE re-render so the cache rebuilds fresh
+        }, OVERLAY_FREEZE_MS);
+        return () => { if (overlayFreezeTimerRef.current != null) { window.clearTimeout(overlayFreezeTimerRef.current); overlayFreezeTimerRef.current = null; } };
+    }, [notes]);
 
     useEffect(() => {
         if (!isPlaying) return;
@@ -10872,13 +10954,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return { ...prev, endX: x, endY: y };
                 });
             }
-            setGhostNote(null);
+            clearGhost();
             return;
         }
 
         // Ghost note only while the insertion modifier (Cmd/Ctrl) is held.
         if (!modKey) {
-            setGhostNote(null);
+            clearGhost();
             return;
         }
 
@@ -10890,11 +10972,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const ACC_AREA_THRESHOLD_Y_GHOST = ACC_TREBLE_TOP_Y_GHOST - 30;
         if (hasVisibleAccompaniment && y > ACC_AREA_THRESHOLD_Y_GHOST) {
             const hitGhost = getSystemMeasureAtX(systemIndex, x);
-            if (!hitGhost) { setGhostNote(null); return; }
+            if (!hitGhost) { clearGhost(); return; }
             const yCalGhost = y + VF_ACC_MOUSE_Y_ADJUST_PX;
             // Resolve the target track block so the ghost previews on the clicked staff.
             const accTargetGhost = resolveAccTarget(yCalGhost, ACC_TREBLE_TOP_Y_GHOST);
-            if (!accTargetGhost) { setGhostNote(null); return; }
+            if (!accTargetGhost) { clearGhost(); return; }
             const accGhostTrackIdx = accTargetGhost.visIdx;
 
             if (selectedInsertion.type === 'rest') {
@@ -10976,7 +11058,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (staffSystemMode === 'satb_ancient') {
             if (!isSvgYWithinClefStaff(y, targetClef)) {
-                setGhostNote(null);
+                clearGhost();
                 return;
             }
         } else {
@@ -10987,13 +11069,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 ? false
                 : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
             if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) {
-                setGhostNote(null);
+                clearGhost();
                 return;
             }
         }
 
         const hit = getSystemMeasureAtX(systemIndex, x);
-        if (!hit) { setGhostNote(null); return; }
+        if (!hit) { clearGhost(); return; }
 
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
@@ -11031,7 +11113,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (staffSystemMode === 'satb_ancient') {
             const computed = diatonicPositionFromSvgY(y, targetClef);
             if (computed == null) {
-                setGhostNote(null);
+                clearGhost();
                 return;
             }
             pos = computed;
@@ -11073,7 +11155,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === selectedVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
             return next;
         });
-    }, [applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor, hasVisibleAccompaniment, effectiveAccStaffMode]);
+    }, [clearGhost, applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor, hasVisibleAccompaniment, effectiveAccStaffMode]);
 
     // Finalize marquee selection on mouse up
     useEffect(() => {
@@ -11353,7 +11435,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (selectedNoteIds.size === 0) return;
 
                 const preferFromAccidental = (n: StaffNote): AccidentalType | null => {
-                    const a = (n.explicitAccidental ?? n.accidental ?? null) as AccidentalType | null;
+                    // Include userAccidental: le note importate da MusicXML portano la grafia lì.
+                    const a = ((n as any).userAccidental ?? n.explicitAccidental ?? n.accidental ?? null) as AccidentalType | null;
                     if (!a) return null;
                     if (a.includes('flat')) return 'flat';
                     if (a.includes('sharp')) return 'sharp';
@@ -11374,6 +11457,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         return {
                             ...n,
                             ...props,
+                            // Lo spostamento cromatico ridetermina l'accidente dalla nuova altezza:
+                            // AZZERA la grafia utente/importata (userAccidental), altrimenti — avendo
+                            // precedenza nel render — continuerebbe a disegnare il vecchio segno (es.
+                            // un Eb importato spostato a E resterebbe col ♭ e non mostrerebbe il ♮).
+                            userAccidental: undefined,
+                            accidental: props.explicitAccidental ?? undefined,
                         };
                     });
 
@@ -11427,7 +11516,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             const clef: ClefType = (n.clef || 'treble') as ClefType;
                             const preferred = preferFromAccidental(n);
                             const props = getNotePropertiesFromMidi(nextMidi, keySignature, clef, preferred);
-                            return { ...n, ...props };
+                            return { ...n, ...props, userAccidental: undefined, accidental: props.explicitAccidental ?? undefined };
                         }),
                     })));
                 }
@@ -12192,7 +12281,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Clear ghost note when the insertion modifier is released, so the
             // preview disappears even if the mouse is idle over the staff.
             if (e.key === 'Meta' || e.key === 'Control') {
-                setGhostNote(null);
+                clearGhost();
             }
         };
 
@@ -12203,6 +12292,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             window.removeEventListener('keyup', onKeyUp, { capture: true } as any);
         };
     }, [
+        clearGhost,
         isActive,
         activeTab,
         selectedNoteIds,
@@ -13335,34 +13425,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         </div>
                         {/* ADD guard (avoid crash on first render if layoutData is not ready) */}
                         {!layoutData ? null : layoutData.systemsParams.map((system, systemIndex) => {
-                        // PERF: avoid new Set(...) inside filter per note
-                        const measureSet = new Set(system.measureIndices);
-                        const systemNotes = layoutData.positionedNotes.filter(note => measureSet.has(note.measureIndex ?? -1));
-
-                        // When the key signature changes, previously-entered notes must re-evaluate which
-                        // accidentals are explicitly shown (naturals to cancel key signature, etc.).
-                        // We keep the stored MIDI pitch intact and only adjust rendering-related fields.
-                        const systemNotesForRender = systemNotes.map((n) => {
-                            // Render-only staff mapping by voice (allows toggling layouts without mutating stored notes).
-                            const mappedClef: ClefType = clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat);
-
-                            if (n.isRest) return { ...n, clef: mappedClef };
-
-                            const tieFromPrev = tiedFromPrevNoteIds.has(n.id);
-
-                            // If the user explicitly chose an accidental for this note, keep it.
-                            if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
-
-                            // Otherwise, recompute the accidental needed for the *existing pitch* under the
-                            // current key signature, without changing the staff position/spelling.
-                            try {
-                                const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
-                                const nextExplicit = calculateAccidental(noteName, keyAccidentals);
-                                return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
-                            } catch {
-                                return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
-                            }
-                        });
+                        // PERF (stadio 1): note per-sistema PRE-CALCOLATE e memoizzate fuori dalla map
+                        // (vedi systemRenderDataBySystem). Qui si legge soltanto → nessun calcolo per
+                        // render su ghost/selezione. `systemNotes` (slice grezza) e `systemNotesForRender`
+                        // (con accidenti) conservano gli stessi nomi/semantica di prima.
+                        const { systemNotes, systemNotesForRender } = systemRenderDataBySystem[systemIndex] || { systemNotes: [], systemNotesForRender: [] };
 
                         const actualSystemWidth = system.width;
                         const ghost = ghostNote && ghostNote.systemIndex === systemIndex ? ghostNote : null;
@@ -14156,7 +14223,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 analysisFilters, showHarmonyDebug, hoveredViolationNotes,
                                                             ];
                                                             const _ovC = overlayCacheRef.current[systemIndex];
-                                                            if (_ovC && _ovC.k.length === _ovKey.length && _ovC.k.every((v, i) => Object.is(v, _ovKey[i]))) return _ovC.el;
+                                                            // Frozen during an edit burst → reuse cached element even if the key changed.
+                                                            if (_ovC && (overlayFreezeActiveRef.current || (_ovC.k.length === _ovKey.length && _ovC.k.every((v, i) => Object.is(v, _ovKey[i]))))) return _ovC.el;
                                                             const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers */}
