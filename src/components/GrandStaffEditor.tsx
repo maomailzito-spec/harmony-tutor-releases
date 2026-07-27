@@ -1645,7 +1645,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         isMinorMode,
         bpm,
         voiceInstruments,
-    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments]);
+        // Servono all'EXPORT MIDI: senza, un brano scritto su una traccia di
+        // accompagnamento veniva esportato in un file vuoto.
+        accompanimentTracks,
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks]);
 
     const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
         setRawNotes(next.notes || []);

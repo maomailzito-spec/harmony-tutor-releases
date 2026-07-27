@@ -17,6 +17,9 @@ export type GrandStaffMidiProject = {
   bpm?: number;
   /** Soundfont name per SATB voice (1-4) — converted to a GM program for MIDI export. */
   voiceInstruments?: Record<number, string>;
+  /** Tracce di accompagnamento: vanno esportate anche loro (un brano scritto su una
+   *  traccia usciva in un file MIDI vuoto). */
+  accompanimentTracks?: AccompanimentTrack[];
 };
 
 export type UseGrandStaffMidiArgs = {
@@ -1576,6 +1579,16 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       notes: project.notes || [],
       timeSignature: project.timeSignature,
       timeSignatureChanges: toMeasureIndexedChanges(project.timeSignature, project.timeSignatureChanges),
+      // Le tracce escono come tracce MIDI a sé (nome, strumento, canale). Le pause non
+      // esistono nel formato: restano i silenzi fra le note.
+      accompanimentTracks: (project.accompanimentTracks || []).map(t => ({
+        name: t.name,
+        notes: t.notes || [],
+        instrumentId: t.instrumentId,
+        isDrum: !!(t as any).isDrum,
+        midiChannel: (t as any).midiChannel,
+        octaveTranspose: (t as any).octaveTranspose,
+      })),
       bpm: project.bpm ?? 120,
       midiType: (midiExportType === '0' ? 0 : 1) as 0 | 1,
       voicePrograms,

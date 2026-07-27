@@ -97,6 +97,20 @@ export type MidiWriterProject = {
    *  compreso) divide le battute nel posto sbagliato dal primo cambio in avanti. */
   timeSignatureChanges?: Array<{ measureIndex?: number; numerator: number; denominator: number }>;
   bpm?: number;
+  /** TRACCE DI ACCOMPAGNAMENTO. Vanno esportate come le voci del coro: senza, un brano
+   *  scritto su una traccia usciva in un file VUOTO (l'export riceveva solo `notes`,
+   *  cioè il SATB). Ogni traccia diventa una traccia MIDI con il suo nome, il suo
+   *  strumento e il suo canale. */
+  accompanimentTracks?: Array<{
+    name?: string;
+    notes: StaffNote[];
+    instrumentId?: number;
+    isDrum?: boolean;
+    /** Canale scelto dall'utente (1-16); assente = automatico, come nel playback. */
+    midiChannel?: number;
+    /** Righi traspositori (chitarra/basso 8vb): il MIDI porta l'altezza SUONATA. */
+    octaveTranspose?: number;
+  }>;
   /** 0 = single track (all voices merged), 1 = multi-track (one per voice). Default: 1 */
   midiType?: 0 | 1;
   /** General-MIDI program (0-127) per SATB voice (1-4). When present, a Program
@@ -197,6 +211,49 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
     return data;
   }
 
+  // ── Tracce di accompagnamento ──
+  // Canale: stessa convenzione del playback — esplicito se scelto, batteria sul 10
+  // (indice 9), altrimenti dal 5 in su saltando il 10.
+  const accTracks = (project.accompanimentTracks || []).filter(t => t && (t.notes || []).length > 0);
+  const accChannel = (t: NonNullable<MidiWriterProject['accompanimentTracks']>[number], idx: number): number => {
+    const explicit = Number(t?.midiChannel);
+    if (Number.isFinite(explicit) && explicit >= 1 && explicit <= 16) return explicit - 1;
+    if (t?.isDrum) return 9;
+    let ch = 4 + idx;
+    if (ch >= 9) ch += 1;
+    return Math.min(15, ch);
+  };
+  const accNoteEvents = (
+    t: NonNullable<MidiWriterProject['accompanimentTracks']>[number],
+    ch: number,
+  ): MidiEvent[] => {
+    const out: MidiEvent[] = [];
+    const shift = t.isDrum ? 0 : (Number(t.octaveTranspose) || 0) * 12;
+    for (const note of (t.notes || [])) {
+      if (!note || note.isRest || !Number.isFinite(note.midi as number)) continue;
+      const tick = noteTick(note, beatsPerMeasure);
+      const dur = noteDurationTicks(note);
+      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi) + shift)));
+      out.push({ tick, order: 2, bytes: [0x90 | ch, midi, noteVelocity(note)] });
+      out.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
+    }
+    return out;
+  };
+  function buildAccTrack(t: NonNullable<MidiWriterProject['accompanimentTracks']>[number], idx: number): number[] {
+    const ch = accChannel(t, idx);
+    const events: MidiEvent[] = [];
+    const name = String(t.name || `Traccia ${idx + 1}`);
+    const nameBytes = Array.from(new TextEncoder().encode(name));
+    events.push({ tick: 0, order: 0, bytes: [0xff, 0x03, ...encodeVlq(nameBytes.length), ...nameBytes] });
+    // La batteria sta sul canale 10 e non prende Program Change (il kit è il canale).
+    if (!t.isDrum) {
+      const prog = Math.max(0, Math.min(127, Math.round(Number(t.instrumentId) || 0)));
+      events.push({ tick: 0, order: 1, bytes: [0xc0 | ch, prog] });
+    }
+    events.push(...accNoteEvents(t, ch));
+    return eventsToTrackData(events);
+  }
+
   // ── Assemble MIDI ──
   let tracks: number[][];
 
@@ -218,6 +275,13 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       allEvents.push({ tick, order: 2, bytes: [0x90 | ch, midi, noteVelocity(note)] });
       allEvents.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
+    accTracks.forEach((t, idx) => {
+      const ch = accChannel(t, idx);
+      if (!t.isDrum) {
+        allEvents.push({ tick: 0, order: 1, bytes: [0xc0 | ch, Math.max(0, Math.min(127, Math.round(Number(t.instrumentId) || 0))) ] });
+      }
+      allEvents.push(...accNoteEvents(t, ch));
+    });
     tracks = [eventsToTrackData(allEvents)];
   } else {
     // Type 1: multi-track (conductor + one per voice)
@@ -225,6 +289,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
     for (const v of voiceNums) {
       tracks.push(buildVoiceTrack(v, notesByVoice.get(v)!));
     }
+    accTracks.forEach((t, idx) => tracks.push(buildAccTrack(t, idx)));
   }
 
   const bytes: number[] = [];
