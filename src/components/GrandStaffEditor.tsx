@@ -32,6 +32,7 @@ import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
+import { musicXmlPartsToAccTracks } from '../importers/musicxml/musicXmlToAccTracks';
 import { exportMusicXML } from '../exporters/exportMusicXML';
 import { exportMuseScoreMscx } from '../exporters/exportMuseScoreMscx';
 import { functionalToken, absoluteToken, spokenPhrase, normalizeRoman } from '../exporters/spokenHarmony';
@@ -119,6 +120,13 @@ const ANALYSIS_DEBOUNCE_MS = 300;
 // flight when we unfreeze. Positions of transposed notes don't change, so frozen
 // overlays aren't even visually stale during the common case (↑/↓ nudges).
 const OVERLAY_FREEZE_MS = 350;
+
+// Playback auto-scroll: how much of the playing system must be on screen for the view
+// to stay put. Above this the page does NOT turn — otherwise the last system of each
+// screenful (whose box includes the Roman-numeral band and the gap to the next one, so
+// it is nearly always clipped by a few px) would trigger a scroll at the end of every
+// row instead of at the end of the page, doubling the number of jumps.
+const PLAYBACK_SYSTEM_VISIBLE_RATIO = 0.7;
 
 // VexFlow stave geometry (must match values in VexflowGrandStaff.tsx)
 // Used for cursor->pitch mapping so the ghost note aligns with the pointer.
@@ -282,12 +290,26 @@ const makeReverbIR = (ctx: AudioContext, preset: Exclude<ReverbPreset, 'off'>): 
   for (let ch = 0; ch < 2; ch++) {
     const data = buf.getChannelData(ch);
     let last = 0;
+    let sumSq = 0;
     for (let i = 0; i < len; i++) {
       const t = i / len;
       const env = Math.pow(1 - t, decay);          // decadimento esponenziale
       const white = Math.random() * 2 - 1;
       last = last + lp * (white - last);            // lowpass a un polo → coda più morbida
       data[i] = last * env;
+      sumSq += data[i] * data[i];
+    }
+    // NORMALIZZAZIONE a guadagno d'energia unitario. Una convoluzione somma decine di
+    // migliaia di campioni: una IR di rumore non normalizzata ha norma L2 ~14 (room),
+    // 22 (hall), 27 (plate), cioè amplifica di ~23-29 dB. Il ramo wet usciva così ~3
+    // volte PIÙ FORTE dell'asciutto (mandata 0.25 × return 0.85), e con più voci andava
+    // oltre il fondo scala: distorsione a banda larga percepita come raschio ad ogni
+    // attacco. Con ||IR|| = 1 il "wet" torna a significare quello che dice — una
+    // percentuale del segnale — e la manopola diventa proporzionale.
+    const norm = Math.sqrt(sumSq);
+    if (norm > 1e-9) {
+      const k = 1 / norm;
+      for (let i = 0; i < len; i++) data[i] *= k;
     }
   }
   return buf;
@@ -717,6 +739,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const satbMasterGainRef = useRef<GainNode | null>(null);
     const accMasterGainRef = useRef<GainNode | null>(null);
     const mixerMasterGainRef = useRef<GainNode | null>(null);
+    // Limitatore di sicurezza in coda alla catena (vedi ensureMasterChain).
+    const masterLimiterRef = useRef<DynamicsCompressorNode | null>(null);
+    // Diagnostica: quanto interviene il limitatore durante l'esecuzione. Se lavora spesso
+    // e di molto, il suo abbassare-e-rilasciare continuo si sente come un'esecuzione che
+    // "pompa"/zoppica, pur essendo il tempo perfetto. Letta con __htAudio() in console.
+    const limiterStatsRef = useRef({ frames: 0, framesInRiduzione: 0, maxRiduzioneDb: 0 });
     const satbMasterAnalyserRef = useRef<AnalyserNode | null>(null);
     const accMasterAnalyserRef = useRef<AnalyserNode | null>(null);
     const mixerMasterAnalyserRef = useRef<AnalyserNode | null>(null);
@@ -826,7 +854,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!mixerMasterGainRef.current) {
             const m = ctx.createGain();              // master fader, DOPO il compressore
             m.gain.value = mixerMasterVolumeRef.current;
-            m.connect(ctx.destination);
+            // LIMITATORE DI SICUREZZA, ultimo nodo prima dell'uscita. Non è un effetto e
+            // non colora nulla: sotto la soglia è trasparente (rapporto 20:1 solo sopra
+            // −1.5 dBFS). Serve perché niente, prima, impedisce alla somma di superare il
+            // fondo scala: il compressore master esiste ma di default è BYPASSATO (ratio 1)
+            // e non c'è trim per strumento. Quattro voci passano; con un accompagnamento
+            // sopra si arriva oltre 0 dBFS e la scheda audio tronca l'onda — che si sente
+            // come raschio sull'attacco delle note, dove stanno i picchi.
+            const lim = ctx.createDynamicsCompressor();
+            lim.threshold.value = -1.5;
+            lim.knee.value = 0;
+            lim.ratio.value = 20;
+            lim.attack.value = 0.002;
+            lim.release.value = 0.08;
+            lim.connect(ctx.destination);
+            m.connect(lim);
+            masterLimiterRef.current = lim;
             const an = ctx.createAnalyser(); an.fftSize = 256; m.connect(an); // meter = USCITA (post-comp+fader)
             mixerMasterAnalyserRef.current = an;
             mixerMasterGainRef.current = m;
@@ -1625,14 +1668,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setProject,
     });
 
-    // MIDI import destination dialog. The resolver lets the async menu handler
-    // await the user's choice between SATB / Accompaniment / Cancel.
+    // Import destination dialog, shared by MIDI and MusicXML. The resolver lets the async
+    // menu handler await the user's choice between SATB / Accompaniment / Cancel.
+    // SATB replaces the project, the accompaniment choices ADD to it — which is the only
+    // way to bring a part into a score you already have open.
     type MidiImportChoice = 'satb' | 'acc-separate' | 'acc-grandstaff' | null;
     const [midiImportDialogOpen, setMidiImportDialogOpen] = useState(false);
+    const [importDialogKind, setImportDialogKind] = useState<'midi' | 'musicxml'>('midi');
     const midiImportResolverRef = useRef<((choice: MidiImportChoice) => void) | null>(null);
-    const askMidiImportDestination = useCallback((): Promise<MidiImportChoice> => {
+    const askImportDestination = useCallback((kind: 'midi' | 'musicxml'): Promise<MidiImportChoice> => {
         return new Promise<MidiImportChoice>((resolve) => {
             midiImportResolverRef.current = resolve;
+            setImportDialogKind(kind);
             setMidiImportDialogOpen(true);
         });
     }, []);
@@ -2569,20 +2616,67 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     useEffect(() => {
         if (!timeSignatureChanges || timeSignatureChanges.length === 0) return;
+        // Mappa delle battute aggiornata, condivisa da SATB e TRACCE: quando il metro
+        // cambia, l'inizio in tempo assoluto di ogni battuta si sposta, e le note vanno
+        // riagganciate alla nuova mappa mantenendo la loro posizione in battuta+movimento.
+        const baseBeatsShared = timeSignature.numerator * (4 / timeSignature.denominator);
+        const sharedChanges = (timeSignatureChanges || [])
+            .map(c => {
+                const absBeat = Number(c.absBeat);
+                const m = Number.isFinite(c.measureIndex as any)
+                    ? Number(c.measureIndex)
+                    : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeatsShared || 4)) : 0);
+                return { measureIndex: m, numerator: c.numerator, denominator: c.denominator };
+            })
+            .filter(c => Number.isFinite(c.measureIndex))
+            .sort((a, b) => a.measureIndex - b.measureIndex);
+        const measureStartsUpTo = (maxIdx: number): number[] => {
+            const out: number[] = [];
+            let acc2 = 0;
+            for (let m = 0; m <= maxIdx + 1; m++) {
+                out[m] = acc2;
+                let active = { numerator: timeSignature.numerator, denominator: timeSignature.denominator };
+                for (const c of sharedChanges) {
+                    if (c.measureIndex <= m) active = { numerator: c.numerator, denominator: c.denominator };
+                    else break;
+                }
+                const bpm2 = active.numerator * (4 / active.denominator);
+                acc2 += Math.max(1, Number.isFinite(bpm2) ? bpm2 : baseBeatsShared || 4);
+            }
+            return out;
+        };
+        // TRACCE DI ACCOMPAGNAMENTO: stesso trattamento del SATB. Senza, un cambio di
+        // metro ri-collocava solo il corale e le tracce restavano ancorate alle vecchie
+        // battute — cioè si disallineavano dalle stanghette che condividono col SATB.
+        setAccompanimentTracks(prev => {
+            if (!prev || prev.length === 0) return prev;
+            let touched = false;
+            const next = prev.map(track => {
+                const notes = track.notes || [];
+                if (notes.length === 0) return track;
+                const maxIdx = notes.reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : 0), 0);
+                const starts = measureStartsUpTo(maxIdx);
+                let changed = false;
+                const nextNotes = notes.map(n => {
+                    const m = Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : 0;
+                    const b = Number.isFinite(n.beat) ? (n.beat as number) : 1;
+                    const startAbs = (starts[m] ?? (m * baseBeatsShared)) + (b - 1);
+                    const startTick = Math.round(startAbs * TICKS_PER_QUARTER);
+                    if (!Number.isFinite(startTick) || startTick === n.startTick) return n;
+                    changed = true;
+                    return { ...n, startTick } as StaffNote;
+                });
+                if (!changed) return track;
+                touched = true;
+                return { ...track, notes: nextNotes };
+            });
+            return touched ? next : prev;
+        });
         setRawNotes(prev => {
             if (!prev || prev.length === 0) return prev;
 
-            const baseBeats = timeSignature.numerator * (4 / timeSignature.denominator);
-            const changes = (timeSignatureChanges || [])
-                .map(c => {
-                    const absBeat = Number(c.absBeat);
-                    const m = Number.isFinite(c.measureIndex as any)
-                        ? Number(c.measureIndex)
-                        : (Number.isFinite(absBeat) ? Math.floor(absBeat / Math.max(1, baseBeats || 4)) : 0);
-                    return { measureIndex: m, numerator: c.numerator, denominator: c.denominator };
-                })
-                .filter(c => Number.isFinite(c.measureIndex))
-                .sort((a, b) => a.measureIndex - b.measureIndex);
+            const baseBeats = baseBeatsShared;
+            const changes = sharedChanges;
 
             const maxIdx = prev.reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : 0), 0);
             const measureStartAbsBeat: number[] = [];
@@ -2607,7 +2701,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return { ...n, startTick } as StaffNote;
             });
         });
-    }, [timeSignatureChanges, timeSignature, setRawNotes]);
+    }, [timeSignatureChanges, timeSignature, setRawNotes, setAccompanimentTracks]);
     // isPlayingRef sync now in usePlayback
     useEffect(() => { soloVoicesRef.current = soloVoices; }, [soloVoices]);
     useEffect(() => { voiceInstrumentsRef.current = voiceInstruments; }, [voiceInstruments]);
@@ -3836,6 +3930,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Editor zoom (extracted to useEditorZoom hook)
     const { editorZoom, resetEditorZoom, handleScoreMouseDownCapture, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
+    // Mirror in a ref so the imperative playback loop can read the current zoom
+    // without taking it as a dependency (that would restart the rAF on every pinch).
+    const editorZoomRef = useRef(editorZoom);
+    useEffect(() => { editorZoomRef.current = editorZoom; }, [editorZoom]);
+
+    // Diagnostica audio da console: `__htAudio()` → note consegnate in ritardo (tempo) +
+    // quanto è intervenuto il limitatore (livello). Azzerata a ogni avvio dell'esecuzione.
+    useEffect(() => {
+        try {
+            (window as any).__htAudio = () => {
+                const s = limiterStatsRef.current;
+                return {
+                    ...AudioService.readLateness(false),
+                    limitatore_riduzione_max_dB: Math.round(s.maxRiduzioneDb * 10) / 10,
+                    limitatore_percento_tempo_attivo: s.frames ? Math.round((s.framesInRiduzione / s.frames) * 100) : 0,
+                };
+            };
+        } catch { /* ignore */ }
+    }, []);
 
     // Click sulla CHIAVE di un rigo ACC (rettangolo invisibile [data-acc-clef-trackid] disegnato
     // da VexflowGrandStaff) → apre il menù delle chiavi e blocca l'inserimento nota. Altrimenti
@@ -4367,23 +4480,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (!picked) return;
                     source = picked;
                 }
-                const choice = await askMidiImportDestination();
+                const choice = await askImportDestination('midi');
                 if (choice === null) return; // user cancelled
                 if (choice === 'satb') {
                     await importMidi(source);
                 } else {
                     // 'acc-separate' = un rigo per parte/traccia; 'acc-grandstaff' = tutto fuso in un grand staff.
-                    const result = await importMidiAsAccompaniment(source, choice === 'acc-grandstaff' ? 'grandstaff' : 'separate');
+                    // Se il progetto ha già musica, la traccia va divisa in battute sul metro
+                    // del PROGETTO (cambi compresi): altrimenti le sue stanghette non
+                    // coincidono con quelle degli altri righi e, dal primo cambio in poi, le
+                    // note finiscono sul movimento sbagliato (con pause inventate a riempire).
+                    const projectIsEmpty = latestRawNotes.current.length === 0 && (latestAccompanimentTracks.current?.length ?? 0) === 0;
+                    const result = await importMidiAsAccompaniment(
+                        source,
+                        choice === 'acc-grandstaff' ? 'grandstaff' : 'separate',
+                        { useProjectMeter: !projectIsEmpty },
+                    );
                     if (result) {
                         // Un file MIDI multi-traccia (format 1, es. 4 pentagrammi MuseScore)
                         // porta più parti a rigo singolo: le aggiungo tutte, non una sola.
                         setAccompanimentTracks(prev => [...(prev || []), ...result.tracks]);
-                        // Apply the file's tempo + time signature to the project (the
-                        // SATB import path already does this; the ACC path previously
-                        // dropped them → bpm stuck at 120 and notes mis-barred against
-                        // the default 4/4).
-                        if (Number.isFinite(result.bpm) && result.bpm > 0) setBpm(result.bpm);
-                        if (result.timeSignature) setTimeSignature(result.timeSignature);
+                        // Tempo e metro del file si adottano SOLO su progetto vuoto: prima si
+                        // applicavano sempre, sovrascrivendo il metro di una partitura già
+                        // aperta (e cancellandone di fatto i cambi).
+                        if (projectIsEmpty) {
+                            if (Number.isFinite(result.bpm) && result.bpm > 0) setBpm(result.bpm);
+                            if (result.timeSignature) setTimeSignature(result.timeSignature);
+                            if (result.timeSignatureChanges?.length) setTimeSignatureChanges(result.timeSignatureChanges);
+                        }
                     }
                 }
             } catch (err: any) {
@@ -4602,14 +4726,61 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const xml = String(payload?.xml || '').trim();
                 if (!xml) return;
 
-                if (latestRawNotes.current.length > 0) {
-                    const confirmed = window.confirm('Importare MusicXML? Le modifiche non salvate andranno perse.');
-                    if (!confirmed) return;
-                }
-
-                // Parse first: if import fails, do not clear the current project.
+                // Parse first: if import fails, do not touch the current project.
                 const imported = importMusicXML(xml);
                 const importedNotes = Array.isArray(imported?.notes) ? imported.notes : [];
+
+                // Where does it go? Same question the MIDI import asks: SATB REPLACES the
+                // project, accompaniment ADDS staves to it. Without this, importing a part
+                // into an open score was impossible — the file was always wiped.
+                const dest = await askImportDestination('musicxml');
+                if (dest === null) return; // annullato
+
+                if (dest !== 'satb') {
+                    const parts = Array.isArray(imported?.parts) ? imported.parts : [];
+                    const fileTitle = String(imported?.projectTitle || '').trim()
+                        || (String(payload?.filePath || '').trim().split(/[/\\]/).pop() || '').replace(/\.(musicxml|xml|mxl)$/i, '');
+                    const tracks = musicXmlPartsToAccTracks(
+                        parts,
+                        dest === 'acc-grandstaff' ? 'grandstaff' : 'separate',
+                        fileTitle,
+                    );
+                    if (tracks.length === 0) {
+                        try { window.alert('Il file MusicXML non contiene note da importare.'); } catch { /* ignore */ }
+                        return;
+                    }
+
+                    // Il progetto è vuoto → adotto tempo/tonalità del file (come farebbe un
+                    // "apri"). Se invece c'è già musica, il progetto resta com'è: la traccia
+                    // si aggiunge e basta. Un tempo diverso, però, sposta le stanghette del
+                    // materiale importato: lo dico prima, e l'utente decide.
+                    const projectIsEmpty = latestRawNotes.current.length === 0 && (latestAccompanimentTracks.current?.length ?? 0) === 0;
+                    const importedTs = imported?.timeSignature || { numerator: 4, denominator: 4 };
+                    if (projectIsEmpty) {
+                        setTimeSignature(importedTs);
+                        setTimeSignatureChanges(Array.isArray(imported?.timeSignatureChanges) ? imported.timeSignatureChanges : []);
+                        setKeySignatureRoot(String(imported?.keySignatureRoot || 'C').trim() || 'C');
+                        setIsMinorMode(Boolean(imported?.isMinorMode));
+                    } else if (
+                        importedTs.numerator !== timeSignature.numerator ||
+                        importedTs.denominator !== timeSignature.denominator
+                    ) {
+                        const ok = window.confirm(
+                            `Il file è in ${importedTs.numerator}/${importedTs.denominator}, il progetto in ` +
+                            `${timeSignature.numerator}/${timeSignature.denominator}. ` +
+                            'Le battute del materiale importato non coincideranno. Importare lo stesso?',
+                        );
+                        if (!ok) return;
+                    }
+
+                    setAccompanimentTracks(prev => [...(prev || []), ...tracks]);
+                    return;
+                }
+
+                if (latestRawNotes.current.length > 0) {
+                    const confirmed = window.confirm('Importare MusicXML come SATB? Le modifiche non salvate andranno perse.');
+                    if (!confirmed) return;
+                }
 
                 const nextKeyRoot = String(imported?.keySignatureRoot || 'C').trim() || 'C';
                 const nextIsMinor = Boolean(imported?.isMinorMode);
@@ -4693,7 +4864,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } else if (action === 'toggle-analysis-lock') {
             setIsAnalysisLockModalOpen(true);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi, importMidiAsAccompaniment, pickMidiFile, askMidiImportDestination, setAccompanimentTracks, applyNewProjectConfig]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi, importMidiAsAccompaniment, pickMidiFile, askImportDestination, setAccompanimentTracks, applyNewProjectConfig]);
 
     // Routing: single source of truth for where actions are handled.
     const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {
@@ -6467,9 +6638,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // setPlayheadPosition() when the cursor CROSSES into a new system — which drives the
     // existing auto-scroll effect and keeps React state roughly in sync. The React
     // playhead is hidden while playing (see `!isPlaying` gate) so only one cursor shows.
-    const playheadLineRefs = useRef<Array<SVGLineElement | null>>([]);
+    const playheadLineRefs = useRef<Array<HTMLDivElement | null>>([]);
     const activePlaybackSystemRef = useRef<number>(-1);
-    const activePlaybackSysElRef = useRef<HTMLElement | null>(null);
+    // Left edge of the active system in UNSCALED content coordinates (same space as
+    // the playhead x). Cached on system change so the per-frame horizontal follow
+    // needs no getBoundingClientRect(); multiplied by the live zoom when used.
+    const activePlaybackSysLeftRef = useRef<number | null>(null);
     const lastPlaybackPosRef = useRef<{ x: number; systemIndex: number } | null>(null);
 
     // PERF: per-system cache of the (expensive) analysis-overlay elements. The overlay
@@ -6528,7 +6702,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            const elapsedSec = ctx.currentTime - t0;
+            // `currentTime` è il tempo dell'audio GIÀ CONSEGNATO al motore, non di quello
+            // che sta uscendo dagli altoparlanti: fra i due c'è la latenza del buffer più
+            // quella della scheda. Sottraendola, il cursore sta dove il suono si SENTE
+            // (prima correva leggermente avanti, e ora che il buffer è più generoso la
+            // differenza si noterebbe).
+            const outLatency = (ctx.baseLatency || 0) + ((ctx as any).outputLatency || 0);
+            const elapsedSec = ctx.currentTime - t0 - outLatency;
             // If a tempo curve is active, use its inverse mapping; else linear.
             const curAbsBeat = playbackTimeToBeatRef.current
                 ? playbackTimeToBeatRef.current(elapsedSec)
@@ -6541,6 +6721,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // resume/replay continues from here. The per-frame React playhead is frozen
             // during playback, so this ref is the single source of truth for "where are we".
             playbackCursorAbsBeatRef.current = visualBeat;
+            // Campionamento del limitatore (una lettura per frame, costo nullo).
+            {
+                const lim = masterLimiterRef.current;
+                if (lim) {
+                    const r = lim.reduction; // dB, ≤ 0
+                    const s = limiterStatsRef.current;
+                    s.frames++;
+                    if (r < -0.5) s.framesInRiduzione++;
+                    if (r < s.maxRiduzioneDb) s.maxRiduzioneDb = r;
+                }
+            }
             const pos = getPlayheadPosForAbsBeat(visualBeat);
             if (pos) {
                 const si = pos.systemIndex;
@@ -6548,21 +6739,49 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const sysW = ld?.systemsParams?.[si]?.width ?? 0;
                 const x = sysW > 0 ? Math.min(pos.x, sysW - STAFF_MARGIN) : pos.x;
                 const container = staffContainerRef.current;
+                // The SCROLLING element is the outer wrapper (overflow-y-auto), not the
+                // staff container: the zoom refactor made the latter a plain content div
+                // inside a transform: scale() layer, so writing scrollTop/scrollLeft on it
+                // is a no-op. All scroll math below therefore targets `scroller`, and uses
+                // client rects (post-transform) so it stays correct at any zoom level.
+                const scroller = scoreScrollRef.current;
                 // Crossing into a new system: hide the previous line, cache the new
-                // system element, and vertical-scroll it into view — all imperative,
+                // system geometry, and vertical-scroll it into view — all imperative,
                 // NO setState, so playback never re-renders the score.
                 if (si !== activePlaybackSystemRef.current) {
                     const prevLine = playheadLineRefs.current[activePlaybackSystemRef.current];
-                    if (prevLine) prevLine.style.visibility = 'hidden';
+                    if (prevLine) { prevLine.style.visibility = 'hidden'; prevLine.style.willChange = 'auto'; }
                     activePlaybackSystemRef.current = si;
                     const sysEl = container ? (container.querySelector(`[data-system-index="${si}"]`) as HTMLElement | null) : null;
-                    activePlaybackSysElRef.current = sysEl;
-                    if (container && sysEl) {
-                        const contRect = container.getBoundingClientRect();
+                    activePlaybackSysLeftRef.current = null;
+                    if (scroller && sysEl) {
+                        const zoom = editorZoomRef.current || 1;
+                        const contRect = scroller.getBoundingClientRect();
                         const sysRect = sysEl.getBoundingClientRect();
-                        const pad = 24;
-                        if (sysRect.top < contRect.top + pad) container.scrollTop += (sysRect.top - (contRect.top + pad));
-                        else if (sysRect.bottom > contRect.bottom - pad) container.scrollTop += (sysRect.bottom - (contRect.bottom - pad));
+                        activePlaybackSysLeftRef.current =
+                            (sysRect.left - contRect.left + scroller.scrollLeft) / zoom;
+
+                        // PAGE-WISE scroll: turn the page at the end of the SCREENFUL, not at
+                        // the end of every row. Requiring the system to be *fully* visible
+                        // would fire on the last row of the screen (its box includes the
+                        // Roman-numeral band and the inter-system gap, so it's typically cut
+                        // by a few px even when it reads as fully on screen) → a jump per row.
+                        // So we hold the view while the playing system is mostly visible, and
+                        // only when the next one starts off-screen (or is badly cut) we scroll
+                        // it to the top, beginning a fresh screenful of systems.
+                        const visiblePx = Math.min(sysRect.bottom, contRect.bottom) - Math.max(sysRect.top, contRect.top);
+                        const visibleRatio = sysRect.height > 0 ? visiblePx / sysRect.height : 1;
+                        if (visibleRatio < PLAYBACK_SYSTEM_VISIBLE_RATIO) {
+                            const marginTop = 28;
+                            const slack = contRect.height - sysRect.height;
+                            const headroom = slack > 0 ? Math.min(marginTop, slack / 2) : marginTop;
+                            const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+                            const target = Math.max(0, Math.min(
+                                maxTop,
+                                scroller.scrollTop + (sysRect.top - contRect.top) - headroom,
+                            ));
+                            if (Math.abs(target - scroller.scrollTop) > 2) scroller.scrollTop = target;
+                        }
                     }
                 }
                 // Per-frame: move the active system's line + horizontal follow (linear
@@ -6570,16 +6789,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // while the score is static during playback.
                 const line = playheadLineRefs.current[si];
                 if (line) {
-                    line.style.transform = `translateX(${x}px)`;
+                    // translate3d + will-change SOLO sul sistema attivo: il compositore
+                    // tiene quel cursore su un livello suo e lo sposta senza ridipingere la
+                    // partitura sotto (promuovere tutti e ~140 i sistemi costerebbe memoria).
+                    if (line.style.willChange !== 'transform') line.style.willChange = 'transform';
+                    line.style.transform = `translate3d(${x}px,0,0)`;
                     line.style.visibility = 'visible';
                 }
-                const sysEl = activePlaybackSysElRef.current;
-                if (container && sysEl) {
-                    const xInContainer = sysEl.offsetLeft + x;
-                    const left = xInContainer - container.scrollLeft;
+                const sysLeftBase = activePlaybackSysLeftRef.current;
+                if (scroller && sysLeftBase != null) {
+                    const zoom = editorZoomRef.current || 1;
+                    const xInContent = (sysLeftBase + x) * zoom;
+                    const left = xInContent - scroller.scrollLeft;
                     const rightPad = 40;
-                    if (left < rightPad) container.scrollLeft = Math.max(0, xInContainer - rightPad);
-                    else if (left > container.clientWidth - rightPad) container.scrollLeft = Math.max(0, xInContainer - (container.clientWidth - rightPad));
+                    if (left < rightPad) scroller.scrollLeft = Math.max(0, xInContent - rightPad);
+                    else if (left > scroller.clientWidth - rightPad) scroller.scrollLeft = Math.max(0, xInContent - (scroller.clientWidth - rightPad));
                 }
                 lastPlaybackPosRef.current = pos;
             }
@@ -6596,9 +6820,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Teardown: hide the active imperative line and sync React state to the
             // exact stop position so the (now visible) React playhead lands there.
             const activeLine = playheadLineRefs.current[activePlaybackSystemRef.current];
-            if (activeLine) activeLine.style.visibility = 'hidden';
+            if (activeLine) { activeLine.style.visibility = 'hidden'; activeLine.style.willChange = 'auto'; }
             activePlaybackSystemRef.current = -1;
-            activePlaybackSysElRef.current = null;
+            activePlaybackSysLeftRef.current = null;
             if (lastPlaybackPosRef.current) setPlayheadPosition(lastPlaybackPosRef.current);
         };
     }, [audioService.audioContext, bpm, getPlayheadPosForAbsBeat, isPlaying]);
@@ -6635,48 +6859,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         wasPlayingRef.current = isPlaying;
     }, [isPlaying]);
 
-    // Auto-scroll during playback so the playhead never disappears off-screen.
-    const lastAutoScrollSystemRef = useRef<number | null>(null);
-    useEffect(() => {
-        if (!isPlaying) return;
-        if (!playheadPosition) return;
-
-        const container = scoreScrollRef.current;
-        if (!container) return;
-
-        const sysIdx = playheadPosition.systemIndex;
-        // Auto-scroll ONLY when the active row (system) changes. Within a row the
-        // playhead just moves horizontally, so there's no need to touch the vertical
-        // scroll — this lets the user pan freely during playback without the view
-        // snapping back to the playhead on every tick.
-        if (lastAutoScrollSystemRef.current === sysIdx) return;
-
-        const sysEl = systemElementByIndexRef.current.get(sysIdx);
-        if (!sysEl) return;
-        lastAutoScrollSystemRef.current = sysIdx;
-
-        // Whole-system geometry (the system div's height includes the SATB staves,
-        // the Roman-numeral band below, and the accompaniment staves).
-        const sysTop = sysEl.offsetTop;
-        const sysHeight = sysEl.offsetHeight;
-        const viewTop = container.scrollTop;
-        const viewBottom = viewTop + container.clientHeight;
-
-        // Already fully on screen → don't move.
-        if (sysTop >= viewTop && (sysTop + sysHeight) <= viewBottom) return;
-
-        // Reveal the WHOLE system (so Roman numerals / ACC staves below aren't cut).
-        // If it fits, leave a little headroom at the top; otherwise align the top.
-        const marginTop = 28;
-        const slack = container.clientHeight - sysHeight;
-        const targetTopRaw = slack > 0 ? (sysTop - Math.min(marginTop, slack / 2)) : (sysTop - marginTop);
-
-        const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        const clamped = Math.max(0, Math.min(maxTop, targetTopRaw));
-        if (Math.abs(clamped - container.scrollTop) <= 2) return;
-
-        container.scrollTo({ top: clamped, behavior: 'smooth' });
-    }, [isPlaying, playheadPosition]);
+    // NOTE: auto-scroll during playback lives in the imperative rAF loop above. It used
+    // to be a `playheadPosition` effect, but that state is frozen while playing (the
+    // playhead is moved imperatively to avoid re-rendering the score), so the effect
+    // fired only once at start and the view stayed parked on the systems already played.
 
     const startPlayback = useCallback(async () => {
         if (!isAudioReady) return;
@@ -7173,25 +7359,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         setIsPlaying(true);
 
-        const lookaheadMs = 80;
-        const startMs = performance.now() + lookaheadMs; // small lookahead
-        const audioStartTime = audioCtx.currentTime + (lookaheadMs / 1000);
         const defaultStartAbsBeat = 0;
         const startAbsBeat = Number.isFinite(playbackCursorAbsBeatRef.current as any)
             ? Math.max(0, playbackCursorAbsBeatRef.current as number)
             : defaultStartAbsBeat;
 
         playbackStartBeatRef.current = startAbsBeat;
-        audioPlaybackStartTimeRef.current = audioStartTime;
-
-        // If metronome is on, re-sync it to the playback downbeat grid.
-        if (isMetronomeOnRef.current) {
-            metronomeSuppressedRef.current = false;
-            metronomeLinkedToPlaybackRef.current = true;
-            // Use the same anchor as the playback notes so click + music align.
-            // We purposely do not turn it off on stop; we just re-anchor on play.
-            void startMetronomeScheduler({ anchorWhenSec: audioStartTime, anchorAbsBeat: startAbsBeat });
-        }
 
         // If playback starts from a point with no note event, move the playhead there immediately.
         const startPos = getPlayheadPosForAbsBeat(startAbsBeat);
@@ -7214,7 +7387,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // and start late, causing "rolled" chords. Preloading keeps chord attacks aligned.
         if (!selectedMidiOutput && audioService.audioContext) {
             try {
-                const neededByInstrument = new Map<string, Set<string>>();
+                // Chiave = nome nota + velocity, perché sugli strumenti a strati di velocity
+                // (pianoforte) il campione dipende da ENTRAMBE: precaricare la sola nota
+                // lasciava fuori lo strato che poi serviva davvero, e quello si scaricava in
+                // corsa durante l'esecuzione.
+                // Il BANCO fa parte della chiave: i campioni GM stanno in una cache diversa
+                // da quelli locali, quindi vanno precaricati per quello che sono.
+                const neededByInstrument = new Map<string, { instr: string; gm: boolean; notes: Map<string, { name: string; velocity?: number }> }>();
                 for (const ev of eventsToPlay) {
                     for (const it of ev.items) {
                         const n = it.note;
@@ -7228,12 +7407,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const instr = accTrk
                             ? (isDrumTrk ? drumSoundfont(accTrk) : gmToSoundfont(accTrk.instrumentId))
                             : (voiceInstrumentsRef.current[(n.voice ?? 1) as number] || 'acoustic_grand_piano');
-                        if (!neededByInstrument.has(instr)) neededByInstrument.set(instr, new Set());
-                        neededByInstrument.get(instr)!.add(midiToName(midi));
+                        const bank = accTrk
+                            ? (isDrumTrk ? 'orchestral' : (((accTrk as any).soundBank) ?? 'orchestral'))
+                            : (voiceSoundBanksRef.current[(n.voice ?? 1) as number] ?? 'orchestral');
+                        const gm = bank === 'gm';
+                        const bucket = `${instr}|${gm ? 'gm' : 'orch'}`;
+                        if (!neededByInstrument.has(bucket)) neededByInstrument.set(bucket, { instr, gm, notes: new Map() });
+                        const name = midiToName(midi);
+                        const vel = (n as any).velocity as number | undefined;
+                        neededByInstrument.get(bucket)!.notes.set(`${name}|${vel ?? ''}`, { name, velocity: vel });
                     }
                 }
-                for (const [instr, notes] of neededByInstrument) {
-                    await audioService.preloadNotesForInstrument(instr, Array.from(notes));
+                for (const [, need] of neededByInstrument) {
+                    await audioService.preloadSamplesForInstrument(need.instr, Array.from(need.notes.values()), need.gm);
                 }
             } catch {
                 // ignore preload failures; playback will still attempt on-demand load
@@ -7342,6 +7528,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         const t0Anchor = beatToTime(startAbsBeat);
+
+        // ── ANCORA TEMPORALE ──────────────────────────────────────────────────────
+        // Va presa QUI, subito prima di programmare le note, e non all'inizio della
+        // funzione: in mezzo c'è il precaricamento dei campioni, che è ASINCRONO e può
+        // durare parecchio. Fissando l'ancora prima, tutto il tempo speso a caricare
+        // veniva mangiato dalla musica: le note dei primi secondi avevano un `when` già
+        // PASSATO e partivano tutte insieme appena programmate, mentre le successive
+        // suonavano regolari — è così che l'esecuzione "zoppicava" all'avvio, tanto più
+        // quanto più c'era da caricare (e con due tracce c'è il doppio da caricare).
+        // Margine prima della prima nota: programmare migliaia di note significa creare
+        // altrettanti nodi audio, e quel lavoro dura. Con un margine fisso di 80 ms, su un
+        // brano lungo le prime note avevano il loro istante già passato prima ancora di
+        // essere programmate. Il margine cresce quindi col numero di attacchi (con un
+        // tetto), così l'inizio resta pronto sui brani brevi e sicuro su quelli lunghi.
+        const lookaheadMs = Math.min(400, 80 + Math.round(eventsToPlay.length * 0.08));
+        const startMs = performance.now() + lookaheadMs;
+        const audioStartTime = audioCtx.currentTime + (lookaheadMs / 1000);
+        audioPlaybackStartTimeRef.current = audioStartTime;
+        // Azzera la diagnostica audio, così `__htAudio()` in console riferisce SEMPRE
+        // l'ultima esecuzione.
+        try { AudioService.readLateness(true); } catch { /* ignore */ }
+        limiterStatsRef.current = { frames: 0, framesInRiduzione: 0, maxRiduzioneDb: 0 };
+
+        // Metronomo: stessa ancora delle note, così battuta e musica coincidono.
+        if (isMetronomeOnRef.current) {
+            metronomeSuppressedRef.current = false;
+            metronomeLinkedToPlaybackRef.current = true;
+            void startMetronomeScheduler({ anchorWhenSec: audioStartTime, anchorAbsBeat: startAbsBeat });
+        }
 
         // Inverse mapping for the visual playhead: given elapsed seconds since
         // playback origin (audioStartTime), find the absBeat the audio is at.
@@ -11335,37 +11550,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return map;
     }, [layoutData]);
 
-    // Auto-scroll during playback to keep the playhead visible.
-    useEffect(() => {
-        if (!isPlaying) return;
-        if (!playheadPosition) return;
-        const container = staffContainerRef.current;
-        if (!container) return;
-
-        const sysEl = container.querySelector(`[data-system-index="${playheadPosition.systemIndex}"]`) as HTMLElement | null;
-        if (!sysEl) return;
-
-        // Vertical: keep the current system in view.
-        const contRect = container.getBoundingClientRect();
-        const sysRect = sysEl.getBoundingClientRect();
-        const pad = 24;
-
-        if (sysRect.top < contRect.top + pad) {
-            container.scrollTop += (sysRect.top - (contRect.top + pad));
-        } else if (sysRect.bottom > contRect.bottom - pad) {
-            container.scrollTop += (sysRect.bottom - (contRect.bottom - pad));
-        }
-
-        // Horizontal (linear mode): keep the x visible when container scrolls horizontally.
-        const xInContainer = sysEl.offsetLeft + playheadPosition.x;
-        const left = xInContainer - container.scrollLeft;
-        const rightPad = 40;
-        if (left < rightPad) {
-            container.scrollLeft = Math.max(0, xInContainer - rightPad);
-        } else if (left > container.clientWidth - rightPad) {
-            container.scrollLeft = Math.max(0, xInContainer - (container.clientWidth - rightPad));
-        }
-    }, [isPlaying, playheadPosition]);
 
     const noteVoiceById = useMemo(() => {
         const map = new Map<string, Voice>();
@@ -12985,7 +13169,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 >
                     <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4 text-sm text-gray-100">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-base font-bold">{tUI('import_dest_title', { defaultValue: 'Importa MIDI' })}</h2>
+                            <h2 className="text-base font-bold">{
+                                importDialogKind === 'musicxml'
+                                    ? tUI('import_dest_title_xml', { defaultValue: 'Importa MusicXML' })
+                                    : tUI('import_dest_title', { defaultValue: 'Importa MIDI' })
+                            }</h2>
                             <button
                                 onClick={() => resolveMidiImportChoice(null)}
                                 className="text-gray-400 hover:text-gray-200 text-lg leading-none"
@@ -13000,21 +13188,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 autoFocus
                             >
                                 <span className="font-semibold">SATB</span>
-                                <span className="block text-[11px] text-cyan-100/90">{tUI('import_dest_satb_desc', { defaultValue: '4 voci sul grand staff (corale).' })}</span>
+                                <span className="block text-[11px] text-cyan-100/90">{tUI('import_dest_satb_desc', { defaultValue: '4 voci sul grand staff (corale).' })}{' '}{tUI('import_dest_satb_replaces', { defaultValue: 'Sostituisce il progetto aperto.' })}</span>
                             </button>
                             <button
                                 onClick={() => resolveMidiImportChoice('acc-separate')}
                                 className="text-left px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
                             >
                                 <span className="font-semibold">{tUI('import_dest_acc_separate', { defaultValue: 'Accompagnamento — righi separati' })}</span>
-                                <span className="block text-[11px] text-gray-400">{tUI('import_dest_acc_separate_desc', { defaultValue: 'Un rigo per traccia/parte del MIDI (es. 4 pentagrammi MuseScore).' })}</span>
+                                <span className="block text-[11px] text-gray-400">{
+                                    importDialogKind === 'musicxml'
+                                        ? tUI('import_dest_acc_separate_desc_xml', { defaultValue: 'Un rigo per parte del file. Si AGGIUNGE al progetto aperto.' })
+                                        : tUI('import_dest_acc_separate_desc', { defaultValue: 'Un rigo per traccia/parte del MIDI (es. 4 pentagrammi MuseScore).' })
+                                }</span>
                             </button>
                             <button
                                 onClick={() => resolveMidiImportChoice('acc-grandstaff')}
                                 className="text-left px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"
                             >
                                 <span className="font-semibold">{tUI('import_dest_acc_grandstaff', { defaultValue: 'Accompagnamento — grand staff unico' })}</span>
-                                <span className="block text-[11px] text-gray-400">{tUI('import_dest_acc_grandstaff_desc', { defaultValue: 'Tutte le parti fuse in un grand staff (treble+bass).' })}</span>
+                                <span className="block text-[11px] text-gray-400">{tUI('import_dest_acc_grandstaff_desc', { defaultValue: 'Tutte le parti fuse in un grand staff (treble+bass).' })}{
+                                    importDialogKind === 'musicxml' ? ` ${tUI('import_dest_acc_adds', { defaultValue: 'Si aggiunge al progetto aperto.' })}` : ''
+                                }</span>
                             </button>
                         </div>
                     </div>
@@ -13849,22 +14043,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             </svg>
                                                         )}
 
-                                                        {/* Imperative playback playhead: one hidden line per system, moved via
-                                                            ref during playback (no per-frame React re-render). See the playback
-                                                            rAF loop / playheadLineRefs. Hidden except while playing. */}
-                                                        <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
-                                                            <line
-                                                                ref={(el) => { playheadLineRefs.current[systemIndex] = el; }}
-                                                                x1={0}
-                                                                y1={playheadYTopPx}
-                                                                x2={0}
-                                                                y2={playheadYBottomPx}
-                                                                className="stroke-cyan-500"
-                                                                strokeWidth={2}
-                                                                opacity={0.7}
-                                                                style={{ visibility: 'hidden' }}
-                                                            />
-                                                        </svg>
+                                                        {/* Cursore d'esecuzione (imperativo): un elemento nascosto per sistema,
+                                                            spostato via ref durante il playback — nessun re-render di React.
+                                                            È un DIV sottile e NON una <line> dentro un <svg> largo quanto il
+                                                            sistema: muovere una linea dentro quell'svg obbligava il browser a
+                                                            ridipingere tutta l'area del sistema 60 volte al secondo, e più la
+                                                            finestra era larga più costava — al punto da rubare CPU al thread
+                                                            audio e produrre interruzioni nel suono. Un div spostato con
+                                                            translate3d viene ricollocato dal compositore (GPU) senza ridisegnare
+                                                            nulla sotto. Vedi il loop rAF / playheadLineRefs. */}
+                                                        <div
+                                                            ref={(el) => { playheadLineRefs.current[systemIndex] = el; }}
+                                                            className="absolute pointer-events-none bg-cyan-500"
+                                                            style={{
+                                                                left: 0,
+                                                                top: playheadYTopPx,
+                                                                width: 2,
+                                                                height: Math.max(1, playheadYBottomPx - playheadYTopPx),
+                                                                opacity: 0.7,
+                                                                visibility: 'hidden',
+                                                                transform: 'translate3d(0,0,0)',
+                                                            }}
+                                                        />
 
                                                         {/* Overlay: playhead (React-driven — click/seek/recording; hidden while
                                                             playing, where the imperative line above takes over). */}
