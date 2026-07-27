@@ -1,6 +1,24 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 
+/**
+ * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
+ * `MusicXMLImportResult.notes`, ma con le voci numerate DENTRO la parte (rigo 1 → voci
+ * 1-2, rigo 2 → voci 1-2) invece che rimappate sulle 4 voci del corale: serve a chi
+ * importa il file come traccia (una parte = un rigo) anziché come SATB.
+ */
+export type MusicXMLPart = {
+  /** id della <part> nel file (P1, P2…) */
+  id: string;
+  /** <part-name> dalla <part-list>, vuoto se assente */
+  name: string;
+  notes: StaffNote[];
+  /** La parte usa due righi (pianistica) → va incisa su grand staff. */
+  hasSecondStaff: boolean;
+  /** Chiave del rigo 1 (usata quando la parte sta su un rigo solo). */
+  clef: ClefType;
+};
+
 export type MusicXMLImportResult = {
   notes: StaffNote[];
   timeSignature: TimeSignature;
@@ -9,6 +27,8 @@ export type MusicXMLImportResult = {
   isMinorMode: boolean;
   staffSystemMode: 'grandstaff' | 'treble_only' | 'satb_ancient';
   projectTitle?: string;
+  /** Le parti del file tenute separate (vedi MusicXMLPart). Stesso ordine del file. */
+  parts: MusicXMLPart[];
 };
 
 const NOTE_PC_BY_LETTER: Record<string, number> = {
@@ -50,13 +70,38 @@ function getFirstNonEmpty(...vals: Array<string | undefined | null>): string {
   return '';
 }
 
+/**
+ * Alterazione EFFETTIVA dell'altezza, ricavata da `<alter>`.
+ *
+ * ATTENZIONE alla semantica del formato: `<alter>` è l'alterazione SUONATA, armatura
+ * compresa. Quindi in Fa maggiore un Si bemolle "di chiave" ha `<alter>-1</alter>` senza
+ * alcun segno stampato, mentre un Si BEQUADRO ha alter 0 (o assente) e in più
+ * `<accidental>natural</accidental>`. Restituire null per alter 0 (com'era) faceva perdere
+ * proprio il bequadro: la nota restava senza alterazione, l'app la rideduceva
+ * dall'armatura e il Si tornava BEMOLLE — cambiava l'altezza, non solo il segno.
+ */
 function accidentalFromAlter(alter: number): AccidentalType | null {
-  if (!Number.isFinite(alter) || alter === 0) return null;
+  if (!Number.isFinite(alter)) return null;
+  if (alter === 0) return 'natural';
   if (alter === 1) return 'sharp';
   if (alter === -1) return 'flat';
   if (alter === 2) return 'double-sharp';
   if (alter === -2) return 'double-flat';
   return null;
+}
+
+/** Segno STAMPATO (`<accidental>`): è la grafia voluta dal file, distinta dall'altezza. */
+const PRINTED_ACCIDENTAL: Record<string, AccidentalType> = {
+  'sharp': 'sharp',
+  'flat': 'flat',
+  'natural': 'natural',
+  'double-sharp': 'double-sharp',
+  'sharp-sharp': 'double-sharp',
+  'flat-flat': 'double-flat',
+  'double-flat': 'double-flat',
+};
+function accidentalFromPrinted(text: string): AccidentalType | null {
+  return PRINTED_ACCIDENTAL[String(text || '').trim().toLowerCase()] ?? null;
 }
 
 function noteDurationFromType(type: string): NoteDuration | null {
@@ -103,6 +148,45 @@ function inferDurationFromBeats(beats: number): { duration: NoteDuration; dotted
     }
   }
   return best;
+}
+
+/**
+ * Dinamiche → velocity MIDI.
+ *
+ * Serve per il VOLUME di riproduzione: nell'app una nota SENZA velocity suona a volume
+ * PIENO (1.0), mentre tutto ciò che arriva dal MIDI o esce dall'export sta su una nominale
+ * di 88 (≈ 0.67). Importare senza velocity metteva quindi il materiale MusicXML ~3,5 dB
+ * sopra tutto il resto — con quattro voci simultanee e nessun limitatore sul master, è
+ * saturazione all'attacco di ogni nota. Il MusicXML le dinamiche ce le ha: usiamole.
+ *
+ * `<sound dynamics="X"/>` è la fonte precisa (X è una percentuale in cui 100 = velocity 90,
+ * per specifica); `<dynamics><p/></dynamics>` è il segno grafico, mappato ai valori d'uso.
+ */
+const DEFAULT_VELOCITY = 88; // nominale dell'app per le note senza dinamica (vedi midiWriter)
+
+const DYNAMIC_MARK_VELOCITY: Record<string, number> = {
+  pppp: 10, ppp: 16, pp: 33, p: 49, mp: 64,
+  mf: 80, f: 96, ff: 112, fff: 126, ffff: 127,
+  fp: 96, sf: 96, sfz: 112, sffz: 112, sfp: 96, rf: 96, rfz: 96, fz: 112,
+};
+
+/** Legge la dinamica da un <direction> (o da un <sound> nudo). null = non ne porta. */
+function velocityFromDirection(el: Element): number | null {
+  const sound = el.tagName === 'sound' ? el : el.querySelector('sound[dynamics]');
+  const raw = sound?.getAttribute('dynamics');
+  if (raw != null) {
+    const pct = Number.parseFloat(raw);
+    // Specifica MusicXML: dynamics="100" ⇒ velocity 90.
+    if (Number.isFinite(pct) && pct > 0) return Math.max(1, Math.min(127, Math.round(90 * pct / 100)));
+  }
+  const dyn = el.querySelector('direction-type > dynamics');
+  if (dyn) {
+    for (const child of Array.from(dyn.children)) {
+      const v = DYNAMIC_MARK_VELOCITY[child.tagName.toLowerCase()];
+      if (v != null) return v;
+    }
+  }
+  return null;
 }
 
 function clefFromMusicXML(sign: string, line: number | null): ClefType {
@@ -219,15 +303,46 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   // Heuristic: if any note declares staff=2, assume grandstaff.
   let sawSecondStaff = false;
 
-  // Parse up to 4 parts (handles SATB as separate parts).
-  const partsToParse = parts.slice(0, 4);
+  // Le parti si LEGGONO tutte (l'import "come traccia" mette ogni parte sul suo rigo, e
+  // una partitura d'orchestra ne ha più di quattro), ma solo le prime 4 confluiscono nel
+  // corale: le 4 voci del SATB non possono ospitarne di più, e le altre finirebbero
+  // ammucchiate nel basso.
+  const MAX_SATB_PARTS = 4;
+  const partsToParse = parts;
+  const satbPartCount = Math.min(parts.length, MAX_SATB_PARTS);
 
   // Detect multi-part SATB: 3+ parts typically means S/A/T/B as individual parts
-  const isSeparateSATB = partsToParse.length >= 3;
+  const isSeparateSATB = satbPartCount >= 3;
+
+  // Nomi delle parti dalla <part-list> (indicizzati per id della <score-part>).
+  const partNameById = new Map<string, string>();
+  try {
+    for (const sp of Array.from(doc.querySelectorAll('part-list > score-part'))) {
+      const id = String(sp.getAttribute('id') || '').trim();
+      if (id) partNameById.set(id, textOf(sp.querySelector('part-name')));
+    }
+  } catch {
+    // ignore
+  }
+
+  const partsOut: MusicXMLPart[] = [];
 
   for (let partIndex = 0; partIndex < partsToParse.length; partIndex++) {
     const part = partsToParse[partIndex];
     const measures = Array.from(part.querySelectorAll(':scope > measure'));
+
+    // Accumulatore della parte (voci locali al rigo, vedi MusicXMLPart).
+    const partNotes: StaffNote[] = [];
+    let partSawSecondStaff = false;
+    let partFirstClef: ClefType | null = null;
+    // Le voci MusicXML del rigo (1,2… oppure 5,6 per il rigo sinistro pianistico)
+    // rimappate, nell'ordine in cui compaiono, sulla convenzione del "grand staff a voci"
+    // dell'app: rigo 1 → voci 1-2, rigo 2 → voci 3-4 (gambi 1/3 su, 2/4 giù). Max 2 voci
+    // per rigo, come nell'import MIDI: le eccedenti confluiscono nella seconda.
+    const localVoiceByStaff = new Map<number, Map<number, 1 | 2 | 3 | 4>>();
+
+    // Dinamica corrente della parte (si porta avanti fino al segno successivo).
+    let currentVelocity = DEFAULT_VELOCITY;
 
     // Score cursor at measure granularity (ticks). We derive it from timeSignature changes.
     // Inside each measure we position notes by their MusicXML position in divisions.
@@ -252,8 +367,10 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
             if (!didSetTime) {
               timeSignature = nextTs;
               didSetTime = true;
-            } else {
-              // Only record if changed vs last known
+            } else if (!timeSignatureChanges.some(c => c.measureIndex === measureIndex)) {
+              // Only record if changed vs last known. La guardia sul measureIndex serve
+              // perché le parti si leggono una dopo l'altra e ognuna ripercorre le STESSE
+              // battute: senza, un corale a 4 parti registrava ogni cambio di tempo 4 volte.
               const last = (timeSignatureChanges.length > 0)
                 ? timeSignatureChanges[timeSignatureChanges.length - 1]
                 : null;
@@ -340,6 +457,11 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           lastChordStartDiv = null;
           continue;
         }
+        if (tag === 'direction' || tag === 'sound') {
+          const v = velocityFromDirection(child);
+          if (v != null) currentVelocity = v;
+          continue;
+        }
         if (tag !== 'note') continue;
 
         const noteEl = child;
@@ -358,7 +480,8 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         const voiceRaw = intOf(noteEl.querySelector('voice')) ?? 1;
         const staffRaw = intOf(noteEl.querySelector('staff')) ?? 1;
         const staff = (Number.isFinite(staffRaw) && staffRaw > 0) ? staffRaw : 1;
-        if (staff >= 2) sawSecondStaff = true;
+        // Solo le parti che finiscono nel corale decidono se il progetto è a grand staff.
+        if (staff >= 2 && partIndex < MAX_SATB_PARTS) sawSecondStaff = true;
 
         const clef: ClefType = clefByStaff.get(staff) || (
           isSeparateSATB
@@ -439,7 +562,16 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         const startTick = measureStartTick + Math.round(startBeats * TICKS_PER_QUARTER);
         const durationTicks = Math.max(1, Math.round(durationBeats * TICKS_PER_QUARTER));
 
+        // Alterazione EFFETTIVA (per l'altezza) e segno STAMPATO (per la grafia) sono
+        // due cose diverse e vanno tenute separate:
+        //  · `accidental` descrive l'altezza reale — serve all'app per non ricalcolare
+        //    la nota dall'armatura e cambiarla (è così che il Si bequadro tornava bemolle);
+        //  · `explicitAccidental`/`userAccidental` sono il SEGNO da disegnare, e si
+        //    scrivono solo se il file lo stampa davvero. Se il file NON stampa nulla
+        //    (il Si bemolle "di chiave" in Fa maggiore), lasciandoli vuoti l'app disegna
+        //    secondo l'armatura, senza alterazioni ridondanti su ogni nota.
         const accidental = accidentalFromAlter(alter);
+        const printedAccidental = accidentalFromPrinted(textOf(noteEl.querySelector('accidental')));
 
         const chordId = `mx-chord-${partIndex}-${measureIndex}-${startDiv}-${staff}-${voice}`;
 
@@ -451,8 +583,8 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           pitch: isRest ? 'C' : (letter || 'C'),
           octave,
           accidental: accidental ?? undefined,
-          explicitAccidental: accidental ?? undefined,
-          userAccidental: accidental ?? undefined,
+          explicitAccidental: printedAccidental ?? undefined,
+          userAccidental: printedAccidental ?? undefined,
           position,
           midi,
           noteIndex,
@@ -470,9 +602,23 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           durationTicks,
           clef,
           voice,
+          // Le pause non suonano: la velocity resta solo sulle note.
+          ...(isRest ? {} : { velocity: currentVelocity }),
         };
 
-        notes.push(staffNote);
+        if (partIndex < MAX_SATB_PARTS) notes.push(staffNote);
+
+        // Copia per la parte: stessa nota, ma numerata sulle voci del SUO rigo.
+        if (staff >= 2) partSawSecondStaff = true;
+        else if (partFirstClef == null) partFirstClef = clef;
+        let staffVoices = localVoiceByStaff.get(staff);
+        if (!staffVoices) { staffVoices = new Map(); localVoiceByStaff.set(staff, staffVoices); }
+        let localVoice = staffVoices.get(voiceRaw);
+        if (localVoice == null) {
+          localVoice = (staffVoices.size === 0 ? 1 : 2) + (staff >= 2 ? 2 : 0) as 1 | 2 | 3 | 4;
+          staffVoices.set(voiceRaw, localVoice);
+        }
+        partNotes.push({ ...staffNote, id: makeId(), voice: localVoice });
 
         if (!isChord) {
           curPosDiv += durDiv;
@@ -484,9 +630,25 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         }
       }
     }
+
+    partNotes.sort((a, b) => {
+      const stA = Number((a as any).startTick ?? 0);
+      const stB = Number((b as any).startTick ?? 0);
+      if (stA !== stB) return stA - stB;
+      if ((a.voice ?? 1) !== (b.voice ?? 1)) return (a.voice ?? 1) - (b.voice ?? 1);
+      return (a.midi ?? 0) - (b.midi ?? 0);
+    });
+    const partId = String(part.getAttribute('id') || '').trim();
+    partsOut.push({
+      id: partId || `part-${partIndex + 1}`,
+      name: (partId ? (partNameById.get(partId) || '') : '').trim(),
+      notes: partNotes,
+      hasSecondStaff: partSawSecondStaff,
+      clef: partFirstClef || 'treble',
+    });
   }
 
-  const staffSystemMode: MusicXMLImportResult['staffSystemMode'] = (isSeparateSATB || partsToParse.length >= 2 || sawSecondStaff)
+  const staffSystemMode: MusicXMLImportResult['staffSystemMode'] = (isSeparateSATB || satbPartCount >= 2 || sawSecondStaff)
     ? 'grandstaff'
     : 'treble_only';
 
@@ -507,5 +669,6 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     isMinorMode,
     staffSystemMode,
     projectTitle: title || undefined,
+    parts: partsOut,
   };
 }
