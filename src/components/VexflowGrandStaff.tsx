@@ -746,9 +746,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   const drawSignature = (() => {
     try {
       const idSet = new Set(notes.map(n => n.id));
-      const localSelected = (selectedNoteIds || []).filter(id => idSet.has(id));
+      // Le note di ACCOMPAGNAMENTO sono disegnate da questo stesso effetto e la
+      // selezione le colora leggendo `selectedNoteIds` — quindi devono entrare nella
+      // firma esattamente come quelle del SATB. Restringendo la selezione ai soli id
+      // del SATB, selezionare una nota ACC non cambiava la firma: nessun ridisegno,
+      // la nota non si evidenziava e la traccia sembrava non selezionabile.
+      const accIdSet = new Set((accompanimentNotes ?? []).map(n => n.id));
+      const localSelected = (selectedNoteIds || []).filter(id => idSet.has(id) || accIdSet.has(id));
       const localMotif: Record<string, { fill: string; stroke: string }> = {};
-      if (motifStyleById) for (const n of notes) { const s = motifStyleById[n.id]; if (s) localMotif[n.id] = s; }
+      if (motifStyleById) {
+        for (const n of notes) { const s = motifStyleById[n.id]; if (s) localMotif[n.id] = s; }
+        // Idem per l'accompagnamento: i motivi si colorano anche sulle tracce ACC
+        // quando il soggetto dell'analisi è una traccia.
+        for (const n of (accompanimentNotes ?? [])) { const s = motifStyleById[n.id]; if (s) localMotif[n.id] = s; }
+      }
       return JSON.stringify([
         notes, localSelected, ghostNote ?? null, accompanimentNotes ?? null,
         accompanimentTracks ?? null, localMotif, drumPalettes ?? null,
@@ -1251,6 +1262,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Chord-merge happens PER VOICE (so different voices keep separate stems),
         // and the SATB-specific cross-voice close-position merges are disabled.
         isVoicedAcc: boolean = false,
+        // Vero quando si sta disegnando un rigo di ACCOMPAGNAMENTO. Serve a spegnere le
+        // regole d'incisione che ragionano sulle QUATTRO VOCI DEL CORALE: quelle leggono
+        // `allNotes`, che contiene le note del SATB e non quelle della traccia, e su un
+        // rigo ACC prenderebbero decisioni basate su note che stanno su un ALTRO rigo.
+        isAccompaniment: boolean = false,
       ) => {
         const prepared: Array<{
           staffNote: StaffNote;
@@ -2133,6 +2149,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
 
         const restLineOverrideById = new Map<string, number>();
+        // Righi di ACCOMPAGNAMENTO: pause DENTRO il proprio rigo, con la convenzione a due
+        // voci (prima voce nella metà alta, seconda nella metà bassa). Le regole del corale
+        // mandano invece la voce 2 SOTTO il rigo e non prevedono affatto le voci 1-2 in
+        // chiave di basso: su una traccia si vedevano pause fuori posto o accavallate.
+        if (isAccompaniment) {
+          for (const sn of staffNotes) {
+            if (!sn?.isRest || sn.id === '__ghost__') continue;
+            const v = Number(sn.voice ?? 1);
+            restLineOverrideById.set(sn.id, (v === 2 || v === 4) ? 1 : 3);
+          }
+        }
         const isClosePositionTreble = staffMode === 'grandstaff' && clef === 'treble' && staffNotes.some(sn => Number(sn?.voice ?? 0) === 3);
         const linePx = (() => {
           try {
@@ -2283,7 +2310,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             }
 
             // --- Rest collision avoidance for all adjacent voice pairs (parti late & strette) ---
-            if (isPartiLate || isPartiStrette) {
+            // SOLO SATB: le note candidate vengono da `allNotes` (il corale) e la loro Y è
+            // calcolata sui righi del corale. Applicandola a un rigo di accompagnamento, una
+            // pausa veniva confrontata con una nota del SATB che attacca nello stesso momento
+            // e spinta verso di essa fino a "liberarla" — cioè trascinata su, dentro al grand
+            // staff del SATB, sparendo dal suo rigo. È il difetto della pausa "trasferita".
+            if (!isAccompaniment && (isPartiLate || isPartiStrette)) {
               const adjVoices = getAdjacentVoices(voice, clef);
               if (adjVoices.length > 0) {
                 // Find all non-rest notes from adjacent voices that overlap in time.
@@ -3776,8 +3808,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             };
             const tn = trackNotes.filter(n => effClef(n) === 'treble');
             const bn = trackNotes.filter(n => effClef(n) === 'bass');
-            if (tn.length > 0) drawNotesAtX(tn, block.treble, 'treble', !!block.voiced);
-            if (bn.length > 0) drawNotesAtX(bn, block.bass, 'bass', !!block.voiced);
+            if (tn.length > 0) drawNotesAtX(tn, block.treble, 'treble', !!block.voiced, true);
+            if (bn.length > 0) drawNotesAtX(bn, block.bass, 'bass', !!block.voiced, true);
           } else if (block.isDrum) {
             // Batteria a 2 voci: ogni pezzo va in voce 1 (mani → gambi su) o voce 2
             // (piedi → gambi giù), così i gambi sono coerenti e i due layer si travano
@@ -3791,12 +3823,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               const dv = (v === 1 || v === 2) ? v : drumPieceVoice(Number((n as any).midi));
               return { ...n, clef: block.clef, __drumKit: block.drumKit, voice: dv } as any;
             });
-            drawNotesAtX(single, block.treble, block.clef, true);
+            drawNotesAtX(single, block.treble, block.clef, true, true);
           } else {
             // single staff: position all notes by the block's clef. Per la batteria taggo
             // ogni nota col KIT del blocco, così le posizioni sul rigo seguono la mappa giusta.
             const single = trackNotes.map(n => ({ ...n, clef: block.clef, __drumKit: block.drumKit } as any));
-            drawNotesAtX(single, block.treble, block.clef);
+            drawNotesAtX(single, block.treble, block.clef, false, true);
           }
         }
         // ACC hit-points are preserved to enable click and marquee selection.
