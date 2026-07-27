@@ -6265,6 +6265,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isMinorMode,
                 keySignatureRoot,
                 harmonyLabels,
+                satbName,
+                // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
+                // traccia di accompagnamento veniva esportato in un file vuoto.
+                accompanimentTracks: (accompanimentTracks || []).map(t => ({
+                    name: t.name,
+                    notes: t.notes || [],
+                    staffMode: t.staffMode,
+                    clef: t.clef,
+                    isDrum: !!(t as any).isDrum,
+                })),
             };
 
             if (choice.mode === 'standard') {

@@ -3,7 +3,7 @@
  *
  * Produces a valid MusicXML file compatible with MuseScore, Finale, Sibelius, etc.
  */
-import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration } from '../types';
+import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -35,6 +35,17 @@ export interface ExportMusicXMLOptions {
   /** Analisi armonica opzionale: serializzata come <direction>(romano) + <figured-bass>(cifre).
    *  Non modifica la serializzazione delle note. */
   harmonyLabels?: HarmonyExportLabel[];
+  /** Nome della parte del coro nella <part-list> (default "Piano"). */
+  satbName?: string;
+  /** TRACCE DI ACCOMPAGNAMENTO: ognuna diventa una <part> a sé. Senza, un brano scritto
+   *  su una traccia veniva esportato in un file vuoto (usciva solo il coro). */
+  accompanimentTracks?: Array<{
+    name?: string;
+    notes: StaffNote[];
+    staffMode?: 'grandstaff' | 'treble_only';
+    clef?: ClefType;
+    isDrum?: boolean;
+  }>;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -123,6 +134,9 @@ function emitNote(
   voiceNum: number,
   staffNum: number,
   isFirst: boolean,
+  /** Percussioni: MusicXML vuole <unpitched> (altezza non intonata). La posizione sul
+   *  rigo è convenzionale — il valore ritmico è quello che conta. */
+  unpitched?: boolean,
 ): void {
   const dur = note.duration || 'quarter';
   const durationTicks = getNoteDurationTicks(note);
@@ -137,6 +151,11 @@ function emitNote(
 
   if (note.isRest) {
     w('        <rest/>');
+  } else if (unpitched) {
+    w('        <unpitched>');
+    w(`          <display-step>${(note.pitch || 'B').toUpperCase()}</display-step>`);
+    w(`          <display-octave>${note.octave ?? 4}</display-octave>`);
+    w('        </unpitched>');
   } else {
     const step = (note.pitch || 'C').toUpperCase();
     const octave = note.octave ?? 4;
@@ -263,17 +282,73 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     return measureStartCache[m];
   };
 
-  // Group notes by measure
-  const notesByMeasure = new Map<number, StaffNote[]>();
-  for (const n of notes) {
-    if (n.isRest && !n.duration) continue;
-    const m = n.measureIndex ?? 0;
-    if (!notesByMeasure.has(m)) notesByMeasure.set(m, []);
-    notesByMeasure.get(m)!.push(n);
-  }
+  // ── PARTI ──────────────────────────────────────────────────────────────────
+  // Prima l'export scriveva UNA sola parte, quella del coro: un brano scritto su una
+  // traccia di accompagnamento usciva in un file vuoto. Ora ogni traccia diventa una
+  // <part> a sé, col suo nome, i suoi righi e la sua chiave.
+  type PartCfg = {
+    id: string;
+    name: string;
+    notes: StaffNote[];
+    staves: 1 | 2;
+    clefs: Array<{ number: number; sign: string; line: number }>;
+    /** Su quale rigo della parte va la nota (0 = primo, 1 = secondo). */
+    staffOf: (n: StaffNote) => 0 | 1;
+    /** Solo il coro porta l'analisi (romani + basso figurato). */
+    withHarmony: boolean;
+    /** Percussioni: altezze non intonate (<unpitched>), la posizione è convenzionale. */
+    unpitched?: boolean;
+  };
+
+  const CLEF_XML: Record<string, { sign: string; line: number }> = {
+    treble: { sign: 'G', line: 2 },
+    bass: { sign: 'F', line: 4 },
+    alto: { sign: 'C', line: 3 },
+    tenor: { sign: 'C', line: 4 },
+    soprano: { sign: 'C', line: 1 },
+    percussion: { sign: 'percussion', line: 3 },
+  };
+
+  const parts: PartCfg[] = [{
+    id: 'P1',
+    name: (opts.satbName || '').trim() || 'Piano',
+    notes,
+    staves: 2,
+    clefs: [{ number: 1, sign: 'G', line: 2 }, { number: 2, sign: 'F', line: 4 }],
+    // Coro: voci 1-2 sul rigo acuto, 3-4 sul grave (o la chiave della nota, se presente).
+    staffOf: (n) => (((n.clefOverride || n.clef || ((n.voice ?? 1) <= 2 ? 'treble' : 'bass')) === 'bass') ? 1 : 0),
+    withHarmony: true,
+  }];
+
+  (opts.accompanimentTracks || []).forEach((t, i) => {
+    const tNotes = (t?.notes || []).filter(Boolean);
+    if (tNotes.length === 0) return;
+    const isDrum = !!t.isDrum;
+    const grand = !isDrum && ((t.staffMode ?? 'grandstaff') === 'grandstaff');
+    const single = CLEF_XML[String(isDrum ? 'percussion' : (t.clef || 'treble'))] || CLEF_XML.treble;
+    parts.push({
+      id: `P${parts.length + 1}`,
+      name: (t.name || '').trim() || `Traccia ${i + 1}`,
+      notes: tNotes,
+      staves: grand ? 2 : 1,
+      clefs: grand
+        ? [{ number: 1, sign: 'G', line: 2 }, { number: 2, sign: 'F', line: 4 }]
+        : [{ number: 1, sign: single.sign, line: single.line }],
+      staffOf: grand ? ((n) => (n.clef === 'bass' ? 1 : 0)) : (() => 0),
+      withHarmony: false,
+      unpitched: isDrum,
+    });
+  });
+
+  // Una parte VUOTA non va scritta (comparirebbe un rigo vuoto in chi apre il file):
+  // si tiene solo se non c'è nient'altro, perché un MusicXML senza parti non è valido.
+  // Gli id vengono rinumerati dopo lo scarto, così restano coerenti con la <part-list>.
+  const nonEmpty = parts.filter(p => p.notes.some(n => !n.isRest));
+  const finalParts = (nonEmpty.length > 0 ? nonEmpty : parts.slice(0, 1))
+    .map((p, i) => ({ ...p, id: `P${i + 1}` }));
 
   // Armonia per misura → { localTick → {roman, figures} }. localTick calcolato con la
-  // STESSA convenzione delle note (tick − m·numerator·DIVISIONS) così coincide con gli onset.
+  // STESSA convenzione delle note (tick − inizio battuta) così coincide con gli onset.
   const harmonyByMeasure = new Map<number, Map<number, { roman?: string; figures?: string[] }>>();
   for (const h of harmonyLabels) {
     const mi = h.measureIndex ?? 0;
@@ -286,9 +361,13 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     });
   }
 
+  // Le parti di un file MusicXML devono avere le STESSE battute: l'estensione è quella
+  // del materiale più lungo, coro o traccia che sia.
+  const measuresOf = (ns: StaffNote[]): number =>
+    ns.reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex as number) ? Number(n.measureIndex) : 0), 0);
   const maxMeasure = opts.totalMeasures
     ? opts.totalMeasures - 1
-    : Math.max(0, ...notesByMeasure.keys());
+    : finalParts.reduce((mx, p) => Math.max(mx, measuresOf(p.notes)), 0);
 
   const fifths = computeFifths(keySignature, keySignatureRoot);
   const mode = isMinorMode ? 'minor' : 'major';
@@ -313,174 +392,169 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
   w('    </encoding>');
   w('  </identification>');
 
-  // Part list — two staves (treble + bass) in one part
   w('  <part-list>');
-  w('    <score-part id="P1">');
-  w('      <part-name>Piano</part-name>');
-  w('    </score-part>');
+  for (const p of finalParts) {
+    w(`    <score-part id="${p.id}">`);
+    w(`      <part-name>${escapeXml(p.name)}</part-name>`);
+    w('    </score-part>');
+  }
   w('  </part-list>');
 
-  w('  <part id="P1">');
-
-  for (let m = 0; m <= maxMeasure; m++) {
-    w(`    <measure number="${m + 1}">`);
-
-    // Attributes on first measure (or when time sig changes)
-    if (m === 0) {
-      w('      <attributes>');
-      w(`        <divisions>${DIVISIONS}</divisions>`);
-      w('        <key>');
-      w(`          <fifths>${fifths}</fifths>`);
-      w(`          <mode>${mode}</mode>`);
-      w('        </key>');
-      w('        <time>');
-      w(`          <beats>${timeSignature.numerator}</beats>`);
-      w(`          <beat-type>${timeSignature.denominator}</beat-type>`);
-      w('        </time>');
-      w('        <staves>2</staves>');
-      w('        <clef number="1">');
-      w('          <sign>G</sign>');
-      w('          <line>2</line>');
-      w('        </clef>');
-      w('        <clef number="2">');
-      w('          <sign>F</sign>');
-      w('          <line>4</line>');
-      w('        </clef>');
-      w('      </attributes>');
-    } else if (measureLenTicks(m) !== measureLenTicks(m - 1)
-      || tsAtMeasure(m).numerator !== tsAtMeasure(m - 1).numerator
-      || tsAtMeasure(m).denominator !== tsAtMeasure(m - 1).denominator) {
-      // CAMBIO DI METRO: va dichiarato nella battuta in cui entra in vigore, altrimenti
-      // il file resta nel metro iniziale e chi lo rilegge divide le battute sbagliate.
-      const ts = tsAtMeasure(m);
-      w('      <attributes>');
-      w('        <time>');
-      w(`          <beats>${ts.numerator}</beats>`);
-      w(`          <beat-type>${ts.denominator}</beat-type>`);
-      w('        </time>');
-      w('      </attributes>');
+  for (const part of finalParts) {
+    // Note della parte raggruppate per misura.
+    const notesByMeasure = new Map<number, StaffNote[]>();
+    for (const n of part.notes) {
+      if (n.isRest && !n.duration) continue;
+      const m = n.measureIndex ?? 0;
+      if (!notesByMeasure.has(m)) notesByMeasure.set(m, []);
+      notesByMeasure.get(m)!.push(n);
     }
 
-    const measureNotes = notesByMeasure.get(m) || [];
-    const measureTotalTicks = measureLenTicks(m);
+    w(`  <part id="${part.id}">`);
 
-    // Armonia di questa misura, agganciata per localTick (onset). Ogni etichetta emessa
-    // UNA sola volta: il romano sul rigo acuto, le cifre sul rigo grave.
-    const hMap = harmonyByMeasure.get(m);
-    const emittedRoman = new Set<number>();
-    const emittedFig = new Set<number>();
+    for (let m = 0; m <= maxMeasure; m++) {
+      w(`    <measure number="${m + 1}">`);
 
-    // Separate notes into staff 1 (treble: voices 1,2) and staff 2 (bass: voices 3,4)
-    const staffNotes: [StaffNote[], StaffNote[]] = [[], []];
-    for (const n of measureNotes) {
-      const v = n.voice ?? 1;
-      const clef = n.clefOverride || n.clef || (v <= 2 ? 'treble' : 'bass');
-      const staffIdx = clef === 'bass' ? 1 : 0;
-      staffNotes[staffIdx].push(n);
-    }
-
-    let needsBackup = false; // track whether we need <backup> before the next voice stream
-
-    // Write each staff, voice by voice
-    for (let staffIdx = 0; staffIdx < 2; staffIdx++) {
-      const sNotes = staffNotes[staffIdx];
-      const staffNum = staffIdx + 1;
-      if (sNotes.length === 0 && staffIdx === 1) continue;
-
-      // Group by voice
-      const voiceGroups = new Map<number, StaffNote[]>();
-      for (const n of sNotes) {
-        const v = n.voice ?? (staffIdx === 0 ? 1 : 3);
-        if (!voiceGroups.has(v)) voiceGroups.set(v, []);
-        voiceGroups.get(v)!.push(n);
+      if (m === 0) {
+        w('      <attributes>');
+        w(`        <divisions>${DIVISIONS}</divisions>`);
+        w('        <key>');
+        w(`          <fifths>${fifths}</fifths>`);
+        w(`          <mode>${mode}</mode>`);
+        w('        </key>');
+        w('        <time>');
+        w(`          <beats>${timeSignature.numerator}</beats>`);
+        w(`          <beat-type>${timeSignature.denominator}</beat-type>`);
+        w('        </time>');
+        if (part.staves > 1) w(`        <staves>${part.staves}</staves>`);
+        for (const c of part.clefs) {
+          w(`        <clef number="${c.number}">`);
+          w(`          <sign>${c.sign}</sign>`);
+          w(`          <line>${c.line}</line>`);
+          w('        </clef>');
+        }
+        w('      </attributes>');
+      } else if (measureLenTicks(m) !== measureLenTicks(m - 1)
+        || tsAtMeasure(m).numerator !== tsAtMeasure(m - 1).numerator
+        || tsAtMeasure(m).denominator !== tsAtMeasure(m - 1).denominator) {
+        // CAMBIO DI METRO: va dichiarato nella battuta in cui entra in vigore, altrimenti
+        // il file resta nel metro iniziale e chi lo rilegge divide le battute sbagliate.
+        const ts = tsAtMeasure(m);
+        w('      <attributes>');
+        w('        <time>');
+        w(`          <beats>${ts.numerator}</beats>`);
+        w(`          <beat-type>${ts.denominator}</beat-type>`);
+        w('        </time>');
+        w('      </attributes>');
       }
 
-      // Sort voices
-      const sortedVoices = [...voiceGroups.keys()].sort((a, b) => a - b);
+      const measureNotes = notesByMeasure.get(m) || [];
+      const measureTotalTicks = measureLenTicks(m);
 
-      for (const voiceNum of sortedVoices) {
-        const voiceNotes = voiceGroups.get(voiceNum)!;
+      // Armonia di questa misura, agganciata per localTick (onset). Ogni etichetta emessa
+      // UNA sola volta: il romano sul rigo acuto, le cifre sul rigo grave.
+      const hMap = part.withHarmony ? harmonyByMeasure.get(m) : undefined;
+      const emittedRoman = new Set<number>();
+      const emittedFig = new Set<number>();
 
-        // Sort notes by onset tick
-        voiceNotes.sort((a, b) => {
-          const ta = a.startTick ?? ((a.beat ?? 1) - 1) * DIVISIONS;
-          const tb = b.startTick ?? ((b.beat ?? 1) - 1) * DIVISIONS;
-          return ta - tb;
-        });
+      // Note divise per rigo della parte.
+      const staffNotes: StaffNote[][] = part.staves === 2 ? [[], []] : [[]];
+      for (const n of measureNotes) {
+        const idx = part.staves === 2 ? part.staffOf(n) : 0;
+        staffNotes[idx].push(n);
+      }
 
-        // <backup> to the start of the measure before each new voice stream
-        if (needsBackup) {
-          w('      <backup>');
-          w(`        <duration>${measureTotalTicks}</duration>`);
-          w('      </backup>');
+      let needsBackup = false; // serve un <backup> prima del prossimo flusso di voce?
+
+      for (let staffIdx = 0; staffIdx < staffNotes.length; staffIdx++) {
+        const sNotes = staffNotes[staffIdx];
+        const staffNum = staffIdx + 1;
+        if (sNotes.length === 0 && staffIdx > 0) continue;
+
+        const voiceGroups = new Map<number, StaffNote[]>();
+        for (const n of sNotes) {
+          const v = n.voice ?? (staffIdx === 0 ? 1 : 3);
+          if (!voiceGroups.has(v)) voiceGroups.set(v, []);
+          voiceGroups.get(v)!.push(n);
         }
 
-        // Group by onset tick within this voice (for real chords: same voice, same tick)
-        const onsets = new Map<number, StaffNote[]>();
-        for (const n of voiceNotes) {
-          const tick = n.startTick ?? ((n.beat ?? 1) - 1) * DIVISIONS;
-          const localTick = tick - measureStartTicks(m);
-          if (!onsets.has(localTick)) onsets.set(localTick, []);
-          onsets.get(localTick)!.push(n);
-        }
+        const sortedVoices = [...voiceGroups.keys()].sort((a, b) => a - b);
 
-        const sortedOnsets = [...onsets.entries()].sort((a, b) => a[0] - b[0]);
+        for (const voiceNum of sortedVoices) {
+          const voiceNotes = voiceGroups.get(voiceNum)!;
 
-        let currentTick = 0;
-        for (const [onsetTick, chordNotes] of sortedOnsets) {
-          // Forward rest if there's a gap
-          if (onsetTick > currentTick) {
-            const gap = onsetTick - currentTick;
-            w('      <forward>');
-            w(`        <duration>${gap}</duration>`);
-            w(`        <voice>${voiceNum}</voice>`);
-            w(`        <staff>${staffNum}</staff>`);
-            w('      </forward>');
-            currentTick = onsetTick;
+          voiceNotes.sort((a, b) => {
+            const ta = a.startTick ?? ((a.beat ?? 1) - 1) * DIVISIONS;
+            const tb = b.startTick ?? ((b.beat ?? 1) - 1) * DIVISIONS;
+            return ta - tb;
+          });
+
+          if (needsBackup) {
+            w('      <backup>');
+            w(`        <duration>${measureTotalTicks}</duration>`);
+            w('      </backup>');
           }
 
-          // Armonia PRIMA della nota a questo onset (non consuma durata).
-          if (hMap) {
-            if (staffIdx === 0 && !emittedRoman.has(onsetTick)) {
-              const roman = hMap.get(onsetTick)?.roman;
-              if (roman) { emitHarmonyDirection(w, roman, staffNum); emittedRoman.add(onsetTick); }
+          const onsets = new Map<number, StaffNote[]>();
+          for (const n of voiceNotes) {
+            const tick = n.startTick ?? ((n.beat ?? 1) - 1) * DIVISIONS;
+            const localTick = tick - measureStartTicks(m);
+            if (!onsets.has(localTick)) onsets.set(localTick, []);
+            onsets.get(localTick)!.push(n);
+          }
+
+          const sortedOnsets = [...onsets.entries()].sort((a, b) => a[0] - b[0]);
+
+          let currentTick = 0;
+          for (const [onsetTick, chordNotes] of sortedOnsets) {
+            if (onsetTick > currentTick) {
+              const gap = onsetTick - currentTick;
+              w('      <forward>');
+              w(`        <duration>${gap}</duration>`);
+              w(`        <voice>${voiceNum}</voice>`);
+              w(`        <staff>${staffNum}</staff>`);
+              w('      </forward>');
+              currentTick = onsetTick;
             }
-            if (staffIdx === 1 && !emittedFig.has(onsetTick)) {
-              const figures = hMap.get(onsetTick)?.figures;
-              if (figures && figures.length) { emitFiguredBass(w, figures); emittedFig.add(onsetTick); }
+
+            if (hMap) {
+              if (staffIdx === 0 && !emittedRoman.has(onsetTick)) {
+                const roman = hMap.get(onsetTick)?.roman;
+                if (roman) { emitHarmonyDirection(w, roman, staffNum); emittedRoman.add(onsetTick); }
+              }
+              if (staffIdx === 1 && !emittedFig.has(onsetTick)) {
+                const figures = hMap.get(onsetTick)?.figures;
+                if (figures && figures.length) { emitFiguredBass(w, figures); emittedFig.add(onsetTick); }
+              }
             }
+
+            let isFirstInChord = true;
+            for (const note of chordNotes) {
+              emitNote(w, note, voiceNum, staffNum, isFirstInChord, part.unpitched);
+              isFirstInChord = false;
+            }
+
+            currentTick = onsetTick + getNoteDurationTicks(chordNotes[0]);
           }
 
-          let isFirstInChord = true;
-          for (const note of chordNotes) {
-            emitNote(w, note, voiceNum, staffNum, isFirstInChord);
-            isFirstInChord = false;
-          }
-
-          // Advance current tick (use first note's duration)
-          currentTick = onsetTick + getNoteDurationTicks(chordNotes[0]);
+          needsBackup = true;
         }
 
-        needsBackup = true;
+        if (sNotes.length === 0) needsBackup = true;
       }
 
-      // If staff 1 had no notes but we still need to emit staff 2
-      if (sNotes.length === 0) {
-        needsBackup = true;
+      if (m === maxMeasure) {
+        w('      <barline location="right">');
+        w('        <bar-style>light-heavy</bar-style>');
+        w('      </barline>');
       }
+
+      w('    </measure>');
     }
 
-    // Barline on last measure
-    if (m === maxMeasure) {
-      w('      <barline location="right">');
-      w('        <bar-style>light-heavy</bar-style>');
-      w('      </barline>');
-    }
-
-    w('    </measure>');
+    w('  </part>');
   }
 
-  w('  </part>');
   w('</score-partwise>');
 
   return lines.join('\n');
