@@ -37,6 +37,9 @@ const App: React.FC = () => {
         }).catch(() => {
             // errore silenziato
         });
+        // Diagnostica del sincronismo, da console: `__htAudioLate()` mostra quante note
+        // sono state consegnate in ritardo al motore audio (con `true` azzera il conto).
+        try { (window as any).__htAudioLate = (reset?: boolean) => AudioService.readLateness(!!reset); } catch { /* ignore */ }
     }, []);
 
     // Native menu integration (Electron): allow switching app mode from "Vista".

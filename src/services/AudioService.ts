@@ -158,6 +158,41 @@ export interface SustainHandle {
 }
 
 export class AudioService {
+  /**
+   * DIAGNOSTICA DEL SINCRONISMO — quante note vengono consegnate in ritardo.
+   *
+   * Ogni nota viene programmata con un istante (`when`); se quando la si consegna quel
+   * momento è già passato, Web Audio la fa partire SUBITO. Poche note in ritardo si
+   * sentono come un'esecuzione che "zoppica". Qui si contano senza toccare l'audio.
+   * In console: `window.__htAudioLate()` per il riepilogo, `window.__htAudioLate(true)`
+   * per azzerare e ricominciare la misura.
+   */
+  private static lateStats = { total: 0, late: 0, sumLateMs: 0, maxLateMs: 0, firstLateAt: null as number | null, lastLateAt: null as number | null };
+  public static recordLateness(lateMs: number, whenSec: number): void {
+    const s = AudioService.lateStats;
+    s.total++;
+    if (lateMs > 1) {
+      s.late++;
+      s.sumLateMs += lateMs;
+      if (lateMs > s.maxLateMs) s.maxLateMs = lateMs;
+      if (s.firstLateAt == null) s.firstLateAt = whenSec;
+      s.lastLateAt = whenSec;
+    }
+  }
+  public static readLateness(reset = false) {
+    const s = AudioService.lateStats;
+    const out = {
+      note_totali: s.total,
+      note_in_ritardo: s.late,
+      ritardo_medio_ms: s.late ? Math.round((s.sumLateMs / s.late) * 10) / 10 : 0,
+      ritardo_massimo_ms: Math.round(s.maxLateMs * 10) / 10,
+      primo_ritardo_a_sec: s.firstLateAt,
+      ultimo_ritardo_a_sec: s.lastLateAt,
+    };
+    if (reset) AudioService.lateStats = { total: 0, late: 0, sumLateMs: 0, maxLateMs: 0, firstLateAt: null, lastLateAt: null };
+    return out;
+  }
+
   public audioContext: AudioContext | null = null;
   private audioBuffers: Map<string, AudioBuffer> = new Map();
   private activeSources: Set<AudioBufferSourceNode> = new Set();
@@ -184,7 +219,20 @@ export class AudioService {
 
     return new Promise(async (resolve, reject) => {
         try {
-            this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            // `latencyHint` = quanto audio il motore tiene pronto in avanti. Senza
+            // indicazione il browser sceglie 'interactive', cioè il buffer più PICCOLO
+            // possibile (pochi millisecondi): ottimo per la reattività, ma basta un
+            // singolo scatto del thread principale — e in questa app disegnare la
+            // partitura mentre scorre ne produce — perché il motore audio non faccia in
+            // tempo a riempire il buffer: il buco si sente come un raschio. Con ~50 ms di
+            // margine il suono attraversa indenne gli scatti di lavoro grafico; sul clic
+            // di ascolto di una nota il ritardo resta impercettibile.
+            const AudioCtor = (window.AudioContext || (window as any).webkitAudioContext);
+            try {
+                this.audioContext = new AudioCtor({ latencyHint: 0.05 });
+            } catch {
+                this.audioContext = new AudioCtor();
+            }
             await this.loadInitialSounds();
             resolve();
         } catch (error) {
@@ -466,6 +514,10 @@ export class AudioService {
       source.connect(gainNode);
     }
     const startTime = options?.when ?? this.audioContext.currentTime;
+    // DIAGNOSTICA (costo ~zero): quante note arrivano al motore audio DOPO l'istante in
+    // cui dovevano suonare. Web Audio, se l'istante è già passato, le fa partire SUBITO:
+    // è così che un'esecuzione "zoppica". Riepilogo in console: window.__htAudioLate().
+    AudioService.recordLateness((this.audioContext.currentTime - startTime) * 1000, startTime);
     const noteDurationInSeconds = options?.duration ?? audioBuffer.duration;
     // Coda di rilascio. Per gli strumenti SOSTENUTI (archi/fiati: corpo loopato, non
     // decadono) la coda fissa di 0.5s OLTRE la fine si accavalla con la nota successiva
@@ -598,6 +650,54 @@ export class AudioService {
     if (unique.length > 0) {
       await Promise.all(unique.map(f => this._loadInstrumentFile(instrument, f)));
     }
+  }
+
+  /**
+   * Precarica ESATTAMENTE i campioni che serviranno, velocity compresa.
+   *
+   * Gli strumenti a strati di velocity (il pianoforte Salamander: 6 strati per nota)
+   * risolvono il buffer come `{dir}/{nota}_v{strato}.mp3`, mentre `preloadNotesForInstrument`
+   * carica solo il campione a strato singolo: lo strato giusto finiva quindi per essere
+   * scaricato e decodificato DURANTE l'esecuzione, e la nota arrivava dopo il suo istante
+   * programmato — l'esecuzione "zoppicava" al primo passaggio e si puliva dal secondo o
+   * terzo in poi, quando ormai tutto era in cache.
+   *
+   * Si caricano le coppie (nota, strato) davvero usate: non il prodotto nota × strati.
+   */
+  public async preloadSamplesForInstrument(
+    instrument: string,
+    notes: Array<{ name: string; velocity?: number }>,
+    forceGm?: boolean,
+  ): Promise<void> {
+    if (!this.audioContext) return;
+    const names = [...new Set(notes.map(n => n.name))];
+    if (forceGm) {
+      // Banco GM: i buffer stanno sotto una chiave diversa (`gm::…`), quindi il
+      // precaricamento "locale" non li coprirebbe.
+      const missing = names.filter(f => !this.audioBuffers.has(`gm::${instrument}::${f}`) && !this.failedLoads.has(`gm::${instrument}::${f}`));
+      if (missing.length > 0) await Promise.all(missing.map(f => this._loadGmFile(instrument, f)));
+      return;
+    }
+    const cfg = VELOCITY_LAYERED[instrument];
+    if (!cfg) return this.preloadNotesForInstrument(instrument, names);
+
+    const wanted = new Map<string, { name: string; layer: number }>();
+    for (const n of notes) {
+      const layer = pickVelocityLayer(n.velocity, cfg.layers);
+      const key = `${cfg.dir}::${n.name}::v${layer}`;
+      if (this.audioBuffers.has(key) || this.failedLoads.has(key)) continue;
+      wanted.set(key, { name: n.name, layer });
+    }
+    if (wanted.size > 0) {
+      await Promise.all([...wanted.entries()].map(([key, w]) => this._loadLayeredSample(cfg.dir, w.name, w.layer, key)));
+    }
+    // Note il cui strato manca sul disco: al momento di suonare ripiegano sul campione
+    // standard, che a questo punto va precaricato anche lui (altrimenti si torna al
+    // caricamento in corsa proprio per quelle).
+    const fellBack = names.filter(name =>
+      notes.some(n => n.name === name
+        && this.failedLoads.has(`${cfg.dir}::${name}::v${pickVelocityLayer(n.velocity, cfg.layers)}`)));
+    if (fellBack.length > 0) await this.preloadNotesForInstrument(instrument, fellBack);
   }
 
   public async playGuitarVoicing(audioFiles: string[]): Promise<void> {
