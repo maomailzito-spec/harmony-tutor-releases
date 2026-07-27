@@ -92,6 +92,10 @@ function timeSignatureMetaEvent(ts: TimeSignature): number[] {
 export type MidiWriterProject = {
   notes: StaffNote[];
   timeSignature: TimeSignature;
+  /** CAMBI DI METRO del brano. Vanno scritti nella traccia direttore: senza, il file
+   *  dichiara un metro costante e qualunque programma che lo rilegga (il nostro import
+   *  compreso) divide le battute nel posto sbagliato dal primo cambio in avanti. */
+  timeSignatureChanges?: Array<{ measureIndex?: number; numerator: number; denominator: number }>;
   bpm?: number;
   /** 0 = single track (all voices merged), 1 = multi-track (one per voice). Default: 1 */
   midiType?: 0 | 1;
@@ -125,11 +129,32 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
   // Sorted voice numbers (1-based) for deterministic track order
   const voiceNums = Array.from(notesByVoice.keys()).sort((a, b) => a - b);
 
-  // ── Track 0: conductor (tempo + time signature, no notes) ──
+  // ── Track 0: conductor (tempo + time signature + CAMBI di metro, no notes) ──
   function buildConductorTrack(): number[] {
     const events: MidiEvent[] = [];
     events.push({ tick: 0, order: 0, bytes: tempoMetaEventBpm(project.bpm ?? 120) });
     events.push({ tick: 0, order: 1, bytes: timeSignatureMetaEvent(timeSignature) });
+    // Ogni cambio va al tick d'inizio della SUA battuta, calcolato accumulando la
+    // lunghezza delle battute precedenti col metro in vigore volta per volta.
+    const changes = (project.timeSignatureChanges || [])
+      .filter(c => c && Number.isFinite(c.measureIndex as number) && c.numerator > 0 && c.denominator > 0)
+      .map(c => ({ measureIndex: Number(c.measureIndex), numerator: c.numerator, denominator: c.denominator }))
+      .sort((a, b) => a.measureIndex - b.measureIndex);
+    // Deduplica (un progetto può portarsi dietro lo stesso cambio più volte) e salta
+    // quelli che non cambiano nulla rispetto al metro già in vigore.
+    let cur: TimeSignature = timeSignature;
+    let tick = 0;
+    let measure = 0;
+    for (const ch of changes) {
+      if (ch.measureIndex < measure) continue;
+      while (measure < ch.measureIndex) {
+        tick += Math.round(cur.numerator * (4 / cur.denominator) * DEFAULT_TPQ);
+        measure++;
+      }
+      if (ch.numerator === cur.numerator && ch.denominator === cur.denominator) continue;
+      cur = { numerator: ch.numerator, denominator: ch.denominator };
+      events.push({ tick, order: 1, bytes: timeSignatureMetaEvent(cur) });
+    }
     return eventsToTrackData(events);
   }
 

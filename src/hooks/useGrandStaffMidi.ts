@@ -110,22 +110,162 @@ function inferClefFromMidi(midi: number): 'treble' | 'bass' {
   return midi < 60 ? 'bass' : 'treble';
 }
 
+/**
+ * MAPPA DELLE BATTUTE: da beat assoluto a (misura, movimento) rispettando i CAMBI di
+ * metro. Prima si divideva per un numero di movimenti costante: con un brano che passa
+ * per esempio a 2/4 a metà strada, da lì in poi ogni nota finiva nella misura sbagliata
+ * e sul movimento sbagliato, e il riempimento delle battute inventava pause per
+ * completare misure che non esistevano.
+ *
+ * `changes` è in forma d'app (indicizzata per MISURA, come `TimeSignatureChange`): la
+ * usano sia l'import MIDI (convertendo i tick del file) sia l'aggiunta di una traccia a
+ * un progetto che ha già il suo metro.
+ */
+/** Cambio di metro con la battuta SEMPRE valorizzata (forma richiesta dalla mappa e
+ *  dal normalizzatore ritmico; `TimeSignatureChange` l'ha invece opzionale). */
+export type MeasureIndexedChange = { measureIndex: number; numerator: number; denominator: number };
+
+export type BarMap = {
+  /** Movimenti (in semiminime) della misura. */
+  beatsInMeasure(measureIndex: number): number;
+  /** Beat assoluto d'inizio della misura. */
+  measureStartBeat(measureIndex: number): number;
+  /** (misura, movimento 1-based) di un beat assoluto. */
+  locate(absBeats: number): { measureIndex: number; beat: number };
+  /** Tick d'app di fine della misura che contiene `tick`. */
+  measureEndTick(tick: number): number;
+};
+
+/**
+ * I cambi di metro del progetto possono essere indicizzati per battuta (`measureIndex`)
+ * oppure, nei file più recenti, per beat assoluto (`absBeat`). Qui serve la forma per
+ * battuta: quelli espressi in beat vengono convertiti col metro in vigore fino a lì,
+ * quelli senza posizione utile scartati.
+ */
+export function toMeasureIndexedChanges(
+  first: TimeSignature,
+  changes: TimeSignatureChange[] | undefined,
+): MeasureIndexedChange[] {
+  const out: MeasureIndexedChange[] = [];
+  const src = [...(changes || [])].filter(c => c && c.numerator > 0 && c.denominator > 0);
+  // Prima quelli già per battuta; poi si risolvono gli absBeat camminando la mappa
+  // costruita con quelli noti (sufficiente: le due forme non si mescolano nei file veri).
+  for (const c of src) {
+    if (Number.isFinite(c.measureIndex as number)) {
+      out.push({ measureIndex: Number(c.measureIndex), numerator: c.numerator, denominator: c.denominator });
+    }
+  }
+  const pending = src.filter(c => !Number.isFinite(c.measureIndex as number) && Number.isFinite(c.absBeat as number));
+  if (pending.length > 0) {
+    const partial = makeBarMap(first, out);
+    for (const c of pending) {
+      out.push({
+        measureIndex: partial.locate(Number(c.absBeat)).measureIndex,
+        numerator: c.numerator,
+        denominator: c.denominator,
+      });
+    }
+  }
+  return out.sort((a, b) => a.measureIndex - b.measureIndex);
+}
+
+export function makeBarMap(
+  first: TimeSignature,
+  changes: MeasureIndexedChange[],
+): BarMap {
+  const sorted = [...(changes || [])]
+    .filter(c => Number.isFinite(c.measureIndex) && c.numerator > 0 && c.denominator > 0)
+    .sort((a, b) => a.measureIndex - b.measureIndex);
+  const beatsInMeasure = (mi: number): number => {
+    let ts: { numerator: number; denominator: number } = first;
+    for (const c of sorted) {
+      if (c.measureIndex <= mi) ts = c;
+      else break;
+    }
+    return Math.max(0.001, ts.numerator * (4 / ts.denominator));
+  };
+  // Inizio-misura in beat, memoizzato e allungato a richiesta.
+  const starts: number[] = [0];
+  const ensure = (mi: number) => {
+    while (starts.length <= mi + 1) {
+      const m = starts.length - 1;
+      starts.push(starts[m] + beatsInMeasure(m));
+    }
+  };
+  const measureStartBeat = (mi: number): number => { ensure(mi); return starts[mi]; };
+  const locate = (absBeats: number) => {
+    const b = Math.max(0, absBeats);
+    let mi = 0;
+    ensure(mi);
+    // Avanza finché la misura successiva comincia entro `b` (con tolleranza).
+    while (starts[mi + 1] <= b + 1e-9) {
+      mi++;
+      ensure(mi);
+      if (mi > 100000) break; // paracadute
+    }
+    return { measureIndex: mi, beat: 1 + (b - starts[mi]) };
+  };
+  return {
+    beatsInMeasure,
+    measureStartBeat,
+    locate,
+    measureEndTick: (tick: number) => {
+      const { measureIndex } = locate(tick / TICKS_PER_QUARTER);
+      return Math.round((measureStartBeat(measureIndex) + beatsInMeasure(measureIndex)) * TICKS_PER_QUARTER);
+    },
+  };
+}
+
+/** Mappa costante (nessun cambio di metro) — comodo per i chiamanti semplici. */
+export function constantBarMap(beatsPerMeasure: number): BarMap {
+  return makeBarMap({ numerator: Math.max(1, beatsPerMeasure), denominator: 4 }, []);
+}
+
+/**
+ * I cambi di metro del file MIDI sono in TICK; il progetto li indicizza per MISURA.
+ * Conversione: si cammina di cambio in cambio contando quante misure entrano nel tratto
+ * col metro corrente. (Un cambio a metà battuta non è musica ben formata: si arrotonda
+ * alla battuta più vicina.)
+ */
+export function midiTimeSignatureChangesToApp(
+  events: Array<{ tick: number; numerator: number; denominator: number }>,
+  tpq: number,
+): { first: TimeSignature; appChanges: MeasureIndexedChange[] } {
+  const evs = [...(events || [])].sort((a, b) => a.tick - b.tick);
+  if (evs.length === 0) return { first: { numerator: 4, denominator: 4 }, appChanges: [] };
+  const first: TimeSignature = { numerator: evs[0].numerator, denominator: evs[0].denominator };
+  const appChanges: MeasureIndexedChange[] = [];
+  let measureIndex = 0;
+  let prevTick = evs[0].tick;
+  let cur = first;
+  for (let i = 1; i < evs.length; i++) {
+    const ticksPerMeasure = Math.max(1, cur.numerator * (4 / cur.denominator) * tpq);
+    measureIndex += Math.max(0, Math.round((evs[i].tick - prevTick) / ticksPerMeasure));
+    appChanges.push({ measureIndex, numerator: evs[i].numerator, denominator: evs[i].denominator });
+    prevTick = evs[i].tick;
+    cur = { numerator: evs[i].numerator, denominator: evs[i].denominator };
+  }
+  return { first, appChanges };
+}
+
 /** Convert one ParsedMidiNote into a StaffNote. The voice/clef strategy is supplied
  *  by the caller: SATB import passes a Voice 1..4 derived from track/channel/pitch,
- *  accompaniment import passes 0 for all notes. Pitch/duration/timing logic is identical. */
+ *  accompaniment import passes 0 for all notes. Pitch/duration/timing logic is identical.
+ *  `bars` accetta la mappa delle battute (cambi di metro) oppure, per compatibilità, il
+ *  numero costante di movimenti per misura. */
 export function convertParsedNoteToStaffNote(
   n: ParsedMidiNote,
   idx: number,
   tpq: number,
-  beatsPerMeasure: number,
+  bars: BarMap | number,
   keySig: ReturnType<typeof getKeySignature>,
   voice: number,
   clefOverride?: 'treble' | 'bass',
 ): StaffNote {
+  const barMap: BarMap = typeof bars === 'number' ? constantBarMap(bars) : bars;
   const absBeats = n.tick / tpq;
   const durBeats = n.durationTicks / tpq;
-  const measureIndex = Math.max(0, Math.floor(absBeats / Math.max(1, beatsPerMeasure)));
-  const beat = 1 + (absBeats - (measureIndex * beatsPerMeasure));
+  const { measureIndex, beat } = barMap.locate(absBeats);
 
   const clef = clefOverride ?? inferClefFromMidi(n.midi);
   const props = getNotePropertiesFromMidi(n.midi, keySig, clef, null);
@@ -257,7 +397,13 @@ function buildRestsForGap(
  *  longer than one beat are preserved.
  *
  *  ticksPerMeasure is used to compute the "measure end" for the last note in a group. */
-export function extendNotesToNextOnset(notes: StaffNote[], ticksPerMeasure: number): StaffNote[] {
+export function extendNotesToNextOnset(notes: StaffNote[], ticksPerMeasure: number | BarMap): StaffNote[] {
+  // Fine della misura che contiene `tick`: con la mappa segue i cambi di metro, col
+  // numero costante resta il comportamento storico.
+  const measureEndAfter = (tick: number): number =>
+    typeof ticksPerMeasure === 'number'
+      ? (Math.floor(tick / ticksPerMeasure) + 1) * ticksPerMeasure
+      : ticksPerMeasure.measureEndTick(tick);
   if (notes.length === 0) return notes;
 
   const groups = new Map<string, number[]>();
@@ -280,7 +426,7 @@ export function extendNotesToNextOnset(notes: StaffNote[], ticksPerMeasure: numb
       const currentTick = distinctTicks[ti];
       const nextTick = ti + 1 < distinctTicks.length
         ? distinctTicks[ti + 1]
-        : (Math.floor(currentTick / ticksPerMeasure) + 1) * ticksPerMeasure;
+        : measureEndAfter(currentTick);
 
       for (const idx of indices) {
         const note = result[idx];
@@ -1429,6 +1575,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     const midiBytes = buildMidiFile({
       notes: project.notes || [],
       timeSignature: project.timeSignature,
+      timeSignatureChanges: toMeasureIndexedChanges(project.timeSignature, project.timeSignatureChanges),
       bpm: project.bpm ?? 120,
       midiType: (midiExportType === '0' ? 0 : 1) as 0 | 1,
       voicePrograms,
@@ -1466,7 +1613,10 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     }
 
     const tpq = Math.max(1, parsed.tpq);
-    const beatsPerMeasure = parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
+    // Metro del file, CAMBI COMPRESI: le note vanno divise in battute su questa mappa,
+    // altrimenti dal primo cambio in poi finiscono nella misura e sul movimento sbagliati.
+    const { first: midiFirstTs, appChanges: midiTsChanges } = midiTimeSignatureChangesToApp(parsed.timeSignatureChanges, tpq);
+    const bars = makeBarMap(midiFirstTs, midiTsChanges);
 
     // Use key signature from MIDI file if available, otherwise use project key.
     let midiRoot = project.keySignatureRoot || 'C';
@@ -1544,7 +1694,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     };
 
     const convertedNotes: StaffNote[] = parsed.notes.map((n, idx) =>
-      convertParsedNoteToStaffNote(n, idx, tpq, beatsPerMeasure, keySig, getVoice(n))
+      convertParsedNoteToStaffNote(n, idx, tpq, bars, keySig, getVoice(n))
     );
 
     // Quantise MIDI timings: snap near-grid onsets and near-standard durations
@@ -1560,12 +1710,12 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // Normalize rhythm: split notes/rests on beat boundaries, fill gaps with
     // boundary-aware rests, decompose non-standard durations into chains of
     // tied standard notes. Preserves tick positions so playback is unchanged.
-    const notes = normalizeRhythm(trimmedNotes, parsed.timeSignature, []);
+    const notes = normalizeRhythm(trimmedNotes, midiFirstTs, midiTsChanges);
 
     setProject({
       notes,
-      timeSignature: parsed.timeSignature,
-      timeSignatureChanges: [],
+      timeSignature: midiFirstTs,
+      timeSignatureChanges: midiTsChanges,
       bpm: parsed.tempoBpm,
       ...(parsed.keySignature ? { keySignatureRoot: midiRoot, isMinorMode: midiIsMinor } : {}),
     });
@@ -1578,7 +1728,17 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
   const importMidiAsAccompaniment = useCallback(async (
     source?: File | ArrayBuffer | string,
     mode: 'separate' | 'grandstaff' = 'separate',
-  ): Promise<{ tracks: AccompanimentTrack[]; bpm: number; timeSignature: TimeSignature } | null> => {
+    // Con `useProjectMeter` la traccia viene divisa in battute sul metro del PROGETTO
+    // (cambi compresi) invece che su quello del file: è il caso in cui si AGGIUNGE una
+    // parte a una partitura che c'è già, dove le stanghette devono coincidere con quelle
+    // degli altri righi. Senza (progetto vuoto), comanda il metro del file.
+    opts?: { useProjectMeter?: boolean },
+  ): Promise<{
+    tracks: AccompanimentTrack[];
+    bpm: number;
+    timeSignature: TimeSignature;
+    timeSignatureChanges: TimeSignatureChange[];
+  } | null> => {
     const arrayBuffer = await resolveMidiSource(source, pickMidiFile);
     if (!arrayBuffer) return null;
 
@@ -1593,7 +1753,13 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     }
 
     const tpq = Math.max(1, parsed.tpq);
-    const beatsPerMeasure = parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
+    const midiMeter = midiTimeSignatureChangesToApp(parsed.timeSignatureChanges, tpq);
+    const useProjectMeter = !!opts?.useProjectMeter;
+    const meterTs: TimeSignature = useProjectMeter ? project.timeSignature : midiMeter.first;
+    const meterChanges = useProjectMeter
+      ? toMeasureIndexedChanges(meterTs, project.timeSignatureChanges)
+      : midiMeter.appChanges;
+    const bars = makeBarMap(meterTs, meterChanges);
 
     // The accompaniment track is not analysed; key signature for spelling defaults
     // to the project's current key so accidentals look reasonable on the staff.
@@ -1620,13 +1786,12 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // resta l'inferenza per-nota (grandstaff).
     const TPR = TICKS_PER_QUARTER;
     const MAX_VOICES_PER_STAFF = 2;
-    const ticksPerMeasure = TICKS_PER_QUARTER * parsed.timeSignature.numerator * (4 / parsed.timeSignature.denominator);
     const buildPartNotes = (partNotes: typeof parsed.notes, forcedClef?: 'treble' | 'bass'): StaffNote[] => {
       const converted: StaffNote[] = partNotes.map((n, idx) => {
         const sounding = n.durationTicks;
         const notated = n.notatedTicks ?? sounding;
         const dePedaled = notated < sounding ? { ...n, durationTicks: notated } : n;
-        const sn = convertParsedNoteToStaffNote(dePedaled, idx, tpq, beatsPerMeasure, keySig, 0, forcedClef);
+        const sn = convertParsedNoteToStaffNote(dePedaled, idx, tpq, bars, keySig, 0, forcedClef);
         if (notated < sounding) {
           (sn as StaffNote).playbackDurationTicks = Math.max(1, Math.round((sounding / Math.max(1, tpq)) * TPR));
         }
@@ -1637,10 +1802,10 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
         ...separateVoices(converted.filter(n => n.clef === 'bass'), MAX_VOICES_PER_STAFF),
       ];
       const tripletSnapped = quantizeTripletBeats(voiced);
-      const extended = extendNotesToNextOnset(tripletSnapped, ticksPerMeasure);
+      const extended = extendNotesToNextOnset(tripletSnapped, bars);
       const quantized = quantizeMidiTimings(extended);
       const trimmed = trimOverlappingNotes(quantized);
-      return normalizeRhythm(trimmed, parsed.timeSignature, [], true);
+      return normalizeRhythm(trimmed, meterTs, meterChanges, true);
     };
 
     const newTrackId = (i: number): string =>
@@ -1666,11 +1831,20 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
         staffMode = 'treble_only';
         clef = forcedClef;
       }
-      const notes = buildPartNotes(partNotes, forcedClef);
+      const trackId = newTrackId(i);
+      // Gli id di `convertParsedNoteToStaffNote` sono `midi-<indice>-<attacco>-<altezza>`
+      // e l'INDICE riparte da zero per ogni parte: due parti che hanno la stessa nota
+      // allo stesso attacco nella stessa posizione (un unisono, un raddoppio — cose
+      // ordinarie) producevano id IDENTICI su tracce diverse. Da lì tutte le ricerche
+      // per id (selezione, editing, hit-point del renderer, chiavi React) finivano sulla
+      // prima nota trovata, cioè su un'altra traccia: la traccia sembrava non
+      // selezionabile né modificabile. Lo stesso valeva fra due import successivi.
+      // L'id della traccia (un UUID) come prefisso rende gli id unici per costruzione.
+      const notes = buildPartNotes(partNotes, forcedClef).map(n => ({ ...n, id: `${trackId}-${n.id}` }));
       const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
       const name = nm || (isMultiPart ? `Traccia ${i + 1}` : 'Piano');
       return {
-        id: newTrackId(i),
+        id: trackId,
         name,
         instrumentId: 0,
         notes,
@@ -1686,9 +1860,12 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     return {
       tracks,
       bpm: parsed.tempoBpm,
-      timeSignature: parsed.timeSignature,
+      // Il metro del FILE (col suo eventuale corredo di cambi): il chiamante lo adotta
+      // solo se il progetto è vuoto — su una partitura già avviata comanda quella.
+      timeSignature: midiMeter.first,
+      timeSignatureChanges: midiMeter.appChanges,
     };
-  }, [pickMidiFile, project.keySignatureRoot, project.isMinorMode]);
+  }, [pickMidiFile, project.keySignatureRoot, project.isMinorMode, project.timeSignature, project.timeSignatureChanges]);
 
   return {
     exportMidi,

@@ -14,10 +14,23 @@ export type ParsedMidiNote = {
   track: number;
 };
 
+/** Un cambio di tempo in chiave nel file, con il tick assoluto in cui entra in vigore. */
+export type ParsedTimeSignature = {
+  tick: number;
+  numerator: number;
+  denominator: number;
+};
+
 export type ParsedMidi = {
   tpq: number;
   tempoBpm: number;
+  /** Il PRIMO tempo in chiave del file (retro-compatibilità). */
   timeSignature: { numerator: number; denominator: number };
+  /** TUTTI i tempi in chiave, in ordine di tick. Prima se ne teneva UNO SOLO e i cambi
+   *  successivi andavano persi: le note venivano poi divise in battute su un metro
+   *  costante, quindi da lì in avanti finivano nella misura e sul movimento sbagliati
+   *  (con pause di riempimento inventate per "completare" battute che non esistevano). */
+  timeSignatureChanges: ParsedTimeSignature[];
   keySignature?: { sharps: number; isMinor: boolean };
   notes: ParsedMidiNote[];
   /** Nome di ogni traccia (meta 0x03), indicizzato per numero di traccia. Voci vuote = senza nome. */
@@ -78,6 +91,10 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   let tsNum = 4;
   let tsDen = 4;
   let tsTick = Infinity;
+  // Tutti i cambi di metro incontrati (in qualunque traccia): raccolti qui e riordinati
+  // alla fine. In un file multi-traccia i meta di tempo stanno di norma nella traccia 0,
+  // ma non è garantito, quindi si accettano da tutte.
+  const tsEvents: ParsedTimeSignature[] = [];
   let keySharps: number | null = null;
   let keyIsMinor = false;
 
@@ -193,10 +210,12 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
           const usPerQuarter = (view.getUint8(pos) << 16) | (view.getUint8(pos + 1) << 8) | view.getUint8(pos + 2);
           if (usPerQuarter > 0 && absTick < tempoTick) { tempoBpm = Math.round(60000000 / usPerQuarter); tempoTick = absTick; }
         } else if (metaType === 0x58 && len.value >= 2) {
+          const evNum = Math.max(1, view.getUint8(pos));
+          const evDen = Math.max(1, Math.pow(2, view.getUint8(pos + 1)));
+          tsEvents.push({ tick: absTick, numerator: evNum, denominator: evDen });
           if (absTick < tsTick) {
-            tsNum = Math.max(1, view.getUint8(pos));
-            const dd = view.getUint8(pos + 1);
-            tsDen = Math.max(1, Math.pow(2, dd));
+            tsNum = evNum;
+            tsDen = evDen;
             tsTick = absTick;
           }
         } else if (metaType === 0x59 && len.value >= 2) {
@@ -307,10 +326,26 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
 
   notes.sort((a, b) => (a.tick - b.tick) || (a.channel - b.channel) || (a.midi - b.midi));
 
+  // Cambi di metro: in ordine di tick, uno solo per tick (in un file multi-traccia lo
+  // stesso cambio può comparire in più tracce) e senza ripetere un metro già in vigore.
+  tsEvents.sort((a, b) => a.tick - b.tick);
+  const timeSignatureChanges: ParsedTimeSignature[] = [];
+  for (const ev of tsEvents) {
+    const last = timeSignatureChanges[timeSignatureChanges.length - 1];
+    if (last && last.tick === ev.tick) continue;
+    if (last && last.numerator === ev.numerator && last.denominator === ev.denominator) continue;
+    timeSignatureChanges.push(ev);
+  }
+  // Se il file non dichiara nulla a tick 0, il 4/4 implicito parte comunque da lì.
+  if (timeSignatureChanges.length === 0 || timeSignatureChanges[0].tick > 0) {
+    timeSignatureChanges.unshift({ tick: 0, numerator: tsNum, denominator: tsDen });
+  }
+
   return {
     tpq,
     tempoBpm,
     timeSignature: { numerator: tsNum, denominator: tsDen },
+    timeSignatureChanges,
     ...(keySharps !== null ? { keySignature: { sharps: keySharps, isMinor: keyIsMinor } } : {}),
     notes,
     trackNames,

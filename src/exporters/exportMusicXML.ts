@@ -228,7 +228,40 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     isMinorMode = false,
     keySignatureRoot,
     harmonyLabels = [],
+    timeSignatureChanges = [],
   } = opts;
+
+  // ── Mappa delle battute (CAMBI DI METRO) ───────────────────────────────────
+  // Prima l'export assumeva un metro costante: la lunghezza di ogni battuta e
+  // l'inizio della battuta m (`m * numerator * DIVISIONS`) erano calcolati sul metro
+  // iniziale. Con un cambio di metro, da lì in avanti l'inizio-battuta era sbagliato →
+  // le note uscivano in posizioni sbagliate (e il file riletto "girava fuori tempo").
+  // Nota: la vecchia formula sbagliava anche i metri con denominatore ≠ 4 (un 6/8 vale
+  // 3 semiminime, non 6).
+  const meterChanges = timeSignatureChanges
+    .filter(c => c && Number.isFinite(c.measureIndex as number) && c.numerator > 0 && c.denominator > 0)
+    .map(c => ({ measureIndex: Number(c.measureIndex), numerator: c.numerator, denominator: c.denominator }))
+    .sort((a, b) => a.measureIndex - b.measureIndex);
+  const tsAtMeasure = (m: number): TimeSignature => {
+    let cur: TimeSignature = timeSignature;
+    for (const c of meterChanges) {
+      if (c.measureIndex <= m) cur = { numerator: c.numerator, denominator: c.denominator };
+      else break;
+    }
+    return cur;
+  };
+  const measureLenTicks = (m: number): number => {
+    const ts = tsAtMeasure(m);
+    return Math.round(ts.numerator * (4 / ts.denominator) * DIVISIONS);
+  };
+  const measureStartCache: number[] = [0];
+  const measureStartTicks = (m: number): number => {
+    while (measureStartCache.length <= m) {
+      const prev = measureStartCache.length - 1;
+      measureStartCache.push(measureStartCache[prev] + measureLenTicks(prev));
+    }
+    return measureStartCache[m];
+  };
 
   // Group notes by measure
   const notesByMeasure = new Map<number, StaffNote[]>();
@@ -244,7 +277,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
   const harmonyByMeasure = new Map<number, Map<number, { roman?: string; figures?: string[] }>>();
   for (const h of harmonyLabels) {
     const mi = h.measureIndex ?? 0;
-    const localTick = h.tick - mi * timeSignature.numerator * DIVISIONS;
+    const localTick = h.tick - measureStartTicks(mi);
     if (!harmonyByMeasure.has(mi)) harmonyByMeasure.set(mi, new Map());
     const existing = harmonyByMeasure.get(mi)!.get(localTick) || {};
     harmonyByMeasure.get(mi)!.set(localTick, {
@@ -314,10 +347,22 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       w('          <line>4</line>');
       w('        </clef>');
       w('      </attributes>');
+    } else if (measureLenTicks(m) !== measureLenTicks(m - 1)
+      || tsAtMeasure(m).numerator !== tsAtMeasure(m - 1).numerator
+      || tsAtMeasure(m).denominator !== tsAtMeasure(m - 1).denominator) {
+      // CAMBIO DI METRO: va dichiarato nella battuta in cui entra in vigore, altrimenti
+      // il file resta nel metro iniziale e chi lo rilegge divide le battute sbagliate.
+      const ts = tsAtMeasure(m);
+      w('      <attributes>');
+      w('        <time>');
+      w(`          <beats>${ts.numerator}</beats>`);
+      w(`          <beat-type>${ts.denominator}</beat-type>`);
+      w('        </time>');
+      w('      </attributes>');
     }
 
     const measureNotes = notesByMeasure.get(m) || [];
-    const measureTotalTicks = timeSignature.numerator * (4 / timeSignature.denominator) * DIVISIONS;
+    const measureTotalTicks = measureLenTicks(m);
 
     // Armonia di questa misura, agganciata per localTick (onset). Ogni etichetta emessa
     // UNA sola volta: il romano sul rigo acuto, le cifre sul rigo grave.
@@ -374,7 +419,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
         const onsets = new Map<number, StaffNote[]>();
         for (const n of voiceNotes) {
           const tick = n.startTick ?? ((n.beat ?? 1) - 1) * DIVISIONS;
-          const localTick = tick - m * timeSignature.numerator * DIVISIONS;
+          const localTick = tick - measureStartTicks(m);
           if (!onsets.has(localTick)) onsets.set(localTick, []);
           onsets.get(localTick)!.push(n);
         }
