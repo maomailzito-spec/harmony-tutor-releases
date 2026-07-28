@@ -1667,7 +1667,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
 
     // Stable ref to playNote — updated after playNote is defined (avoids TDZ in handleChordInsert)
-    const playNoteRef = useRef<((note: StaffNote, durationSec?: number, instrumentOverride?: string, midiChannel?: number, extraTransposeSemitones?: number) => Promise<void>) | null>(null);
+    const playNoteRef = useRef<((note: StaffNote, durationSec?: number, instrumentOverride?: string, midiChannel?: number, extraTransposeSemitones?: number, routeTrackId?: string | null) => Promise<void>) | null>(null);
 
     const project = useMemo(() => ({
         notes: rawNotes,
@@ -3185,7 +3185,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const accTrkBlk = latestAccompanimentTracks.current?.[trackIdx];
                 const accInstrBlk = accTrkBlk?.isDrum ? drumSoundfont(accTrkBlk) : gmToSoundfont(accTrkBlk?.instrumentId);
                 const accChBlk = accTrkBlk ? accMidiChannel(accTrkBlk, trackIdx) : undefined;
-                newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk, accChBlk, accTransposeSemitones(accTrkBlk)); });
+                newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk, accChBlk, accTransposeSemitones(accTrkBlk), accTrkBlk?.id); });
                 return;
             }
 
@@ -3395,7 +3395,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const accTrk = latestAccompanimentTracks.current?.[trackIdx];
         const accInstr = accTrk?.isDrum ? drumSoundfont(accTrk) : gmToSoundfont(accTrk?.instrumentId);
         const accCh = accTrk ? accMidiChannel(accTrk, trackIdx) : undefined;
-        newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstr, accCh, accTransposeSemitones(accTrk)); });
+        newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstr, accCh, accTransposeSemitones(accTrk), accTrk?.id); });
     }, [selectedNoteIds, quantizeGrid, applyAccPattern, setAccompanimentTracks, setSelectedNoteIds]);
 
     /**
@@ -3498,7 +3498,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const accTrkChord = latestAccompanimentTracks.current?.[firstVisibleIdx];
             const accInstrChord = accTrkChord?.isDrum ? drumSoundfont(accTrkChord) : gmToSoundfont(accTrkChord?.instrumentId);
             const accChChord = accTrkChord ? accMidiChannel(accTrkChord, firstVisibleIdx) : undefined;
-            accNotes.forEach(n => { void playNoteRef.current?.(n, 0.8, accInstrChord, accChChord, accTransposeSemitones(accTrkChord)); });
+            accNotes.forEach(n => { void playNoteRef.current?.(n, 0.8, accInstrChord, accChChord, accTransposeSemitones(accTrkChord), accTrkChord?.id); });
             return { startTick, durTicks };
         }
 
@@ -6617,7 +6617,55 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         output.send([0x80 + ch, midi, 0], t0 + durationSec * 1000);
     }, [playbackTransposeSemitones]);
 
-    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, extraTransposeSemitones = 0, soundBankOverride?: 'orchestral' | 'gm') => {
+    // ── Ingresso del MIXER per una voce o per una traccia ────────────────────────
+    // Sono gli stessi nodi che usa l'esecuzione (gain → EQ → comp → pan → riverbero →
+    // master): passandoli anche all'ascolto di una nota singola, gli effetti si sentono
+    // pure cliccando, e non solo premendo play.
+    // NB: l'esecuzione crea questi stessi nodi in linea (cerca `wireVoiceWithPan` e
+    // `wireTrackWithPan` nel motore di riproduzione). Se cambia la catena, vanno
+    // aggiornati entrambi i punti — altrimenti ciò che si sente cliccando smette di
+    // corrispondere a ciò che si sente suonando.
+    const ensureVoiceGain = useCallback((v: number): GainNode | undefined => {
+        if (!audioService.audioContext) return undefined;
+        let g = voiceGainsRef.current.get(v);
+        if (!g) {
+            ensureMasterChain();
+            g = audioService.audioContext.createGain();
+            wireVoiceWithPan(v, g);
+            voiceGainsRef.current.set(v, g);
+            const an = audioService.audioContext.createAnalyser();
+            an.fftSize = 256;
+            g.connect(an); // presa per i LED del mixer
+            voiceAnalysersRef.current.set(v, an);
+        }
+        g.gain.value = isVoiceAudible(v) ? (voiceVolumesRef.current[v] ?? 1) : 0;
+        ensureVoiceRevSend(v, g);
+        return g;
+    }, [audioService, ensureMasterChain, ensureVoiceRevSend, isVoiceAudible, wireVoiceWithPan]);
+
+    const ensureAccTrackGain = useCallback((trackId?: string | null): GainNode | undefined => {
+        if (!audioService.audioContext || !trackId) return undefined;
+        const tracks = latestAccompanimentTracks.current || [];
+        const idx = tracks.findIndex(t => t.id === trackId);
+        if (idx < 0) return undefined;
+        const track = tracks[idx];
+        let g = accTrackGainsRef.current.get(idx);
+        if (!g) {
+            ensureMasterChain();
+            g = audioService.audioContext.createGain();
+            wireTrackWithPan(idx, g, track);
+            accTrackGainsRef.current.set(idx, g);
+            const an = audioService.audioContext.createAnalyser();
+            an.fftSize = 256;
+            g.connect(an);
+            accTrackAnalysersRef.current.set(idx, an);
+        }
+        // Stessa regola dell'esecuzione: il SOLO su un altro canale zittisce questo.
+        g.gain.value = isTrackAudible(track) ? (track.volume ?? 1) : 0;
+        return g;
+    }, [audioService, ensureMasterChain, isTrackAudible, wireTrackWithPan]);
+
+    const playNoteSound = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, extraTransposeSemitones = 0, soundBankOverride?: 'orchestral' | 'gm', routeTrackId?: string | null) => {
                 if (!isAudioReady || !audioService.audioContext || note.isRest) return;
                 await audioService.ensureAudioIsReady();
                 const midi = (note.midi ?? 0) + playbackTransposeSemitones + extraTransposeSemitones;
@@ -6642,10 +6690,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const instr = instrumentOverride
                     ?? (v >= 1 && v <= 4 ? (voiceInstrumentsRef.current[v] || 'acoustic_grand_piano') : 'acoustic_grand_piano');
                 const bank = soundBankOverride ?? (v >= 1 && v <= 4 ? (voiceSoundBanksRef.current[v] ?? 'orchestral') : 'orchestral');
-                await audioService.playNoteForInstrument(instr, midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal, velocity: (note as any).velocity, bank });
-    }, [audioService, isAudioReady, midiToName, playbackTransposeSemitones]);
+                // Instradamento nel mixer: la traccia ACC se il chiamante la dichiara,
+                // altrimenti la voce SATB della nota. Senza, l'anteprima andava dritta
+                // all'uscita e di EQ, compressore, pan e riverbero non si sentiva nulla.
+                const output = routeTrackId
+                    ? ensureAccTrackGain(routeTrackId)
+                    : ((v >= 1 && v <= 4) ? ensureVoiceGain(v) : undefined);
+                await audioService.playNoteForInstrument(instr, midiToName(midi), { when: audioService.audioContext.currentTime, duration: durationSecFinal, velocity: (note as any).velocity, bank, ...(output ? { output } : {}) });
+    }, [audioService, ensureAccTrackGain, ensureVoiceGain, isAudioReady, midiToName, playbackTransposeSemitones]);
 
-    const playNote = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, midiChannel?: number, extraTransposeSemitones = 0) => {
+    const playNote = useCallback(async (note: StaffNote, durationSec = 0.8, instrumentOverride?: string, midiChannel?: number, extraTransposeSemitones = 0, routeTrackId?: string | null) => {
         if (selectedMidiOutput) {
             // Inoltro all'uscita MIDI esterna sul canale corretto: se il chiamante passa
             // midiChannel (tracce ACC) usa quello; altrimenti deriva dalla voce SATB
@@ -6656,7 +6710,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             sendMidiNote(note, selectedMidiOutput, durationSec, window.performance.now(), ch, extraTransposeSemitones);
             return;
         }
-        await playNoteSound(note, durationSec, instrumentOverride, extraTransposeSemitones);
+        await playNoteSound(note, durationSec, instrumentOverride, extraTransposeSemitones, undefined, routeTrackId);
     }, [playNoteSound, selectedMidiOutput, sendMidiNote]);
     playNoteRef.current = playNote;
 
@@ -8721,7 +8775,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 ? (accTrkForPlay.isDrum ? drumSoundfont(accTrkForPlay) : gmToSoundfont(accTrkForPlay.instrumentId))
                 : undefined;
             const clickCh = accTrkForPlay ? accMidiChannel(accTrkForPlay, accInfoForPlay!.trackIndex) : undefined;
-            void playNote(normalized, 0.6, clickInstr, clickCh, accTransposeSemitones(accTrkForPlay));
+            void playNote(normalized, 0.6, clickInstr, clickCh, accTransposeSemitones(accTrkForPlay), accTrkForPlay?.id);
         }
     }, [getPlayheadPosForAbsBeat, normalizedRawNotes, playNote, rawNotes, selectedNoteIds, timeSignature, tool, violations]);
 
@@ -10392,7 +10446,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const accClickIdx = latestAccompanimentTracks.current?.findIndex(t => t.id === targetTrackId) ?? -1;
                 const accTrkClick = accClickIdx >= 0 ? latestAccompanimentTracks.current[accClickIdx] : undefined;
                 const accInstrClick = accTrkClick?.isDrum ? drumSoundfont(accTrkClick) : gmToSoundfont(accTrkClick?.instrumentId);
-                void playNote(accNote, 0.8, accInstrClick, accTrkClick ? accMidiChannel(accTrkClick, accClickIdx) : undefined, accTransposeSemitones(accTrkClick));
+                void playNote(accNote, 0.8, accInstrClick, accTrkClick ? accMidiChannel(accTrkClick, accClickIdx) : undefined, accTransposeSemitones(accTrkClick), accTrkClick?.id);
                 // Advance playhead to the next position (same as SATB insertion)
                 try {
                     const nextAbsBeat = (startTick + durationTicks) / TICKS_PER_QUARTER;
@@ -11096,7 +11150,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // attacco (passthrough soundfont + anteprima piano interno).
                 if (selectedMidiOutputRef.current) {
                     const accStepIdx = (latestAccompanimentTracks.current || []).findIndex(t => t.id === target.id);
-                    void playNote(accNoteStep, 0.8, undefined, accMidiChannel(target, accStepIdx), accTransposeSemitones(target));
+                    void playNote(accNoteStep, 0.8, undefined, accMidiChannel(target, accStepIdx), accTransposeSemitones(target), target?.id);
                 }
                 // Avanza la playhead (come SATB): fine della nota appena inserita.
                 const nextAbsBeatAcc = (startTick + durationTicks) / TICKS_PER_QUARTER;
@@ -11373,7 +11427,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // il colpo del kit (stesso soundfont della traccia) per dare riscontro sonoro.
         try {
             void audioService.ensureAudioIsReady().then(() =>
-                audioService.playNoteForInstrument(drumSoundfont(target), midiToName(pieceMidi), { duration: 2.0, velocity: 110 })
+                audioService.playNoteForInstrument(drumSoundfont(target), midiToName(pieceMidi), {
+                    duration: 2.0,
+                    velocity: 110,
+                    // Anche il colpo di prova passa dal canale della traccia: volume, pan,
+                    // EQ, compressore e riverbero si sentono come in esecuzione.
+                    ...(() => { const o = ensureAccTrackGain(target?.id); return o ? { output: o } : {}; })(),
+                })
             );
         } catch { /* audio non pronto: ignora */ }
     }, [audioService, midiToName]);
