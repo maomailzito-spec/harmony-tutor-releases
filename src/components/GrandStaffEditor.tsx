@@ -5891,12 +5891,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const defaultPx = (typeof DEFAULT_PX_PER_TICK === 'number' && DEFAULT_PX_PER_TICK > 0) ? DEFAULT_PX_PER_TICK : 0;
             const pxPerTick = Math.max(minPxPerTick, defaultPx, neededPxPerTickFromNotes, (availableContentWidth / Math.max(1, totalTicks)));
 
-            // Ripartizione della larghezza fra le misure del sistema: in proporzione alla
-            // loro DOMANDA di spazio invece che alla sola durata. La somma non cambia — la
-            // riga resta larga uguale — cambia come lo spazio è distribuito.
+            // Ripartizione della larghezza fra le misure del sistema, in proporzione alla
+            // loro DOMANDA di spazio invece che alla sola durata.
+            //
+            // In PAGINA la riga ha una larghezza da riempire, quindi le domande vengono
+            // normalizzate a quel totale: cambia come lo spazio è distribuito, non quanto.
+            // Nel NASTRO non c'è nulla da riempire — si scorre — e normalizzare al totale
+            // "a tempo" comprimeva le misure fitte proprio dove servirebbe più aria: lì la
+            // domanda viene usata TALE E QUALE, e il nastro si allunga di conseguenza.
             const demands = sys.measureIndices.map(m => Math.max(1, measureDemand(m)));
             const demandTotal = demands.reduce((x, y) => x + y, 0) || 1;
-            const contentTotal = totalTicks * pxPerTick; // spazio contenuto complessivo, come prima
+            const contentTotal = isRibbon
+                ? demandTotal
+                : totalTicks * pxPerTick; // spazio contenuto complessivo, come prima
             // Ogni misura ha ora il SUO px-per-tick: dentro la misura la posizione resta
             // lineare nel tempo (così clic, cursore ed etichette continuano a funzionare),
             // ma misure diverse hanno densità diverse.
@@ -5907,9 +5914,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const startMeasuresX: number[] = [];
             sys.measureIndices.forEach((m, idx) => {
                 const measureTicks = ticksPerMeasureForIndex(m);
+                const ribbonPxPerTick = Math.max(minPxPerTick, defaultPx, neededPxPerTickFromNotes);
                 const contentWidthForMeasure = contentAwareSpacing
                     ? (contentTotal * (demands[idx] / demandTotal))
-                    : (measureTicks * pxPerTick);
+                    : (measureTicks * (isRibbon ? ribbonPxPerTick : pxPerTick));
                 const mPxPerTick = contentWidthForMeasure / Math.max(1, measureTicks);
                 measurePxPerTickLocal[idx] = mPxPerTick;
                 // If this is the first measure in the system, reserve space for key/time glyphs
