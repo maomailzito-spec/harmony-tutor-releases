@@ -5611,9 +5611,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // lo spazio guadagnato rimpicciolendo viene riempito dalle misure successive, e dopo
     // la scala il contenuto torna a occupare esattamente il contenitore. Ingrandendo vale
     // il contrario: meno misure per riga, più grandi.
+    // Lo zoom che comanda l'IMPAGINAZIONE è "assestato": durante la pinch il gesto
+    // produce decine di valori al secondo, e rifare a ogni scatto impaginazione,
+    // posizionamento delle etichette d'analisi (~440 ms sul brano intero) e
+    // sovrapposizioni renderebbe il gesto lentissimo e le etichette ballerine.
+    // Durante il gesto resta la scala CSS, che è immediata; quando lo zoom si ferma,
+    // la partitura si ri-impagina per riempire lo spazio.
+    const [settledZoom, setSettledZoom] = useState(editorZoom);
+    useEffect(() => {
+        const t = window.setTimeout(() => setSettledZoom(editorZoom), 180);
+        return () => window.clearTimeout(t);
+    }, [editorZoom]);
+
     const layoutWidth = useMemo(
-        () => Math.max(300, Math.round(containerWidth / Math.max(0.05, editorZoom || 1))),
-        [containerWidth, editorZoom],
+        () => Math.max(300, Math.round(containerWidth / Math.max(0.05, settledZoom || 1))),
+        [containerWidth, settledZoom],
     );
 
     // La stabilità di pxPerQuarter va ricalcolata quando cambia la larghezza
@@ -5710,7 +5722,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Il valore scelto in toolbar vale al 100%: rimpicciolendo ne entrano di più in
         // proporzione (a metà scala, il doppio), altrimenti il tetto impedirebbe di
         // sfruttare lo spazio guadagnato.
-        const zoomForLine = Math.max(0.05, editorZoom || 1);
+        const zoomForLine = Math.max(0.05, settledZoom || 1);
         const desiredMeasuresPerLine = Math.max(1, Math.min(24, Math.round((measuresPerLine || 4) / zoomForLine)));
 
         // NASTRO CONTINUO ("linear"): tutte le misure su un unico sistema, che si estende
@@ -5923,7 +5935,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ignore logging errors
         }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
-    }, [notes, layoutWidth, editorZoom, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
+    }, [notes, layoutWidth, settledZoom, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA
