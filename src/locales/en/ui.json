@@ -203,5 +203,6 @@
   "chorale_syntax_half": "half note",
   "chorale_syntax_quarter": "quarter note",
   "chorale_syntax_eighth": "eighth note",
-  "chorale_syntax_sixteenth": "sixteenth note"
+  "chorale_syntax_sixteenth": "sixteenth note",
+  "confidence_enharmonic_reading": "Inconsistent spelling: the symbol is read enharmonically and does not match what is written"
 }

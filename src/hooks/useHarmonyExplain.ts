@@ -14,6 +14,7 @@ import {
     getChordSymbol,
     computeFiguredBassFromNotes,
     getKeySignature,
+    isEnharmonicSpellingMismatch,
 } from '../utils/musicTheory';
 
 export interface UseHarmonyExplainParams {
@@ -72,6 +73,12 @@ export function useHarmonyExplain(params: UseHarmonyExplainParams) {
             const candidates = identifyChordCandidates(labelNotes as any);
             const figResult = computeFiguredBassFromNotes(labelNotes as any);
             const symResult = getChordSymbol(labelNotes as any, keySig, ctxTonic);
+            // Grafia incoerente: la sigla è dedotta per enarmonia e NON corrisponde a ciò
+            // che è scritto. Il pannello deve dirlo, altrimenti spiega un'etichetta senza
+            // spiegare la cosa più importante che le è successa.
+            const symbolFromRespelling = (() => {
+                try { return !!symResult && isEnharmonicSpellingMismatch(labelNotes as any); } catch { return false; }
+            })();
 
             // ── Confidence ──
             // Lo score raw di identifyChordCandidates() non è una percentuale 0–100:
@@ -83,6 +90,9 @@ export function useHarmonyExplain(params: UseHarmonyExplainParams) {
             const isOverride = Boolean((lbl as any).isOverride);
             let confidenceLevel: HarmonyExplainConfidenceLevel = 'low';
             const confidenceReasons: string[] = [];
+            if (symbolFromRespelling) {
+                confidenceReasons.push(i18n.t('confidence_enharmonic_reading'));
+            }
             if (!mainCand) {
                 confidenceLevel = 'low';
                 confidenceReasons.push(i18n.t('confidence_no_candidate'));
@@ -144,7 +154,7 @@ export function useHarmonyExplain(params: UseHarmonyExplainParams) {
                 label: {
                     roman: String(lbl.roman ?? ''),
                     romanDisplay: String((lbl as any).romanDisplay ?? lbl.roman ?? ''),
-                    symbol: String(symResult ?? ''),
+                    symbol: symbolFromRespelling ? `(${String(symResult ?? '')})` : String(symResult ?? ''),
                     figures: (figResult?.figures ?? []).map(String),
                     isOverride: Boolean((lbl as any).isOverride),
                     alternatives: (lbl as any).alternatives ?? undefined,

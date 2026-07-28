@@ -8697,7 +8697,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Aggiorna la violation selezionata se la nota è coinvolta in una violation
         if (!shiftKey) {
             if (next.size === 1 && next.has(noteId) && Array.isArray(violations)) {
-                const idx = violations.findIndex(v => v.noteIds.includes(noteId));
+                // Una nota può comparire in più segnalazioni. Ha la precedenza quella che
+                // la indica come COLPEVOLE (`primaryNoteId`): altrimenti, cliccando la nota
+                // mal scritta, si apriva la prima violazione qualsiasi che la contenesse
+                // (una falsa relazione, per dire) e la segnalazione sulla grafia restava
+                // irraggiungibile dalla partitura.
+                let idx = violations.findIndex(v => (v as any).primaryNoteId === noteId);
+                if (idx === -1) idx = violations.findIndex(v => v.noteIds.includes(noteId));
                 setSelectedViolationIndex(idx !== -1 ? idx : null);
             } else {
                 setSelectedViolationIndex(null);
@@ -15930,7 +15936,10 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                             return null;
                                         }
                                         if (index != null && violations[index]) {
-                                            setSelectedNoteIds(new Set(violations[index].noteIds));
+                                            // Se la violazione dichiara la nota in causa si seleziona
+                                            // SOLO quella: è quella da correggere (e da riscrivere con J).
+                                            const prim = (violations[index] as any).primaryNoteId as string | undefined;
+                                            setSelectedNoteIds(new Set(prim ? [prim] : violations[index].noteIds));
                                         }
                                         if (typeof index === 'number') scrollScoreToViolationIndex(index);
                                         return index;

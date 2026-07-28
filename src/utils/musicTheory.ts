@@ -10539,7 +10539,11 @@ export function applyHarmonyRules(
                         ruleId: 'R-SPELL',
                         severity: 'warning',
                         description: 'Grafia incoerente: le note scritte non formano un accordo',
-                        noteIds: [culprit.id],
+                        noteIds: partner?.id ? [culprit.id, partner.id] : [culprit.id],
+                        // Il tratteggio ha bisogno di due estremi, ma la nota da riscrivere
+                        // è una sola: senza questa distinzione il clic sulla nota innocente
+                        // apriva la spiegazione come se fosse lei.
+                        primaryNoteId: culprit.id,
                     });
                     if (partner?.id) {
                         connections.push({

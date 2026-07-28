@@ -178,5 +178,6 @@
   "chorale_syntax_half": "minima",
   "chorale_syntax_quarter": "semiminima",
   "chorale_syntax_eighth": "croma",
-  "chorale_syntax_sixteenth": "semicroma"
+  "chorale_syntax_sixteenth": "semicroma",
+  "confidence_enharmonic_reading": "Grafia incoerente: la sigla è dedotta per enarmonia e non corrisponde a quanto scritto"
 }

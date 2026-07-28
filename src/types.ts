@@ -372,6 +372,13 @@ export type RuleViolation = {
     suggestion?: string;
     noteIds: string[];
     severity: 'error' | 'warning' | 'exception';
+    /**
+     * Nota davvero IN CAUSA, quando `noteIds` ne contiene anche altre solo per poter
+     * disegnare il tratteggio (che vuole due estremi). Il clic sulla partitura apre di
+     * preferenza la violazione che ha questa nota come colpevole, e selezionandola dal
+     * pannello si seleziona lei — non le innocenti che le stanno accanto.
+     */
+    primaryNoteId?: string;
 };
 
 export type AnalysisContext = {
