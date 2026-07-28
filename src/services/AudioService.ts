@@ -142,6 +142,27 @@ const SHORT_RELEASE: Record<string, number> = {
 const instrumentRelease = (instrument: string): number => SHORT_RELEASE[instrument] ?? 0.5;
 
 /**
+ * Dissolvenza di rilascio ESPONENZIALE.
+ *
+ * Con una rampa LINEARE d'ampiezza l'orecchio — che è logaritmico — sente il livello
+ * quasi immutato per quasi tutta la coda, e poi un crollo negli ultimi millisecondi: su
+ * uno strumento che NON decade da solo (archi, fiati, organo) la nota sembra tenere, o
+ * addirittura crescere se il campione in quel punto gonfia, e poi essere tagliata di
+ * netto. È l'artefatto segnalato come "un crescendo poi tagliato".
+ * Una rampa esponenziale toglie una quantità costante di dB al secondo: è quello che fa
+ * un suono che si spegne, e la fine non si sente più come un taglio.
+ * `exponentialRampToValueAtTime` non può arrivare a zero: si scende a −60 dB, che è
+ * silenzio a tutti gli effetti, e lì la sorgente viene fermata senza che si senta.
+ */
+const RELEASE_FLOOR = 0.001; // −60 dB
+const rampDownTo = (gain: AudioParam, from: number, startTime: number, endTime: number): void => {
+  const safeFrom = Math.max(RELEASE_FLOOR, from);
+  gain.setValueAtTime(safeFrom, startTime);
+  if (endTime > startTime) gain.exponentialRampToValueAtTime(RELEASE_FLOOR, endTime);
+  else gain.setValueAtTime(RELEASE_FLOOR, startTime);
+};
+
+/**
  * Strumenti SOLO-LOCALI: nessun fallback GM remoto. Sono i bassi custom (FLAC
  * renderizzati da SFZ): oltre il range renderizzato la nota resta muta, invece di
  * passare a un campione GM con timbro/livello diversi (il "calo" al confine).
@@ -302,8 +323,7 @@ export class AudioService {
       const releaseDurationInSeconds = 0.5; // Fade-out duration
       const noteEndTime = startTime + noteDurationInSeconds;
 
-      gainNode.gain.setValueAtTime(options?.volume ?? 1, startTime);
-      gainNode.gain.linearRampToValueAtTime(0.0001, noteEndTime + releaseDurationInSeconds);
+      rampDownTo(gainNode.gain, options?.volume ?? 1, startTime, noteEndTime + releaseDurationInSeconds);
 
       source.start(startTime);
       source.stop(noteEndTime + releaseDurationInSeconds);
@@ -356,8 +376,7 @@ export class AudioService {
         const releaseDurationInSeconds = 0.5; // Fade-out duration
         const noteEndTime = startTime + noteDurationInSeconds;
 
-        gainNode.gain.setValueAtTime(1, startTime);
-        gainNode.gain.linearRampToValueAtTime(0.0001, noteEndTime + releaseDurationInSeconds);
+        rampDownTo(gainNode.gain, 1, startTime, noteEndTime + releaseDurationInSeconds);
 
         source.start(startTime);
         source.stop(noteEndTime + releaseDurationInSeconds);
@@ -532,7 +551,10 @@ export class AudioService {
     if (!forceGm && SUSTAINED[instrument] && options?.slotSec != null) {
       const maxRelease = options.slotSec - noteDurationInSeconds;
       if (maxRelease >= 0) {
-        releaseDurationInSeconds = Math.max(0.05, Math.min(releaseDurationInSeconds, maxRelease));
+        // Minimo 0,12 s: sotto quella soglia il rilascio non è più una coda ma un taglio
+        // (e a 0,05 s si sentiva come un clic). Una sovrapposizione così breve con la nota
+        // dopo non si percepisce come "due esecutori", che era il difetto da evitare.
+        releaseDurationInSeconds = Math.max(0.12, Math.min(releaseDurationInSeconds, maxRelease));
       }
     }
     const noteEndTime = startTime + noteDurationInSeconds;
@@ -547,11 +569,9 @@ export class AudioService {
       // short note isn't quieter than a long one (fixes the live-vs-recorded
       // loudness gap), and the held body matches the live monitor.
       gainNode.gain.setValueAtTime(vol, startTime);
-      gainNode.gain.setValueAtTime(vol, noteEndTime);
-      gainNode.gain.linearRampToValueAtTime(0.0001, noteEndTime + releaseDurationInSeconds);
+      rampDownTo(gainNode.gain, vol, noteEndTime, noteEndTime + releaseDurationInSeconds);
     } else {
-      gainNode.gain.setValueAtTime(vol, startTime);
-      gainNode.gain.linearRampToValueAtTime(0.0001, noteEndTime + releaseDurationInSeconds);
+      rampDownTo(gainNode.gain, vol, startTime, noteEndTime + releaseDurationInSeconds);
     }
     source.start(startTime);
     source.stop(noteEndTime + releaseDurationInSeconds);
@@ -587,7 +607,7 @@ export class AudioService {
         try {
           handle._gain.gain.cancelScheduledValues(now);
           handle._gain.gain.setValueAtTime(Math.max(0.0001, handle._gain.gain.value), now);
-          handle._gain.gain.linearRampToValueAtTime(0.0001, now + releaseSec);
+          rampDownTo(handle._gain.gain, handle._gain.gain.value, now, now + releaseSec);
         } catch { /* ignore */ }
         try { handle._source.stop(now + releaseSec + 0.05); } catch { /* ignore */ }
       },
