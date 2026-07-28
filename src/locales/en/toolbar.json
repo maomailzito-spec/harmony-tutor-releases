@@ -6,7 +6,6 @@
   "duration_sixteenth": "Sixteenth note",
   "duration_thirty_second": "Thirty-second note",
   "duration_sixty_fourth": "Sixty-fourth note",
-
   "instrument_piano": "Piano",
   "instrument_organ": "Organ",
   "instrument_harpsichord": "Harpsichord",
@@ -33,7 +32,6 @@
   "instrument_xylophone": "Xylophone",
   "instrument_marimba": "Marimba",
   "instrument_tubular_bells": "Tubular Bells",
-
   "voice_soprano": "Soprano",
   "voice_alto": "Alto",
   "voice_tenor": "Tenor",
@@ -42,19 +40,16 @@
   "voice_tooltip_suffix": " — double-click for solo",
   "voice_reassign_suffix": " — move selected notes here",
   "voice_instrument_tooltip": "Instrument for {{voice}}",
-
   "accidental_sharp": "Sharp (♯)",
   "accidental_double_sharp": "Double Sharp (𝄪)",
   "accidental_flat": "Flat (♭)",
   "accidental_double_flat": "Double Flat (♭♭)",
   "accidental_natural": "Natural (N)",
-
   "metronome_tooltip": "Metronome (K)",
   "metronome_unit_tooltip": "Metronome unit",
   "metronome_unit_quarter": "Quarter",
   "metronome_unit_eighth": "Eighth",
   "metronome_unit_dotted_quarter": "Dotted Quarter",
-
   "key_label": "Key:",
   "key_optgroup_sharps": "Sharps (♯)",
   "key_optgroup_flats": "Flats (♭)",
@@ -67,7 +62,6 @@
   "key_minor": "min",
   "key_auto_leading_tone": "Auto leading-tone",
   "key_auto_leading_tone_tooltip": "In a minor key: automatically raises the 7th degree (harmonic minor) when no manual accidental is set.",
-
   "time_label": "Time:",
   "measures_label": "Mea:",
   "measures_per_line_label": "per line",
@@ -78,11 +72,9 @@
   "measures_per_line_tooltip": "Measures per line (1-12)",
   "measures_per_line_increase": "Increase measures per line",
   "measures_per_line_decrease": "Decrease measures per line",
-
   "playback_play": "Play (Space)",
   "playback_pause": "Pause (Space)",
   "playback_undo": "Undo (Cmd/Ctrl+Z)",
-
   "insert_switch_to_rest": "Switch to Rest (R)",
   "insert_rest_mode_switch_to_note": "Rest mode active — switch to Note (R)",
   "insert_dotted": "Dotted note",
@@ -93,15 +85,12 @@
   "insert_double_barline_active": "Insert/Remove double bar at the playhead measure",
   "insert_set_playhead_first": "Set the playhead first (click on the staff)",
   "insert_measure_at_playhead": "Insert measure at the playhead (push following measures forward)",
-
   "notations_unbeam": "Unbeam selected notes",
   "notations_beam_select_min": "Select at least 2 notes to beam",
   "notations_beam": "Beam selected notes",
   "notations_tie": "Tie notes",
   "notations_flip_stem": "Flip stem / tie",
-
   "analysis_chromatic_label": "Chromatic",
-
   "more_menu": "Menu",
   "more_grand_staff_tooltip": "Back to Grand Staff (2 staves) — Alt/Option+L",
   "more_grand_staff_label": "Grand Staff (2 staves)",
@@ -118,12 +107,16 @@
   "more_format_show_page_breaks": "Show page breaks",
   "more_format_page_break": "Page",
   "more_drag_to_reorder": "Drag to reorder",
-
   "midi_label": "MIDI",
   "midi_select_output": "Select output",
   "midi_internal_audio": "Internal Audio",
   "midi_no_devices": "No MIDI device",
   "midi_step_input": "MIDI Step Input",
   "midi_step_input_short": "Step Input",
-  "midi_step_input_with_device": "Input: {{device}}"
+  "midi_step_input_with_device": "Input: {{device}}",
+  "more_view_label": "View",
+  "more_view_paged": "Paged",
+  "more_view_paged_tooltip": "Measures wrap to fill the available width",
+  "more_view_ribbon": "Continuous ribbon",
+  "more_view_ribbon_tooltip": "All measures on a single system, scrolled horizontally"
 }

@@ -199,6 +199,9 @@ type GrandStaffToolbarProps = {
     staffLayoutMode: StaffLayoutMode;
     setStaffLayoutMode: (value: StaffLayoutMode | ((prev: StaffLayoutMode) => StaffLayoutMode)) => void;
     canvasFormat: CanvasFormat;
+    /** Vista della partitura: pagina (righe che vanno a capo) o nastro continuo. */
+    viewMode?: 'page' | 'linear';
+    setViewMode?: (v: 'page' | 'linear') => void;
     setCanvasFormat: (value: CanvasFormat) => void;
     /** Opt-in guide: draw approximate page breaks between systems in the editor. */
     showPageBreaks?: boolean;
@@ -388,6 +391,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         staffLayoutMode,
         setStaffLayoutMode,
         canvasFormat,
+        viewMode,
+        setViewMode,
         setCanvasFormat,
         showPageBreaks,
         onToggleShowPageBreaks,
@@ -1251,6 +1256,28 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             <span>{tT('more_close_voicing_label')}</span>
                             {staffLayoutMode === 'parti_strette' && staffSystemMode !== 'satb_ancient' && <span className="text-[11px]">✓</span>}
                         </button>
+                        {setViewMode && (
+                            <>
+                                <div className="my-2 h-px bg-slate-700" />
+                                <div className="px-2 pb-1 text-[11px] text-slate-300">{tT('more_view_label')}</div>
+                                <button
+                                    onClick={() => setViewMode('page')}
+                                    className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                    title={tT('more_view_paged_tooltip')}
+                                >
+                                    <span>{tT('more_view_paged')}</span>
+                                    <span className="text-[11px]">{viewMode !== 'linear' ? '●' : '○'}</span>
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('linear')}
+                                    className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                    title={tT('more_view_ribbon_tooltip')}
+                                >
+                                    <span>{tT('more_view_ribbon')}</span>
+                                    <span className="text-[11px]">{viewMode === 'linear' ? '●' : '○'}</span>
+                                </button>
+                            </>
+                        )}
                         <div className="my-2 h-px bg-slate-700" />
                         <div className="px-2 pb-1 text-[11px] text-slate-300">{tT('more_format_label')}</div>
                         <button

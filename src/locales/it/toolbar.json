@@ -6,7 +6,6 @@
   "duration_sixteenth": "Semicroma",
   "duration_thirty_second": "Biscroma",
   "duration_sixty_fourth": "Semibiscroma",
-
   "instrument_piano": "Pianoforte",
   "instrument_organ": "Organo",
   "instrument_harpsichord": "Clavicembalo",
@@ -33,7 +32,6 @@
   "instrument_xylophone": "Xilofono",
   "instrument_marimba": "Marimba",
   "instrument_tubular_bells": "Campane tubolari",
-
   "voice_soprano": "Soprano",
   "voice_alto": "Alto",
   "voice_tenor": "Tenore",
@@ -42,19 +40,16 @@
   "voice_tooltip_suffix": " — doppio-click per solo",
   "voice_reassign_suffix": " — sposta qui le note selezionate",
   "voice_instrument_tooltip": "Strumento per {{voice}}",
-
   "accidental_sharp": "Diesis (♯)",
   "accidental_double_sharp": "Doppio Diesis (𝄪)",
   "accidental_flat": "Bemolle (♭)",
   "accidental_double_flat": "Doppio Bemolle (♭♭)",
   "accidental_natural": "Bequadro (N)",
-
   "metronome_tooltip": "Metronomo (K)",
   "metronome_unit_tooltip": "Unità del metronomo",
   "metronome_unit_quarter": "Quarto",
   "metronome_unit_eighth": "Ottavo",
   "metronome_unit_dotted_quarter": "Quarto puntato",
-
   "key_label": "Ton:",
   "key_optgroup_sharps": "Diesis (♯)",
   "key_optgroup_flats": "Bemolli (♭)",
@@ -67,7 +62,6 @@
   "key_minor": "min",
   "key_auto_leading_tone": "Sensibile auto",
   "key_auto_leading_tone_tooltip": "In tonalità minore: alza automaticamente il VII grado (minore armonica) se non scegli un accidentale manuale.",
-
   "time_label": "Tempo:",
   "measures_label": "Mis:",
   "measures_per_line_label": "per riga",
@@ -78,11 +72,9 @@
   "measures_per_line_tooltip": "Misure per riga (1-12)",
   "measures_per_line_increase": "Aumenta misure per riga",
   "measures_per_line_decrease": "Diminuisci misure per riga",
-
   "playback_play": "Play (Spazio)",
   "playback_pause": "Pausa (Spazio)",
   "playback_undo": "Undo (Cmd/Ctrl+Z)",
-
   "insert_switch_to_rest": "Passa a Pausa (R)",
   "insert_rest_mode_switch_to_note": "Modalità Pausa attiva — passa a Nota (R)",
   "insert_dotted": "Punto di valore",
@@ -93,15 +85,12 @@
   "insert_double_barline_active": "Inserisci/Rimuovi doppia barra alla misura della playhead",
   "insert_set_playhead_first": "Imposta prima la playhead (click sullo staff)",
   "insert_measure_at_playhead": "Inserisci misura alla playhead (sposta avanti le successive)",
-
   "notations_unbeam": "Separa note selezionate",
   "notations_beam_select_min": "Seleziona almeno 2 note per la travatura",
   "notations_beam": "Unisci note selezionate",
   "notations_tie": "Lega note",
   "notations_flip_stem": "Inverti gambo / legatura",
-
   "analysis_chromatic_label": "Cromatica",
-
   "more_menu": "Menu",
   "more_grand_staff_tooltip": "Torna al Grand Staff (2 righi) — Alt/Option+L",
   "more_grand_staff_label": "Grand Staff (2 righi)",
@@ -118,12 +107,16 @@
   "more_format_show_page_breaks": "Mostra salti pagina",
   "more_format_page_break": "Pagina",
   "more_drag_to_reorder": "Trascina per riordinare",
-
   "midi_label": "MIDI",
   "midi_select_output": "Seleziona uscita",
   "midi_internal_audio": "Audio Interno",
   "midi_no_devices": "Nessun dispositivo MIDI",
   "midi_step_input": "MIDI Step Input",
   "midi_step_input_short": "Step Input",
-  "midi_step_input_with_device": "Input: {{device}}"
+  "midi_step_input_with_device": "Input: {{device}}",
+  "more_view_label": "Vista",
+  "more_view_paged": "A pagina",
+  "more_view_paged_tooltip": "Le misure vanno a capo riempiendo la larghezza disponibile",
+  "more_view_ribbon": "Nastro continuo",
+  "more_view_ribbon_tooltip": "Tutte le misure su un solo rigo, si scorre in orizzontale"
 }

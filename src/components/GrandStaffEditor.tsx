@@ -5713,6 +5713,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const zoomForLine = Math.max(0.05, editorZoom || 1);
         const desiredMeasuresPerLine = Math.max(1, Math.min(24, Math.round((measuresPerLine || 4) / zoomForLine)));
 
+        // NASTRO CONTINUO ("linear"): tutte le misure su un unico sistema, che si estende
+        // oltre la finestra e si percorre scorrendo in orizzontale. Nessuna spezzatura di
+        // riga, quindi né il tetto della toolbar né la larghezza disponibile contano.
+        const isRibbon = viewMode === 'linear';
+
         const tentativeSystems: { measureIndices: number[] }[] = [];
         let curSys: number[] = [];
         // Natural width for a measure using the deterministic default px-per-tick
@@ -5725,7 +5730,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         let accWidth = 0;
-        for (let m = 0; m < targetTotalMeasures; m++) {
+        for (let m = 0; m < targetTotalMeasures && !isRibbon; m++) {
             if (curSys.length >= desiredMeasuresPerLine) {
                 tentativeSystems.push({ measureIndices: curSys });
                 curSys = [];
@@ -5743,7 +5748,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 accWidth += mWidth;
             }
         }
-        if (curSys.length > 0) tentativeSystems.push({ measureIndices: curSys });
+        if (isRibbon) {
+            // Un solo sistema, ma con un tetto di larghezza: oltre ~16.000 px un elemento
+            // grafico supera il limite di composizione dei browser e rischia di essere reso
+            // vuoto o sfocato. Un brano molto lungo diventa quindi pochi nastri lunghissimi
+            // (a 4/4 sono circa 60 misure ciascuno) invece di uno solo impossibile da dipingere.
+            const RIBBON_MAX_WIDTH_PX = 16000;
+            let ribbon: number[] = [];
+            let ribbonWidth = START_X;
+            for (let m = 0; m < targetTotalMeasures; m++) {
+                const mw = naturalMeasureWidth(m, ribbon.length === 0);
+                if (ribbon.length > 0 && ribbonWidth + mw > RIBBON_MAX_WIDTH_PX) {
+                    tentativeSystems.push({ measureIndices: ribbon });
+                    ribbon = [];
+                    ribbonWidth = START_X;
+                }
+                ribbon.push(m);
+                ribbonWidth += mw;
+            }
+            if (ribbon.length > 0) tentativeSystems.push({ measureIndices: ribbon });
+        } else if (curSys.length > 0) {
+            tentativeSystems.push({ measureIndices: curSys });
+        }
 
         // If a global default px-per-tick is configured, check whether every tentative
         // system can fit using that scale. If so, prefer the global deterministic value
@@ -5861,7 +5887,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // the barline aligns with the edge (prevents a visually short last
             // measure that breaks insertion UX). This does not change pxPerTick.
             let usedWidth = curX - curXStart + START_X;
-            if (usedWidth < layoutWidth) {
+            if (!isRibbon && usedWidth < layoutWidth) {
                 const extra = layoutWidth - usedWidth;
                 const lastMeasureIdx = sys.measureIndices[sys.measureIndices.length - 1];
                 const prev = measureFinalWidths.get(lastMeasureIdx) || 0;
@@ -6206,6 +6232,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return { systemNotes, systemNotesForRender };
         });
     }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentals]);
+
+    // Larghezza reale del contenuto: di norma quella d'impaginazione, ma nel nastro
+    // continuo è quella del sistema, che la eccede e si percorre scorrendo.
+    const contentWidth = useMemo(() => {
+        const widest = (layoutData?.systemsParams || []).reduce(
+            (mx: number, s: any) => Math.max(mx, Number(s?.width) || 0), 0);
+        return Math.max(layoutWidth, Math.ceil(widest));
+    }, [layoutData, layoutWidth]);
 
     const scrollScoreToViolationIndex = useCallback((index: number) => {
         const v = violations?.[index];
@@ -13100,6 +13134,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setLayoutModeChanges([]);
                 }}
                 canvasFormat={canvasFormat}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
                 setCanvasFormat={setCanvasFormat}
                 showPageBreaks={showPageBreaks}
                 onToggleShowPageBreaks={() => setShowPageBreaks(v => !v)}
@@ -13681,7 +13717,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             <div
                                 ref={staffContainerRef}
                                 className="p-4 ht-staff-container"
-                                style={{ width: layoutWidth }}
+                                // Nel nastro continuo il sistema è più largo della finestra: il
+                                // contenitore deve seguirlo, altrimenti il contenuto verrebbe
+                                // tagliato invece di poter scorrere.
+                                style={{ width: contentWidth }}
                             >
                         <div className="w-full flex justify-center mb-3">
                             <input
