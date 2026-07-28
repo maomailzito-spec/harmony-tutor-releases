@@ -118,5 +118,7 @@
   "more_view_paged": "A pagina",
   "more_view_paged_tooltip": "Le misure vanno a capo riempiendo la larghezza disponibile",
   "more_view_ribbon": "Nastro continuo",
-  "more_view_ribbon_tooltip": "Tutte le misure su un solo rigo, si scorre in orizzontale"
+  "more_view_ribbon_tooltip": "Tutte le misure su un solo rigo, si scorre in orizzontale",
+  "more_spacing_content": "Spaziatura secondo il contenuto",
+  "more_spacing_content_tooltip": "La larghezza di ogni misura segue quante note contiene e quanto sono brevi; spenta, segue solo la durata"
 }

@@ -202,6 +202,9 @@ type GrandStaffToolbarProps = {
     /** Vista della partitura: pagina (righe che vanno a capo) o nastro continuo. */
     viewMode?: 'page' | 'linear';
     setViewMode?: (v: 'page' | 'linear') => void;
+    /** Spaziatura proporzionale al contenuto (larghezza della misura secondo le note). */
+    contentAwareSpacing?: boolean;
+    setContentAwareSpacing?: (v: boolean) => void;
     setCanvasFormat: (value: CanvasFormat) => void;
     /** Opt-in guide: draw approximate page breaks between systems in the editor. */
     showPageBreaks?: boolean;
@@ -393,6 +396,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         canvasFormat,
         viewMode,
         setViewMode,
+        contentAwareSpacing,
+        setContentAwareSpacing,
         setCanvasFormat,
         showPageBreaks,
         onToggleShowPageBreaks,
@@ -1268,6 +1273,16 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                     <span>{tT('more_view_paged')}</span>
                                     <span className="text-[11px]">{viewMode !== 'linear' ? '●' : '○'}</span>
                                 </button>
+                                {setContentAwareSpacing && (
+                                    <button
+                                        onClick={() => setContentAwareSpacing(!contentAwareSpacing)}
+                                        className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                        title={tT('more_spacing_content_tooltip')}
+                                    >
+                                        <span>{tT('more_spacing_content')}</span>
+                                        <span className="text-[11px]">{contentAwareSpacing ? '✓' : ''}</span>
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setViewMode('linear')}
                                     className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"

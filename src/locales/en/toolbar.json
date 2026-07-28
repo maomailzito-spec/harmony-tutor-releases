@@ -118,5 +118,7 @@
   "more_view_paged": "Paged",
   "more_view_paged_tooltip": "Measures wrap to fill the available width",
   "more_view_ribbon": "Continuous ribbon",
-  "more_view_ribbon_tooltip": "All measures on a single system, scrolled horizontally"
+  "more_view_ribbon_tooltip": "All measures on a single system, scrolled horizontally",
+  "more_spacing_content": "Content-aware spacing",
+  "more_spacing_content_tooltip": "Each measure is as wide as its content demands; when off, width follows duration only"
 }

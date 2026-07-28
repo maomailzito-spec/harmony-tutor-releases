@@ -432,6 +432,7 @@ type ToolbarGroupId =
 const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
 const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
 const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
+const CONTENT_SPACING_KEY = 'harmony-tutor.contentAwareSpacing.v1';
 const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'playback',
     'bpm',
@@ -2417,6 +2418,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         try { window.localStorage.setItem(ENGRAVING_MODE_KEY, engravingMode); } catch (_) {}
     }, [engravingMode]);
+
+    // SPAZIATURA PROPORZIONALE AL CONTENUTO (incisione): quando è attiva, la larghezza di
+    // ogni misura dipende da quante note contiene e da quanto sono brevi, non dalla sola
+    // durata. Spegnendola si torna esattamente alla spaziatura per tempo di prima.
+    const [contentAwareSpacing, setContentAwareSpacing] = useState<boolean>(() => {
+        try { return String(window.localStorage.getItem(CONTENT_SPACING_KEY) || '') !== '0'; } catch (_) { return true; }
+    });
+    useEffect(() => {
+        try { window.localStorage.setItem(CONTENT_SPACING_KEY, contentAwareSpacing ? '1' : '0'); } catch (_) {}
+    }, [contentAwareSpacing]);
 
     const [showVoiceColors, setShowVoiceColors] = useState(false);
     const [showIncompleteMeasureWarnings, setShowIncompleteMeasureWarnings] = useState(true);
@@ -5734,9 +5745,52 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         let curSys: number[] = [];
         // Natural width for a measure using the deterministic default px-per-tick
         // (used only for system splitting heuristics).
-        const naturalMeasureWidth = (_mIdx: number, isFirstMeasureInSystem: boolean) => {
+        // ── DOMANDA DI SPAZIO DI UNA MISURA ────────────────────────────────────────
+        // Spaziatura per TEMPO (storica): larghezza = durata × px-per-tick, quindi due
+        // misure di uguale durata sono larghe uguale anche se una contiene una semibreve e
+        // l'altra sedici semicrome — e in quest'ultima le note si accalcano.
+        // Spaziatura per CONTENUTO (incisione): ogni attacco riceve spazio in funzione
+        // SUBLINEARE della sua durata (esponente 0,6), come nelle tabelle d'incisione: una
+        // semiminima non prende quattro volte lo spazio di una semicroma, ma circa due volte
+        // e mezzo. Così le misure fitte si allargano e quelle rade restringono, e la riga
+        // resta della stessa larghezza complessiva.
+        const SPACING_EXPONENT = 0.6;
+        const QUARTER_PX = TICKS_PER_QUARTER * DEFAULT_PX_PER_TICK; // spazio di una semiminima
+        const MIN_ONSET_PX = 14; // una testa di nota più un minimo respiro
+        const measureDemandCache = new Map<number, number>();
+        const measureDemand = (_mIdx: number): number => {
+            const cached = measureDemandCache.get(_mIdx);
+            if (cached != null) return cached;
             const measureTicks = ticksPerMeasureForIndex(_mIdx);
-            const content = Math.round(measureTicks * DEFAULT_PX_PER_TICK);
+            const byTime = measureTicks * DEFAULT_PX_PER_TICK;
+            let demand = byTime;
+            if (contentAwareSpacing) {
+                // Attacchi distinti della misura, con la durata più breve che vi comincia.
+                const shortestByOnset = new Map<number, number>();
+                for (const n of notesToLayout) {
+                    if ((n.measureIndex ?? -1) !== _mIdx) continue;
+                    const t = Number((n as any).startTick);
+                    if (!Number.isFinite(t)) continue;
+                    const d = Math.max(1, Number(n.durationTicks) || 1);
+                    const prev = shortestByOnset.get(t);
+                    if (prev == null || d < prev) shortestByOnset.set(t, d);
+                }
+                if (shortestByOnset.size > 0) {
+                    let sum = 0;
+                    for (const d of shortestByOnset.values()) {
+                        const quarters = Math.max(0.03125, d / TICKS_PER_QUARTER);
+                        sum += Math.max(MIN_ONSET_PX, QUARTER_PX * Math.pow(quarters, SPACING_EXPONENT));
+                    }
+                    // Pavimento: una misura rada non scende sotto il 60% della sua larghezza
+                    // "a tempo", altrimenti diventerebbe un francobollo accanto a una fitta.
+                    demand = Math.max(sum, byTime * 0.6);
+                }
+            }
+            return (measureDemandCache.set(_mIdx, demand), demand);
+        };
+
+        const naturalMeasureWidth = (_mIdx: number, isFirstMeasureInSystem: boolean) => {
+            const content = Math.round(measureDemand(_mIdx));
             const extraLeft = isFirstMeasureInSystem ? (keySigWidth + timeSigWidthWithPadding) : 0;
             return content + (MEASURE_PADDING_X * 2) + extraLeft;
         };
@@ -5802,7 +5856,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // For each tentative system compute pxPerTick from available width minus paddings
         let curXStart = startOffset;
-        const systemsParams: { measureIndices: number[]; width: number; startMeasuresX: number[]; pxPerTick: number }[] = [];
+        const systemsParams: { measureIndices: number[]; width: number; startMeasuresX: number[]; pxPerTick: number; measurePxPerTick: number[] }[] = [];
         tentativeSystems.forEach((sys, sysIndex) => {
             const measureCount = sys.measureIndices.length;
             const totalPadding = measureCount * (MEASURE_PADDING_X * 2);
@@ -5837,12 +5891,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const defaultPx = (typeof DEFAULT_PX_PER_TICK === 'number' && DEFAULT_PX_PER_TICK > 0) ? DEFAULT_PX_PER_TICK : 0;
             const pxPerTick = Math.max(minPxPerTick, defaultPx, neededPxPerTickFromNotes, (availableContentWidth / Math.max(1, totalTicks)));
 
+            // Ripartizione della larghezza fra le misure del sistema: in proporzione alla
+            // loro DOMANDA di spazio invece che alla sola durata. La somma non cambia — la
+            // riga resta larga uguale — cambia come lo spazio è distribuito.
+            const demands = sys.measureIndices.map(m => Math.max(1, measureDemand(m)));
+            const demandTotal = demands.reduce((x, y) => x + y, 0) || 1;
+            const contentTotal = totalTicks * pxPerTick; // spazio contenuto complessivo, come prima
+            // Ogni misura ha ora il SUO px-per-tick: dentro la misura la posizione resta
+            // lineare nel tempo (così clic, cursore ed etichette continuano a funzionare),
+            // ma misure diverse hanno densità diverse.
+            const measurePxPerTickLocal: number[] = [];
+
             const systemBarlines: Barline[] = [];
             let curX = curXStart;
             const startMeasuresX: number[] = [];
             sys.measureIndices.forEach((m, idx) => {
                 const measureTicks = ticksPerMeasureForIndex(m);
-                const contentWidthForMeasure = measureTicks * pxPerTick;
+                const contentWidthForMeasure = contentAwareSpacing
+                    ? (contentTotal * (demands[idx] / demandTotal))
+                    : (measureTicks * pxPerTick);
+                const mPxPerTick = contentWidthForMeasure / Math.max(1, measureTicks);
+                measurePxPerTickLocal[idx] = mPxPerTick;
                 // If this is the first measure in the system, reserve space for key/time glyphs
                 // so notes don't overlap the clef/time.
                 const isFirstMeasureInSystem = idx === 0;
@@ -5862,7 +5931,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                     const nStartTick = (n as any).startTick as number;
                     const relativeTicks = Math.max(0, nStartTick - measureStartTick);
-                    const relativeX = relativeTicks * pxPerTick; // nessun round qui
+                    const relativeX = relativeTicks * mPxPerTick; // px-per-tick DELLA MISURA
                     const localX =
                         (curX - curXStart + START_X) +
                         extraLeft +
@@ -5912,7 +5981,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 usedWidth += extra;
             }
             const finalWidth = usedWidth;
-            systemsParams.push({ measureIndices: sys.measureIndices, width: finalWidth, startMeasuresX, pxPerTick });
+            systemsParams.push({ measureIndices: sys.measureIndices, width: finalWidth, startMeasuresX, pxPerTick, measurePxPerTick: measurePxPerTickLocal });
             // next system starts after current curX plus small gap
             curXStart = curX + 20;
         });
@@ -5935,7 +6004,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ignore logging errors
         }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
-    }, [notes, layoutWidth, settledZoom, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
+    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA
@@ -6591,7 +6660,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const endX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
             const measureWidth = Math.max(1, endX - startX);
             const contentWidth = Math.max(1, measureWidth - (MEASURE_PADDING_X * 2));
-            const rawPxPerTick = (sys as any).pxPerTick;
+            const rawPxPerTick = pxPerTickOfMeasure(sys, idx);
             const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
                 ? rawPxPerTick
                 : (contentWidth / Math.max(1, ticksPerMeasure));
@@ -7958,7 +8027,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const baseX = sp.startMeasuresX?.[idxInSys] ?? 0;
                 const vi = visAccTracks.findIndex(vt => vt.id === t.id);
                 const accY = ACC_TREBLE_TOP_Y_LOCAL + (vi >= 0 ? (accTrebleOffsets[vi] ?? 0) : 0) - 10;
-                return { sys, x: baseX + MEASURE_PADDING_X + relativeTicks * sp.pxPerTick, y: accY };
+                return { sys, x: baseX + MEASURE_PADDING_X + relativeTicks * pxPerTickOfMeasure(sp, idxInSys), y: accY };
             }
             return null;
         };
@@ -8257,7 +8326,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
                     const measureStartTick = beatsToTicks(msAbsBeat);
                     const relativeTicks = Math.max(0, startTick - measureStartTick);
-                    const relativeX = relativeTicks * system.pxPerTick;
+                    const relativeX = relativeTicks * pxPerTickOfMeasure(system, idxInSys);
                     const baseX = system.startMeasuresX[idxInSys] ?? 0;
                     const xPosition = baseX + MEASURE_PADDING_X + relativeX;
                     accNotesInSys.push({ ...n, xPosition, _trackIdx: visIdx });
@@ -9032,6 +9101,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         pasteToSelectedVoiceRef.current = false;
     }, [clefForVoice, selectedVoice, setRawNotes, setSelectedNoteIds, setAccompanimentTracks, timeSignature]);
 
+    /** px-per-tick DELLA MISURA: con la spaziatura per contenuto ogni misura ha la sua
+     *  densità, mentre dentro la misura la posizione resta lineare nel tempo. */
+    const pxPerTickOfMeasure = (sys: any, idxInSystem: number): number => {
+        const per = sys?.measurePxPerTick?.[idxInSystem];
+        if (typeof per === 'number' && isFinite(per) && per > 0) return per;
+        const sysPx = sys?.pxPerTick;
+        return (typeof sysPx === 'number' && isFinite(sysPx) && sysPx > 0) ? sysPx : DEFAULT_PX_PER_TICK;
+    };
+
     const getSystemMeasureAtX = useCallback((systemIndex: number, x: number) => {
         const sys = layoutData?.systemsParams?.[systemIndex];
         if (!sys || !layoutData) return null;
@@ -9046,7 +9124,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const startX = sys.startMeasuresX[i];
             const endX = i < count - 1 ? sys.startMeasuresX[i + 1] : (sys.width - START_X);
             const w = Math.max(0, endX - startX);
-            if (x >= startX && x < endX) return { measureIndex: mIdx, measureStartX: startX, measureWidth: w, pxPerTick: sys.pxPerTick };
+            if (x >= startX && x < endX) return { measureIndex: mIdx, measureStartX: startX, measureWidth: w, pxPerTick: pxPerTickOfMeasure(sys, i) };
         }
 
         // Fallback: clamp x and pick closest bucket.
@@ -9062,7 +9140,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const startX = sys.startMeasuresX[idx];
         const endX = idx < count - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
         const w = Math.max(0, endX - startX);
-        return { measureIndex: mIdx, measureStartX: startX, measureWidth: w, pxPerTick: sys.pxPerTick };
+        return { measureIndex: mIdx, measureStartX: startX, measureWidth: w, pxPerTick: pxPerTickOfMeasure(sys, idx) };
     }, [layoutData]);
 
     const setPlaybackCursorFromMeasureBeat = useCallback((systemIndex: number, x: number, measureIndex: number, beat: number) => {
@@ -9774,7 +9852,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const startX = startsX[pick];
             const endX = pick < startsX.length - 1 ? startsX[pick + 1] : (sys.width - START_X);
             const contentWidth = Math.max(1, (endX - startX) - (MEASURE_PADDING_X * 2));
-            const rawPxPerTick = sys.pxPerTick;
+            const rawPxPerTick = pxPerTickOfMeasure(sys, pick);
             const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
                 ? rawPxPerTick : (contentWidth / ticksPerMeasure);
             let localTicks = (ph.x - (startX + MEASURE_PADDING_X)) / pxPerTick;
@@ -13148,6 +13226,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 canvasFormat={canvasFormat}
                 viewMode={viewMode}
                 setViewMode={setViewMode}
+                contentAwareSpacing={contentAwareSpacing}
+                setContentAwareSpacing={setContentAwareSpacing}
                 setCanvasFormat={setCanvasFormat}
                 showPageBreaks={showPageBreaks}
                 onToggleShowPageBreaks={() => setShowPageBreaks(v => !v)}
@@ -14065,7 +14145,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
                                                                             const measureStartTick = beatsToTicks(msAbsBeat);
                                                                             const relativeTicks = Math.max(0, startTick - measureStartTick);
-                                                                            const relativeX = relativeTicks * sysParams.pxPerTick;
+                                                                            const relativeX = relativeTicks * pxPerTickOfMeasure(sysParams, idxInSys);
                                                                             const baseX = sysParams.startMeasuresX[idxInSys] ?? 0;
                                                                             const localX = baseX + MEASURE_PADDING_X + relativeX;
                                                                             // Ricalcola explicitAccidental come per il SATB (vedi systemNotesForRender):
