@@ -132,6 +132,12 @@ type VoiceSnapshot = {
     isTiedToNext?: boolean;
     isTiedFromPrev?: boolean;
     position?: number | null;
+    /** La voce ATTACCA una nota proprio qui (non la sta tenendo da prima).
+     *  Serve a distinguere una nota tenuta da una ribattuta: senza, un modello con
+     *  una semibreve e una ripetizione con due minime della stessa altezza risultano
+     *  identici, perché in entrambi i casi al momento del confronto "suona" la stessa
+     *  nota. Gli intervalli tornano, il ritmo no — ed è una sequenza sbagliata. */
+    onset?: boolean;
 };
 
 type SlotSnapshot = {
@@ -192,6 +198,11 @@ const buildSnapshots = (slots: number[], notes: StaffNote[]): SlotSnapshot[] => 
                 active = null;
             }
             state.active = active;
+            // Attacco: la nota attiva comincia proprio a questo slot e non è la
+            // continuazione di una legatura di valore (che musicalmente NON è un attacco).
+            const startsHere = !!active
+                && Math.abs((Number(active.startTick) || 0) - tick) <= 1e-6
+                && !active.isTiedFromPrev;
             voicesSnap.push({
                 midi: Number.isFinite(active?.midi as number) ? Number(active?.midi) : null,
                 pc: Number.isFinite(active?.midi as number) ? mod12(Number(active?.midi)) : null,
@@ -199,6 +210,7 @@ const buildSnapshots = (slots: number[], notes: StaffNote[]): SlotSnapshot[] => 
                 isTiedToNext: active?.isTiedToNext,
                 isTiedFromPrev: active?.isTiedFromPrev,
                 position: Number.isFinite(active?.position as number) ? Number(active?.position) : null,
+                onset: startsHere,
             });
         });
         snapshots.push({ tick, voices: voicesSnap });
@@ -273,6 +285,14 @@ const snapshotVoicingEqual = (a: SlotSnapshot, b: SlotSnapshot): boolean => {
     // Voice presence pattern must match (same voices absent in both)
     for (let i = 0; i < 4; i++) {
         if ((aPos[i] == null) !== (bPos[i] == null)) return false;
+    }
+
+    // RITMO: dev'essere lo stesso disegno di ATTACCHI. Confrontando solo le altezze
+    // che suonano, una nota tenuta e una ribattuta risultano uguali: il modello con
+    // una semibreve e la ripetizione con due minime passavano per sequenza, con gli
+    // intervalli giusti ma il ritmo diverso. Una sequenza ripete anche il ritmo.
+    for (let i = 0; i < 4; i++) {
+        if (!!a.voices[i]?.onset !== !!b.voices[i]?.onset) return false;
     }
 
     for (let k = 0; k < presentIndices.length - 1; k++) {
@@ -407,6 +427,25 @@ export function detectVoiceLeadingSequences(
     const changes = normalizeTimeSignatureChanges(timeSignature, timeSignatureChanges);
     const measureStartTicks = buildMeasureStartTicks(maxTick, timeSignature, changes);
 
+    // RITMO DELLA SEQUENZA: modello e ripetizione devono avere le stesse DISTANZE fra
+    // gli attacchi. Il confronto guardava solo che cosa suona ad ogni slot, non quanto
+    // dura: un modello di semibrevi e una ripetizione di minime, con gli stessi
+    // intervalli, passavano per sequenza (l'imitazione intervallare c'era, quella
+    // ritmica no). Una sequenza ripete anche il ritmo.
+    const spacingTolerance = Math.max(1, snapTicks);
+    const spacingsMatch = (aStart: number, bStart: number, len: number): boolean => {
+        for (let k = 0; k < len; k += 1) {
+            const a1 = slots[aStart + k];
+            const a2 = slots[aStart + k + 1];
+            const b1 = slots[bStart + k];
+            const b2 = slots[bStart + k + 1];
+            // Fine del brano: oltre l'ultimo slot non c'è nulla da confrontare.
+            if (a2 == null || b2 == null) break;
+            if (Math.abs((a2 - a1) - (b2 - b1)) > spacingTolerance) return false;
+        }
+        return true;
+    };
+
     const matches: SequenceMatch[] = [];
     const MIN_ONSET_VOICES = 2;
     const REQUIRED_ONSET_VOICES = new Set([1, 4]);
@@ -428,6 +467,7 @@ export function detectVoiceLeadingSequences(
             const modelBlock = signatures.slice(i, i + L);
             const blockMatchesModel = (blockStart: number): boolean => {
                 if (blockStart + L > signatures.length) return false;
+                if (!spacingsMatch(i, blockStart, L)) return false;
                 for (let k = 0; k < L; k += 1) {
                     const snapA = snapshots[i + k];
                     const snapB = snapshots[blockStart + k];
@@ -448,6 +488,7 @@ export function detectVoiceLeadingSequences(
                     const blockStart = startIndex + k * len;
                     const block = signatures.slice(blockStart, blockStart + len);
                     if (block.length < len) break;
+                    if (!spacingsMatch(startIndex, blockStart, len)) break;
                     let firstMismatch = -1;
                     for (let bi = 0; bi < len; bi += 1) {
                         const snapA = snapshots[startIndex + bi];
