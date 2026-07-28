@@ -566,5 +566,10 @@
       "quinta più che eccedente": "more-than-augmented fifth",
       "terza eccedente": "augmented third"
     }
+  },
+  "EXC-IV6-V6": {
+    "title": "Fifth by direct motion in the chain of first inversions of IV and V",
+    "body": "In the succession of the first inversions of the fourth and fifth degrees, the fifth may be reached by direct motion without harshness, even when both parts forming it move by leap.\nThe general rule requires, for fifths reached by direct motion, that at least one of the two parts move stepwise, or that one of the two notes of the fifth be common to both chords. In this chain the condition is not needed: the link between the two inversions is already firm — the bass rises by step from the sixth to the seventh degree of the scale and the upper parts stay within the same harmonic region — and to the ear the arrival on the fifth does not sound harsh.",
+    "suggestion": "No correction needed: in this chain the arrival on the fifth by direct motion is accepted even with a leap in both parts."
   }
 }

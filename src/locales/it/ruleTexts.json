@@ -566,5 +566,10 @@
       "quinta più che eccedente": "quinta più che eccedente",
       "terza eccedente": "terza eccedente"
     }
+  },
+  "EXC-IV6-V6": {
+    "title": "Quinta per moto retto nell'incatenamento dei primi rivolti di IV e V",
+    "body": "Nel passaggio fra i primi rivolti dei gradi IV e V la quinta può essere raggiunta per moto retto senza durezza, anche quando entrambe le parti che la formano procedono per intervalli disgiunti.\nLa regola generale chiede, per le quinte raggiunte per moto retto, che almeno una delle due parti proceda per grado congiunto oppure che una delle due note della quinta sia comune ai due accordi. In questo incatenamento la condizione non serve: il legame fra i due rivolti è già saldo — il basso sale di grado dal sesto al settimo grado della scala e le parti superiori restano dentro la stessa regione armonica — e all'ascolto l'arrivo sulla quinta non risulta aspro.",
+    "suggestion": "Nessuna correzione necessaria: in questo incatenamento l'arrivo sulla quinta per moto retto è ammesso anche con salto in entrambe le parti."
   }
 }

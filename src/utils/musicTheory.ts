@@ -11259,6 +11259,34 @@ export function applyHarmonyRules(
         const aV = byVoiceStructural(a);
         const bV = byVoiceStructural(b);
 
+        // ── Incatenamento dei primi rivolti dei gradi IV e V (IV6 → V6) ──────────
+        // Serve a un'eccezione sulle quinte per moto retto: in questo incatenamento la
+        // quinta può essere raggiunta senza durezza anche quando ENTRAMBE le parti che
+        // la formano procedono per salto. Il riconoscimento è per gradi della scala,
+        // sulla tonica LOCALE (rispetta le tonicizzazioni) e vale in maggiore e in
+        // minore (la terza dell'accordo può essere maggiore o minore).
+        const _degPcMap: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11 };
+        const isFirstInversionOnDegree = (ev: ChordEvent, semitonesAboveTonic: number): boolean => {
+            try {
+                const ctx = getContextAtAbsBeat(ev.absBeat);
+                const tonicPc = _degPcMap[ctx.tonic] ?? _degPcMap[keyTonic] ?? 0;
+                const rootPc = mod12(tonicPc + semitonesAboveTonic);
+                const ns = getStructuralNotes(ev).filter(n => n && !n.isRest);
+                if (ns.length < 3) return false;
+                const pcs = new Set(ns.map(n => mod12(pitchClassOf(n as any))));
+                if (pcs.size !== 3) return false; // triade pura: niente settime o note estranee
+                const thirdMaj = mod12(rootPc + 4);
+                const thirdMin = mod12(rootPc + 3);
+                const third = pcs.has(thirdMaj) ? thirdMaj : (pcs.has(thirdMin) ? thirdMin : -1);
+                if (third < 0 || !pcs.has(rootPc) || !pcs.has(mod12(rootPc + 7))) return false;
+                const bass = ns.reduce((lo, n) => (Number(n.midi) < Number(lo.midi) ? n : lo), ns[0]);
+                return mod12(pitchClassOf(bass as any)) === third; // terza al basso = primo rivolto
+            } catch {
+                return false;
+            }
+        };
+        const isIV6toV6Chain = isFirstInversionOnDegree(a, 5) && isFirstInversionOnDegree(b, 7);
+
         const voices: Voice[] = [1, 2, 3, 4];
 
         // R-13: all voices move in same direction
@@ -12259,20 +12287,28 @@ export function applyHarmonyRules(
                     // Both leap
                     {
                         const _seqSon = (inSequence || sameSonority);
-                        const _sevSA = isOct ? 'error' as const : (_seqSon ? 'exception' as const : 'warning' as const);
+                        // Eccezione: nell'incatenamento dei primi rivolti di IV e V la quinta
+                        // per moto retto è ammessa anche con salto in entrambe le parti.
+                        const _iv6v6SA = isFifth && isIV6toV6Chain;
+                        const _sevSA = isOct ? 'error' as const : ((_seqSon || _iv6v6SA) ? 'exception' as const : 'warning' as const);
+                        const _ridSA = _iv6v6SA ? 'EXC-IV6-V6' : 'R-05';
                         addViolation({
-                            ruleId: 'R-05',
+                            ruleId: _ridSA,
                             severity: _sevSA,
-                            description: isOct
+                            description: _iv6v6SA
+                                ? 'Quinta per moto retto nell\'incatenamento dei primi rivolti di IV e V (ammessa)'
+                                : isOct
                                 ? (inSequence ? 'Ottave nascoste S–A in progressione imitata' : 'Ottava nascosta S–A per salto in entrambe le voci (proibita)')
                                 : (inSequence ? 'Quinte nascoste S–A in progressione imitata' : 'Quinta nascosta S–A per salto senza nota comune'),
-                            suggestion: isOct
+                            suggestion: _iv6v6SA
+                                ? 'In questo incatenamento l\'arrivo sulla quinta per moto retto non produce durezza, anche quando entrambe le parti procedono per salto: nessuna correzione necessaria.'
+                                : isOct
                                 ? 'Nella prassi classica, l\'ottava nascosta è proibita quando entrambe le voci procedono per salto.'
                                 : 'Nella prassi classica, la quinta nascosta per salto è ammessa solo se una delle note è comune ai due accordi.',
                             noteIds: [sopA.id, sopB.id, altoA.id, altoB.id],
                         });
-                        connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: 'R-05' });
-                        connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: _sevSA, ruleId: 'R-05' });
+                        connections.push({ type: 'horizontal', noteId1: sopA.id, noteId2: sopB.id, severity: _sevSA, ruleId: _ridSA });
+                        connections.push({ type: 'horizontal', noteId1: altoA.id, noteId2: altoB.id, severity: _sevSA, ruleId: _ridSA });
                     }
                 }
             }
@@ -12381,6 +12417,12 @@ export function applyHarmonyRules(
                             ? `Ottava nascosta ${_pairLabel} per salto in progressione imitata (tollerata)`
                             : `Ottava nascosta ${_pairLabel} per salto in entrambe le voci (evitare — tra parti interne tollerata)`;
                         _sugg = 'Tra parti interne, l\'ottava nascosta per salto è più tollerata che tra voci estreme (prassi classica).';
+                    } else if (isIV6toV6Chain) {
+                        // Eccezione: nell'incatenamento dei primi rivolti di IV e V la quinta
+                        // per moto retto è ammessa anche con salto in entrambe le parti.
+                        _sev = 'exception';
+                        _desc = 'Quinta per moto retto nell\'incatenamento dei primi rivolti di IV e V (ammessa)';
+                        _sugg = 'In questo incatenamento l\'arrivo sulla quinta per moto retto non produce durezza, anche quando entrambe le parti procedono per salto: nessuna correzione necessaria.';
                     } else {
                         _sev = _inSeq ? 'exception' : 'warning';
                         _desc = _inSeq
@@ -12390,7 +12432,9 @@ export function applyHarmonyRules(
                     }
                 }
 
-                const _rId = _sev === 'exception' ? 'EXC-Hidden-Stepwise' : 'R-05';
+                const _rId = _sev !== 'exception'
+                    ? 'R-05'
+                    : (_desc.startsWith('Quinta per moto retto nell') ? 'EXC-IV6-V6' : 'EXC-Hidden-Stepwise');
                 addViolation({
                     ruleId: _rId,
                     severity: _sev,

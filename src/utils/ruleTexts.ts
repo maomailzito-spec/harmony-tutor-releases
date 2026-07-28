@@ -373,6 +373,14 @@ export const RULE_TEXTS: Record<string, RuleText> = {
     suggestion: 'Eccezione valida. Nessuna modifica necessaria se una delle due voci rimane effettivamente ferma sulla nota comune tra i due accordi.',
   },
 
+  'EXC-IV6-V6': {
+      body: [
+        'Nel passaggio fra i primi rivolti dei gradi IV e V la quinta pu\u00F2 essere raggiunta per moto retto senza durezza, anche quando entrambe le parti che la formano procedono per intervalli disgiunti.',
+        'La regola generale chiede, per le quinte raggiunte per moto retto, che almeno una delle due parti proceda per grado congiunto oppure che una delle due note della quinta sia comune ai due accordi. In questo incatenamento la condizione non serve: il legame fra i due rivolti \u00E8 gi\u00E0 saldo \u2014 il basso sale di grado dal sesto al settimo grado della scala e le parti superiori restano dentro la stessa regione armonica \u2014 e all\'ascolto l\'arrivo sulla quinta non risulta aspro.',
+      ].join('\n'),
+    suggestion: 'Nessuna correzione necessaria: in questo incatenamento l\'arrivo sulla quinta per moto retto \u00E8 ammesso anche con salto in entrambe le parti.',
+  },
+
   'EXC-Hidden-Stepwise': {
       body: [
         'La quinta o ottava nascosta tra voci estreme è tollerata quando il Soprano (la parte superiore) si muove per grado congiunto (seconda maggiore o minore) invece che per salto. In questo caso il percorso melodico del Soprano è fluido e l\'effetto dell\'intervallo nascosto è attenuato.',
