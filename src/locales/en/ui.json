@@ -220,5 +220,7 @@
   "import_part_pitched": "pitched",
   "import_unmark_drums": "Treated as percussion — tap to make it a pitched part again",
   "import_found_drums_kit": "drum kit",
-  "import_drums_hint2": "Percussion and pitched parts are detected automatically (channel 10, track name): tap the label only to correct them."
+  "import_drums_hint2": "Percussion and pitched parts are detected automatically (channel 10, track name): tap the label only to correct them.",
+  "import_kit_rock": "rock",
+  "import_kit_orch": "orchestral"
 }

@@ -13545,7 +13545,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                 })()}
                                                 {' · '}
                                                 {isDrum
-                                                    ? tUI('import_found_drums_kit', { defaultValue: 'kit di percussioni' })
+                                                    ? `${tUI('import_found_drums_kit', { defaultValue: 'kit di percussioni' })}${p.drumKit ? ` · ${p.drumKit === 'rock' ? tUI('import_kit_rock', { defaultValue: 'rock' }) : tUI('import_kit_orch', { defaultValue: 'orchestrale' })}` : ''}`
                                                     : p.twoStaves
                                                         ? tUI('import_found_two_staves', { defaultValue: 'due righi' })
                                                         : `${tUI('import_found_one_staff', { defaultValue: 'un rigo' })}${p.clef === 'bass' ? ' (basso)' : p.clef === 'treble' ? ' (violino)' : ''}`}

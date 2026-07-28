@@ -37,19 +37,26 @@ export const DRUM_PALETTE_ROCK: DrumPiece[] = [
 ];
 
 /**
- * Quale kit sa suonare meglio questi pezzi. Si conta quanti PEZZI DISTINTI del file
- * ciascun kit conosce: un pop-rock (charleston, tom, ride) è coperto dal kit rock e non
- * da quello orchestrale, e viceversa per tamburello e gong. A parità vince l'orchestrale,
- * che è il ripiego storico dell'app.
+ * Quale kit suonare per queste percussioni.
+ *
+ * Contare le sovrapposizioni non funziona: il set ORCHESTRALE è un sottoinsieme di quello
+ * ROCK, quindi si finisce quasi sempre in parità — e per giunta lo stesso numero GM vuol
+ * dire cose diverse nei due kit (42 è il charleston nel rock, il gong nell'orchestra).
+ * Si guardano invece i segni inequivocabili di un KIT da batteria: charleston, tom,
+ * rimshot, china, splash. Se ce n'è anche uno solo, è un kit; altrimenti — grancassa,
+ * rullante, piatti, tamburello e poco altro — è percussione d'orchestra.
+ *
+ * Nei file MIDI il numero 42 è il charleston per convenzione GM: chi importa una batteria
+ * lo usa in quel senso, e leggerlo come gong darebbe il suono sbagliato al primo colpo.
  */
+const DRUM_KIT_SIGNS = new Set<number>([
+    37,             // rimshot / sidestick
+    41, 43, 45, 47, 48, 50, // tom
+    42, 44, 46,     // charleston (chiuso, a pedale, aperto)
+    52, 55, 57,     // china, splash, crash 2
+]);
+
 export function bestDrumKitFor(midiPieces: Iterable<number>): 'orchestral' | 'rock' {
-    const pieces = new Set<number>();
-    for (const m of midiPieces) pieces.add(Number(m));
-    const covers = (palette: DrumPiece[]) => {
-        const set = new Set(palette.map(p => p.midi));
-        let n = 0;
-        for (const p of pieces) if (set.has(p)) n++;
-        return n;
-    };
-    return covers(DRUM_PALETTE_ROCK) > covers(DRUM_PALETTE_ORCH) ? 'rock' : 'orchestral';
+    for (const m of midiPieces) if (DRUM_KIT_SIGNS.has(Number(m))) return 'rock';
+    return 'orchestral';
 }

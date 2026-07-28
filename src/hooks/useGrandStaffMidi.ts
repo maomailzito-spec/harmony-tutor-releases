@@ -1640,7 +1640,7 @@ export async function summarizeMidiSource(source: File | ArrayBuffer | string): 
       return {
         name: spec.name,
         noteCount: partNotes.length,
-        ...(spec.isDrum ? { isDrum: true } : {}),
+        ...(spec.isDrum ? { isDrum: true, ...(spec.drumKit ? { drumKit: spec.drumKit } : {}) } : {}),
         ...(typeof declared === 'number' ? { instrumentId: declared } : {}),
         // Una parte sola resta su grand staff (chiave per nota); più parti = un rigo ciascuna.
         twoStaves: !multi && !spec.isDrum,

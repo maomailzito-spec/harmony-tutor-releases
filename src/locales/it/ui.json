@@ -195,5 +195,7 @@
   "import_part_pitched": "intonata",
   "import_unmark_drums": "È trattata come percussioni — tocca per riportarla a parte intonata",
   "import_found_drums_kit": "kit di percussioni",
-  "import_drums_hint2": "Percussioni e parti intonate sono riconosciute da sole (canale 10, nome della traccia): tocca l’etichetta solo se serve correggerle."
+  "import_drums_hint2": "Percussioni e parti intonate sono riconosciute da sole (canale 10, nome della traccia): tocca l’etichetta solo se serve correggerle.",
+  "import_kit_rock": "rock",
+  "import_kit_orch": "orchestrale"
 }
