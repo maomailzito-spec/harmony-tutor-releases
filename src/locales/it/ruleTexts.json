@@ -21,6 +21,15 @@
     "titleVariants": {
       "Incrocio di voci grave (Basso sopra Tenore)": "Incrocio di voci grave (Basso sopra Tenore)",
       "Incrocio di voci grave (Alto sopra Soprano)": "Incrocio di voci grave (Alto sopra Soprano)"
+    },
+    "titlePrefix": "Sovrapposizione di voci: ",
+    "titleTokens": {
+      "Soprano": "Soprano",
+      "Alto": "Alto",
+      "Tenore": "Tenore",
+      "Basso": "Basso",
+      "supera la posizione precedente del": "supera la posizione precedente del",
+      "scende sotto la posizione precedente del": "scende sotto la posizione precedente del"
     }
   },
   "R-06": {
@@ -62,7 +71,8 @@
   },
   "R-10-DIM5": {
     "body": "La quinta diminuita è un intervallo instabile con una tendenza a restringersi verso la terza (le due note si avvicinano per semitono). Raddoppiare una delle note che formano questo intervallo crea problemi analoghi al raddoppio della sensibile: la voce aggiuntiva è vincolata a muoversi nella stessa direzione della risoluzione, generando rischi di parallele.\nNell'accordo di vii° (accordo di sensibile), la quinta diminuita è formata dalla sensibile (che sale) e dal quarto grado della scala (che scende). Raddoppiare una di queste note aggiunge ulteriore pressione direzionale in un accordo già molto teso.\n• Quando la quinta diminuita è una nota cromatica (alterazione accidentale): il contesto può rendere il raddoppio meno problematico, ma va comunque valutato con attenzione.",
-    "suggestion": "Ridistribuisci le note dell'accordo raddoppiando la fondamentale invece della quinta diminuita. Se l'accordo è vii° o vii°7, preferisci raddoppiare il terzo grado (la terza dell'accordo) piuttosto che la quinta diminuita."
+    "suggestion": "Ridistribuisci le note dell'accordo raddoppiando la fondamentale invece della quinta diminuita. Se l'accordo è vii° o vii°7, preferisci raddoppiare il terzo grado (la terza dell'accordo) piuttosto che la quinta diminuita.",
+    "title": "Raddoppio della 5ª diminuita"
   },
   "R-10-64": {
     "body": "Il secondo rivolto di una triade (accordo in posizione 6/4) ha la quinta dell'accordo al basso. Nella sua forma cadenzale — il I6/4 che precede la dominante — questo accordo non è un accordo di tonica autonomo ma una preparazione della dominante: le voci di sesta e quarta devono scendere per grado alla quinta e alla terza della dominante.\nLa regola del raddoppio nel 6/4 cadenzale è precisa: si deve raddoppiare la quinta (cioè la nota al basso), che rimarrà ferma come pedale mentre le altre voci scendono. Raddoppiare invece la fondamentale o la terza compromette la funzione cadenzale e crea problemi di condotta nella risoluzione.\n• 6/4 cadenzale: la regola del raddoppio è rigida — solo la quinta (basso) va raddoppiata.\n• 6/4 di passaggio: il raddoppio è meno critico perché l'accordo ha funzione melodica di transizione.\n• 6/4 di volta e pedale: la funzione diversa rende il raddoppio valutabile con meno rigore.",
@@ -83,7 +93,9 @@
     "title": "Raddoppio in accordo di 6",
     "titleVariants": {
       "Preferenza di raddoppio in 6: basso su grado forte": "Preferenza di raddoppio in 6: basso su grado forte",
-      "Preferenza di raddoppio in 6: basso su grado forte (tollerato in sequenza/imitazione)": "Preferenza di raddoppio in 6: basso su grado forte (tollerato in sequenza/imitazione)"
+      "Preferenza di raddoppio in 6: basso su grado forte (tollerato in sequenza/imitazione)": "Preferenza di raddoppio in 6: basso su grado forte (tollerato in sequenza/imitazione)",
+      "Preferenza di raddoppio in 6: basso su grado debole": "Preferenza di raddoppio in 6: basso su grado debole",
+      "Preferenza di raddoppio in 6: basso su grado debole (tollerato in sequenza/imitazione)": "Preferenza di raddoppio in 6: basso su grado debole (tollerato in sequenza/imitazione)"
     }
   },
   "R-12": {
@@ -106,7 +118,8 @@
   },
   "R-AUG6-RES": {
     "body": "Gli accordi di sesta aumentata (italiano, francese, tedesco) contengono un intervallo di sesta eccedente tra il basso e una voce superiore. Questo intervallo ha una forte tensione direzionale: le due note che lo compongono devono espandersi verso l'esterno, risolvendo normalmente sull'accordo di dominante (V o V6/4 cadenzale).\nQuando la risoluzione non avviene sulla dominante, o le voci non si muovono nella direzione attesa, l'accordo perde la sua funzione tensiva e il passaggio risulta armonicamente incoerente.",
-    "suggestion": "L'accordo di sesta aumentata risolve tipicamente su V: il basso scende di semitono (o sale di semitono a seconda del tipo) mentre la voce superiore sale di semitono. Assicurati che entrambe le voci si muovano verso l'esterno verso la quinta della scala."
+    "suggestion": "L'accordo di sesta aumentata risolve tipicamente su V: il basso scende di semitono (o sale di semitono a seconda del tipo) mentre la voce superiore sale di semitono. Assicurati che entrambe le voci si muovano verso l'esterno verso la quinta della scala.",
+    "titlePrefix": "Risoluzione atipica di "
   },
   "R-CAD64": {
     "body": "Il secondo rivolto dell'accordo di tonica in posizione cadenzale (I6/4) è uno degli accordi più codificati della teoria armonica classica. Non è un accordo di tonica autonomo, ma una preparazione della dominante: le due \"dissonanze\" (la quarta e la sesta rispetto al basso) devono scendere per grado congiunto alla terza e alla quinta della dominante.\nQuando questo accordo non risolve su V — o le sue note non scendono nella direzione attesa — la funzione cadenzale viene completamente vanificata.",
@@ -183,7 +196,11 @@
   },
   "R-14": {
     "body": "Si ha quinta (od ottava) nascosta quando Soprano e Basso si muovono nella stessa direzione (moto retto) per arrivare a una quinta o ottava giusta. L'effetto è simile alle parallele: anche se le voci non erano in quinta prima, l'arrivo \"diretto\" crea un'enfasi dell'intervallo perfetto che i trattati classici considerano da evitare nelle voci estreme.\nI trattati stabiliscono regole precise: l'ottava per moto retto tra parti estreme è permessa solo se la parte superiore procede per seconda minore ascendente o discendente verso le tre note tonali; è tollerata con riserva su gradi tonali se il Soprano scende per seconda maggiore, principalmente in conclusione di frase.\nLa quinta nascosta è permessa verso I e V se la parte superiore procede per intervallo congiunto; sugli altri gradi solo se la parte superiore procede per seconda minore discendente.",
-    "suggestion": "Il modo più semplice per evitare le nascoste tra voci estreme è far procedere il Soprano per grado congiunto (seconda) invece che per salto, oppure portare Soprano e Basso in moto contrario."
+    "suggestion": "Il modo più semplice per evitare le nascoste tra voci estreme è far procedere il Soprano per grado congiunto (seconda) invece che per salto, oppure portare Soprano e Basso in moto contrario.",
+    "titleVariants": {
+      "Ottave nascoste tra voci estreme: il Soprano procede per 2ª maggiore (non per semitono)": "Ottave nascoste tra voci estreme: il Soprano procede per 2ª maggiore (non per semitono)",
+      "Quinte/ottave nascoste tra voci estreme (moto simile)": "Quinte/ottave nascoste tra voci estreme (moto simile)"
+    }
   },
   "R-15": {
     "body": "Le voci interne (Alto e Tenore) devono privilegiare il moto per gradi congiunti o per salti piccoli (terza, quarta). I salti superiori alla sesta sono considerati innaturali per voci di coro e rendono la linea difficile da intonare.\nI trattati elencano tra gli intervalli permessi: gradi congiunti, terze, quarte e quinte giuste, sesta minore e ottava (preferibilmente in senso ascendente). I salti maggiori sono tollerati nella parte del basso o in stile libero, ma non nelle voci interne della scrittura corale accademica.\nUn salto ampio in voce interna può essere giustificato se è seguito da un cambio di direzione e da un movimento per gradi, che \"compensano\" il salto.",
@@ -201,21 +218,44 @@
       "Ottava discendente — preferibilmente ascendente": "Ottava discendente — preferibilmente ascendente",
       "Sesta minore discendente — preferibilmente ascendente": "Sesta minore discendente — preferibilmente ascendente",
       "Seconda eccedente (♭6 ↔ ♮7 nel modo minore) — proibita": "Seconda eccedente (♭6 ↔ ♮7 nel modo minore) — proibita"
+    },
+    "titlePrefix": "Salto melodico di ",
+    "titleSuffix": " — proibito",
+    "titleTokens": {
+      "maggiore": "maggiore",
+      "minore": "minore",
+      "o superiore": "o superiore",
+      "semitoni": "semitoni",
+      "7ª": "7ª",
+      "9ª": "9ª"
     }
   },
   "R-17b": {
     "body": "Una settima o nona percorsa in due salti (senza che nessuno dei due sia un grado congiunto) crea un profilo melodico poco cantabile, anche se meno grave della variante R-17a dove entrambi i movimenti sono nella stessa direzione.\nIl problema è la mancanza di un grado congiunto di \"appoggio\": la linea salta due volte senza mai passare per una seconda, rendendo il percorso melodico astratto e difficile da intonare. Almeno uno dei due movimenti dovrebbe essere una seconda per ancorare la linea alla scala.\nQuesta è un'infrazione di gravità media (warning): i due salti possono essere entrambi consonanti e la direzione può cambiare, ma il risultato complessivo resta melodicamente insoddisfacente senza un grado congiunto intermedio.",
-    "suggestion": "Sostituisci almeno uno dei due salti con un grado congiunto (seconda maggiore o minore). Se entrambi i salti sono necessari per la condotta armonica, considera di riscrivere il passaggio cambiando la distribuzione delle note tra le voci."
+    "suggestion": "Sostituisci almeno uno dei due salti con un grado congiunto (seconda maggiore o minore). Se entrambi i salti sono necessari per la condotta armonica, considera di riscrivere il passaggio cambiando la distribuzione delle note tra le voci.",
+    "titlePrefix": "Intervallo di ",
+    "titleSuffix": " percorso in due movimenti senza grado congiunto",
+    "titleTokens": {
+      "7ª": "7ª",
+      "9ª": "9ª"
+    }
   },
   "R-17c": {
     "body": "Il tritono (quarta eccedente o quinta diminuita) è l'intervallo più instabile del sistema tonale. Quando viene \"delineato\" da due o più movimenti melodici consecutivi — cioè quando i punti estremi del percorso melodico formano un tritono — l'orecchio percepisce la tensione irrisolta anche se le note intermedie sono consonanti.\nIl problema è nel contorno complessivo: la melodia ha tracciato un tritono \"nascosto\" che aspetta risoluzione. Nella scrittura accademica questo schema è da evitare perché crea instabilità melodica non intenzionale.\nLa gravità dipende dal contesto:\n• Error: tritono percorso in 2 movimenti nella stessa direzione, nota finale breve, senza risoluzione per grado congiunto opposto. Massima tensione irrisolta.\n• Warning: nota intermedia più lunga (che attenua la percezione del contorno), oppure risoluzione presente ma parziale.\nLa condizione di sblocco è la risoluzione: dopo il tritono, l'ultima nota deve proseguire per grado congiunto in direzione opposta al tritono, \"risolvendo\" la tensione accumulata.",
-    "suggestion": "Dopo il tritono delineato, porta la voce a risolvere per grado congiunto nella direzione opposta. Se la quarta eccedente è ascendente, la nota successiva deve scendere per grado; se la quinta diminuita è discendente, la nota successiva deve salire per grado."
+    "suggestion": "Dopo il tritono delineato, porta la voce a risolvere per grado congiunto nella direzione opposta. Se la quarta eccedente è ascendente, la nota successiva deve scendere per grado; se la quinta diminuita è discendente, la nota successiva deve salire per grado.",
+    "titleVariants": {
+      "Successione di tritono (4ª eccedente) delineata in due movimenti senza risoluzione": "Successione di tritono (4ª eccedente) delineata in due movimenti senza risoluzione",
+      "Successione di tritono (4ª eccedente) delineata in due movimenti senza risoluzione — valori brevi, gravità alta": "Successione di tritono (4ª eccedente) delineata in due movimenti senza risoluzione — valori brevi, gravità alta"
+    }
   },
   "R-18": {
     "body": "Due note con lo stesso nome ma alterazione diversa (es. Si naturale e Si♭) suonano contemporaneamente nello stesso accordo.\nQuesto \"scontro cromatico simultaneo\" crea una forte dissonanza di seconda minore (o equivalente enarmonico) che non ha giustificazione funzionale nell'armonia tonale. A differenza della falsa relazione (R-09), che avviene fra accordi consecutivi, qui le due versioni della stessa nota coesistono nello stesso istante.\nIl risultato è un suono confuso: l'orecchio non riesce a decidere quale sia la \"vera\" versione della nota.",
     "suggestion": "Correggi una delle due note in modo che abbiano la stessa alterazione, oppure verifica se una delle due è un errore di inserimento.",
     "titlePrefix": "Scontro cromatico: ",
-    "titleSuffix": " suonano contemporaneamente."
+    "titleSuffix": " suonano contemporaneamente.",
+    "titleTokens": {
+      " e ": " e "
+    }
   },
   "R-CHORD-COMPLETE": {
     "body": "Un accordo si dice completo quando contiene almeno una voce per ciascuna delle sue note costitutive (fondamentale, terza e quinta per una triade; fondamentale, terza, quinta e settima per un accordo di settima).\nNella scrittura a quattro voci è talvolta necessario omettere la quinta per raddoppiare la fondamentale, specialmente negli accordi di settima di dominante dove la quinta è spesso sacrificata. Questo è accettabile e previsto dai trattati. L'omissione della terza è invece quasi sempre scorretta, perché è la terza a definire il modo (maggiore o minore) dell'accordo.\nNegli accordi di settima, omettere la settima stessa vanifica la funzione dell'accordo.",
@@ -305,7 +345,16 @@
   "EXC-S02": {
     "body": "L'incrocio tra le voci interne (Alto e Tenore) è considerato meno grave dell'incrocio che coinvolge le voci estreme, e in certi contesti è tollerato quando la condotta melodica delle singole parti lo richiede.\nL'incrocio momentaneo tra Alto e Tenore può essere accettabile se dura un solo battito, se è motivato da una linea melodica chiara in entrambe le voci, e se non genera altri problemi di condotta (parallele, spaziatura eccessiva). È comunque una soluzione da usare con parsimonia e consapevolezza.",
     "suggestion": "L'incrocio è tollerato in questo contesto, ma valuta se esiste una distribuzione alternativa delle note che eviti l'incrocio mantenendo una buona condotta delle parti. Preferisci sempre soluzioni senza incroci quando possibile.",
-    "title": "Incrocio Alto/Tenore (tollerato)"
+    "title": "Incrocio Alto/Tenore (tollerato)",
+    "titlePrefix": "Sovrapposizione di voci: ",
+    "titleTokens": {
+      "Soprano": "Soprano",
+      "Alto": "Alto",
+      "Tenore": "Tenore",
+      "Basso": "Basso",
+      "supera la posizione precedente del": "supera la posizione precedente del",
+      "scende sotto la posizione precedente del": "scende sotto la posizione precedente del"
+    }
   },
   "EXC-Unison-Lower": {
     "body": "l'unisono tra le voci basse (Tenore e Basso) raggiunto per moto contrario o obliquo è ammesso. Il moto contrario (le due voci si avvicinano da direzioni opposte) o il moto obliquo (una voce ferma, l'altra si muove) neutralizzano il problema tipico dell'unisono raggiunto per moto retto.\nQuesta eccezione rispecchia la pratica corale tradizionale, dove le voci gravi occasionalmente convergono sull'unisono in corrispondenza di note tonali importanti.",
@@ -442,27 +491,52 @@
   "CAD-PAC": {
     "body": "La cadenza autentica perfetta è la formula cadenzale più conclusiva e stabile del sistema tonale. Si realizza con il movimento V → I (o V7 → I) con entrambi gli accordi in stato fondamentale e la tonica al Soprano nell'accordo finale.\nLa presenza di tutte queste condizioni — stato fondamentale di entrambi gli accordi, tonica al Soprano, movimento di quinta discendente (o quarta ascendente) nel Basso — produce la massima sensazione di chiusura e conclusione.\nÈ la cadenza tipica di fine periodo, fine sezione e fine brano. È la formula cadenzale più conclusiva della tradizione tonale.",
     "suggestion": "Marker informativo — nessuna correzione necessaria. La cadenza autentica perfetta è stata rilevata correttamente.",
-    "title": "Cadenza autentica perfetta (PAC)"
+    "title": "Cadenza autentica perfetta (PAC)",
+    "titlePrefix": "Cadenza autentica perfetta (PAC)",
+    "titleTokens": {
+      "maggiore": "maggiore",
+      "minore": "minore"
+    }
   },
   "CAD-IAC": {
     "body": "La cadenza autentica imperfetta condivide il movimento V → I con la cadenza perfetta, ma manca di una o più delle sue condizioni di \"perfezione\": l'accordo di dominante o di tonica possono essere in rivolto, oppure il Soprano nell'accordo finale può avere la terza o la quinta invece della tonica.\nIl risultato è una cadenza che conclude ma con minore definitività rispetto alla PAC: crea un senso di chiusura relativa, spesso usata alla fine della frase antecedente di un periodo, o come cadenza interna di una sezione più ampia.",
     "suggestion": "Marker informativo — nessuna correzione necessaria. La cadenza autentica imperfetta è stata rilevata correttamente.",
-    "title": "Cadenza autentica imperfetta (IAC)"
+    "title": "Cadenza autentica imperfetta (IAC)",
+    "titlePrefix": "Cadenza autentica imperfetta (IAC)",
+    "titleTokens": {
+      "maggiore": "maggiore",
+      "minore": "minore"
+    }
   },
   "CAD-HC": {
     "body": "La semicadenza (half cadence) è una cadenza che conclude su V — l'accordo di dominante — invece di risolvere alla tonica. Crea un senso di sospensione e attesa: la frase si ferma su un punto di tensione che \"chiede\" una continuazione.\nÈ la cadenza tipica della frase antecedente nel periodo binario: la domanda (antecedente) si ferma sulla dominante, la risposta (conseguente) concluderà sulla tonica.\nQualsiasi accordo può precedere la dominante nella semicadenza; la forma più comune è IV–V oppure I–V.",
     "suggestion": "Marker informativo — nessuna correzione necessaria. La semicadenza è stata rilevata correttamente.",
-    "title": "Semicadenza (HC)"
+    "title": "Semicadenza (HC)",
+    "titlePrefix": "Semicadenza (HC)",
+    "titleTokens": {
+      "maggiore": "maggiore",
+      "minore": "minore"
+    }
   },
   "CAD-PLAG": {
     "body": "La cadenza plagale si realizza con il movimento IV → I (sottodominante → tonica). A differenza della cadenza autentica, non passa per la dominante e quindi manca della tensione della sensibile. Il risultato è una conclusione più morbida e distesa, spesso associata a un carattere solenne o meditativo.\nÈ frequente come conclusione aggiuntiva dopo una cadenza autentica (il classico \"Amen\" della musica sacra), oppure come cadenza interna in brani di carattere tranquillo. È considerata una cadenza di \"conferma\" più che di \"risoluzione\".",
     "suggestion": "Marker informativo — nessuna correzione necessaria. La cadenza plagale è stata rilevata correttamente.",
-    "title": "Cadenza plagale (Plagal)"
+    "title": "Cadenza plagale (Plagal)",
+    "titlePrefix": "Cadenza plagale (Plagal)",
+    "titleTokens": {
+      "maggiore": "maggiore",
+      "minore": "minore"
+    }
   },
   "CAD-DEC": {
     "body": "La cadenza d'inganno (deceptive cadence) si realizza quando la dominante (V) — invece di risolvere sulla tonica attesa — si muove verso un altro accordo che condivide due note con la tonica: il vi grado in modo maggiore, il VI in minore, oppure ♭VI in versione cromatica.\nL'effetto è di sorpresa: l'orecchio attende la tonica e riceve un accordo \"ingannevole\" che prolunga la frase, spesso preparando una nuova cadenza più conclusiva. È particolarmente espressiva quando la dominante è preceduta da un I⁶⁄₄ cadenzale.\nNella condotta a quattro voci la sensibile, di norma libera di scendere, si comporta come nella cadenza perfetta: sale alla tonica per evitare le ottave parallele tra la sensibile e la fondamentale del vi.",
     "suggestion": "Marker informativo — nessuna correzione necessaria. La cadenza d'inganno è stata rilevata correttamente.",
-    "title": "Cadenza d'inganno (Deceptive)"
+    "title": "Cadenza d'inganno (Deceptive)",
+    "titlePrefix": "Cadenza d'inganno (Deceptive)",
+    "titleTokens": {
+      "maggiore": "maggiore",
+      "minore": "minore"
+    }
   },
   "CAD-PIC": {
     "body": "Rilevata conclusione su accordo di tonica maggiore (I) in un brano in tonalità minore. Questa pratica, detta Terza Piccarda, è considerata regolare sia nella formula di cadenza perfetta (V→I) che in quella plagale (IV→I o iv→I).\nL'uso della Terza Piccarda trasforma il carattere della risoluzione finale, conferendo un senso di maggiore stabilità, solennità o \"luce\" rispetto alla conclusione in minore. È particolarmente comune nel periodo barocco e classico (es. Bach).",
@@ -477,5 +551,20 @@
     },
     "body": "",
     "suggestion": ""
+  },
+  "R-01c": {
+    "title": "Ottave consecutive per moto contrario"
+  },
+  "EXC-ContrOct": {
+    "title": "Ottave consecutive per moto contrario"
+  },
+  "CHROM-AUG6-VAR": {
+    "titlePrefix": "♭II ",
+    "titleTokens": {
+      "Sesta aumentata con": "Sesta aumentata con",
+      "ottava più che eccedente": "ottava più che eccedente",
+      "quinta più che eccedente": "quinta più che eccedente",
+      "terza eccedente": "terza eccedente"
+    }
   }
 }

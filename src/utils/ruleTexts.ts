@@ -709,6 +709,12 @@ type RuleEntry = {
   titleVariants?: Record<string, string>;
   titlePrefix?: string;
   titleSuffix?: string;
+  /** Parole della parte DINAMICA del titolo da tradurre una per una (nomi di voce,
+   *  modi, unità di misura…). Serve dove il motore compone la riga con pezzi variabili:
+   *  "Sovrapposizione di voci: Alto supera la posizione precedente del Soprano" oppure
+   *  "… · in A minore". Senza, la cornice veniva tradotta e il contenuto restava
+   *  italiano. Le chiavi sono i termini ITALIANI (il motore produce italiano). */
+  titleTokens?: Record<string, string>;
 };
 
 /**
@@ -809,6 +815,16 @@ export function localizeViolationTitle(ruleId: string, description: string): str
           ? localEntry.titleSuffix
           : itEntry.titleSuffix;
         dynPart = dynPart.slice(0, dynPart.length - itEntry.titleSuffix.length) + localSfx;
+      }
+      // Parte dinamica: traduce i termini noti (nomi di voce, modi, unità). Dal più
+      // lungo al più corto, così "quinta più che eccedente" non viene spezzato da "quinta".
+      const tokens = localEntry?.titleTokens;
+      if (tokens) {
+        for (const src of Object.keys(tokens).sort((x, y) => y.length - x.length)) {
+          const dst = tokens[src];
+          if (!src || !dst || src === dst) continue;
+          dynPart = dynPart.split(src).join(dst);
+        }
       }
       translated = localPfx + dynPart;
     } catch {
