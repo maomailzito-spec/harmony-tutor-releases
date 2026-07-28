@@ -1556,9 +1556,14 @@ export async function summarizeMidiSource(source: File | ArrayBuffer | string): 
       const partNotes = parsed.notes.filter(n => partKey(n) === pid);
       const mean = partNotes.reduce((acc, n) => acc + n.midi, 0) / Math.max(1, partNotes.length);
       const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
+      const first = partNotes[0];
+      const declared = first ? parsed.programs?.[`${first.track}:${first.channel}`] : undefined;
+      const isDrumPart = partNotes.length > 0 && partNotes.every(n => n.channel === 9);
       return {
-        name: nm || (multi ? `Traccia ${i + 1}` : 'Piano'),
+        name: nm || (isDrumPart ? 'Batteria' : multi ? `Traccia ${i + 1}` : 'Piano'),
         noteCount: partNotes.length,
+        ...(isDrumPart ? { isDrum: true } : {}),
+        ...(typeof declared === 'number' ? { instrumentId: declared } : {}),
         // Una parte sola resta su grand staff (chiave per nota); più parti = un rigo ciascuna.
         twoStaves: !multi,
         ...(multi ? { clef: (mean < 60 ? 'bass' : 'treble') as ClefType } : {}),
@@ -1873,10 +1878,17 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
 
     const tracks: AccompanimentTrack[] = partIds.map((pid, i) => {
       const partNotes = parsed.notes.filter(n => partKey(n) === pid);
+      // PERCUSSIONI: nel MIDI stanno sul canale 10 (indice 9) e le loro "altezze" non sono
+      // altezze ma pezzi del kit. La traccia va marcata come batteria, altrimenti entrano
+      // come note intonate su un rigo qualsiasi. Il disegno ricava la riga dal numero GM
+      // della nota, quindi non serve altro che non alterare `midi`.
+      const isDrumPart = partNotes.length > 0 && partNotes.every(n => n.channel === 9);
       let staffMode: 'grandstaff' | 'treble_only' = 'grandstaff';
       let clef: 'treble' | 'bass' | undefined;
       let forcedClef: 'treble' | 'bass' | undefined;
-      if (isMultiPart) {
+      if (isDrumPart) {
+        staffMode = 'treble_only';
+      } else if (isMultiPart) {
         // Una parte = un rigo singolo; chiave dalla tessitura media (soglia C4 = 60).
         const mean = partNotes.reduce((s, n) => s + n.midi, 0) / Math.max(1, partNotes.length);
         forcedClef = mean < 60 ? 'bass' : 'treble';
@@ -1892,19 +1904,28 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       // prima nota trovata, cioè su un'altra traccia: la traccia sembrava non
       // selezionabile né modificabile. Lo stesso valeva fra due import successivi.
       // L'id della traccia (un UUID) come prefisso rende gli id unici per costruzione.
-      const notes = buildPartNotes(partNotes, forcedClef).map(n => ({ ...n, id: `${trackId}-${n.id}` }));
+      const built = buildPartNotes(partNotes, forcedClef).map(n => ({ ...n, id: `${trackId}-${n.id}` }));
+      // Sulla batteria la voce (gambo su/giù) dipende dal PEZZO — mani in su, piedi in giù —
+      // e la calcola il disegno: le voci assegnate per tessitura qui non hanno senso.
+      const notes = isDrumPart ? built.map(n => ({ ...n, voice: 0 as any })) : built;
       const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
-      const name = nm || (isMultiPart ? `Traccia ${i + 1}` : 'Piano');
+      const name = nm || (isDrumPart ? 'Batteria' : isMultiPart ? `Traccia ${i + 1}` : 'Piano');
+      // Strumento dichiarato dal file (Program Change) invece del pianoforte per tutti.
+      // Si cerca fra le note di QUESTA parte: la chiave è traccia:canale, e la parte può
+      // essere stata definita per traccia o per canale, quindi si guarda la prima nota.
+      const first = partNotes[0];
+      const declared = first ? parsed.programs?.[`${first.track}:${first.channel}`] : undefined;
       return {
         id: trackId,
         name,
-        instrumentId: 0,
+        instrumentId: (typeof declared === 'number' && declared >= 0 && declared <= 127) ? declared : 0,
         notes,
         muted: false,
         visible: true,
         volume: 1,
         staffMode,
-        ...(clef ? { clef } : {}),
+        ...(isDrumPart ? { isDrum: true } : {}),
+        ...(clef && !isDrumPart ? { clef } : {}),
         ...(groupId ? { groupId } : {}),
       };
     });

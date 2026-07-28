@@ -324,6 +324,10 @@ export interface ImportSummary {
     parts: Array<{
         name: string;
         noteCount: number;
+        /** Strumento dichiarato dal file (numero di programma GM), quando c'è. */
+        instrumentId?: number;
+        /** Parte di PERCUSSIONI (canale 10 del MIDI). */
+        isDrum?: boolean;
         /** Due righi (pianistica) o uno solo. */
         twoStaves?: boolean;
         /** Chiave del rigo singolo, quando è nota o deducibile dalla tessitura. */

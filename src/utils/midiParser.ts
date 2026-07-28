@@ -35,6 +35,10 @@ export type ParsedMidi = {
   notes: ParsedMidiNote[];
   /** Nome di ogni traccia (meta 0x03), indicizzato per numero di traccia. Voci vuote = senza nome. */
   trackNames: string[];
+  /** Strumento GM dichiarato dal file (Program Change), per traccia e per canale: chiave
+   *  `traccia:canale`, valore = numero di programma 0-127. Il PRIMO dichiarato vince —
+   *  i cambi di timbro a metà brano non sono rappresentabili su una traccia sola. */
+  programs: Record<string, number>;
 };
 
 function readU16(view: DataView, offset: number): number {
@@ -105,6 +109,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   const active = new Map<string, Array<ActiveEntry>>();
   const notes: ParsedMidiNote[] = [];
   const trackNames: string[] = [];
+  const programs: Record<string, number> = {};
 
   // Sustain pedal (CC 64) state per channel. When ON, note-offs are deferred
   // so the note keeps "ringing" until the pedal releases — exactly the piano
@@ -275,7 +280,16 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
         pos += 2;
         continue;
       }
-      if (hi === 0xc0 || hi === 0xd0) {
+      if (hi === 0xc0) {
+        // Program Change: il timbro dichiarato dal file. Serve a dare alla traccia
+        // importata lo strumento giusto invece del pianoforte per tutti.
+        const program = view.getUint8(pos);
+        const key = `${t}:${ch}`;
+        if (programs[key] === undefined) programs[key] = program;
+        pos += 1;
+        continue;
+      }
+      if (hi === 0xd0) {
         pos += 1;
         continue;
       }
@@ -349,5 +363,6 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     ...(keySharps !== null ? { keySignature: { sharps: keySharps, isMinor: keyIsMinor } } : {}),
     notes,
     trackNames,
+    programs,
   };
 }

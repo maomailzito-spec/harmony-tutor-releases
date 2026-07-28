@@ -77,11 +77,13 @@ export function musicXmlPartsToAccTracks(
     if (withNotes.length === 0) return [];
 
     const base = {
-        instrumentId: 0,
         muted: false,
         visible: true,
         volume: 1,
     };
+    // Strumento dichiarato dal file, quando c'è: 0 (pianoforte) solo come ripiego.
+    const instrOf = (p?: MusicXMLPart | null): number =>
+        (typeof p?.instrumentId === 'number' && p.instrumentId >= 0 && p.instrumentId <= 127) ? p.instrumentId : 0;
 
     if (mode === 'grandstaff' || withNotes.length === 1) {
         const notes = mergeParts(withNotes);
@@ -93,6 +95,8 @@ export function musicXmlPartsToAccTracks(
         return [{
             id: newTrackId(0),
             name: (single?.name || '').trim() || (fallbackName || '').trim() || 'Importata',
+            // Fondendo più parti il timbro è per forza uno solo: quello della prima.
+            instrumentId: instrOf(single ?? withNotes[0]),
             notes,
             staffMode: grand ? 'grandstaff' : 'treble_only',
             // Il MusicXML porta le VOCI vere: su due righi conviene il "grand staff a voci"
@@ -111,6 +115,7 @@ export function musicXmlPartsToAccTracks(
         return {
             id: newTrackId(i),
             name: p.name.trim() || `Parte ${i + 1}`,
+            instrumentId: instrOf(p),
             notes: p.notes,
             staffMode: grand ? 'grandstaff' : 'treble_only',
             ...(grand ? { voiced: true } : { clef: p.clef }),

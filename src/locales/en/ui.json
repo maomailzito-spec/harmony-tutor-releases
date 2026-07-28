@@ -211,5 +211,6 @@
   "import_found_notes": "{{count}} notes",
   "import_found_two_staves": "two staves",
   "import_found_one_staff": "one staff",
-  "import_dest_acc_separate_desc_n": "{{count}} staves, one per part. Added to the open project."
+  "import_dest_acc_separate_desc_n": "{{count}} staves, one per part. Added to the open project.",
+  "import_found_drums": "percussion (channel 10)"
 }

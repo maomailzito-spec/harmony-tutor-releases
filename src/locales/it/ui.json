@@ -186,5 +186,6 @@
   "import_found_notes": "{{count}} note",
   "import_found_two_staves": "due righi",
   "import_found_one_staff": "un rigo",
-  "import_dest_acc_separate_desc_n": "{{count}} righi, uno per parte. Si aggiunge al progetto aperto."
+  "import_dest_acc_separate_desc_n": "{{count}} righi, uno per parte. Si aggiunge al progetto aperto.",
+  "import_found_drums": "percussioni (canale 10)"
 }

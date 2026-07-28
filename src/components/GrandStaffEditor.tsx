@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
-import { gmToSoundfont, soundfontToGm } from '../constants/instruments';
+import { gmToSoundfont, soundfontToGm, INSTRUMENTS } from '../constants/instruments';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useFeatureGate } from '../hooks/useFeatureGate';
@@ -13540,10 +13540,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             <span className="font-medium text-gray-100">{p.name}</span>
                                             <span className="text-slate-400">
                                                 {tUI('import_found_notes', { count: p.noteCount, defaultValue: `${p.noteCount} note` })}
+                                                {(() => {
+                                                    // Nome dello strumento dichiarato dal file. I timbri riconosciuti
+                                                    // hanno un nome tradotto; gli altri restano col numero GM.
+                                                    if (p.isDrum || typeof p.instrumentId !== 'number') return '';
+                                                    const opt = INSTRUMENTS.find(x => x.gm === p.instrumentId);
+                                                    const nome = opt ? tPB(`instrument_${opt.i18nKey}`, { defaultValue: opt.i18nKey }) : `GM ${p.instrumentId}`;
+                                                    return ` · ${opt?.emoji ? `${opt.emoji} ` : ''}${nome}`;
+                                                })()}
                                                 {' · '}
-                                                {p.twoStaves
-                                                    ? tUI('import_found_two_staves', { defaultValue: 'due righi' })
-                                                    : `${tUI('import_found_one_staff', { defaultValue: 'un rigo' })}${p.clef === 'bass' ? ' (basso)' : p.clef === 'treble' ? ' (violino)' : ''}`}
+                                                {p.isDrum
+                                                    ? tUI('import_found_drums', { defaultValue: 'percussioni (canale 10)' })
+                                                    : p.twoStaves
+                                                        ? tUI('import_found_two_staves', { defaultValue: 'due righi' })
+                                                        : `${tUI('import_found_one_staff', { defaultValue: 'un rigo' })}${p.clef === 'bass' ? ' (basso)' : p.clef === 'treble' ? ' (violino)' : ''}`}
                                             </span>
                                         </li>
                                     ))}

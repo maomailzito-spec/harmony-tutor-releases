@@ -17,6 +17,9 @@ export type MusicXMLPart = {
   hasSecondStaff: boolean;
   /** Chiave del rigo 1 (usata quando la parte sta su un rigo solo). */
   clef: ClefType;
+  /** Strumento GM dichiarato dalla <part-list> (<midi-program>, 1-128 nel file → 0-127
+   *  qui). Senza, la traccia importata userebbe il pianoforte per qualsiasi parte. */
+  instrumentId?: number;
 };
 
 export type MusicXMLImportResult = {
@@ -316,10 +319,16 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
   // Nomi delle parti dalla <part-list> (indicizzati per id della <score-part>).
   const partNameById = new Map<string, string>();
+  const partProgramById = new Map<string, number>();
   try {
     for (const sp of Array.from(doc.querySelectorAll('part-list > score-part'))) {
       const id = String(sp.getAttribute('id') || '').trim();
       if (id) partNameById.set(id, textOf(sp.querySelector('part-name')));
+      // Strumento: <midi-instrument><midi-program> è 1-128, i programmi GM 0-127.
+      if (id) {
+        const prog = Number(textOf(sp.querySelector('midi-instrument > midi-program')));
+        if (Number.isFinite(prog) && prog >= 1 && prog <= 128) partProgramById.set(id, prog - 1);
+      }
     }
   } catch {
     // ignore
@@ -645,6 +654,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
       notes: partNotes,
       hasSecondStaff: partSawSecondStaff,
       clef: partFirstClef || 'treble',
+      ...(partId && partProgramById.has(partId) ? { instrumentId: partProgramById.get(partId) } : {}),
     });
   }
 
