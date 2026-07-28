@@ -344,6 +344,48 @@ const DEFAULT_CHORAL_RULES: ChoralRules = {
  * Se realizeFirstChord non trova un voicing valido, cade back alla
  * distribuzione semplice precedente.
  */
+/**
+ * Suono della parte intermedia in una scrittura a TRE parti, dato il voicing a quattro
+ * voci del motore corale. Soprano e basso sono intoccabili (melodia e rivolto), quindi
+ * la voce di mezzo è l'unica che può dire la qualità dell'accordo: si sceglie il primo
+ * suono MANCANTE in ordine di necessità — terza (o il suo sostituto negli accordi sospesi),
+ * settima, poi qualunque altro grado dell'accordo. Se soprano e basso li coprono già
+ * tutti, si tiene il contralto del motore.
+ * L'altezza è quella del grado scelto più vicina al registro delle parti interne, tenuta
+ * fra basso e soprano finché c'è spazio.
+ */
+function pickThreePartMiddle(voicing: SATBVoicing, tones: ScaleDegreeNote[], rootPc: number): number {
+    const pcOf = (m: number) => ((m % 12) + 12) % 12;
+    const present = new Set([pcOf(voicing.soprano), pcOf(voicing.bass)]);
+    const pcOfTone = (t: ScaleDegreeNote) => ((rootPc + t.semiFromRoot) % 12 + 12) % 12;
+    // 2 e 5 coprono gli accordi sospesi, dove fanno le veci della terza.
+    const isThird = (t: ScaleDegreeNote) => t.semiFromRoot >= 2 && t.semiFromRoot <= 5;
+    const isSeventh = (t: ScaleDegreeNote) => t.semiFromRoot >= 9 && t.semiFromRoot <= 11;
+    const order = [
+        ...tones.filter(isThird),
+        ...tones.filter(isSeventh),
+        ...tones.filter(t => !isThird(t) && !isSeventh(t)),
+    ];
+    const needed = order.find(t => !present.has(pcOfTone(t)));
+    if (!needed) return voicing.alto;
+
+    const pc = pcOfTone(needed);
+    // Registro di partenza: fra contralto e tenore del voicing a quattro voci.
+    const target = Math.round((voicing.alto + voicing.tenor) / 2);
+    const inner: number[] = [];
+    for (let m = voicing.bass + 1; m < voicing.soprano; m++) if (pcOf(m) === pc) inner.push(m);
+    if (inner.length > 0) {
+        // A parità di distanza si sceglie l'ottava PIÙ ALTA (inner è crescente): a tre parti
+        // l'intervallo largo sta bene in basso, non fra le due voci superiori.
+        return inner.reduce((best, m) => Math.abs(m - target) <= Math.abs(best - target) ? m : best, inner[0]);
+    }
+    // Parti estreme più strette di quanto serva: sopra il basso, senza superare il soprano.
+    let m = nearestMidi(pc, target);
+    while (m <= voicing.bass) m += 12;
+    while (m > voicing.soprano && m - 12 > voicing.bass) m -= 12;
+    return m;
+}
+
 export function buildChordSATBNotes(
     parsed: ParsedChordSymbol,
     measureIndex: number,
@@ -438,20 +480,20 @@ export function buildChordSATBNotes(
         }
         // Meno di quattro parti: il motore corale resta a quattro voci (le sue regole di
         // condotta valgono lì) e da quel voicing si ricava la scrittura ridotta. Soprano e
-        // Basso restano intoccati; per la parte intermedia si sceglie fra contralto e tenore
-        // quello che conserva più suoni dell'accordo (a parità si tiene il contralto, che
-        // mantiene la spaziatura originale).
+        // Basso restano intoccati.
         if (partCount === 2) {
             return buildResult([
                 makeNote(voicing.soprano, 1, 'treble'),
                 makeNote(voicing.bass,    4, 'bass'),
             ]);
         }
-        const pcOf = (m: number) => ((m % 12) + 12) % 12;
-        const distinct = (mids: number[]) => new Set(mids.map(pcOf)).size;
-        const withAlto = distinct([voicing.soprano, voicing.alto, voicing.bass]);
-        const withTenor = distinct([voicing.soprano, voicing.tenor, voicing.bass]);
-        const middle = withTenor > withAlto ? voicing.tenor : voicing.alto;
+        // A TRE PARTI la parte intermedia non si sceglie fra contralto e tenore: si
+        // COSTRUISCE, perché con una sola voce interna quel suono deve essere quello che
+        // dice la qualità dell'accordo. Ordine di necessità: la terza, poi la settima,
+        // poi ciò che manca ancora; se soprano e basso coprono già tutto, resta il
+        // contralto del motore. Senza questo, un G con la terza affidata al tenore usciva
+        // privo di terza (e la sigla lo leggeva come un sus).
+        const middle = pickThreePartMiddle(voicing, tones, rootPc);
         return buildResult([
             makeNote(voicing.soprano, 1, 'treble'),
             makeNote(middle,          2, 'treble'),
