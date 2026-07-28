@@ -128,6 +128,9 @@ const OVERLAY_FREEZE_MS = 350;
 // row instead of at the end of the page, doubling the number of jumps.
 const PLAYBACK_SYSTEM_VISIBLE_RATIO = 0.7;
 
+// Posizione diatonica della lettera (Do4 = 0), come in musicTheory.getNotePosition.
+const NOTE_POSITION_BY_LETTER_LOCAL: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+
 // VexFlow stave geometry (must match values in VexflowGrandStaff.tsx)
 // Used for cursor->pitch mapping so the ghost note aligns with the pointer.
 const VF_TREBLE_Y = 40;
@@ -3613,27 +3616,69 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!delta) return;
 
         const targetKeySignature = getKeySignature(toRoot, 'Major');
+        const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, targetKeySignature.type === 'sharp' ? targetKeySignature.count : 0);
+        const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, targetKeySignature.type === 'flat' ? targetKeySignature.count : 0);
+        const targetKeyAccidentals = targetKeySignature.type === 'sharp' ? sharpNotes.map(x => x + '#') : flatNotes.map(x => x + 'b');
+
+        // TRASPORTO PER INTERVALLO, non per soli semitoni.
+        // Trasportare significa muovere ogni nota di un INTERVALLO: tanti semitoni E
+        // tanti gradi di scala. Prima si sommavano solo i semitoni e la nota risultante
+        // veniva riscritta scegliendo la grafia dall'armatura d'arrivo: da Do minore a
+        // Re minore il Si (sensibile) diventava Re bemolle invece di Do diesis, cioè una
+        // terza diminuita al posto di una seconda maggiore. Stessa altezza, grafia
+        // sbagliata — e con essa il grado della scala, l'analisi e la lettura.
+        const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+        const NATURAL_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+        const letterIdx = (name: string) => LETTERS.indexOf(String(name || 'C').charAt(0).toUpperCase());
+        // Gradi da percorrere: differenza fra le lettere delle due toniche, nella
+        // direzione indicata dai semitoni (in giù si scende di lettera, non si sale di sei).
+        const rawSteps = ((letterIdx(toRoot) - letterIdx(fromRoot)) % 7 + 7) % 7;
+        const letterSteps = delta >= 0 ? rawSteps : rawSteps - 7;
+        const ACC_BY_ALTER: Record<number, AccidentalType> = {
+            [-2]: 'double-flat', [-1]: 'flat', 0: 'natural', 1: 'sharp', 2: 'double-sharp',
+        };
+        const SUFFIX_BY_ALTER: Record<number, string> = { [-2]: 'bb', [-1]: 'b', 0: '', 1: '#', 2: '##' };
 
         setRawNotes(prev => prev.map((n) => {
             if (n.isRest) return n;
 
             const currentClef = (n.clef || 'treble') as ClefType;
-            const a = (n.explicitAccidental ?? n.accidental ?? null) as AccidentalType | null;
-            const preferredAccidental: AccidentalType | null =
-                a === 'sharp' || a === 'double-sharp'
-                    ? 'sharp'
-                    : a === 'flat' || a === 'double-flat'
-                        ? 'flat'
-                        : null;
-
             const nextMidi = n.midi + delta;
-            const recalculated = getNotePropertiesFromMidi(nextMidi, targetKeySignature, currentClef, preferredAccidental);
 
+            const idx = letterIdx(n.pitch);
+            const total = idx + letterSteps;
+            const newLetter = idx >= 0 ? LETTERS[((total % 7) + 7) % 7] : '';
+            const newOctave = (Number(n.octave) || 4) + Math.floor(total / 7);
+            const alter = newLetter ? (nextMidi - ((newOctave + 1) * 12 + NATURAL_PC[newLetter])) : NaN;
+
+            // Se l'intervallo richiederebbe un triplo diesis/bemolle (armature estreme),
+            // si ripiega sulla vecchia grafia per classe di suono: meglio una nota
+            // enarmonica che una impossibile da scrivere.
+            if (!newLetter || !Number.isFinite(alter) || alter < -2 || alter > 2) {
+                const a = (n.explicitAccidental ?? n.accidental ?? null) as AccidentalType | null;
+                const preferredAccidental: AccidentalType | null =
+                    a === 'sharp' || a === 'double-sharp' ? 'sharp'
+                        : a === 'flat' || a === 'double-flat' ? 'flat' : null;
+                const recalculated = getNotePropertiesFromMidi(nextMidi, targetKeySignature, currentClef, preferredAccidental);
+                return { ...n, ...recalculated, id: n.id, midi: nextMidi, userAccidental: undefined };
+            }
+
+            const noteName = newLetter + SUFFIX_BY_ALTER[alter];
             return {
                 ...n,
-                ...recalculated,
                 id: n.id,
+                pitch: newLetter,
+                octave: newOctave,
                 midi: nextMidi,
+                noteIndex: ((nextMidi % 12) + 12) % 12,
+                position: NOTE_POSITION_BY_LETTER_LOCAL[newLetter] + (newOctave - 4) * 7,
+                clef: currentClef,
+                accidental: ACC_BY_ALTER[alter],
+                // Il segno da stampare lo decide l'armatura d'arrivo (un Do diesis in una
+                // chiave che non ce l'ha va scritto; un Si bemolle in Fa maggiore no).
+                explicitAccidental: calculateAccidental(noteName, targetKeyAccidentals),
+                // La grafia "utente" della vecchia tonalità non vale più.
+                userAccidental: undefined,
             };
         }));
     }, [setRawNotes, signedKeyDelta]);
