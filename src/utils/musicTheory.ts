@@ -10512,14 +10512,24 @@ export function applyHarmonyRules(
             // la scrittura di una sola nota (stesso suono) sì. È un errore di scrittura,
             // non di armonia: va detto, perché falsa sigla, cifre e lettura del passo.
             try {
-                const culprit = enharmonicSpellingCulprit(present as any);
+                // Solo sulle note STRUTTURALI: un'appoggiatura o una nota di passaggio non
+                // fa parte dell'accordo, e chiederle di formarlo produce falsi allarmi
+                // (il Fa♯ appoggiatura di un Mi♭ maggiore non è un errore di grafia).
+                // Valgono sia le marcature automatiche sia la scelta manuale dell'utente.
+                const structuralOnly = present.filter(x => {
+                    const a2 = x as any;
+                    if (a2.ornamentOverride && a2.ornamentOverride !== 'structural') return false;
+                    return !(a2.isPassing || a2.isNeighbor || a2.isAppoggiatura || a2.isAnticipation
+                        || a2.isEscape || a2.isCambiata || a2.isSuspension);
+                });
+                const culprit = enharmonicSpellingCulprit(structuralOnly as any);
                 if (culprit?.id) {
                     // Serve una CONNESSIONE fra due note, altrimenti la segnalazione resta muta
                     // sul pentagramma: il disegno degli avvisi traccia il tratteggio solo fra due
                     // estremi, ed è quel tratteggio a legare pannello e partitura (nei due versi).
                     // Si tira dalla nota mal scritta alla più lontana dell'accordo, così indica lei.
                     const culpritMidi = effectiveMidi(culprit as any) as number;
-                    const partner = present
+                    const partner = structuralOnly
                         .filter(x => x?.id && x.id !== culprit.id && Number.isFinite(effectiveMidi(x as any) as any))
                         .sort((x, y) => Math.abs((effectiveMidi(y as any) as number) - culpritMidi)
                                       - Math.abs((effectiveMidi(x as any) as number) - culpritMidi))[0];
@@ -10529,7 +10539,7 @@ export function applyHarmonyRules(
                         ruleId: 'R-SPELL',
                         severity: 'warning',
                         description: 'Grafia incoerente: le note scritte non formano un accordo',
-                        noteIds: partner?.id ? [culprit.id, partner.id] : [culprit.id],
+                        noteIds: [culprit.id],
                     });
                     if (partner?.id) {
                         connections.push({
@@ -13845,7 +13855,17 @@ export function applyHarmonyRules(
                                     };
                                     const typeKey = `${fromSimple}-${toSimple}`;
                                     if (classicTypes[typeKey]) {
-                                        s.type = classicTypes[typeKey];
+                                        // ATTENZIONE: su un'APPOGGIATURA dichiarata a mano il tipo
+                                        // deve restare 'app'. Scrivendoci sopra la sigla d'intervallo
+                                        // (4-3, 2-3…) si perde l'unico segno che distingue le due
+                                        // cose, e il disegno tornava a marcare la nota come ritardo
+                                        // (R) vanificando la scelta dell'utente. La sigla si conserva
+                                        // a parte: serve solo a mostrare "2-3" accanto al segno.
+                                        if (ov === 'appoggiatura') {
+                                            s.figure = classicTypes[typeKey];
+                                        } else {
+                                            s.type = classicTypes[typeKey];
+                                        }
                                     }
                                 }
                             }

@@ -3033,6 +3033,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
             let roman = '';
             let symbol = '';
+            let symbolFromRespelling = false;
             let isAug6Roman = false;
             let hasAug6Variants = false;
 
@@ -3159,6 +3160,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 });
                 const s = getChordSymbol(fullNotesForSymbol as any, contextKeySignature, contextTonic);
                 if (s) symbol = s;
+                // La sigla nasce da una riscrittura enarmonica? Va saputo QUI, dalle stesse
+                // note da cui la sigla è stata ricavata: le ornamentali sono già escluse, e
+                // un'appoggiatura cromatica non deve far sembrare incoerente la scrittura.
+                try { symbolFromRespelling = !!s && isEnharmonicSpellingMismatch(fullNotesForSymbol as any); } catch { /* ignore */ }
 
                 // R3: I7 — minor tonic maj7 fallback
                 try {
@@ -4049,10 +4054,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // sigla affermerebbe una cosa che il pentagramma smentisce (Mi♭ dove è scritto
             // Re♯); con le parentesi dichiara di essere una lettura dei SUONI, non della
             // pagina — e la segnalazione d'analisi spiega dov'è l'errore di scrittura.
-            let symbolForDisplay = symbol;
-            try {
-                if (symbol && isEnharmonicSpellingMismatch(fullNotes as any)) symbolForDisplay = `(${symbol})`;
-            } catch { /* ignore */ }
+            const symbolForDisplay = (symbol && symbolFromRespelling) ? `(${symbol})` : symbol;
 
             labelsBySystem[systemIndex].push({
                 id: `lbl-${event.absBeat}`,
