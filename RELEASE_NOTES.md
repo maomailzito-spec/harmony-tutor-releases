@@ -1,3 +1,40 @@
+## Novità in v1.4.0
+
+### ✍️ Scrittura
+- **Coro a 3 o 2 parti**: dal menù *Altro ▸ Parti* si sceglie fra 4 (S A T B), 3 (S A B) e 2 (S B). Le voci spente spariscono dalla toolbar e non sono più scrivibili; la voce più grave resta il Basso, così le regole d'analisi mantengono il loro significato. Ridurre le parti non cancella nulla: se contengono musica il cambio viene rifiutato.
+- **Spostamento delle note col mouse**: si trascina la testa in verticale, l'anteprima segue a scatti di un grado e al rilascio l'altezza è scritta. Muove tutta la selezione (un accordo si alza in un gesto), vale anche sulle tracce di accompagnamento. È diatonico — la grafia viene dall'armatura — mentre le frecce restano cromatiche.
+- **Riscrittura enarmonica (tasto J)**: Re♯ ⇄ Mi♭ sulla selezione, stesso suono e grafia coerente.
+
+### 🔎 Analisi
+- **Grafia incoerente**: quando le note scritte non formano alcun accordo (per esempio Re♯–Sol–Si♭, dove da Re♯ a Sol c'è una quarta diminuita), l'analisi lo segnala e indica la nota da riscrivere. La sigla dedotta dai suoni compare **fra parentesi**, per non far credere che corrisponda a ciò che è scritto.
+- **Sigle**: una quinta *assente* non viene più dichiarata diminuita (una settima minore senza quinta era siglata m7♭5).
+- **Nuova eccezione**: quinta per moto retto fra i primi rivolti di IV e V, ammessa anche con salto in entrambe le parti.
+- **Sequenze**: una sequenza deve ripetere anche il **ritmo**, non solo gli intervalli.
+- **Incrocio delle parti** riconosciuto anche con meno di quattro voci; a due parti niente più avviso di "accordo incompleto".
+- **Appoggiatura dichiarata a mano**: non torna più a essere marcata come ritardo.
+- Titoli delle violazioni tradotti anche quando sono composti dinamicamente.
+
+### 🎼 Impaginazione
+- **Vista a nastro continuo**: tutte le misure su un rigo solo, scorrimento orizzontale.
+- **L'impaginazione segue lo zoom**: rimpicciolendo entrano più misure per riga, invece di lasciare la fascia bianca a destra.
+- **Spaziatura per contenuto**: ogni misura prende la larghezza che il suo contenuto richiede. Le etichette d'analisi seguono l'impaginazione in tutti i casi.
+
+### 📥 Import ed export
+- **Il dialogo dice cosa contiene il file** prima di chiedere dove metterlo: parti, numero di note, righi, chiave, strumento.
+- **Strumento dedotto dal file** (Program Change nei MIDI, lista delle parti nei MusicXML) invece del pianoforte per tutto.
+- **Percussioni riconosciute** dal canale 10 o dal nome della traccia, con il kit (orchestrale o rock) scelto dai pezzi usati; restano una traccia a sé anche fondendo le altre.
+- **MusicXML**: esporta anche le tracce di accompagnamento; l'import non azzera più il progetto.
+- **Trasporto per intervallo** e non per soli semitoni: cambiando tonalità la grafia resta corretta (Cm→Dm: Si♮ diventa Do♯, non Re♭).
+
+### 🔊 Audio
+- **Gli effetti del mixer si sentono anche cliccando le note**, non solo in riproduzione: volume, mute, solo, pan, EQ, compressore e riverbero passano dagli stessi canali.
+- **Coda delle note**: il rilascio ora si spegne in modo esponenziale invece di essere tagliato di netto (si sentiva soprattutto sugli archi).
+
+### 🐛 Fix
+- Legature lunghissime sui file importati: ora la legatura unisce solo suoni contigui, e quella che continua a capo è un gancio breve.
+- Crash aprendo una traccia MIDI con terzine.
+- Il trascinamento parte al primo grado invece che dopo tre.
+
 ## Novità in v1.3.0
 
 ### ⚡ Prestazioni — editing fluido con l'analisi attiva
