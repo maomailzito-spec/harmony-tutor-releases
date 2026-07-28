@@ -10514,13 +10514,32 @@ export function applyHarmonyRules(
             try {
                 const culprit = enharmonicSpellingCulprit(present as any);
                 if (culprit?.id) {
+                    // Serve una CONNESSIONE fra due note, altrimenti la segnalazione resta muta
+                    // sul pentagramma: il disegno degli avvisi traccia il tratteggio solo fra due
+                    // estremi, ed è quel tratteggio a legare pannello e partitura (nei due versi).
+                    // Si tira dalla nota mal scritta alla più lontana dell'accordo, così indica lei.
+                    const culpritMidi = effectiveMidi(culprit as any) as number;
+                    const partner = present
+                        .filter(x => x?.id && x.id !== culprit.id && Number.isFinite(effectiveMidi(x as any) as any))
+                        .sort((x, y) => Math.abs((effectiveMidi(y as any) as number) - culpritMidi)
+                                      - Math.abs((effectiveMidi(x as any) as number) - culpritMidi))[0];
+                    // Il suggerimento NON si scrive qui: viene dal registro dei testi, che è
+                    // tradotto (scritto qui resterebbe italiano anche nell'interfaccia inglese).
                     addViolation({
                         ruleId: 'R-SPELL',
                         severity: 'warning',
                         description: 'Grafia incoerente: le note scritte non formano un accordo',
-                        suggestion: 'Una nota è scritta con l\u2019enarmonia sbagliata (per esempio Re\u266f al posto di Mi\u266d): riscrivila, cos\u00ec grafia e armonia tornano a coincidere.',
-                        noteIds: [culprit.id],
+                        noteIds: partner?.id ? [culprit.id, partner.id] : [culprit.id],
                     });
+                    if (partner?.id) {
+                        connections.push({
+                            type: 'vertical',
+                            noteId1: culprit.id,
+                            noteId2: partner.id,
+                            severity: 'warning',
+                            ruleId: 'R-SPELL',
+                        });
+                    }
                 }
             } catch { /* ignore */ }
 
