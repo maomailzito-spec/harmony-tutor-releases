@@ -11076,6 +11076,30 @@ export function applyHarmonyRules(
                 noteIds: [v2.id, v1.id],
             });
         }
+        // Con MENO DI QUATTRO PARTI le voci confinanti non sono più quelle di sempre: a tre
+        // parti il Basso confina col Contralto, a due col Soprano. Senza questi controlli
+        // l'incrocio più vistoso — il basso che passa sopra la parte che ha sopra — non
+        // verrebbe visto affatto, perché le coppie cablate sopra riguardano voci assenti.
+        if (opts?.partCount === 3 && v4 && v2 && Number.isFinite(effectiveMidi(v4 as any) as any) && Number.isFinite(effectiveMidi(v2 as any) as any)
+            && (effectiveMidi(v4 as any) as number) > (effectiveMidi(v2 as any) as number)) {
+            addViolation({
+                ruleId: 'R-04',
+                severity: 'error',
+                description: 'Incrocio di voci grave (Basso sopra Contralto)',
+                suggestion: 'Riordina le altezze: Basso deve restare sotto il Contralto.',
+                noteIds: [v4.id, v2.id],
+            });
+        }
+        if (opts?.partCount === 2 && v4 && v1 && Number.isFinite(effectiveMidi(v4 as any) as any) && Number.isFinite(effectiveMidi(v1 as any) as any)
+            && (effectiveMidi(v4 as any) as number) > (effectiveMidi(v1 as any) as number)) {
+            addViolation({
+                ruleId: 'R-04',
+                severity: 'error',
+                description: 'Incrocio di voci grave (Basso sopra Soprano)',
+                suggestion: 'Riordina le altezze: Basso deve restare sotto il Soprano.',
+                noteIds: [v4.id, v1.id],
+            });
+        }
 
         // R-08: excessive spacing (S-A, A-T > octave)
         if (v1 && v2) {

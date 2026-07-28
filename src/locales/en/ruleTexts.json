@@ -20,7 +20,9 @@
     "title": "Voice crossing",
     "titleVariants": {
       "Incrocio di voci grave (Basso sopra Tenore)": "Severe voice crossing (Bass above Tenor)",
-      "Incrocio di voci grave (Alto sopra Soprano)": "Severe voice crossing (Alto above Soprano)"
+      "Incrocio di voci grave (Alto sopra Soprano)": "Severe voice crossing (Alto above Soprano)",
+      "Incrocio di voci grave (Basso sopra Contralto)": "Severe voice crossing (Bass above Alto)",
+      "Incrocio di voci grave (Basso sopra Soprano)": "Severe voice crossing (Bass above Soprano)"
     },
     "titlePrefix": "Voice overlap: ",
     "titleTokens": {
@@ -29,7 +31,8 @@
       "Tenore": "Tenor",
       "Basso": "Bass",
       "supera la posizione precedente del": "rises above the previous position of",
-      "scende sotto la posizione precedente del": "falls below the previous position of"
+      "scende sotto la posizione precedente del": "falls below the previous position of",
+      "Contralto": "Alto"
     }
   },
   "R-06": {

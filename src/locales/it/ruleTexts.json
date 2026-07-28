@@ -20,7 +20,9 @@
     "title": "Incrocio di voci",
     "titleVariants": {
       "Incrocio di voci grave (Basso sopra Tenore)": "Incrocio di voci grave (Basso sopra Tenore)",
-      "Incrocio di voci grave (Alto sopra Soprano)": "Incrocio di voci grave (Alto sopra Soprano)"
+      "Incrocio di voci grave (Alto sopra Soprano)": "Incrocio di voci grave (Alto sopra Soprano)",
+      "Incrocio di voci grave (Basso sopra Contralto)": "Incrocio di voci grave (Basso sopra Contralto)",
+      "Incrocio di voci grave (Basso sopra Soprano)": "Incrocio di voci grave (Basso sopra Soprano)"
     },
     "titlePrefix": "Sovrapposizione di voci: ",
     "titleTokens": {
@@ -29,7 +31,8 @@
       "Tenore": "Tenore",
       "Basso": "Basso",
       "supera la posizione precedente del": "supera la posizione precedente del",
-      "scende sotto la posizione precedente del": "scende sotto la posizione precedente del"
+      "scende sotto la posizione precedente del": "scende sotto la posizione precedente del",
+      "Contralto": "Contralto"
     }
   },
   "R-06": {
