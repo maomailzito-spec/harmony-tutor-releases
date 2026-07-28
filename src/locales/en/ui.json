@@ -212,5 +212,7 @@
   "import_found_two_staves": "two staves",
   "import_found_one_staff": "one staff",
   "import_dest_acc_separate_desc_n": "{{count}} staves, one per part. Added to the open project.",
-  "import_found_drums": "percussion (channel 10)"
+  "import_found_drums": "percussion (channel 10)",
+  "import_mark_drums": "Treat this part as percussion (drum kit)",
+  "import_dest_satb_no_drums": "Not available: percussion are not pitches and do not belong in the choir."
 }

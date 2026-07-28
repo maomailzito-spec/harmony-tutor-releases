@@ -1740,12 +1740,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [importDialogKind, setImportDialogKind] = useState<'midi' | 'musicxml'>('midi');
     // Cosa contiene il file che si sta importando: serve a scegliere con cognizione.
     const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+    // Parti che l'utente marca (o smarca) come percussioni nel dialogo. Il canale 10 le
+    // riconosce da sé, ma non tutti i file lo rispettano: senza questo comando una batteria
+    // scritta su un canale qualsiasi entrerebbe come note intonate, col suono di pianoforte.
+    const [importDrumParts, setImportDrumParts] = useState<Record<number, boolean>>({});
+    const importDrumPartsRef = useRef<Record<number, boolean>>({});
+    useEffect(() => { importDrumPartsRef.current = importDrumParts; }, [importDrumParts]);
     const midiImportResolverRef = useRef<((choice: MidiImportChoice) => void) | null>(null);
     const askImportDestination = useCallback((kind: 'midi' | 'musicxml', summary?: ImportSummary | null): Promise<MidiImportChoice> => {
         return new Promise<MidiImportChoice>((resolve) => {
             midiImportResolverRef.current = resolve;
             setImportDialogKind(kind);
             setImportSummary(summary ?? null);
+            setImportDrumParts({});
             setMidiImportDialogOpen(true);
         });
     }, []);
@@ -4612,7 +4619,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const result = await importMidiAsAccompaniment(
                         source,
                         choice === 'acc-grandstaff' ? 'grandstaff' : 'separate',
-                        { useProjectMeter: !projectIsEmpty },
+                        { useProjectMeter: !projectIsEmpty, drumParts: importDrumPartsRef.current },
                     );
                     if (result) {
                         // Un file MIDI multi-traccia (format 1, es. 4 pentagrammi MuseScore)
@@ -13534,42 +13541,67 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         : tUI('import_found_many', { count: importSummary.parts.length, defaultValue: `${importSummary.parts.length} parti` })}
                                 </div>
                                 <ul className="flex flex-col gap-0.5 max-h-40 overflow-y-auto">
-                                    {importSummary.parts.map((p, i) => (
+                                    {importSummary.parts.map((p, i) => {
+                                        const isDrum = importDrumParts[i] ?? !!p.isDrum;
+                                        return (
                                         <li key={i} className="text-[11px] text-gray-300 flex items-baseline gap-2">
                                             <span className="text-slate-500 tabular-nums">{i + 1}.</span>
+                                            {importSummary.kind === 'midi' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setImportDrumParts(prev => ({ ...prev, [i]: !isDrum }))}
+                                                    className={`px-1 rounded text-[11px] leading-none border ${isDrum ? 'bg-amber-500/20 border-amber-500/60 text-amber-200' : 'border-slate-600 text-slate-500 hover:text-slate-300'}`}
+                                                    title={tUI('import_mark_drums', { defaultValue: 'Tratta questa parte come percussioni' })}
+                                                >🥁</button>
+                                            )}
                                             <span className="font-medium text-gray-100">{p.name}</span>
                                             <span className="text-slate-400">
                                                 {tUI('import_found_notes', { count: p.noteCount, defaultValue: `${p.noteCount} note` })}
                                                 {(() => {
                                                     // Nome dello strumento dichiarato dal file. I timbri riconosciuti
                                                     // hanno un nome tradotto; gli altri restano col numero GM.
-                                                    if (p.isDrum || typeof p.instrumentId !== 'number') return '';
+                                                    if (isDrum || typeof p.instrumentId !== 'number') return '';
                                                     const opt = INSTRUMENTS.find(x => x.gm === p.instrumentId);
                                                     const nome = opt ? tPB(`instrument_${opt.i18nKey}`, { defaultValue: opt.i18nKey }) : `GM ${p.instrumentId}`;
                                                     return ` · ${opt?.emoji ? `${opt.emoji} ` : ''}${nome}`;
                                                 })()}
                                                 {' · '}
-                                                {p.isDrum
+                                                {isDrum
                                                     ? tUI('import_found_drums', { defaultValue: 'percussioni (canale 10)' })
                                                     : p.twoStaves
                                                         ? tUI('import_found_two_staves', { defaultValue: 'due righi' })
                                                         : `${tUI('import_found_one_staff', { defaultValue: 'un rigo' })}${p.clef === 'bass' ? ' (basso)' : p.clef === 'treble' ? ' (violino)' : ''}`}
                                             </span>
                                         </li>
-                                    ))}
+                                        );
+                                    })}
                                 </ul>
                             </div>
                         )}
                         <p className="text-xs text-gray-300">{tUI('import_dest_question', { defaultValue: 'Dove vuoi importare le note?' })}</p>
                         <div className="flex flex-col gap-2">
-                            <button
-                                onClick={() => resolveMidiImportChoice('satb')}
-                                className="text-left px-3 py-2 rounded bg-cyan-600 border border-cyan-500 text-white hover:bg-cyan-500"
-                                autoFocus
-                            >
-                                <span className="font-semibold">SATB</span>
-                                <span className="block text-[11px] text-cyan-100/90">{tUI('import_dest_satb_desc', { defaultValue: '4 voci sul grand staff (corale).' })}{' '}{tUI('import_dest_satb_replaces', { defaultValue: 'Sostituisce il progetto aperto.' })}</span>
-                            </button>
+                            {(() => {
+                                // Con SOLE percussioni il coro non è una destinazione: i colpi del kit
+                                // non sono altezze e finirebbero nelle voci come note intonate, col
+                                // suono di pianoforte. Si dice, e il fuoco va sull'accompagnamento.
+                                const parts = importSummary?.parts ?? [];
+                                const allDrums = parts.length > 0 && parts.every((p, i) => (importDrumParts[i] ?? !!p.isDrum));
+                                return (
+                                    <button
+                                        onClick={() => resolveMidiImportChoice('satb')}
+                                        disabled={allDrums}
+                                        className={`text-left px-3 py-2 rounded border ${allDrums
+                                            ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                                            : 'bg-cyan-600 border-cyan-500 text-white hover:bg-cyan-500'}`}
+                                        autoFocus={!allDrums}
+                                    >
+                                        <span className="font-semibold">SATB</span>
+                                        <span className={`block text-[11px] ${allDrums ? 'text-slate-500' : 'text-cyan-100/90'}`}>{allDrums
+                                            ? tUI('import_dest_satb_no_drums', { defaultValue: 'Non disponibile: le percussioni non sono altezze e non entrano nel coro.' })
+                                            : `${tUI('import_dest_satb_desc', { defaultValue: '4 voci sul grand staff (corale).' })} ${tUI('import_dest_satb_replaces', { defaultValue: 'Sostituisce il progetto aperto.' })}`}</span>
+                                    </button>
+                                );
+                            })()}
                             <button
                                 onClick={() => resolveMidiImportChoice('acc-separate')}
                                 className="text-left px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 hover:bg-gray-600"

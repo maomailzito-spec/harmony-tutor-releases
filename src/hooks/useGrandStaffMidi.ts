@@ -1797,7 +1797,13 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // (cambi compresi) invece che su quello del file: è il caso in cui si AGGIUNGE una
     // parte a una partitura che c'è già, dove le stanghette devono coincidere con quelle
     // degli altri righi. Senza (progetto vuoto), comanda il metro del file.
-    opts?: { useProjectMeter?: boolean },
+    opts?: {
+      useProjectMeter?: boolean;
+      /** Parti che l'utente ha marcato (o smarcato) come percussioni nel dialogo, per
+       *  indice di parte: serve ai file in cui la batteria NON sta sul canale 10, e al
+       *  caso opposto. Assente per una parte = decide il canale. */
+      drumParts?: Record<number, boolean>;
+    },
   ): Promise<{
     tracks: AccompanimentTrack[];
     bpm: number;
@@ -1882,7 +1888,9 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       // altezze ma pezzi del kit. La traccia va marcata come batteria, altrimenti entrano
       // come note intonate su un rigo qualsiasi. Il disegno ricava la riga dal numero GM
       // della nota, quindi non serve altro che non alterare `midi`.
-      const isDrumPart = partNotes.length > 0 && partNotes.every(n => n.channel === 9);
+      const autoDrum = partNotes.length > 0 && partNotes.every(n => n.channel === 9);
+      const forcedDrum = opts?.drumParts?.[i];
+      const isDrumPart = typeof forcedDrum === 'boolean' ? forcedDrum : autoDrum;
       let staffMode: 'grandstaff' | 'treble_only' = 'grandstaff';
       let clef: 'treble' | 'bass' | undefined;
       let forcedClef: 'treble' | 'bass' | undefined;
