@@ -3440,6 +3440,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             return 1;
           };
 
+          // Una legatura che continua nel sistema dopo si disegna come un GANCIO breve
+          // oltre la nota, non come una riga fino al margine: quella, su un sistema largo,
+          // diventa un arco lunghissimo che nella partitura d'origine non c'è.
+          const PARTIAL_TIE_LEN_PX = 22;
+
           const drawPartialTiePath = (fromX: number, toX: number, y: number, dir: 1 | -1, fromId?: string, toId?: string) => {
             try {
               if (!tieGroup) return;
@@ -3576,10 +3581,38 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const curVoice = cur.voice ?? 1;
             const curStartForTie = Number((cur as any).startTick);
             const emCurForSearch = effectiveMidiForTie(cur as any);
+
+            // PRIMO attacco successivo di questa voce, PAUSE COMPRESE — e per questo si
+            // guarda `prepared` e non `sorted`, che le pause le ha già scartate. La legatura
+            // di valore unisce due suoni CONTIGUI: se a quell'attacco c'è una pausa, o
+            // un'altra altezza, legatura non ce n'è. Senza questo vincolo una legatura
+            // aperta e mai chiusa — capita nei file importati — andava a pescare la stessa
+            // altezza anche molte misure più avanti, tracciando una riga lunghissima che
+            // nell'originale non esiste.
+            let firstOnsetAhead: number | null = null;
+            if (Number.isFinite(curStartForTie)) {
+              for (const p of prepared) {
+                const cand = p.staffNote as any;
+                if (!cand || cand.id === '__ghost__') continue;
+                if ((cand.voice ?? 1) !== curVoice) continue;
+                const st = Number(cand.startTick);
+                if (!Number.isFinite(st) || st <= curStartForTie) continue;
+                if (firstOnsetAhead == null || st < firstOnsetAhead) firstOnsetAhead = st;
+              }
+            }
+
             let next: (typeof sorted)[number] | undefined;
             for (let j = i + 1; j < sorted.length; j++) {
               const cand = sorted[j].staffNote;
               if ((cand.voice ?? 1) !== curVoice) continue;
+              // Solo il primo attacco successivo: oltre quello la legatura non arriva.
+              if (firstOnsetAhead != null) {
+                const stCand = Number((cand as any).startTick);
+                if (Number.isFinite(stCand) && stCand !== firstOnsetAhead) {
+                  if (stCand > firstOnsetAhead) break;
+                  continue;
+                }
+              }
               if (cand.isRest) continue;
               // Salta i toni dello STESSO attacco (fratelli d'accordo): la legatura va a un
               // attacco successivo. Senza questo, in un accordo (voce 0) `next` sarebbe un
@@ -3640,6 +3673,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               }
             }
 
+            // Qui la legatura non ha trovato la nota d'arrivo. Due casi diversi:
+            // se in questo sistema la voce ha un seguito (e non è legato), la legatura è
+            // sbagliata e non si disegna nulla; se invece non c'è più niente, allora
+            // prosegue davvero nel sistema dopo e si disegna il tratto parziale.
+            if (!next && firstOnsetAhead != null) continue;
+
             if (!next) {
               // Tie continues into the next system/line: draw a partial outgoing tie.
               const vf = sorted[i].vfNote as any;
@@ -3649,7 +3688,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 const y = getTieY(vf, stave, keyIndex);
                 const dir = tieDirectionFor(cur, vf);
                 // No concrete toId in this system, so we don't tag it as selectable.
-                drawPartialTiePath(fromX, staffEndX, y, dir);
+                drawPartialTiePath(fromX, Math.min(staffEndX, fromX + PARTIAL_TIE_LEN_PX), y, dir);
               }
               continue;
             }
@@ -3777,7 +3816,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const y = getTieY(vf, stave, keyIndex);
             const dir = tieDirectionFor(cur, vf);
             // No concrete fromId in this system, so we don't tag it as selectable.
-            drawPartialTiePath(staffStartX, toX, y, dir);
+            drawPartialTiePath(Math.max(staffStartX, toX - PARTIAL_TIE_LEN_PX), toX, y, dir);
           }
 
           try {
