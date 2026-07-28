@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import type { AccompanimentTrack, StaffNote, TimeSignature, TimeSignatureChange, Voice } from '../types';
+import type { AccompanimentTrack, ClefType, ImportSummary, StaffNote, TimeSignature, TimeSignatureChange, Voice } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { getKeySignature, getNotePropertiesFromMidi } from '../utils/musicTheory';
 import { buildMidiFile } from '../utils/midiWriter';
@@ -1523,6 +1523,53 @@ export function normalizeRhythm(
 
 /** Resolve a heterogenous source (File / ArrayBuffer / base64 string / undefined)
  *  into an ArrayBuffer. Returns null if the source was a falsy/cancelled pick. */
+/**
+ * Come si divide un MIDI in PARTI: se ci sono più tracce con note, una parte per traccia
+ * (è il caso dei file scritti con un editor di notazione); altrimenti si guarda ai canali;
+ * altrimenti è una parte sola. Chiedendo la fusione, una sola per definizione.
+ * Sta qui, in un punto solo, perché la usano sia l'importazione sia il riassunto mostrato
+ * prima di importare: se divergessero, il dialogo prometterebbe righi diversi da quelli
+ * che poi compaiono.
+ */
+export function planMidiParts(
+  notes: Array<{ track: number; channel: number }>,
+  mode: 'separate' | 'grandstaff',
+): { partIds: number[]; partKey: (n: { track: number; channel: number }) => number; groupedByTrack: boolean } {
+  const tracksWithNotes = [...new Set(notes.map(n => n.track))];
+  const channelsWithNotes = [...new Set(notes.map(n => n.channel))];
+  if (mode === 'grandstaff') return { partIds: [0], partKey: () => 0, groupedByTrack: false };
+  if (tracksWithNotes.length >= 2) return { partIds: tracksWithNotes, partKey: n => n.track, groupedByTrack: true };
+  if (channelsWithNotes.length >= 2) return { partIds: channelsWithNotes, partKey: n => n.channel, groupedByTrack: false };
+  return { partIds: [0], partKey: () => 0, groupedByTrack: false };
+}
+
+/** Che cosa contiene un file MIDI, per poterlo dire PRIMA di chiedere dove metterlo. */
+export async function summarizeMidiSource(source: File | ArrayBuffer | string): Promise<ImportSummary | null> {
+  try {
+    const buffer = await resolveMidiSource(source, async () => null);
+    if (!buffer) return null;
+    const parsed = parseMidi(buffer);
+    if (!parsed?.notes?.length) return { kind: 'midi', parts: [] };
+    const { partIds, partKey, groupedByTrack } = planMidiParts(parsed.notes, 'separate');
+    const multi = partIds.length >= 2;
+    const parts = partIds.map((pid, i) => {
+      const partNotes = parsed.notes.filter(n => partKey(n) === pid);
+      const mean = partNotes.reduce((acc, n) => acc + n.midi, 0) / Math.max(1, partNotes.length);
+      const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
+      return {
+        name: nm || (multi ? `Traccia ${i + 1}` : 'Piano'),
+        noteCount: partNotes.length,
+        // Una parte sola resta su grand staff (chiave per nota); più parti = un rigo ciascuna.
+        twoStaves: !multi,
+        ...(multi ? { clef: (mean < 60 ? 'bass' : 'treble') as ClefType } : {}),
+      };
+    });
+    return { kind: 'midi', parts };
+  } catch {
+    return null;
+  }
+}
+
 async function resolveMidiSource(
   source: File | ArrayBuffer | string | undefined,
   pickFn: () => Promise<File | null>,
@@ -1782,15 +1829,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // per traccia MIDI se il file è multi-traccia (format 1), altrimenti per canale
     // (format 0 con più canali), altrimenti una parte unica. Ogni parte → una
     // AccompanimentTrack a RIGO SINGOLO con la sua chiave.
-    const tracksWithNotes = [...new Set(parsed.notes.map(n => n.track))];
-    const channelsWithNotes = [...new Set(parsed.notes.map(n => n.channel))];
-    let partIds: number[];
-    let partKey: (n: { track: number; channel: number }) => number;
-    let groupedByTrack = false;
-    if (mode === 'grandstaff') { partIds = [0]; partKey = () => 0; } // fusione richiesta: un'unica parte
-    else if (tracksWithNotes.length >= 2) { partIds = tracksWithNotes; partKey = n => n.track; groupedByTrack = true; }
-    else if (channelsWithNotes.length >= 2) { partIds = channelsWithNotes; partKey = n => n.channel; }
-    else { partIds = [0]; partKey = () => 0; }
+    const { partIds, partKey, groupedByTrack } = planMidiParts(parsed.notes, mode);
     const isMultiPart = partIds.length >= 2;
 
     // Pipeline di una singola parte → StaffNote[] normalizzati (stessa catena di prima:

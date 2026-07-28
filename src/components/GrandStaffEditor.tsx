@@ -13,6 +13,7 @@ declare global {
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
+import type { ImportSummary } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
 import { gmToSoundfont, soundfontToGm } from '../constants/instruments';
 import { CycleIcon } from './icons/CycleIcon';
@@ -53,7 +54,7 @@ import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
 import { handleGrandStaffProjectIOMenuAction, buildGrandStaffProjectSnapshot } from '../controllers/grandStaffProjectIOAdapter';
-import { useGrandStaffMidi, trimOverlappingNotes, normalizeRhythm, beatsToDurationFlags, extendNotesToNextOnset } from '../hooks/useGrandStaffMidi';
+import { useGrandStaffMidi, trimOverlappingNotes, normalizeRhythm, beatsToDurationFlags, extendNotesToNextOnset, summarizeMidiSource } from '../hooks/useGrandStaffMidi';
 import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
@@ -1737,11 +1738,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     type MidiImportChoice = 'satb' | 'acc-separate' | 'acc-grandstaff' | null;
     const [midiImportDialogOpen, setMidiImportDialogOpen] = useState(false);
     const [importDialogKind, setImportDialogKind] = useState<'midi' | 'musicxml'>('midi');
+    // Cosa contiene il file che si sta importando: serve a scegliere con cognizione.
+    const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
     const midiImportResolverRef = useRef<((choice: MidiImportChoice) => void) | null>(null);
-    const askImportDestination = useCallback((kind: 'midi' | 'musicxml'): Promise<MidiImportChoice> => {
+    const askImportDestination = useCallback((kind: 'midi' | 'musicxml', summary?: ImportSummary | null): Promise<MidiImportChoice> => {
         return new Promise<MidiImportChoice>((resolve) => {
             midiImportResolverRef.current = resolve;
             setImportDialogKind(kind);
+            setImportSummary(summary ?? null);
             setMidiImportDialogOpen(true);
         });
     }, []);
@@ -4591,7 +4595,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (!picked) return;
                     source = picked;
                 }
-                const choice = await askImportDestination('midi');
+                // Si legge il file PRIMA di chiedere: la domanda "dove lo metto" ha senso
+                // solo sapendo quante parti ci sono e come si chiamano.
+                const summary = source ? await summarizeMidiSource(source) : null;
+                const choice = await askImportDestination('midi', summary);
                 if (choice === null) return; // user cancelled
                 if (choice === 'satb') {
                     await importMidi(source);
@@ -4846,7 +4853,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // Where does it go? Same question the MIDI import asks: SATB REPLACES the
                 // project, accompaniment ADDS staves to it. Without this, importing a part
                 // into an open score was impossible — the file was always wiped.
-                const dest = await askImportDestination('musicxml');
+                const xmlSummary: ImportSummary = {
+                    kind: 'musicxml',
+                    title: String(imported?.projectTitle || '').trim() || undefined,
+                    parts: (Array.isArray(imported?.parts) ? imported.parts : [])
+                        .filter((p: any) => (p?.notes?.length ?? 0) > 0)
+                        .map((p: any, i: number) => ({
+                            name: String(p?.name || '').trim() || `Parte ${i + 1}`,
+                            noteCount: p?.notes?.length ?? 0,
+                            twoStaves: !!p?.hasSecondStaff,
+                            ...(p?.hasSecondStaff ? {} : { clef: p?.clef }),
+                        })),
+                };
+                const dest = await askImportDestination('musicxml', xmlSummary);
                 if (dest === null) return; // annullato
 
                 if (dest !== 'satb') {
@@ -13503,6 +13522,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 aria-label={tUI('import_dest_cancel', { defaultValue: 'Annulla' })}
                             >✕</button>
                         </div>
+                        {importSummary && importSummary.parts.length > 0 && (
+                            <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3">
+                                <div className="text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+                                    {tUI('import_found_title', { defaultValue: 'Nel file' })}
+                                    {importSummary.title ? ` — ${importSummary.title}` : ''}
+                                </div>
+                                <div className="text-xs text-gray-200 mb-2">
+                                    {importSummary.parts.length === 1
+                                        ? tUI('import_found_one', { defaultValue: 'una parte' })
+                                        : tUI('import_found_many', { count: importSummary.parts.length, defaultValue: `${importSummary.parts.length} parti` })}
+                                </div>
+                                <ul className="flex flex-col gap-0.5 max-h-40 overflow-y-auto">
+                                    {importSummary.parts.map((p, i) => (
+                                        <li key={i} className="text-[11px] text-gray-300 flex items-baseline gap-2">
+                                            <span className="text-slate-500 tabular-nums">{i + 1}.</span>
+                                            <span className="font-medium text-gray-100">{p.name}</span>
+                                            <span className="text-slate-400">
+                                                {tUI('import_found_notes', { count: p.noteCount, defaultValue: `${p.noteCount} note` })}
+                                                {' · '}
+                                                {p.twoStaves
+                                                    ? tUI('import_found_two_staves', { defaultValue: 'due righi' })
+                                                    : `${tUI('import_found_one_staff', { defaultValue: 'un rigo' })}${p.clef === 'bass' ? ' (basso)' : p.clef === 'treble' ? ' (violino)' : ''}`}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                         <p className="text-xs text-gray-300">{tUI('import_dest_question', { defaultValue: 'Dove vuoi importare le note?' })}</p>
                         <div className="flex flex-col gap-2">
                             <button
@@ -13519,9 +13566,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             >
                                 <span className="font-semibold">{tUI('import_dest_acc_separate', { defaultValue: 'Accompagnamento — righi separati' })}</span>
                                 <span className="block text-[11px] text-gray-400">{
-                                    importDialogKind === 'musicxml'
-                                        ? tUI('import_dest_acc_separate_desc_xml', { defaultValue: 'Un rigo per parte del file. Si AGGIUNGE al progetto aperto.' })
-                                        : tUI('import_dest_acc_separate_desc', { defaultValue: 'Un rigo per traccia/parte del MIDI (es. 4 pentagrammi MuseScore).' })
+                                    (importSummary && importSummary.parts.length > 0)
+                                        ? tUI('import_dest_acc_separate_desc_n', {
+                                            count: importSummary.parts.length,
+                                            defaultValue: `${importSummary.parts.length} ${importSummary.parts.length === 1 ? 'rigo' : 'righi'}, uno per parte. Si aggiunge al progetto aperto.`,
+                                        })
+                                        : importDialogKind === 'musicxml'
+                                            ? tUI('import_dest_acc_separate_desc_xml', { defaultValue: 'Un rigo per parte del file. Si AGGIUNGE al progetto aperto.' })
+                                            : tUI('import_dest_acc_separate_desc', { defaultValue: 'Un rigo per traccia/parte del MIDI (es. 4 pentagrammi MuseScore).' })
                                 }</span>
                             </button>
                             <button

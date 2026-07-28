@@ -313,6 +313,24 @@ export type TempoCurve = {
 };
 
 /** User override that forces a specific ornament classification on a note. */
+/**
+ * Riassunto di ciò che un file da importare contiene, mostrato PRIMA di chiedere dove
+ * metterlo: senza, si sceglie al buio fra "SATB", "righi separati" e "grand staff unico"
+ * senza sapere quante parti ci sono né come si chiamano.
+ */
+export interface ImportSummary {
+    kind: 'midi' | 'musicxml';
+    title?: string;
+    parts: Array<{
+        name: string;
+        noteCount: number;
+        /** Due righi (pianistica) o uno solo. */
+        twoStaves?: boolean;
+        /** Chiave del rigo singolo, quando è nota o deducibile dalla tessitura. */
+        clef?: ClefType;
+    }>;
+}
+
 export interface OrnamentOverride {
   noteId: string;
   type: OrnamentType;

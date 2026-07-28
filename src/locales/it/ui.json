@@ -179,5 +179,12 @@
   "chorale_syntax_quarter": "semiminima",
   "chorale_syntax_eighth": "croma",
   "chorale_syntax_sixteenth": "semicroma",
-  "confidence_enharmonic_reading": "Grafia incoerente: la sigla è dedotta per enarmonia e non corrisponde a quanto scritto"
+  "confidence_enharmonic_reading": "Grafia incoerente: la sigla è dedotta per enarmonia e non corrisponde a quanto scritto",
+  "import_found_title": "Nel file",
+  "import_found_one": "una parte",
+  "import_found_many": "{{count}} parti",
+  "import_found_notes": "{{count}} note",
+  "import_found_two_staves": "due righi",
+  "import_found_one_staff": "un rigo",
+  "import_dest_acc_separate_desc_n": "{{count}} righi, uno per parte. Si aggiunge al progetto aperto."
 }

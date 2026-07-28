@@ -204,5 +204,12 @@
   "chorale_syntax_quarter": "quarter note",
   "chorale_syntax_eighth": "eighth note",
   "chorale_syntax_sixteenth": "sixteenth note",
-  "confidence_enharmonic_reading": "Inconsistent spelling: the symbol is read enharmonically and does not match what is written"
+  "confidence_enharmonic_reading": "Inconsistent spelling: the symbol is read enharmonically and does not match what is written",
+  "import_found_title": "In the file",
+  "import_found_one": "one part",
+  "import_found_many": "{{count}} parts",
+  "import_found_notes": "{{count}} notes",
+  "import_found_two_staves": "two staves",
+  "import_found_one_staff": "one staff",
+  "import_dest_acc_separate_desc_n": "{{count}} staves, one per part. Added to the open project."
 }
