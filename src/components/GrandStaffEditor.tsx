@@ -2573,10 +2573,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // to avoid global rescaling (which caused the drift). Reset when container
     // width changes so layout can adapt to a new viewport.
     const stablePxPerQuarterRef = useRef<number | null>(null);
-    useEffect(() => {
-        // reset stability when the container resizes
-        stablePxPerQuarterRef.current = null;
-    }, [containerWidth]);
+
 
     useEffect(() => {
         if (!isMoreMenuOpen) return;
@@ -5607,6 +5604,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return () => observer.disconnect();
     }, [isActive, viewMode]);
 
+    // ── LARGHEZZA D'IMPAGINAZIONE ───────────────────────────────────────────────
+    // Lo zoom è una scala visiva applicata DOPO l'impaginazione: rimpicciolendo, il
+    // disegno si riduceva ma le righe restavano quelle calcolate a scala 1, lasciando
+    // una fascia bianca inutilizzata a destra. Impaginando invece su `larghezza / zoom`,
+    // lo spazio guadagnato rimpicciolendo viene riempito dalle misure successive, e dopo
+    // la scala il contenuto torna a occupare esattamente il contenitore. Ingrandendo vale
+    // il contrario: meno misure per riga, più grandi.
+    const layoutWidth = useMemo(
+        () => Math.max(300, Math.round(containerWidth / Math.max(0.05, editorZoom || 1))),
+        [containerWidth, editorZoom],
+    );
+
+    // La stabilità di pxPerQuarter va ricalcolata quando cambia la larghezza
+    // d'impaginazione — cioè al ridimensionamento della finestra E allo zoom.
+    useEffect(() => {
+        stablePxPerQuarterRef.current = null;
+    }, [layoutWidth]);
+
     const layoutData = useMemo(() => {
         // New deterministic tick-based layout:
         // Use immediate `notes` (not deferred analyzedNotes) so the layout
@@ -5615,7 +5630,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const keySigWidth = keySignature.count * 14;
         const timeSigWidthWithPadding = timeSignature ? 55 : 0;
         const startOffset = START_X + keySigWidth + timeSigWidthWithPadding;
-        const systemRightX = containerWidth - START_X;
+        const systemRightX = layoutWidth - START_X;
         const baseBeatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const normalizedTimeSigChanges = (timeSignatureChanges || [])
             .map(c => {
@@ -5692,7 +5707,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Build systems using the user-selected measures-per-line as the primary
         // constraint, while still splitting earlier if the line would overflow.
-        const desiredMeasuresPerLine = Math.max(1, Math.min(12, measuresPerLine || 4));
+        // Il valore scelto in toolbar vale al 100%: rimpicciolendo ne entrano di più in
+        // proporzione (a metà scala, il doppio), altrimenti il tetto impedirebbe di
+        // sfruttare lo spazio guadagnato.
+        const zoomForLine = Math.max(0.05, editorZoom || 1);
+        const desiredMeasuresPerLine = Math.max(1, Math.min(24, Math.round((measuresPerLine || 4) / zoomForLine)));
 
         const tentativeSystems: { measureIndices: number[] }[] = [];
         let curSys: number[] = [];
@@ -5815,7 +5834,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
 
                 const isLastInSystem = idx === sys.measureIndices.length - 1;
-                const svgStaffEnd = containerWidth - STAFF_MARGIN;
+                const svgStaffEnd = layoutWidth - STAFF_MARGIN;
                 const barStyle = repeatBarlines[m] || (m === finalMeasureIndex ? 'final' : (doubleSet.has(m) ? 'double' : 'single'));
                 let barXLocal = (curX - curXStart + START_X) + measureWidth;
                 if (isLastInSystem) {
@@ -5842,8 +5861,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // the barline aligns with the edge (prevents a visually short last
             // measure that breaks insertion UX). This does not change pxPerTick.
             let usedWidth = curX - curXStart + START_X;
-            if (usedWidth < containerWidth) {
-                const extra = containerWidth - usedWidth;
+            if (usedWidth < layoutWidth) {
+                const extra = layoutWidth - usedWidth;
                 const lastMeasureIdx = sys.measureIndices[sys.measureIndices.length - 1];
                 const prev = measureFinalWidths.get(lastMeasureIdx) || 0;
                 measureFinalWidths.set(lastMeasureIdx, prev + extra);
@@ -5878,7 +5897,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ignore logging errors
         }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
-    }, [notes, containerWidth, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
+    }, [notes, layoutWidth, editorZoom, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA
@@ -13662,7 +13681,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             <div
                                 ref={staffContainerRef}
                                 className="p-4 ht-staff-container"
-                                style={{ width: containerWidth }}
+                                style={{ width: layoutWidth }}
                             >
                         <div className="w-full flex justify-center mb-3">
                             <input
