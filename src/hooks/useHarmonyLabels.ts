@@ -197,6 +197,27 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         return rec;
     }, [ornOverrideMap]);
 
+    // FIRMA DELL'IMPAGINAZIONE — quali misure stanno su quale riga e quanto è larga.
+    //
+    // Il memo delle etichette qui sotto NON dipende da `layoutData` per scelta: l'identità
+    // di layoutData cambia a ogni modifica delle note, e rifare il posizionamento (~440 ms
+    // sul brano intero) ad ogni tasto premuto era il collo di bottiglia dell'editing. Il
+    // prezzo però era che, cambiando SOLO l'impaginazione — ridimensionamento della
+    // finestra, zoom, vista a nastro — le etichette restavano dov'erano mentre le misure
+    // si spostavano, e le misure entrate nella riga non ne avevano affatto.
+    //
+    // Questa firma cattura solo ciò che sposta le etichette (la spartizione in righe e la
+    // larghezza dei sistemi) e NON la spaziatura fine, che cambia ad ogni nota inserita:
+    // così l'editing non paga nulla, mentre zoom e ridimensionamento fanno ricalcolare.
+    const layoutSignature = useMemo(() => {
+        const sys = (layoutData as any)?.systemsParams as any[] | undefined;
+        if (!sys || sys.length === 0) return '';
+        return sys.map((s: any) => {
+            const mi = s?.measureIndices || [];
+            return `${mi[0] ?? -1}-${mi[mi.length - 1] ?? -1}:${Math.round(Number(s?.width) || 0)}`;
+        }).join('|');
+    }, [layoutData]);
+
     const harmonyLabelsBySystem = useMemo(() => {
         if (!isAnalysisEnabled || !layoutData) return [];
 
@@ -4164,7 +4185,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // accettato: le etichette si riposizionano ~300ms dopo l'edit e restano ferme dopo un
         // resize finestra finché non si fa un'altra modifica (il layout cambia senza cambiare l'analisi).
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [_chromaticModulationEnabled, accHintEnabled, accompanimentTracks, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions]);
+    }, [_chromaticModulationEnabled, accHintEnabled, accompanimentTracks, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions, layoutSignature]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.
     // This is intentionally conservative: it looks for repeated *functional shapes* rather than
