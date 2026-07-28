@@ -747,6 +747,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   // I righi non impostano una spaziatura propria, quindi vale quella di serie di
   // VexFlow (10 unità fra le linee → 5 fra linea e spazio).
   const STAFF_HALF_SPACE_SVG = 5;
+  // Movimento minimo in pixel VERI perché una presa diventi trascinamento (difesa dal
+  // clic tremolante; a zoom ridotto un grado di rigo vale meno di questo).
+  const NOTE_DRAG_START_PX = 4;
 
   // ── PERF: content signature gating the (expensive) full-redraw effect below ──
   // The draw effect rebuilds the whole SVG (innerHTML='' + new Renderer + draw). It
@@ -4298,16 +4301,39 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
       }
 
-      // Trascinamento verticale in corso: converte lo spostamento in GRADI di scala
-      // (mezzo interlinea = un grado) e muove l'anteprima a scatti, come si scrive.
-      if (down && down.moved && down.dragIds && typeof down.dragStartSvgY === 'number') {
+      // Trascinamento verticale: lo spostamento del puntatore diventa GRADI di scala
+      // (mezzo interlinea = un grado) e l'anteprima si muove a scatti, come si scrive.
+      //
+      // La presa si stacca con una soglia PROPRIA, misurata in unità di rigo e non nei
+      // 12 px del clic: quella soglia è più larga di due gradi, così la nota restava
+      // ferma e poi partiva già due o tre gradi più in là. Con 0,8 di grado il primo
+      // scatto è esattamente di UNO, e la misura in unità di rigo tiene il gesto
+      // uguale a sé stesso a qualunque zoom.
+      if (down && down.dragIds && typeof down.dragStartSvgY === 'number') {
         const curY = clientToSvgCoords(svg, e).y;
-        const steps = Math.round((down.dragStartSvgY - curY) / STAFF_HALF_SPACE_SVG);
-        if (steps !== down.dragSteps) {
-          down.dragSteps = steps;
-          setDragPreview(svg, down.dragIds, -steps * STAFF_HALF_SPACE_SVG);
+        if (!down.moved) {
+          // La presa si stacca con una soglia PROPRIA, non con i 12 px del clic: quella
+          // è più larga di due gradi, e la nota restava ferma per poi partire già due o
+          // tre gradi più in là. Servono un grado intero di rigo (la distanza che si
+          // percorre per spostare di un grado) E un minimo di pixel veri, perché a zoom
+          // ridotto un grado vale pochissimo e un clic tremolante muoverebbe le note.
+          const enoughStaff = Math.abs(down.dragStartSvgY - curY) >= STAFF_HALF_SPACE_SVG;
+          const enoughPixels = Math.abs(e.clientY - down.startClientY) >= NOTE_DRAG_START_PX;
+          if (enoughStaff && enoughPixels) {
+            down.moved = true;
+            // Riancora la presa al punto attuale meno UN grado: così il primo scatto è
+            // esattamente di uno (niente salto), e da lì la nota segue il mouse uno a uno.
+            down.dragStartSvgY = curY + Math.sign(down.dragStartSvgY - curY) * STAFF_HALF_SPACE_SVG;
+          }
         }
-        return; // niente nota fantasma mentre si trascina
+        if (down.moved) {
+          const steps = Math.round((down.dragStartSvgY - curY) / STAFF_HALF_SPACE_SVG);
+          if (steps !== down.dragSteps) {
+            down.dragSteps = steps;
+            setDragPreview(svg, down.dragIds, -steps * STAFF_HALF_SPACE_SVG);
+          }
+          return; // niente nota fantasma mentre si trascina
+        }
       }
 
       const moveCb = onMouseMoveStaffRef.current;
