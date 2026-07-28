@@ -58,6 +58,7 @@ import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
 import { applyMeasureAccidentalCarry } from '../utils/measureAccidentalCarry';
+import { enharmonicRespell } from '../utils/enharmonicRespell';
 import { activeVoicesForPartCount, inactiveVoicesForPartCount, nearestActiveVoice, normalizePartCount, voiceShortLabel, type PartCount } from '../utils/voiceParts';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff, { accompanimentExtraPxForTracks, accompanimentTrackTrebleOffsets } from './VexflowGrandStaff';
@@ -11287,6 +11288,53 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch { /* ignore */ }
     }, [applyAutoLeadingToneInMinor, clefForVoice, keySignature, latestSelectedNoteIds, setAccompanimentTracks, setRawNotes, timeSignature]);
 
+    // ── Riscrittura enarmonica della selezione (tasto J) ──────────────────────────
+    // Stesso suono, altra grafia: Re♯ → Mi♭. Serve sui file altrui, dove una nota
+    // scritta con l'enarmonia sbagliata falsa sigla, cifre e grado dell'accordo
+    // (vedi la segnalazione R-SPELL). L'altezza NON cambia mai: cambiano lettera,
+    // alterazione, ottava scritta e posizione sul rigo.
+    const respellSelectionEnharmonically = useCallback(() => {
+        const ids = latestSelectedNoteIds.current;
+        if (!ids || ids.size === 0) return;
+        const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+        const respelled = (n: any): any => {
+            if (!n || n.isRest || !ids.has(n.id)) return n;
+            const r = enharmonicRespell(n);
+            if (!r) return n;
+            return {
+                ...n,
+                pitch: r.pitch,
+                octave: r.octave,
+                accidental: r.accidental,
+                explicitAccidental: r.accidental,
+                // La grafia scelta a mano prima non vale più: è quella che stiamo cambiando.
+                userAccidental: null,
+                midi: r.midi,
+                noteIndex: ((r.midi % 12) + 12) % 12,
+                // La nota cambia RIGO: senza questo resterebbe disegnata dov'era.
+                position: LETTERS.indexOf(r.pitch) + (r.octave - 4) * 7,
+            };
+        };
+        // Ogni aggiornamento decide da sé se qualcosa è cambiato: niente contatori
+        // condivisi fra i due, che React può rieseguire o rimandare.
+        setRawNotes(prev => {
+            let changed = false;
+            const next = prev.map(n => { const r = respelled(n); if (r !== n) changed = true; return r; });
+            return changed ? next : prev;
+        });
+        setAccompanimentTracks(prev => {
+            let anyTrack = false;
+            const nextTracks = (prev || []).map(track => {
+                let changed = false;
+                const notes = (track.notes || []).map((n: any) => { const r = respelled(n); if (r !== n) changed = true; return r; });
+                if (!changed) return track;
+                anyTrack = true;
+                return { ...track, notes };
+            });
+            return anyTrack ? nextTracks : prev;
+        });
+    }, [latestSelectedNoteIds, setAccompanimentTracks, setRawNotes]);
+
     // Keep the MIDI step-input ref in sync with the latest callback.
     insertNoteFromMidiRef.current = insertNoteFromMidi;
 
@@ -12263,6 +12311,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (i < 0) return active[active.length - 1];
                     return i === 0 ? active[active.length - 1] : active[i - 1];
                 });
+                return;
+            }
+
+            // J: riscrivi enarmonicamente le note selezionate (come in MuseScore).
+            if (!isMod && key === 'j') {
+                if (selectedNoteIds.size === 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                respellSelectionEnharmonically();
                 return;
             }
 
