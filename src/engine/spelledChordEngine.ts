@@ -338,11 +338,30 @@ export function analyzeChord(notes: SpelledPitch[], options?: AnalyzeOptions): A
     return aSemi - bSemi;
   })[0];
   const bass = implicitBass;
+  /**
+   * Un modello che SOTTINTENDE proprio il grado alterato da cui prende il nome sta
+   * dichiarando un'alterazione che non è scritta da nessuna parte. Una settima minore
+   * senza quinta è una m7, non una m7♭5: la quinta assente si presume giusta, non
+   * diminuita. Vale solo come confronto FRA candidati — se il modello alterato è
+   * l'unico che spiega le note (una °7 scritta senza quinta) resta lui a vincere.
+   */
+  const elidesItsOwnAlteredDegree = (c: Candidate): boolean => {
+    if (c.missingDegrees.length === 0) return false;
+    const required = new Map(c.pattern.required.map(d => [d.degree, d.quality]));
+    return c.missingDegrees.some(deg => {
+      const q = required.get(deg);
+      return q === 'd' || q === 'A';
+    });
+  };
+
   candidates.sort((a, b) => {
     const dMiss = a.missingDegrees.length - b.missingDegrees.length;
     if (dMiss !== 0) return dMiss;
     const dExtra = a.extraNoteIndices.length - b.extraNoteIndices.length;
     if (dExtra !== 0) return dExtra;
+    const aGuess = elidesItsOwnAlteredDegree(a) ? 1 : 0;
+    const bGuess = elidesItsOwnAlteredDegree(b) ? 1 : 0;
+    if (aGuess !== bGuess) return aGuess - bGuess;
     const dSpec = b.pattern.specificity - a.pattern.specificity;
     if (dSpec !== 0) return dSpec;
     if (bass) {
