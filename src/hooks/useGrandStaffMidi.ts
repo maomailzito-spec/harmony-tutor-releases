@@ -1543,6 +1543,52 @@ export function planMidiParts(
   return { partIds: [0], partKey: () => 0, groupedByTrack: false };
 }
 
+/**
+ * Le PARTI EFFETTIVE che l'importazione produrrà, con la marcatura percussioni già decisa.
+ *
+ * Due punti che meritano una spiegazione:
+ *  · la marcatura si decide sempre sul piano "una parte per traccia", che è quello mostrato
+ *    nel dialogo: così gli indici delle scelte dell'utente combaciano anche quando poi si
+ *    chiede la fusione, dove le parti diventerebbero una sola e la marcatura si perderebbe;
+ *  · chiedendo la fusione, le percussioni restano comunque una traccia A SÉ. Un kit non è
+ *    una voce del pianoforte: fondercelo dentro fa perdere sia il suono sia la notazione —
+ *    ed era il motivo per cui una batteria importata "a pentagramma unico" suonava di piano.
+ */
+export function planMidiTracks(
+  parsed: { notes: ParsedMidiNote[]; trackNames: string[] },
+  mode: 'separate' | 'grandstaff',
+  drumOverrides?: Record<number, boolean>,
+): Array<{ notes: ParsedMidiNote[]; isDrum: boolean; name: string }> {
+  const sepPlan = planMidiParts(parsed.notes, 'separate');
+  const drumBySepIndex = sepPlan.partIds.map((pid, idx) => {
+    const pn = parsed.notes.filter(n => sepPlan.partKey(n) === pid);
+    const auto = pn.length > 0 && pn.every(n => n.channel === 9);
+    const forced = drumOverrides?.[idx];
+    return typeof forced === 'boolean' ? forced : auto;
+  });
+  const isDrumNote = (n: { track: number; channel: number }): boolean => {
+    const idx = sepPlan.partIds.indexOf(sepPlan.partKey(n));
+    return idx >= 0 && !!drumBySepIndex[idx];
+  };
+
+  if (mode === 'grandstaff') {
+    const drums = parsed.notes.filter(isDrumNote);
+    const pitched = parsed.notes.filter(n => !isDrumNote(n));
+    const out: Array<{ notes: ParsedMidiNote[]; isDrum: boolean; name: string }> = [];
+    if (pitched.length > 0) out.push({ notes: pitched, isDrum: false, name: 'Piano' });
+    if (drums.length > 0) out.push({ notes: drums, isDrum: true, name: 'Batteria' });
+    return out.length > 0 ? out : [{ notes: parsed.notes, isDrum: false, name: 'Piano' }];
+  }
+
+  const { partIds, partKey, groupedByTrack } = planMidiParts(parsed.notes, mode);
+  return partIds.map((pid, i) => {
+    const pn = parsed.notes.filter(n => partKey(n) === pid);
+    const isDrum = pn.length > 0 && pn.every(isDrumNote);
+    const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
+    return { notes: pn, isDrum, name: nm || (isDrum ? 'Batteria' : partIds.length >= 2 ? `Traccia ${i + 1}` : 'Piano') };
+  });
+}
+
 /** Che cosa contiene un file MIDI, per poterlo dire PRIMA di chiedere dove metterlo. */
 export async function summarizeMidiSource(source: File | ArrayBuffer | string): Promise<ImportSummary | null> {
   try {
@@ -1840,8 +1886,9 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // per traccia MIDI se il file è multi-traccia (format 1), altrimenti per canale
     // (format 0 con più canali), altrimenti una parte unica. Ogni parte → una
     // AccompanimentTrack a RIGO SINGOLO con la sua chiave.
-    const { partIds, partKey, groupedByTrack } = planMidiParts(parsed.notes, mode);
-    const isMultiPart = partIds.length >= 2;
+    const specs = planMidiTracks(parsed, mode, opts?.drumParts);
+    const perPartSingleStaff = mode !== 'grandstaff' && specs.length >= 2;
+
 
     // Pipeline di una singola parte → StaffNote[] normalizzati (stessa catena di prima:
     // de-pedalatura NOTAZIONE, separazione voci, terzine, gap-fill, quantize, trim, ritmo).
@@ -1878,25 +1925,23 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
 
     // Le parti importate insieme (righi separati) condividono un groupId → l'analisi
     // armonica le legge come un tutt'uno pur restando su righi distinti.
-    const groupId = isMultiPart
+
+    // Il gruppo d'analisi lega più righi come un tutt'uno: vale se le tracce prodotte
+    // sono più d'una (la batteria poi ne resta fuori, l'armonia non la riguarda).
+    const groupId = specs.length >= 2
       ? ((typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `grp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
       : undefined;
 
-    const tracks: AccompanimentTrack[] = partIds.map((pid, i) => {
-      const partNotes = parsed.notes.filter(n => partKey(n) === pid);
-      // PERCUSSIONI: nel MIDI stanno sul canale 10 (indice 9) e le loro "altezze" non sono
-      // altezze ma pezzi del kit. La traccia va marcata come batteria, altrimenti entrano
-      // come note intonate su un rigo qualsiasi. Il disegno ricava la riga dal numero GM
-      // della nota, quindi non serve altro che non alterare `midi`.
-      const autoDrum = partNotes.length > 0 && partNotes.every(n => n.channel === 9);
-      const forcedDrum = opts?.drumParts?.[i];
-      const isDrumPart = typeof forcedDrum === 'boolean' ? forcedDrum : autoDrum;
+    const tracks: AccompanimentTrack[] = specs.map((spec, i) => {
+      const partNotes = spec.notes;
+      const isDrumPart = spec.isDrum;
       let staffMode: 'grandstaff' | 'treble_only' = 'grandstaff';
       let clef: 'treble' | 'bass' | undefined;
       let forcedClef: 'treble' | 'bass' | undefined;
       if (isDrumPart) {
+        // La batteria si incide sul suo rigo di percussione: chiave e tessitura non contano.
         staffMode = 'treble_only';
-      } else if (isMultiPart) {
+      } else if (perPartSingleStaff) {
         // Una parte = un rigo singolo; chiave dalla tessitura media (soglia C4 = 60).
         const mean = partNotes.reduce((s, n) => s + n.midi, 0) / Math.max(1, partNotes.length);
         forcedClef = mean < 60 ? 'bass' : 'treble';
@@ -1904,28 +1949,21 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
         clef = forcedClef;
       }
       const trackId = newTrackId(i);
-      // Gli id di `convertParsedNoteToStaffNote` sono `midi-<indice>-<attacco>-<altezza>`
-      // e l'INDICE riparte da zero per ogni parte: due parti che hanno la stessa nota
-      // allo stesso attacco nella stessa posizione (un unisono, un raddoppio — cose
-      // ordinarie) producevano id IDENTICI su tracce diverse. Da lì tutte le ricerche
-      // per id (selezione, editing, hit-point del renderer, chiavi React) finivano sulla
-      // prima nota trovata, cioè su un'altra traccia: la traccia sembrava non
-      // selezionabile né modificabile. Lo stesso valeva fra due import successivi.
-      // L'id della traccia (un UUID) come prefisso rende gli id unici per costruzione.
+      // Gli id di `convertParsedNoteToStaffNote` sono `midi-<indice>-<attacco>-<altezza>` e
+      // l'INDICE riparte da zero per ogni parte: due parti con la stessa nota allo stesso
+      // attacco (un unisono, un raddoppio) producevano id IDENTICI su tracce diverse, e da lì
+      // ogni ricerca per id finiva sulla nota di un'altra traccia. L'id della traccia come
+      // prefisso li rende unici per costruzione.
       const built = buildPartNotes(partNotes, forcedClef).map(n => ({ ...n, id: `${trackId}-${n.id}` }));
-      // Sulla batteria la voce (gambo su/giù) dipende dal PEZZO — mani in su, piedi in giù —
-      // e la calcola il disegno: le voci assegnate per tessitura qui non hanno senso.
+      // Sulla batteria la voce (gambo su per le mani, giù per i piedi) la calcola il disegno
+      // dal PEZZO: le voci assegnate per tessitura, qui, non vogliono dire niente.
       const notes = isDrumPart ? built.map(n => ({ ...n, voice: 0 as any })) : built;
-      const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
-      const name = nm || (isDrumPart ? 'Batteria' : isMultiPart ? `Traccia ${i + 1}` : 'Piano');
-      // Strumento dichiarato dal file (Program Change) invece del pianoforte per tutti.
-      // Si cerca fra le note di QUESTA parte: la chiave è traccia:canale, e la parte può
-      // essere stata definita per traccia o per canale, quindi si guarda la prima nota.
+      // Strumento dichiarato dal file (Program Change); sulla batteria non si applica.
       const first = partNotes[0];
-      const declared = first ? parsed.programs?.[`${first.track}:${first.channel}`] : undefined;
+      const declared = (!isDrumPart && first) ? parsed.programs?.[`${first.track}:${first.channel}`] : undefined;
       return {
         id: trackId,
-        name,
+        name: spec.name,
         instrumentId: (typeof declared === 'number' && declared >= 0 && declared <= 127) ? declared : 0,
         notes,
         muted: false,
@@ -1934,7 +1972,9 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
         staffMode,
         ...(isDrumPart ? { isDrum: true } : {}),
         ...(clef && !isDrumPart ? { clef } : {}),
-        ...(groupId ? { groupId } : {}),
+        // Il gruppo serve all'analisi armonica per leggere più righi come un tutt'uno:
+        // la batteria non c'entra e resta fuori.
+        ...(groupId && !isDrumPart ? { groupId } : {}),
       };
     });
 
