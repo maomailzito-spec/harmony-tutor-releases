@@ -1764,8 +1764,12 @@ app.whenReady().then(async () => {
         text = text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
         // Collapse excessive blank lines
         text = text.replace(/\n{3,}/g, '\n\n').trim();
-        // Truncate if very long
-        if (text.length > 1500) text = text.slice(0, 1497) + '...';
+        // Taglio di sicurezza. Il corpo della release contiene ORA la sola versione che
+        // si sta installando (il CI estrae la sua sezione da RELEASE_NOTES.md), quindi
+        // ci sta l'elenco completo — correzioni e import/export compresi. Prima il limite
+        // era 1500 caratteri su un testo che conteneva TUTTE le versioni: si leggeva
+        // l'inizio delle novità e il resto spariva.
+        if (text.length > 6000) text = text.slice(0, 5997) + '...';
         return text;
       };
       const notes = formatNotes(info.releaseNotes);

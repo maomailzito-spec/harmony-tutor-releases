@@ -255,12 +255,27 @@ jobs:
           echo "── Patched latest.yml ──"
           cat latest.yml
 
+      # Corpo della release = SOLO la sezione della versione che si pubblica.
+      # RELEASE_NOTES.md le contiene tutte, dalla più recente in giù: pubblicandolo
+      # intero, la finestra "aggiornamento disponibile" (che tronca il testo) mostrava
+      # l'inizio delle novità e poi si interrompeva, lasciando fuori correzioni e
+      # import/export. Qui si prende dal primo titolo di versione fino al successivo.
+      - name: Estrai le note della versione corrente
+        run: |
+          awk '/^## Novità in v/{ n++ } n==1' RELEASE_NOTES.md > RELEASE_BODY.md
+          if [ ! -s RELEASE_BODY.md ]; then
+            echo "::error::RELEASE_BODY.md vuoto — manca la sezione '## Novità in vX.Y.Z' in cima a RELEASE_NOTES.md"
+            exit 1
+          fi
+          echo "── Corpo della release ($(wc -c < RELEASE_BODY.md) caratteri) ──"
+          cat RELEASE_BODY.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: Harmony Tutor ${{ steps.ver.outputs.tag }}
-          body_path: RELEASE_NOTES.md
+          body_path: RELEASE_BODY.md
           generate_release_notes: false
           fail_on_unmatched_files: true
           prerelease: ${{ contains(steps.ver.outputs.version, 'test') || contains(steps.ver.outputs.version, 'beta') || contains(steps.ver.outputs.version, 'alpha') }}
