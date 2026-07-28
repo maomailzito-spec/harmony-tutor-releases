@@ -5056,7 +5056,12 @@ export function applyHarmonyRules(
     harmonyOverrides?: HarmonyLabelOverride[],
     // Preferences that would otherwise be read from localStorage — passed in so the analysis
     // stays pure (needed to run it inside a Web Worker). Falls back to localStorage when omitted.
-    opts?: { learnedOrnamentsEnabled?: boolean }
+    opts?: {
+        learnedOrnamentsEnabled?: boolean;
+        /** Parti scritte: 4 = SATB, 3 = S-A-B, 2 = S-B. Serve alle regole che parlano
+         *  della COMPLETEZZA dell'accordo, che a due parti non hanno oggetto. */
+        partCount?: 2 | 3 | 4;
+    }
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = (() => {
         try {
@@ -10421,7 +10426,10 @@ export function applyHarmonyRules(
                 }
             } catch { /* ignore */ }
 
-            if (present.length >= 2) {
+            // A DUE PARTI la completezza dell'accordo non ha oggetto: con due suoni una
+            // triade non può essere completa per definizione, e l'avviso scatterebbe su ogni
+            // verticale. Da tre parti in su la regola torna a dire qualcosa.
+            if (present.length >= 2 && opts?.partCount !== 2) {
                 // The staff overlay renderer can only draw dashed highlights when it has a
                 // 2-note connection whose endpoints are also present in the corresponding
                 // violation's noteIds. For chord-level issues like “missing 3rd”, we

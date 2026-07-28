@@ -21,7 +21,7 @@ interface AnalysisArgs {
     doubleBarlineMeasures?: number[];
     ornamentOverrides?: any[];
     harmonyOverrides?: any[];
-    opts?: { learnedOrnamentsEnabled?: boolean };
+    opts?: { learnedOrnamentsEnabled?: boolean; partCount?: 2 | 3 | 4 };
 }
 
 self.onmessage = (e: MessageEvent<{ seq: number; args: AnalysisArgs }>) => {

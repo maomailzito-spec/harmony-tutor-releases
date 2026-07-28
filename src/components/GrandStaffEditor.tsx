@@ -5354,7 +5354,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!isAnalysisEnabled) { analysisSeqRef.current++; setAnalysisResult(empty); return; }
         const seq = ++analysisSeqRef.current; // invalidate any in-flight/late reply immediately
         if (isPlaying) return;                 // freeze: keep last labels; recompute when playback stops
-        const opts = { learnedOrnamentsEnabled: getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0' };
+        const opts = { learnedOrnamentsEnabled: getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0', partCount };
         const handle = window.setTimeout(() => {
             const w = analysisWorkerRef.current;
             if (w) {
@@ -5373,7 +5373,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         }, ANALYSIS_DEBOUNCE_MS);
         return () => window.clearTimeout(handle);
-    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, isPlaying]);
+    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, isPlaying, partCount]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
