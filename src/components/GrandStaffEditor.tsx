@@ -16,6 +16,7 @@ import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType
 import type { ImportSummary } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
 import { gmToSoundfont, soundfontToGm, INSTRUMENTS } from '../constants/instruments';
+import { DRUM_PALETTE_ORCH, DRUM_PALETTE_ROCK, type DrumPiece } from '../constants/drumKits';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useFeatureGate } from '../hooks/useFeatureGate';
@@ -216,35 +217,6 @@ const flatKeyOptions = keySignatureOptions.filter(k => flatKeyValues.includes(k.
 // con DRUM_VEX_KEY in VexflowGrandStaff). Due kit: ORCHESTRALE (VSCO2) e ROCK (Salamander),
 // ognuno col suo set GM e le sue posizioni. L'inserimento dal rigo aggancia al pezzo la cui riga
 // è più vicina; i pezzi "difficili" (piatti) si mettono dalla mappa (al cursore).
-type DrumPiece = { midi: number; label: string; line: string };
-// Nomi degli elementi in INGLESE (terminologia batteria standard, uguale in IT/EN → niente
-// divergenza tra le versioni). Usati sia nel modulo 🥁 sia nei fader del mixer batteria.
-const DRUM_PALETTE_ORCH: DrumPiece[] = [
-  { midi: 36, label: 'Bass Drum',  line: 'f/4' },
-  { midi: 38, label: 'Snare',      line: 'c/5' },
-  { midi: 42, label: 'Gong',       line: 'd/4' },
-  { midi: 49, label: 'Crash',      line: 'a/5' },
-  { midi: 51, label: 'Sus. Cym.',  line: 'g/5' },
-  { midi: 53, label: 'Tambourine', line: 'e/5' },
-  { midi: 56, label: 'Cowbell',    line: 'f/5' },
-];
-// Kit ROCK (Salamander) — set GM standard. Ordine mappa: dal basso (kick) all'alto (piatti).
-const DRUM_PALETTE_ROCK: DrumPiece[] = [
-  { midi: 36, label: 'Kick',      line: 'f/4' },
-  { midi: 38, label: 'Snare',     line: 'c/5' },
-  { midi: 37, label: 'Rimshot',   line: 'c/5' },
-  { midi: 45, label: 'Low Tom',   line: 'a/4' },
-  { midi: 50, label: 'High Tom',  line: 'e/5' },
-  { midi: 44, label: 'HH Pedal',  line: 'd/4' },
-  { midi: 42, label: 'HH Closed', line: 'g/5' },
-  { midi: 46, label: 'HH Open',   line: 'g/5' },
-  { midi: 51, label: 'Ride',      line: 'f/5' },
-  { midi: 53, label: 'Ride Bell', line: 'f/5' },
-  { midi: 49, label: 'Crash',     line: 'a/5' },
-  { midi: 52, label: 'China',     line: 'b/5' },
-  { midi: 55, label: 'Splash',    line: 'c/6' },
-  { midi: 56, label: 'Cowbell',   line: 'd/5' },
-];
 const drumSoundfont = (t: any): string => (t?.drumKit === 'rock' ? 'drumkit' : 'drums');
 // Canale MIDI in uscita per una traccia ACC: la BATTERIA va sul canale 10 (indice 9,
 // convenzione GM per le percussioni); le tracce intonate partono da 4 SALTANDO il 9, così
@@ -13550,9 +13522,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                 <button
                                                     type="button"
                                                     onClick={() => setImportDrumParts(prev => ({ ...prev, [i]: !isDrum }))}
-                                                    className={`px-1 rounded text-[11px] leading-none border ${isDrum ? 'bg-amber-500/20 border-amber-500/60 text-amber-200' : 'border-slate-600 text-slate-500 hover:text-slate-300'}`}
+                                                    className={`px-1.5 py-0.5 rounded text-[10px] leading-none border whitespace-nowrap transition-colors ${isDrum
+                                                        ? 'bg-amber-500/25 border-amber-500/70 text-amber-100'
+                                                        : 'border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200'}`}
                                                     title={tUI('import_mark_drums', { defaultValue: 'Tratta questa parte come percussioni' })}
-                                                >🥁</button>
+                                                >{isDrum ? '🥁 ✓' : '🥁'}</button>
                                             )}
                                             <span className="font-medium text-gray-100">{p.name}</span>
                                             <span className="text-slate-400">
@@ -13576,6 +13550,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         );
                                     })}
                                 </ul>
+                                {importSummary.kind === 'midi' && (
+                                    <p className="mt-2 text-[10px] text-slate-500">
+                                        {tUI('import_drums_hint', { defaultValue: 'Tocca 🥁 per trattare una parte come percussioni (il canale 10 e i nomi tipo “Drums” si riconoscono da soli).' })}
+                                    </p>
+                                )}
                             </div>
                         )}
                         <p className="text-xs text-gray-300">{tUI('import_dest_question', { defaultValue: 'Dove vuoi importare le note?' })}</p>

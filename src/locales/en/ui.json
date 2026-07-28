@@ -214,5 +214,6 @@
   "import_dest_acc_separate_desc_n": "{{count}} staves, one per part. Added to the open project.",
   "import_found_drums": "percussion (channel 10)",
   "import_mark_drums": "Treat this part as percussion (drum kit)",
-  "import_dest_satb_no_drums": "Not available: percussion are not pitches and do not belong in the choir."
+  "import_dest_satb_no_drums": "Not available: percussion are not pitches and do not belong in the choir.",
+  "import_drums_hint": "Tap 🥁 to treat a part as percussion (channel 10 and names like “Drums” are recognised automatically)."
 }

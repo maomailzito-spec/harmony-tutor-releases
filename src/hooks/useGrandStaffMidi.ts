@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import type { AccompanimentTrack, ClefType, ImportSummary, StaffNote, TimeSignature, TimeSignatureChange, Voice } from '../types';
+import { bestDrumKitFor } from '../constants/drumKits';
 import { TICKS_PER_QUARTER } from '../constants';
 import { getKeySignature, getNotePropertiesFromMidi } from '../utils/musicTheory';
 import { buildMidiFile } from '../utils/midiWriter';
@@ -1554,15 +1555,29 @@ export function planMidiParts(
  *    una voce del pianoforte: fondercelo dentro fa perdere sia il suono sia la notazione —
  *    ed era il motivo per cui una batteria importata "a pentagramma unico" suonava di piano.
  */
+/** Nomi che dichiarano una traccia di percussioni (Logic, Cubase, Reaper, MuseScore…). */
+const DRUM_TRACK_NAME_RE = /\b(drum|drums|drummer|drumkit|drum\s*kit|batteria|percussion[ei]?|percuss|perc)\b/i;
+
 export function planMidiTracks(
   parsed: { notes: ParsedMidiNote[]; trackNames: string[] },
   mode: 'separate' | 'grandstaff',
   drumOverrides?: Record<number, boolean>,
-): Array<{ notes: ParsedMidiNote[]; isDrum: boolean; name: string }> {
+): Array<{ notes: ParsedMidiNote[]; isDrum: boolean; name: string; drumKit?: 'orchestral' | 'rock' }> {
   const sepPlan = planMidiParts(parsed.notes, 'separate');
   const drumBySepIndex = sepPlan.partIds.map((pid, idx) => {
     const pn = parsed.notes.filter(n => sepPlan.partKey(n) === pid);
-    const auto = pn.length > 0 && pn.every(n => n.channel === 9);
+    // Canale 10 (indice 9): la convenzione GM. Ma non tutti i file la rispettano — le
+    // tracce "Drummer" di Logic, per dirne una, escono su un canale qualsiasi — quindi
+    // vale anche il NOME della traccia, che in quei casi lo dice chiaramente. Se la
+    // deduzione sbaglia, l'interruttore nel dialogo ha comunque l'ultima parola.
+    const byChannel = pn.length > 0 && pn.every(n => n.channel === 9);
+    const trackName = sepPlan.groupedByTrack ? (parsed.trackNames[pid] || '') : '';
+    const byName = DRUM_TRACK_NAME_RE.test(trackName);
+    // Il nome da solo non basta: si chiede anche che le altezze stiano nel campo delle
+    // percussioni GM, così una traccia chiamata "Drum & Bass" piena di note vere non
+    // finisce per sbaglio sul rigo di batteria.
+    const inDrumRange = pn.length > 0 && pn.every(n => n.midi >= 27 && n.midi <= 87);
+    const auto = byChannel || (byName && inDrumRange);
     const forced = drumOverrides?.[idx];
     return typeof forced === 'boolean' ? forced : auto;
   });
@@ -1571,12 +1586,19 @@ export function planMidiTracks(
     return idx >= 0 && !!drumBySepIndex[idx];
   };
 
+  // Il KIT si decide UNA VOLTA su tutte le percussioni del file: le tracce di batteria
+  // separate (cassa, rullante, piatti) sono un kit solo, e giudicandole una per una la
+  // prima — con due pezzi che esistono in entrambi i kit — finiva sull'orchestrale
+  // mentre le altre andavano sul rock.
+  const allDrumNotes = parsed.notes.filter(isDrumNote);
+  const kit = allDrumNotes.length > 0 ? bestDrumKitFor(allDrumNotes.map(n => n.midi)) : undefined;
+
   if (mode === 'grandstaff') {
     const drums = parsed.notes.filter(isDrumNote);
     const pitched = parsed.notes.filter(n => !isDrumNote(n));
-    const out: Array<{ notes: ParsedMidiNote[]; isDrum: boolean; name: string }> = [];
+    const out: Array<{ notes: ParsedMidiNote[]; isDrum: boolean; name: string; drumKit?: 'orchestral' | 'rock' }> = [];
     if (pitched.length > 0) out.push({ notes: pitched, isDrum: false, name: 'Piano' });
-    if (drums.length > 0) out.push({ notes: drums, isDrum: true, name: 'Batteria' });
+    if (drums.length > 0) out.push({ notes: drums, isDrum: true, name: 'Batteria', ...(kit ? { drumKit: kit } : {}) });
     return out.length > 0 ? out : [{ notes: parsed.notes, isDrum: false, name: 'Piano' }];
   }
 
@@ -1585,7 +1607,15 @@ export function planMidiTracks(
     const pn = parsed.notes.filter(n => partKey(n) === pid);
     const isDrum = pn.length > 0 && pn.every(isDrumNote);
     const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
-    return { notes: pn, isDrum, name: nm || (isDrum ? 'Batteria' : partIds.length >= 2 ? `Traccia ${i + 1}` : 'Piano') };
+    return {
+      notes: pn,
+      isDrum,
+      name: nm || (isDrum ? 'Batteria' : partIds.length >= 2 ? `Traccia ${i + 1}` : 'Piano'),
+      // Il KIT viene dai pezzi che il file usa, ed è lo stesso per tutte le tracce di
+      // percussione: senza, si ripiegava sull'orchestrale (sette pezzi, niente charleston
+      // né tom) e un pop-rock suonava sbagliato.
+      ...(isDrum && kit ? { drumKit: kit } : {}),
+    };
   });
 }
 
@@ -1596,23 +1626,24 @@ export async function summarizeMidiSource(source: File | ArrayBuffer | string): 
     if (!buffer) return null;
     const parsed = parseMidi(buffer);
     if (!parsed?.notes?.length) return { kind: 'midi', parts: [] };
-    const { partIds, partKey, groupedByTrack } = planMidiParts(parsed.notes, 'separate');
-    const multi = partIds.length >= 2;
-    const parts = partIds.map((pid, i) => {
-      const partNotes = parsed.notes.filter(n => partKey(n) === pid);
+    // Le parti (e la marcatura percussioni) vengono dalla STESSA funzione che poi importa:
+    // se il riassunto le calcolasse per conto suo, il dialogo prometterebbe una cosa e
+    // l'importazione ne farebbe un'altra.
+    const specs = planMidiTracks(parsed, 'separate');
+    const multi = specs.length >= 2;
+    const parts = specs.map((spec) => {
+      const partNotes = spec.notes;
       const mean = partNotes.reduce((acc, n) => acc + n.midi, 0) / Math.max(1, partNotes.length);
-      const nm = groupedByTrack ? (parsed.trackNames[pid] || '').trim() : '';
       const first = partNotes[0];
-      const declared = first ? parsed.programs?.[`${first.track}:${first.channel}`] : undefined;
-      const isDrumPart = partNotes.length > 0 && partNotes.every(n => n.channel === 9);
+      const declared = (!spec.isDrum && first) ? parsed.programs?.[`${first.track}:${first.channel}`] : undefined;
       return {
-        name: nm || (isDrumPart ? 'Batteria' : multi ? `Traccia ${i + 1}` : 'Piano'),
+        name: spec.name,
         noteCount: partNotes.length,
-        ...(isDrumPart ? { isDrum: true } : {}),
+        ...(spec.isDrum ? { isDrum: true } : {}),
         ...(typeof declared === 'number' ? { instrumentId: declared } : {}),
         // Una parte sola resta su grand staff (chiave per nota); più parti = un rigo ciascuna.
-        twoStaves: !multi,
-        ...(multi ? { clef: (mean < 60 ? 'bass' : 'treble') as ClefType } : {}),
+        twoStaves: !multi && !spec.isDrum,
+        ...(multi && !spec.isDrum ? { clef: (mean < 60 ? 'bass' : 'treble') as ClefType } : {}),
       };
     });
     return { kind: 'midi', parts };
@@ -1970,7 +2001,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
         visible: true,
         volume: 1,
         staffMode,
-        ...(isDrumPart ? { isDrum: true } : {}),
+        ...(isDrumPart ? { isDrum: true, ...(spec.drumKit ? { drumKit: spec.drumKit } : {}) } : {}),
         ...(clef && !isDrumPart ? { clef } : {}),
         // Il gruppo serve all'analisi armonica per leggere più righi come un tutt'uno:
         // la batteria non c'entra e resta fuori.
