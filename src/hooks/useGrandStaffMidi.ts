@@ -1573,11 +1573,12 @@ export function planMidiTracks(
     const byChannel = pn.length > 0 && pn.every(n => n.channel === 9);
     const trackName = sepPlan.groupedByTrack ? (parsed.trackNames[pid] || '') : '';
     const byName = DRUM_TRACK_NAME_RE.test(trackName);
-    // Il nome da solo non basta: si chiede anche che le altezze stiano nel campo delle
-    // percussioni GM, così una traccia chiamata "Drum & Bass" piena di note vere non
-    // finisce per sbaglio sul rigo di batteria.
-    const inDrumRange = pn.length > 0 && pn.every(n => n.midi >= 27 && n.midi <= 87);
-    const auto = byChannel || (byName && inDrumRange);
+    // Il nome basta da solo: chiedere in più che TUTTE le altezze stiano nel campo GM
+    // delle percussioni era troppo rigido — un solo colpo fuori mappa (le articolazioni
+    // in più dei kit di Logic) faceva fallire il riconoscimento dell'intera traccia, che
+    // tornava a essere importata come parte intonata. Se la deduzione sbaglia,
+    // l'etichetta nel dialogo la corregge in un tocco.
+    const auto = byChannel || byName;
     const forced = drumOverrides?.[idx];
     return typeof forced === 'boolean' ? forced : auto;
   });

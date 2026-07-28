@@ -215,5 +215,10 @@
   "import_found_drums": "percussion (channel 10)",
   "import_mark_drums": "Treat this part as percussion (drum kit)",
   "import_dest_satb_no_drums": "Not available: percussion are not pitches and do not belong in the choir.",
-  "import_drums_hint": "Tap 🥁 to treat a part as percussion (channel 10 and names like “Drums” are recognised automatically)."
+  "import_drums_hint": "Tap 🥁 to treat a part as percussion (channel 10 and names like “Drums” are recognised automatically).",
+  "import_part_percussion": "percussion",
+  "import_part_pitched": "pitched",
+  "import_unmark_drums": "Treated as percussion — tap to make it a pitched part again",
+  "import_found_drums_kit": "drum kit",
+  "import_drums_hint2": "Percussion and pitched parts are detected automatically (channel 10, track name): tap the label only to correct them."
 }

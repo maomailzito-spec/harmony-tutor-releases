@@ -190,5 +190,10 @@
   "import_found_drums": "percussioni (canale 10)",
   "import_mark_drums": "Tratta questa parte come percussioni (kit di batteria)",
   "import_dest_satb_no_drums": "Non disponibile: le percussioni non sono altezze e non entrano nel coro.",
-  "import_drums_hint": "Tocca 🥁 per trattare una parte come percussioni (il canale 10 e i nomi tipo “Drums” si riconoscono da soli)."
+  "import_drums_hint": "Tocca 🥁 per trattare una parte come percussioni (il canale 10 e i nomi tipo “Drums” si riconoscono da soli).",
+  "import_part_percussion": "percussioni",
+  "import_part_pitched": "intonata",
+  "import_unmark_drums": "È trattata come percussioni — tocca per riportarla a parte intonata",
+  "import_found_drums_kit": "kit di percussioni",
+  "import_drums_hint2": "Percussioni e parti intonate sono riconosciute da sole (canale 10, nome della traccia): tocca l’etichetta solo se serve correggerle."
 }

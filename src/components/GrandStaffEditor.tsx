@@ -13525,8 +13525,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                     className={`px-1.5 py-0.5 rounded text-[10px] leading-none border whitespace-nowrap transition-colors ${isDrum
                                                         ? 'bg-amber-500/25 border-amber-500/70 text-amber-100'
                                                         : 'border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200'}`}
-                                                    title={tUI('import_mark_drums', { defaultValue: 'Tratta questa parte come percussioni' })}
-                                                >{isDrum ? '🥁 ✓' : '🥁'}</button>
+                                                    title={isDrum
+                                                        ? tUI('import_unmark_drums', { defaultValue: 'È trattata come percussioni — tocca per riportarla a parte intonata' })
+                                                        : tUI('import_mark_drums', { defaultValue: 'Tratta questa parte come percussioni' })}
+                                                >{isDrum
+                                                    ? `🥁 ${tUI('import_part_percussion', { defaultValue: 'percussioni' })}`
+                                                    : `♪ ${tUI('import_part_pitched', { defaultValue: 'intonata' })}`}</button>
                                             )}
                                             <span className="font-medium text-gray-100">{p.name}</span>
                                             <span className="text-slate-400">
@@ -13541,7 +13545,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                 })()}
                                                 {' · '}
                                                 {isDrum
-                                                    ? tUI('import_found_drums', { defaultValue: 'percussioni (canale 10)' })
+                                                    ? tUI('import_found_drums_kit', { defaultValue: 'kit di percussioni' })
                                                     : p.twoStaves
                                                         ? tUI('import_found_two_staves', { defaultValue: 'due righi' })
                                                         : `${tUI('import_found_one_staff', { defaultValue: 'un rigo' })}${p.clef === 'bass' ? ' (basso)' : p.clef === 'treble' ? ' (violino)' : ''}`}
@@ -13552,7 +13556,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 </ul>
                                 {importSummary.kind === 'midi' && (
                                     <p className="mt-2 text-[10px] text-slate-500">
-                                        {tUI('import_drums_hint', { defaultValue: 'Tocca 🥁 per trattare una parte come percussioni (il canale 10 e i nomi tipo “Drums” si riconoscono da soli).' })}
+                                        {tUI('import_drums_hint2', { defaultValue: 'Percussioni e parti intonate sono riconosciute da sole (canale 10, nome della traccia): tocca l’etichetta solo se serve correggerle.' })}
                                     </p>
                                 )}
                             </div>
