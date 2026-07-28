@@ -13,6 +13,9 @@ interface VexflowGrandStaffProps {
   staffMode?: 'grandstaff' | 'treble_only' | 'satb_ancient';
   engravingMode?: 'legacy' | 'enhanced';
   onNoteClick?: (noteId: string, e: MouseEvent) => void;
+  /** Trascinamento VERTICALE delle note: al rilascio arriva lo scostamento in gradi
+   *  di scala (positivo = verso l'alto) e la nota da cui è partito il gesto. */
+  onNoteVerticalDrag?: (anchorNoteId: string, steps: number, e: MouseEvent) => void;
   onTieClick?: (fromNoteId: string, toNoteId: string, e: MouseEvent) => void;
   selectedNoteIds?: string[];
   /** Evidenziazione dei MOTIVI melodici rilevati: id-nota → colore (modello/imitazione). */
@@ -580,6 +583,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   staffMode = 'grandstaff',
   engravingMode = 'enhanced',
   onNoteClick,
+  onNoteVerticalDrag,
   onTieClick,
   selectedNoteIds = [],
   motifStyleById,
@@ -702,12 +706,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   // Keep latest callbacks in refs so DOM listeners don't get torn down
   // on every React re-render (important for mousedown->mouseup gestures).
   const onNoteClickRef = useRef<typeof onNoteClick>(onNoteClick);
+  const onNoteVerticalDragRef = useRef<typeof onNoteVerticalDrag>(onNoteVerticalDrag);
+  const selectedNoteIdsRef = useRef<string[]>(selectedNoteIds);
   const onStaffClickRef = useRef<typeof onStaffClick>(onStaffClick);
   const onStaffRightClickRef = useRef<typeof onStaffRightClick>(onStaffRightClick);
   const onMouseMoveStaffRef = useRef<typeof onMouseMoveStaff>(onMouseMoveStaff);
   const onStaffMouseDownRef = useRef<typeof onStaffMouseDown>(onStaffMouseDown);
 
   useEffect(() => { onNoteClickRef.current = onNoteClick; }, [onNoteClick]);
+  useEffect(() => { onNoteVerticalDragRef.current = onNoteVerticalDrag; }, [onNoteVerticalDrag]);
+  useEffect(() => { selectedNoteIdsRef.current = selectedNoteIds; }, [selectedNoteIds]);
   useEffect(() => { onStaffClickRef.current = onStaffClick; }, [onStaffClick]);
   useEffect(() => { onStaffRightClickRef.current = onStaffRightClick; }, [onStaffRightClick]);
   useEffect(() => { onMouseMoveStaffRef.current = onMouseMoveStaff; }, [onMouseMoveStaff]);
@@ -728,8 +736,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     downIsGhost: boolean;
     downTieFrom?: string | null;
     downTieTo?: string | null;
+    /** Trascinamento verticale: Y di partenza in coordinate SVG, note coinvolte e
+     *  gradi di scostamento correnti (l'anteprima è solo grafica, niente stato React). */
+    dragStartSvgY?: number;
+    dragIds?: string[];
+    dragSteps?: number;
   };
   const downRef = useRef<DownState | null>(null);
+  // Mezzo interlinea in unità SVG = passo di UN GRADO di scala sul pentagramma.
+  // I righi non impostano una spaziatura propria, quindi vale quella di serie di
+  // VexFlow (10 unità fra le linee → 5 fra linea e spazio).
+  const STAFF_HALF_SPACE_SVG = 5;
 
   // ── PERF: content signature gating the (expensive) full-redraw effect below ──
   // The draw effect rebuilds the whole SVG (innerHTML='' + new Renderer + draw). It
@@ -3934,6 +3951,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     };
 
 
+    // Anteprima del trascinamento: sposta i gruppi SVG delle note coinvolte con una
+    // trasformazione, senza toccare lo stato né ridisegnare il rigo (il ridisegno
+    // completo di un sistema costa; qui serve fluidità a 60 fps).
+    const setDragPreview = (svg: SVGSVGElement, ids: string[] | undefined, dySvg: number) => {
+      if (!ids || ids.length === 0) return;
+      for (const id of ids) {
+        let g: Element | null = null;
+        try { g = svg.querySelector(`[data-note-id="${(window as any).CSS?.escape ? CSS.escape(id) : id}"]`); } catch { g = null; }
+        if (!g) continue;
+        (g as SVGGElement).style.transform = dySvg ? `translateY(${dySvg}px)` : '';
+      }
+    };
+
     const onWindowMouseUp = (e: MouseEvent) => {
       const down = downRef.current;
       if (!down) return;
@@ -3942,6 +3972,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // Only treat left button as a click that can insert/select.
       // Right-click should be reserved for context menus.
       if (e.button !== 0) return;
+
+      // Trascinamento verticale di una nota: si conclude qui (niente click).
+      if (down.moved && down.downNoteId && !down.downIsGhost) {
+        const svgNow = getCurrentSvg();
+        if (svgNow) setDragPreview(svgNow, down.dragIds, 0);
+        const steps = Number(down.dragSteps || 0);
+        if (steps !== 0) {
+          try { e.preventDefault(); } catch { /* ignore */ }
+          try { e.stopPropagation(); } catch { /* ignore */ }
+          onNoteVerticalDragRef.current?.(down.downNoteId, steps, e);
+        }
+        return;
+      }
 
       // If it was a drag, do not emit a staff click.
       if (down.moved) return;
@@ -4206,6 +4249,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       }
 
       const { noteId, isGhost } = getTargetNoteInfo(e.target);
+      // Trascinamento verticale: si parte solo da una nota VERA (non dal fantasma).
+      // Se la nota è già nella selezione si muove tutta la selezione, altrimenti solo lei
+      // — è il comportamento consueto negli editor, e permette di alzare un accordo intero.
+      let dragIds: string[] | undefined;
+      let dragStartSvgY: number | undefined;
+      if (noteId && !isGhost && onNoteVerticalDragRef.current) {
+        const sel = selectedNoteIdsRef.current;
+        dragIds = (sel && sel.includes(noteId)) ? sel.slice() : [noteId];
+        dragStartSvgY = clientToSvgCoords(svg, e).y;
+      }
       downRef.current = {
         startClientX: e.clientX,
         startClientY: e.clientY,
@@ -4214,6 +4267,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         downIsGhost: isGhost,
         downTieFrom: null,
         downTieTo: null,
+        dragStartSvgY,
+        dragIds,
+        dragSteps: 0,
       };
 
       // Start rectangle selection only on background (or on ghost), not on real notes.
@@ -4240,6 +4296,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         if (Math.hypot(dx, dy) >= CLICK_MOVE_THRESHOLD_PX) {
           down.moved = true;
         }
+      }
+
+      // Trascinamento verticale in corso: converte lo spostamento in GRADI di scala
+      // (mezzo interlinea = un grado) e muove l'anteprima a scatti, come si scrive.
+      if (down && down.moved && down.dragIds && typeof down.dragStartSvgY === 'number') {
+        const curY = clientToSvgCoords(svg, e).y;
+        const steps = Math.round((down.dragStartSvgY - curY) / STAFF_HALF_SPACE_SVG);
+        if (steps !== down.dragSteps) {
+          down.dragSteps = steps;
+          setDragPreview(svg, down.dragIds, -steps * STAFF_HALF_SPACE_SVG);
+        }
+        return; // niente nota fantasma mentre si trascina
       }
 
       const moveCb = onMouseMoveStaffRef.current;

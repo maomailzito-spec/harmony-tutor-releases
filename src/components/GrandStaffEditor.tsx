@@ -57,6 +57,7 @@ import { useGrandStaffMidi, trimOverlappingNotes, normalizeRhythm, beatsToDurati
 import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
+import { applyMeasureAccidentalCarry } from '../utils/measureAccidentalCarry';
 import { activeVoicesForPartCount, inactiveVoicesForPartCount, nearestActiveVoice, normalizePartCount, voiceShortLabel, type PartCount } from '../utils/voiceParts';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff, { accompanimentExtraPxForTracks, accompanimentTrackTrebleOffsets } from './VexflowGrandStaff';
@@ -10641,122 +10642,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // on the same staff/clef, subsequent notes inherit that pitch even if the glyph is omitted.
         // This only applies when the user is NOT explicitly arming an accidental.
         if (!activeAccidental) {
-            try {
-                const DIATONIC_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-                const normalizeAcc = (a: any): AccidentalType | null => {
-                    if (!a) return null;
-                    if (a === 'sharp' || a === '#' || a === '♯') return 'sharp';
-                    if (a === 'flat' || a === 'b' || a === '♭') return 'flat';
-                    if (a === 'natural' || a === 'n' || a === '♮') return 'natural';
-                    if (a === 'double-sharp' || a === '##' || a === '𝄪') return 'double-sharp';
-                    if (a === 'double-flat' || a === 'bb' || a === '𝄫') return 'double-flat';
-                    return null;
-                };
-                const pitchLetterOf = (pitch: any): string => {
-                    try {
-                        const s = String(pitch || '').trim();
-                        const m = /[A-Ga-g]/.exec(s);
-                        return (m ? m[0] : 'C').toUpperCase();
-                    } catch {
-                        return 'C';
-                    }
-                };
-                const keySigDefaultAccForLetter = (letter: string): AccidentalType => {
-                    const l = String(letter || '').toUpperCase();
-                    if (!l) return 'natural';
-                    if (keySignature.type === 'sharp' && keySignature.count > 0) {
-                        const sharpOrder = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
-                        return sharpOrder.slice(0, keySignature.count).includes(l) ? 'sharp' : 'natural';
-                    }
-                    if (keySignature.type === 'flat' && keySignature.count > 0) {
-                        const flatOrder = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
-                        return flatOrder.slice(0, keySignature.count).includes(l) ? 'flat' : 'natural';
-                    }
-                    return 'natural';
-                };
-                const accidentalFromPcForLetter = (pc: number, letter: string): AccidentalType => {
-                    const l = String(letter || '').toUpperCase();
-                    const base = DIATONIC_PC[l];
-                    if (base == null) return 'natural';
-                    const raw = (((Number(pc) % 12) + 12) % 12);
-                    const d = ((raw - base + 18) % 12) - 6;
-                    if (d === 1) return 'sharp';
-                    if (d === -1) return 'flat';
-                    if (d === 2) return 'double-sharp';
-                    if (d === -2) return 'double-flat';
-                    return 'natural';
-                };
-                const accOffset = (acc: AccidentalType): number => {
-                    switch (acc) {
-                        case 'sharp': return 1;
-                        case 'flat': return -1;
-                        case 'double-sharp': return 2;
-                        case 'double-flat': return -2;
-                        default: return 0;
-                    }
-                };
-                const startTickOf = (n: any): number => {
-                    const st = Number(n?.startTick);
-                    if (Number.isFinite(st)) return st;
-                    const m = Number(n?.measureIndex);
-                    const b = Number(n?.beat);
-                    const beatsPerMeasureLocal = timeSignature.numerator * (4 / timeSignature.denominator);
-                    if (Number.isFinite(m) && Number.isFinite(b)) {
-                        const absBeat = (m * beatsPerMeasureLocal) + (b - 1);
-                        return Math.round(absBeat * TICKS_PER_QUARTER);
-                    }
-                    return 0;
-                };
-
-                const letter = pitchLetterOf((props as any)?.pitch);
-                const octave = Number((props as any)?.octave);
-                const basePc = DIATONIC_PC[letter];
-                // Skip measure accidental carry when applyAutoLeadingToneInMinor
-                // (or applyActiveAccidental) already set an explicit accidental —
-                // the carry logic would blindly overwrite the midi/noteIndex back
-                // to the key-signature default.
-                if (letter && Number.isFinite(octave) && basePc != null && !(props as any).explicitAccidental) {
-                    const measureIndex = Number(hit.measureIndex);
-                    const beforeTick = Number(insertedStartTick);
-                    const relevant = (rawNotes || [])
-                        .filter((n: any) => n && !n.isRest)
-                        .filter((n: any) => Number(n.measureIndex) === measureIndex)
-                        .filter((n: any) => {
-                            const c = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
-                            return c === targetClef;
-                        })
-                        .filter((n: any) => startTickOf(n) < beforeTick - 1e-6)
-                        .slice()
-                        .sort((a: any, b: any) => startTickOf(a) - startTickOf(b) || Number(a.voice ?? 1) - Number(b.voice ?? 1));
-
-                    let stateAcc: AccidentalType = keySigDefaultAccForLetter(letter);
-                    for (const n of relevant) {
-                        const l2 = pitchLetterOf(n.pitch);
-                        const o2 = Number(n.octave);
-                        if (l2 !== letter || o2 !== octave) continue;
-                        const userAcc = normalizeAcc((n as any).userAccidental);
-                        const explicitAcc = normalizeAcc((n as any).explicitAccidental);
-                        const autoAcc = normalizeAcc((n as any).accidental);
-                        const derived = Number.isFinite(Number(n.noteIndex))
-                            ? accidentalFromPcForLetter(Number(n.noteIndex), l2)
-                            : 'natural';
-                        stateAcc = userAcc ?? explicitAcc ?? autoAcc ?? derived;
-                    }
-
-                    // Apply the carried accidental to the new note's pitch (without forcing glyph rendering).
-                    const desiredPcRaw = basePc + accOffset(stateAcc);
-                    // Avoid rare edge-cases like B# that would wrap across octaves in this data model.
-                    if (desiredPcRaw >= 0 && desiredPcRaw <= 11) {
-                        const desiredPc = desiredPcRaw;
-                        const desiredMidi = (octave + 1) * 12 + desiredPc;
-                        (props as any).noteIndex = desiredPc;
-                        (props as any).midi = desiredMidi;
-                        (props as any).accidental = stateAcc;
-                    }
-                }
-            } catch {
-                // ignore
-            }
+            // Accidenti di misura: un'alterazione scritta prima nella stessa misura vale
+            // fino alla stanghetta anche senza segno (helper condiviso con lo spostamento
+            // delle note col trascinamento).
+            applyMeasureAccidentalCarry(props as any, {
+                notes: rawNotes || [],
+                measureIndex: Number(hit.measureIndex),
+                beforeTick: Number(insertedStartTick),
+                clef: targetClef,
+                keySignature,
+                timeSignature,
+                ticksPerQuarter: TICKS_PER_QUARTER,
+                clefForVoice,
+            });
         }
 
         // startTick is computed by the tick-based snap above.
@@ -11294,6 +11192,98 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setAccompanimentTracks, setActiveAccidental,
         tupletNoteCount, setIsTriplet, setTupletNoteCount, setTripletBaseDuration,
     ]);
+
+    // ── Spostamento verticale delle note col mouse ────────────────────────────────
+    // Il gesto (trascina, anteprima a scatti, rilascia) sta nel renderer; qui arriva
+    // solo il risultato: quanti GRADI di scala e da quale nota è partito. Si muove la
+    // selezione se la nota afferrata ne fa parte, altrimenti solo quella nota.
+    // Una sola scrittura di stato per gesto → un solo passo di annullamento.
+    const handleNoteVerticalDrag = useCallback((anchorNoteId: string, steps: number) => {
+        if (!steps || !Number.isFinite(steps)) return;
+        const sel = latestSelectedNoteIds.current;
+        const targets = new Set<string>((sel && sel.has(anchorNoteId)) ? [...sel] : [anchorNoteId]);
+
+        const LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+        // Posizione diatonica assoluta (Do4 = 0), ricavata dalla GRAFIA e non dal MIDI:
+        // muovere una nota sul pentagramma è muoverla di righi e spazi, non di semitoni.
+        const diatonicPosOf = (n: any): number | null => {
+            const letter = String(n?.pitch || '').trim().charAt(0).toUpperCase();
+            const idx = LETTER_ORDER.indexOf(letter);
+            const oct = Number(n?.octave);
+            if (idx < 0 || !Number.isFinite(oct)) return null;
+            return idx + (oct - 4) * 7;
+        };
+        const movedNote = (n: any, siblings: StaffNote[]): any => {
+            if (!n || n.isRest) return n;
+            const pos = diatonicPosOf(n);
+            if (pos == null) return n;
+            const clef = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
+            let props: any = getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignature);
+            props = applyAutoLeadingToneInMinor(props);
+            props = applyMeasureAccidentalCarry(props, {
+                notes: siblings,
+                measureIndex: Number(n.measureIndex),
+                beforeTick: Number((n as any).startTick ?? 0),
+                clef,
+                keySignature,
+                timeSignature,
+                ticksPerQuarter: TICKS_PER_QUARTER,
+                clefForVoice,
+                excludeId: n.id,
+            });
+            return {
+                ...n,
+                ...props,
+                clef,
+                // La grafia si ricalcola da capo: quella vecchia (compresa la scelta
+                // manuale dell'utente) non deve sopravvivere allo spostamento.
+                accidental: props.accidental ?? null,
+                explicitAccidental: props.explicitAccidental ?? null,
+                userAccidental: null,
+            };
+        };
+
+        const accTracks = latestAccompanimentTracks.current || [];
+        // Limite di guardia: un trascinamento lungo non deve poter spedire le note in
+        // ottave impossibili. Se anche una sola nota del gruppo uscirebbe dal campo di
+        // un pianoforte, il gesto non si applica affatto — meglio nulla che un accordo
+        // spezzato con una parte sola fuori posto.
+        {
+            const allTargets: any[] = [
+                ...latestRawNotes.current.filter(n => targets.has(n.id) && !n.isRest),
+                ...accTracks.flatMap(t => (t.notes || [])).filter((n: any) => targets.has(n.id) && !n.isRest),
+            ];
+            const outOfRange = allTargets.some(n => {
+                const pos = diatonicPosOf(n);
+                if (pos == null) return false;
+                const clef = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
+                const midi = Number(getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignature).midi);
+                return !Number.isFinite(midi) || midi < 21 || midi > 108; // La0 … Do8
+            });
+            if (outOfRange) return;
+        }
+        const satbHit = latestRawNotes.current.some(n => targets.has(n.id) && !n.isRest);
+        if (satbHit) {
+            setRawNotes(prev => prev.map(n => (targets.has(n.id) && !n.isRest) ? movedNote(n, prev) : n));
+        }
+        const accHit = accTracks.some(t => (t.notes || []).some((n: any) => targets.has(n.id) && !n.isRest));
+        if (accHit) {
+            setAccompanimentTracks(prev => (prev || []).map(track => {
+                if (!(track.notes || []).some((n: any) => targets.has(n.id) && !n.isRest)) return track;
+                return { ...track, notes: (track.notes || []).map((n: any) => (targets.has(n.id) && !n.isRest) ? movedNote(n, track.notes as any) : n) };
+            }));
+        }
+        // Riscontro sonoro della nota su cui si è chiuso il gesto (come all'inserimento).
+        // Calcolato QUI e non dentro gli aggiornamenti di stato: React può eseguire quelle
+        // funzioni più tardi, e il suono resterebbe indietro o non partirebbe affatto.
+        try {
+            const srcSatb = latestRawNotes.current.find(n => n.id === anchorNoteId && !n.isRest);
+            const srcAcc = srcSatb ? null : accTracks.flatMap(t => (t.notes || [])).find((n: any) => n.id === anchorNoteId && !n.isRest);
+            const src: any = srcSatb || srcAcc;
+            const siblings: any = srcSatb ? latestRawNotes.current : (accTracks.find(t => (t.notes || []).some((n: any) => n.id === anchorNoteId))?.notes ?? []);
+            if (src) void playNoteRef.current?.(movedNote(src, siblings), 0.6);
+        } catch { /* ignore */ }
+    }, [applyAutoLeadingToneInMinor, clefForVoice, keySignature, latestSelectedNoteIds, setAccompanimentTracks, setRawNotes, timeSignature]);
 
     // Keep the MIDI step-input ref in sync with the latest callback.
     insertNoteFromMidiRef.current = insertNoteFromMidi;
@@ -14242,6 +14232,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 selectedNoteIds={Array.from(selectedNoteIds)}
                                 motifStyleById={isMotifsEnabled ? motifNoteStyles : undefined}
                                 onNoteClick={(noteId, e) => handleNoteClick(noteId, systemIndex, e as any)}
+                                onNoteVerticalDrag={handleNoteVerticalDrag}
                                                                 onStaffClick={(x, y, e) => handleBackgroundClick(x, y, systemIndex, e)}
                                                                                                                                 onStaffRightClick={(x, y, e) => handleStaffRightClick(x, y, systemIndex, e)}
                                                                 onStaffMouseDown={ENABLE_MARQUEE_SELECTION ? ((e, svg) => handleBackgroundMouseDown(e, svg, systemIndex)) : undefined}
