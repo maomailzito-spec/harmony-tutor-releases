@@ -170,6 +170,17 @@ const VF_TREBLE_MOUSE_Y_ADJUST_PX = -40;
 // treble: col solo -40 la ghost/nota ACC restava ~40px troppo in basso. Adjust dedicato.
 const VF_ACC_MOUSE_Y_ADJUST_PX = -80;
 
+/** px-per-tick DELLA MISURA: con la spaziatura per contenuto ogni misura ha la sua
+ *  densità, mentre dentro la misura la posizione resta lineare nel tempo.
+ *  Sta FUORI dal componente di proposito: non usa nulla del suo stato, e dentro veniva
+ *  chiamata da memo che girano prima della sua riga (errore in fase di avvio). */
+const pxPerTickOfMeasure = (sys: any, idxInSystem: number): number => {
+    const per = sys?.measurePxPerTick?.[idxInSystem];
+    if (typeof per === 'number' && isFinite(per) && per > 0) return per;
+    const sysPx = sys?.pxPerTick;
+    return (typeof sysPx === 'number' && isFinite(sysPx) && sysPx > 0) ? sysPx : DEFAULT_PX_PER_TICK;
+};
+
 const relativeMinors: { [major: string]: string } = {
     'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
     'F': 'D', 'Bb': 'G', 'Eb': 'C', 'Ab': 'F', 'Db': 'Bb', 'Gb': 'Eb', 'Cb': 'Ab'
@@ -9154,15 +9165,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         pasteToSelectedVoiceRef.current = false;
     }, [clefForVoice, selectedVoice, setRawNotes, setSelectedNoteIds, setAccompanimentTracks, timeSignature]);
-
-    /** px-per-tick DELLA MISURA: con la spaziatura per contenuto ogni misura ha la sua
-     *  densità, mentre dentro la misura la posizione resta lineare nel tempo. */
-    const pxPerTickOfMeasure = (sys: any, idxInSystem: number): number => {
-        const per = sys?.measurePxPerTick?.[idxInSystem];
-        if (typeof per === 'number' && isFinite(per) && per > 0) return per;
-        const sysPx = sys?.pxPerTick;
-        return (typeof sysPx === 'number' && isFinite(sysPx) && sysPx > 0) ? sysPx : DEFAULT_PX_PER_TICK;
-    };
 
     const getSystemMeasureAtX = useCallback((systemIndex: number, x: number) => {
         const sys = layoutData?.systemsParams?.[systemIndex];
