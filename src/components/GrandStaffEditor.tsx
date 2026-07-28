@@ -57,6 +57,7 @@ import { useGrandStaffMidi, trimOverlappingNotes, normalizeRhythm, beatsToDurati
 import { useMidiStepInput } from '../hooks/useMidiStepInput';
 import { useRealtimeRecording, RawRecordedEvent } from '../hooks/useRealtimeRecording';
 import { expandMeasureOrder } from '../utils/expandMeasureOrder';
+import { activeVoicesForPartCount, inactiveVoicesForPartCount, nearestActiveVoice, normalizePartCount, voiceShortLabel, type PartCount } from '../utils/voiceParts';
 import GrandStaffToolbar from './GrandStaffToolbar';
 import VexflowGrandStaff, { accompanimentExtraPxForTracks, accompanimentTrackTrebleOffsets } from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
@@ -714,6 +715,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // continua (per silenziarlo si usa il Mute nel mixer). Lo shift di clip in px
     // corrisponde all'altezza del blocco SATB sopra gli ACC (ACC treble 310 → 40).
     const [satbVisible, setSatbVisible] = useState(true);
+    // NUMERO DI PARTI del coro: 4 (SATB), 3 (S-A-B) o 2 (S-B). Le voci spente non sono
+    // scrivibili (spariscono dalla toolbar e dai comandi), ma restano quelle di sempre:
+    // la più grave è il Basso, così regole e analisi non cambiano significato.
+    const [partCount, setPartCount] = useState<PartCount>(4);
+    const activeVoices = useMemo(() => activeVoicesForPartCount(partCount), [partCount]);
+    const activeVoicesRef = useRef(activeVoices);
+    useEffect(() => { activeVoicesRef.current = activeVoices; }, [activeVoices]);
+    const partCountRef = useRef(partCount);
+    useEffect(() => { partCountRef.current = partCount; }, [partCount]);
+    // Rete di sicurezza: se in una voce spenta compare musica vera (import, incolla,
+    // annulla), le parti risalgono da sole — meglio riaccendere la voce che tenere
+    // note invisibili e non modificabili. A quattro parti l'effetto non fa nulla.
+    useEffect(() => {
+        if (partCount === 4) return;
+        if (rawNotes.some(n => Number(n.voice) === 3 && !n.isRest)) { setPartCount(4); return; }
+        if (partCount === 2 && rawNotes.some(n => Number(n.voice) === 2 && !n.isRest)) setPartCount(3);
+    }, [rawNotes, partCount]);
     // Dialogo di export MusicXML (Standard vs Screen reader + livello).
     const [exportXmlModalOpen, setExportXmlModalOpen] = useState(false);
     // Custom name for the SATB group (like ACC track names). Empty = no staff label.
@@ -1459,6 +1477,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const activeAccidentalRef = useRef<AccidentalType | null>(null);
     useEffect(() => { activeAccidentalRef.current = activeAccidental; }, [activeAccidental]);
     const [selectedVoice, setSelectedVoice] = useState<Voice>(1);
+    // Cambio del numero di parti. Ridurre le parti non cancella nulla: se le voci che
+    // si spegnerebbero contengono già musica, il cambio viene rifiutato con un avviso
+    // (svuotare la voce è una decisione dell'utente, non un effetto collaterale).
+    const changePartCount = useCallback((next: PartCount) => {
+        if (next === partCountRef.current) return;
+        const losing = inactiveVoicesForPartCount(next);
+        const busy = losing.filter(v => latestRawNotes.current.some(n => Number(n.voice) === v && !n.isRest));
+        if (busy.length > 0) {
+            const names = busy.map(v => voiceShortLabel(v)).join(', ');
+            setCopyPasteError(`Prima svuota ${names}: riducendo le parti quelle note resterebbero fuori dalla scrittura.`);
+            return;
+        }
+        // Pause rimaste nelle voci spente: quelle sì si tolgono (sono riempitivo
+        // automatico, non musica scritta).
+        if (losing.length > 0) {
+            setRawNotes(cur => {
+                const cleaned = cur.filter(n => !(losing.includes(Number(n.voice) as Voice) && n.isRest));
+                return cleaned.length === cur.length ? cur : cleaned;
+            });
+        }
+        setSelectedVoice(v => nearestActiveVoice(v, next));
+        partCountRef.current = next;
+        setPartCount(next);
+    }, [setCopyPasteError, setRawNotes]);
     const [soloVoices, setSoloVoices] = useState<Set<number>>(new Set());
     const [voiceInstruments, setVoiceInstruments] = useState<Record<number, string>>({
         1: 'acoustic_grand_piano', 2: 'acoustic_grand_piano',
@@ -3485,7 +3527,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const activeAccidentals = buildMeasureAccidentals(latestRawNotes.current as any, measureIndex, startTick);
 
         const notes = buildChordSATBNotes(parsed, measureIndex, beat, startTick,
-            selectedInsertion.duration, durTicks, keySignature, prevVoicing, activeAccidentals);
+            selectedInsertion.duration, durTicks, keySignature, prevVoicing, activeAccidentals, partCountRef.current);
 
         setRawNotes(prev => [...(prev || []), ...notes]);
         setChordInputText('');
@@ -4667,6 +4709,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     comp: { enabled: compEnabled, threshold: compThreshold, ratio: compRatio, attack: compAttack, release: compRelease, makeup: compMakeup },
                     satbName,
                     satbVisible,
+                    partCount,
                     computedLabelsRef: _harmonyLabelsRef,
                 },
                 apply: {
@@ -4676,6 +4719,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setProjectTitle,
                     setSatbName,
                     setSatbVisible,
+                    setPartCount,
                     setCurrentProjectFilePath,
                     setKeySignatureRoot,
                     setIsMinorMode,
@@ -4943,7 +4987,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
         tonicizationHints, inferredContextSuppressions,
-        accompanimentTracks, voiceInstruments, voiceSoundBanks, voiceMidiChannels, voiceVolumes, mutedVoices, satbName, satbVisible,
+        accompanimentTracks, voiceInstruments, voiceSoundBanks, voiceMidiChannels, voiceVolumes, mutedVoices, satbName, satbVisible, partCount,
     };
 
     // Auto-save: periodically trigger 'save' if a file path is already set.
@@ -5117,6 +5161,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 if (typeof (p as any).satbName === 'string') setSatbName((p as any).satbName);
                 setSatbVisible((p as any).satbVisible !== false);
+                setPartCount(normalizePartCount((p as any).partCount));
                 setCurrentProjectFilePath(draft.filePath || null);
                 localStorage.removeItem(DRAFT_KEY);
             } catch {
@@ -12213,11 +12258,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 return;
             }
-            // V: cycle voices in order 4 -> 3 -> 2 -> 1 (B, T, A, S)
+            // V: cycle voices in order 4 -> 3 -> 2 -> 1 (B, T, A, S), skipping the
+            // voices switched off by the part count (a 3 parti il Tenore non c'è).
             if (!isMod && key === 'v') {
                 e.preventDefault();
                 e.stopPropagation();
-                setSelectedVoice(v => (v <= 1 ? 4 : ((v - 1) as Voice)));
+                setSelectedVoice(v => {
+                    const active = activeVoicesRef.current;
+                    if (active.length === 0) return v;
+                    const i = active.indexOf(v);
+                    // Non trovata (voce spenta): riparti dalla più grave.
+                    if (i < 0) return active[active.length - 1];
+                    return i === 0 ? active[active.length - 1] : active[i - 1];
+                });
                 return;
             }
 
@@ -13113,6 +13166,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 bumpMeasuresPerLine={bumpMeasuresPerLine}
                 selectedVoice={selectedVoice}
                 setSelectedVoice={setSelectedVoice}
+                partCount={partCount}
+                setPartCount={changePartCount}
                 hasNoteSelection={hasReassignableSelection}
                 onReassignSelectionToVoice={reassignSelectionToVoice}
                 soloVoices={soloVoices}

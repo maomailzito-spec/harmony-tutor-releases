@@ -120,5 +120,10 @@
   "more_view_ribbon": "Continuous ribbon",
   "more_view_ribbon_tooltip": "All measures on a single system, scrolled horizontally",
   "more_spacing_content": "Content-aware spacing",
-  "more_spacing_content_tooltip": "Each measure is as wide as its content demands; when off, width follows duration only"
+  "more_spacing_content_tooltip": "Each measure is as wide as its content demands; when off, width follows duration only",
+  "more_parts_label": "Parts",
+  "more_parts_tooltip": "Number of written parts. The lowest voice is always the Bass; disabled voices cannot be written.",
+  "more_parts_4": "4 parts (S A T B)",
+  "more_parts_3": "3 parts (S A B)",
+  "more_parts_2": "2 parts (S B)"
 }

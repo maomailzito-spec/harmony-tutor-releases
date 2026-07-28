@@ -354,6 +354,8 @@ export function buildChordSATBNotes(
     keySignature: KeySignature,
     prevVoicing?: SATBVoicing | null,
     activeAccidentals?: Record<string, string>,
+    /** Parti scritte nel progetto: 4 = SATB, 3 = S-A-B, 2 = S-B (default 4). */
+    partCount: 2 | 3 | 4 = 4,
 ): StaffNote[] {
     const { rootPc, rootName, intervals, bassPc } = parsed;
 
@@ -426,10 +428,33 @@ export function buildChordSATBNotes(
             : rawNotes;
 
     if (voicing) {
+        if (partCount === 4) {
+            return buildResult([
+                makeNote(voicing.soprano, 1, 'treble'),
+                makeNote(voicing.alto,    2, 'treble'),
+                makeNote(voicing.tenor,   3, 'treble'),
+                makeNote(voicing.bass,    4, 'bass'),
+            ]);
+        }
+        // Meno di quattro parti: il motore corale resta a quattro voci (le sue regole di
+        // condotta valgono lì) e da quel voicing si ricava la scrittura ridotta. Soprano e
+        // Basso restano intoccati; per la parte intermedia si sceglie fra contralto e tenore
+        // quello che conserva più suoni dell'accordo (a parità si tiene il contralto, che
+        // mantiene la spaziatura originale).
+        if (partCount === 2) {
+            return buildResult([
+                makeNote(voicing.soprano, 1, 'treble'),
+                makeNote(voicing.bass,    4, 'bass'),
+            ]);
+        }
+        const pcOf = (m: number) => ((m % 12) + 12) % 12;
+        const distinct = (mids: number[]) => new Set(mids.map(pcOf)).size;
+        const withAlto = distinct([voicing.soprano, voicing.alto, voicing.bass]);
+        const withTenor = distinct([voicing.soprano, voicing.tenor, voicing.bass]);
+        const middle = withTenor > withAlto ? voicing.tenor : voicing.alto;
         return buildResult([
             makeNote(voicing.soprano, 1, 'treble'),
-            makeNote(voicing.alto,    2, 'treble'),
-            makeNote(voicing.tenor,   3, 'treble'),
+            makeNote(middle,          2, 'treble'),
             makeNote(voicing.bass,    4, 'bass'),
         ]);
     }
@@ -446,6 +471,19 @@ export function buildChordSATBNotes(
     const finalAlto  = Math.max(finalTenor + 1, altoMidi);
     const finalSop   = Math.max(finalAlto + 1, sopMidi);
 
+    if (partCount === 2) {
+        return buildResult([
+            makeNote(finalSop, 1, 'treble'),
+            makeNote(bassMidi, 4, 'bass'),
+        ]);
+    }
+    if (partCount === 3) {
+        return buildResult([
+            makeNote(finalSop,  1, 'treble'),
+            makeNote(finalAlto, 2, 'treble'),
+            makeNote(bassMidi,  4, 'bass'),
+        ]);
+    }
     return buildResult([
         makeNote(finalSop,   1, 'treble'),
         makeNote(finalAlto,  2, 'treble'),

@@ -80,6 +80,11 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         /** Visibilità del rigo SATB nel layout (toggle dal mixer). Salvato solo quando
          *  nascosto; in apertura, assente = visibile. */
         satbVisible?: boolean;
+        /** NUMERO DI PARTI del coro: 4 (SATB), 3 (Soprano, Contralto, Basso) o 2
+         *  (Soprano, Basso). Le voci attive sono sempre le estreme più le interne
+         *  necessarie, e la più grave resta il BASSO — è la voce cui sono agganciate
+         *  le regole su rivolti, raddoppi e voci estreme. Assente = 4. */
+        partCount?: 2 | 3 | 4;
         /** Volumi dei fader master (gruppo SATB, gruppo ACC, master globale). */
         masterVolumes?: { satb?: number; acc?: number; mixer?: number };
         /** FX per-voce SATB: pan (-1..+1) e mandata riverbero (0..1). Le tracce ACC salvano
@@ -151,6 +156,8 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		...(args.satbName ? { satbName: args.satbName } : {}),
 		// SATB nascosto: persistito solo quando false (default = visibile) per file leggeri.
 		...(args.satbVisible === false ? { satbVisible: false } : {}),
+		// Numero di parti: salvato solo se diverso dal SATB a quattro (file leggeri).
+		...(args.partCount && args.partCount !== 4 ? { partCount: args.partCount } : {}),
 		// Mixer per-voce SATB (strumento/volume/mute). mutedVoices serializzato come array.
 		...(args.voiceInstruments ? { voiceInstruments: args.voiceInstruments } : {}),
 		...(args.voiceSoundBanks ? { voiceSoundBanks: args.voiceSoundBanks } : {}),
@@ -267,6 +274,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setAccompanimentTracks?: (next: AccompanimentTrack[]) => void;
 	setSatbName?: (name: string) => void;
 	setSatbVisible?: (next: boolean) => void;
+	setPartCount?: (next: 2 | 3 | 4) => void;
 	setVoiceInstruments?: (next: Record<number, string>) => void;
 	setVoiceSoundBanks?: (next: Record<number, 'orchestral' | 'gm'>) => void;
 	setVoiceMidiChannels?: (next: Record<number, number>) => void;
@@ -357,6 +365,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setCompRelease?.(0.15);
 		args.setCompMakeup?.(0);
 		args.setSatbVisible?.(true);
+		args.setPartCount?.(4);
 		args.projectExtrasRef.current = {};
 		return;
 	}
@@ -406,6 +415,8 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setCompMakeup?.(0);
 	// Default a visibile; i file salvati col SATB nascosto lo reimpostano sotto.
 	args.setSatbVisible?.(true);
+	// Default a quattro parti; i file che ne salvano meno lo reimpostano sotto.
+	args.setPartCount?.(4);
 	args.setBpm(120);
 	args.setIsBpmActive(false);
 	args.setIsMetronomeOn(false);
@@ -622,6 +633,11 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (typeof loadedProject.satbName === 'string') args.setSatbName?.(loadedProject.satbName);
 			// SATB nascosto: ripristina dal file (assente = visibile, già impostato sopra).
 			if (typeof (loadedProject as any).satbVisible === 'boolean') args.setSatbVisible?.((loadedProject as any).satbVisible);
+			// Numero di parti: assente nei file esistenti → quattro, come sempre stato.
+			{
+				const pc = Number((loadedProject as any).partCount);
+				args.setPartCount?.((pc === 2 || pc === 3) ? (pc as 2 | 3) : 4);
+			}
 			// Mixer per-voce SATB (assente nei file vecchi → restano i default già impostati sopra).
 			if (loadedProject.voiceInstruments && typeof loadedProject.voiceInstruments === 'object') {
 				args.setVoiceInstruments?.(loadedProject.voiceInstruments as Record<number, string>);

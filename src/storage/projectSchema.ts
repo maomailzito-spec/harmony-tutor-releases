@@ -33,6 +33,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'accompanimentTracks',
   'satbName',
   'satbVisible',
+  'partCount',
   'masterVolumes',
   'voicePans',
   'voiceReverbSends',

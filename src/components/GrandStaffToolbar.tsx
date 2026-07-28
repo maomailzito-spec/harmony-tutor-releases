@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 import type { AccidentalType, NoteDuration, StaffNote, Voice } from '../types';
+import { activeVoicesForPartCount, type PartCount } from '../utils/voiceParts';
 import { INSTRUMENTS, gmToSoundfont, soundfontToGm } from '../constants/instruments';
 import {
     WholeNoteIcon,
@@ -115,6 +116,9 @@ type GrandStaffToolbarProps = {
     bumpMeasuresPerLine: (delta: number) => void;
 
     selectedVoice: Voice;
+    /** Numero di parti del coro: 4 (SATB), 3 (S-A-B) o 2 (S-B). */
+    partCount?: PartCount;
+    setPartCount?: (value: PartCount) => void;
     setSelectedVoice: (value: Voice) => void;
     // When notes are selected, clicking a voice button also moves the selection to
     // that voice (reassign), in addition to setting the insertion voice.
@@ -325,6 +329,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         applyMeasuresPerLineDraft,
         bumpMeasuresPerLine,
         selectedVoice,
+        partCount = 4,
+        setPartCount,
         setSelectedVoice,
         hasNoteSelection,
         onReassignSelectionToVoice,
@@ -746,7 +752,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         ),
         voices: (
             <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-md">
-                {[1, 2, 3, 4].map(v => (
+                {activeVoicesForPartCount(partCount).map(v => (
                     <button
                         key={v}
                         onClick={() => { setSelectedVoice(v as Voice); if (hasNoteSelection) onReassignSelectionToVoice?.(v as Voice); }}
@@ -1261,6 +1267,23 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             <span>{tT('more_close_voicing_label')}</span>
                             {staffLayoutMode === 'parti_strette' && staffSystemMode !== 'satb_ancient' && <span className="text-[11px]">✓</span>}
                         </button>
+                        {setPartCount && (
+                            <>
+                                <div className="my-2 h-px bg-slate-700" />
+                                <div className="px-2 pb-1 text-[11px] text-slate-300">{tT('more_parts_label')}</div>
+                                {([4, 3, 2] as PartCount[]).map(n => (
+                                    <button
+                                        key={n}
+                                        onClick={() => setPartCount(n)}
+                                        className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                        title={tT('more_parts_tooltip')}
+                                    >
+                                        <span>{tT(`more_parts_${n}`)}</span>
+                                        <span className="text-[11px]">{partCount === n ? '●' : '○'}</span>
+                                    </button>
+                                ))}
+                            </>
+                        )}
                         {setViewMode && (
                             <>
                                 <div className="my-2 h-px bg-slate-700" />
