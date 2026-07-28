@@ -2329,6 +2329,71 @@ const CHORD_TYPE_TO_SYMBOL: Partial<Record<ChordType, string>> = {
 
 // --- RESTORE: exports expected by GrandStaffEditor.tsx ---
 
+/**
+ * Riscrittura enarmonica di UNA nota per far comparire un accordo.
+ *
+ * Serve ai file in cui una nota è scritta con la grafia sbagliata: Re♯–Sol–Si♭ non è
+ * nessun accordo (Re♯→Sol è una quarta diminuita, non una terza), ma scrivendo Mi♭ al
+ * posto del Re♯ diventa un Mi♭ maggiore. Si prova a cambiare la scrittura di una sola
+ * nota per volta, senza toccare il suono: se una di quelle riscritture forma un accordo,
+ * viene restituita la lista corretta.
+ *
+ * Solo alterazioni semplici e mai attraverso la lettera (niente Si♯/Do♭): quelle
+ * sposterebbero l'ottava, e comunque non sono l'errore che si incontra nei file veri.
+ */
+const ENHARMONIC_SWAP: Record<string, { pitch: string; accidental: string }> = {
+    'C#': { pitch: 'D', accidental: 'flat' },  'Db': { pitch: 'C', accidental: 'sharp' },
+    'D#': { pitch: 'E', accidental: 'flat' },  'Eb': { pitch: 'D', accidental: 'sharp' },
+    'F#': { pitch: 'G', accidental: 'flat' },  'Gb': { pitch: 'F', accidental: 'sharp' },
+    'G#': { pitch: 'A', accidental: 'flat' },  'Ab': { pitch: 'G', accidental: 'sharp' },
+    'A#': { pitch: 'B', accidental: 'flat' },  'Bb': { pitch: 'A', accidental: 'sharp' },
+};
+
+function respellOneNoteToFormChord(chord: StaffNote[]): { notes: StaffNote[]; culprit: StaffNote } | null {
+    try {
+        const sounding = (chord || []).filter(n => n && !n.isRest);
+        if (sounding.length < 3 || sounding.length > 6) return null;
+        const spelledOf = (notes: StaffNote[]) => notes.map(n => staffNoteToSp(n as any));
+        // Se la grafia scritta già forma un accordo non c'è niente da riparare.
+        if (analyzeChordSpelled(spelledOf(sounding))) return null;
+
+        for (let i = 0; i < sounding.length; i++) {
+            const sp = staffNoteToSp(sounding[i] as any);
+            if (sp.accidental !== 1 && sp.accidental !== -1) continue;
+            const key = `${sp.letter}${sp.accidental === 1 ? '#' : 'b'}`;
+            const alt = ENHARMONIC_SWAP[key];
+            if (!alt) continue;
+            const swapped = sounding.map((n, j) => j === i
+                ? ({ ...(n as any), pitch: alt.pitch, accidental: alt.accidental, userAccidental: null, explicitAccidental: null } as StaffNote)
+                : n);
+            const analyzed = analyzeChordSpelled(spelledOf(swapped));
+            if (analyzed && analyzed.extraNoteIndices.length === 0 && analyzed.confidence >= 0.6) {
+                // Le note NON riscritte restano quelle originali: cambia solo la grafia
+                // della nota incriminata, mai il suono.
+                return { notes: swapped, culprit: sounding[i] };
+            }
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Vero quando le note SCRITTE non formano alcun accordo ma i suoni sì: la sigla che si
+ * vede è una lettura ENARMONICA e non corrisponde a ciò che è sul pentagramma. Chi
+ * mostra la sigla deve dirlo, altrimenti l'etichetta afferma una cosa che la pagina
+ * smentisce.
+ */
+export function isEnharmonicSpellingMismatch(chord: StaffNote[]): boolean {
+    return respellOneNoteToFormChord(chord) !== null;
+}
+
+/** La nota scritta male, quella la cui riscrittura enarmonica fa comparire l'accordo. */
+export function enharmonicSpellingCulprit(chord: StaffNote[]): StaffNote | null {
+    return respellOneNoteToFormChord(chord)?.culprit ?? null;
+}
+
 export function getChordSymbol(
     chord: StaffNote[],
     keySignature: KeySignature,
@@ -2485,10 +2550,11 @@ export function getChordSymbol(
 
     // Hand-off to the new engine. Wrapped in a function so we can early-return
     // a string OR fall through to the legacy block transparently.
-    const tryPhase3Wrapper = (): string | null => {
+    const tryPhase3Wrapper = (notesOverride?: StaffNote[]): string | null => {
         try {
-            if (filteredChord.length < 2) return null;
-            const sounding = filteredChord.filter(n => n && !n.isRest);
+            const source = notesOverride ?? filteredChord;
+            if (source.length < 2) return null;
+            const sounding = source.filter(n => n && !n.isRest);
             if (sounding.length < 2) return null;
 
             // ── Spelling-consistency gate ───────────────────────────────
@@ -2594,6 +2660,22 @@ export function getChordSymbol(
 
     const phase3Symbol = tryPhase3Wrapper();
     if (phase3Symbol !== null) return phase3Symbol;
+
+    // GRAFIA INCOERENTE. Se le note SCRITTE non formano alcun accordo — per esempio
+    // Re♯–Sol–Si♭, dove Re♯→Sol è una quarta diminuita e non una terza — ma riscrivendo
+    // enarmonicamente UNA sola nota l'accordo compare, la sigla si prende da quella
+    // lettura: dice il vero sui suoni e con una grafia coerente (Mi♭/Si♭, non Re♯/Si♭).
+    // Il ripiego che veniva dopo prendeva la QUALITÀ dai suoni e il NOME dalla grafia,
+    // e non rappresentava né l'una né l'altra cosa. Che la sigla non corrisponda a ciò
+    // che è scritto è un'informazione a sé: la dà `isEnharmonicSpellingMismatch`, non
+    // va nascosta dentro la stringa.
+    {
+        const repaired = respellOneNoteToFormChord(filteredChord);
+        if (repaired) {
+            const s = tryPhase3Wrapper(repaired.notes);
+            if (s !== null) return s;
+        }
+    }
     // ── End Phase 3 wrapper. Fall through to legacy chord recognition. ────
 
     const chordInfo = identifyChord(filteredChord) || identifyChord(fullChord);
@@ -10423,6 +10505,22 @@ export function applyHarmonyRules(
                         ]);
                         isRootlessV7b9Subset = pcs.every(pc => dim7Set.has(pc));
                     }
+                }
+            } catch { /* ignore */ }
+
+            // GRAFIA INCOERENTE: le note scritte non formano alcun accordo, ma cambiando
+            // la scrittura di una sola nota (stesso suono) sì. È un errore di scrittura,
+            // non di armonia: va detto, perché falsa sigla, cifre e lettura del passo.
+            try {
+                const culprit = enharmonicSpellingCulprit(present as any);
+                if (culprit?.id) {
+                    addViolation({
+                        ruleId: 'R-SPELL',
+                        severity: 'warning',
+                        description: 'Grafia incoerente: le note scritte non formano un accordo',
+                        suggestion: 'Una nota è scritta con l\u2019enarmonia sbagliata (per esempio Re\u266f al posto di Mi\u266d): riscrivila, cos\u00ec grafia e armonia tornano a coincidere.',
+                        noteIds: [culprit.id],
+                    });
                 }
             } catch { /* ignore */ }
 

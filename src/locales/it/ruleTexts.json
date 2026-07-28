@@ -574,5 +574,13 @@
     "title": "Quinta per moto retto nell'incatenamento dei primi rivolti di IV e V",
     "body": "Nel passaggio fra i primi rivolti dei gradi IV e V la quinta può essere raggiunta per moto retto senza durezza, anche quando entrambe le parti che la formano procedono per intervalli disgiunti.\nLa regola generale chiede, per le quinte raggiunte per moto retto, che almeno una delle due parti proceda per grado congiunto oppure che una delle due note della quinta sia comune ai due accordi. In questo incatenamento la condizione non serve: il legame fra i due rivolti è già saldo — il basso sale di grado dal sesto al settimo grado della scala e le parti superiori restano dentro la stessa regione armonica — e all'ascolto l'arrivo sulla quinta non risulta aspro.",
     "suggestion": "Nessuna correzione necessaria: in questo incatenamento l'arrivo sulla quinta per moto retto è ammesso anche con salto in entrambe le parti."
+  },
+  "R-SPELL": {
+    "title": "Grafia incoerente",
+    "body": "Le note scritte, lette come sono scritte, non formano alcun accordo: una di esse porta l’alterazione enarmonica sbagliata. Per esempio Re♯–Sol–Si♭ non è un accordo, perché da Re♯ a Sol c’è una quarta diminuita e non una terza; scrivendo Mi♭ al posto del Re♯ le stesse altezze diventano un Mi♭ maggiore.\nIl suono non cambia, ma la scrittura sì: da essa dipendono la sigla, il basso figurato e il grado dell’accordo. Finché la grafia resta incoerente, la sigla mostrata è una lettura dei suoni — per questo compare fra parentesi — e non corrisponde a ciò che si legge sul pentagramma.",
+    "suggestion": "Riscrivi enarmonicamente la nota segnalata, senza cambiarne il suono, scegliendo la grafia coerente con l’armonia del passo.",
+    "titleVariants": {
+      "Grafia incoerente: le note scritte non formano un accordo": "Grafia incoerente: le note scritte non formano un accordo"
+    }
   }
 }

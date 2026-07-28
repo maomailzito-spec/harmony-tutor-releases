@@ -7,7 +7,7 @@
  */
 import { useMemo } from 'react';
 import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack } from '../types';
-import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol, bassScaleDegreeRoman } from '../utils/musicTheory';
+import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol, bassScaleDegreeRoman, isEnharmonicSpellingMismatch } from '../utils/musicTheory';
 import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
 import { evaluateCadentialPatterns, type ChordEvent, pcToNoteName, noteNameToPc, qualityFamily, getScalePcs } from '../utils/cadentialPatterns';
@@ -4044,6 +4044,16 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             // "Scuola romana": grado della nota reale al basso, rispetto alla tonica LOCALE
             // (contextTonic gestisce le modulazioni). Dalle stesse note del basso figurato.
             const romanBass = bassScaleDegreeRoman(analysisNotes as any, contextTonic, contextIsMinor);
+            // GRAFIA INCOERENTE: se le note scritte non formano accordo e la sigla viene da
+            // una riscrittura enarmonica, l'etichetta va fra parentesi. Senza il segno la
+            // sigla affermerebbe una cosa che il pentagramma smentisce (Mi♭ dove è scritto
+            // Re♯); con le parentesi dichiara di essere una lettura dei SUONI, non della
+            // pagina — e la segnalazione d'analisi spiega dov'è l'errore di scrittura.
+            let symbolForDisplay = symbol;
+            try {
+                if (symbol && isEnharmonicSpellingMismatch(fullNotes as any)) symbolForDisplay = `(${symbol})`;
+            } catch { /* ignore */ }
+
             labelsBySystem[systemIndex].push({
                 id: `lbl-${event.absBeat}`,
                 x,
@@ -4051,7 +4061,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 romanDisplay,
                 figures,
                 romanBass,
-                symbol,
+                symbol: symbolForDisplay,
                 absBeat: event.absBeat,
                 isOverride: overrideByAbsBeat.has(qAbs(event.absBeat)),
                 pcsSig: signatureFromNotes((fullNotes || []) as any),

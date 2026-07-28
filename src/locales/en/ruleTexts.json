@@ -574,5 +574,13 @@
     "title": "Fifth by direct motion in the chain of first inversions of IV and V",
     "body": "In the succession of the first inversions of the fourth and fifth degrees, the fifth may be reached by direct motion without harshness, even when both parts forming it move by leap.\nThe general rule requires, for fifths reached by direct motion, that at least one of the two parts move stepwise, or that one of the two notes of the fifth be common to both chords. In this chain the condition is not needed: the link between the two inversions is already firm — the bass rises by step from the sixth to the seventh degree of the scale and the upper parts stay within the same harmonic region — and to the ear the arrival on the fifth does not sound harsh.",
     "suggestion": "No correction needed: in this chain the arrival on the fifth by direct motion is accepted even with a leap in both parts."
+  },
+  "R-SPELL": {
+    "title": "Inconsistent spelling",
+    "body": "Read exactly as written, these notes do not form any chord: one of them carries the wrong enharmonic spelling. For instance D♯–G–B♭ is not a chord, because D♯ to G is a diminished fourth rather than a third; writing E♭ instead of D♯ turns the same pitches into an E♭ major triad.\nThe sound does not change, but the notation does — and the chord symbol, the figured bass and the scale degree all depend on it. While the spelling stays inconsistent, the symbol shown is a reading of the sounds (hence the parentheses) and does not match what is written on the staff.",
+    "suggestion": "Respell the flagged note enharmonically, leaving its sound untouched, choosing the spelling consistent with the harmony of the passage.",
+    "titleVariants": {
+      "Grafia incoerente: le note scritte non formano un accordo": "Inconsistent spelling: the notes as written do not form a chord"
+    }
   }
 }
