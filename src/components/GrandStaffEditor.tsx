@@ -9886,6 +9886,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, [qAbsForOverrides]);
 
+    // Etichette ORFANE. Gli override d'analisi vivono in un elenco a parte, non appesi alle
+    // note: cancellando l'intero brano le sigle restavano sullo schermo e l'unico modo di
+    // toglierle era il menù T, una per una. Quando non c'è più NIENTE — né coro né tracce —
+    // non c'è più niente da etichettare: l'elenco si azzera da sé.
+    useEffect(() => {
+        const noSatb = (rawNotes || []).length === 0;
+        const noAcc = (accompanimentTracks || []).every(t => (t.notes || []).length === 0);
+        if (!noSatb || !noAcc) return;
+        if ((harmonyOverrides || []).length > 0) setHarmonyOverrides([]);
+        if ((accHarmonyOverrides || []).length > 0) setAccHarmonyOverrides([]);
+    }, [rawNotes, accompanimentTracks, harmonyOverrides, accHarmonyOverrides, setAccHarmonyOverrides]);
+
     const removeHarmonyOverride = useCallback((absBeat: number) => {
         const a = qAbsForOverrides(absBeat);
         setHarmonyOverrides(prev => (prev || []).filter(o => qAbsForOverrides(o.absBeat) !== a));
@@ -10024,6 +10036,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
+        // ── TOGGLE anche in modo SATB ────────────────────────────────────────────────
+        // Ripetere il comando sulla STESSA selezione toglie il collasso e fa tornare
+        // l'analisi automatica. Prima il ritorno indietro esisteva solo per le tracce ACC
+        // (e il manuale lo prometteva per tutti): sul coro bisognava passare dal menù T,
+        // e chi non lo sapeva restava con l'analisi spenta su quel tratto.
+        {
+            const already = (latestHarmonyOverrides.current || []);
+            const hasAnchor = already.some(o => qAbsForOverrides(o.absBeat) === anchorQ
+                && String(o.roman || '') === String(roman || '')
+                && String(o.symbol || '') === String(symbol || ''));
+            const othersBlank = [...onsetBeats].every(q => Math.abs(q - anchorQ) < 1e-6
+                || already.some(o => qAbsForOverrides(o.absBeat) === q
+                    && !String(o.roman || '').trim() && !String(o.symbol || '').trim()));
+            if (hasAnchor && othersBlank) {
+                setHarmonyOverrides(prev => (prev || []).filter(o => {
+                    const q = qAbsForOverrides(o.absBeat);
+                    return !(Math.abs(q - anchorQ) < 1e-6 || onsetBeats.has(q));
+                }));
+                setOrnamentOverrides(prev => (prev || []).filter(o => !ids.has(o.noteId)));
+                return;
+            }
+        }
+
         // 1) Pin the full chord label at the anchor beat.
         applyHarmonyOverride(anchorQ, roman, figures, symbol);
         // 2) Blank the other onset beats so the scattered arpeggio collapses to one label.
@@ -10048,7 +10083,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return arr;
         });
-    }, [selectedNoteIds, timeSignature, currentTonic, keySignatureRoot, keySignature, isMinorMode, qAbsForOverrides, applyHarmonyOverride, setOrnamentOverrides, analysisSubject, analysisAccTrack, setAccHarmonyOverrides]);
+    }, [selectedNoteIds, timeSignature, currentTonic, keySignatureRoot, keySignature, isMinorMode, qAbsForOverrides, applyHarmonyOverride, setHarmonyOverrides, setOrnamentOverrides, analysisSubject, analysisAccTrack, setAccHarmonyOverrides]);
 
     const handleApplyOrnamentOverride = useCallback((type: string) => {
         if (selectedNoteIds.size === 0) return;
