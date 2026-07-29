@@ -7755,7 +7755,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Send MIDI Program Change for each voice channel so external synths
         // (e.g. Logic Pro) know which instrument to use per channel.
         if (selectedMidiOutput) {
+            // Si dichiara lo strumento SOLO delle voci che hanno davvero note. Prima si
+            // annunciavano tutte e quattro anche a coro vuoto: su un progetto di sola
+            // batteria arrivavano a Logic quattro cambi di programma su canali che non
+            // avrebbero suonato nulla — rumore che confonde chi sta configurando il
+            // collegamento, e che può cambiare strumento a una traccia già armata.
+            const voicesWithNotes = new Set<number>();
+            for (const n of (latestRawNotes.current || [])) {
+                if (!n || n.isRest) continue;
+                const v = Number(n.voice);
+                if (v >= 1 && v <= 4) voicesWithNotes.add(v);
+            }
             for (let v = 1; v <= 4; v++) {
+                if (!voicesWithNotes.has(v)) continue;
                 const ch = satbVoiceMidiChannel(voiceMidiChannelsRef.current, v);
                 const instr = voiceInstrumentsRef.current[v] || 'acoustic_grand_piano';
                 const pc = soundfontToGm(instr); // GM program dalla fonte di verità INSTRUMENTS
@@ -7764,7 +7776,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Program Change for accompaniment tracks (batteria → ch.10, intonate → ≠10)
             accTracks.forEach((track, idx) => {
                 if (!track || track.muted) return;
+                if (!(track.notes || []).some(n => n && !n.isRest)) return; // traccia vuota: niente da dichiarare
                 const ch = accMidiChannel(track, idx);
+                // La batteria sul canale 10 non ha "strumento": il Program Change lì
+                // seleziona il kit e su molti strumenti esterni è meglio non toccarlo.
+                if ((track as any).isDrum) return;
                 selectedMidiOutput.send([0xC0 + ch, track.instrumentId & 0x7F]);
             });
         }
