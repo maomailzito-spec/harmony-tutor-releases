@@ -541,15 +541,16 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 </button>
             </div>
         ),
-        // Pannello del PUNTO: metro, tonalità, stanghette, ritornelli, testo, modulazioni,
-        // tonicizzazioni, override d'analisi. Sono interventi al volo su un punto del brano,
-        // quindi il pulsante sta per conto suo — accanto ai comandi del cursore — e non fra
-        // le misure, dove si confondeva con le impostazioni di pagina.
+        // PROPRIETÀ del luogo in cui si trova il cursore: metro, tonalità, stanghette,
+        // ritornelli, testo, modulazioni, tonicizzazioni, override d'analisi. Sono interventi
+        // al volo sulla partitura, quindi il pulsante sta per conto suo — accanto ai comandi
+        // del cursore — e non fra le misure, dove si confondeva con le impostazioni di pagina.
+        // In musica "punto" vuol dire punto di valore o di staccato: da evitare come nome.
         measurePanel: onOpenMeasurePanel ? (
             <button
                 onClick={onOpenMeasurePanel}
                 className="px-2.5 py-1 rounded-md bg-slate-700 border border-slate-600 text-gray-100 text-xs font-semibold hover:bg-slate-600 transition-colors"
-                title={tT('measure_panel_tooltip', { defaultValue: 'Proprietà del punto: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d\u2019analisi — scorciatoia: T' })}
+                title={tT('measure_panel_tooltip', { defaultValue: 'Proprietà: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d\u2019analisi — scorciatoia: T' })}
             >
                 {tT('measure_panel_label', { defaultValue: 'Proprietà' })}
             </button>

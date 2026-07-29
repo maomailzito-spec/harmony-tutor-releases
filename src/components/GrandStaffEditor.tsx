@@ -423,10 +423,10 @@ const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
 const CONTENT_SPACING_KEY = 'harmony-tutor.contentAwareSpacing.v1';
 const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'playback',
-    // Il pannello del punto (metro, tonalità, stanghette, testo, modulazioni, override):
-    // interventi al volo su un punto del brano, non impostazioni di pagina — per questo sta
-    // accanto ai comandi del cursore e non fra le misure, dove si confondeva con "misure per
-    // riga" e "numero di misure".
+    // Le PROPRIETÀ del luogo in cui si trova il cursore (metro, tonalità, stanghette, testo,
+    // modulazioni, override): interventi al volo sulla partitura, non impostazioni di pagina —
+    // per questo sta accanto ai comandi del cursore e non fra le misure, dove si confondeva
+    // con "misure per riga" e "numero di misure".
     'measurePanel',
     'bpm',
     'key',
