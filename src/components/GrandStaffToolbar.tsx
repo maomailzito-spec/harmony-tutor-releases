@@ -115,6 +115,8 @@ type GrandStaffToolbarProps = {
     applyMeasuresPerLineDraft: () => void;
     bumpMeasuresPerLine: (delta: number) => void;
 
+    /** Apre il pannello delle modifiche di misura (lo stesso del tasto T). */
+    onOpenMeasurePanel?: () => void;
     selectedVoice: Voice;
     /** Numero di parti del coro: 4 (SATB), 3 (S-A-B) o 2 (S-B). */
     partCount?: PartCount;
@@ -328,6 +330,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         setMeasuresPerLineDraft,
         applyMeasuresPerLineDraft,
         bumpMeasuresPerLine,
+        onOpenMeasurePanel,
         selectedVoice,
         partCount = 4,
         setPartCount,
@@ -672,6 +675,18 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         ),
         measures: (
             <div className="flex items-center gap-1.5">
+                {onOpenMeasurePanel && (
+                    // Il pannello di misura (metro, tonalità, stanghette, ritornelli, testo,
+                    // override) esisteva solo dietro il tasto T: chi non impara le scorciatoie
+                    // non lo trovava. Qui sta accanto ai comandi di misura, dove lo si cerca.
+                    <button
+                        onClick={onOpenMeasurePanel}
+                        className="px-2 py-0.5 rounded-md bg-slate-700 border border-slate-600 text-gray-100 text-xs font-semibold hover:bg-slate-600 transition-colors"
+                        title={tT('measure_panel_tooltip', { defaultValue: 'Pannello della misura al cursore: metro, tonalità, stanghette, ritornelli, testo, analisi (tasto T)' })}
+                    >
+                        {tT('measure_panel_label', { defaultValue: 'Misura…' })}
+                    </button>
+                )}
                 <span className="text-xs text-slate-400">{tT('measures_label')}</span>
                 <div className="flex items-center">
                     <input

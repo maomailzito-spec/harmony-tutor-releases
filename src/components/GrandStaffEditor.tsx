@@ -9913,6 +9913,46 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * etichetta. Per un accordo solo-ACC (nessuna nota SATB sotto la playhead) l'hook
      * sintetizza l'evento-etichetta sul beat dell'override.
      */
+    /**
+     * Apre il PANNELLO DELLE MODIFICHE DI MISURA (il "pannello T") sul playhead.
+     *
+     * Da lì passano metro, tonalità, stanghette, ritornelli, testo, override d'analisi:
+     * troppa roba per lasciarla dietro una sola scorciatoia. Estratta qui perché la
+     * chiamino sia il tasto T sia il pulsante in toolbar.
+     */
+    const openMeasurePanelAtPlayhead = useCallback(() => {
+        // Toggle: if the tonicization panel is already open, close it.
+        if (contextMenu) {
+            setContextMenu(null);
+            return;
+        }
+
+        if (!playheadPosition) return;
+        const container = staffContainerRef.current;
+        if (!container) return;
+        const sysEl = container.querySelector(`[data-system-index="${playheadPosition.systemIndex}"]`) as HTMLElement | null;
+        if (!sysEl) return;
+
+        const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
+        const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
+
+        const sysRect = sysEl.getBoundingClientRect();
+        const x = sysRect.left + playheadPosition.x;
+        const y = sysRect.top + 16;
+
+        // Calcola la tonica inferita attiva a questo beat
+        // (contesti manuali + inferred dall'analisi result, ordinati per beat)
+        const _ctxsSorted = [...(effectiveAnalysisContexts || [])]
+            .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
+            .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a));
+        const _activeCtx = _ctxsSorted[0];
+        const _activeTonic = _activeCtx ? _activeCtx.newTonic : keySignatureRoot;
+        const _activeIsMinor = _activeCtx ? !!_activeCtx.newIsMinor : isMinorMode;
+        const _hasInferredChange = _activeTonic !== keySignatureRoot || _activeIsMinor !== isMinorMode;
+
+        setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: _hasInferredChange ? { tonic: _activeTonic, isMinor: _activeIsMinor } : null });
+    }, [contextMenu, playheadPosition, getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, effectiveAnalysisContexts, keySignatureRoot, isMinorMode, setContextMenu]);
+
     const markSelectionAsChordAtPlayhead = useCallback(() => {
         const ids = selectedNoteIds;
         if (ids.size < 2) return;
@@ -12586,41 +12626,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            // T: open text/modulation menu at the playhead position.
+            // T: apre il pannello delle modifiche di misura al playhead.
+            // Il comando vero sta in `openMeasurePanelAtPlayhead`, così lo può chiamare
+            // anche il pulsante in toolbar: una funzione ricca come questa non può essere
+            // raggiungibile solo da chi conosce la scorciatoia.
             if (!isMod && key === 't') {
                 e.preventDefault();
                 e.stopPropagation();
-
-                // Toggle: if the tonicization panel is already open, close it.
-                if (contextMenu) {
-                    setContextMenu(null);
-                    return;
-                }
-
-                if (!playheadPosition) return;
-                const container = staffContainerRef.current;
-                if (!container) return;
-                const sysEl = container.querySelector(`[data-system-index="${playheadPosition.systemIndex}"]`) as HTMLElement | null;
-                if (!sysEl) return;
-
-                const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
-                const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
-
-                const sysRect = sysEl.getBoundingClientRect();
-                const x = sysRect.left + playheadPosition.x;
-                const y = sysRect.top + 16;
-
-                // Calcola la tonica inferita attiva a questo beat
-                // (contesti manuali + inferred dall'analisi result, ordinati per beat)
-                const _ctxsSorted = [...(effectiveAnalysisContexts || [])]
-                    .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
-                    .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a));
-                const _activeCtx = _ctxsSorted[0];
-                const _activeTonic = _activeCtx ? _activeCtx.newTonic : keySignatureRoot;
-                const _activeIsMinor = _activeCtx ? !!_activeCtx.newIsMinor : isMinorMode;
-                const _hasInferredChange = _activeTonic !== keySignatureRoot || _activeIsMinor !== isMinorMode;
-
-                setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: _hasInferredChange ? { tonic: _activeTonic, isMinor: _activeIsMinor } : null });
+                openMeasurePanelAtPlayhead();
                 return;
             }
 
@@ -13325,6 +13338,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setSelectedVoice={setSelectedVoice}
                 partCount={partCount}
                 setPartCount={changePartCount}
+                onOpenMeasurePanel={openMeasurePanelAtPlayhead}
                 hasNoteSelection={hasReassignableSelection}
                 onReassignSelectionToVoice={reassignSelectionToVoice}
                 soloVoices={soloVoices}

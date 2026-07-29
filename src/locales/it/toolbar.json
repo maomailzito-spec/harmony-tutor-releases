@@ -125,5 +125,7 @@
   "more_parts_tooltip": "Numero di parti scritte. La voce più grave resta il Basso; le voci spente non sono scrivibili.",
   "more_parts_4": "4 parti (S A T B)",
   "more_parts_3": "3 parti (S A B)",
-  "more_parts_2": "2 parti (S B)"
+  "more_parts_2": "2 parti (S B)",
+  "measure_panel_label": "Misura…",
+  "measure_panel_tooltip": "Pannello della misura al cursore: metro, tonalità, stanghette, ritornelli, testo, analisi (tasto T)"
 }

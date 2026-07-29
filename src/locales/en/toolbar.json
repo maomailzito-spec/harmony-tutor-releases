@@ -125,5 +125,7 @@
   "more_parts_tooltip": "Number of written parts. The lowest voice is always the Bass; disabled voices cannot be written.",
   "more_parts_4": "4 parts (S A T B)",
   "more_parts_3": "3 parts (S A B)",
-  "more_parts_2": "2 parts (S B)"
+  "more_parts_2": "2 parts (S B)",
+  "measure_panel_label": "Measure…",
+  "measure_panel_tooltip": "Measure panel at the cursor: meter, key, barlines, repeats, text, analysis (T key)"
 }
