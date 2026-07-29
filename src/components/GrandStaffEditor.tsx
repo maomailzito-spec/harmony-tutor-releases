@@ -14691,6 +14691,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         value={chordInputText}
                                                                         onChange={e => { setChordInputText(e.target.value); setChordInputError(false); }}
                                                                         onKeyDown={e => {
+                                                                            // Annulla/ripeti SENZA uscire dal box. Le scorciatoie globali si
+                                                                            // fermano quando il fuoco è in un campo di testo — giusto per le
+                                                                            // lettere, sbagliato qui: scrivendo una sequenza di accordi, per
+                                                                            // disfare l'ultimo bisognava chiudere il box, annullare e rientrare.
+                                                                            // Qui ⌘Z / ⌘⇧Z agiscono sulla PARTITURA, che è ciò che si sta
+                                                                            // costruendo; il testo nel campo è di due caratteri e si corregge
+                                                                            // con la cancellazione.
+                                                                            if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                if (e.shiftKey) redoNotes(); else undoNotes();
+                                                                                return;
+                                                                            }
                                                                             // Blocca propagazione solo per i tasti che gestiamo
                                                                             if (e.key === 'Enter' || e.key === 'Escape' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                                                                                 e.stopPropagation();
