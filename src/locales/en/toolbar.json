@@ -127,5 +127,7 @@
   "more_parts_3": "3 parts (S A B)",
   "more_parts_2": "2 parts (S B)",
   "measure_panel_label": "Properties",
-  "measure_panel_tooltip": "Properties: meter, key, barlines, repeats, text, modulations and analysis overrides — shortcut: T"
+  "measure_panel_tooltip": "Properties: meter, key, barlines, repeats, text, modulations and analysis overrides — shortcut: T",
+  "more_menu_label": "Score",
+  "more_menu_tooltip": "Score: staff type, number of parts, view, spacing, page format — shortcut: P"
 }

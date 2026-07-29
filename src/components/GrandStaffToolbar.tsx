@@ -1240,10 +1240,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             <div ref={moreMenuRef} className="relative flex items-center">
                 <button
                     onClick={() => setIsMoreMenuOpen(o => !o)}
-                    className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${isMoreMenuOpen ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
-                    title={tT('more_menu')}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${isMoreMenuOpen ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
+                    title={tT('more_menu_tooltip', { defaultValue: 'Partitura: tipo di righi, numero di parti, vista, spaziatura, formato della pagina — scorciatoia: P' })}
                 >
-                    ⋯
+                    {tT('more_menu_label', { defaultValue: 'Partitura' })} ⌄
                 </button>
                 {isMoreMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">

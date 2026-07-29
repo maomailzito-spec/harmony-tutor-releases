@@ -12658,6 +12658,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
+            // P: apre e chiude il menù "Partitura" (righi, parti, vista, spaziatura, formato).
+            // Era il pulsante coi puntini, e passava inosservato: ora ha un nome e un tasto.
+            if (!isMod && key === 'p') {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsMoreMenuOpen(o => !o);
+                return;
+            }
+
             // T: apre il pannello delle modifiche di misura al playhead.
             // Il comando vero sta in `openMeasurePanelAtPlayhead`, così lo può chiamare
             // anche il pulsante in toolbar: una funzione ricca come questa non può essere
