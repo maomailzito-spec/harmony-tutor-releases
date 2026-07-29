@@ -3415,6 +3415,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         applyPatternToSelectionAsIs(pattern);
     }, [applyPatternToSelectionAsIs]);
 
+    // Il punto del cursore lo sanno due funzioni dichiarate più in basso: qui si passa da
+    // riferimenti, non da chiamate dirette, perché usarle prima della loro riga farebbe
+    // esplodere il componente all'avvio (è già successo con la densità delle misure).
+    const playheadAbsBeatRef = useRef<(() => number) | null>(null);
+    const measureBeatFromAbsRef = useRef<((absBeat: number) => { measureIndex: number; beat: number }) | null>(null);
+
     /** Inserisce un accordo dalla sigla (es. "Cmaj7/E") alla posizione della playhead.
      * Restituisce { startTick, durTicks } per permettere al chiamante di avanzare il caret,
      * oppure null se la sigla non è valida. */
@@ -3423,24 +3429,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const parsed = parseChordSymbol(symbol);
         if (!parsed) { setChordInputError(true); return null; }
 
+        // DOVE finisce l'accordo. Comanda il CURSORE, come per ogni altro inserimento:
+        // prima decideva l'ultimo clic (il "caret"), che resta fermo quando si sposta il
+        // cursore — così spostando la playhead a inizio misura l'accordo finiva comunque
+        // dove si era cliccato l'ultima volta. Il caret resta come ripiego quando il cursore
+        // non c'è. (Dopo ogni inserimento la playhead avanza da sé, quindi incolonnare più
+        // accordi di seguito continua a funzionare.)
         let measureIndex = 0;
         let beat = 1;
         const ld = layoutDataRef.current as any;
         const currentCaret = latestPasteCaretRef.current;
-        if (currentCaret) {
+        const absBeatFn = playheadAbsBeatRef.current;
+        const measureBeatFn = measureBeatFromAbsRef.current;
+        if (playheadPositionRef.current && absBeatFn && measureBeatFn) {
+            const abs = Math.max(0, absBeatFn());
+            const mb = measureBeatFn(abs);
+            measureIndex = mb.measureIndex;
+            beat = mb.beat;
+        } else if (currentCaret) {
             measureIndex = currentCaret.measureIndex;
             beat = currentCaret.beat;
-        } else if (playheadPositionRef.current && ld?.systemsParams) {
-            const sys = ld.systemsParams[playheadPositionRef.current.systemIndex];
-            if (sys) {
-                let bestIdx = 0;
-                let bestDist = Infinity;
-                (sys.startMeasuresX as number[]).forEach((x, i) => {
-                    const dist = Math.abs(x - playheadPositionRef.current!.x);
-                    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-                });
-                measureIndex = sys.measureIndices[bestIdx] ?? 0;
-            }
         }
 
         const bpmLocal = ld?.measureBeatsPerMeasure?.[measureIndex]
@@ -9406,6 +9414,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return Number.isFinite(cur as any) ? (cur as number) : 0;
     }, [audioService.audioContext, bpm, timeSignature]);
 
+    // Riempie i riferimenti usati dall'inserimento accordi, che sta più in alto nel file.
+    useEffect(() => { playheadAbsBeatRef.current = getCurrentAbsBeatForPlayhead; }, [getCurrentAbsBeatForPlayhead]);
+
     const getMeasureIndexAndBeatFromAbsBeat = useCallback((absBeat: number) => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const starts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
@@ -9425,6 +9436,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const beat = Math.round(((absBeat - (measureIndex * beatsPerMeasure)) + 1) * 1e6) / 1e6;
         return { measureIndex, beat };
     }, [layoutData, timeSignature]);
+    useEffect(() => { measureBeatFromAbsRef.current = getMeasureIndexAndBeatFromAbsBeat; }, [getMeasureIndexAndBeatFromAbsBeat]);
 
     /**
      * Trasformazione melodica sulla LINEA selezionata (motivo): trasposizione (tonale/
