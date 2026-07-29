@@ -10005,7 +10005,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const candidates = identifyChordCandidates(forAnalysis as any);
         const chordInfo = candidates && candidates.length ? candidates[0] : null;
         const tonicRoot = (currentTonic || keySignatureRoot || (keySignature as any).root || 'C') as string;
-        const roman = chordInfo ? (calculateRomanFromChordInfo(chordInfo as any, tonicRoot, isMinorMode) || '') : '';
+        // Il romano si chiede alla STESSA funzione che scrive tutte le altre etichette.
+        // `calculateRomanFromChordInfo` lavora sul solo accordo, fuori contesto, e legge una
+        // triade maggiore sulla tonica come dominante del IV: una triade di Do in Do maggiore
+        // usciva V/IV invece di I. (Con la settima — Do7 — V/IV è giusto, e infatti le due
+        // strade concordano.) Resta come ripiego se l'analisi non riconosce nulla.
+        const romanFromAnalysis = (() => {
+            try { return getRomanAnalysis(forAnalysis as any, tonicRoot, isMinorMode)?.roman || ''; } catch { return ''; }
+        })();
+        const roman = romanFromAnalysis
+            || (chordInfo ? (calculateRomanFromChordInfo(chordInfo as any, tonicRoot, isMinorMode) || '') : '');
         const symbol = getChordSymbol(forAnalysis as any, keySignature, tonicRoot) || '';
         let figures: string[] = [];
         try { figures = computeFiguredBassFromNotes(forAnalysis as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: getKeySignature(tonicRoot, isMinorMode ? 'Minor' : 'Major') }).figures || []; } catch { figures = []; }
