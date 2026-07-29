@@ -711,6 +711,11 @@ function createMenu() {
         },
         {
           label: mt('importXml'),
+          // Import MIDI ha ⌘I: il MusicXML — la via d'ingresso principale per chi lavora
+          // con altri programmi di notazione — non aveva scorciatoia. Per chi usa uno
+          // screen reader il menù è la strada principale, e una voce senza scorciatoia
+          // costa ogni volta la navigazione dell'intero menù.
+          accelerator: 'CmdOrCtrl+Shift+I',
           click: async () => {
             if (!mainWindow) return;
             const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
