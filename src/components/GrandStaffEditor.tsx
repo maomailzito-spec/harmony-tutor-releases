@@ -402,6 +402,7 @@ const ENABLE_MARQUEE_SELECTION = true;
 
 type ToolbarGroupId =
     | 'playback'
+    | 'measurePanel'
     | 'bpm'
     | 'key'
     | 'time'
@@ -422,6 +423,11 @@ const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
 const CONTENT_SPACING_KEY = 'harmony-tutor.contentAwareSpacing.v1';
 const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'playback',
+    // Il pannello del punto (metro, tonalità, stanghette, testo, modulazioni, override):
+    // interventi al volo su un punto del brano, non impostazioni di pagina — per questo sta
+    // accanto ai comandi del cursore e non fra le misure, dove si confondeva con "misure per
+    // riga" e "numero di misure".
+    'measurePanel',
     'bpm',
     'key',
     'time',
@@ -9927,17 +9933,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
-        if (!playheadPosition) return;
         const container = staffContainerRef.current;
         if (!container) return;
-        const sysEl = container.querySelector(`[data-system-index="${playheadPosition.systemIndex}"]`) as HTMLElement | null;
-        if (!sysEl) return;
 
-        const absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
+        // Il pannello riguarda un PUNTO del brano. Col tasto T quel punto è il cursore, che
+        // chi usa la tastiera ha già posizionato; premendo il pulsante in toolbar spesso non
+        // c'è ancora, e prima la funzione usciva in silenzio — il pulsante sembrava rotto.
+        // Ripieghi, in ordine: il cursore, la prima nota selezionata, l'inizio del brano.
+        let sysIndex = playheadPosition?.systemIndex ?? 0;
+        let absBeat: number;
+        if (playheadPosition) {
+            absBeat = Math.max(0, Math.round(getCurrentAbsBeatForPlayhead() * 1e6) / 1e6);
+        } else {
+            const firstSel = (latestRawNotes.current || []).find(n => selectedNoteIds.has(n.id));
+            const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+            absBeat = firstSel
+                ? ((Number(firstSel.measureIndex) || 0) * beatsPerMeasure) + ((Number(firstSel.beat) || 1) - 1)
+                : 0;
+            const si = firstSel ? noteToSystemIndexRef.current.get(firstSel.id) : undefined;
+            if (typeof si === 'number') sysIndex = si;
+        }
         const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
 
-        const sysRect = sysEl.getBoundingClientRect();
-        const x = sysRect.left + playheadPosition.x;
+        const sysEl = container.querySelector(`[data-system-index="${sysIndex}"]`) as HTMLElement | null;
+        const sysRect = (sysEl ?? container).getBoundingClientRect();
+        const x = playheadPosition ? sysRect.left + playheadPosition.x : sysRect.left + 80;
         const y = sysRect.top + 16;
 
         // Calcola la tonica inferita attiva a questo beat
@@ -9951,7 +9971,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const _hasInferredChange = _activeTonic !== keySignatureRoot || _activeIsMinor !== isMinorMode;
 
         setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: _hasInferredChange ? { tonic: _activeTonic, isMinor: _activeIsMinor } : null });
-    }, [contextMenu, playheadPosition, getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, effectiveAnalysisContexts, keySignatureRoot, isMinorMode, setContextMenu]);
+    }, [contextMenu, playheadPosition, selectedNoteIds, timeSignature, getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, effectiveAnalysisContexts, keySignatureRoot, isMinorMode, setContextMenu]);
 
     const markSelectionAsChordAtPlayhead = useCallback(() => {
         const ids = selectedNoteIds;

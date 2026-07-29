@@ -541,6 +541,19 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 </button>
             </div>
         ),
+        // Pannello del PUNTO: metro, tonalità, stanghette, ritornelli, testo, modulazioni,
+        // tonicizzazioni, override d'analisi. Sono interventi al volo su un punto del brano,
+        // quindi il pulsante sta per conto suo — accanto ai comandi del cursore — e non fra
+        // le misure, dove si confondeva con le impostazioni di pagina.
+        measurePanel: onOpenMeasurePanel ? (
+            <button
+                onClick={onOpenMeasurePanel}
+                className="px-2.5 py-1 rounded-md bg-slate-700 border border-slate-600 text-gray-100 text-xs font-semibold hover:bg-slate-600 transition-colors"
+                title={tT('measure_panel_tooltip', { defaultValue: 'Interventi sul punto: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d\u2019analisi (tasto T)' })}
+            >
+                {tT('measure_panel_label', { defaultValue: 'Punto…' })}
+            </button>
+        ) : null,
         bpm: (
             <div className="flex items-center gap-1">
                 <div
@@ -675,18 +688,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         ),
         measures: (
             <div className="flex items-center gap-1.5">
-                {onOpenMeasurePanel && (
-                    // Il pannello di misura (metro, tonalità, stanghette, ritornelli, testo,
-                    // override) esisteva solo dietro il tasto T: chi non impara le scorciatoie
-                    // non lo trovava. Qui sta accanto ai comandi di misura, dove lo si cerca.
-                    <button
-                        onClick={onOpenMeasurePanel}
-                        className="px-2 py-0.5 rounded-md bg-slate-700 border border-slate-600 text-gray-100 text-xs font-semibold hover:bg-slate-600 transition-colors"
-                        title={tT('measure_panel_tooltip', { defaultValue: 'Pannello della misura al cursore: metro, tonalità, stanghette, ritornelli, testo, analisi (tasto T)' })}
-                    >
-                        {tT('measure_panel_label', { defaultValue: 'Misura…' })}
-                    </button>
-                )}
                 <span className="text-xs text-slate-400">{tT('measures_label')}</span>
                 <div className="flex items-center">
                     <input
