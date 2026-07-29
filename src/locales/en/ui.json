@@ -222,5 +222,7 @@
   "import_found_drums_kit": "drum kit",
   "import_drums_hint2": "Percussion and pitched parts are detected automatically (channel 10, track name): tap the label only to correct them.",
   "import_kit_rock": "rock",
-  "import_kit_orch": "orchestral"
+  "import_kit_orch": "orchestral",
+  "menu_panel_title": "Properties",
+  "menu_modulation_title": "Modulation / tonicisation"
 }

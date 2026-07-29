@@ -240,7 +240,7 @@ const ModulationContextMenu: React.FC<{
                     title={t('menu_drag_to_move')}
                     onMouseDown={beginDrag}
                 >
-                    Modulazione / tonicizzazione ({t('menu_measure_label')} {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)})
+                    {t('menu_panel_title', { defaultValue: 'Proprietà' })} — {t('menu_measure_label')} {menuData.measureIndex + 1}, beat {Number.isInteger(menuData.beat) ? menuData.beat : menuData.beat.toFixed(3)}
                 </h3>
                 <button
                     onClick={onClose}
@@ -249,6 +249,9 @@ const ModulationContextMenu: React.FC<{
                 >
                     ✕
                 </button>
+            </div>
+            <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">
+                {t('menu_modulation_title', { defaultValue: 'Modulazione / tonicizzazione' })}
             </div>
             <div className="flex items-center gap-2">
                  <select value={tempKey} onChange={e => setTempKey(e.target.value)} className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-full">

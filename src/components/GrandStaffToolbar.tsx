@@ -549,9 +549,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             <button
                 onClick={onOpenMeasurePanel}
                 className="px-2.5 py-1 rounded-md bg-slate-700 border border-slate-600 text-gray-100 text-xs font-semibold hover:bg-slate-600 transition-colors"
-                title={tT('measure_panel_tooltip', { defaultValue: 'Interventi sul punto: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d\u2019analisi (tasto T)' })}
+                title={tT('measure_panel_tooltip', { defaultValue: 'Proprietà del punto: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d\u2019analisi — scorciatoia: T' })}
             >
-                {tT('measure_panel_label', { defaultValue: 'Punto…' })}
+                {tT('measure_panel_label', { defaultValue: 'Proprietà' })}
             </button>
         ) : null,
         bpm: (

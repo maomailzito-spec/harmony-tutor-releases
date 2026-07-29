@@ -126,6 +126,6 @@
   "more_parts_4": "4 parts (S A T B)",
   "more_parts_3": "3 parts (S A B)",
   "more_parts_2": "2 parts (S B)",
-  "measure_panel_label": "Point…",
-  "measure_panel_tooltip": "Edit at this point: meter, key, barlines, repeats, text, modulations and analysis overrides (T key)"
+  "measure_panel_label": "Properties",
+  "measure_panel_tooltip": "Properties at this point: meter, key, barlines, repeats, text, modulations and analysis overrides — shortcut: T"
 }

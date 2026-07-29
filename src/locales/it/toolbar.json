@@ -126,6 +126,6 @@
   "more_parts_4": "4 parti (S A T B)",
   "more_parts_3": "3 parti (S A B)",
   "more_parts_2": "2 parti (S B)",
-  "measure_panel_label": "Punto…",
-  "measure_panel_tooltip": "Interventi sul punto: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d’analisi (tasto T)"
+  "measure_panel_label": "Proprietà",
+  "measure_panel_tooltip": "Proprietà del punto: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d’analisi — scorciatoia: T"
 }
