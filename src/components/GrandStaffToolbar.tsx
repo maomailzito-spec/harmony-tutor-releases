@@ -470,6 +470,22 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         { duration: 'sixty-fourth', label: tT('duration_sixty_fourth') },
     ]), [tT]);
 
+    // Gruppo MIDI: stato del suo menù e formato di esportazione. Il formato è la STESSA
+    // preferenza del pannello Preferenze (`midi.exportType`): qui perché è dove si decide
+    // come il file esce verso gli altri programmi, non un'impostazione da cercare altrove.
+    const midiGroupRef = useRef<HTMLDivElement>(null);
+    const [isMidiGroupOpen, setIsMidiGroupOpen] = useState(false);
+    const [midiExportType, setMidiExportType] = usePreference<string>('midi.exportType');
+
+    useEffect(() => {
+        if (!isMidiGroupOpen) return;
+        const onDown = (e: MouseEvent) => {
+            if (midiGroupRef.current && !midiGroupRef.current.contains(e.target as Node)) setIsMidiGroupOpen(false);
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [isMidiGroupOpen]);
+
     const toolbarGroups: Record<ToolbarGroupId, React.ReactNode> = {
         playback: (
             <div className="flex items-center gap-1">
@@ -1236,6 +1252,113 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 )}
             </div>
         ),
+        // MIDI: uscita esterna, tastiera in ingresso e formato di esportazione. Stava dentro
+        // il menù della partitura, dove era un intruso — lì si parla di righi, parti, vista e
+        // formato della pagina, non di collegamenti con altri programmi.
+        midi: (
+            <div ref={midiGroupRef} className="relative flex items-center">
+                <button
+                    onClick={() => setIsMidiGroupOpen(o => !o)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${isMidiGroupOpen || !!selectedMidiOutput || midiStepInputEnabled ? 'bg-slate-200 text-gray-900' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}`}
+                    title={tT('midi_group_tooltip', { defaultValue: 'MIDI: uscita verso strumenti esterni, tastiera per l\u2019inserimento, formato di esportazione' })}
+                >
+                    {tT('midi_label')} ⌄
+                </button>
+                {isMidiGroupOpen && (
+                    <div className="absolute right-0 top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">
+                    <button
+                        onClick={async () => {
+                            const enabled = isMidiMenuOpen || !!selectedMidiOutput;
+                            if (enabled) {
+                                setSelectedMidiOutput(null);
+                                setIsMidiMenuOpen(false);
+                                return;
+                            }
+                            if (midiOutputs.length === 0) {
+                                try { await handleActivateMidi(); } catch (_) {}
+                            }
+                            setIsMidiMenuOpen(true);
+                        }}
+                        className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                        title={tT('midi_label')}
+                    >
+                        <span>{tT('midi_label')}</span>
+                        {(isMidiMenuOpen || !!selectedMidiOutput) && <span className="text-[11px]">✓</span>}
+                    </button>
+                    {isMidiMenuOpen && (
+                        <div className="mt-1 rounded-md bg-slate-900/40 border border-slate-700">
+                            <div className="px-2 py-1 text-[11px] text-slate-300">{tT('midi_select_output')}</div>
+                            <button
+                                onClick={() => {
+                                    setSelectedMidiOutput(null);
+                                    setIsMidiMenuOpen(false);
+                                }}
+                                className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${selectedMidiOutput ? 'text-gray-200 hover:bg-slate-700' : 'bg-cyan-600 text-white'}`}
+                            >
+                                <span>{tT('midi_internal_audio')}</span>
+                                {!selectedMidiOutput && <span className="text-[11px]">✓</span>}
+                            </button>
+                            {midiOutputs.length === 0 ? (
+                                <div className="px-2 py-1 text-[11px] text-gray-400">{tT('midi_no_devices')}</div>
+                            ) : (
+                                midiOutputs.map(output => {
+                                    const isSelected = selectedMidiOutput?.id === output.id;
+                                    return (
+                                        <button
+                                            key={output.id}
+                                            onClick={() => {
+                                                setSelectedMidiOutput(output);
+                                                setIsMidiMenuOpen(false);
+                                            }}
+                                            className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${isSelected ? 'bg-cyan-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
+                                            title={output.name}
+                                        >
+                                            <span className="truncate">{output.name}</span>
+                                            {isSelected && <span className="text-[11px]">✓</span>}
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
+                    {/* MIDI Step Input toggle */}
+                    <div className="my-2 h-px bg-slate-700" />
+                    <button
+                        onClick={onToggleMidiStepInput}
+                        className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${midiStepInputEnabled ? 'bg-emerald-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
+                        title={midiStepInputEnabled && midiStepInputDeviceName ? tT('midi_step_input_with_device', { device: midiStepInputDeviceName }) : tT('midi_step_input')}
+                    >
+                        <span>🎹 {tT('midi_step_input_short')}</span>
+                        {midiStepInputEnabled && <span className="text-[11px]">✓</span>}
+                    </button>
+                    {midiStepInputEnabled && midiStepInputDeviceName && (
+                        <div className="px-2 py-0.5 text-[10px] text-emerald-300 truncate">
+                            {midiStepInputDeviceName}
+                        </div>
+                    )}
+                        {/* Formato di esportazione: la stessa impostazione delle preferenze,
+                            qui perché è dove si decide come esce il file per gli altri programmi. */}
+                        <div className="my-2 h-px bg-slate-700" />
+                        <div className="px-2 pb-1 text-[11px] text-slate-300">{tT('midi_export_format', { defaultValue: 'Formato di esportazione' })}</div>
+                        {(['1', '0'] as const).map(v => (
+                            <button
+                                key={v}
+                                onClick={() => setMidiExportType(v)}
+                                className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                title={v === '1'
+                                    ? tT('midi_type1_tooltip', { defaultValue: 'Una traccia per voce: lo leggono MuseScore, Finale, Sibelius' })
+                                    : tT('midi_type0_tooltip', { defaultValue: 'Tutte le voci in una traccia sola: massima compatibilità' })}
+                            >
+                                <span>{v === '1'
+                                    ? tT('midi_type1', { defaultValue: 'Type 1 — multi-traccia' })
+                                    : tT('midi_type0', { defaultValue: 'Type 0 — traccia singola' })}</span>
+                                <span className="text-[11px]">{midiExportType === v ? '●' : '○'}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        ),
         more: (
             <div ref={moreMenuRef} className="relative flex items-center">
                 <button
@@ -1360,77 +1483,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 <span>{tT('more_format_show_page_breaks')}</span>
                                 <span className="text-[11px]">{showPageBreaks ? '☑' : '☐'}</span>
                             </button>
-                        )}
-                        <div className="my-2 h-px bg-slate-700" />
-                        <button
-                            onClick={async () => {
-                                const enabled = isMidiMenuOpen || !!selectedMidiOutput;
-                                if (enabled) {
-                                    setSelectedMidiOutput(null);
-                                    setIsMidiMenuOpen(false);
-                                    return;
-                                }
-                                if (midiOutputs.length === 0) {
-                                    try { await handleActivateMidi(); } catch (_) {}
-                                }
-                                setIsMidiMenuOpen(true);
-                            }}
-                            className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                            title={tT('midi_label')}
-                        >
-                            <span>{tT('midi_label')}</span>
-                            {(isMidiMenuOpen || !!selectedMidiOutput) && <span className="text-[11px]">✓</span>}
-                        </button>
-                        {isMidiMenuOpen && (
-                            <div className="mt-1 rounded-md bg-slate-900/40 border border-slate-700">
-                                <div className="px-2 py-1 text-[11px] text-slate-300">{tT('midi_select_output')}</div>
-                                <button
-                                    onClick={() => {
-                                        setSelectedMidiOutput(null);
-                                        setIsMidiMenuOpen(false);
-                                    }}
-                                    className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${selectedMidiOutput ? 'text-gray-200 hover:bg-slate-700' : 'bg-cyan-600 text-white'}`}
-                                >
-                                    <span>{tT('midi_internal_audio')}</span>
-                                    {!selectedMidiOutput && <span className="text-[11px]">✓</span>}
-                                </button>
-                                {midiOutputs.length === 0 ? (
-                                    <div className="px-2 py-1 text-[11px] text-gray-400">{tT('midi_no_devices')}</div>
-                                ) : (
-                                    midiOutputs.map(output => {
-                                        const isSelected = selectedMidiOutput?.id === output.id;
-                                        return (
-                                            <button
-                                                key={output.id}
-                                                onClick={() => {
-                                                    setSelectedMidiOutput(output);
-                                                    setIsMidiMenuOpen(false);
-                                                }}
-                                                className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${isSelected ? 'bg-cyan-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
-                                                title={output.name}
-                                            >
-                                                <span className="truncate">{output.name}</span>
-                                                {isSelected && <span className="text-[11px]">✓</span>}
-                                            </button>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        )}
-                        {/* MIDI Step Input toggle */}
-                        <div className="my-2 h-px bg-slate-700" />
-                        <button
-                            onClick={onToggleMidiStepInput}
-                            className={`w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors ${midiStepInputEnabled ? 'bg-emerald-600 text-white' : 'text-gray-200 hover:bg-slate-700'}`}
-                            title={midiStepInputEnabled && midiStepInputDeviceName ? tT('midi_step_input_with_device', { device: midiStepInputDeviceName }) : tT('midi_step_input')}
-                        >
-                            <span>🎹 {tT('midi_step_input_short')}</span>
-                            {midiStepInputEnabled && <span className="text-[11px]">✓</span>}
-                        </button>
-                        {midiStepInputEnabled && midiStepInputDeviceName && (
-                            <div className="px-2 py-0.5 text-[10px] text-emerald-300 truncate">
-                                {midiStepInputDeviceName}
-                            </div>
                         )}
                     </div>
                 )}

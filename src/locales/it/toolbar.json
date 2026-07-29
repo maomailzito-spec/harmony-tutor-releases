@@ -129,5 +129,11 @@
   "measure_panel_label": "Proprietà",
   "measure_panel_tooltip": "Proprietà: metro, tonalità, stanghette, ritornelli, testo, modulazioni e override d’analisi — scorciatoia: T",
   "more_menu_label": "Partitura",
-  "more_menu_tooltip": "Partitura: tipo di righi, numero di parti, vista, spaziatura, formato della pagina — scorciatoia: P"
+  "more_menu_tooltip": "Partitura: tipo di righi, numero di parti, vista, spaziatura, formato della pagina — scorciatoia: P",
+  "midi_group_tooltip": "MIDI: uscita verso strumenti esterni, tastiera per l’inserimento, formato di esportazione",
+  "midi_export_format": "Formato di esportazione",
+  "midi_type1": "Type 1 — multi-traccia",
+  "midi_type0": "Type 0 — traccia singola",
+  "midi_type1_tooltip": "Una traccia per voce: lo leggono MuseScore, Finale, Sibelius",
+  "midi_type0_tooltip": "Tutte le voci in una traccia sola: massima compatibilità"
 }

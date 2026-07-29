@@ -415,6 +415,7 @@ type ToolbarGroupId =
     | 'accidentals'
     | 'notations'
     | 'analysis'
+    | 'midi'
     | 'more';
 
 const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
@@ -440,6 +441,7 @@ const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'accidentals',
     'notations',
     'analysis',
+    'midi',
     'more',
 ];
 

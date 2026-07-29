@@ -129,5 +129,11 @@
   "measure_panel_label": "Properties",
   "measure_panel_tooltip": "Properties: meter, key, barlines, repeats, text, modulations and analysis overrides — shortcut: T",
   "more_menu_label": "Score",
-  "more_menu_tooltip": "Score: staff type, number of parts, view, spacing, page format — shortcut: P"
+  "more_menu_tooltip": "Score: staff type, number of parts, view, spacing, page format — shortcut: P",
+  "midi_group_tooltip": "MIDI: output to external instruments, keyboard input, export format",
+  "midi_export_format": "Export format",
+  "midi_type1": "Type 1 — multi-track",
+  "midi_type0": "Type 0 — single track",
+  "midi_type1_tooltip": "One track per voice: read by MuseScore, Finale, Sibelius",
+  "midi_type0_tooltip": "All voices in a single track: maximum compatibility"
 }
