@@ -1,3 +1,8 @@
+## Novità in v1.4.1
+
+### ♿ Accessibilità
+- **Scorciatoia per importare MusicXML: ⌘⇧I** (Ctrl+Shift+I su Windows). L'importazione MIDI aveva già ⌘I, quella MusicXML nessuna: per chi lavora con uno screen reader il menù è la strada principale, e una voce senza scorciatoia costa ogni volta la navigazione dell'intero menù — proprio sulla via d'ingresso più usata da chi scambia file con altri programmi di notazione.
+
 ## Novità in v1.4.0
 
 ### ✍️ Scrittura
