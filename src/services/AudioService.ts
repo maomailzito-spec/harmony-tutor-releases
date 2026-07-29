@@ -323,7 +323,8 @@ export class AudioService {
       const releaseDurationInSeconds = 0.5; // Fade-out duration
       const noteEndTime = startTime + noteDurationInSeconds;
 
-      rampDownTo(gainNode.gain, options?.volume ?? 1, startTime, noteEndTime + releaseDurationInSeconds);
+      gainNode.gain.setValueAtTime(options?.volume ?? 1, startTime);
+      rampDownTo(gainNode.gain, options?.volume ?? 1, noteEndTime, noteEndTime + releaseDurationInSeconds);
 
       source.start(startTime);
       source.stop(noteEndTime + releaseDurationInSeconds);
@@ -376,7 +377,8 @@ export class AudioService {
         const releaseDurationInSeconds = 0.5; // Fade-out duration
         const noteEndTime = startTime + noteDurationInSeconds;
 
-        rampDownTo(gainNode.gain, 1, startTime, noteEndTime + releaseDurationInSeconds);
+        gainNode.gain.setValueAtTime(1, startTime);
+        rampDownTo(gainNode.gain, 1, noteEndTime, noteEndTime + releaseDurationInSeconds);
 
         source.start(startTime);
         source.stop(noteEndTime + releaseDurationInSeconds);
@@ -571,7 +573,14 @@ export class AudioService {
       gainNode.gain.setValueAtTime(vol, startTime);
       rampDownTo(gainNode.gain, vol, noteEndTime, noteEndTime + releaseDurationInSeconds);
     } else {
-      rampDownTo(gainNode.gain, vol, startTime, noteEndTime + releaseDurationInSeconds);
+      // Anche gli strumenti che decadono da soli (pianoforte, pizzicati, percussioni)
+      // TENGONO il livello per tutta la nota e si spengono solo dopo: al decadimento ci
+      // pensa il campione. Prima la discesa partiva dall'attacco, e passando da lineare a
+      // esponenziale è diventata una sordina — a metà nota il guadagno era già sceso di
+      // 18 dB e il pianoforte si spegneva mentre stava ancora suonando, soprattutto sui
+      // bassi, che vivono di coda.
+      gainNode.gain.setValueAtTime(vol, startTime);
+      rampDownTo(gainNode.gain, vol, noteEndTime, noteEndTime + releaseDurationInSeconds);
     }
     source.start(startTime);
     source.stop(noteEndTime + releaseDurationInSeconds);
