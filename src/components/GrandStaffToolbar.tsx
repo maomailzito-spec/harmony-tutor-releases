@@ -147,6 +147,8 @@ type GrandStaffToolbarProps = {
     hasDrumTrack?: boolean;
     isDrumPanelOpen?: boolean;
     onToggleDrumPanel?: () => void;
+    isDynamicsPanelOpen?: boolean;
+    onToggleDynamicsPanel?: () => void;
 
     selectedInsertion: InsertionElement;
     setSelectedInsertion: React.Dispatch<React.SetStateAction<InsertionElement>>;
@@ -353,6 +355,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         hasDrumTrack,
         isDrumPanelOpen,
         onToggleDrumPanel,
+        isDynamicsPanelOpen,
+        onToggleDynamicsPanel,
         selectedInsertion,
         setSelectedInsertion,
         selectedNoteIds,
@@ -876,6 +880,15 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         className={`flex items-center gap-1 p-1 px-2 rounded-md text-xs font-semibold transition-colors ${isDrumPanelOpen ? 'bg-amber-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-gray-600'}`}
                     >
                         🥁
+                    </button>
+                )}
+                {onToggleDynamicsPanel && (
+                    <button
+                        onClick={onToggleDynamicsPanel}
+                        title="Tavolozza dei segni: dinamiche (apri/chiudi)"
+                        className={`flex items-center gap-1 p-1 px-2 rounded-md text-xs font-semibold transition-colors ${isDynamicsPanelOpen ? 'bg-sky-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                        <span style={{ fontFamily: 'serif', fontStyle: 'italic', fontWeight: 700 }}>pf</span>
                     </button>
                 )}
             </div>

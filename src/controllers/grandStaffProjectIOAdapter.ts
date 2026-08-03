@@ -46,6 +46,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	doubleBarlineMeasures: any[];
         repeatBarlines: Record<number, string>;
         voltaBrackets: any[];
+        dynamics?: any[];
         toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
@@ -130,6 +131,8 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		// Curve di tempo (rallentando/accelerando): salvate sempre, anche vuote, per
 		// round-trip pulito (prima non venivano scritte → sparivano alla riapertura).
 		tempoCurves: args.tempoCurves || [],
+		// Dinamiche: salvate sempre, anche vuote, per un round-trip pulito.
+		dynamics: args.dynamics || [],
 		harmonyOverrides: args.latestHarmonyOverrides.current,
 		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
 		// Override manuali dell'analisi ACC — solo se presenti, per file leggeri.
@@ -222,6 +225,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setDoubleBarlineMeasures: (next: any) => void;
 	setRepeatBarlines: (next: any) => void;
 	setVoltaBrackets: (next: any) => void;
+	setDynamics?: (next: any) => void;
 	setTempoCurves?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
@@ -320,6 +324,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setDoubleBarlineMeasures([]);
 		args.setRepeatBarlines({});
 		args.setVoltaBrackets([]);
+		args.setDynamics?.([]);
 		args.setTempoCurves?.([]);
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
@@ -591,6 +596,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			// Curve di tempo: ripristina dal file, oppure azzera (file vecchi senza il campo
 			// → niente carry-over dalla sessione precedente).
 			args.setTempoCurves?.(Array.isArray(loadedProject.tempoCurves) ? loadedProject.tempoCurves : []);
+			// Dinamiche: come sopra — ripristina o azzera, così un file vecchio non
+			// eredita i segni della sessione precedente.
+			args.setDynamics?.(Array.isArray((loadedProject as any).dynamics) ? (loadedProject as any).dynamics : []);
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
 			}

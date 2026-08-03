@@ -27,6 +27,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'isSwing',
   'toolbarGroupOrder',
   'tempoCurves',
+  'dynamics',
   'analysisLocked',
   'teacherPasswordHash',
   'analysisLockOptions',
@@ -85,6 +86,8 @@ export type ProjectDataV1 = {
   toolbarGroupOrder?: any[];
 
   tempoCurves?: any[];
+  /** Segni di dinamica (pp…ff, sf, fp, forcelle): valgono per tutte le voci. */
+  dynamics?: any[];
 
   analysisLocked?: boolean;
   teacherPasswordHash?: string;
