@@ -5353,6 +5353,9 @@ export function applyHarmonyRules(
     const connections: ErrorConnection[] = [];
     const inferredAnalysisContexts: AnalysisContext[] = [];
     const autoHarmonyLabelOverrides: HarmonyLabelOverride[] = [];
+    // Terza picarda del finale: se c'è, il passaggio al maggiore omonimo NON è una
+    // modulazione (vedi in fondo, dove la si toglie dai contesti dedotti).
+    let picardaFinale: { absBeat: number; daAbsBeat: number } | null = null;
 
     const preferFlatsForAuto = (() => {
         try {
@@ -8657,40 +8660,65 @@ export function applyHarmonyRules(
         // triad on the tonic, mark it as CAD-PIC.  The Picardy third often
         // co-occurs with a PAC/IAC/PLAG cadence, so this marker is additive.
         if (isMinor && chordEvents.length >= 2) {
-            // Find the last chordEvent that actually has notes.
-            let lastEvIdx = chordEvents.length - 1;
-            while (lastEvIdx >= 1 && chordEvents[lastEvIdx].byVoice.size === 0) lastEvIdx--;
-            if (lastEvIdx >= 1) {
-                const lastEv = chordEvents[lastEvIdx];
-                const prevEv = chordEvents[lastEvIdx - 1];
-                try {
-                    const lastPcs = new Set<number>();
-                    let lastBassMidi = Infinity;
-                    let lastBassPc = -1;
-                    for (const [, n] of lastEv.byVoice) {
-                        if (!n) continue;
+            try {
+                // Si cerca dentro l'ULTIMA MISURA che contiene musica, non nell'ultimissimo
+                // evento: il finale spesso si assottiglia (la terza smette di suonare prima
+                // del basso), e guardando solo l'ultimo respiro la picarda spariva.
+                let ultimaMisura = -1;
+                for (const ev of chordEvents) {
+                    const suona = (ev.notes || []).some(n => n && !n.isRest);
+                    if (!suona) continue;
+                    const mi = Number(ev.measureIndex);
+                    if (Number.isFinite(mi) && mi > ultimaMisura) ultimaMisura = mi;
+                }
+
+                for (let k = chordEvents.length - 1; k >= 1; k--) {
+                    const ev = chordEvents[k];
+                    const mi = Number(ev.measureIndex);
+                    if (!Number.isFinite(mi) || mi > ultimaMisura) continue;
+                    if (mi < ultimaMisura) break; // usciti dall'ultima misura
+
+                    const pcs = new Set<number>();
+                    let bassoMidi = Infinity;
+                    let bassoPc = -1;
+                    for (const n of (ev.notes || [])) {
+                        if (!n || n.isRest) continue;
                         const pc = mod12(n.midi);
-                        lastPcs.add(pc);
-                        if (n.midi < lastBassMidi) { lastBassMidi = n.midi; lastBassPc = pc; }
+                        pcs.add(pc);
+                        if (n.midi < bassoMidi) { bassoMidi = n.midi; bassoPc = pc; }
                     }
-                    if (lastBassPc === tonicPc && lastPcs.size >= 3
-                        && lastPcs.has(tonicPc)
-                        && lastPcs.has(mod12(tonicPc + 4))
-                        && lastPcs.has(mod12(tonicPc + 7))) {
-                        markCadence(
-                            'CAD-PIC',
-                            'Terza Piccarda: conclusione su I maggiore in tonalità minore',
-                            'Cadenze\n'
-                            + '• Terza Piccarda: L\'ultimo accordo del brano in minore presenta la terza alzata, '
-                            + 'trasformando il i minore in I maggiore. Pratica comune nel Barocco e Classico (es. Bach).\n'
-                            + '\n'
-                            + 'Rilevamento: ultimo accordo = triade maggiore sulla tonica in tonalità minore.',
-                            prevEv,
-                            lastEv
-                        );
+                    // Stato fondamentale obbligatorio: con la terza o la quinta al basso
+                    // difficilmente si tratta di un finale, almeno in ambito accademico.
+                    if (bassoPc !== tonicPc) continue;
+                    // Serve la tonica e la TERZA ALZATA. La quinta NON è obbligatoria: la
+                    // conclusione di V7→I lascia spesso la tonica incompleta (fondamentale
+                    // raddoppiata e niente quinta), ed è lì che la picarda si sente di più.
+                    if (!pcs.has(tonicPc)) continue;
+                    if (!pcs.has(mod12(tonicPc + 4))) continue;
+                    if (pcs.has(mod12(tonicPc + 3))) continue; // terza minore presente → non è picarda
+
+                    markCadence(
+                        'CAD-PIC',
+                        'Terza Piccarda: conclusione su I maggiore in tonalità minore',
+                        'Cadenze\n'
+                        + '• Terza Piccarda: L\'ultimo accordo del brano in minore presenta la terza alzata, '
+                        + 'trasformando il i minore in I maggiore. Pratica comune nel Barocco e Classico (es. Bach).\n'
+                        + '\n'
+                        + 'Rilevamento: nell\'ultima misura, triade maggiore sulla tonica in stato fondamentale.',
+                        chordEvents[k - 1],
+                        ev
+                    );
+                    // Soglia per togliere la modulazione: l'INIZIO DELL'ULTIMA MISURA.
+                    // Più indietro di così non si tocca nulla — una modulazione vera al
+                    // maggiore omonimo, stabilita prima, resta.
+                    let inizioUltimaMisura = ev.absBeat;
+                    for (const e2 of chordEvents) {
+                        if (Number(e2.measureIndex) === ultimaMisura) { inizioUltimaMisura = e2.absBeat; break; }
                     }
-                } catch { /* ignore */ }
-            }
+                    picardaFinale = { absBeat: ev.absBeat, daAbsBeat: inizioUltimaMisura };
+                    break;
+                }
+            } catch { /* ignore */ }
         }
 
     _pmark('09b-cadenceMarkers');
@@ -11699,6 +11727,94 @@ export function applyHarmonyRules(
         })();
         const ctxLeadingPc = mod12(ctxTonicPc - 1);
 
+        // ── R-09-TRITONE: falsa relazione di TRITONO (De Nino, Delamont) ──
+        // Il 4º grado in una voce e il 7º (sensibile) in un'ALTRA voce nell'accordo
+        // immediatamente successivo, o viceversa: il tritono tonale spezzato fra due
+        // parti. È cosa diversa dalla falsa relazione cromatica (stessa lettera con
+        // alterazione diversa, R-09) e dal salto melodico di tritono dentro una voce
+        // sola (R-16). Casi tipici: V→IV, IV→V, IV→III, III→IV.
+        try {
+            const pcQuarto = mod12(ctxTonicPc + 5);
+            const pcSettimo = ctxLeadingPc;
+            const notesA_T = a.notes.filter(n => n && !n.isRest);
+            const notesB_T = b.notes.filter(n => n && !n.isRest);
+
+            // Se il tritono suona già DENTRO uno dei due accordi (il caso tipico è il
+            // V7, dove 4º e 7º grado sono la settima e la sensibile) allora è un
+            // intervallo armonico dell'accordo, non una relazione falsa fra parti.
+            const tritonoDentroUnAccordo = [notesA_T, notesB_T].some(gruppo => {
+                const pcs = new Set(gruppo.map(n => mod12(n.midi)));
+                return pcs.has(pcQuarto) && pcs.has(pcSettimo);
+            });
+
+            // Formula cadenzale: l'accordo d'arrivo è la dominante e subito dopo
+            // viene la tonica → la cadenza giustifica la successione.
+            const isCadenzale = (() => {
+                try {
+                    const evC = chordEvents[i + 2];
+                    if (!evC) return false;
+                    const rootB = identifyChord(getStructuralNotes(b))?.root;
+                    const rootC = identifyChord(getStructuralNotes(evC as any))?.root;
+                    if (!rootB || !rootC) return false;
+                    return mod12(mod12(rootB.midi) - ctxTonicPc) === 7 && mod12(mod12(rootC.midi) - ctxTonicPc) === 0;
+                } catch { return false; }
+            })();
+
+            for (const n1 of (tritonoDentroUnAccordo ? [] : notesA_T)) {
+                const pc1 = mod12(n1.midi);
+                if (pc1 !== pcQuarto && pc1 !== pcSettimo) continue;
+                for (const n2 of notesB_T) {
+                    const v1 = (n1.voice ?? 1) as Voice;
+                    const v2 = (n2.voice ?? 1) as Voice;
+                    if (v1 === v2) continue; // dentro una voce sola è il tritono melodico (R-16)
+                    // Solo fra le PARTI ESTREME: la quarta eccedente fra soprano e basso
+                    // è quella esposta. Col 4º grado in una parte interna è tollerata.
+                    if (!((v1 === 1 && v2 === 4) || (v1 === 4 && v2 === 1))) continue;
+                    const pc2 = mod12(n2.midi);
+                    const coppiaValida = (pc1 === pcQuarto && pc2 === pcSettimo) || (pc1 === pcSettimo && pc2 === pcQuarto);
+                    if (!coppiaValida) continue;
+
+                    // Movimento delle DUE parti coinvolte fra i due accordi.
+                    const proseguoDiN1 = bV[v1] as StaffNote | undefined;   // dove va la voce che ha la prima nota
+                    const precedeN2 = aV[v2] as StaffNote | undefined;      // da dove viene la voce che ha la seconda
+                    const passo1 = proseguoDiN1 ? (proseguoDiN1.midi - n1.midi) : null;
+                    const passo2 = precedeN2 ? (n2.midi - precedeN2.midi) : null;
+
+                    // Eccezione: entrambe le parti procedono per semitono — la
+                    // risoluzione diatonica annulla la durezza del tritono.
+                    const entrambePerSemitono = passo1 !== null && passo2 !== null
+                        && Math.abs(passo1) === 1 && Math.abs(passo2) === 1;
+
+                    // Attenuazione: in senso discendente la durezza è minore.
+                    const entrambeDiscendenti = passo1 !== null && passo2 !== null && passo1 < 0 && passo2 < 0;
+
+                    let severity: RuleViolation['severity'];
+                    let description: string;
+                    let suggestion: string;
+                    if (entrambePerSemitono) {
+                        severity = 'exception';
+                        description = 'Falsa relazione di tritono sciolta per semitono (ammessa)';
+                        suggestion = 'Entrambe le parti procedono per semitono: la risoluzione diatonica annulla la durezza del tritono.';
+                    } else if (isCadenzale) {
+                        severity = 'exception';
+                        description = 'Falsa relazione di tritono dentro una formula cadenzale (ammessa)';
+                        suggestion = 'La successione determina una cadenza: i trattati ammettono la falsa relazione di tritono nelle formule cadenzali.';
+                    } else if (entrambeDiscendenti) {
+                        severity = 'warning';
+                        description = 'Falsa relazione di tritono in senso discendente (tollerata con riserva)';
+                        suggestion = 'Il moto discendente attenua la durezza del tritono, ma la relazione fra 4º e 7º grado in parti diverse resta esposta.';
+                    } else {
+                        severity = 'error';
+                        description = 'Falsa relazione di tritono (4º e 7º grado in parti diverse)';
+                        suggestion = 'Il 4º grado in una parte e la sensibile in un\'altra, in accordi contigui, formano il tritono tonale spezzato fra le voci: evitalo o fai procedere entrambe le parti per semitono.';
+                    }
+
+                    addViolation({ ruleId: 'R-09-TRITONE', severity, description, suggestion, noteIds: [n1.id, n2.id] });
+                    connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity, ruleId: 'R-09-TRITONE' });
+                }
+            }
+        } catch { /* ignore */ }
+
         // Identifica il grado dell'accordo corrente
         const chordInfoA_R07 = identifyChord(getStructuralNotes(a));
         let isVorViidim = false;
@@ -11793,6 +11909,9 @@ export function applyHarmonyRules(
                     suggestion: 'Ammesso perché la tonica è presa dal Soprano.',
                     noteIds: [n1.id, sopranoNext.id],
                 });
+                // La linea unisce la sensibile alla tonica che la risolve al Soprano:
+                // è obliqua perché attraversa le voci, ed è proprio quello che mostra.
+                connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: sopranoNext.id, severity: 'exception', ruleId: 'EXC-LT-Transfer' });
                 handledLeadingToneIds.add(n1.id);
                 return; // Salva il paziente ed esci
             }
@@ -11834,6 +11953,7 @@ export function applyHarmonyRules(
                                 suggestion: 'L\'accordo di destinazione non è I (es. cadenza d\'inganno V→vi): la sensibile è melodicamente libera.',
                                 noteIds: [n1.id, n2.id],
                             });
+                            connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'exception', ruleId: 'EXC-LT-FREE' });
                             handledLeadingToneIds.add(n1.id);
                             return;
                         }
@@ -11855,24 +11975,27 @@ export function applyHarmonyRules(
                         suggestion: 'Eccezione: in una linea cromatica di voce interna la sensibile può non risolvere subito alla tonica.',
                         noteIds: [n1.id, n2.id],
                     });
+                    connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: 'exception', ruleId: 'EXC-LT-Chromatic-Line' });
                     handledLeadingToneIds.add(n1.id);
                     return;
                 }
             } catch { /* ignore */ }
+            // Calcolata una volta sola perché serve anche alla linea sul pentagramma.
+            const r07Severity: RuleViolation['severity'] = (() => {
+                // Attenuation inside imitated progressions (sequences): the symmetry of the
+                // model/repetition can justify “non-standard” leading-tone handling.
+                let isInsideSequence = false;
+                try {
+                    const tickRaw = Number((n1 as any).startTick);
+                    const tick = Number.isFinite(tickRaw) ? tickRaw : null;
+                    isInsideSequence = isTickInsideImitatedSequence(tick);
+                } catch { /* ignore */ }
+                if (isInsideSequence) return 'exception';
+                return (v === 1 || v === 4) ? 'error' : 'warning';
+            })();
             addViolation({
                 ruleId: 'R-07',
-                severity: (() => {
-                    // Attenuation inside imitated progressions (sequences): the symmetry of the
-                    // model/repetition can justify “non-standard” leading-tone handling.
-                    let isInsideSequence = false;
-                    try {
-                        const tickRaw = Number((n1 as any).startTick);
-                        const tick = Number.isFinite(tickRaw) ? tickRaw : null;
-                        isInsideSequence = isTickInsideImitatedSequence(tick);
-                    } catch { /* ignore */ }
-                    if (isInsideSequence) return 'exception';
-                    return (v === 1 || v === 4) ? 'error' : 'warning';
-                })(),
+                severity: r07Severity,
                 description: (() => {
                     let isInsideSequence = false;
                     try {
@@ -11897,6 +12020,10 @@ export function applyHarmonyRules(
                 })(),
                 noteIds: [n1.id, n2.id],
             });
+            // Se più avanti il post-filtro cancella questa R-07 perché sulle stesse note
+            // c'è un'eccezione EXC-LT-*, la linea resta orfana e il disegno la scarta da
+            // sé (pretende una violazione omonima sulla stessa coppia).
+            connections.push({ type: 'horizontal', noteId1: n1.id, noteId2: n2.id, severity: r07Severity, ruleId: 'R-07' });
         });
 
         // R-01 / R-02: parallel octaves and fifths
@@ -12711,8 +12838,6 @@ export function applyHarmonyRules(
                     const bStructuralFor7 = (() => {
                         try { return getStructuralNotes(evBFor7 as any) || []; } catch { return []; }
                     })();
-                    const pcsBFor7 = new Set(bStructuralFor7.filter(n => n && !n.isRest).map(n => mod12(n.noteIndex)));
-
                     const stepUp = (fromMidi: number, toMidi: number) => (toMidi === fromMidi + 1) || (toMidi === fromMidi + 2);
                     const isPerfectFourthUp = (fromMidi: number, toMidi: number) => (toMidi - fromMidi) === 5;
 
@@ -12786,18 +12911,13 @@ export function applyHarmonyRules(
                         }
                     }
 
-                    if (rel === 10 && nNext && stepUp(n7.midi, nNext.midi) && isConsonantChordMemberAtB(nNext)) {
-                        addViolation({
-                            ruleId: 'EXC-7-UP',
-                            severity: 'exception',
-                            description: 'Eccezione: la 7a risolve per moto ascendente',
-                            suggestion:
-                                'Parte interna/licenza: la 7a sale di grado verso un membro consonante dell’accordo di arrivo (spesso per completezza dell’armonia o logica melodica).\n\n'
-                                + SEVENTH_EXCEPTIONAL_RESOLUTION_HELP,
-                            noteIds: [n7.id, nNext.id],
-                        });
-                        return;
-                    }
+                    // RIMOSSA: EXC-7-UP ("la 7ª sale di grado verso un membro consonante
+                    // dell'accordo di arrivo"). Era una licenza in bianco: si arriva qui solo
+                    // dopo che EXC-7-TRANSFERRED-RES ha già escluso la presenza di una voce che
+                    // raccolga la risoluzione, quindi scattava PROPRIO quando nessuno risolve.
+                    // La sua motivazione ("per completezza dell'armonia") si rovesciava nei casi
+                    // reali: V7→I con la 7ª che sale dà la tonica senza terza — e la terza
+                    // mancante è la nota di risoluzione. Senza carrier la 7ª ricade su R-12.
 
                     // (3) Delamont: upward perfect 4th to another minor seventh.
                     // Accept when the arrival note is itself the chordal minor seventh of the arrival harmony.
@@ -12914,26 +13034,11 @@ export function applyHarmonyRules(
                         } catch { /* ignore */ }
                     }
 
-                    // (6) "Free" seventh / not harmonically available: if the arrival sonority contains
-                    // no plausible resolution pitch-class at all, do not flag as an error.
-                    if (rel === 10) {
-                        try {
-                            const targetPcs = new Set([mod12(n7.midi - 1), mod12(n7.midi - 2)]);
-                            const hasAnyResolutionTone = [...targetPcs].some(pc => pcsBFor7.has(pc));
-                            if (!hasAnyResolutionTone) {
-                                addViolation({
-                                    ruleId: 'EXC-7-FREE',
-                                    severity: 'exception',
-                                    description: 'Eccezione: la 7a non ha una risoluzione disponibile nella sonorità di arrivo',
-                                    suggestion:
-                                        'Risoluzione non disponibile: nella sonorità di arrivo non è presente alcuna nota di risoluzione plausibile (per grado discendente). In questi casi la risoluzione può essere implicita, trasferita o reinterpretata dal contesto.\n\n'
-                                        + SEVENTH_EXCEPTIONAL_RESOLUTION_HELP,
-                                    noteIds: [n7.id, (nNext?.id ?? n7.id)],
-                                });
-                                return;
-                            }
-                        } catch { /* ignore */ }
-                    }
+                    // RIMOSSA: EXC-7-FREE ("nella sonorità d'arrivo non c'è nessuna nota di
+                    // risoluzione plausibile → non segnalare"). Era il rovescio del principio:
+                    // l'eccezione deve scattare quando la risoluzione C'È in un'altra voce, non
+                    // quando non c'è da nessuna parte. Scrivere una settima che l'accordo dopo
+                    // non può accogliere è il difetto, non la sua giustificazione: ora è R-12.
 
                     // Nessuna eccezione ammessa si applica: la 7ª non risolve. NON silenziare mai —
                     // se il contesto è "stretto" (triade/7ª pulita, root certa) è un ERRORE; altrimenti
@@ -13884,6 +13989,34 @@ export function applyHarmonyRules(
 
     _pmark('15-postProcessing');
     if (_profiling) { (globalThis as any).__HARMONY_TIMINGS = _pTimings; }
+    // ── Terza picarda: minore → maggiore alla fine NON è una modulazione ──
+    // Il rilevatore di tonalità legge V7 → I maggiore come "siamo passati al maggiore"
+    // e piazza un cambio di tonalità sulle ultime battute. Ma la terza alzata del
+    // finale è appunto la terza picarda, non un cambio d'impianto: qui si toglie il
+    // contesto dedotto al maggiore OMONIMO, e solo se nasce DENTRO L'ULTIMA MISURA
+    // (una modulazione vera, stabilita prima, resta intatta).
+    // Poi si fissa a I il grado dell'accordo finale: letto nella tonalità minore
+    // diventerebbe V/iv, cioè la dominante del IV grado.
+    // NB: si interviene qui, sull'esito già calcolato — entrare nel ciclo di
+    // deduzione dei contesti lo destabilizzerebbe.
+    if (isMinor && picardaFinale) {
+        try {
+            const _pf = picardaFinale as { absBeat: number; daAbsBeat: number };
+            for (let i = inferredAnalysisContexts.length - 1; i >= 0; i--) {
+                const c = inferredAnalysisContexts[i] as any;
+                if (!c || c.newIsMinor) continue;
+                const pc = noteNameToIndex[String(c.newTonic)];
+                if (!Number.isFinite(pc) || mod12(pc) !== tonicPc) continue;
+                if (Number(c.absBeat) < _pf.daAbsBeat) continue;
+                inferredAnalysisContexts.splice(i, 1);
+            }
+            const _idx = autoHarmonyLabelOverrides.findIndex(x => Math.abs(Number(x.absBeat) - _pf.absBeat) < 1e-6);
+            const _entry = { absBeat: _pf.absBeat, roman: 'I', romanDisplay: 'I' } as HarmonyLabelOverride;
+            if (_idx >= 0) autoHarmonyLabelOverrides[_idx] = _entry;
+            else autoHarmonyLabelOverrides.push(_entry);
+        } catch { /* ignore */ }
+    }
+
     return { analyzedNotes, violations, connections, inferredAnalysisContexts, autoHarmonyLabelOverrides };
 }
 

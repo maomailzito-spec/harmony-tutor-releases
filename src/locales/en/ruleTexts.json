@@ -582,5 +582,10 @@
     "titleVariants": {
       "Grafia incoerente: le note scritte non formano un accordo": "Inconsistent spelling: the notes as written do not form a chord"
     }
+  },
+  "R-09-TRITONE": {
+    "title": "Tritone false relation",
+    "body": "The 4th degree of the scale in one part and the 7th (the leading tone) in another part, in the immediately following chord, form the tonal tritone split between two voices. Typical cases are V→IV, IV→V, IV→III and III→IV. This differs from the chromatic false relation (the same note altered in different voices) and from the melodic tritone leap, which happens within a single voice.\n\nIt is allowed when both parts move by semitone, because the diatonic resolution cancels the harshness of the interval, and when the succession forms a clear cadential formula. In descending motion the harshness is perceived as milder and the report is attenuated.\n\nThe danger concerns intonation above all in vocal music; in instrumental scoring it is milder, but the rule still holds for the coherence of strict counterpoint.",
+    "suggestion": "Avoid having the 4th degree in one part and the leading tone in another follow one another in adjacent chords: let both parts move by semitone, or interpose a chord."
   }
 }

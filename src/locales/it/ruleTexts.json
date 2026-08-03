@@ -582,5 +582,10 @@
     "titleVariants": {
       "Grafia incoerente: le note scritte non formano un accordo": "Grafia incoerente: le note scritte non formano un accordo"
     }
+  },
+  "R-09-TRITONE": {
+    "title": "Falsa relazione di tritono",
+    "body": "Il 4º grado della scala in una parte e il 7º (la sensibile) in un'altra parte, nell'accordo immediatamente successivo, formano il tritono tonale spezzato fra due voci. È il caso tipico delle successioni V→IV, IV→V, IV→III e III→IV. Si distingue dalla falsa relazione cromatica (stessa nota alterata in voci diverse) e dal salto melodico di tritono, che avviene invece dentro una voce sola.\n\nÈ ammessa quando entrambe le parti procedono per semitono, perché la risoluzione diatonica annulla la durezza dell'intervallo, e quando la successione determina una chiara formula cadenzale. In senso discendente la durezza è percepita minore e la segnalazione è attenuata.\n\nIl pericolo riguarda soprattutto l'intonazione nella musica vocale; negli organici strumentali è attenuato, ma la regola resta valida per la coerenza del contrappunto rigoroso.",
+    "suggestion": "Evita che il 4º grado di una parte e la sensibile di un'altra si susseguano in accordi contigui: falle procedere entrambe per semitono, oppure interponi un accordo."
   }
 }
