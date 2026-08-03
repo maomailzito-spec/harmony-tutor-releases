@@ -31,6 +31,7 @@ import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysi
 import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing } from '../utils/parseChordSymbol';
 import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody, spelledNoteName, keyAccidentalNotes, type TransformMode } from '../utils/melodicTransforms';
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
+import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } from '../utils/dynamics';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -75,6 +76,7 @@ import MixerPanel from './MixerPanel';
 import CompressorWindow from './CompressorWindow';
 import EqWindow from './EqWindow';
 import DrumPalettePanel from './DrumPalettePanel';
+import DynamicsPalettePanel from './DynamicsPalettePanel';
 import NewProjectDialog, { type NewProjectConfig } from './NewProjectDialog';
 
 interface GrandStaffEditorProps {
@@ -395,6 +397,28 @@ const OVERLAY_BASS_X_SHIFT_PX = 19;   // ~5mm
 const OVERLAY_BASS_Y_SHIFT_PX = 19;   // lowered by ~2mm vs previous tweak (empirical)
 const ORNAMENT_LABEL_FONT_SIZE_PX = 11;
 const ORNAMENT_LABEL_LEADER_STROKE = '#94a3b8';
+// Sulle stesse note possono cadere più segnalazioni (una coppia di note che porta
+// insieme quinte parallele, ottave nascoste e un'eccezione sulla sensibile): sul
+// pentagramma però il segno è UNO solo, quindi va scelto un colore. Vince la cosa
+// PIÙ GRAVE, e il verde è la meno grave di tutte: l'eccezione di un'ALTRA regola non
+// rende lecita questa, e dipingerla di verde direbbe "qui va bene" mentre il pannello
+// d'analisi elenca un avviso. Il verde compare solo quando su quelle note non c'è
+// nient'altro che eccezioni.
+const SEVERITY_PAINT_RANK: Record<'error' | 'warning' | 'chromatic' | 'exception', number> = {
+    error: 4,
+    warning: 3,
+    chromatic: 2,
+    exception: 1,
+};
+type PaintSeverity = keyof typeof SEVERITY_PAINT_RANK;
+// Distanza fra le linee di colore diverso che segnano la STESSA coppia di note:
+// abbastanza da distinguere i colori, abbastanza poco da leggerle come un segno solo.
+const CONNECTION_SEVERITY_GAP_PX = 4;
+const strongerSeverity = <T extends PaintSeverity>(a?: T, b?: T): T | undefined => {
+    if (!a) return b;
+    if (!b) return a;
+    return SEVERITY_PAINT_RANK[a] >= SEVERITY_PAINT_RANK[b] ? a : b;
+};
 // Drag threshold in *client* pixels to avoid canceling clicks when the SVG is scaled.
 const DRAG_THRESHOLD_CLIENT_PX = 6;
 
@@ -532,21 +556,9 @@ function expandAccChordSelection(accNotes: any[], selectedNoteIds: Set<string>):
     });
 }
 
-/** Mappa la velocity MIDI (1..127) in un fattore di volume per il playback.
- *  Le note senza velocity (inserite a mano) restituiscono 1 (volume pieno),
- *  così il comportamento esistente non cambia. La curva è leggermente
- *  esponenziale (^1.6) per avvicinarsi alla risposta percettiva dei sintetizzatori
- *  e con un pavimento minimo così le note pianissimo restano udibili. */
-function velocityToGain(velocity: number | undefined): number {
-    if (velocity == null || !Number.isFinite(velocity)) return 1;
-    const v = Math.max(0, Math.min(127, velocity)) / 127;
-    // Curva realistica: i pianissimo restano UDIBILI (non spariscono) ma chiaramente
-    // più piani; i fortissimi pieni. Pavimento 0.12 + esponente morbido (1.3) così la
-    // gamma media non si schiaccia ma le note piano non diventano inudibili.
-    // Es.: vel 18→0.16, vel 40→0.30, vel 64→0.48, vel 100→0.77, vel 127→1.0.
-    // Le note senza velocity (inserite a mano) restano a 1 (gestito nel guard sopra).
-    return 0.12 + 0.88 * Math.pow(v, 1.3);
-}
+/* La curva velocity → volume vive ora in utils/dynamics.ts, insieme ai segni di
+ * dinamica: è la stessa scala che serve per suonare e per interpolare le forcelle.
+ * Qui resta solo l'alias, così tutti i punti di chiamata restano invariati. */
 
 /** Converti gli eventi raw registrati in StaffNote pronte per la traccia ACC. */
 function convertRecordedEventsToNotes(
@@ -699,6 +711,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Modulo percussioni flottante (apri/chiudi dalla toolbar; si auto-apre quando aggiungi
     // una batteria). Sostituisce la vecchia barra inline "🥁 Mappa".
     const [isDrumPanelOpen, setIsDrumPanelOpen] = useState(false);
+    const [isDynamicsPanelOpen, setIsDynamicsPanelOpen] = useState(false);
 
     // Dialog di setup mostrato alla creazione di un NUOVO progetto: scelta tracce
     // iniziali (SATB / ACC / batteria) + template riutilizzabili.
@@ -957,6 +970,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             reverbConvolverRef.current = conv;
             reverbReturnRef.current = ret;
         }
+    }, [audioService]);
+
+    // Risveglio del motore audio quando si torna sulla finestra. Il contesto può
+    // addormentarsi da solo (cambio del dispositivo d'uscita, sospensione, un'altra
+    // istanza dell'app che prende la scheda) e finora nessuno lo risvegliava: quella
+    // finestra restava muta finché non la si richiudeva. Qui si risveglia al rientro,
+    // così non si perde nemmeno la prima nota.
+    useEffect(() => {
+        const risveglia = () => {
+            try {
+                if (audioService.audioContext && audioService.audioContext.state !== 'running') {
+                    void audioService.ensureAudioIsReady();
+                }
+            } catch { /* ignore */ }
+        };
+        window.addEventListener('focus', risveglia);
+        document.addEventListener('visibilitychange', risveglia);
+        return () => {
+            window.removeEventListener('focus', risveglia);
+            document.removeEventListener('visibilitychange', risveglia);
+        };
     }, [audioService]);
 
     // Riverbero live: aggiorna il wet del return e, al cambio preset, rigenera l'IR
@@ -1431,6 +1465,83 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [tempoCurves, setTempoCurves] = useState<TempoCurve[]>([]);
     const tempoCurvesRef = useRef(tempoCurves);
     tempoCurvesRef.current = tempoCurves;
+
+    // Segni di dinamica (pp…ff, sf, fp, forcelle). Valgono per TUTTE le voci e sono
+    // ancorati a un punto nel tempo (absBeat), come gli override d'armonia.
+    const [dynamics, setDynamics] = useState<DynamicMark[]>([]);
+    const dynamicsRef = useRef(dynamics);
+    dynamicsRef.current = dynamics;
+
+    // Trascinamento degli estremi delle forcelle: il mouse si segue a livello di
+    // finestra (non del solo SVG) così il gesto non si interrompe uscendo dal rigo.
+    useEffect(() => {
+        const muovi = (e: MouseEvent) => {
+            const d = dynDragRef.current;
+            if (!d) return;
+            try {
+                const rect = d.svg.getBoundingClientRect();
+                const vb = d.svg.viewBox?.baseVal;
+                const scaleX = rect.width ? (((vb?.width && vb.width > 0) ? vb.width : rect.width) / rect.width) : 1;
+                const x = (e.clientX - rect.left) * scaleX;
+                const rng = ghostInsertTickRangeRef.current?.(d.systemIndex, x);
+                if (!rng) return;
+                const nuovoAbs = rng.startTick / TICKS_PER_QUARTER;
+                setDynamics(prev => (prev || []).map((m, i) => {
+                    if (i !== d.index) return m;
+                    // Segno singolo (livello, accento, fp): si sposta e basta.
+                    if (d.end === 'punto') return (m.kind === 'hairpin') ? m : { ...m, absBeat: nuovoAbs };
+                    if (m.kind !== 'hairpin') return m;
+                    const altro = d.end === 'from' ? m.toAbsBeat : m.fromAbsBeat;
+                    // Non si passa dall'altra parte: la forcella deve restare un tratto.
+                    if (d.end === 'from' && nuovoAbs >= altro) return m;
+                    if (d.end === 'to' && nuovoAbs <= altro) return m;
+                    return d.end === 'from' ? { ...m, fromAbsBeat: nuovoAbs } : { ...m, toAbsBeat: nuovoAbs };
+                }));
+            } catch { /* ignore */ }
+        };
+        const molla = () => { dynDragRef.current = null; };
+        window.addEventListener('mousemove', muovi);
+        window.addEventListener('mouseup', molla);
+        return () => {
+            window.removeEventListener('mousemove', muovi);
+            window.removeEventListener('mouseup', molla);
+        };
+    }, []);
+
+    /** Voce indicata dalla ZONA in cui cade la Y: rigo superiore sopra/sotto la terza
+     *  linea = soprano/contralto, rigo inferiore = tenore/basso. Le quattro fasce di cui
+     *  parla l'utente: in alto, in mezzo-alto, in mezzo-basso, in basso. */
+    const voceDiZona = useCallback((y: number): { voce: Voice; bassArea: boolean; alta: Voice; bassa: Voice } => {
+        const bassArea = y > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2 + 20);
+        const alta: Voice = bassArea ? 3 : 1;
+        const bassa: Voice = bassArea ? 4 : 2;
+        const posZona = bassArea
+            ? Math.round((((BOTTOM_STAFF_TOP + 2 * LINE_HEIGHT) - (y - TOP_STAFF_HEIGHT - CONNECTOR_HEIGHT)) / (LINE_HEIGHT / 2)) - 4)
+            : Math.round(((VF_TREBLE_Y + 5 * VF_LINE_SPACING) - (y + VF_TREBLE_MOUSE_Y_ADJUST_PX)) / (VF_LINE_SPACING / 2));
+        const terzaLinea = bassArea ? -6 : 6;
+        return { voce: posZona >= terzaLinea ? alta : bassa, bassArea, alta, bassa };
+    }, []);
+
+    /** Trascinamento di un estremo di forcella: quale segno, quale capo, e su quale
+     *  SVG di sistema si sta lavorando (serve a convertire il mouse in posizione). */
+    const dynDragRef = useRef<{ index: number; end: 'from' | 'to' | 'punto'; svg: SVGSVGElement; systemIndex: number } | null>(null);
+
+    /** Punto di una nota sulla linea del tempo, nella stessa convenzione che usa
+     *  l'esecuzione (`absStartBeat`): inizio della sua misura + battuta − 1. Passa
+     *  dalla mappa delle misure, così i cambi di metro non lo sfasano. */
+    const absBeatOfNote = useCallback((n: StaffNote): number | null => {
+        try {
+            const mi = Number(n.measureIndex ?? -1);
+            if (!Number.isFinite(mi) || mi < 0) return null;
+            // Si passa dal ref perché l'aiutante è dichiarato prima di `layoutData`.
+            const inizio = (layoutDataRef.current as any)?.measureStartAbsBeat?.[mi]
+                ?? (mi * (timeSignature.numerator * (4 / timeSignature.denominator)));
+            const battuta = Number.isFinite(n.beat) ? Number(n.beat) : 1;
+            return inizio + (battuta - 1);
+        } catch {
+            return null;
+        }
+    }, [timeSignature]);
     // Pending tempo-curve dialog state. When set, an inline modal appears with
     // two BPM inputs; user confirms to create the curve, or cancels to dismiss.
     const [tempoCurvePending, setTempoCurvePending] = useState<{
@@ -4695,6 +4806,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     repeatBarlines,
                     voltaBrackets,
                     tempoCurves,
+                    dynamics,
                     toolbarGroupOrder,
                     bpm,
                     isBpmActive,
@@ -4750,6 +4862,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setRepeatBarlines,
                     setVoltaBrackets,
                     setTempoCurves,
+                    setDynamics,
                     setKeyChangeMode,
                     setModalTonicOverride,
                     setAutoLeadingToneInMinor,
@@ -5009,7 +5122,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, tempoCurves, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, dynamics, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -5111,6 +5224,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setRepeatBarlines(p.repeatBarlines || {});
                 setVoltaBrackets(p.voltaBrackets || []);
                 setTempoCurves((p as any).tempoCurves || []);
+                setDynamics((p as any).dynamics || []);
                 setAutoLeadingToneInMinor(p.autoLeadingToneInMinor ?? true);
                 setKeyChangeMode(p.keyChangeMode || 'none');
                 setModalTonicOverride(p.modalTonicOverride || '');
@@ -6557,7 +6671,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Violations -> noteId -> level (defensive extraction)
     const violationLevelByNoteId = useMemo(() => {
-        const map = new Map<string, 'error' | 'warning' | 'exception'>();
+        const map = new Map<string, PaintSeverity>();
 
         const getIds = (v: any): string[] => {
             if (!v) return [];
@@ -6568,7 +6682,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return [];
         };
 
-        const getLevel = (v: any): 'error' | 'warning' | 'exception' | 'chromatic' => {
+        const getLevel = (v: any): PaintSeverity => {
             const s = (v?.severity || v?.level || v?.type || '').toString().toLowerCase();
             if (s.includes('chromatic')) return 'chromatic';
             if (s.includes('exception') || s.includes('green')) return 'exception';
@@ -6577,19 +6691,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         try {
-            const rank: Record<'error' | 'warning' | 'exception' | 'chromatic', number> = {
-                error: 3,
-                chromatic: 2,
-                exception: 2,
-                warning: 1,
-            };
-
             (violations as any[]).forEach(v => {
                 const level = getLevel(v);
                 getIds(v).forEach((id) => {
                     const prev = map.get(id);
-                    // strongest wins: error > exception > warning
-                    if (!prev || rank[level] > rank[prev]) {
+                    // vince la più grave: error > warning > chromatic > exception
+                    if (!prev || SEVERITY_PAINT_RANK[level] > SEVERITY_PAINT_RANK[prev]) {
                         map.set(id, level);
                     }
                 });
@@ -8072,7 +8179,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             drumOut = pieceGain;
                         }
                         const slotSecAcc = ((it as any)._slotBeats != null) ? (beatToTime(it.absStartBeat + (it as any)._slotBeats) - beatToTime(it.absStartBeat)) : undefined;
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(n.velocity), output: drumOut, sustain: true, velocity: n.velocity, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc, bank: isDrum ? 'orchestral' : (((track as any).soundBank) ?? 'orchestral') });
+                        const velDinAcc = (dynamicsRef.current && dynamicsRef.current.length > 0)
+                            ? velocityAtAbsBeat(dynamicsRef.current, it.absStartBeat)
+                            : n.velocity;
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(velDinAcc), output: drumOut, sustain: true, velocity: velDinAcc, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc, bank: isDrum ? 'orchestral' : (((track as any).soundBank) ?? 'orchestral') });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -8099,7 +8209,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         ensureVoiceRevSend(v, voiceGain); // send riverbero per-voce
                     }
                     const slotSecV = ((it as any)._slotBeats != null) ? (beatToTime(it.absStartBeat + (it as any)._slotBeats) - beatToTime(it.absStartBeat)) : undefined;
-                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(n.velocity), output: voiceGain, sustain: true, velocity: n.velocity, slotSec: slotSecV, bank: voiceSoundBanksRef.current[v] ?? 'orchestral' });
+                    // Dinamica scritta in partitura: se ci sono segni, comandano loro;
+                    // senza segni resta la velocity della nota (import MIDI, registrazione),
+                    // che altrimenti verrebbe appiattita su un mezzoforte.
+                    const velDin = (dynamicsRef.current && dynamicsRef.current.length > 0)
+                        ? velocityAtAbsBeat(dynamicsRef.current, it.absStartBeat)
+                        : n.velocity;
+                    // Livello di ARRIVO della nota: se dentro la sua durata la dinamica
+                    // cambia (una forcella che la attraversa), la nota deve gonfiare o
+                    // calare mentre suona, non solo partire a un'intensità diversa. Il
+                    // motore applica la rampa solo agli strumenti che tengono il suono.
+                    const velDinFine = (dynamicsRef.current && dynamicsRef.current.length > 0)
+                        ? velocityAtAbsBeat(dynamicsRef.current, it.absStartBeat + it.durationBeats)
+                        : undefined;
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(velDin), volumeEnd: velDinFine != null ? velocityToGain(velDinFine) : undefined, output: voiceGain, sustain: true, velocity: velDin, slotSec: slotSecV, bank: voiceSoundBanksRef.current[v] ?? 'orchestral' });
                 });
             }
 
@@ -8696,7 +8819,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // by running insertion rather than toggling selection.
         const isModifier = !!((e as any).shiftKey || (e as any).ctrlKey || (e as any).altKey);
         const isCmdHeld = !!((e as any).metaKey || (e as any).ctrlKey);
-        if (tool === 'insert' && n?.isRest && !isModifier && !isCmdHeld && !isAccNote) {
+        // Con ⌘ premuto (il modificatore d'inserimento) il clic deve INSERIRE anche
+        // quando cade su una nota già scritta, non selezionarla: è il gesto con cui si
+        // completa un accordo, dove la nota nuova finisce per forza accanto a una
+        // esistente. La selezione multipla sta su Maiuscolo, quindi non si perde nulla.
+        // (Prima ⌘+clic su una nota la selezionava e per giunta spostava lì la voce
+        // attiva, rendendo impossibile inserire la seconda voce di un accordo.)
+        const insertOverExisting = tool === 'insert' && isCmdHeld && !isAccNote
+            && !(e as any).shiftKey && !(e as any).altKey && !!nInRaw;
+        if (insertOverExisting || (tool === 'insert' && n?.isRest && !isModifier && !isCmdHeld && !isAccNote)) {
             try {
                 const target = (e as any).target as Element | null;
                 const svg = target?.closest?.('svg') as SVGSVGElement | null;
@@ -10330,6 +10461,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Derive beat only for compatibility (do not use it for snapping).
         const beatInMeasure = (snappedLocalTicks / TICKS_PER_QUARTER) + 1;
 
+        // Voce in cui finirà la nota. Parte da quella attiva, ma più sotto (blocco
+        // "autoselezione della voce") può cambiare in base al punto in cui si è
+        // cliccato. È una `let` perché l'helper qui sotto viene CHIAMATO dopo, dentro
+        // setRawNotes: legge quindi il valore già aggiornato.
+        let voiceForInsert: Voice = selectedVoice;
+
         // Tick-space overlap helper: when inserting, replace any existing events that
         // overlap the new event's [startTick, endTick) in the same measure+voice.
         const overlapEpsilonTicks = TICKS_PER_QUARTER * 0.001;
@@ -10338,7 +10475,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const getTickRangeForEvent = (n: StaffNote): { start: number; end: number } | null => {
             try {
                 if ((n.measureIndex ?? -1) !== hit.measureIndex) return null;
-                if ((n.voice as any) !== (selectedVoice as any)) return null;
+                if ((n.voice as any) !== (voiceForInsert as any)) return null;
 
                 const start = (typeof (n as any).startTick === 'number' && isFinite((n as any).startTick))
                     ? ((n as any).startTick as number)
@@ -10614,9 +10751,74 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (chordInsertModeRef.current) return;
         // Plain click: pick SATB as the paste destination (caret already positioned by the
         // snap block above) and deselect — never insert.
-        if (isPlainClick) { setSelectedNoteIds(new Set()); return; }
+        if (isPlainClick) {
+            // Il clic semplice sceglie la VOCE in base alla fascia del sistema in cui
+            // cade: in alto soprano, mezzo-alto contralto, mezzo-basso tenore, in basso
+            // basso. È il gesto con cui si "conferma" la voce, separato dallo scrivere:
+            // così scrivendo una linea sola (⌘+clic) la voce non cambia più da sé quando
+            // si scavalca la terza linea.
+            try {
+                if (staffSystemMode === 'grandstaff' && clefForVoice(3) === 'bass') {
+                    const z = voceDiZona(y);
+                    if (activeVoicesRef.current.includes(z.voce)) setSelectedVoice(z.voce);
+                }
+            } catch { /* ignore */ }
+            setSelectedNoteIds(new Set());
+            return;
+        }
 
-        const targetClef: ClefType = clefForVoice(selectedVoice);
+        // ── Autoselezione della voce SATB dal punto in cui si clicca ──
+        // Il rigo lo dà la posizione verticale. Poi, in cascata:
+        //  1. se la voce attiva ABITA quel rigo resta lei, a qualunque altezza — così
+        //     scrivendo una linea non si cambia voce sotto le dita (un Sol grave al
+        //     soprano resta al soprano, con i tagli addizionali);
+        //  2. se quella voce è già OCCUPATA lì e la sorella è libera, passa alla libera
+        //     — è il gesto con cui si completa un accordo voce per voce;
+        //  3. solo quando si CAMBIA rigo decidono le zone: sopra la terza linea la voce
+        //     superiore, sotto quella inferiore (terza linea = Si4 al violino e Re3 al
+        //     basso, cioè posizioni diatoniche 6 e -6 con Do4 = 0).
+        // Vale solo per il grand staff a due righi: a chiavi antiche ogni voce ha già il
+        // suo rigo, e in "parti strette" il rigo superiore ne ospita tre.
+        try {
+            const layoutModeHere = effectiveLayoutMode(hit.measureIndex, beatInMeasure);
+            if (staffSystemMode === 'grandstaff' && layoutModeHere !== 'parti_strette') {
+                // Confine fra i due righi indipendente dalla voce attiva: sta a metà fra
+                // le due soglie usate finora (135 con la chiave di basso attiva, 175 con
+                // quella di violino), cioè nel mezzo dello spazio fra i due pentagrammi.
+                const bassArea = y > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2 + 20);
+                const alta: Voice = bassArea ? 3 : 1;
+                const bassa: Voice = bassArea ? 4 : 2;
+
+                const occupata = (v: Voice) => (latestRawNotes.current || []).some(n => {
+                    if (!n || n.isRest) return false;
+                    if ((n.measureIndex ?? -1) !== hit.measureIndex) return false;
+                    if (Number((n as any).voice ?? -1) !== Number(v)) return false;
+                    const s = (typeof (n as any).startTick === 'number' && isFinite((n as any).startTick))
+                        ? (n as any).startTick as number
+                        : (measureStartTick + Math.round((((n.beat ?? 1) - 1)) * TICKS_PER_QUARTER));
+                    const d = (typeof (n as any).durationTicks === 'number' && isFinite((n as any).durationTicks) && (n as any).durationTicks > 0)
+                        ? (n as any).durationTicks as number
+                        : TICKS_PER_QUARTER;
+                    return s < insertedEndTick - overlapEpsilonTicks && (s + d) > insertedStartTick + overlapEpsilonTicks;
+                });
+
+                // Se la voce attiva ABITA questo rigo, resta lei a qualunque altezza:
+                // scrivendo una linea sola non si cambia voce scavalcando la terza linea.
+                // La voce si sceglie col CLIC SEMPLICE sulla fascia (vedi sopra).
+                // Unica eccezione: se è già occupata qui e la sorella è libera, si passa
+                // alla libera — è il gesto con cui si completa un accordo.
+                // La ZONA decide soltanto quando si cambia rigo, dove non c'è nessun indizio.
+                const partenza: Voice = (selectedVoice === alta || selectedVoice === bassa)
+                    ? selectedVoice
+                    : voceDiZona(y).voce;
+                const sorella: Voice = partenza === alta ? bassa : alta;
+                voiceForInsert = (occupata(partenza) && !occupata(sorella)) ? sorella : partenza;
+
+                if (voiceForInsert !== selectedVoice) setSelectedVoice(voiceForInsert);
+            }
+        } catch { /* nel dubbio si tiene la voce attiva */ }
+
+        const targetClef: ClefType = clefForVoice(voiceForInsert);
 
         if (staffSystemMode === 'satb_ancient') {
             if (!isSvgYWithinClefStaff(y, targetClef)) return;
@@ -10716,10 +10918,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 startTick,
                 durationTicks,
                 clef: targetClef,
-                voice: selectedVoice,
+                voice: voiceForInsert,
             };
             setRawNotes(prev => {
-                const withRests = appendMissingRestsForVoice(prev, Number(selectedVoice), hit.measureIndex);
+                const withRests = appendMissingRestsForVoice(prev, Number(voiceForInsert), hit.measureIndex);
                 // Replace anything overlapping this rest in tick-space.
                 const filtered = withRests.filter(n => {
                     if (n.measureIndex !== rest.measureIndex) return true;
@@ -10823,7 +11025,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
 
             // keep your existing empirical bass alignment
-            if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
+            if (targetClef === 'bass' && (voiceForInsert === 3 || voiceForInsert === 4)) pos -= 4;
 
             pos = Math.round(pos);
         }
@@ -10867,7 +11069,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     startTick,
                     durationTicks,
                     clef: targetClef,
-                    voice: selectedVoice,
+                    voice: voiceForInsert,
                 };
 
         // If an existing note occupies this exact pitch+tick+voice+measure AND has the
@@ -10901,7 +11103,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         setRawNotes(prev => {
             // Replace anything overlapping this note in tick-space.
-            const withRests = appendMissingRestsForVoice(prev, Number(selectedVoice), hit.measureIndex);
+            const withRests = appendMissingRestsForVoice(prev, Number(voiceForInsert), hit.measureIndex);
             const filtered = withRests.filter(n => {
                 if (n.measureIndex !== newNote.measureIndex) return true;
                 if ((n.voice as any) !== (newNote.voice as any)) return true;
@@ -11154,6 +11356,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setTripletBaseDuration,
         setPlayheadPosition,
         getPlayheadPosForAbsBeat,
+        effectiveLayoutMode,
+        setSelectedVoice,
     ]);
 
     const getPlayheadSnapGridTicks = useCallback((useFineStep: boolean): number => {
@@ -11630,6 +11834,57 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }));
     }, [activeTab, tool, selectedVoice, marqueeSelectOnlyCurrentVoice]);
 
+    /** Misura e intervallo di tick in cui finirebbe una nota inserita a questa X.
+     *  Serve al fantasma per sapere quali voci sono già occupate in quel punto e
+     *  mostrare quindi lo stesso colore che userà il clic.
+     *  ATTENZIONE: rispecchia l'aggancio alla griglia di `handleBackgroundClick`
+     *  (cerca "Snap grid" lì): se cambia una, va cambiata anche l'altra. */
+    const ghostInsertTickRange = useCallback((systemIndex: number, x: number): { measureIndex: number; startTick: number; endTick: number; measureStartTick: number } | null => {
+        try {
+            const hit = getSystemMeasureAtX(systemIndex, x);
+            if (!hit) return null;
+            const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex]
+                ?? (hit.measureIndex * (timeSignature.numerator * (4 / timeSignature.denominator)));
+            const beatsPerMeasureLocal = (layoutData as any)?.measureBeatsPerMeasure?.[hit.measureIndex]
+                ?? (timeSignature.numerator * (4 / timeSignature.denominator));
+            const ticksPerMeasure = Math.round(beatsPerMeasureLocal * TICKS_PER_QUARTER);
+            const measureStartTick = Math.round(measureStartAbsBeat * TICKS_PER_QUARTER);
+
+            const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
+            const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+            const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
+            const rawPxPerTick = hit.pxPerTick;
+            const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
+                ? rawPxPerTick
+                : (contentWidth / Math.max(1, ticksPerMeasure));
+            let localTicksRaw = clampedRelX / Math.max(1e-9, pxPerTick);
+            if (!Number.isFinite(localTicksRaw)) localTicksRaw = 0;
+            localTicksRaw = Math.max(0, Math.min(ticksPerMeasure, localTicksRaw));
+
+            let durBeatsBase = DURATION_VALUES[selectedInsertion.duration] ?? 1;
+            if (selectedInsertion.isDotted) durBeatsBase *= 1.5;
+            durBeatsBase *= tupletFactor;
+            if (!isFinite(durBeatsBase) || durBeatsBase <= 0) durBeatsBase = 1;
+            const durationTicks = Math.max(1, Math.round(durBeatsBase * TICKS_PER_QUARTER));
+
+            const snapCapTicks = Math.round(TICKS_PER_QUARTER / 2);
+            const _gcd = (a: number, b: number): number => { let p = Math.abs(a); let q = Math.abs(b); while (q) { [p, q] = [q, p % q]; } return p || 1; };
+            const snapGridTicks = Math.max(1, _gcd(Math.min(durationTicks, snapCapTicks), TICKS_PER_QUARTER));
+            let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+            const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
+            if (snappedLocalTicks < 0) snappedLocalTicks = 0;
+            if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
+
+            const startTick = measureStartTick + snappedLocalTicks;
+            return { measureIndex: hit.measureIndex, startTick, endTick: startTick + durationTicks, measureStartTick };
+        } catch {
+            return null;
+        }
+    }, [getSystemMeasureAtX, layoutData, selectedInsertion, timeSignature, tupletFactor]);
+
+    const ghostInsertTickRangeRef = useRef(ghostInsertTickRange);
+    useEffect(() => { ghostInsertTickRangeRef.current = ghostInsertTickRange; }, [ghostInsertTickRange]);
+
     const handleMouseMove = useCallback((x: number, y: number, systemIndex: number, modKey: boolean) => {
         const drag = dragStartPosRef.current;
         if (drag && drag.systemIndex === systemIndex) {
@@ -11761,7 +12016,42 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
-        const targetClef: ClefType = clefForVoice(selectedVoice);
+        // Voce mostrata dal fantasma: nel grand staff segue il rigo sotto il cursore,
+        // con la stessa regola del clic (vedi "autoselezione della voce"), così prima
+        // di premere si vede su quale rigo e a che altezza finirà la nota. Qui la
+        // scelta fra le due voci dello stesso rigo non guarda le note già scritte:
+        // quella parte la fa il clic, che conosce il tick esatto.
+        let ghostVoice: Voice = selectedVoice;
+        if (staffSystemMode === 'grandstaff' && clefForVoice(3) === 'bass') {
+            const bassArea = y > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2 + 20);
+            const alta: Voice = bassArea ? 3 : 1;
+            const bassa: Voice = bassArea ? 4 : 2;
+            // Come il clic: si resta nella voce attiva se abita questo rigo.
+            const perZona: Voice = (selectedVoice === alta || selectedVoice === bassa)
+                ? selectedVoice
+                : voceDiZona(y).voce;
+
+            // Stessa eccezione del clic: se la voce della zona è già occupata in quel
+            // punto e la sorella è libera, il colore mostra la sorella.
+            const rng = ghostInsertTickRange(systemIndex, x);
+            const occupataGhost = (v: Voice) => !!rng && (latestRawNotes.current || []).some(n => {
+                if (!n || n.isRest) return false;
+                if ((n.measureIndex ?? -1) !== rng.measureIndex) return false;
+                if (Number((n as any).voice ?? -1) !== Number(v)) return false;
+                const s = (typeof (n as any).startTick === 'number' && isFinite((n as any).startTick))
+                    ? (n as any).startTick as number
+                    : (rng.measureStartTick + Math.round((((n.beat ?? 1) - 1)) * TICKS_PER_QUARTER));
+                const d = (typeof (n as any).durationTicks === 'number' && isFinite((n as any).durationTicks) && (n as any).durationTicks > 0)
+                    ? (n as any).durationTicks as number
+                    : TICKS_PER_QUARTER;
+                const eps = TICKS_PER_QUARTER * 0.001;
+                return s < rng.endTick - eps && (s + d) > rng.startTick + eps;
+            });
+            const sorellaGhost: Voice = perZona === alta ? bassa : alta;
+            ghostVoice = (occupataGhost(perZona) && !occupataGhost(sorellaGhost)) ? sorellaGhost : perZona;
+        }
+
+        const targetClef: ClefType = clefForVoice(ghostVoice);
 
         if (staffSystemMode === 'satb_ancient') {
             if (!isSvgYWithinClefStaff(y, targetClef)) {
@@ -11807,10 +12097,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isDotted,
                     xPosition: x,
                     clef: targetClef,
-                    voice: selectedVoice,
+                    voice: ghostVoice,
                     systemIndex,
                 };
-                if (prev && prev.isRest && prev.xPosition === x && prev.clef === targetClef && prev.voice === selectedVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+                if (prev && prev.isRest && prev.xPosition === x && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
                 return next;
             });
             return;
@@ -11837,7 +12127,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 pos = ((staffTop + 2 * LINE_HEIGHT) - relativeY) / (LINE_HEIGHT / 2);
             }
 
-            if (targetClef === 'bass' && (selectedVoice === 3 || selectedVoice === 4)) pos -= 4;
+            if (targetClef === 'bass' && (ghostVoice === 3 || ghostVoice === 4)) pos -= 4;
             pos = Math.round(pos);
         }
 
@@ -11856,13 +12146,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isDotted,
                 xPosition: x,
                 clef: targetClef,
-                voice: selectedVoice,
+                voice: ghostVoice,
                 systemIndex,
             };
-            if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === selectedVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+            if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
             return next;
         });
-    }, [clearGhost, applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor, hasVisibleAccompaniment, effectiveAccStaffMode]);
+    }, [clearGhost, applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor, hasVisibleAccompaniment, effectiveAccStaffMode, ghostInsertTickRange]);
 
     // Finalize marquee selection on mouse up
     useEffect(() => {
@@ -13463,6 +13753,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 hasDrumTrack={(accompanimentTracks || []).some(t => (t as any).isDrum)}
                 isDrumPanelOpen={isDrumPanelOpen}
                 onToggleDrumPanel={() => setIsDrumPanelOpen(o => !o)}
+                isDynamicsPanelOpen={isDynamicsPanelOpen}
+                onToggleDynamicsPanel={() => setIsDynamicsPanelOpen(o => !o)}
                 selectedInsertion={selectedInsertion}
                 setSelectedInsertion={setSelectedInsertion}
                 selectedNoteIds={selectedNoteIds}
@@ -13579,6 +13871,80 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         pieces={pieces}
                         onInsertPiece={insertDrumPieceAtCursor}
                         onClose={() => setIsDrumPanelOpen(false)}
+                    />
+                );
+            })()}
+
+            {isDynamicsPanelOpen && (() => {
+                // absBeat delle note selezionate, in ordine di tempo.
+                const scelte = [...selectedNoteIds]
+                    .map(id => (latestRawNotes.current || []).find(n => n.id === id))
+                    .filter((n): n is StaffNote => !!n && !n.isRest)
+                    .map((n): { inizio: number; fine: number } | null => {
+                        const inizio: number | null = absBeatOfNote(n);
+                        if (inizio == null) return null;
+                        // Durata reale della nota, legature comprese: una forcella su una
+                        // nota lunga deve arrivare alla FINE del suono, non al suo attacco.
+                        let durata = (typeof (n as any).durationTicks === 'number' && (n as any).durationTicks > 0)
+                            ? ((n as any).durationTicks as number) / TICKS_PER_QUARTER
+                            : 1;
+                        let cur: StaffNote | undefined = n;
+                        const voce = Number((n as any).voice ?? 1);
+                        let guardia = 0;
+                        while (cur && (cur as any).isTiedToNext && guardia++ < 64) {
+                            const finoA: number = (absBeatOfNote(cur) ?? 0) + (((cur as any).durationTicks ?? TICKS_PER_QUARTER) / TICKS_PER_QUARTER);
+                            const dopo: StaffNote | undefined = (latestRawNotes.current || []).find(x => (
+                                !x.isRest && Number((x as any).voice ?? 1) === voce && x.midi === cur!.midi
+                                && Math.abs((absBeatOfNote(x) ?? -1) - finoA) < 1e-6
+                            ));
+                            if (!dopo) break;
+                            durata += (((dopo as any).durationTicks ?? TICKS_PER_QUARTER) / TICKS_PER_QUARTER);
+                            cur = dopo;
+                        }
+                        return { inizio, fine: inizio + durata };
+                    })
+                    .filter((x): x is { inizio: number; fine: number } => x != null)
+                    .sort((a, b) => a.inizio - b.inizio);
+                const battute = scelte.map(x => x.inizio);
+                const primo = scelte.length > 0 ? scelte[0].inizio : null;
+                const ultimo = scelte.length > 0 ? scelte[scelte.length - 1].fine : null;
+                const EPSD = 1e-6;
+                const segnoQui = primo != null && (dynamics || []).some(m => (
+                    m.kind === 'hairpin'
+                        ? Math.abs(m.fromAbsBeat - primo) < EPSD
+                        : Math.abs(m.absBeat - primo) < EPSD
+                ));
+                const metti = (m: DynamicMark) => setDynamics(prev => {
+                    // Un solo segno dello stesso tipo per punto: il nuovo sostituisce il vecchio.
+                    const puliti = (prev || []).filter(x => {
+                        if (m.kind === 'hairpin') return !(x.kind === 'hairpin' && Math.abs(x.fromAbsBeat - m.fromAbsBeat) < EPSD);
+                        if (x.kind === 'hairpin') return true;
+                        const stessoPunto = Math.abs(x.absBeat - m.absBeat) < EPSD;
+                        const stessaFamiglia = (x.kind === 'level' || x.kind === 'fp') && (m.kind === 'level' || m.kind === 'fp');
+                        return !(stessoPunto && (stessaFamiglia || x.kind === m.kind));
+                    });
+                    return [...puliti, m];
+                });
+                return (
+                    <DynamicsPalettePanel
+                        selectionCount={battute.length}
+                        hasMarkAtSelection={segnoQui}
+                        onPlaceLevel={(level) => { if (primo != null) metti({ kind: 'level', absBeat: primo, level }); }}
+                        onPlaceAccent={(label) => { if (primo != null) metti({ kind: 'accent', absBeat: primo, label }); }}
+                        onPlaceFp={() => { if (primo != null) metti({ kind: 'fp', absBeat: primo }); }}
+                        onPlaceHairpin={(direction) => {
+                            if (primo == null || ultimo == null || ultimo <= primo) return;
+                            metti({ kind: 'hairpin', fromAbsBeat: primo, toAbsBeat: ultimo, direction });
+                        }}
+                        onRemoveAtSelection={() => {
+                            if (primo == null) return;
+                            setDynamics(prev => (prev || []).filter(m => (
+                                m.kind === 'hairpin'
+                                    ? Math.abs(m.fromAbsBeat - primo) >= EPSD
+                                    : Math.abs(m.absBeat - primo) >= EPSD
+                            )));
+                        }}
+                        onClose={() => setIsDynamicsPanelOpen(false)}
                     />
                 );
             })()}
@@ -15009,7 +15375,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 systemNoteHitPointsRef.current[systemIndex],
                                                                 showRomanAnalysis, showSymbolAnalysis, isMotifsEnabled, isAnalysisEnabled, analysisSubject,
                                                                 actualSystemWidth, systemHeightPx, staffSystemMode, accLabelY,
-                                                                violationLevelByNoteId, analysisContexts, timeSignatureChanges,
+                                                                violationLevelByNoteId, analysisContexts, timeSignatureChanges, dynamics,
                                                                 // notePositions / noteVoiceById intentionally NOT keyed: they are pure
                                                                 // derivations of layoutData (+ staffSystemMode), both already in the key,
                                                                 // and their useMemo identity is unstable every render (would defeat the cache).
@@ -15145,6 +15511,109 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         ) : null}
                                     </g>
                                 ))}
+
+                                {/* ── Segni di dinamica ──
+                                     Valgono per tutte le voci, quindi si disegnano FRA i due
+                                     righi come nella scrittura pianistica (a chiavi antiche,
+                                     sotto l'ultimo rigo). La posizione orizzontale passa dallo
+                                     stesso convertitore del cursore di esecuzione, così segno e
+                                     suono cadono nello stesso punto. */}
+                                {(dynamics || []).length > 0 && (() => {
+                                    const yDin = (staffSystemMode === 'satb_ancient')
+                                        ? (VF_SATB_BASS_Y + 4 * VF_LINE_SPACING + 34)
+                                        : (TOP_STAFF_HEIGHT + (CONNECTOR_HEIGHT / 2) + 6);
+                                    // Le forcelle stanno un po' più in basso dei segni scritti:
+                                    // condividendo la stessa riga i cunei passavano sopra le
+                                    // lettere. Un solo numero da girare se serve altro spazio.
+                                    const yForcella = yDin + 13;
+                                    const bordoDx = (lastNonEmptyMeasureEndX ?? ((actualSystemWidth ?? 0) - STAFF_MARGIN));
+                                    const bordoSx = Math.max(0, (system.startMeasuresX?.[0] ?? START_X) + 2);
+                                    const pezzi: JSX.Element[] = [];
+
+                                    (dynamics || []).forEach((m, i) => {
+                                        if (m.kind === 'hairpin') {
+                                            const a = getPlayheadPosForAbsBeat(m.fromAbsBeat);
+                                            const b = getPlayheadPosForAbsBeat(m.toAbsBeat);
+                                            if (!a || !b) return;
+                                            if (a.systemIndex !== systemIndex && b.systemIndex !== systemIndex) return;
+                                            // Forcella a cavallo di due sistemi: si spezza al bordo.
+                                            const x1 = a.systemIndex === systemIndex ? a.x : bordoSx;
+                                            const x2 = b.systemIndex === systemIndex ? b.x : bordoDx;
+                                            if (!(x2 > x1)) return;
+                                            const apertura = 5;
+                                            const apre = m.direction === 'cresc';
+                                            // Maniglie invisibili ai due capi: si afferrano e si
+                                            // trascinano per allungare o accorciare la forcella.
+                                            // L'overlay non riceve il mouse (pointer-events: none),
+                                            // quindi qui va riacceso caso per caso.
+                                            const maniglia = (cx: number, capo: 'from' | 'to') => (
+                                                <circle
+                                                    key={`din-h-${systemIndex}-${i}-${capo}`}
+                                                    cx={cx} cy={yForcella} r={7}
+                                                    fill="transparent" stroke="transparent"
+                                                    style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
+                                                    onMouseDown={(ev) => {
+                                                        if (ev.button !== 0) return; // vedi sopra: il destro deve cancellare
+                                                        ev.preventDefault();
+                                                        ev.stopPropagation();
+                                                        const svg = (ev.currentTarget as SVGCircleElement).ownerSVGElement;
+                                                        if (!svg) return;
+                                                        dynDragRef.current = { index: i, end: capo, svg, systemIndex };
+                                                    }}
+                                                    onContextMenu={(ev) => {
+                                                        ev.preventDefault();
+                                                        ev.stopPropagation();
+                                                        setDynamics(prev => (prev || []).filter((_, j) => j !== i));
+                                                    }}
+                                                />
+                                            );
+                                            pezzi.push(
+                                                <g key={`din-h-${systemIndex}-${i}`} opacity={0.9}>
+                                                    <line x1={x1} y1={apre ? yForcella : yForcella - apertura} x2={x2} y2={apre ? yForcella - apertura : yForcella}
+                                                        stroke="#111827" strokeWidth={1.4} strokeLinecap="round" />
+                                                    <line x1={x1} y1={apre ? yForcella : yForcella + apertura} x2={x2} y2={apre ? yForcella + apertura : yForcella}
+                                                        stroke="#111827" strokeWidth={1.4} strokeLinecap="round" />
+                                                    {a.systemIndex === systemIndex && maniglia(x1, 'from')}
+                                                    {b.systemIndex === systemIndex && maniglia(x2, 'to')}
+                                                </g>
+                                            );
+                                            return;
+                                        }
+                                        const pos = getPlayheadPosForAbsBeat(m.absBeat);
+                                        if (!pos || pos.systemIndex !== systemIndex) return;
+                                        pezzi.push(
+                                            <text
+                                                key={`din-${systemIndex}-${i}`}
+                                                x={pos.x}
+                                                y={yDin + 5}
+                                                textAnchor="middle"
+                                                style={{ fontFamily: 'serif', fontStyle: 'italic', fontWeight: 700, pointerEvents: 'auto', cursor: 'grab' }}
+                                                fontSize={15}
+                                                fill="#111827"
+                                                onMouseDown={(ev) => {
+                                                    // Solo il tasto SINISTRO trascina: col destro il
+                                                    // preventDefault sopprimeva il menù contestuale e
+                                                    // quindi la cancellazione non partiva mai.
+                                                    if (ev.button !== 0) return;
+                                                    ev.preventDefault();
+                                                    ev.stopPropagation();
+                                                    const svg = (ev.currentTarget as SVGTextElement).ownerSVGElement;
+                                                    if (!svg) return;
+                                                    dynDragRef.current = { index: i, end: 'punto', svg, systemIndex };
+                                                }}
+                                                onContextMenu={(ev) => {
+                                                    // Tasto destro = togli il segno.
+                                                    ev.preventDefault();
+                                                    ev.stopPropagation();
+                                                    setDynamics(prev => (prev || []).filter((_, j) => j !== i));
+                                                }}
+                                            >
+                                                {dynamicLabel(m)}
+                                            </text>
+                                        );
+                                    });
+                                    return <>{pezzi}</>;
+                                })()}
 
                                 {/* Harmony labels (roman/symbol) + figured bass */}
                                 {showHarmony && systemHarmonyLabels.map((lbl, lblIndex) => {
@@ -15740,37 +16209,57 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                         return true;
                                                                     });
 
-                                                                    const rank: Record<'error' | 'warning' | 'exception', number> = { error: 3, exception: 2, warning: 1 };
-                                                                    const bestOf = (a?: 'error' | 'warning' | 'exception', b?: 'error' | 'warning' | 'exception') => {
-                                                                        if (!a) return b;
-                                                                        if (!b) return a;
-                                                                        return rank[a] >= rank[b] ? a : b;
-                                                                    };
-
-                                                                    const connectionLevel = (c: ErrorConnection): 'error' | 'warning' | 'exception' => {
-                                                                        // Parti dalla severità della connection, ma se sullo STESSO paio di note
-                                                                        // esiste una violazione più severa (es. R-07 error che coesiste con un
-                                                                        // warning) vince la PIÙ SEVERA (error>exception>warning) → linea rossa,
-                                                                        // non arancione. Prima c'era un corto-circuito su c.severity.
-                                                                        let level: 'error' | 'warning' | 'exception' | undefined = c.severity;
+                                                                    const connectionLevel = (c: ErrorConnection): PaintSeverity => {
+                                                                        // Il colore della linea è quello della SUA regola: una linea = una riga
+                                                                        // del pannello d'analisi. Le linee di regole diverse sulla stessa coppia
+                                                                        // di note non si coprono più (sotto vengono affiancate), quindi qui non
+                                                                        // si fa più vincere la più grave: farlo tingeva di verde le ottave
+                                                                        // nascoste appena un'eccezione EXC-LT-* condivideva le stesse note.
                                                                         for (const v of (violations as any[])) {
-                                                                            const ids: string[] = Array.isArray((v as any)?.noteIds) ? (v as any).noteIds : [];
+                                                                            if (!v || v.ruleId !== c.ruleId) continue;
+                                                                            const ids: string[] = Array.isArray(v.noteIds) ? v.noteIds : [];
                                                                             if (ids.includes(c.noteId1) && ids.includes(c.noteId2)) {
-                                                                                level = bestOf(level, (v as any).severity as any);
+                                                                                return (v.severity as PaintSeverity) || c.severity || 'error';
                                                                             }
                                                                         }
-                                                                        if (level) return level;
+                                                                        if (c.severity) return c.severity;
 
                                                                         // Fallback: derive from endpoints.
                                                                         const a = violationLevelByNoteId.get(c.noteId1);
                                                                         const b = violationLevelByNoteId.get(c.noteId2);
-                                                                        return bestOf(a, b) || 'error';
+                                                                        return strongerSeverity(a, b) || 'error';
                                                                     };
 
-                                                                    const connectionStroke = (level: 'error' | 'warning' | 'exception' | 'chromatic') =>
+                                                                    const connectionStroke = (level: PaintSeverity) =>
                                                                         level === 'warning' ? '#f59e0b' : level === 'exception' ? '#22c55e' : level === 'chromatic' ? '#8B5CF6' : '#ef4444';
 
-                                                                    return systemConnections.map((c, idx) => {
+                                                                    // Più regole possono segnare la STESSA coppia di note (tipico: quinte
+                                                                    // parallele + ottave nascoste + moto parallelo). Le linee cadrebbero una
+                                                                    // sull'altra e si vedrebbe solo un colore: raccogliamo i COLORI distinti
+                                                                    // per coppia e ne disegniamo uno per ciascuno, affiancati di pochi pixel
+                                                                    // (perpendicolarmente alla linea), dal più grave al meno grave. Regole
+                                                                    // diverse dello stesso colore restano una linea sola: raddoppiarla non
+                                                                    // direbbe nulla di nuovo.
+                                                                    const pairGroups = new Map<string, { rep: ErrorConnection; levels: PaintSeverity[] }>();
+                                                                    for (const c of systemConnections) {
+                                                                        const key = [c.noteId1, c.noteId2].sort().join('|') + '|' + String(c.type || '');
+                                                                        let g = pairGroups.get(key);
+                                                                        if (!g) {
+                                                                            g = { rep: c, levels: [] };
+                                                                            pairGroups.set(key, g);
+                                                                        }
+                                                                        const lv = connectionLevel(c);
+                                                                        if (!g.levels.includes(lv)) g.levels.push(lv);
+                                                                    }
+                                                                    const drawnConnections: Array<{ c: ErrorConnection; level: PaintSeverity; slot: number; slots: number }> = [];
+                                                                    pairGroups.forEach((g) => {
+                                                                        g.levels.sort((a, b) => SEVERITY_PAINT_RANK[b] - SEVERITY_PAINT_RANK[a]);
+                                                                        g.levels.forEach((level, slot) => {
+                                                                            drawnConnections.push({ c: g.rep, level, slot, slots: g.levels.length });
+                                                                        });
+                                                                    });
+
+                                                                    return drawnConnections.map(({ c, level: lvl, slot, slots }, idx) => {
                                                                         const hp1 = hitPointById.get(c.noteId1);
                                                                         const hp2 = hitPointById.get(c.noteId2);
 
@@ -15814,7 +16303,21 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                         const staffStartX = Math.max(0, (system.startMeasuresX?.[0] ?? START_X) + 2);
 
                                                                         const isHovered = !!hoveredViolationNotes && (hoveredViolationNotes.includes(c.noteId1) || hoveredViolationNotes.includes(c.noteId2));
-                                                                        const lvl = connectionLevel(c);
+
+                                                                        // Scostamento perpendicolare alla linea, per affiancare i colori:
+                                                                        // le linee melodiche (orizzontali) si impilano in verticale, quelle
+                                                                        // verticali (es. raddoppio della sensibile) si affiancano di lato.
+                                                                        const spreadOffset = slots <= 1
+                                                                            ? 0
+                                                                            : (slot * CONNECTION_SEVERITY_GAP_PX) - ((slots - 1) * CONNECTION_SEVERITY_GAP_PX) / 2;
+                                                                        const perpendicularShift = (ax: number, ay: number, bx: number, by: number) => {
+                                                                            if (!spreadOffset) return { dx: 0, dy: 0 };
+                                                                            const vx = bx - ax;
+                                                                            const vy = by - ay;
+                                                                            const len = Math.hypot(vx, vy);
+                                                                            if (!len) return { dx: 0, dy: spreadOffset };
+                                                                            return { dx: (-vy / len) * spreadOffset, dy: (vx / len) * spreadOffset };
+                                                                        };
 
                                                                         // Same-system: draw the full connection.
                                                                         if (inThis1 && inThis2) {
@@ -15822,14 +16325,15 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
 
                                                                             const x1 = c.type === 'vertical' ? (q1.x + q2.x) / 2 : q1.x;
                                                                             const x2 = c.type === 'vertical' ? (q1.x + q2.x) / 2 : q2.x;
+                                                                            const { dx, dy } = perpendicularShift(x1, q1.y, x2, q2.y);
 
                                                                             return (
                                                                                 <line
-                                                                                    key={`conn-${systemIndex}-${idx}-${c.noteId1}-${c.noteId2}`}
-                                                                                    x1={x1}
-                                                                                    y1={q1.y}
-                                                                                    x2={x2}
-                                                                                    y2={q2.y}
+                                                                                    key={`conn-${systemIndex}-${idx}-${lvl}-${c.noteId1}-${c.noteId2}`}
+                                                                                    x1={x1 + dx}
+                                                                                    y1={q1.y + dy}
+                                                                                    x2={x2 + dx}
+                                                                                    y2={q2.y + dy}
                                                                                     stroke={connectionStroke(lvl)}
                                                                                     strokeWidth={isHovered ? 3 : 2}
                                                                                     strokeLinecap="round"
@@ -15855,14 +16359,15 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                             forward = (typeof otherSys === 'number') ? (otherSys > systemIndex) : true;
                                                                         }
                                                                         const toX = forward ? staffEndX : staffStartX;
+                                                                        const split = perpendicularShift(thisPoint.x, thisPoint.y, toX, thisPoint.y);
 
                                                                         return (
                                                                             <line
-                                                                                key={`conn-split-${systemIndex}-${idx}-${c.noteId1}-${c.noteId2}`}
-                                                                                x1={thisPoint.x}
-                                                                                y1={thisPoint.y}
-                                                                                x2={toX}
-                                                                                y2={thisPoint.y}
+                                                                                key={`conn-split-${systemIndex}-${idx}-${lvl}-${c.noteId1}-${c.noteId2}`}
+                                                                                x1={thisPoint.x + split.dx}
+                                                                                y1={thisPoint.y + split.dy}
+                                                                                x2={toX + split.dx}
+                                                                                y2={thisPoint.y + split.dy}
                                                                                 stroke={connectionStroke(lvl)}
                                                                                 strokeWidth={isHovered ? 3 : 2}
                                                                                 strokeLinecap="round"
