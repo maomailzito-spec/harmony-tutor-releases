@@ -254,6 +254,18 @@ export class AudioService {
             } catch {
                 this.audioContext = new AudioCtor();
             }
+            // Il contesto audio può addormentarsi da solo: cambio del dispositivo di
+            // uscita, sospensione del sistema, un'altra istanza dell'app che prende la
+            // scheda. Quando succede nessuno lo risvegliava e QUELLA finestra restava
+            // muta finché non la si richiudeva. Ora si risveglia da sé.
+            try {
+                this.audioContext.addEventListener('statechange', () => {
+                    const st = this.audioContext?.state;
+                    if (st === 'suspended' || (st as string) === 'interrupted') {
+                        this.audioContext?.resume().catch(() => { /* riproverà al prossimo suono */ });
+                    }
+                });
+            } catch { /* ignore */ }
             await this.loadInitialSounds();
             resolve();
         } catch (error) {
@@ -303,6 +315,9 @@ export class AudioService {
   }
 
   public async playNote(audioFile: string, options?: { duration?: number, when?: number, volume?: number }) {
+    // Rete di sicurezza: se il contesto si è addormentato lo si risveglia PRIMA di
+    // suonare, invece di produrre silenzio. Il controllo costa nulla quando è già sveglio.
+    if (this.audioContext && this.audioContext.state !== 'running') { try { await this.ensureAudioIsReady(); } catch { /* ignore */ } }
     if (!this.audioContext) return;
 
     if (!this.audioBuffers.has(audioFile)) {
@@ -357,6 +372,9 @@ export class AudioService {
 
 
   public async playChord(audioFiles: string[], options: { when: number, duration: number }) {
+    // Rete di sicurezza: se il contesto si è addormentato lo si risveglia PRIMA di
+    // suonare, invece di produrre silenzio. Il controllo costa nulla quando è già sveglio.
+    if (this.audioContext && this.audioContext.state !== 'running') { try { await this.ensureAudioIsReady(); } catch { /* ignore */ } }
     if (!this.audioContext) return;
     
     const { when: startTime, duration: noteDurationInSeconds } = options;
@@ -500,7 +518,10 @@ export class AudioService {
     return { buffer: this.audioBuffers.get(key), layered: false };
   }
 
-  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean, slotSec?: number, bank?: 'orchestral' | 'gm' }) {
+  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean, slotSec?: number, bank?: 'orchestral' | 'gm', volumeEnd?: number }) {
+    // Rete di sicurezza: se il contesto si è addormentato lo si risveglia PRIMA di
+    // suonare, invece di produrre silenzio. Il controllo costa nulla quando è già sveglio.
+    if (this.audioContext && this.audioContext.state !== 'running') { try { await this.ensureAudioIsReady(); } catch { /* ignore */ } }
     if (!this.audioContext) return;
     const forceGm = options?.bank === 'gm';
     const { buffer: audioBuffer, layered } = await this._getBufferFor(instrument, audioFile, options?.velocity, forceGm);
@@ -563,6 +584,19 @@ export class AudioService {
     // applyDrumPieceGain:false → il per-pezzo è già gestito a valle da un nodo gain
     // persistente (playback batteria real-time); qui NON ri-applicarlo (evita il doppio).
     const vol = (options?.volume ?? 1) * instrumentGain(instrument) * (options?.applyDrumPieceGain === false ? 1 : this.drumPieceGain(instrument, audioFile));
+    // ── Forcella DENTRO la nota tenuta ──
+    // Una forcella su una semibreve d'archi deve far gonfiare quella nota, non solo
+    // stabilire con che intensità parte. Qui il chiamante passa anche il volume di
+    // ARRIVO e la nota ci va sopra gradualmente. Vale SOLO per gli strumenti che
+    // tengono davvero il suono (la mappa SUSTAINED): un pianoforte, una volta
+    // percosso il tasto, non può crescere, e fargli fare una rampa suonerebbe falso.
+    // La rampa è esponenziale perché in decibel è una salita uniforme.
+    const volFine = (options?.volumeEnd != null && Number.isFinite(options.volumeEnd))
+      ? (options.volumeEnd as number) * instrumentGain(instrument) * (options?.applyDrumPieceGain === false ? 1 : this.drumPieceGain(instrument, audioFile))
+      : null;
+    const gonfia = volFine != null && !!SUSTAINED[instrument] && !forceGm && Math.abs(volFine - vol) > 1e-4;
+    const volFinale = gonfia ? (volFine as number) : vol;
+
     if (options?.sustain) {
       // Natural envelope: INSTANT attack (the sample starts from silence, so no
       // click — keeps the percussive transient and lets it scale with velocity),
@@ -571,7 +605,10 @@ export class AudioService {
       // short note isn't quieter than a long one (fixes the live-vs-recorded
       // loudness gap), and the held body matches the live monitor.
       gainNode.gain.setValueAtTime(vol, startTime);
-      rampDownTo(gainNode.gain, vol, noteEndTime, noteEndTime + releaseDurationInSeconds);
+      if (gonfia) {
+        try { gainNode.gain.exponentialRampToValueAtTime(Math.max(1e-4, volFinale), noteEndTime); } catch { /* ignore */ }
+      }
+      rampDownTo(gainNode.gain, volFinale, noteEndTime, noteEndTime + releaseDurationInSeconds);
     } else {
       // Anche gli strumenti che decadono da soli (pianoforte, pizzicati, percussioni)
       // TENGONO il livello per tutta la nota e si spengono solo dopo: al decadimento ci

@@ -1667,6 +1667,16 @@ ipcMain.handle(IPC_CHANNELS.SHOW_ACTIVATION_DIALOG, async () => {
   return { activated: false };
 });
 app.commandLine.appendSwitch('disable-background-timer-throttling')
+
+// ── Audio nello STESSO processo dell'app ──
+// Di norma Chromium tiene il motore audio in un processo separato ("audio service").
+// Su macOS quel processo ogni tanto muore — tipicamente quando cambia il dispositivo
+// d'uscita o quando due istanze dell'app si contendono la scheda — e NON viene
+// ricreato: l'app resta muta anche riaprendo la finestra, e l'unico rimedio era
+// riavviare la sessione. Diagnosi verificata sul campo: l'app viva con i processi di
+// grafica, rete e finestra, e quello audio sparito.
+// Tenendo l'audio dentro il processo principale il punto di rottura sparisce.
+app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess')
 app.whenReady().then(async () => {
   // ── Trial / License gate (skip in dev mode) ──
   const isDev = !app.isPackaged;
