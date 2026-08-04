@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TimeSignature, HarmonyLabelOverride } from '../types';
-import { TimeSignatureControlNumber, denominatorStepFn } from './TimeSignatureControl';
 
 const relativeMinors: { [major: string]: string } = {
     'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
@@ -38,10 +37,6 @@ const ModulationContextMenu: React.FC<{
     onApply: (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => void;
     onApplyTextMarker: (absBeat: number, label?: string) => void;
     onRemove: (absBeat: number) => void;
-    onDeleteMeasure: (measureIndex: number) => void;
-    onToggleRepeatBarline?: (measureIndex: number, type: 'repeat-begin' | 'repeat-end' | 'repeat-both') => void;
-    onApplyTimeSignature: (absBeat: number, numerator: number, denominator: number, measureIndex?: number) => void;
-    onRemoveTimeSignature: (absBeat: number) => void;
     existingHarmonyOverride: HarmonyLabelOverride | null;
     onApplyHarmonyOverride: (absBeat: number, roman: string, figures: string[], symbol: string) => void;
     onRemoveHarmonyOverride: (absBeat: number) => void;
@@ -62,13 +57,11 @@ const ModulationContextMenu: React.FC<{
     onMoveToTreble?: () => void;
     onMoveToBass?: () => void;
     onResetStaff?: () => void;
-}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, onDeleteMeasure, onToggleRepeatBarline, onApplyTimeSignature, onRemoveTimeSignature, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff, existingTonicizationHint, onRemoveTonicizationHint, inferredTonicAtBeat, hasSuppressedInference, onSuppressInference, onUnsuppressInference }) => {
+}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff, existingTonicizationHint, onRemoveTonicizationHint, inferredTonicAtBeat, hasSuppressedInference, onSuppressInference, onUnsuppressInference }) => {
     const { t } = useTranslation('ui');
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
     const [tempLabel, setTempLabel] = useState(initialLabel || '');
-    const [tempNumerator, setTempNumerator] = useState<number>(initialTimeSignature.numerator);
-    const [tempDenominator, setTempDenominator] = useState<number>(initialTimeSignature.denominator);
     const menuRef = useRef<HTMLDivElement>(null);
 
     const [floatingPos, setFloatingPos] = useState<{ top: number; left: number }>({ top: menuData.y, left: menuData.x });
@@ -111,8 +104,6 @@ const ModulationContextMenu: React.FC<{
 
     useEffect(() => {
         setTempLabel(initialLabel || '');
-        setTempNumerator(initialTimeSignature.numerator);
-        setTempDenominator(initialTimeSignature.denominator);
     }, [initialLabel, initialTimeSignature.denominator, initialTimeSignature.numerator, menuData.absBeat]);
 
     useLayoutEffect(() => {
@@ -302,48 +293,11 @@ const ModulationContextMenu: React.FC<{
                     </button>
                 </div>
             )}
-            <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-300">{t('menu_measure_label')}</label>
-                <button
-                    onClick={() => onDeleteMeasure(menuData.measureIndex)}
-                    className="px-2 py-1 text-[11px] rounded-md bg-red-800 hover:bg-red-700 font-semibold transition-colors"
-                >
-                    {t('menu_delete_measure_btn')}
-                </button>
-                <div className="text-[10px] text-gray-400">{t('menu_delete_measure_hint')}</div>
-            </div>
-            {onToggleRepeatBarline && (
-                <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-300">{t('menu_repeat_label')}</label>
-                    <div className="flex gap-1">
-                        <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-begin'); onClose(); }}
-                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title={t('menu_repeat_begin_title')}>|:</button>
-                        <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-end'); onClose(); }}
-                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title={t('menu_repeat_end_title')}>:|</button>
-                        <button onClick={() => { onToggleRepeatBarline(menuData.measureIndex, 'repeat-both'); onClose(); }}
-                            className="px-2 py-1 text-[11px] rounded-md bg-blue-800 hover:bg-blue-700 font-semibold transition-colors" title={t('menu_repeat_both_title')}>:|:</button>
-                    </div>
-                </div>
-            )}
-            <div className="flex flex-col gap-2">
-                <label className="text-xs text-gray-300">{t('menu_time_change_label')}</label>
-                <div className="flex items-center gap-2">
-                    <TimeSignatureControlNumber value={tempNumerator} onChange={setTempNumerator} min={1} max={16} />
-                    <TimeSignatureControlNumber value={tempDenominator} onChange={setTempDenominator} min={2} max={16} stepFunction={denominatorStepFn} />
-                    <button
-                        onClick={() => onApplyTimeSignature(menuData.absBeat, tempNumerator, tempDenominator, menuData.measureIndex)}
-                        className="px-2 py-1 text-[11px] rounded-md bg-cyan-700 hover:bg-cyan-600 font-semibold transition-colors"
-                    >
-                        {t('menu_apply_context')}
-                    </button>
-                    <button
-                        onClick={() => onRemoveTimeSignature(menuData.absBeat)}
-                        className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors"
-                    >
-                        {t('menu_time_change_remove')}
-                    </button>
-                </div>
-            </div>
+            {/* Cancella misura, ritornelli e cambio di metro sono passati alla TAVOLOZZA
+                DEI SEGNI (pulsante "pf" in toolbar): si trascinano sul punto voluto e si
+                tolgono col tasto destro. Qui restano solo le cose che riguardano
+                l'ANALISI di questo punto — tonalità, testo, override — per non tenere
+                due strade separate da mantenere allineate. */}
             <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-300">{t('menu_text_label')}</label>
                 <input
