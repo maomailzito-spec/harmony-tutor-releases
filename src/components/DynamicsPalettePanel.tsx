@@ -263,15 +263,17 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-1 mt-1">
                     <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'measure-add', label: '+ misura' }, e)}
                         onClick={onAddMeasure}
-                        title="Aggiungi una misura in fondo al brano"
+                        title="Trascinalo sulla misura davanti a cui inserire una misura vuota (clic: al cursore)"
                         className={`${bottone} ${attivo}`}
                     >
                         + misura
                     </button>
                     <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'measure-del', label: '− misura' }, e)}
                         onClick={onDeleteMeasureAtPlayhead}
-                        title="Togli la misura in cui si trova il cursore"
+                        title="Trascinalo sulla misura da togliere (clic: quella del cursore)"
                         className={`${bottone} bg-slate-700 text-gray-300 border-slate-600 hover:bg-rose-700 hover:text-white hover:border-rose-600`}
                     >
                         − misura

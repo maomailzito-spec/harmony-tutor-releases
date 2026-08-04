@@ -435,6 +435,7 @@ type ToolbarGroupId =
     | 'voices'
     | 'voiceInstrument'
     | 'mixer'
+    | 'signs'
     | 'insert'
     | 'chordInsert'
     | 'accidentals'
@@ -454,6 +455,7 @@ const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     // per questo sta accanto ai comandi del cursore e non fra le misure, dove si confondeva
     // con "misure per riga" e "numero di misure".
     'measurePanel',
+    'signs',
     'bpm',
     'key',
     'time',
@@ -5237,7 +5239,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setIsSwing(!!(p as any).isSwing);
                 if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
                 if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
-                if (p.toolbarGroupOrder) setToolbarGroupOrder(p.toolbarGroupOrder);
+                if (p.toolbarGroupOrder) {
+                    // I gruppi NUOVI non stanno negli elenchi salvati prima: si aggiungono
+                    // in coda, altrimenti un pulsante appena introdotto sparirebbe
+                    // riaprendo un progetto vecchio. Stessa fusione del caricamento da file.
+                    const noti = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
+                    const puliti = (p.toolbarGroupOrder as any[]).filter((id: any): id is ToolbarGroupId => noti.has(id));
+                    setToolbarGroupOrder(Array.from(new Set([...puliti, ...DEFAULT_TOOLBAR_ORDER])));
+                }
                 if (typeof p.analysisLocked === 'boolean') setAnalysisLocked(p.analysisLocked);
                 if (typeof p.teacherPasswordHash === 'string') setTeacherPasswordHash(p.teacherPasswordHash);
                 if (p.analysisLockOptions && typeof p.analysisLockOptions === 'object') setAnalysisLockOptions(p.analysisLockOptions);
@@ -9764,11 +9773,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, [getCurrentAbsBeatForPlayhead, playheadPosition, timeSignature]);
 
-    const insertMeasureAtPlayhead = useCallback(() => {
-        if (!playheadPosition) return;
-
-        const absBeat = Math.max(0, getCurrentAbsBeatForPlayhead());
-        const { measureIndex: insertAtMeasureIndex } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
+    /** Inserisce una misura vuota PRIMA di quella indicata; senza indice, prima di
+     *  quella in cui sta il cursore. L'indice esplicito serve alla tavolozza, dove il
+     *  segno "+ misura" si trascina sulla misura voluta. */
+    const insertMeasureAtPlayhead = useCallback((atMeasureIndex?: number) => {
+        let insertAtMeasureIndex: number;
+        if (typeof atMeasureIndex === 'number' && Number.isFinite(atMeasureIndex)) {
+            insertAtMeasureIndex = Math.max(0, Math.trunc(atMeasureIndex));
+        } else {
+            if (!playheadPosition) return;
+            insertAtMeasureIndex = getMeasureIndexAndBeatFromAbsBeat(Math.max(0, getCurrentAbsBeatForPlayhead())).measureIndex;
+        }
         const beatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure?.[insertAtMeasureIndex]
             ?? (timeSignature.numerator * (4 / timeSignature.denominator));
         const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
@@ -11931,6 +11946,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
     }, []);
 
+    const insertMeasureAtPlayheadRef = useRef(insertMeasureAtPlayhead);
+    useEffect(() => { insertMeasureAtPlayheadRef.current = insertMeasureAtPlayhead; }, [insertMeasureAtPlayhead]);
+    const deleteMeasureAtIndexRef = useRef(deleteMeasureAtIndex);
+    useEffect(() => { deleteMeasureAtIndexRef.current = deleteMeasureAtIndex; }, [deleteMeasureAtIndex]);
     const absBeatOfNoteRef = useRef(absBeatOfNote);
     useEffect(() => { absBeatOfNoteRef.current = absBeatOfNote; }, [absBeatOfNote]);
 
@@ -11953,6 +11972,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
                 return [...puliti, m];
             });
+
+            // ── Misure: si aggiungono e si tolgono NEL PUNTO in cui si molla ──
+            if (payload.kind === 'measure-add') { insertMeasureAtPlayheadRef.current?.(rng.measureIndex); return; }
+            if (payload.kind === 'measure-del') { deleteMeasureAtIndexRef.current?.(rng.measureIndex); return; }
 
             // ── Testo ──
             // Il testo si scrive nella tavolozza e si trascina dove serve. Usa la stessa
@@ -14118,7 +14141,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 if (c) handleRemoveTimeSignatureChange(timeSignatureChangeAbsBeat(c));
                             } catch { /* ignore */ }
                         }}
-                        onAddMeasure={() => bumpMinMeasureCount(1)}
+                        onAddMeasure={() => insertMeasureAtPlayhead()}
                         onDeleteMeasureAtPlayhead={() => {
                             try {
                                 const ab = Math.max(0, getCurrentAbsBeatForPlayhead());
