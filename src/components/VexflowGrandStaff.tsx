@@ -24,7 +24,10 @@ interface VexflowGrandStaffProps {
   onStaffRightClick?: (x: number, y: number, e: MouseEvent) => void;
   onMouseMoveStaff?: (x: number, y: number, modKey: boolean) => void;
   onStaffMouseDown?: (e: MouseEvent, svg: SVGSVGElement) => void;
-  onBarlineRightClick?: (barlineId: string, e: MouseEvent) => void;
+  /** Tasto destro su una stanghetta. Restituendo `false` il gestore dichiara di non
+   *  aver fatto nulla e il clic prosegue verso il menù del rigo: così intercettare le
+   *  stanghette non crea una zona morta di 12px attorno a ognuna. */
+  onBarlineRightClick?: (barlineId: string, e: MouseEvent) => boolean | void;
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
@@ -3964,9 +3967,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // Make barlines easier to target than a 1px stroke.
       const HIT_PX = 12;
       if (best && best.dx <= HIT_PX) {
-        e.stopPropagation();
-        cb(best.id, e);
-        return;
+        const gestito = cb(best.id, e);
+        if (gestito !== false) {
+          e.stopPropagation();
+          return;
+        }
+        // non gestito → prosegue verso il menù del rigo, qui sotto
       }
 
       // Otherwise, right-click on the staff background.

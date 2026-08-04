@@ -77,6 +77,7 @@ import CompressorWindow from './CompressorWindow';
 import EqWindow from './EqWindow';
 import DrumPalettePanel from './DrumPalettePanel';
 import DynamicsPalettePanel from './DynamicsPalettePanel';
+import { useSignDrag, type SignDragPayload } from '../hooks/useSignDrag';
 import NewProjectDialog, { type NewProjectConfig } from './NewProjectDialog';
 
 interface GrandStaffEditorProps {
@@ -11885,6 +11886,168 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const ghostInsertTickRangeRef = useRef(ghostInsertTickRange);
     useEffect(() => { ghostInsertTickRangeRef.current = ghostInsertTickRange; }, [ghostInsertTickRange]);
 
+    // Trascinamento del capo destro di un rallentando/accelerando. La curva è
+    // ancorata agli ID delle note, quindi allungarla vuol dire RIANCORARLA alla nota
+    // più vicina al punto in cui si molla.
+    const tempoDragRef = useRef<{ index: number; svg: SVGSVGElement; systemIndex: number } | null>(null);
+    useEffect(() => {
+        const muovi = (e: MouseEvent) => {
+            const d = tempoDragRef.current;
+            if (!d) return;
+            try {
+                const rect = d.svg.getBoundingClientRect();
+                const vb = d.svg.viewBox?.baseVal;
+                const scaleX = rect.width ? (((vb?.width && vb.width > 0) ? vb.width : rect.width) / rect.width) : 1;
+                const x = (e.clientX - rect.left) * scaleX;
+                const rng = ghostInsertTickRangeRef.current?.(d.systemIndex, x);
+                if (!rng) return;
+                const dove = rng.startTick / TICKS_PER_QUARTER;
+                const tutte = [...(latestRawNotes.current || []), ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes))]
+                    .filter(n => n && !n.isRest)
+                    .map(n => ({ n, ab: absBeatOfNoteRef.current?.(n as StaffNote) }))
+                    .filter((x): x is { n: StaffNote; ab: number } => x.ab != null);
+                if (tutte.length === 0) return;
+                setTempoCurves(prev => (prev || []).map((c, i) => {
+                    if (i !== d.index) return c;
+                    const inizio = tutte.find(x => x.n.id === c.startNoteId);
+                    if (!inizio) return c;
+                    // Solo note DOPO l'inizio: la curva deve restare un tratto.
+                    const dopo = tutte.filter(x => x.ab > inizio.ab + 1e-6);
+                    if (dopo.length === 0) return c;
+                    let scelta = dopo[0];
+                    for (const cand of dopo) {
+                        if (Math.abs(cand.ab - dove) < Math.abs(scelta.ab - dove)) scelta = cand;
+                    }
+                    return { ...c, endNoteId: scelta.n.id };
+                }));
+            } catch { /* ignore */ }
+        };
+        const molla = () => { tempoDragRef.current = null; };
+        window.addEventListener('mousemove', muovi);
+        window.addEventListener('mouseup', molla);
+        return () => {
+            window.removeEventListener('mousemove', muovi);
+            window.removeEventListener('mouseup', molla);
+        };
+    }, []);
+
+    const absBeatOfNoteRef = useRef(absBeatOfNote);
+    useEffect(() => { absBeatOfNoteRef.current = absBeatOfNote; }, [absBeatOfNote]);
+
+    // ── Prendi-e-posa dei segni ──
+    // L'impalcatura è generica (useSignDrag): trasporta un carico qualunque e dice
+    // dove è stato mollato. Qui si traduce il rilascio in un segno di dinamica; per
+    // gli altri segni futuri basterà aggiungere un caso.
+    const posaSegno = useCallback((payload: SignDragPayload, target: { systemIndex: number; x: number; y: number }) => {
+        try {
+            const rng = ghostInsertTickRangeRef.current?.(target.systemIndex, target.x);
+            if (!rng) return;
+            const dove = rng.startTick / TICKS_PER_QUARTER;
+            const EPSD = 1e-6;
+            const aggiungi = (m: DynamicMark) => setDynamics(prev => {
+                const puliti = (prev || []).filter(x => {
+                    if (m.kind === 'hairpin') return true;
+                    if (x.kind === 'hairpin') return true;
+                    return !(Math.abs(x.absBeat - m.absBeat) < EPSD
+                        && ((x.kind === 'level' || x.kind === 'fp') === (m.kind === 'level' || m.kind === 'fp')));
+                });
+                return [...puliti, m];
+            });
+
+            // ── Testo ──
+            // Il testo si scrive nella tavolozza e si trascina dove serve. Usa la stessa
+            // funzione del pannello T, quindi finisce nello stesso posto di sempre.
+            if (payload.kind === 'text-marker') {
+                const scritta = String(payload.data || '').trim();
+                if (scritta) handleApplyContextLabelOnly(dove, scritta);
+                return;
+            }
+
+            // ── Cambio di metro ──
+            // Vale da una MISURA in poi, non da un punto qualunque: si applica sempre
+            // all'inizio della misura in cui si molla, con la stessa funzione del
+            // pannello T.
+            if (payload.kind === 'time-sig') {
+                const mis = rng.measureIndex;
+                const inizioMisura = rng.measureStartTick / TICKS_PER_QUARTER;
+                // I valori si scelgono nella tavolozza prima di trascinare, così non
+                // serve passare da un altro pannello. Il pannello T resta comunque
+                // valido per chi lo preferisce.
+                handleApplyTimeSignatureChange(
+                    inizioMisura,
+                    payload.data?.n ?? timeSignature.numerator,
+                    payload.data?.d ?? timeSignature.denominator,
+                    mis,
+                );
+                return;
+            }
+
+            // ── Tempo (rall./accel.) ──
+            // La curva è ancorata agli ID di due NOTE, non a un punto nel tempo: si
+            // prende la prima nota reale da dove si molla e l'ultima entro due misure,
+            // poi si apre lo stesso dialogo dei valori che usa il comando da tastiera.
+            if (payload.kind === 'tempo-curve') {
+                const bpmLoc = timeSignature.numerator * (4 / timeSignature.denominator);
+                const finestra = dove + bpmLoc * 2;
+                const candidate = [...(latestRawNotes.current || []), ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes))]
+                    .filter(n => n && !n.isRest)
+                    .map(n => ({ n, ab: absBeatOfNote(n as StaffNote) }))
+                    .filter((x): x is { n: StaffNote; ab: number } => x.ab != null && x.ab >= dove - 1e-6)
+                    .sort((a, b) => a.ab - b.ab);
+                if (candidate.length < 2) return;
+                const prima = candidate[0];
+                const dentro = candidate.filter(x => x.ab <= finestra + 1e-6);
+                const ultima = dentro.length >= 2 ? dentro[dentro.length - 1] : candidate[1];
+                const base = bpm || 120;
+                setTempoCurvePending({
+                    startNoteId: prima.n.id,
+                    endNoteId: ultima.n.id,
+                    defaultFromBpm: base,
+                    defaultToBpm: payload.data === 'accel' ? Math.round(base * 1.5) : Math.round(base / 2),
+                });
+                return;
+            }
+
+            // ── Segni di battuta: agiscono sulla MISURA in cui si molla ──
+            if (payload.kind === 'bar-double' || payload.kind === 'bar-repeat') {
+                const mis = rng.measureIndex;
+                if (payload.kind === 'bar-double') {
+                    setDoubleBarlineMeasures(prev => {
+                        const set = new Set(prev || []);
+                        if (set.has(mis)) set.delete(mis); else set.add(mis);
+                        return Array.from(set).sort((a, b) => a - b);
+                    });
+                } else {
+                    // Stessa convenzione del menù misura: l'inizio di ritornello si
+                    // disegna sul bordo SINISTRO della misura, cioè a destra della
+                    // precedente; fine e doppio sul bordo destro della misura stessa.
+                    const tipo = payload.data as 'repeat-begin' | 'repeat-end' | 'repeat-both';
+                    const bersaglio = tipo === 'repeat-begin' ? Math.max(0, mis - 1) : mis;
+                    setRepeatBarlines(prev => {
+                        const next = { ...(prev || {}) };
+                        if (next[bersaglio] === tipo) delete next[bersaglio];
+                        else next[bersaglio] = tipo;
+                        return next;
+                    });
+                }
+                return;
+            }
+
+            if (payload.kind === 'dyn-level') aggiungi({ kind: 'level', absBeat: dove, level: payload.data });
+            else if (payload.kind === 'dyn-accent') aggiungi({ kind: 'accent', absBeat: dove, label: payload.data });
+            else if (payload.kind === 'dyn-fp') aggiungi({ kind: 'fp', absBeat: dove });
+            else if (payload.kind === 'dyn-hairpin') {
+                // Una forcella mollata nasce lunga due movimenti: poi si allunga o si
+                // accorcia trascinandone i capi, che è il gesto naturale.
+                const bpmLoc = timeSignature.numerator * (4 / timeSignature.denominator);
+                aggiungi({ kind: 'hairpin', fromAbsBeat: dove, toAbsBeat: dove + Math.min(2, bpmLoc), direction: payload.data });
+            }
+        } catch { /* rilascio non valido: si abbandona */ }
+    }, [timeSignature, bpm, absBeatOfNote]);
+
+    const segnoTrascinato = useSignDrag(posaSegno);
+
+
     const handleMouseMove = useCallback((x: number, y: number, systemIndex: number, modKey: boolean) => {
         const drag = dragStartPosRef.current;
         if (drag && drag.systemIndex === systemIndex) {
@@ -13945,9 +14108,47 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             )));
                         }}
                         onClose={() => setIsDynamicsPanelOpen(false)}
+                        onStartDrag={(payload, ev) => segnoTrascinato.inizia(payload, ev)}
+                        currentTimeSignature={timeSignature}
+                        onRemoveTimeSignatureAtPlayhead={() => {
+                            try {
+                                const ab = Math.max(0, getCurrentAbsBeatForPlayhead());
+                                const { measureIndex } = getMeasureIndexAndBeatFromAbsBeat(ab);
+                                const c = (timeSignatureChanges || []).find(x => Number((x as any).measureIndex) === measureIndex);
+                                if (c) handleRemoveTimeSignatureChange(timeSignatureChangeAbsBeat(c));
+                            } catch { /* ignore */ }
+                        }}
+                        onAddMeasure={() => bumpMinMeasureCount(1)}
+                        onDeleteMeasureAtPlayhead={() => {
+                            try {
+                                const ab = Math.max(0, getCurrentAbsBeatForPlayhead());
+                                const { measureIndex } = getMeasureIndexAndBeatFromAbsBeat(ab);
+                                deleteMeasureAtIndex(measureIndex);
+                            } catch { /* ignore */ }
+                        }}
                     />
                 );
             })()}
+
+            {segnoTrascinato.inCorso && segnoTrascinato.punta && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: segnoTrascinato.punta.x + 10,
+                        top: segnoTrascinato.punta.y - 10,
+                        zIndex: 2000,
+                        pointerEvents: 'none',
+                        fontFamily: 'serif',
+                        fontStyle: 'italic',
+                        fontWeight: 700,
+                        fontSize: 18,
+                        color: '#0ea5e9',
+                        textShadow: '0 1px 3px rgba(0,0,0,0.35)',
+                    }}
+                >
+                    {segnoTrascinato.carico?.label}
+                </div>
+            )}
 
             <ExportMusicXMLModal
                 open={exportXmlModalOpen}
@@ -14910,6 +15111,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 timeSignatureChanges={systemMarkers}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
+                                onBarlineRightClick={(barlineId) => {
+                                    // Coerenza coi segni della tavolozza: il tasto destro TOGLIE.
+                                    // Se su quella stanghetta non c'è né doppia barra né
+                                    // ritornello si restituisce false e il clic prosegue
+                                    // verso il menù del rigo, come prima.
+                                    const m = Number(String(barlineId).replace('bar-', ''));
+                                    if (!Number.isFinite(m)) return false;
+                                    const haDoppia = (doubleBarlineMeasures || []).includes(m);
+                                    const haRit = !!(repeatBarlines || {})[m];
+                                    // Il cambio di metro si disegna subito DOPO questa
+                                    // stanghetta, cioè all'inizio della misura seguente:
+                                    // il tasto destro lì toglie anche quello.
+                                    const camb = (timeSignatureChanges || []).find(x => Number((x as any).measureIndex) === m + 1);
+                                    if (!haDoppia && !haRit && !camb) return false;
+                                    if (haDoppia) setDoubleBarlineMeasures(prev => (prev || []).filter(x => x !== m));
+                                    if (haRit) setRepeatBarlines(prev => { const next = { ...(prev || {}) }; delete next[m]; return next; });
+                                    if (camb) handleRemoveTimeSignatureChange(timeSignatureChangeAbsBeat(camb));
+                                    return true;
+                                }}
                                 width={actualSystemWidth}
                                 height={systemHeightPx}
                                                                 staffMode={staffSystemMode}
@@ -15301,10 +15521,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                         fill="black"
                                                         style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                                                         onClick={handleClick}
+                                                        onContextMenu={(e) => {
+                                                            // Stessa regola degli altri segni: tasto destro = togli.
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            setTempoCurves(prev => (prev || []).filter((_, i) => i !== index));
+                                                        }}
                                                     >
-                                                        <title>{`${label} ${curve.fromBpm}→${curve.toBpm} · Click: modifica · Alt+Click: elimina`}</title>
+                                                        <title>{`${label} ${curve.fromBpm}→${curve.toBpm} · Clic: modifica i valori · Tasto destro: togli · Trascina il capo destro: allunga`}</title>
                                                         {label}
                                                     </text>
+                                                )}
+                                                {lineX2 > lineX1 && (
+                                                    <circle
+                                                        cx={lineX2} cy={y} r={7}
+                                                        fill="transparent" stroke="transparent"
+                                                        style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
+                                                        onMouseDown={(ev) => {
+                                                            if (ev.button !== 0) return;
+                                                            ev.preventDefault();
+                                                            ev.stopPropagation();
+                                                            const svg = (ev.currentTarget as SVGCircleElement).ownerSVGElement;
+                                                            if (!svg) return;
+                                                            tempoDragRef.current = { index, svg, systemIndex };
+                                                        }}
+                                                        onContextMenu={(ev) => {
+                                                            ev.preventDefault();
+                                                            ev.stopPropagation();
+                                                            setTempoCurves(prev => (prev || []).filter((_, i) => i !== index));
+                                                        }}
+                                                    />
                                                 )}
                                                 {lineX2 > lineX1 && (
                                                     <line
@@ -16755,22 +17001,6 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     onApply={handleApplyContext}
                     onApplyTextMarker={handleApplyContextLabelOnly}
                     onRemove={handleRemoveContext}
-                    onDeleteMeasure={deleteMeasureAtIndex}
-                    onToggleRepeatBarline={(measureIndex, type) => {
-                        setRepeatBarlines(prev => {
-                            const next = { ...prev };
-                            // repeat-begin: the barline appears at the LEFT edge of the target
-                            // measure, which is the RIGHT edge of (measureIndex - 1).
-                            // repeat-end: barline at the RIGHT edge of the target measure.
-                            // repeat-both: barline at the RIGHT edge (ends here, begins next).
-                            const targetM = type === 'repeat-begin' ? Math.max(0, measureIndex - 1) : measureIndex;
-                            if (next[targetM] === type) delete next[targetM];
-                            else next[targetM] = type;
-                            return next;
-                        });
-                    }}
-                    onApplyTimeSignature={handleApplyTimeSignatureChange}
-                    onRemoveTimeSignature={handleRemoveTimeSignatureChange}
                     existingHarmonyOverride={existingHarmonyOverrideForMenu}
                     onApplyHarmonyOverride={applyHarmonyOverride}
                     onRemoveHarmonyOverride={removeHarmonyOverride}

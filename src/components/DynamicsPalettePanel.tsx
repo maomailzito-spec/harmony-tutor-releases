@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { DynamicLevel } from '../utils/dynamics';
+import type { SignDragPayload } from '../hooks/useSignDrag';
 
 /**
  * Tavolozza dei SEGNI, flottante e trascinabile (stesso modello del modulo
@@ -21,15 +22,33 @@ interface DynamicsPalettePanelProps {
     onPlaceHairpin: (direction: 'cresc' | 'dim') => void;
     onRemoveAtSelection: () => void;
     onClose: () => void;
+    /** Battute: comandi che non sono "segni da posare" ma azioni su una misura. */
+    onAddMeasure: () => void;
+    onDeleteMeasureAtPlayhead: () => void;
+    /** Metro corrente del brano: i contatori della tavolozza partono da lì. */
+    currentTimeSignature: { numerator: number; denominator: number };
+    /** Toglie il cambio di metro nella misura dov'è il cursore. */
+    onRemoveTimeSignatureAtPlayhead: () => void;
+    /** Prendi-e-posa: si afferra il pulsante e si molla il segno sulla partitura.
+     *  Il clic semplice continua a funzionare (mette il segno sulla nota selezionata). */
+    onStartDrag: (payload: SignDragPayload, e: React.MouseEvent) => void;
 }
 
 const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff'];
 
 const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     selectionCount, hasMarkAtSelection,
-    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onRemoveAtSelection, onClose,
+    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
     const [pos, setPos] = useState<{ x: number; y: number }>({ x: 200, y: 120 });
+    // Valori del metro da posare: partono da quello del brano e si regolano qui,
+    // così il cambio si trascina già pronto senza passare da un altro pannello.
+    const [metroN, setMetroN] = useState<number>(currentTimeSignature?.numerator ?? 4);
+    const [metroD, setMetroD] = useState<number>(currentTimeSignature?.denominator ?? 4);
+    const DENOMINATORI = [1, 2, 4, 8, 16];
+    // Testo da posare: si scrive qui e poi si trascina la T dove serve, come per il
+    // metro. Così il segno arriva sulla partitura già pronto.
+    const [testo, setTesto] = useState<string>('');
     const dragRef = useRef<{ dx: number; dy: number } | null>(null);
 
     const onTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -53,7 +72,6 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
         };
     }, []);
 
-    const nessunaNota = selectionCount === 0;
     const unaSola = selectionCount === 1;
     const bottone = 'h-7 px-2 text-[11px] font-bold rounded border transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
     const attivo = 'bg-slate-700 text-gray-100 border-slate-600 hover:bg-slate-600 active:bg-sky-600 active:text-white';
@@ -68,7 +86,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded-t-lg cursor-move"
             >
                 <span className="text-[11px] font-bold text-gray-300 tracking-wide truncate">
-                    𝆑 Segni — dinamiche
+                    𝆑 Segni
                 </span>
                 <button
                     onClick={onClose}
@@ -85,9 +103,9 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     {LIVELLI.map(l => (
                         <button
                             key={l}
-                            disabled={!unaSola}
-                            onClick={() => onPlaceLevel(l)}
-                            title={unaSola ? `Metti ${l} sulla nota selezionata (vale per tutte le voci)` : 'Seleziona una nota'}
+                            onMouseDown={(e) => onStartDrag({ kind: 'dyn-level', data: l, label: l }, e)}
+                            onClick={() => { if (unaSola) onPlaceLevel(l); }}
+                            title={`Trascina ${l} sulla partitura, oppure seleziona una nota e clicca`}
                             className={`${bottone} ${attivo} italic`}
                             style={{ fontFamily: 'serif' }}
                         >
@@ -101,9 +119,9 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     {(['sf', 'sfz', 'rf'] as const).map(a => (
                         <button
                             key={a}
-                            disabled={!unaSola}
-                            onClick={() => onPlaceAccent(a)}
-                            title={`Accento ${a} su quella sola nota`}
+                            onMouseDown={(e) => onStartDrag({ kind: 'dyn-accent', data: a, label: a }, e)}
+                            onClick={() => { if (unaSola) onPlaceAccent(a); }}
+                            title={`Trascina ${a} sulla partitura, oppure seleziona una nota e clicca`}
                             className={`${bottone} ${attivo} italic`}
                             style={{ fontFamily: 'serif' }}
                         >
@@ -111,9 +129,9 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                         </button>
                     ))}
                     <button
-                        disabled={!unaSola}
-                        onClick={onPlaceFp}
-                        title="Forte piano: attacco forte, poi si resta piano"
+                        onMouseDown={(e) => onStartDrag({ kind: 'dyn-fp', label: 'fp' }, e)}
+                        onClick={() => { if (unaSola) onPlaceFp(); }}
+                        title="Forte piano: trascinalo sulla partitura, oppure seleziona una nota e clicca"
                         className={`${bottone} ${attivo} italic`}
                         style={{ fontFamily: 'serif' }}
                     >
@@ -124,20 +142,139 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Forcelle</div>
                 <div className="grid grid-cols-2 gap-1">
                     <button
-                        disabled={selectionCount < 2}
-                        onClick={() => onPlaceHairpin('cresc')}
-                        title={selectionCount >= 2 ? 'Crescendo dalla prima all\'ultima nota selezionata' : 'Seleziona due note'}
+                        onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'cresc', label: '⟨ cresc.' }, e)}
+                        onClick={() => { if (selectionCount >= 2) onPlaceHairpin('cresc'); }}
+                        title="Trascina il crescendo sulla partitura (poi allungalo dai capi), oppure seleziona due note e clicca"
                         className={`${bottone} ${attivo}`}
                     >
                         ⟨ cresc.
                     </button>
                     <button
-                        disabled={selectionCount < 2}
-                        onClick={() => onPlaceHairpin('dim')}
-                        title={selectionCount >= 2 ? 'Diminuendo dalla prima all\'ultima nota selezionata' : 'Seleziona due note'}
+                        onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'dim', label: 'dim. ⟩' }, e)}
+                        onClick={() => { if (selectionCount >= 2) onPlaceHairpin('dim'); }}
+                        title="Trascina il diminuendo sulla partitura (poi accorcialo dai capi), oppure seleziona due note e clicca"
                         className={`${bottone} ${attivo}`}
                     >
                         dim. ⟩
+                    </button>
+                </div>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Tempo</div>
+                <div className="grid grid-cols-2 gap-1">
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'rall', label: 'rall.' }, e)}
+                        title="Rallentando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
+                        className={`${bottone} ${attivo} italic`}
+                        style={{ fontFamily: 'serif' }}
+                    >
+                        rall.
+                    </button>
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'accel', label: 'accel.' }, e)}
+                        title="Accelerando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
+                        className={`${bottone} ${attivo} italic`}
+                        style={{ fontFamily: 'serif' }}
+                    >
+                        accel.
+                    </button>
+                </div>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Metro</div>
+                <div className="flex items-center gap-1">
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'time-sig', data: { n: metroN, d: metroD }, label: `${metroN}/${metroD}` }, e)}
+                        title={`Cambio di metro ${metroN}/${metroD}: trascinalo sulla misura da cui vale`}
+                        className={`${bottone} ${attivo} px-3`}
+                        style={{ fontFamily: 'serif', fontSize: 13 }}
+                    >
+                        {metroN}/{metroD}
+                    </button>
+                    <div className="flex items-center gap-0.5">
+                        <button onClick={() => setMetroN(v => Math.max(1, v - 1))} className={`${bottone} ${attivo} px-1.5`} title="Meno movimenti">−</button>
+                        <span className="text-[10px] text-gray-400 w-4 text-center">{metroN}</span>
+                        <button onClick={() => setMetroN(v => Math.min(32, v + 1))} className={`${bottone} ${attivo} px-1.5`} title="Più movimenti">+</button>
+                    </div>
+                    <select
+                        value={metroD}
+                        onChange={(e) => setMetroD(Number(e.target.value))}
+                        title="Valore del movimento"
+                        className="h-7 text-[11px] bg-slate-700 text-gray-100 border border-slate-600 rounded px-1"
+                    >
+                        {DENOMINATORI.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                </div>
+                <button
+                    onClick={onRemoveTimeSignatureAtPlayhead}
+                    title="Togli il cambio di metro dalla misura in cui si trova il cursore"
+                    className={`${bottone} w-full mt-1 bg-slate-700 text-gray-300 border-slate-600 hover:bg-rose-700 hover:text-white hover:border-rose-600`}
+                >
+                    Togli il cambio di metro
+                </button>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Testo</div>
+                <div className="flex items-center gap-1">
+                    <button
+                        onMouseDown={(e) => { if (testo.trim()) onStartDrag({ kind: 'text-marker', data: testo.trim(), label: testo.trim() }, e); }}
+                        disabled={!testo.trim()}
+                        title={testo.trim() ? `Trascina "${testo.trim()}" sul punto della partitura` : 'Scrivi prima il testo qui accanto'}
+                        className={`${bottone} ${attivo} px-3`}
+                        style={{ fontFamily: 'serif', fontSize: 15 }}
+                    >
+                        T
+                    </button>
+                    <input
+                        value={testo}
+                        onChange={(e) => setTesto(e.target.value)}
+                        placeholder="dolce, poco rit., Fine…"
+                        className="flex-1 h-7 text-[11px] bg-slate-700 text-gray-100 border border-slate-600 rounded px-2 placeholder-gray-500"
+                    />
+                </div>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Battute</div>
+                <div className="grid grid-cols-4 gap-1">
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'bar-double', label: '𝄀𝄀' }, e)}
+                        title="Doppia barra: trascinala sulla misura dove deve comparire"
+                        className={`${bottone} ${attivo}`}
+                    >
+                        𝄀𝄀
+                    </button>
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-begin', label: '𝄆' }, e)}
+                        title="Inizio ritornello: trascinalo sulla misura da cui si riprende"
+                        className={`${bottone} ${attivo}`}
+                    >
+                        𝄆
+                    </button>
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-end', label: '𝄇' }, e)}
+                        title="Fine ritornello: trascinalo sulla misura dove si torna indietro"
+                        className={`${bottone} ${attivo}`}
+                    >
+                        𝄇
+                    </button>
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-both', label: '𝄆𝄇' }, e)}
+                        title="Ritornello doppio: finisce qui e ricomincia"
+                        className={`${bottone} ${attivo}`}
+                    >
+                        𝄆𝄇
+                    </button>
+                </div>
+                <div className="grid grid-cols-2 gap-1 mt-1">
+                    <button
+                        onClick={onAddMeasure}
+                        title="Aggiungi una misura in fondo al brano"
+                        className={`${bottone} ${attivo}`}
+                    >
+                        + misura
+                    </button>
+                    <button
+                        onClick={onDeleteMeasureAtPlayhead}
+                        title="Togli la misura in cui si trova il cursore"
+                        className={`${bottone} bg-slate-700 text-gray-300 border-slate-600 hover:bg-rose-700 hover:text-white hover:border-rose-600`}
+                    >
+                        − misura
                     </button>
                 </div>
 
@@ -151,11 +288,9 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 </button>
 
                 <div className="text-[9px] text-gray-400 mt-2 leading-snug">
-                    {nessunaNota
-                        ? 'Seleziona una nota, poi clicca un segno. I segni valgono per tutte le voci.'
-                        : unaSola
-                            ? 'Clicca un livello o un accento per metterlo qui. Per una forcella seleziona due note.'
-                            : `${selectionCount} note selezionate: la forcella va dalla prima all'ultima.`}
+                    Trascina un segno dove vuoi sulla partitura. Oppure: seleziona una nota e
+                    clicca il segno (due note per una forcella). Sul rigo i segni si spostano
+                    trascinandoli e si tolgono col tasto destro. Valgono per tutte le voci.
                 </div>
             </div>
         </div>
