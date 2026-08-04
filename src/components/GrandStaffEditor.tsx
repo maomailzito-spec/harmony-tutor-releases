@@ -3659,6 +3659,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setChordInputText('');
         setChordInputError(false);
 
+        // Fai SENTIRE l'accordo appena scritto, come già faceva il ramo ACC qui sopra e
+        // come fa ogni nota inserita col mouse: incolonnando sigle si scrive a orecchio,
+        // e senza risposta sonora non ci si accorge di un rivolto o di una settima
+        // sbagliata finché non si torna indietro a suonare. Ogni nota va sullo strumento
+        // e sul canale della SUA voce (ci pensa playNoteSound leggendo `voice`).
+        notes.forEach(n => { void playNoteRef.current?.(n as any, 0.8); });
+
         return { startTick, durTicks };
     }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, quantizeGrid, setRawNotes, setAccompanimentTracks, setSelectedNoteIds, applyAccPattern]);
 
