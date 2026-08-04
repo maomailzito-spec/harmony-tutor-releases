@@ -464,61 +464,83 @@ function createMenu() {
         return;
       }
       if (!mainWindow) return;
+      // ELENCO VERIFICATO SUL CODICE (03/08/2026): estratto dal gestore dei tasti in
+      // GrandStaffEditor.tsx e dagli acceleratori dei menù. Se aggiungi una scorciatoia
+      // là, aggiungila QUI: era già capitato che l'elenco raccontasse cose false (diceva
+      // che T è la legatura, mentre T apre le proprietà e la legatura è L).
       const sections = [
         { title: `MENU (${app.name})`, items: [
           'Cmd/Ctrl+N — Nuovo progetto',
           'Cmd/Ctrl+O — Apri…',
-          'Cmd/Ctrl+I — Importa MIDI…',
+          'Cmd/Ctrl+I — Importa MIDI…   |   Cmd/Ctrl+Shift+I — Importa MusicXML…',
           'Cmd/Ctrl+Shift+E — Esporta musica…',
-          'Cmd/Ctrl+Shift+P — Esporta PDF…',
-          'Cmd/Ctrl+Shift+G — Esporta PNG…',
+          'Cmd/Ctrl+Shift+P — Esporta PDF…   |   Cmd/Ctrl+Shift+G — Esporta PNG…',
           'Cmd/Ctrl+P — Stampa',
-          'Cmd/Ctrl+S — Salva',
-          'Cmd/Ctrl+Shift+S — Salva con nome…',
+          'Cmd/Ctrl+S — Salva   |   Cmd/Ctrl+Shift+S — Salva con nome…',
           'Cmd/Ctrl+W — Chiudi progetto',
           'Cmd/Ctrl+Z — Annulla   |   Shift+Cmd/Ctrl+Z — Ripeti',
           'Cmd/Ctrl+X — Taglia   |   Cmd/Ctrl+C — Copia   |   Cmd/Ctrl+V — Incolla   |   Cmd/Ctrl+A — Seleziona tutto',
-          'Alt/Option+S — Seleziona solo voce corrente (rettangolo)',
-          'Ctrl/Control+C — Colori voci (BTAS)',
-          'Cmd/Ctrl+] — Aumenta dimensione titolo   |   Cmd/Ctrl+[ — Diminuisci dimensione titolo',
+          'Alt/Option+S — Seleziona solo la voce corrente (rettangolo)',
+          'Ctrl+C — Colori delle voci',
+          'Cmd/Ctrl+] — Titolo più grande   |   Cmd/Ctrl+[ — Titolo più piccolo',
         ]},
-        { title: 'GRAND STAFF (Editor)', items: [
-          'Alt/Option+L — Cicla layout righi (grandstaff ↔ SATB antiche ↔ treble-only)',
-          'Alt/Option+M — Cambia parti late/strette da playhead in avanti (fissa il passato)',
-          'Alt/Option+T — Mostra/nascondi toolbar',
-          'Space — Play/stop',
-          'ArrowLeft/ArrowRight — Sposta playhead (Shift = passo più fine)',
-          'Enter — Torna a inizio (senza suonare)',
-          'K — Toggle metronomo',
-          'V — Cicla voce selezionata (B→T→A→S)',
-          'T — Toggle legatura (note selezionate)',
-          '1..7 — Durate (semibreve…semibiscroma)',
-          'R — Toggle inserimento nota/pausa',
-          '. — Toggle punto (accetta anche ">" su alcune tastiere)',
-          'b / n / # — Accidentali (bemolle / bequadro / diesis)',
-          'ArrowUp/ArrowDown — Trasponi (1 semitono)   |   Shift+ArrowUp/Down — (1 ottava)',
-          'Backspace/Delete — Cancella selezione',
-          'Cmd/Ctrl+C — Copia note selezionate   |   Cmd/Ctrl+V — Incolla',
+        { title: 'PANNELLI E VISTA', items: [
+          'T — Proprietà del punto in cui sta il cursore (tonalità del passaggio, modulazioni, testo, override)',
+          'P — Menù "Altro"',
+          'Alt/Option+T — Mostra/nascondi la toolbar',
+          'Alt/Option+L — Cicla i righi: grand staff ↔ chiavi antiche ↔ rigo singolo',
+          'Alt/Option+M — Parti late/strette dal cursore in avanti',
+          'Cmd/Ctrl+0 — Azzera lo zoom',
         ]},
-        { title: 'ALTRE VISTE', items: [
-          'Scale: Cmd/Ctrl+Z undo; Backspace/Delete rimuovi box; Arrow + numeri per muovere/selezionare shape',
-          'Accordi: ArrowLeft/Right voicing prev/next; ArrowUp/Down cambia set corde (se presente)',
-          'Intervalli: Cmd/Ctrl+Z undo',
+        { title: 'ESECUZIONE', items: [
+          'Spazio — Play / stop',
+          'Freccia ← → — Sposta il cursore (Shift = passo più fine)',
+          'Invio — Torna all\'inizio senza suonare',
+          'K — Metronomo',
+          'Shift+R — Registrazione (arma / disarma / ferma)',
         ]},
-        { title: 'MARCATURA ORNAMENTALE (nota selezionata)', items: [
-          '⌥P — Nota di passaggio',
-          '⌥A — Appoggiatura',
-          '⌥V — Nota di volta',
-          '⌥N — Anticipazione',
-          '⌥S — Nota di sfuggita',
-          '⌥R — Ritardo (sospensione)',
+        { title: 'SCRITTURA', items: [
+          'Cmd/Ctrl+clic sul rigo — Inserisci una nota (il clic semplice sceglie la voce)',
+          '1…7 — Durata: semibreve, minima, semiminima, croma, semicroma, biscroma, semibiscroma',
+          '. — Punto di valore',
+          'R — Alterna nota / pausa',
+          'b — bemolle   |   n — bequadro   |   # — diesis',
+          'V — Cicla la voce (B→T→A→S)',
+          'L — Legatura di valore',
+          'J — Riscrittura enarmonica (Re♯ ⇄ Mi♭)',
+          '+ — Aggiungi una traccia d\'accompagnamento',
+          'Backspace / Canc — Cancella la selezione',
         ]},
-        { title: 'FUNZIONI SENZA SCORCIATOIA DEDICATA (principali)', items: [
-          'Vista: Scale / Accordi / Intervalli / Editor / Grand Staff (dal menu)',
-          'Riordina toolbar (drag)…',
-          'Numeri misure (toggle dal menu)',
-          'Debug harmony labels (pcs) (toggle dal menu)',
+        { title: 'ALTEZZE E RIGHI (note selezionate)', items: [
+          'Freccia ↑ ↓ — Trasporta di un semitono',
+          'Shift+↑ ↓ — Trasporta di un\'ottava',
+          'Alt/Option+↑ ↓ — Sposta al rigo superiore / inferiore',
+          'Trascinamento col mouse — Sposta di grado (diatonico)',
         ]},
+        { title: 'ANALISI E MARCATURE (note selezionate)', items: [
+          'Alt/Option+P — Nota di passaggio   |   ⌥V — Nota di volta   |   ⌥A — Appoggiatura',
+          'Alt/Option+R — Ritardo   |   ⌥S — Nota di sfuggita   |   ⌥C — Cambiata   |   ⌥N — Anticipazione',
+          'Alt/Option+H — Forza nota STRUTTURALE   |   ⌥O — Forza nota ORNAMENTALE',
+          'Alt/Option+Shift+H — Leggi la selezione come un solo accordo',
+          'Alt/Option+F — Corona (fermata)',
+          'Alt/Option+Shift+R — Curva di tempo (rallentando / accelerando) — ora anche dalla tavolozza dei Segni',
+        ]},
+        { title: 'TAVOLOZZA DEI SEGNI (pulsante "pf" in toolbar)', items: [
+          'Trascina un segno sulla partitura per posarlo: dinamiche, rall./accel., metro, testo, doppia barra, ritornelli, +/− misura',
+          'Tasto destro su un segno — Toglilo',
+          'Trascina i capi di forcelle e rallentando — Allunga o accorcia',
+          'In alternativa: seleziona una nota e clicca il segno (due note per una forcella)',
+        ]},
+        // Le viste Scale / Accordi / Intervalli appartengono alla versione "chitarra":
+        // in Harmony Tutor (flavor grandstaff) non sono raggiungibili da nessun menù,
+        // quindi elencarne le scorciatoie confondeva e basta.
+        ...(getAppFlavor() !== 'grandstaff' ? [
+          { title: 'VISTE CHITARRA (Scale · Accordi · Intervalli)', items: [
+            'Scale: Cmd/Ctrl+Z annulla; Backspace/Canc rimuove il riquadro; frecce e numeri per muovere e selezionare',
+            'Accordi: frecce ← → voicing precedente/successivo; ↑ ↓ cambia set di corde',
+            'Intervalli: Cmd/Ctrl+Z annulla',
+          ]},
+        ] : []),
       ];
       const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const sectionsHtml = sections.map(sec =>
