@@ -12124,11 +12124,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     : { ...sl, fromNoteId: a, toNoteId: da };
             }));
         };
-        const molla = () => {
-            if (!slurDragRef.current) return;
-            slurDragRef.current = null;
-            document.body.style.cursor = '';
-        };
+        const molla = () => { slurDragRef.current = null; };
         window.addEventListener('mousemove', muovi);
         window.addEventListener('mouseup', molla);
         return () => {
@@ -16071,13 +16067,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                 <g
                                                     key={`leg-${sl.id}-${capo}`}
                                                     className="ht-maniglia"
-                                                    style={{ pointerEvents: 'auto', cursor: 'grab' }}
+                                                    style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
                                                     onMouseDown={(ev) => {
                                                         if (ev.button !== 0) return; // il destro toglie, non trascina
                                                         ev.preventDefault();
                                                         ev.stopPropagation();
                                                         slurDragRef.current = { id: sl.id, capo };
-                                                        document.body.style.cursor = 'grabbing';
                                                     }}
                                                     onContextMenu={(ev) => {
                                                         ev.preventDefault();
