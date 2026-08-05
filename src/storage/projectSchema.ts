@@ -30,6 +30,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'dynamics',
   'slurs',
   'octaveShifts',
+  'keySignatureChanges',
   'analysisLocked',
   'teacherPasswordHash',
   'analysisLockOptions',
@@ -92,6 +93,7 @@ export type ProjectDataV1 = {
   dynamics?: any[];
   slurs?: any[];
   octaveShifts?: any[];
+  keySignatureChanges?: any[];
 
   analysisLocked?: boolean;
   teacherPasswordHash?: string;

@@ -33,7 +33,8 @@ import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } from '../utils/dynamics';
 import { articulationPlayback } from '../utils/articulations';
-import type { ArticulationMark, Slur, OctaveShift } from '../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
+import { normalizeKeyChanges } from '../utils/keySignatureChanges';
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
@@ -1496,6 +1497,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // maniglie ci si appendono. Serve uno STATO e non un riferimento, perché il disegno
     // avviene dopo il render e la maniglia deve comparire subito.
     const [slurAnchors, setSlurAnchors] = useState<Record<number, Array<{ id: string; capo: 'from' | 'to'; x: number; y: number }>>>({});
+    // Cambi d'ARMATURA a metà brano. Valgono dalla battuta indicata in poi e per tutto
+    // il brano — coro e tracce insieme — come il metro: l'armatura è del pezzo.
+    const [keySignatureChanges, setKeySignatureChanges] = useState<KeySignatureChange[]>([]);
+    const keySignatureChangesRef = useRef(keySignatureChanges);
+    keySignatureChangesRef.current = keySignatureChanges;
     const [octaveShifts, setOctaveShifts] = useState<OctaveShift[]>([]);
     const octaveShiftsRef = useRef(octaveShifts);
     octaveShiftsRef.current = octaveShifts;
@@ -4881,6 +4887,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     dynamics,
                     slurs,
                     octaveShifts,
+                    keySignatureChanges,
                     toolbarGroupOrder,
                     bpm,
                     isBpmActive,
@@ -4939,6 +4946,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setDynamics,
                     setSlurs,
                     setOctaveShifts,
+                    setKeySignatureChanges,
                     setKeyChangeMode,
                     setModalTonicOverride,
                     setAutoLeadingToneInMinor,
@@ -5140,6 +5148,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
                 setSlurs(Array.isArray(imported?.slurs) ? imported.slurs : []);
                 setOctaveShifts(Array.isArray(imported?.octaveShifts) ? imported.octaveShifts : []);
+                setKeySignatureChanges([]);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setPasteCaretImmediate(null);
@@ -5209,7 +5218,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, tempoCurves, dynamics, slurs, octaveShifts, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -6654,8 +6663,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Timeline-based harmony labels per system (roman+figures and symbol)
     // ADAPTER LAYER — harmony analysis overlay data (extracted to useHarmonyLabels hook)
-    const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, sequenceMatches, motifNoteStyles, motifBracketsBySystem, motifMatches } = useHarmonyLabels({
-        layoutData, timeSignature, timeSignatureChanges, analysisContexts: effectiveAnalysisContexts, harmonyOverrides,
+    const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, keySignatureMarkersBySystem, sequenceMatches, motifNoteStyles, motifBracketsBySystem, motifMatches } = useHarmonyLabels({
+        layoutData, timeSignature, timeSignatureChanges, keySignatureChanges, keySignatureRoot,
+        analysisContexts: effectiveAnalysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
         harmonyLabelMinSpanBeats: Number(harmonyLabelMinSpanBeats) || 0,
@@ -12265,6 +12275,46 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const metti8vaRef = useRef(metti8va);
     metti8vaRef.current = metti8va;
 
+    /**
+     * Posa un CAMBIO D'ARMATURA all'inizio di una battuta.
+     *
+     * `root` è la fondamentale MAGGIORE relativa, come l'armatura d'impianto del brano
+     * (un Re minore si scrive 'F' + minore: l'armatura è la stessa).
+     *
+     * Sposta ANCHE la lettura dell'analisi da quel punto — scelta dell'utente: scrivere
+     * l'armatura di Re maggiore alla battuta 9 vuol dire che da lì il pezzo è in Re, e
+     * doverlo ridire nel pannello sarebbe dirlo due volte. Il pannello resta per i casi
+     * in cui le due cose NON coincidono (una modulazione senza cambio d'armatura).
+     */
+    const mettiCambioArmatura = useCallback((measureIndex: number, root: string, isMinor: boolean) => {
+        const mis = Math.max(0, Math.round(measureIndex));
+        setKeySignatureChanges(prev => normalizeKeyChanges([
+            ...(prev || []).filter(c => c.measureIndex !== mis),
+            { measureIndex: mis, root, isMinor },
+        ]));
+        try {
+            const inizio = (layoutDataRef.current as any)?.measureStartAbsBeat?.[mis]
+                ?? (mis * (timeSignature.numerator * (4 / timeSignature.denominator)));
+            // La tonica dell'analisi è quella REALE: in minore è la relativa minore
+            // dell'armatura, non la maggiore con cui l'armatura si scrive.
+            const tonica = isMinor ? (relativeMinors[root] || root) : root;
+            handleApplyContext(inizio, tonica, isMinor);
+        } catch { /* l'armatura resta comunque scritta */ }
+    }, [timeSignature]);
+    const mettiCambioArmaturaRef = useRef(mettiCambioArmatura);
+    mettiCambioArmaturaRef.current = mettiCambioArmatura;
+
+    /** Tasto destro: toglie il cambio d'armatura di quella battuta (e la sua lettura). */
+    const togliCambioArmatura = useCallback((measureIndex: number) => {
+        const mis = Math.max(0, Math.round(measureIndex));
+        setKeySignatureChanges(prev => (prev || []).filter(c => c.measureIndex !== mis));
+        try {
+            const inizio = (layoutDataRef.current as any)?.measureStartAbsBeat?.[mis]
+                ?? (mis * (timeSignature.numerator * (4 / timeSignature.denominator)));
+            setAnalysisContexts(prev => (prev || []).filter(c => Math.abs(analysisContextAbsBeat(c) - inizio) > 1e-6));
+        } catch { /* ignore */ }
+    }, [timeSignature, analysisContextAbsBeat]);
+
     /** Tasto destro sulla parentesi: il segno d'ottava si toglie. */
     const togli8va = useCallback((octaveId: string): boolean => {
         setOctaveShifts(prev => (prev || []).filter(o => o.id !== octaveId));
@@ -12412,6 +12462,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (payload.kind === 'text-marker') {
                 const scritta = String(payload.data || '').trim();
                 if (scritta) handleApplyContextLabelOnly(dove, scritta);
+                return;
+            }
+
+            // ── Cambio d'armatura ──
+            // Come il metro: vale da una MISURA in poi, non da un punto qualunque.
+            if (payload.kind === 'key-sig') {
+                const root = String(payload.data?.root || 'C');
+                const minore = !!payload.data?.isMinor;
+                mettiCambioArmaturaRef.current?.(rng.measureIndex, root, minore);
                 return;
             }
 
@@ -14562,6 +14621,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         onPlaceArticulation={(a) => applicaArticolazione(a)}
                         onPlaceSlur={() => legaNote()}
                         onPlaceOctave={(dir: 'up' | 'down') => metti8va(dir)}
+                        currentKeyRoot={keySignatureRoot}
+                        currentKeyIsMinor={isMinorMode}
+                        onRemoveKeySignatureAtPlayhead={() => {
+                            try {
+                                const ab = Math.max(0, getCurrentAbsBeatForPlayhead());
+                                const mb = measureBeatFromAbsRef.current?.(ab);
+                                if (mb) togliCambioArmatura(mb.measureIndex);
+                            } catch { /* ignore */ }
+                        }}
                         onClose={() => setIsDynamicsPanelOpen(false)}
                         onStartDrag={(payload, ev) => segnoTrascinato.inizia(payload, ev)}
                         currentTimeSignature={timeSignature}
@@ -15564,6 +15632,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 notes={systemNotesForRender}
                                 timeSignature={systemTimeSignature}
                                 timeSignatureChanges={systemMarkers}
+                                keySignatureChanges={(keySignatureMarkersBySystem?.[systemIndex] || [])}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
                                 slurs={slurs}

@@ -31,6 +31,11 @@ interface DynamicsPalettePanelProps {
     onPlaceSlur: () => void;
     /** Segno d'ottava sopra (8va) o sotto (8vb) per le note selezionate. */
     onPlaceOctave: (direction: 'up' | 'down') => void;
+    /** Armatura d'impianto del brano: i selettori partono da lì. */
+    currentKeyRoot: string;
+    currentKeyIsMinor: boolean;
+    /** Toglie il cambio d'armatura nella misura dov'è il cursore. */
+    onRemoveKeySignatureAtPlayhead: () => void;
     onRemoveAtSelection: () => void;
     onClose: () => void;
     /** Battute: comandi che non sono "segni da posare" ma azioni su una misura. */
@@ -47,9 +52,12 @@ interface DynamicsPalettePanelProps {
 
 const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff'];
 
+/** Le armature come si susseguono per quinte, dai bemolli ai diesis. */
+const TONALITA = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
+
 const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     selectionCount, hasMarkAtSelection,
-    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
+    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
     const [pos, setPos] = useState<{ x: number; y: number }>({ x: 200, y: 120 });
     // Valori del metro da posare: partono da quello del brano e si regolano qui,
@@ -60,6 +68,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     // Testo da posare: si scrive qui e poi si trascina la T dove serve, come per il
     // metro. Così il segno arriva sulla partitura già pronto.
     const [testo, setTesto] = useState<string>('');
+    // Armatura da posare: si sceglie qui e si trascina sulla misura da cui vale, come il
+    // metro. Le tonalità sono elencate come si scrivono in partitura (per quinte).
+    const [tonalita, setTonalita] = useState<string>(currentKeyRoot || 'C');
+    const [tonalitaMinore, setTonalitaMinore] = useState<boolean>(!!currentKeyIsMinor);
     const dragRef = useRef<{ dx: number; dy: number } | null>(null);
 
     const onTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -216,6 +228,40 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                         </button>
                     ))}
                 </div>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Armatura</div>
+                <div className="flex items-center gap-1">
+                    <select
+                        value={tonalita}
+                        onChange={(e) => setTonalita(e.target.value)}
+                        title="Armatura da posare (la fondamentale maggiore: il minore ha la stessa armatura)"
+                        className="h-7 flex-1 min-w-0 bg-slate-700 text-gray-100 text-[11px] rounded border border-slate-600 px-1"
+                    >
+                        {TONALITA.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <button
+                        onClick={() => setTonalitaMinore(v => !v)}
+                        title={tonalitaMinore ? 'Modo minore (stessa armatura del relativo maggiore)' : 'Modo maggiore'}
+                        className={`${bottone} ${attivo} px-1.5`}
+                    >
+                        {tonalitaMinore ? 'min' : 'Mag'}
+                    </button>
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'key-sig', data: { root: tonalita, isMinor: tonalitaMinore }, label: tonalita + (tonalitaMinore ? 'm' : '') }, e)}
+                        title={`Cambio d'armatura in ${tonalita}${tonalitaMinore ? ' minore' : ' maggiore'}: trascinalo sulla misura da cui vale. Da lì cambia anche la lettura dell'analisi.`}
+                        className={`${bottone} ${attivo} px-1.5`}
+                        style={{ fontFamily: 'serif' }}
+                    >
+                        ♯♭
+                    </button>
+                </div>
+                <button
+                    onClick={onRemoveKeySignatureAtPlayhead}
+                    title="Toglie il cambio d'armatura nella misura dov'è il cursore"
+                    className={`${bottone} ${attivo} w-full mt-1`}
+                >
+                    Togli il cambio d'armatura
+                </button>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Tempo</div>
                 <div className="grid grid-cols-2 gap-1">

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation, Curve, TextBracket } from 'vexflow';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation, Curve, TextBracket, KeySignature as VFKeySignature } from 'vexflow';
 import { ARTICULATION_VF_CODE } from '../utils/articulations';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
@@ -41,6 +41,9 @@ interface VexflowGrandStaffProps {
   octaveShifts?: Array<{ id: string; fromNoteId: string; toNoteId: string; direction: 'up' | 'down' }>;
   /** Tasto destro sulla parentesi dell'8va. */
   onOctaveRightClick?: (octaveId: string, e: MouseEvent) => boolean | void;
+  /** CAMBI D'ARMATURA da disegnare in questo sistema: la nuova armatura e quella da
+   *  annullare coi bequadri, alla x d'inizio della battuta in cui entrano in vigore. */
+  keySignatureChanges?: Array<{ x: number; nuova: string; daAnnullare: string; measureIndex: number }>;
   /** DOVE cadono davvero i capi delle legature disegnate in questo sistema. Le maniglie
    *  si mettono lì: appese alla testa della nota finivano lontanissime dalla curva ogni
    *  volta che il gambo era lungo. */
@@ -618,6 +621,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   octaveShifts,
   onOctaveRightClick,
   onSlurAnchors,
+  keySignatureChanges,
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
@@ -821,7 +825,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Le legature stanno in un elenco a parte: senza metterle nella firma, una
         // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo
         // al primo tocco successivo alla partitura.
-        slurs ?? null, octaveShifts ?? null,
+        slurs ?? null, octaveShifts ?? null, keySignatureChanges ?? null,
       ]);
     } catch {
       // Serialization failed → force a redraw (safe: never UNDER-draws).
@@ -1150,6 +1154,41 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }));
       onDrumStavesLayout(info);
     }
+
+    // ── CAMBI D'ARMATURA a metà brano ──
+    // Stessa impalcatura dei cambi di metro qui sotto: un segno disegnato alla x
+    // d'inizio della battuta, su tutti i righi. L'armatura precedente si annulla coi
+    // bequadri (`cancelKeySpec`): senza, passando da tre diesis a nessuno il rigo
+    // resterebbe muto e chi legge continuerebbe a mettere i diesis di prima.
+    try {
+      const disegnaArmatura = (stave: Stave | null, x: number, nuova: string, daAnnullare: string) => {
+        if (!stave) return;
+        const ks = new VFKeySignature(nuova, daAnnullare);
+        ks.setStave(stave);
+        ks.setContext(context as any);
+        ks.setX(x);
+        (ks as any).draw();
+      };
+      (keySignatureChanges || []).forEach(ch => {
+        const x = Number(ch?.x);
+        if (!Number.isFinite(x) || !ch?.nuova) return;
+        if (staffMode === 'satb_ancient') {
+          disegnaArmatura(satbSoprano, x, ch.nuova, ch.daAnnullare);
+          disegnaArmatura(satbAlto, x, ch.nuova, ch.daAnnullare);
+          disegnaArmatura(satbTenor, x, ch.nuova, ch.daAnnullare);
+          disegnaArmatura(satbBass, x, ch.nuova, ch.daAnnullare);
+        } else {
+          disegnaArmatura(treble, x, ch.nuova, ch.daAnnullare);
+          disegnaArmatura(bass, x, ch.nuova, ch.daAnnullare);
+        }
+        // Le tracce d'accompagnamento seguono il brano, la batteria no (non ha armatura).
+        for (const block of accBlocks) {
+          if (block.isDrum) continue;
+          disegnaArmatura(block.treble, x, ch.nuova, ch.daAnnullare);
+          if (block.bass) disegnaArmatura(block.bass, x, ch.nuova, ch.daAnnullare);
+        }
+      });
+    } catch { /* un'armatura che non si disegna non deve fermare il resto */ }
 
     // Time signature changes (draw with VexFlow glyphs to match staff style)
     try {

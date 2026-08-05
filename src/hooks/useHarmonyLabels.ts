@@ -6,7 +6,8 @@
  * sequence markers, modulation markers, and time-signature markers.
  */
 import { useMemo } from 'react';
-import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack } from '../types';
+import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack, KeySignatureChange } from '../types';
+import { normalizeKeyChanges, keyChangeAtMeasure } from '../utils/keySignatureChanges';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol, bassScaleDegreeRoman, isEnharmonicSpellingMismatch } from '../utils/musicTheory';
 import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
@@ -66,6 +67,9 @@ export interface UseHarmonyLabelsParams {
     layoutData: any;
     timeSignature: TimeSignature;
     timeSignatureChanges: TimeSignatureChange[];
+    /** Cambi d'armatura a metà brano + armatura d'impianto: servono a piazzarli sul rigo. */
+    keySignatureChanges?: KeySignatureChange[];
+    keySignatureRoot?: string;
     analysisContexts: AnalysisContext[];
     harmonyOverrides: any[];
     currentTonic: string;
@@ -127,6 +131,7 @@ function getAccompanimentPcsForBeat(
 export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
     const {
         layoutData, timeSignature, timeSignatureChanges,
+        keySignatureChanges, keySignatureRoot,
         analysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes,
@@ -5772,6 +5777,36 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         return markersBySystem;
     }, [layoutData, timeSignature, timeSignatureChangeAbsBeat, timeSignatureChanges]);
 
+    /**
+     * CAMBI D'ARMATURA da disegnare, sistema per sistema. Stessa impalcatura dei cambi
+     * di metro qui sopra: si trova la x d'inizio della battuta in cui il cambio entra in
+     * vigore. Ogni cambio porta anche l'armatura DA ANNULLARE, che è quella in vigore
+     * fino a lì — i bequadri che tolgono i diesis o i bemolli di prima.
+     */
+    const keySignatureMarkersBySystem = useMemo(() => {
+        const vuoto = [] as Array<Array<{ x: number; nuova: string; daAnnullare: string; measureIndex: number }>>;
+        if (!layoutData || !(keySignatureChanges || []).length) return vuoto;
+        const base = { root: String(keySignatureRoot || 'C'), isMinor: !!isMinorMode };
+        const markersBySystem = layoutData.systemsParams.map(() => [] as Array<{ x: number; nuova: string; daAnnullare: string; measureIndex: number }>);
+        for (const ch of normalizeKeyChanges(keySignatureChanges)) {
+            const cambio = keyChangeAtMeasure(base, keySignatureChanges, ch.measureIndex);
+            if (!cambio) continue; // un cambio verso la stessa armatura non si disegna
+            const sysIndex = layoutData.systemsParams.findIndex((sp: any) => (sp.measureIndices || []).includes(ch.measureIndex));
+            if (sysIndex < 0) continue;
+            const system = layoutData.systemsParams[sysIndex];
+            const idx = system.measureIndices.indexOf(ch.measureIndex);
+            if (idx === -1) continue;
+            markersBySystem[sysIndex].push({
+                x: system.startMeasuresX[idx] + 6,
+                nuova: cambio.nuova,
+                daAnnullare: cambio.daAnnullare,
+                measureIndex: ch.measureIndex,
+            });
+        }
+        markersBySystem.forEach((ms: any[]) => ms.sort((a, b) => a.x - b.x));
+        return markersBySystem;
+    }, [layoutData, keySignatureChanges, keySignatureRoot, isMinorMode]);
+
 
     // ── Trasformazioni MELODICHE (idea "simmetria"): T/I/R/RI, dentro-voce e
     // cross-voce, tonale+reale. Banda sotto il MODELLO + bracket con etichetta
@@ -5892,6 +5927,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         sequenceModelMarkersBySystem,
         contextMarkersBySystem,
         timeSignatureMarkersBySystem,
+        keySignatureMarkersBySystem,
         sequenceMatches,
         motifNoteStyles: motifData.styleById,
         motifBracketsBySystem,

@@ -152,6 +152,25 @@ export interface Slur {
 }
 
 /**
+ * CAMBIO D'ARMATURA a metà brano (Do maggiore → Re maggiore alla battuta 9).
+ *
+ * Vale dall'inizio della battuta indicata in poi, e vale per TUTTO il brano — coro e
+ * tracce insieme — come il metro: l'armatura è del pezzo, non del rigo.
+ *
+ * NON muove le note: cambia l'armatura disegnata e quindi quali alterazioni vengono
+ * stampate. Per trasportare davvero un passaggio c'è il trasporto, che è un'altra cosa
+ * e si vede.
+ *
+ * `root` segue la convenzione del brano: è la fondamentale MAGGIORE relativa (un Re
+ * minore si scrive root 'F' + isMinor), perché l'armatura è la stessa.
+ */
+export interface KeySignatureChange {
+  measureIndex: number;
+  root: string;
+  isMinor?: boolean;
+}
+
+/**
  * SEGNO D'OTTAVA (8va sopra / 8vb sotto).
  *
  * Serve ai passaggi che avrebbero troppi tagli addizionali: si scrivono un'ottava più
