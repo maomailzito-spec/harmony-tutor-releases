@@ -11226,7 +11226,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 measureIndex: Number(hit.measureIndex),
                 beforeTick: Number(insertedStartTick),
                 clef: targetClef,
-                keySignature,
+                // L'armatura di QUESTA misura: il riporto ricalcola l'altezza partendo
+                // dall'alterazione che la lettera ha in armatura, e con quella d'inizio
+                // riportava a naturale il La bemolle appena ricavato. È il passaggio che
+                // rimetteva i bequadri dopo il cambio di tonalità.
+                keySignature: keySignatureAtMeasureRef.current(Number(hit.measureIndex)),
                 timeSignature,
                 ticksPerQuarter: TICKS_PER_QUARTER,
                 clefForVoice,
@@ -11805,7 +11809,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 measureIndex: Number(n.measureIndex),
                 beforeTick: Number((n as any).startTick ?? 0),
                 clef,
-                keySignature,
+                keySignature: keySignatureAtMeasureRef.current(Number(n.measureIndex ?? 0)),
                 timeSignature,
                 ticksPerQuarter: TICKS_PER_QUARTER,
                 clefForVoice,
