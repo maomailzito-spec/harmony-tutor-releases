@@ -8286,7 +8286,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const velArtAcc = (velDinAcc != null && Number.isFinite(velDinAcc))
                             ? Math.max(1, Math.min(127, Math.round(velDinAcc + artAcc.velocityDelta)))
                             : velDinAcc;
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec * artAcc.durationFactor, volume: velocityToGain(velDinAcc) * artAcc.gainFactor, output: drumOut, sustain: true, velocity: velArtAcc, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc, bank: isDrum ? 'orchestral' : (((track as any).soundBank) ?? 'orchestral') });
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec * artAcc.durationFactor, volume: velocityToGain(velDinAcc) * artAcc.gainFactor, ...(artAcc.releaseSec != null ? { releaseSec: artAcc.releaseSec } : {}), output: drumOut, sustain: true, velocity: velArtAcc, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc, bank: isDrum ? 'orchestral' : (((track as any).soundBank) ?? 'orchestral') });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -8338,7 +8338,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const velArt = (velDin != null && Number.isFinite(velDin))
                         ? Math.max(1, Math.min(127, Math.round(velDin + art.velocityDelta)))
                         : velDin;
-                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec * art.durationFactor, volume: velocityToGain(velDin) * art.gainFactor, volumeEnd: velDinFine != null ? velocityToGain(velDinFine) * art.gainFactor : undefined, output: voiceGain, sustain: true, velocity: velArt, slotSec: slotSecV, bank: voiceSoundBanksRef.current[v] ?? 'orchestral' });
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec * art.durationFactor, volume: velocityToGain(velDin) * art.gainFactor, ...(art.releaseSec != null ? { releaseSec: art.releaseSec } : {}), volumeEnd: velDinFine != null ? velocityToGain(velDinFine) * art.gainFactor : undefined, output: voiceGain, sustain: true, velocity: velArt, slotSec: slotSecV, bank: voiceSoundBanksRef.current[v] ?? 'orchestral' });
                 });
             }
 

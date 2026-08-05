@@ -518,7 +518,7 @@ export class AudioService {
     return { buffer: this.audioBuffers.get(key), layered: false };
   }
 
-  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean, slotSec?: number, bank?: 'orchestral' | 'gm', volumeEnd?: number }) {
+  public async playNoteForInstrument(instrument: string, audioFile: string, options?: { duration?: number, when?: number, volume?: number, output?: AudioNode, sustain?: boolean, velocity?: number, applyDrumPieceGain?: boolean, slotSec?: number, bank?: 'orchestral' | 'gm', volumeEnd?: number, releaseSec?: number }) {
     // Rete di sicurezza: se il contesto si è addormentato lo si risveglia PRIMA di
     // suonare, invece di produrre silenzio. Il controllo costa nulla quando è già sveglio.
     if (this.audioContext && this.audioContext.state !== 'running') { try { await this.ensureAudioIsReady(); } catch { /* ignore */ } }
@@ -571,6 +571,12 @@ export class AudioService {
     // è polifonia voluta. Gli strumenti che decadono (piano, pizz, mallet, batteria) non
     // sono SUSTAINED → coda naturale invariata.
     let releaseDurationInSeconds = instrumentRelease(instrument);
+    // Coda IMPOSTA dal chiamante (staccato e simili): può solo ACCORCIARE quella dello
+    // strumento, mai allungarla. Senza questo, accorciare la nota non bastava: la coda
+    // di mezzo secondo riempiva il silenzio che lo staccato deve lasciare.
+    if (options?.releaseSec != null && Number.isFinite(options.releaseSec)) {
+      releaseDurationInSeconds = Math.max(0.03, Math.min(releaseDurationInSeconds, options.releaseSec));
+    }
     if (!forceGm && SUSTAINED[instrument] && options?.slotSec != null) {
       const maxRelease = options.slotSec - noteDurationInSeconds;
       if (maxRelease >= 0) {

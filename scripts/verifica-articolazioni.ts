@@ -26,6 +26,12 @@ const acc = articulationPlayback(['accent']);
 ok(acc.gainFactor > 1 && acc.durationFactor === 1, `l'accento rinforza (×${acc.gainFactor}) senza accorciare`);
 ok(acc.velocityDelta > 0, "l'accento alza anche la velocity, per lo strato di campione più brillante");
 
+ok(stac.releaseSec != null && stac.releaseSec < 0.2,
+   `lo staccato accorcia anche la CODA (${stac.releaseSec}s invece del mezzo secondo di serie): senza, la nota corta veniva riempita dalla coda e non si sentiva`);
+ok(articulationPlayback(['accent']).releaseSec == null, "l'accento non tocca la coda: è un colpo, non uno stacco");
+ok(articulationPlayback(['staccato', 'marcato']).releaseSec === articulationPlayback(['staccato']).releaseSec,
+   'fra due code vince la più corta');
+
 const ten = articulationPlayback(['tenuto']);
 ok(ten.durationFactor === 1 && ten.gainFactor === 1, 'il tenuto non tocca il suono (la durata piena è già la norma)');
 

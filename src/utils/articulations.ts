@@ -46,11 +46,14 @@ export const ARTICULATION_UI: Record<ArticulationMark, { simbolo: string; nome: 
  * come segno scritto, e diventerà udibile il giorno in cui le note avranno un distacco
  * di serie fra l'una e l'altra.
  */
-const EFFETTO: Record<ArticulationMark, { durationFactor: number; gainFactor: number; velocityDelta: number }> = {
-    staccato: { durationFactor: 0.50, gainFactor: 1.00, velocityDelta: 0 },
-    staccatissimo: { durationFactor: 0.35, gainFactor: 1.00, velocityDelta: 0 },
+const EFFETTO: Record<ArticulationMark, { durationFactor: number; gainFactor: number; velocityDelta: number; releaseSec?: number }> = {
+    // `releaseSec` = quanto può durare la CODA. Senza, accorciare la tenuta non bastava:
+    // la coda di serie è mezzo secondo, cioè quasi quanto una semiminima, e si mangiava
+    // il silenzio che deve venire dopo. Uno staccato è nota corta E stacco netto.
+    staccato: { durationFactor: 0.50, gainFactor: 1.00, velocityDelta: 0, releaseSec: 0.10 },
+    staccatissimo: { durationFactor: 0.30, gainFactor: 1.00, velocityDelta: 0, releaseSec: 0.06 },
     accent: { durationFactor: 1.00, gainFactor: 1.30, velocityDelta: 18 },
-    marcato: { durationFactor: 0.80, gainFactor: 1.45, velocityDelta: 26 },
+    marcato: { durationFactor: 0.75, gainFactor: 1.45, velocityDelta: 26, releaseSec: 0.16 },
     tenuto: { durationFactor: 1.00, gainFactor: 1.00, velocityDelta: 0 },
 };
 
@@ -58,6 +61,8 @@ export interface ArticulationPlayback {
     durationFactor: number;
     gainFactor: number;
     velocityDelta: number;
+    /** Tetto alla coda del suono, in secondi (assente = quella normale dello strumento). */
+    releaseSec?: number;
 }
 
 const NESSUNO: ArticulationPlayback = { durationFactor: 1, gainFactor: 1, velocityDelta: 0 };
@@ -66,9 +71,12 @@ const NESSUNO: ArticulationPlayback = { durationFactor: 1, gainFactor: 1, veloci
 export function articulationPlayback(marks: ArticulationMark[] | undefined): ArticulationPlayback {
     if (!marks || marks.length === 0) return NESSUNO;
     let durationFactor = 1, gainFactor = 1, velocityDelta = 0;
+    let releaseSec: number | undefined;
     for (const m of marks) {
         const e = EFFETTO[m];
         if (!e) continue;
+        // Fra due code vince la più corta: staccato + marcato stacca come lo staccato.
+        if (e.releaseSec != null) releaseSec = Math.min(releaseSec ?? Infinity, e.releaseSec);
         // Le durate si moltiplicano (staccatissimo + marcato accorcia due volte), il
         // rinforzo NON si somma: si tiene il più forte, altrimenti due segni insieme
         // sfondavano il livello.
@@ -76,5 +84,5 @@ export function articulationPlayback(marks: ArticulationMark[] | undefined): Art
         gainFactor = Math.max(gainFactor, e.gainFactor);
         velocityDelta = Math.max(velocityDelta, e.velocityDelta);
     }
-    return { durationFactor: Math.max(0.05, durationFactor), gainFactor, velocityDelta };
+    return { durationFactor: Math.max(0.05, durationFactor), gainFactor, velocityDelta, ...(releaseSec != null ? { releaseSec } : {}) };
 }
