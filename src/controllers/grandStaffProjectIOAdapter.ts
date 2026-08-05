@@ -47,6 +47,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         repeatBarlines: Record<number, string>;
         voltaBrackets: any[];
         dynamics?: any[];
+        slurs?: any[];
         toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
@@ -133,6 +134,8 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		tempoCurves: args.tempoCurves || [],
 		// Dinamiche: salvate sempre, anche vuote, per un round-trip pulito.
 		dynamics: args.dynamics || [],
+		// Legature di portamento: idem.
+		slurs: args.slurs || [],
 		harmonyOverrides: args.latestHarmonyOverrides.current,
 		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
 		// Override manuali dell'analisi ACC — solo se presenti, per file leggeri.
@@ -226,6 +229,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setRepeatBarlines: (next: any) => void;
 	setVoltaBrackets: (next: any) => void;
 	setDynamics?: (next: any) => void;
+	setSlurs?: (next: any) => void;
 	setTempoCurves?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
@@ -599,6 +603,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			// Dinamiche: come sopra — ripristina o azzera, così un file vecchio non
 			// eredita i segni della sessione precedente.
 			args.setDynamics?.(Array.isArray((loadedProject as any).dynamics) ? (loadedProject as any).dynamics : []);
+			args.setSlurs?.(Array.isArray((loadedProject as any).slurs) ? (loadedProject as any).slurs : []);
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
 			}

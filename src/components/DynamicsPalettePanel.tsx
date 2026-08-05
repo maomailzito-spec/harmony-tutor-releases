@@ -26,6 +26,9 @@ interface DynamicsPalettePanelProps {
      *  (e trascinandole si posano su quella sotto il puntatore). Rimettere lo stesso
      *  segno lo toglie. */
     onPlaceArticulation: (a: ArticulationMark) => void;
+    /** Legatura di portamento: fra le due note selezionate (o trascinata su una nota,
+     *  e allora arriva alla successiva). Rifarla sulla stessa coppia la toglie. */
+    onPlaceSlur: () => void;
     onRemoveAtSelection: () => void;
     onClose: () => void;
     /** Battute: comandi che non sono "segni da posare" ma azioni su una misura. */
@@ -44,7 +47,7 @@ const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff']
 
 const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     selectionCount, hasMarkAtSelection,
-    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
+    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
     const [pos, setPos] = useState<{ x: number; y: number }>({ x: 200, y: 120 });
     // Valori del metro da posare: partono da quello del brano e si regolano qui,
@@ -179,6 +182,19 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                             {ARTICULATION_UI[a].simbolo}
                         </button>
                     ))}
+                </div>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Legature</div>
+                <div className="grid grid-cols-4 gap-1">
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'slur', label: '⌒' }, e)}
+                        onClick={() => { if (selectionCount >= 2) onPlaceSlur(); }}
+                        title="Legatura di portamento: seleziona due note e clicca, oppure trascinala su una nota (arriva alla successiva). Tasto destro sulla curva per toglierla."
+                        className={`${bottone} ${attivo} px-1`}
+                        style={{ fontFamily: 'serif', lineHeight: 1 }}
+                    >
+                        ⌒
+                    </button>
                 </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Tempo</div>

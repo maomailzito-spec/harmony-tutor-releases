@@ -139,6 +139,18 @@ export type NoteDuration = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth'
 export type ClefType = 'treble' | 'bass' | 'soprano' | 'alto' | 'tenor';
 export type Voice = 1 | 2 | 3 | 4;
 
+/**
+ * LEGATURA DI PORTAMENTO (slur) — l'unico segno di questo gruppo che non sta SU una
+ * nota ma FRA due: si tiene quindi in un elenco del brano, ancorato agli id dei due
+ * capi, come le curve di tempo. Non va confusa con la legatura di VALORE
+ * (`isTiedToNext`), che unisce due suoni uguali in uno solo.
+ */
+export interface Slur {
+  id: string;
+  fromNoteId: string;
+  toNoteId: string;
+}
+
 /** Articolazioni che si posano su una nota. L'ordine è quello della tavolozza. */
 export type ArticulationMark = 'staccato' | 'staccatissimo' | 'accent' | 'marcato' | 'tenuto';
 

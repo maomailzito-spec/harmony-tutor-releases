@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation } from 'vexflow';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation, Curve } from 'vexflow';
 import { ARTICULATION_VF_CODE } from '../utils/articulations';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
@@ -33,6 +33,10 @@ interface VexflowGrandStaffProps {
    *  (`false`) e il clic prosegue verso il menù del rigo: senza, ogni nota sarebbe
    *  diventata una zona morta per i menù che ci stavano già. */
   onNoteRightClick?: (noteId: string, e: MouseEvent) => boolean | void;
+  /** Legature di portamento del brano (capi = id di due note). */
+  slurs?: Array<{ id: string; fromNoteId: string; toNoteId: string }>;
+  /** Tasto destro sulla curva di una legatura. */
+  onSlurRightClick?: (slurId: string, e: MouseEvent) => boolean | void;
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
@@ -601,6 +605,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onStaffMouseDown,
   onBarlineRightClick,
   onNoteRightClick,
+  slurs,
+  onSlurRightClick,
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
@@ -735,6 +741,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   useEffect(() => { onBarlineRightClickRef.current = onBarlineRightClick; }, [onBarlineRightClick]);
   const onNoteRightClickRef = useRef<typeof onNoteRightClick>(onNoteRightClick);
   useEffect(() => { onNoteRightClickRef.current = onNoteRightClick; }, [onNoteRightClick]);
+  const onSlurRightClickRef = useRef<typeof onSlurRightClick>(onSlurRightClick);
+  useEffect(() => { onSlurRightClickRef.current = onSlurRightClick; }, [onSlurRightClick]);
 
   const barlinesRef = useRef<Barline[]>(barlines);
   useEffect(() => { barlinesRef.current = barlines; }, [barlines]);
@@ -797,6 +805,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         timeSignature, timeSignatureChanges ?? null, keySignature, barlines ?? null,
         width, height, staffMode, engravingMode, showVoiceColors,
         showAccompanimentStaves, accompanimentStaffMode, satbName,
+        // Le legature stanno in un elenco a parte: senza metterle nella firma, una
+        // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo
+        // al primo tocco successivo alla partitura.
+        slurs ?? null,
       ]);
     } catch {
       // Serialization failed → force a redraw (safe: never UNDER-draws).
@@ -1284,6 +1296,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const satbBassNotes = staffMode === 'satb_ancient' ? allNotes.filter(n => n.clef === 'bass') : [];
 
       const hitPoints: Array<{ id: string; x: number; y: number; isGhost: boolean }> = [];
+      // Nota disegnata per ogni id, raccolta mentre si disegnano TUTTI i righi (coro e
+      // tracce): le legature di portamento possono unire note di righi diversi, quindi
+      // vanno disegnate dopo, quando si sa dove sono finite tutte.
+      const vfPerId = new Map<string, StaveNote>();
 
       const drawNotesAtX = (
         staffNotes: StaffNote[],
@@ -3281,6 +3297,17 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
         flush();
 
+        // Chi è la nota disegnata di ciascun id (accordi unificati compresi: i loro
+        // membri condividono la stessa testa).
+        for (const p of prepared) {
+          if (p.staffNote.id === '__ghost__') continue;
+          if (!vfPerId.has(p.staffNote.id)) vfPerId.set(p.staffNote.id, p.vfNote);
+          const uniti: string[] | undefined = (p.vfNote as any).__mergedIds;
+          if (Array.isArray(uniti)) {
+            for (const mid of uniti) if (!vfPerId.has(String(mid))) vfPerId.set(String(mid), p.vfNote);
+          }
+        }
+
         // Draw notes (noteheads, ledger lines, etc.). Beamed notes will not draw stems/flags.
         const drawn = new Set<StaveNote>();
         for (const p of prepared.filter(p => p.isPrimaryRender)) {
@@ -3934,6 +3961,51 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // ACC hit-points are preserved to enable click and marquee selection.
       }
 
+      // ── LEGATURE DI PORTAMENTO ──
+      // Si disegnano per ultime, quando ogni rigo ha già messo le sue note: una legatura
+      // può unire due note di righi diversi, e prima di qui non si saprebbe dove sono.
+      // Quando un solo capo sta in questo sistema, VexFlow disegna la MEZZA curva fino
+      // al bordo del rigo: è così che una legatura sopravvive all'a capo.
+      try {
+        for (const sl of (slurs || [])) {
+          const da = vfPerId.get(sl.fromNoteId) || null;
+          const a = vfPerId.get(sl.toNoteId) || null;
+          if (!da && !a) continue; // nessuno dei due capi è in questo sistema
+          const g = (context as any).openGroup?.() as SVGGElement | undefined;
+          try {
+            if (g) {
+              g.setAttribute('data-slur-id', sl.id);
+              (g.style as any).pointerEvents = 'stroke';
+            }
+          } catch { /* ignore */ }
+          try {
+            const curva = new Curve(da as any, a as any, { thickness: 2, y_shift: 8 });
+            curva.setContext(context as any);
+            curva.draw();
+            // Zona di presa più larga del tratto, come per le legature di valore:
+            // due pixel di curva sono impossibili da centrare col tasto destro.
+            if (g) {
+              for (const path of Array.from(g.querySelectorAll('path')) as SVGPathElement[]) {
+                path.setAttribute('data-slur-id', sl.id);
+                (path.style as any).pointerEvents = 'stroke';
+                const d = path.getAttribute('d');
+                if (!d) continue;
+                const presa = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                presa.setAttribute('d', d);
+                presa.setAttribute('fill', 'none');
+                presa.setAttribute('stroke', 'transparent');
+                presa.setAttribute('stroke-width', '12');
+                presa.setAttribute('stroke-linecap', 'round');
+                presa.setAttribute('data-slur-id', sl.id);
+                (presa.style as any).pointerEvents = 'stroke';
+                g.insertBefore(presa, path);
+              }
+            }
+          } catch { /* una legatura che non si disegna non deve fermare il resto */ }
+          try { (context as any).closeGroup?.(); } catch { /* ignore */ }
+        }
+      } catch { /* ignore */ }
+
       noteHitPointsRef.current = hitPoints;
       onNoteHitPoints?.(hitPoints);
 
@@ -3986,6 +4058,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const staffCb = onStaffRightClickRef.current;
       const bars = barlinesRef.current;
       const { x, y } = clientToSvgCoords(svg, e);
+
+      // ── Tasto destro sulla CURVA di una legatura ──
+      // Prima della nota: qui il bersaglio è colpito in pieno (il tratto porta il suo
+      // id), mentre la nota si prende anche per vicinanza e ruberebbe il gesto.
+      const slurCb = onSlurRightClickRef.current;
+      if (slurCb && e.target instanceof Element) {
+        const suCurva = e.target.closest('[data-slur-id]') as Element | null;
+        const idCurva = suCurva?.getAttribute('data-slur-id');
+        if (idCurva) {
+          const gestito = slurCb(idCurva, e);
+          if (gestito !== false) { e.stopPropagation(); return; }
+        }
+      }
 
       // ── Tasto destro su una NOTA: si toglie ciò che le è attaccato ──
       // Prima l'elemento sotto il puntatore (il glifo dell'articolazione fa parte del

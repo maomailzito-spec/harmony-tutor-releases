@@ -1,7 +1,7 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
-import type { ArticulationMark } from '../../types';
+import type { ArticulationMark, Slur } from '../../types';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -34,6 +34,10 @@ export type MusicXMLImportResult = {
   projectTitle?: string;
   /** Le parti del file tenute separate (vedi MusicXMLPart). Stesso ordine del file. */
   parts: MusicXMLPart[];
+  /** LEGATURE DI PORTAMENTO lette dal file, con i capi già risolti sugli id delle note
+   *  importate. I due capi arrivano separati (`<slur type="start">` … `type="stop">`) e
+   *  spesso a battute di distanza: si appaiano per `number`. */
+  slurs: Slur[];
   /** SEGNI DI DINAMICA letti dal file (pp…ff, sf, fp, forcelle), pronti da disegnare e
    *  da modificare. Prima le dinamiche entravano SOLO come velocity delle note: il
    *  volume era giusto ma sulla carta non c'era niente, e le forcelle si perdevano del
@@ -209,6 +213,19 @@ const XML_ARTICULATION: Record<string, ArticulationMark> = {
   'strong-accent': 'marcato',
   tenuto: 'tenuto',
 };
+
+/** Capi di legatura dichiarati da una <note>: [{tipo, numero}]. */
+export function readNoteSlurEnds(noteEl: Element): Array<{ tipo: 'start' | 'stop'; numero: string }> {
+  const out: Array<{ tipo: 'start' | 'stop'; numero: string }> = [];
+  try {
+    for (const sl of Array.from(noteEl.querySelectorAll('notations > slur'))) {
+      const tipo = String(sl.getAttribute('type') || '').toLowerCase();
+      if (tipo !== 'start' && tipo !== 'stop') continue; // 'continue' non apre né chiude
+      out.push({ tipo, numero: String(sl.getAttribute('number') || '1') });
+    }
+  } catch { /* nota senza notations */ }
+  return out;
+}
 
 /** Articolazioni di una <note>, dal suo <notations><articulations>.
  *  (Esportata per il banco di prova, come `readDynamicSigns`.) */
@@ -439,6 +456,8 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   // identici su ognuna); qui valgono per tutti, quindi si raccolgono una volta sola.
   const dynamics: DynamicMark[] = [];
   const dynSeen = new Set<string>();
+  // Legature: i capi arrivano separati e vanno appaiati per numero, dentro la parte.
+  const slurs: Slur[] = [];
 
   for (let partIndex = 0; partIndex < partsToParse.length; partIndex++) {
     const part = partsToParse[partIndex];
@@ -459,6 +478,8 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
     // Segni grafici di questa parte, e le forcelle ancora aperte in attesa del loro stop.
     const partDynamics: DynamicMark[] = [];
+    // Legature aperte in questa parte, in attesa del loro `stop` (chiave = number).
+    const legatureAperte = new Map<string, string>();
     const openWedges = new Map<string, { from: number; direction: 'cresc' | 'dim' }>();
     let finePartAbsBeat = 0;
 
@@ -739,6 +760,22 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           })(),
         };
 
+        // Capi di legatura: `start` mette in attesa l'id di questa nota, `stop` la chiude
+        // sulla nota corrente. Il numero tiene distinte le legature sovrapposte.
+        if (!isRest) {
+          for (const capo of readNoteSlurEnds(noteEl)) {
+            if (capo.tipo === 'start') {
+              legatureAperte.set(capo.numero, staffNote.id);
+            } else {
+              const daId = legatureAperte.get(capo.numero);
+              legatureAperte.delete(capo.numero);
+              if (daId && daId !== staffNote.id) {
+                slurs.push({ id: makeId(), fromNoteId: daId, toNoteId: staffNote.id });
+              }
+            }
+          }
+        }
+
         if (partIndex < MAX_SATB_PARTS) notes.push(staffNote);
 
         // Copia per la parte: stessa nota, ma numerata sulle voci del SUO rigo.
@@ -818,6 +855,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     staffSystemMode,
     projectTitle: title || undefined,
     parts: partsOut,
+    slurs,
     dynamics: dynamics.sort((a, b) => {
       const aa = a.kind === 'hairpin' ? a.fromAbsBeat : a.absBeat;
       const bb = b.kind === 'hairpin' ? b.fromAbsBeat : b.absBeat;

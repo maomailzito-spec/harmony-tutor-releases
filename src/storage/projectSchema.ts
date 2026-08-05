@@ -28,6 +28,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'toolbarGroupOrder',
   'tempoCurves',
   'dynamics',
+  'slurs',
   'analysisLocked',
   'teacherPasswordHash',
   'analysisLockOptions',
@@ -88,6 +89,7 @@ export type ProjectDataV1 = {
   tempoCurves?: any[];
   /** Segni di dinamica (pp…ff, sf, fp, forcelle): valgono per tutte le voci. */
   dynamics?: any[];
+  slurs?: any[];
 
   analysisLocked?: boolean;
   teacherPasswordHash?: string;

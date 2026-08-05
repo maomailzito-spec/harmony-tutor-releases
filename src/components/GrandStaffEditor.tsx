@@ -33,7 +33,7 @@ import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } from '../utils/dynamics';
 import { articulationPlayback } from '../utils/articulations';
-import type { ArticulationMark } from '../types';
+import type { ArticulationMark, Slur } from '../types';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -1474,6 +1474,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Segni di dinamica (pp…ff, sf, fp, forcelle). Valgono per TUTTE le voci e sono
     // ancorati a un punto nel tempo (absBeat), come gli override d'armonia.
     const [dynamics, setDynamics] = useState<DynamicMark[]>([]);
+    // Legature di PORTAMENTO: elenco del brano ancorato agli id di due note (la
+    // legatura di VALORE, che unisce due suoni uguali, resta un campo della nota).
+    const [slurs, setSlurs] = useState<Slur[]>([]);
+    const slursRef = useRef(slurs);
+    slursRef.current = slurs;
     const dynamicsRef = useRef(dynamics);
     dynamicsRef.current = dynamics;
 
@@ -4822,6 +4827,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     voltaBrackets,
                     tempoCurves,
                     dynamics,
+                    slurs,
                     toolbarGroupOrder,
                     bpm,
                     isBpmActive,
@@ -4878,6 +4884,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setVoltaBrackets,
                     setTempoCurves,
                     setDynamics,
+                    setSlurs,
                     setKeyChangeMode,
                     setModalTonicOverride,
                     setAutoLeadingToneInMinor,
@@ -5077,6 +5084,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // riga un brano importato si sarebbe portato dietro le forcelle di quello
                 // di prima, in punti che con la musica nuova non c'entrano niente.
                 setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
+                setSlurs(Array.isArray(imported?.slurs) ? imported.slurs : []);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setPasteCaretImmediate(null);
@@ -5146,7 +5154,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, tempoCurves, dynamics, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, dynamics, slurs, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -6672,6 +6680,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // Dinamiche: <dynamics> e <wedge> nel MusicXML. Valgono per tutto il
                 // brano, quindi ogni parte se le porta.
                 dynamics: dynamicsRef.current || [],
+                slurs: slursRef.current || [],
                 satbName,
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.
@@ -12034,6 +12043,68 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     applicaArticolazioneRef.current = applicaArticolazione;
 
     /**
+     * Lega DUE note con una legatura di portamento. I capi si danno per id; se non si
+     * danno, si prendono la prima e l'ultima nota selezionata in ordine di tempo — lo
+     * stesso gesto delle forcelle, che pure vanno da un punto a un altro.
+     *
+     * Una legatura per coppia: rifarla sulla stessa coppia la toglie, come per le
+     * articolazioni.
+     */
+    const legaNote = useCallback((daId?: string, aId?: string) => {
+        const tutte = [
+            ...(latestRawNotes.current || []),
+            ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+        ].filter(n => n && !n.isRest);
+        let da = daId, a = aId;
+        if (!da || !a) {
+            const scelte = tutte
+                .filter(n => selectedNoteIds.has(n.id))
+                .map(n => ({ id: n.id, t: Number((n as any).startTick ?? 0) }))
+                .sort((x, y) => x.t - y.t);
+            if (scelte.length < 2) return;
+            da = scelte[0].id;
+            a = scelte[scelte.length - 1].id;
+        }
+        if (!da || !a || da === a) return;
+        setSlurs(prev => {
+            const esistenti = prev || [];
+            const uguale = (s: Slur) => (s.fromNoteId === da && s.toNoteId === a) || (s.fromNoteId === a && s.toNoteId === da);
+            if (esistenti.some(uguale)) return esistenti.filter(s => !uguale(s));
+            return [...esistenti, { id: crypto.randomUUID(), fromNoteId: da!, toNoteId: a! }];
+        });
+    }, [selectedNoteIds]);
+    const legaNoteRef = useRef(legaNote);
+    legaNoteRef.current = legaNote;
+
+    /** Tasto destro sulla curva: la legatura si toglie. */
+    const togliLegatura = useCallback((slurId: string): boolean => {
+        let trovata = false;
+        setSlurs(prev => {
+            const dopo = (prev || []).filter(s => {
+                if (s.id !== slurId) return true;
+                trovata = true;
+                return false;
+            });
+            return trovata ? dopo : (prev || []);
+        });
+        return true;
+    }, []);
+
+    /**
+     * Legature rimaste senza uno dei due capi (nota cancellata, import che sostituisce
+     * il brano): si tolgono da sé. Senza, resterebbe una mezza curva appesa al bordo
+     * del rigo, disegnata da un capo che non esiste più.
+     */
+    useEffect(() => {
+        if (slurs.length === 0) return;
+        const vive = new Set<string>();
+        for (const n of (rawNotes || [])) if (n?.id) vive.add(n.id);
+        for (const t of (accompanimentTracks || [])) for (const n of (t.notes || [])) if (n?.id) vive.add(n.id);
+        const buone = slurs.filter(s => vive.has(s.fromNoteId) && vive.has(s.toNoteId));
+        if (buone.length !== slurs.length) setSlurs(buone);
+    }, [rawNotes, accompanimentTracks, slurs]);
+
+    /**
      * Tasto destro su una nota: toglie le sue articolazioni — la stessa regola della
      * tavolozza, dove il destro toglie sempre.
      *
@@ -12063,6 +12134,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // una nota a caso lì vicino).
             if (payload.kind === 'articulation') {
                 if (target.noteId) applicaArticolazioneRef.current?.(payload.data as ArticulationMark, [target.noteId]);
+                return;
+            }
+
+            // La legatura ha DUE capi: mollata su una nota, arriva alla successiva della
+            // stessa voce — il caso più comune, e da lì si allunga rifacendola su una
+            // coppia più larga. Con due note già selezionate comanda la selezione.
+            if (payload.kind === 'slur') {
+                if (!target.noteId) return;
+                const tutte = [
+                    ...(latestRawNotes.current || []),
+                    ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+                ].filter(n => n && !n.isRest);
+                const partenza = tutte.find(n => n.id === target.noteId);
+                if (!partenza) return;
+                const voce = Number((partenza as any).voice ?? 1);
+                const tick = Number((partenza as any).startTick ?? 0);
+                const dopo = tutte
+                    .filter(n => Number((n as any).voice ?? 1) === voce && Number((n as any).startTick ?? 0) > tick)
+                    .sort((x, y) => Number((x as any).startTick ?? 0) - Number((y as any).startTick ?? 0))[0];
+                if (dopo) legaNoteRef.current?.(partenza.id, dopo.id);
                 return;
             }
 
@@ -14238,6 +14329,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             )));
                         }}
                         onPlaceArticulation={(a) => applicaArticolazione(a)}
+                        onPlaceSlur={() => legaNote()}
                         onClose={() => setIsDynamicsPanelOpen(false)}
                         onStartDrag={(payload, ev) => segnoTrascinato.inizia(payload, ev)}
                         currentTimeSignature={timeSignature}
@@ -15242,6 +15334,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 timeSignatureChanges={systemMarkers}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
+                                slurs={slurs}
+                                onSlurRightClick={(slurId) => togliLegatura(slurId)}
                                 onNoteRightClick={(noteId) => togliArticolazioniDaNota(noteId)}
                                 onBarlineRightClick={(barlineId) => {
                                     // Coerenza coi segni della tavolozza: il tasto destro TOGLIE.

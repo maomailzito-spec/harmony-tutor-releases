@@ -89,5 +89,40 @@ const giro = ARTICULATIONS.every((a: ArticulationMark) => {
 });
 ok(giro, `tutte e ${ARTICULATIONS.length} escono e rientrano identiche`);
 
+// ── 4. Legature di portamento ─────────────────────────────────────────────
+// Il segno che collega DUE note: nel file esce in due pezzi (start e stop) legati
+// dallo stesso numero, e va appaiato in lettura.
+console.log('\nLegature di portamento');
+import { readNoteSlurEnds } from '../src/importers/musicxml/importMusicXML';
+
+const due = [nota({ id: 'a' }), nota({ id: 'b', beat: 2, startTick: TPQ })];
+const xmlLeg = exportMusicXML({ ...base, notes: due as any, slurs: [{ id: 's1', fromNoteId: 'a', toNoteId: 'b' }] });
+ok(xmlLeg.includes('<slur type="start" number="1"/>'), 'la legatura si apre sulla prima nota');
+ok(xmlLeg.includes('<slur type="stop" number="1"/>'), 'e si chiude sulla seconda');
+ok((xmlLeg.match(/<slur /g) || []).length === 2, 'due capi, non uno né tre');
+
+const xmlDueLeg = exportMusicXML({
+    ...base, notes: [...due, nota({ id: 'c', beat: 3, startTick: 2 * TPQ })] as any,
+    slurs: [{ id: 's1', fromNoteId: 'a', toNoteId: 'b' }, { id: 's2', fromNoteId: 'b', toNoteId: 'c' }],
+});
+ok(/number="1"/.test(xmlDueLeg) && /number="2"/.test(xmlDueLeg),
+   'due legature diverse prendono numeri diversi: i capi non si confondono');
+
+const xmlNiente = exportMusicXML({ ...base, notes: due as any });
+ok(!xmlNiente.includes('<slur'), 'senza legature non esce nessun tag');
+
+// Rilettura dei capi (di nuovo con elementi finti: in node non c'è un DOM).
+const fintaConLegature = (capi: Array<{ type: string; number?: string }>): any => ({
+    querySelectorAll: (sel: string) => sel.includes('slur')
+        ? capi.map(c => ({ getAttribute: (k: string) => (k === 'type' ? c.type : (c.number ?? '1')) }))
+        : [],
+});
+const capiLetti = readNoteSlurEnds(fintaConLegature([{ type: 'start', number: '2' }]));
+ok(capiLetti.length === 1 && capiLetti[0].tipo === 'start' && capiLetti[0].numero === '2',
+   'un capo di apertura si rilegge col suo numero');
+ok(readNoteSlurEnds(fintaConLegature([{ type: 'continue' }])).length === 0,
+   "il tipo 'continue' non apre e non chiude: si ignora");
+ok(readNoteSlurEnds(fintaConLegature([])).length === 0, 'nota senza legature: nessun capo');
+
 console.log(falliti === 0 ? '\nTUTTO A POSTO\n' : `\n${falliti} CONTROLLI FALLITI\n`);
 process.exit(falliti === 0 ? 0 : 1);

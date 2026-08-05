@@ -6,7 +6,7 @@
 import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
-import type { ArticulationMark } from '../types';
+import type { ArticulationMark, Slur } from '../types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +37,9 @@ export interface ExportMusicXMLOptions {
   /** Analisi armonica opzionale: serializzata come <direction>(romano) + <figured-bass>(cifre).
    *  Non modifica la serializzazione delle note. */
   harmonyLabels?: HarmonyExportLabel[];
+  /** LEGATURE DI PORTAMENTO: `<slur type="start">` sulla prima nota e `type="stop"`
+   *  sull'ultima, con lo stesso `number` — è così che si riconoscono i due capi. */
+  slurs?: Slur[];
   /** SEGNI DI DINAMICA: <dynamics> per i livelli e gli accenti, <wedge> per le forcelle.
    *  In questo programma valgono per tutto il brano (non appartengono a una voce), quindi
    *  ogni <part> se li porta: chi apre il file li trova su ogni rigo, come in una
@@ -153,6 +156,8 @@ function emitNote(
   /** Percussioni: MusicXML vuole <unpitched> (altezza non intonata). La posizione sul
    *  rigo è convenzionale — il valore ritmico è quello che conta. */
   unpitched?: boolean,
+  /** Numeri delle legature che COMINCIANO e che FINISCONO su questa nota. */
+  capiLegatura?: { start: number[]; stop: number[] },
 ): void {
   const dur = note.duration || 'quarter';
   const durationTicks = getNoteDurationTicks(note);
@@ -206,10 +211,15 @@ function emitNote(
   // <notations> è UNO solo per nota: legature e articolazioni vanno nello stesso.
   const artNota = (Array.isArray((note as any).articulations) ? (note as any).articulations : [])
     .filter((a: string) => !!ARTICULATION_XML[a as ArticulationMark]);
-  if (note.isTiedToNext || note.isTiedFromPrev || artNota.length > 0) {
+  const slurStart = capiLegatura?.start ?? [];
+  const slurStop = capiLegatura?.stop ?? [];
+  if (note.isTiedToNext || note.isTiedFromPrev || artNota.length > 0 || slurStart.length > 0 || slurStop.length > 0) {
     w('        <notations>');
     if (note.isTiedFromPrev) w('          <tied type="stop"/>');
     if (note.isTiedToNext) w('          <tied type="start"/>');
+    // Prima le chiusure, poi le aperture: è l'ordine in cui si leggono.
+    for (const num of slurStop) w(`          <slur type="stop" number="${num}"/>`);
+    for (const num of slurStart) w(`          <slur type="start" number="${num}"/>`);
     if (artNota.length > 0) {
       w('          <articulations>');
       for (const a of artNota) w(`            <${ARTICULATION_XML[a as ArticulationMark]}/>`);
@@ -455,6 +465,20 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     list.sort((x, y) => (x.localTick - y.localTick) || (x.ordine - y.ordine));
   }
 
+  // ── LEGATURE: a ogni legatura il suo numero, per riconoscere i capi che vanno
+  // insieme. MusicXML ne ammette 16 in contemporanea; si riciclano a giro perché due
+  // legature lontane possono portare lo stesso numero senza confondersi.
+  const inizioLegatura = new Map<string, number[]>();
+  const fineLegatura = new Map<string, number[]>();
+  (opts.slurs || []).forEach((sl, i) => {
+    if (!sl?.fromNoteId || !sl?.toNoteId) return;
+    const num = (i % 6) + 1;
+    if (!inizioLegatura.has(sl.fromNoteId)) inizioLegatura.set(sl.fromNoteId, []);
+    if (!fineLegatura.has(sl.toNoteId)) fineLegatura.set(sl.toNoteId, []);
+    inizioLegatura.get(sl.fromNoteId)!.push(num);
+    fineLegatura.get(sl.toNoteId)!.push(num);
+  });
+
   const fifths = computeFifths(keySignature, keySignatureRoot);
   const mode = isMinorMode ? 'minor' : 'major';
 
@@ -651,7 +675,10 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
 
             let isFirstInChord = true;
             for (const note of chordNotes) {
-              emitNote(w, note, voiceNum, staffNum, isFirstInChord, part.unpitched);
+              emitNote(w, note, voiceNum, staffNum, isFirstInChord, part.unpitched, {
+                start: inizioLegatura.get(note.id) || [],
+                stop: fineLegatura.get(note.id) || [],
+              });
               isFirstInChord = false;
             }
 
