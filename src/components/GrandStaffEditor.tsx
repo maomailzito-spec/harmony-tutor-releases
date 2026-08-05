@@ -12292,6 +12292,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             ...(prev || []).filter(c => c.measureIndex !== mis),
             { measureIndex: mis, root, isMinor },
         ]));
+        // Doppia barra sul confine, come si scrive in partitura — e qui non è solo
+        // grafia: la doppia barra è la ROTTURA che l'analisi riconosce, quindi quinte e
+        // ottave a cavallo del cambio smettono di essere segnalate. Attraversare un
+        // cambio di tonalità non è un errore di condotta delle parti: è un altro pezzo
+        // di brano. La barra sta alla FINE della misura precedente (è la convenzione
+        // dell'elenco), quindi un cambio in prima battuta non ne ha nessuna.
+        if (mis > 0) {
+            setDoubleBarlineMeasures(prev => {
+                const set = new Set(prev || []);
+                set.add(mis - 1);
+                return Array.from(set).sort((a, b) => a - b);
+            });
+        }
         try {
             const inizio = (layoutDataRef.current as any)?.measureStartAbsBeat?.[mis]
                 ?? (mis * (timeSignature.numerator * (4 / timeSignature.denominator)));
@@ -12308,6 +12321,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const togliCambioArmatura = useCallback((measureIndex: number) => {
         const mis = Math.max(0, Math.round(measureIndex));
         setKeySignatureChanges(prev => (prev || []).filter(c => c.measureIndex !== mis));
+        // Se ne va anche la doppia barra che era venuta con lui: erano un segno solo.
+        // Se serviva per altro, si rimette dalla tavolozza in un clic.
+        if (mis > 0) setDoubleBarlineMeasures(prev => (prev || []).filter(m => m !== mis - 1));
         try {
             const inizio = (layoutDataRef.current as any)?.measureStartAbsBeat?.[mis]
                 ?? (mis * (timeSignature.numerator * (4 / timeSignature.denominator)));
