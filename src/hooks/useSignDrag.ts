@@ -39,7 +39,7 @@ export interface SignDropTarget {
 const RAGGIO_NOTA_PX = 26;
 
 /** La nota sotto il puntatore: quella esatta, o la più vicina entro il raggio. */
-export function notaSottoIlPuntatore(sotto: Element | null, svg: SVGSVGElement, cx: number, cy: number): string | undefined {
+export function notaSottoIlPuntatore(sotto: Element | null, svg: SVGSVGElement, cx: number, cy: number, raggio = RAGGIO_NOTA_PX): string | undefined {
     const valida = (el: Element | null): string | undefined => {
         const id = el?.getAttribute?.('data-note-id') || '';
         if (!id || id === '__ghost__' || el?.getAttribute('data-is-ghost')) return undefined;
@@ -55,7 +55,7 @@ export function notaSottoIlPuntatore(sotto: Element | null, svg: SVGSVGElement, 
         const r = (g as SVGGraphicsElement).getBoundingClientRect();
         if (!r.width && !r.height) continue;
         const d = Math.hypot(cx - (r.left + r.width / 2), cy - (r.top + r.height / 2));
-        if (d <= RAGGIO_NOTA_PX && (!migliore || d < migliore.d)) migliore = { id, d };
+        if (d <= raggio && (!migliore || d < migliore.d)) migliore = { id, d };
     }
     return migliore?.id;
 }
@@ -66,15 +66,18 @@ const SOGLIA_PX = 4;
 /**
  * La nota in un punto dello schermo, partendo dalle sole coordinate del mouse.
  * Serve al rilascio di un segno e a chiunque debba riagganciare qualcosa a una nota
- * (per esempio il capo di una legatura che si sta allungando).
+ * (per esempio il capo di una legatura che si sta allungando). Il `raggio` è quanto si
+ * può sbagliare la mira: stretto per POSARE un segno (meglio non farlo che metterlo
+ * sulla nota sbagliata), larghissimo per RIAGGANCIARE un capo, dove si sta già
+ * trascinando qualcosa e si vuole comunque finire su una nota.
  */
-export function notaAlPunto(clientX: number, clientY: number): string | undefined {
+export function notaAlPunto(clientX: number, clientY: number, raggio?: number): string | undefined {
     try {
         const sotto = document.elementFromPoint(clientX, clientY);
         const contenitore = (sotto as Element | null)?.closest?.('[data-system-index]') as HTMLElement | null;
         const svg = contenitore?.querySelector('svg') as SVGSVGElement | null;
         if (!svg) return undefined;
-        return notaSottoIlPuntatore(sotto, svg, clientX, clientY);
+        return notaSottoIlPuntatore(sotto, svg, clientX, clientY, raggio);
     } catch {
         return undefined;
     }

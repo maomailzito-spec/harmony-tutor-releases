@@ -12077,38 +12077,53 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     legaNoteRef.current = legaNote;
 
     /**
-     * Presa di un capo della legatura: si tira la curva su un'altra nota e la legatura
-     * si allunga (o si accorcia). Senza questo l'unico modo di cambiarla era toglierla
-     * e rifarla, che su una legatura lunga è un lavoro inutile.
+     * Trascinamento dei CAPI di una legatura, sullo stesso modello delle forcelle:
+     * maniglia visibile che si afferra, e la curva che segue mentre si trascina.
      *
-     * Al rilascio i due capi si riordinano nel tempo: tirando l'inizio oltre la fine la
-     * legatura si rovescerebbe, e una curva disegnata all'indietro non vuol dire nulla.
+     * Il primo tentativo lasciava afferrare la curva in un punto qualunque, ma il
+     * bersaglio era invisibile, rubava i clic alle note e al rilascio spesso non
+     * trovava nessuna nota: il gesto andava a vuoto senza dire perché. Qui il capo si
+     * riaggancia alla nota più vicina AD OGNI MOVIMENTO — si vede dove si sta per
+     * finire — e la nota si cerca senza limite di distanza, perché chi sta trascinando
+     * un capo vuole comunque posarlo su una nota.
      */
-    const prendiCapoLegatura = useCallback((slurId: string, capo: 'from' | 'to'): boolean => {
-        const cursorePrima = document.body.style.cursor;
-        document.body.style.cursor = 'grabbing';
-        const finisci = (ev: MouseEvent) => {
-            window.removeEventListener('mouseup', finisci, true);
-            document.body.style.cursor = cursorePrima;
-            const nuovaNota = notaAlPunto(ev.clientX, ev.clientY);
-            if (!nuovaNota) return;
-            const tickDi = (id: string): number => {
-                const n = (latestRawNotes.current || []).find(x => x.id === id)
-                    ?? (latestAccompanimentTracks.current || []).flatMap(t => t.notes || []).find(x => x.id === id);
-                return Number((n as any)?.startTick ?? 0);
-            };
+    const slurDragRef = useRef<{ id: string; capo: 'from' | 'to' } | null>(null);
+
+    useEffect(() => {
+        const tickDi = (id: string): number => {
+            const n = (latestRawNotes.current || []).find(x => x.id === id)
+                ?? (latestAccompanimentTracks.current || []).flatMap(t => t.notes || []).find(x => x.id === id);
+            return Number((n as any)?.startTick ?? 0);
+        };
+        const muovi = (e: MouseEvent) => {
+            const d = slurDragRef.current;
+            if (!d) return;
+            const nuova = notaAlPunto(e.clientX, e.clientY, Number.POSITIVE_INFINITY);
+            if (!nuova) return;
             setSlurs(prev => (prev || []).map(sl => {
-                if (sl.id !== slurId) return sl;
-                const da = capo === 'from' ? nuovaNota : sl.fromNoteId;
-                const a = capo === 'to' ? nuovaNota : sl.toNoteId;
-                if (da === a) return sl; // una legatura da una nota a sé stessa non esiste
+                if (sl.id !== d.id) return sl;
+                const da = d.capo === 'from' ? nuova : sl.fromNoteId;
+                const a = d.capo === 'to' ? nuova : sl.toNoteId;
+                if (da === a) return sl;                       // su sé stessa non esiste
+                if (da === sl.fromNoteId && a === sl.toNoteId) return sl; // nulla di nuovo: niente ridisegno
+                // I capi si riordinano nel tempo: tirando l'inizio oltre la fine la
+                // legatura si rovescerebbe, e una curva all'indietro non vuol dire nulla.
                 return tickDi(da) <= tickDi(a)
                     ? { ...sl, fromNoteId: da, toNoteId: a }
                     : { ...sl, fromNoteId: a, toNoteId: da };
             }));
         };
-        window.addEventListener('mouseup', finisci, true);
-        return true;
+        const molla = () => {
+            if (!slurDragRef.current) return;
+            slurDragRef.current = null;
+            document.body.style.cursor = '';
+        };
+        window.addEventListener('mousemove', muovi);
+        window.addEventListener('mouseup', molla);
+        return () => {
+            window.removeEventListener('mousemove', muovi);
+            window.removeEventListener('mouseup', molla);
+        };
     }, []);
 
     /** Tasto destro sulla curva: la legatura si toglie. */
@@ -15371,7 +15386,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 barlines={systemBarlines}
                                 slurs={slurs}
                                 onSlurRightClick={(slurId) => togliLegatura(slurId)}
-                                onSlurEndPick={(slurId, capo) => prendiCapoLegatura(slurId, capo)}
                                 onNoteRightClick={(noteId) => togliArticolazioniDaNota(noteId)}
                                 onBarlineRightClick={(barlineId) => {
                                     // Coerenza coi segni della tavolozza: il tasto destro TOGLIE.
@@ -16019,6 +16033,56 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         ) : null}
                                     </g>
                                 ))}
+
+                                {/* ── Maniglie delle legature di portamento ──
+                                     Stesso modello delle forcelle: un punto che si vede e si
+                                     afferra, invece di dover indovinare dove prendere la curva.
+                                     Stanno dalla parte in cui la curva passa (sotto per le voci
+                                     coi gambi in su, sopra per le altre), spostate quel tanto da
+                                     non coprire la testa della nota. */}
+                                {(slurs || []).length > 0 && (() => {
+                                    const punti = systemNoteHitPointsRef.current[systemIndex] || [];
+                                    const posDi = (id: string) => punti.find(p => p.id === id && !p.isGhost);
+                                    const voceDi = (id: string): number => {
+                                        const n = (latestRawNotes.current || []).find(x => x.id === id)
+                                            ?? (latestAccompanimentTracks.current || []).flatMap(t => t.notes || []).find(x => x.id === id);
+                                        return Number((n as any)?.voice ?? 1);
+                                    };
+                                    const maniglie: JSX.Element[] = [];
+                                    for (const sl of (slurs || [])) {
+                                        for (const capo of ['from', 'to'] as const) {
+                                            const id = capo === 'from' ? sl.fromNoteId : sl.toNoteId;
+                                            const p = posDi(id);
+                                            if (!p) continue; // l'altro capo sta in un altro sistema
+                                            const gamboSu = voceDi(id) % 2 === 1;
+                                            const cy = p.y + (gamboSu ? 16 : -16);
+                                            maniglie.push(
+                                                <circle
+                                                    key={`leg-${sl.id}-${capo}`}
+                                                    cx={p.x} cy={cy} r={5}
+                                                    fill="#0ea5e9" fillOpacity={0.28}
+                                                    stroke="#0284c7" strokeOpacity={0.75} strokeWidth={1}
+                                                    style={{ pointerEvents: 'auto', cursor: 'grab' }}
+                                                    onMouseDown={(ev) => {
+                                                        if (ev.button !== 0) return; // il destro toglie, non trascina
+                                                        ev.preventDefault();
+                                                        ev.stopPropagation();
+                                                        slurDragRef.current = { id: sl.id, capo };
+                                                        document.body.style.cursor = 'grabbing';
+                                                    }}
+                                                    onContextMenu={(ev) => {
+                                                        ev.preventDefault();
+                                                        ev.stopPropagation();
+                                                        setSlurs(prev => (prev || []).filter(x => x.id !== sl.id));
+                                                    }}
+                                                >
+                                                    <title>Trascina per spostare il capo della legatura; tasto destro per toglierla</title>
+                                                </circle>
+                                            );
+                                        }
+                                    }
+                                    return maniglie.length > 0 ? <g>{maniglie}</g> : null;
+                                })()}
 
                                 {/* ── Segni di dinamica ──
                                      Valgono per tutte le voci, quindi si disegnano FRA i due
