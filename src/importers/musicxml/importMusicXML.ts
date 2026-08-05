@@ -484,10 +484,13 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     const partDynamics: DynamicMark[] = [];
     // Legature aperte in questa parte, in attesa del loro `stop` (chiave = number).
     const legatureAperte = new Map<string, string>();
-    // Segni d'ottava: il file dice DA DOVE e FIN DOVE in tick; le note a cui agganciarli
-    // si sanno solo dopo averle lette, quindi si tiene l'elenco di quelle della parte.
-    let ottavaAperta: { daTick: number; direzione: 'up' | 'down' } | null = null;
-    const noteDiParte: Array<{ id: string; tick: number }> = [];
+    // Segni d'ottava. NON si risolvono man mano: i `<direction>` possono stare tutti
+    // all'inizio della battuta (è così che li scriviamo noi, posizionandoli nel tempo
+    // con <forward>), quindi leggendo in ordine di documento la chiusura arrivava PRIMA
+    // delle note che copre — e il tratto si fermava alla battuta d'apertura. Si prende
+    // nota di dove cade ogni capo e si appaia alla fine, quando le note ci sono tutte.
+    const capiOttava: Array<{ tick: number; tipo: 'apre' | 'chiude'; numero: string; direzione: 'up' | 'down' }> = [];
+    const noteDiParte: Array<{ tick: number; globale: StaffNote; locale: StaffNote }> = [];
     const openWedges = new Map<string, { from: number; direction: 'cresc' | 'dim' }>();
     let finePartAbsBeat = 0;
 
@@ -500,6 +503,17 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
       // attributes
       const attrs = measure.querySelector(':scope > attributes');
+      // Quanti righi dichiara la parte. Contava solo se una NOTA finiva sul secondo
+      // rigo: un brano scritto sul solo soprano tornava indietro come rigo singolo e il
+      // coro perdeva la chiave di basso, pur essendo scritto nel file che i righi sono
+      // due. Qui si crede a quello che il file dichiara.
+      try {
+        const dichiarati = intOf(attrs?.querySelector('staves'));
+        if (dichiarati != null && dichiarati >= 2) {
+          partSawSecondStaff = true;
+          if (partIndex < MAX_SATB_PARTS) sawSecondStaff = true;
+        }
+      } catch { /* ignore */ }
       // divisions persists from previous measure (MusicXML spec); only update when declared.
       if (attrs) {
         const div = intOf(attrs.querySelector('divisions'));
@@ -619,21 +633,13 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
             try {
               const os = child.querySelector('direction-type > octave-shift');
               const tipo = String(os?.getAttribute('type') || '').toLowerCase();
+              const numero = String(os?.getAttribute('number') || '1');
               const tick = Math.round(absBeat * TICKS_PER_QUARTER);
+              // down = lo scritto sta un'ottava sotto = suona sopra = il nostro 'up'.
               if (tipo === 'down' || tipo === 'up') {
-                // down = scritto sotto, suonato sopra = il nostro 'up'.
-                ottavaAperta = { daTick: tick, direzione: tipo === 'down' ? 'up' : 'down' };
-              } else if (tipo === 'stop' && ottavaAperta) {
-                const dentro = noteDiParte.filter(x => x.tick >= ottavaAperta!.daTick - 1 && x.tick < tick - 1);
-                if (dentro.length > 0) {
-                  octaveShifts.push({
-                    id: makeId(),
-                    fromNoteId: dentro[0].id,
-                    toNoteId: dentro[dentro.length - 1].id,
-                    direction: ottavaAperta.direzione,
-                  });
-                }
-                ottavaAperta = null;
+                capiOttava.push({ tick, tipo: 'apre', numero, direzione: tipo === 'down' ? 'up' : 'down' });
+              } else if (tipo === 'stop') {
+                capiOttava.push({ tick, tipo: 'chiude', numero, direzione: 'up' });
               }
             } catch { /* direzione senza octave-shift */ }
           }
@@ -684,11 +690,9 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         const pitchEl = noteEl.querySelector('pitch');
         const step = textOf(pitchEl?.querySelector('step'));
         const alter = intOf(pitchEl?.querySelector('alter')) ?? 0;
-        // Il <pitch> del file è l'altezza che SUONA. Dentro un tratto d'ottava, quella
-        // SCRITTA (l'unica che salviamo) sta un'ottava più in là: senza questa riga un
-        // brano esportato e riletto saliva di un'ottava a ogni giro.
-        const ottavaLetta = intOf(pitchEl?.querySelector('octave')) ?? 4;
-        const octave = ottavaLetta - (ottavaAperta ? (ottavaAperta.direzione === 'up' ? 1 : -1) : 0);
+        // Si legge com'è nel file: l'altezza SUONATA. Il rientro all'altezza scritta si
+        // fa dopo, quando si sa quali note cadono davvero dentro un tratto d'ottava.
+        const octave = intOf(pitchEl?.querySelector('octave')) ?? 4;
 
         const letter = String(step || '').trim().toUpperCase();
         const basePc = NOTE_PC_BY_LETTER[letter];
@@ -794,7 +798,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           })(),
         };
 
-        if (!isRest) noteDiParte.push({ id: staffNote.id, tick: startTick });
+        // (le note si registrano più sotto, quando esiste anche la copia della parte)
 
         // Capi di legatura: `start` mette in attesa l'id di questa nota, `stop` la chiude
         // sulla nota corrente. Il numero tiene distinte le legature sovrapposte.
@@ -824,7 +828,12 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           localVoice = (staffVoices.size === 0 ? 1 : 2) + (staff >= 2 ? 2 : 0) as 1 | 2 | 3 | 4;
           staffVoices.set(voiceRaw, localVoice);
         }
-        partNotes.push({ ...staffNote, id: makeId(), voice: localVoice });
+        const notaDellaParte = { ...staffNote, id: makeId(), voice: localVoice };
+        partNotes.push(notaDellaParte);
+        // Le due copie della stessa nota (quella del coro e quella della parte) vanno
+        // tenute insieme: se un tratto d'ottava la riporta all'altezza scritta, deve
+        // muoversi in tutt'e due, altrimenti importando "come traccia" resta alzata.
+        if (!isRest) noteDiParte.push({ tick: startTick, globale: staffNote, locale: notaDellaParte });
 
         if (!isChord) {
           curPosDiv += durDiv;
@@ -833,6 +842,47 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
             const maxDiv = Math.round(beatsPerMeasure * divisions);
             if (maxDiv > 0) curPosDiv = Math.min(curPosDiv, maxDiv);
           }
+        }
+      }
+    }
+
+    // ── Tratti d'ottava: si appaiano ORA, con tutte le note in mano ──
+    // I capi si ordinano per punto nel tempo (non per ordine di lettura) e si accoppiano
+    // apertura → prima chiusura successiva con lo stesso numero.
+    {
+      const perNumero = new Map<string, Array<typeof capiOttava[number]>>();
+      for (const c of capiOttava) {
+        if (!perNumero.has(c.numero)) perNumero.set(c.numero, []);
+        perNumero.get(c.numero)!.push(c);
+      }
+      for (const elenco of perNumero.values()) {
+        elenco.sort((a, b) => a.tick - b.tick);
+        let aperta: { tick: number; direzione: 'up' | 'down' } | null = null;
+        for (const c of elenco) {
+          if (c.tipo === 'apre') { aperta = { tick: c.tick, direzione: c.direzione }; continue; }
+          if (!aperta) continue;
+          const dentro = noteDiParte
+            .filter(x => x.tick >= aperta!.tick - 1 && x.tick < c.tick - 1)
+            .sort((x, y) => x.tick - y.tick);
+          const direzione = aperta.direzione;
+          aperta = null;
+          if (dentro.length === 0) continue;
+          // Dall'altezza SUONATA che il file dichiara a quella SCRITTA, l'unica che
+          // salviamo: un 8va (suona sopra) si riporta giù di un'ottava.
+          const salto = direzione === 'up' ? 1 : -1;
+          for (const x of dentro) {
+            for (const n of [x.globale, x.locale] as any[]) {
+              n.octave = Number(n.octave ?? 4) - salto;
+              n.midi = Number(n.midi ?? 60) - salto * 12;
+              if (Number.isFinite(n.position)) n.position = Number(n.position) - salto * 7;
+            }
+          }
+          octaveShifts.push({
+            id: makeId(),
+            fromNoteId: dentro[0].globale.id,
+            toNoteId: dentro[dentro.length - 1].globale.id,
+            direction: direzione,
+          });
         }
       }
     }
