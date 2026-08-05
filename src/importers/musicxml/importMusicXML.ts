@@ -1,5 +1,6 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
+import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -32,6 +33,12 @@ export type MusicXMLImportResult = {
   projectTitle?: string;
   /** Le parti del file tenute separate (vedi MusicXMLPart). Stesso ordine del file. */
   parts: MusicXMLPart[];
+  /** SEGNI DI DINAMICA letti dal file (pp…ff, sf, fp, forcelle), pronti da disegnare e
+   *  da modificare. Prima le dinamiche entravano SOLO come velocity delle note: il
+   *  volume era giusto ma sulla carta non c'era niente, e le forcelle si perdevano del
+   *  tutto. Nel programma i segni valgono per il brano, non per la parte: quelli uguali
+   *  ripetuti in più parti (come li scrive MuseScore) contano una volta sola. */
+  dynamics: DynamicMark[];
 };
 
 const NOTE_PC_BY_LETTER: Record<string, number> = {
@@ -192,6 +199,72 @@ function velocityFromDirection(el: Element): number | null {
   return null;
 }
 
+/** Nomi MusicXML dei livelli → i nostri. Gli estremi che non abbiamo (pppp, ffff)
+ *  ricadono sul più vicino invece di sparire. */
+const XML_DYNAMIC_LEVEL: Record<string, DynamicLevel> = {
+  pppp: 'ppp', ppp: 'ppp', pp: 'pp', p: 'p', mp: 'mp',
+  mf: 'mf', f: 'f', ff: 'ff', fff: 'fff', ffff: 'fff',
+};
+
+/** Accenti istantanei: agiscono sul solo attacco, non spostano il livello in vigore. */
+const XML_DYNAMIC_ACCENT: Record<string, 'sf' | 'sfz' | 'rf'> = {
+  sf: 'sf', sfz: 'sfz', sffz: 'sfz', fz: 'sfz', rf: 'rf', rfz: 'rf',
+};
+
+/**
+ * Segni GRAFICI di un <direction>: livelli, accenti, fp e forcelle.
+ *
+ * Le forcelle arrivano in due pezzi (apertura e `stop`) che possono stare in battute
+ * diverse: l'apertura resta in sospeso finché non arriva la chiusura. L'attributo
+ * `number` distingue forcelle sovrapposte — senza, due forcelle intrecciate si
+ * chiuderebbero a vicenda nell'ordine sbagliato.
+ */
+export function readDynamicSigns(
+  el: Element,
+  absBeat: number,
+  out: DynamicMark[],
+  openWedges: Map<string, { from: number; direction: 'cresc' | 'dim' }>,
+): void {
+  for (const dt of Array.from(el.querySelectorAll(':scope > direction-type'))) {
+    const dyn = dt.querySelector(':scope > dynamics');
+    if (dyn) {
+      for (const c of Array.from(dyn.children)) {
+        const t = c.tagName.toLowerCase();
+        // fp e sfp sono la stessa idea: attacco forte, poi si resta piano.
+        if (t === 'fp' || t === 'sfp') { out.push({ kind: 'fp', absBeat }); continue; }
+        const lvl = XML_DYNAMIC_LEVEL[t];
+        if (lvl) { out.push({ kind: 'level', absBeat, level: lvl }); continue; }
+        const acc = XML_DYNAMIC_ACCENT[t];
+        if (acc) out.push({ kind: 'accent', absBeat, label: acc });
+      }
+    }
+    const wedge = dt.querySelector(':scope > wedge');
+    if (wedge) {
+      const tipo = String(wedge.getAttribute('type') || '').toLowerCase();
+      const num = String(wedge.getAttribute('number') || '1');
+      if (tipo === 'crescendo' || tipo === 'diminuendo') {
+        openWedges.set(num, { from: absBeat, direction: tipo === 'crescendo' ? 'cresc' : 'dim' });
+      } else if (tipo === 'stop') {
+        const aperta = openWedges.get(num);
+        if (aperta && absBeat > aperta.from) {
+          out.push({ kind: 'hairpin', fromAbsBeat: aperta.from, toAbsBeat: absBeat, direction: aperta.direction });
+        }
+        openWedges.delete(num);
+      }
+      // type="continue" non apre e non chiude: la forcella prosegue.
+    }
+  }
+}
+
+/** Chiave per riconoscere due segni UGUALI ripetuti in parti diverse.
+ *  (Questa e `readDynamicSigns` sono esportate per il banco di prova: i collaudi girano
+ *  in node, che non ha un DOM, quindi il lettore va provato da solo.) */
+export function dynamicKey(d: DynamicMark): string {
+  return d.kind === 'hairpin'
+    ? `h|${d.direction}|${d.fromAbsBeat.toFixed(4)}|${d.toAbsBeat.toFixed(4)}`
+    : `${d.kind}|${(d as any).level ?? (d as any).label ?? ''}|${d.absBeat.toFixed(4)}`;
+}
+
 function clefFromMusicXML(sign: string, line: number | null): ClefType {
   const s = String(sign || '').trim().toUpperCase();
   if (s === 'F') return 'bass';
@@ -336,6 +409,11 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
   const partsOut: MusicXMLPart[] = [];
 
+  // Segni di dinamica del BRANO. Nel file stanno dentro le parti (e MuseScore li ripete
+  // identici su ognuna); qui valgono per tutti, quindi si raccolgono una volta sola.
+  const dynamics: DynamicMark[] = [];
+  const dynSeen = new Set<string>();
+
   for (let partIndex = 0; partIndex < partsToParse.length; partIndex++) {
     const part = partsToParse[partIndex];
     const measures = Array.from(part.querySelectorAll(':scope > measure'));
@@ -352,6 +430,11 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
     // Dinamica corrente della parte (si porta avanti fino al segno successivo).
     let currentVelocity = DEFAULT_VELOCITY;
+
+    // Segni grafici di questa parte, e le forcelle ancora aperte in attesa del loro stop.
+    const partDynamics: DynamicMark[] = [];
+    const openWedges = new Map<string, { from: number; direction: 'cresc' | 'dim' }>();
+    let finePartAbsBeat = 0;
 
     // Score cursor at measure granularity (ticks). We derive it from timeSignature changes.
     // Inside each measure we position notes by their MusicXML position in divisions.
@@ -446,6 +529,9 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         return acc;
       })();
       const measureStartTick = Math.round(measureStartAbsBeat * TICKS_PER_QUARTER);
+      // Dove finisce la musica letta finora: serve a chiudere una forcella rimasta
+      // aperta nel file.
+      finePartAbsBeat = Math.max(finePartAbsBeat, measureStartAbsBeat + beatsPerMeasure);
 
       // Iterate measure children in order to support <backup>/<forward>.
       let curPosDiv = 0;
@@ -469,6 +555,11 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         if (tag === 'direction' || tag === 'sound') {
           const v = velocityFromDirection(child);
           if (v != null) currentVelocity = v;
+          // …e il segno GRAFICO, al punto in cui si trova il cursore della battuta.
+          if (tag === 'direction') {
+            const absBeat = measureStartAbsBeat + (divisions > 0 ? curPosDiv / divisions : 0);
+            readDynamicSigns(child, absBeat, partDynamics, openWedges);
+          }
           continue;
         }
         if (tag !== 'note') continue;
@@ -640,6 +731,20 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
       }
     }
 
+    // Una forcella senza il suo `stop` (file scritti male, o parte che finisce prima)
+    // si chiude alla fine del brano invece di sparire.
+    for (const aperta of openWedges.values()) {
+      if (finePartAbsBeat > aperta.from) {
+        partDynamics.push({ kind: 'hairpin', fromAbsBeat: aperta.from, toAbsBeat: finePartAbsBeat, direction: aperta.direction });
+      }
+    }
+    for (const d of partDynamics) {
+      const k = dynamicKey(d);
+      if (dynSeen.has(k)) continue;
+      dynSeen.add(k);
+      dynamics.push(d);
+    }
+
     partNotes.sort((a, b) => {
       const stA = Number((a as any).startTick ?? 0);
       const stB = Number((b as any).startTick ?? 0);
@@ -680,5 +785,10 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     staffSystemMode,
     projectTitle: title || undefined,
     parts: partsOut,
+    dynamics: dynamics.sort((a, b) => {
+      const aa = a.kind === 'hairpin' ? a.fromAbsBeat : a.absBeat;
+      const bb = b.kind === 'hairpin' ? b.fromAbsBeat : b.absBeat;
+      return aa - bb;
+    }),
   };
 }

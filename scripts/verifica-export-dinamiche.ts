@@ -1,5 +1,5 @@
 /**
- * Banco di prova: le dinamiche escono davvero nel MIDI e nel MusicXML?
+ * Banco di prova: le dinamiche escono davvero nel MIDI e nel MusicXML, e RIENTRANO?
  * Si esegue con:  npx tsx scripts/verifica-export-dinamiche.ts
  */
 import { buildMidiFile } from '../src/utils/midiWriter';
@@ -152,6 +152,65 @@ const misura3 = xml.split('<measure number="3">')[1]?.split('</measure>')[0] || 
 ok(misura3.includes('<dynamics><ff/></dynamics>'), 'il ff sta nella 3ª battuta');
 const misura2 = xml.split('<measure number="2">')[1]?.split('</measure>')[0] || '';
 ok(misura2.includes('<wedge type="crescendo"/>'), 'la forcella si apre nella 2ª battuta');
+
+// ── 3. Il lettore dell'import ──────────────────────────────────────────────
+// L'import vero ha bisogno di un DOM e qui non c'è (i collaudi girano in node), quindi
+// si prova il LETTORE dei segni con elementi finti: è dove stanno i tranelli veri —
+// la forcella che si apre in una battuta e si chiude in un'altra, i nomi che il nostro
+// programma non ha (pppp), e lo stesso segno ripetuto su ogni parte.
+console.log('\nLettura dei segni (import)');
+import { readDynamicSigns, dynamicKey } from '../src/importers/musicxml/importMusicXML';
+
+/** Finto <direction> con dentro <dynamics> e/o <wedge>, quel tanto che serve al lettore. */
+const finto = (spec: { dyn?: string[]; wedge?: { type: string; number?: string } }): any => {
+    const el = (tag: string, attrs: Record<string, string> = {}, figli: any[] = []): any => ({
+        tagName: tag,
+        children: figli,
+        getAttribute: (k: string) => attrs[k] ?? null,
+        querySelector: (sel: string) => figli.find(f => sel.endsWith(f.tagName)) ?? null,
+        querySelectorAll: (sel: string) => figli.filter(f => sel.endsWith(f.tagName)),
+    });
+    const dentro: any[] = [];
+    if (spec.dyn) dentro.push(el('dynamics', {}, spec.dyn.map(t => el(t))));
+    if (spec.wedge) dentro.push(el('wedge', { type: spec.wedge.type, ...(spec.wedge.number ? { number: spec.wedge.number } : {}) }));
+    const dt = el('direction-type', {}, dentro);
+    return el('direction', {}, [dt]);
+};
+
+const letti: DynamicMark[] = [];
+const aperte = new Map<string, { from: number; direction: 'cresc' | 'dim' }>();
+readDynamicSigns(finto({ dyn: ['pp'] }), 0, letti, aperte);
+readDynamicSigns(finto({ wedge: { type: 'crescendo' } }), 4, letti, aperte);
+readDynamicSigns(finto({ wedge: { type: 'stop' } }), 8, letti, aperte);   // chiusura in un'ALTRA battuta
+readDynamicSigns(finto({ dyn: ['ff'] }), 8, letti, aperte);
+readDynamicSigns(finto({ dyn: ['sf'] }), 14, letti, aperte);
+readDynamicSigns(finto({ dyn: ['fp'] }), 15, letti, aperte);
+readDynamicSigns(finto({ dyn: ['pppp'] }), 16, letti, aperte);            // livello che noi non abbiamo
+readDynamicSigns(finto({ dyn: ['other-dynamics'] }), 17, letti, aperte);  // roba che non sappiamo leggere
+
+const tipo = (k: string) => letti.filter(d => d.kind === k);
+ok(tipo('level').length === 3, `livelli letti: ${tipo('level').length} (pp, ff, e pppp ricondotto a ppp)`);
+ok(letti.some(d => d.kind === 'level' && (d as any).level === 'ppp'), 'pppp ricade su ppp invece di sparire');
+ok(tipo('accent').length === 1 && (tipo('accent')[0] as any).label === 'sf', "l'sf entra come accento, non come livello");
+ok(tipo('fp').length === 1, 'il fp entra come fp');
+const h: any = tipo('hairpin')[0];
+ok(!!h && h.fromAbsBeat === 4 && h.toAbsBeat === 8 && h.direction === 'cresc',
+   `la forcella si chiude a cavallo di due battute (${h?.fromAbsBeat} → ${h?.toAbsBeat})`);
+ok(letti.length === 6, `i segni sconosciuti vengono ignorati senza rompere nulla (${letti.length} segni)`);
+
+// Forcelle sovrapposte: l'attributo number impedisce che si chiudano a vicenda.
+const due: DynamicMark[] = [];
+const aperte2 = new Map<string, { from: number; direction: 'cresc' | 'dim' }>();
+readDynamicSigns(finto({ wedge: { type: 'crescendo', number: '1' } }), 0, due, aperte2);
+readDynamicSigns(finto({ wedge: { type: 'diminuendo', number: '2' } }), 2, due, aperte2);
+readDynamicSigns(finto({ wedge: { type: 'stop', number: '1' } }), 4, due, aperte2);
+readDynamicSigns(finto({ wedge: { type: 'stop', number: '2' } }), 6, due, aperte2);
+ok(due.length === 2, `due forcelle intrecciate restano due (${due.length})`);
+ok(due.every((d: any) => d.kind === 'hairpin' && d.toAbsBeat > d.fromAbsBeat), 'ognuna si chiude sulla PROPRIA apertura');
+
+// Lo stesso segno ripetuto su ogni parte (come lo scrive MuseScore) vale una volta sola.
+const chiavi = new Set(letti.concat(letti).map(dynamicKey));
+ok(chiavi.size === letti.length, `segni ripetuti su più parti: ${chiavi.size} distinti su ${letti.length * 2} letti`);
 
 console.log(falliti === 0 ? '\nTUTTO A POSTO\n' : `\n${falliti} CONTROLLI FALLITI\n`);
 process.exit(falliti === 0 ? 0 : 1);

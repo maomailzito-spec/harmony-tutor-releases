@@ -5014,6 +5014,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         setTimeSignatureChanges(Array.isArray(imported?.timeSignatureChanges) ? imported.timeSignatureChanges : []);
                         setKeySignatureRoot(String(imported?.keySignatureRoot || 'C').trim() || 'C');
                         setIsMinorMode(Boolean(imported?.isMinorMode));
+                        // Solo a progetto vuoto: i segni valgono per tutto il brano, quindi
+                        // quelli di una traccia aggiunta a una partitura già scritta
+                        // cancellerebbero le dinamiche che ci sono già.
+                        setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
                     } else if (
                         importedTs.numerator !== timeSignature.numerator ||
                         importedTs.denominator !== timeSignature.denominator
@@ -5066,6 +5070,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setTonicizationHints([]);
                 setInferredContextSuppressions([]);
                 setOrnamentOverrides([]);
+                // I segni di dinamica del file. Vanno azzerati SEMPRE, anche quando il
+                // file non ne porta: sono stato del progetto precedente, e senza questa
+                // riga un brano importato si sarebbe portato dietro le forcelle di quello
+                // di prima, in punti che con la musica nuova non c'entrano niente.
+                setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setPasteCaretImmediate(null);
