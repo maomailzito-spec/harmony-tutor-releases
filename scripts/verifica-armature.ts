@@ -97,5 +97,30 @@ ok(armature[0].sf === 0 && armature[1].sf === -4, `d'impianto ${armature[0]?.sf}
 ok(leggiArmature(buildMidiFile({ notes: note, timeSignature: { numerator: 4, denominator: 4 } as any, bpm: 90, midiType: 1 })).length === 0,
    'senza armature dichiarate il file resta com era');
 
+// ── Il nome per il disegno ────────────────────────────────────────────────
+// Difetto vero (05/08/2026): reimportando un file, il cambio non compariva più. Il
+// programma tiene le fondamentali nel dominio dei DIESIS — un La bemolle importato
+// torna 'G#' — e passando quel nome a VexFlow il disegno falliva in silenzio.
+console.log('\nNome della tonalità per il disegno');
+import { keySignatureToVexflowString } from '../src/utils/keySignatureChanges';
+import { getKeySignature } from '../src/utils/musicTheory';
+
+/** Gli unici quindici nomi che VexFlow accetta come tonalità. */
+const NOMI_VALIDI = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
+// Tutte le fondamentali che possono arrivare: quelle della tavolozza e quelle
+// dell'importazione (dominio dei diesis).
+const FONDAMENTALI = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#',
+                      'G#', 'D#', 'A#'];
+let tutteBuone = true;
+for (const r of FONDAMENTALI) {
+    const nome = keySignatureToVexflowString(getKeySignature(r, 'Major'));
+    if (!NOMI_VALIDI.includes(nome)) { tutteBuone = false; console.log('    ', r, '→', nome, 'NON è un nome che VexFlow accetta'); }
+}
+ok(tutteBuone, `tutte e ${FONDAMENTALI.length} le fondamentali danno un nome disegnabile`);
+ok(keySignatureToVexflowString(getKeySignature('G#', 'Major')) === 'Ab',
+   "la fondamentale importata 'G#' si disegna come Ab (stessa armatura, nome d'uso)");
+ok(!NOMI_VALIDI.includes('G#'),
+   "e 'G#' passato di peso non sarebbe accettato: è il difetto da cui nasce questo controllo");
+
 console.log(falliti === 0 ? '\nTUTTO A POSTO\n' : `\n${falliti} CONTROLLI FALLITI\n`);
 process.exit(falliti === 0 ? 0 : 1);

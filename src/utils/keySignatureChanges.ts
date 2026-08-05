@@ -7,7 +7,23 @@
  *
  * Modulo PURO: serve al disegno, alla grafia degli accidenti, all'analisi e ai collaudi.
  */
-import type { KeySignatureChange } from '../types';
+import type { KeySignatureChange, KeySignature } from '../types';
+
+/**
+ * Nome della tonalità per VexFlow, ricavato dall'ARMATURA (quanti diesis o bemolli).
+ *
+ * Non si può passare la fondamentale che usa il programma: le tonalità sono tenute nel
+ * dominio dei DIESIS (un La bemolle importato torna come 'G#'), e VexFlow conosce solo
+ * i quindici nomi d'uso — con 'G#' il disegno falliva in silenzio dentro la rete di
+ * sicurezza, e il cambio d'armatura semplicemente non compariva.
+ */
+export function keySignatureToVexflowString(keySignature: KeySignature): string {
+    const conDiesis = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
+    const conBemolli = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
+    return keySignature.type === 'sharp'
+        ? (conDiesis[keySignature.count] || 'C')
+        : (conBemolli[keySignature.count] || 'C');
+}
 
 export interface ArmaturaInVigore {
     /** Fondamentale MAGGIORE relativa (convenzione del brano: Re minore → 'F'). */

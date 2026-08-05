@@ -6,7 +6,7 @@
  * sequence markers, modulation markers, and time-signature markers.
  */
 import { useMemo } from 'react';
-import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack, KeySignatureChange } from '../types';
+import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack, KeySignatureChange, KeySignature } from '../types';
 import { normalizeKeyChanges, keyChangeAtMeasure } from '../utils/keySignatureChanges';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol, bassScaleDegreeRoman, isEnharmonicSpellingMismatch } from '../utils/musicTheory';
 import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
@@ -5784,10 +5784,10 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
      * fino a lì — i bequadri che tolgono i diesis o i bemolli di prima.
      */
     const keySignatureMarkersBySystem = useMemo(() => {
-        const vuoto = [] as Array<Array<{ x: number; nuova: string; daAnnullare: string; measureIndex: number }>>;
+        const vuoto = [] as Array<Array<{ x: number; nuova: KeySignature; daAnnullare: KeySignature; measureIndex: number }>>;
         if (!layoutData || !(keySignatureChanges || []).length) return vuoto;
         const base = { root: String(keySignatureRoot || 'C'), isMinor: !!isMinorMode };
-        const markersBySystem = layoutData.systemsParams.map(() => [] as Array<{ x: number; nuova: string; daAnnullare: string; measureIndex: number }>);
+        const markersBySystem = layoutData.systemsParams.map(() => [] as Array<{ x: number; nuova: KeySignature; daAnnullare: KeySignature; measureIndex: number }>);
         for (const ch of normalizeKeyChanges(keySignatureChanges)) {
             const cambio = keyChangeAtMeasure(base, keySignatureChanges, ch.measureIndex);
             if (!cambio) continue; // un cambio verso la stessa armatura non si disegna
@@ -5804,8 +5804,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const spazio = Number((layoutData as any)?.keyChangeExtraByMeasure?.[ch.measureIndex] ?? 0);
             markersBySystem[sysIndex].push({
                 x: system.startMeasuresX[idx] - spazio + 4,
-                nuova: cambio.nuova,
-                daAnnullare: cambio.daAnnullare,
+                // Si passano le ARMATURE, non i nomi delle tonalità: il programma tiene
+                // le fondamentali nel dominio dei diesis (un La bemolle importato torna
+                // 'G#'), che VexFlow non conosce come tonalità. Convertire qui in
+                // armatura — diesis/bemolli e quanti — toglie di mezzo il problema, e la
+                // traduzione nel nome del disegno la fa chi disegna, una volta sola.
+                nuova: getKeySignature(cambio.nuova, 'Major'),
+                daAnnullare: getKeySignature(cambio.daAnnullare, 'Major'),
                 measureIndex: ch.measureIndex,
             });
         }

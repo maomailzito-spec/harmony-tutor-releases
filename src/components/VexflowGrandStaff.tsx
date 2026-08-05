@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation, Curve, TextBracket, KeySignature as VFKeySignature } from 'vexflow';
 import { ARTICULATION_VF_CODE } from '../utils/articulations';
+import { keySignatureToVexflowString } from '../utils/keySignatureChanges';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 
@@ -43,7 +44,7 @@ interface VexflowGrandStaffProps {
   onOctaveRightClick?: (octaveId: string, e: MouseEvent) => boolean | void;
   /** CAMBI D'ARMATURA da disegnare in questo sistema: la nuova armatura e quella da
    *  annullare coi bequadri, alla x d'inizio della battuta in cui entrano in vigore. */
-  keySignatureChanges?: Array<{ x: number; nuova: string; daAnnullare: string; measureIndex: number }>;
+  keySignatureChanges?: Array<{ x: number; nuova: KeySignature; daAnnullare: KeySignature; measureIndex: number }>;
   /** ARMATURA IN VIGORE misura per misura (solo i punti in cui cambia). Serve alla
    *  grafia delle alterazioni, che va decisa sull'armatura di QUEL punto. */
   keySignatureByMeasure?: Array<{ measureIndex: number; keySignature: KeySignature }>;
@@ -591,16 +592,6 @@ const getNoteOnsetKey = (n: StaffNote): string => {
   if (typeof st === 'number') return `${st}`;
   return `${n.measureIndex ?? -1}|${n.beat ?? -1}`;
 };
-
-function keySignatureToVexflowString(keySignature: KeySignature): string {
-  const sharpKeys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
-  const flatKeys = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
-  if (keySignature.type === 'sharp') {
-    return sharpKeys[keySignature.count] || 'C';
-  } else {
-    return flatKeys[keySignature.count] || 'C';
-  }
-}
 
 const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   notes,
@@ -1180,9 +1171,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // bequadri (`cancelKeySpec`): senza, passando da tre diesis a nessuno il rigo
     // resterebbe muto e chi legge continuerebbe a mettere i diesis di prima.
     try {
-      const disegnaArmatura = (stave: Stave | null, x: number, nuova: string, daAnnullare: string) => {
+      const disegnaArmatura = (stave: Stave | null, x: number, nuova: KeySignature, daAnnullare: KeySignature) => {
         if (!stave) return;
-        const ks = new VFKeySignature(nuova, daAnnullare);
+        // Il nome per VexFlow si ricava dall'ARMATURA (quanti diesis o bemolli), non dal
+        // nome della tonalità: 'G#' è una fondamentale che il programma usa, ma non una
+        // tonalità che VexFlow conosca — e passargliela faceva fallire il disegno in
+        // silenzio, dentro la rete di sicurezza qui sotto.
+        const ks = new VFKeySignature(keySignatureToVexflowString(nuova), keySignatureToVexflowString(daAnnullare));
         ks.setStave(stave);
         ks.setContext(context as any);
         ks.setX(x);
