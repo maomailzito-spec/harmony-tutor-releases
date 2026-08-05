@@ -34,7 +34,7 @@ import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } from '../utils/dynamics';
 import { articulationPlayback } from '../utils/articulations';
 import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
-import { normalizeKeyChanges } from '../utils/keySignatureChanges';
+import { normalizeKeyChanges, keyAtMeasure } from '../utils/keySignatureChanges';
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
@@ -1502,6 +1502,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [keySignatureChanges, setKeySignatureChanges] = useState<KeySignatureChange[]>([]);
     const keySignatureChangesRef = useRef(keySignatureChanges);
     keySignatureChangesRef.current = keySignatureChanges;
+    /** I punti in cui l'armatura cambia, già risolti: servono al disegno per decidere le
+     *  alterazioni da stampare misura per misura. */
+    const keySignatureByMeasure = useMemo(
+        () => normalizeKeyChanges(keySignatureChanges).map(c => ({
+            measureIndex: c.measureIndex,
+            keySignature: getKeySignature(c.root, 'Major'),
+        })),
+        [keySignatureChanges],
+    );
     const [octaveShifts, setOctaveShifts] = useState<OctaveShift[]>([]);
     const octaveShiftsRef = useRef(octaveShifts);
     octaveShiftsRef.current = octaveShifts;
@@ -3758,6 +3767,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
         return keySignature.type === 'sharp' ? sharpNotes.map(n => n + '#') : flatNotes.map(n => n + 'b');
     }, [keySignature.count, keySignature.type]);
+
+    /**
+     * Le alterazioni d'armatura in vigore in UNA data misura.
+     *
+     * È la domanda che sostituisce «quali sono le alterazioni d'armatura»: con un cambio
+     * a metà brano, un Fa dopo la battuta 9 va scritto secondo l'armatura di lì, non
+     * secondo quella d'inizio. Tutti i punti che decidono la grafia di una nota passano
+     * di qui.
+     */
+    const keyAccidentalsAtMeasure = useCallback((measureIndex: number): string[] => {
+        if (!keySignatureChanges || keySignatureChanges.length === 0) return keyAccidentals;
+        const inVigore = keyAtMeasure(
+            { root: keySignatureRoot, isMinor: isMinorMode },
+            keySignatureChanges,
+            Number.isFinite(measureIndex) ? Number(measureIndex) : 0,
+        );
+        return keyAccidentalNotes(getKeySignature(inVigore.root, 'Major'));
+    }, [keySignatureChanges, keySignatureRoot, isMinorMode, keyAccidentals]);
 
     const noteNameToChromaticIndex = useCallback((name: string): number => {
         const idxSharp = NOTE_NAMES.indexOf(name);
@@ -6601,7 +6628,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
                 try {
                     const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
-                    const nextExplicit = calculateAccidental(noteName, keyAccidentals);
+                    const nextExplicit = calculateAccidental(noteName, keyAccidentalsAtMeasure(n.measureIndex ?? 0));
                     return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
                 } catch {
                     return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
@@ -6609,7 +6636,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             });
             return { systemNotes, systemNotesForRender };
         });
-    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentals]);
+    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentalsAtMeasure]);
 
     // Larghezza reale del contenuto: di norma quella d'impaginazione, ma nel nastro
     // continuo è quella del sistema, che la eccede e si percorre scorrendo.
@@ -9772,7 +9799,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // veniva disegnato (es. B C trasposto −1 → Bb B: il B restava letto come Bb,
         // rompendo l'imitazione). Rielaboriamo explicitAccidental in ordine di tick,
         // tenendo conto delle note già presenti nelle stesse misure (coesistenza).
-        const keyAccList = keyAccidentalNotes(keySignature);
+        // (l'armatura si chiede misura per misura: vedi keyAccidentalsAtMeasure)
         const contextStore: any[] = isAcc
             ? [...((latestAccompanimentTracks.current[trackIdx]?.notes as any[]) ?? [])]
             : [...((latestRawNotes.current as any[]) ?? [])];
@@ -9784,7 +9811,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const map = buildMeasureAccidentals(working as any, measureIdx, Number(n.startTick));
             const clefAcc: Record<string, string> = {};
             for (const [k, v] of Object.entries(map)) if (k.startsWith(clef + '-')) clefAcc[k.slice(clef.length + 1)] = v;
-            n.explicitAccidental = calculateAccidentalWithMeasureContext(spelledNoteName(n), keyAccList, clefAcc);
+            n.explicitAccidental = calculateAccidentalWithMeasureContext(spelledNoteName(n), keyAccidentalsAtMeasure(measureIdx), clefAcc);
             working.push(n);
         }
 
@@ -15634,7 +15661,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             if (!n.isRest && !(n as any).userAccidental) {
                                                                                 try {
                                                                                     const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
-                                                                                    accForRender = { ...n, explicitAccidental: calculateAccidental(noteName, keyAccidentals) };
+                                                                                    accForRender = { ...n, explicitAccidental: calculateAccidental(noteName, keyAccidentalsAtMeasure(n.measureIndex ?? 0)) };
                                                                                 } catch { /* mantieni n */ }
                                                                             }
                                                                             out.push({ ...accForRender, xPosition: localX, _trackIdx: visIdx } as StaffNote);
@@ -15649,6 +15676,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 timeSignature={systemTimeSignature}
                                 timeSignatureChanges={systemMarkers}
                                 keySignatureChanges={(keySignatureMarkersBySystem?.[systemIndex] || [])}
+                                keySignatureByMeasure={keySignatureByMeasure}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
                                 slurs={slurs}

@@ -44,6 +44,9 @@ interface VexflowGrandStaffProps {
   /** CAMBI D'ARMATURA da disegnare in questo sistema: la nuova armatura e quella da
    *  annullare coi bequadri, alla x d'inizio della battuta in cui entrano in vigore. */
   keySignatureChanges?: Array<{ x: number; nuova: string; daAnnullare: string; measureIndex: number }>;
+  /** ARMATURA IN VIGORE misura per misura (solo i punti in cui cambia). Serve alla
+   *  grafia delle alterazioni, che va decisa sull'armatura di QUEL punto. */
+  keySignatureByMeasure?: Array<{ measureIndex: number; keySignature: KeySignature }>;
   /** DOVE cadono davvero i capi delle legature disegnate in questo sistema. Le maniglie
    *  si mettono lì: appese alla testa della nota finivano lontanissime dalla curva ogni
    *  volta che il gambo era lungo. */
@@ -476,7 +479,10 @@ const accidentalFromPcForLetter = (pc: number, letter: string): AccidentalType =
 const computeMeasureAccidentalGlyphs = (
   staffNotes: StaffNote[],
   timeSignature: TimeSignature,
-  keySignature: KeySignature,
+  /** L'armatura in vigore in QUELLA misura. Prima era una sola per tutto il brano: con
+   *  un cambio a metà, le note dopo restavano ortografate sull'armatura d'inizio — un
+   *  Fa diesis d'armatura continuava a portarsi dietro il diesis scritto. */
+  armaturaAllaMisura: (measureIndex: number) => KeySignature,
 ): Map<string, AccidentalType | null> => {
   const out = new Map<string, AccidentalType | null>();
   const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -505,6 +511,7 @@ const computeMeasureAccidentalGlyphs = (
 
   const sortedMeasures = Array.from(groups.keys()).sort((a, b) => a - b);
   for (const mi of sortedMeasures) {
+    const armaturaDiQuestaMisura = armaturaAllaMisura(mi);
     const g = (groups.get(mi) || []).slice();
     g.sort((a, b) => startTickOf(a) - startTickOf(b) || Number(a.voice ?? 1) - Number(b.voice ?? 1) || Number(a.midi ?? 0) - Number(b.midi ?? 0));
 
@@ -521,7 +528,7 @@ const computeMeasureAccidentalGlyphs = (
       const key = keyOf(clef, letter, octave);
       const existing = state.get(key);
       if (existing) return existing;
-      const d = keySignatureDefaultAccidentalForLetter(keySignature, letter);
+      const d = keySignatureDefaultAccidentalForLetter(armaturaDiQuestaMisura, letter);
       state.set(key, d);
       return d;
     };
@@ -622,6 +629,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onOctaveRightClick,
   onSlurAnchors,
   keySignatureChanges,
+  keySignatureByMeasure,
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
@@ -826,6 +834,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo
         // al primo tocco successivo alla partitura.
         slurs ?? null, octaveShifts ?? null, keySignatureChanges ?? null,
+        keySignatureByMeasure ?? null,
       ]);
     } catch {
       // Serialization failed → force a redraw (safe: never UNDER-draws).
@@ -875,6 +884,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const staffWidth = width - 2 * STAFF_MARGIN;
 
     const keyString = keySignatureToVexflowString(keySignature);
+    /** L'armatura in vigore all'inizio di una misura: quella d'impianto finché non
+     *  arriva un cambio, poi l'ultimo cambio avvenuto fino a lì. */
+    const armaturaAllaMisura = (measureIndex: number): KeySignature => {
+      let corrente = keySignature;
+      for (const c of (keySignatureByMeasure || [])) {
+        if (Number(c?.measureIndex) <= measureIndex) corrente = c.keySignature;
+        else break;
+      }
+      return corrente;
+    };
 
     const treble = staffMode !== 'satb_ancient' ? new Stave(STAFF_MARGIN, TREBLE_Y, staffWidth) : null;
     const bass = (staffMode === 'grandstaff') ? new Stave(STAFF_MARGIN, BASS_Y, staffWidth) : null;
@@ -2070,7 +2089,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           }
         }
 
-        const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, keySignature);
+        const accidentalGlyphById = computeMeasureAccidentalGlyphs(staffNotes, timeSignature, armaturaAllaMisura);
 
         // --- Bass staff: cross-voice accidental collision (voices 3+4) ---
         // When two notes at the same onset are a unison/second AND both have
