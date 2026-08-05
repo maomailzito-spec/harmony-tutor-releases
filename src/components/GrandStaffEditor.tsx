@@ -12087,8 +12087,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (!n) continue;
             const voce = Number((n as any).voice ?? 1);
             const tick = Number((n as any).startTick ?? 0);
+            // Nel CORO l'accordo è la verticale: le quattro voci che attaccano insieme.
+            // Prendendo la sola voce toccata, lo staccato spariva all'ascolto — le altre
+            // tre continuavano a suonare piene e coprivano il silenzio. Sulle tracce
+            // l'accordo è invece l'insieme delle note della stessa voce.
+            const nelCoro = voce >= 1 && voce <= 4;
             for (const altra of tutte) {
-                if (Number((altra as any).voice ?? 1) !== voce) continue;
+                const vAltra = Number((altra as any).voice ?? 1);
+                if (nelCoro ? !(vAltra >= 1 && vAltra <= 4) : vAltra !== voce) continue;
                 if (Number((altra as any).startTick ?? 0) !== tick) continue;
                 fuori.add(altra.id);
             }
@@ -12105,8 +12111,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * Vale anche per le note delle tracce d'accompagnamento: uno staccato è uno
      * staccato che sia scritto nel coro o nell'organo.
      */
-    const applicaArticolazione = useCallback((tipo: ArticulationMark, ids?: string[]) => {
-        const bersagli = espandiAllAccordo((ids && ids.length) ? ids : Array.from(selectedNoteIds));
+    const applicaArticolazione = useCallback((tipo: ArticulationMark, ids?: string[], comeAccordo = false) => {
+        // Due gesti, due significati:
+        //  · dalla tavolozza con delle note SELEZIONATE → esattamente quelle (se vuoi
+        //    lo staccato del solo soprano, lo selezioni e clicchi);
+        //  · TRASCINANDO il segno su una nota → l'accordo su cui l'hai mollato, perché
+        //    è quello che si vede: il punto si disegna una volta sola sopra il gruppo.
+        const richiesti = (ids && ids.length) ? ids : Array.from(selectedNoteIds);
+        const bersagli = comeAccordo ? espandiAllAccordo(richiesti) : new Set(richiesti);
         if (bersagli.size === 0) return;
         const tutteLeNote = [
             ...(latestRawNotes.current || []),
@@ -12332,7 +12344,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // nota il gesto non ha bersaglio, e non si fa nulla (meglio di posarla su
             // una nota a caso lì vicino).
             if (payload.kind === 'articulation') {
-                if (target.noteId) applicaArticolazioneRef.current?.(payload.data as ArticulationMark, [target.noteId]);
+                if (target.noteId) applicaArticolazioneRef.current?.(payload.data as ArticulationMark, [target.noteId], true);
                 return;
             }
 
