@@ -6,6 +6,7 @@ import { getKeySignature, getNotePropertiesFromMidi } from '../utils/musicTheory
 import { buildMidiFile } from '../utils/midiWriter';
 import { soundfontToGm } from '../constants/instruments';
 import { parseMidi, type ParsedMidiNote } from '../utils/midiParser';
+import type { DynamicMark } from '../utils/dynamics';
 import { electronBridge } from '../services/electronBridge';
 import { usePreference } from '../preferences/usePreference';
 
@@ -21,6 +22,8 @@ export type GrandStaffMidiProject = {
   /** Tracce di accompagnamento: vanno esportate anche loro (un brano scritto su una
    *  traccia usciva in un file MIDI vuoto). */
   accompanimentTracks?: AccompanimentTrack[];
+  /** Segni di dinamica: decidono la velocity delle note esportate, come in esecuzione. */
+  dynamics?: DynamicMark[];
 };
 
 export type UseGrandStaffMidiArgs = {
@@ -1720,6 +1723,8 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
         octaveTranspose: (t as any).octaveTranspose,
       })),
       bpm: project.bpm ?? 120,
+      // Le dinamiche scritte comandano la velocity: senza, il file usciva piatto.
+      dynamics: project.dynamics || [],
       midiType: (midiExportType === '0' ? 0 : 1) as 0 | 1,
       voicePrograms,
     });

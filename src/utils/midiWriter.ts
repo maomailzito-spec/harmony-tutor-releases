@@ -1,5 +1,6 @@
 import type { StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
+import { velocityAtAbsBeat, type DynamicMark } from './dynamics';
 
 const DEFAULT_TPQ = 480;
 const APP_TPQ = Math.max(1, Number(TICKS_PER_QUARTER) || 480);
@@ -67,6 +68,16 @@ function noteVelocity(note: StaffNote): number {
   return 88;
 }
 
+/** Punto della nota sulla linea del tempo, in semiminime dall'inizio: è l'unità in cui
+ *  sono ancorati i segni di dinamica. Stessa convenzione di `noteTick`, ma senza la
+ *  conversione alla risoluzione del file MIDI. */
+function noteAbsBeat(note: StaffNote, beatsPerMeasure: number): number {
+  if (Number.isFinite(note.startTick as number)) return Math.max(0, Number(note.startTick)) / APP_TPQ;
+  const measureIndex = Number.isFinite(note.measureIndex as number) ? Number(note.measureIndex) : 0;
+  const beat = Number.isFinite(note.beat as number) ? Number(note.beat) : 1;
+  return Math.max(0, (measureIndex * beatsPerMeasure) + (beat - 1));
+}
+
 function noteDurationTicks(note: StaffNote): number {
   if (Number.isFinite(note.durationTicks as number) && Number(note.durationTicks) > 0) {
     const appTicks = Math.max(1, Math.round(Number(note.durationTicks)));
@@ -111,6 +122,13 @@ export type MidiWriterProject = {
     /** Righi traspositori (chitarra/basso 8vb): il MIDI porta l'altezza SUONATA. */
     octaveTranspose?: number;
   }>;
+  /** SEGNI DI DINAMICA del brano (pp…ff, sf, fp, forcelle). Quando ce n'è almeno uno
+   *  comandano loro la velocity dei note-on, con la stessa curva e le stesse forcelle
+   *  che si sentono in esecuzione: senza, il file usciva tutto sullo stesso livello e
+   *  le dinamiche scritte sparivano al primo export. Quando non ce n'è nessuno resta
+   *  la velocity della nota (import MIDI, registrazione), che è l'unica informazione
+   *  dinamica del brano. */
+  dynamics?: DynamicMark[];
   /** 0 = single track (all voices merged), 1 = multi-track (one per voice). Default: 1 */
   midiType?: 0 | 1;
   /** General-MIDI program (0-127) per SATB voice (1-4). When present, a Program
@@ -130,6 +148,15 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
   const notes = (project.notes || []).filter(n => n && !n.isRest && Number.isFinite(n.midi));
   const timeSignature = project.timeSignature || { numerator: 4, denominator: 4 };
   const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
+
+  // Velocity da scrivere: comandano i segni di dinamica se ce n'è, altrimenti la
+  // velocity della nota. È la STESSA precedenza dell'esecuzione — un file importato
+  // con dinamiche vere non va appiattito su un mezzoforte solo perché nessuno ha
+  // ancora scritto un segno.
+  const segni = (project.dynamics || []).filter(Boolean);
+  const velocityDaScrivere = segni.length > 0
+    ? (note: StaffNote) => velocityAtAbsBeat(segni, noteAbsBeat(note, beatsPerMeasure))
+    : noteVelocity;
 
   // ── Group notes by voice ──
   const voiceNames = ['Soprano', 'Alto', 'Tenore', 'Basso'];
@@ -189,7 +216,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
       const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
-      const velOn = noteVelocity(note);
+      const velOn = velocityDaScrivere(note);
       events.push({ tick, order: 2, bytes: [0x90 | ch, midi, velOn] });
       events.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
@@ -234,7 +261,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
       const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi) + shift)));
-      out.push({ tick, order: 2, bytes: [0x90 | ch, midi, noteVelocity(note)] });
+      out.push({ tick, order: 2, bytes: [0x90 | ch, midi, velocityDaScrivere(note)] });
       out.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
     return out;
@@ -272,7 +299,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       const dur = noteDurationTicks(note);
       const ch = Math.max(0, Math.min(15, (note.voice ?? 1) - 1));
       const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
-      allEvents.push({ tick, order: 2, bytes: [0x90 | ch, midi, noteVelocity(note)] });
+      allEvents.push({ tick, order: 2, bytes: [0x90 | ch, midi, velocityDaScrivere(note)] });
       allEvents.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
     accTracks.forEach((t, idx) => {

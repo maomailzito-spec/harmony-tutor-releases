@@ -5,6 +5,7 @@
  */
 import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
+import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,11 @@ export interface ExportMusicXMLOptions {
   /** Analisi armonica opzionale: serializzata come <direction>(romano) + <figured-bass>(cifre).
    *  Non modifica la serializzazione delle note. */
   harmonyLabels?: HarmonyExportLabel[];
+  /** SEGNI DI DINAMICA: <dynamics> per i livelli e gli accenti, <wedge> per le forcelle.
+   *  In questo programma valgono per tutto il brano (non appartengono a una voce), quindi
+   *  ogni <part> se li porta: chi apre il file li trova su ogni rigo, come in una
+   *  partitura corale dove il *f* si scrive una volta e riguarda l'insieme. */
+  dynamics?: DynamicMark[];
   /** Nome della parte del coro nella <part-list> (default "Piano"). */
   satbName?: string;
   /** TRACCE DI ACCOMPAGNAMENTO: ognuna diventa una <part> a sé. Senza, un brano scritto
@@ -236,6 +242,31 @@ function emitFiguredBass(w: (s: string) => void, figures: string[]): void {
   w('      </figured-bass>');
 }
 
+// ── Dinamiche ──────────────────────────────────────────────────────────────
+
+/** Una direzione già pronta, con il punto della battuta in cui va infilata.
+ *  `ordine` conta solo a parità di tick: prima si chiude la forcella che finisce lì,
+ *  poi si scrive il segno di quel punto, poi si apre la forcella che parte di lì. */
+type DynDirection = { localTick: number; ordine: number; lines: string[] };
+
+/** `<sound dynamics>` vuole una PERCENTUALE, dove 100 = velocity 90 (lo dice la
+ *  specifica MusicXML). Senza, chi riapre il file vede il segno ma lo suona a caso. */
+const soundDynamicsPercent = (velocity: number): number =>
+    Math.max(1, Math.round((velocity / 90) * 100));
+
+function buildDynDirection(corpo: string[], velocity?: number): string[] {
+    const lines = [
+        '      <direction placement="below">',
+        '        <direction-type>',
+        ...corpo,
+        '        </direction-type>',
+        '        <staff>1</staff>',
+    ];
+    if (velocity != null) lines.push(`        <sound dynamics="${soundDynamicsPercent(velocity)}"/>`);
+    lines.push('      </direction>');
+    return lines;
+}
+
 // ── Main Export ────────────────────────────────────────────────────────────
 
 export function exportMusicXML(opts: ExportMusicXMLOptions): string {
@@ -369,6 +400,43 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     ? opts.totalMeasures - 1
     : finalParts.reduce((mx, p) => Math.max(mx, measuresOf(p.notes)), 0);
 
+  // ── DINAMICHE per battuta ──────────────────────────────────────────────────
+  // I segni sono ancorati a un punto della linea del tempo (absBeat, in semiminime):
+  // qui diventano tick, poi battuta + posizione dentro la battuta, passando dalla
+  // stessa mappa delle note così un cambio di metro non li sposta.
+  const measureOfTick = (tick: number): number => {
+    let m = 0;
+    while (m < maxMeasure && measureStartTicks(m + 1) <= tick + 1) m++;
+    return m;
+  };
+  const dynByMeasure = new Map<number, DynDirection[]>();
+  const pushDyn = (absBeat: number, ordine: number, corpo: string[], velocity?: number): void => {
+    if (!Number.isFinite(absBeat)) return;
+    const tick = Math.round(Math.max(0, absBeat) * DIVISIONS);
+    const m = measureOfTick(tick);
+    const localTick = Math.max(0, tick - measureStartTicks(m));
+    if (!dynByMeasure.has(m)) dynByMeasure.set(m, []);
+    dynByMeasure.get(m)!.push({ localTick, ordine, lines: buildDynDirection(corpo, velocity) });
+  };
+  for (const d of (opts.dynamics || [])) {
+    if (!d) continue;
+    if (d.kind === 'level') {
+      pushDyn(d.absBeat, 1, [`          <dynamics><${d.level}/></dynamics>`], DYNAMIC_VELOCITY[d.level]);
+    } else if (d.kind === 'accent') {
+      pushDyn(d.absBeat, 1, [`          <dynamics><${d.label}/></dynamics>`]);
+    } else if (d.kind === 'fp') {
+      pushDyn(d.absBeat, 1, ['          <dynamics><fp/></dynamics>']);
+    } else if (d.kind === 'hairpin') {
+      const a = Math.min(d.fromAbsBeat, d.toAbsBeat);
+      const b = Math.max(d.fromAbsBeat, d.toAbsBeat);
+      pushDyn(a, 2, [`          <wedge type="${d.direction === 'cresc' ? 'crescendo' : 'diminuendo'}"/>`]);
+      pushDyn(b, 0, ['          <wedge type="stop"/>']);
+    }
+  }
+  for (const list of dynByMeasure.values()) {
+    list.sort((x, y) => (x.localTick - y.localTick) || (x.ordine - y.ordine));
+  }
+
   const fifths = computeFifths(keySignature, keySignatureRoot);
   const mode = isMinorMode ? 'minor' : 'major';
 
@@ -451,6 +519,39 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       const measureNotes = notesByMeasure.get(m) || [];
       const measureTotalTicks = measureLenTicks(m);
 
+      // I segni di dinamica vanno scritti PRIMA delle note, ciascuno al suo punto: si
+      // avanza con <forward> fino al tick del segno e alla fine si riempie il resto
+      // della battuta, così il flusso delle note riparte da capo col solito <backup>.
+      // Corsia dedicata e non agganciata agli attacchi perché la coda di una forcella
+      // cade spesso dove nessuna voce attacca, e lì non avrebbe trovato un posto.
+      const dynHere = dynByMeasure.get(m) || [];
+      let dynStreamWritten = false;
+      if (dynHere.length > 0) {
+        let cur = 0;
+        for (const d of dynHere) {
+          const t = Math.max(0, Math.min(measureTotalTicks, d.localTick));
+          if (t > cur) {
+            w('      <forward>');
+            w(`        <duration>${t - cur}</duration>`);
+            w('      </forward>');
+            cur = t;
+          }
+          for (const line of d.lines) w(line);
+        }
+        // Se i segni stavano tutti sul primo movimento non ci si è mossi: inutile
+        // percorrere la battuta e riavvolgerla a vuoto (un <forward> seguito da un
+        // <backup> della stessa misura è un giro a vuoto che certi programmi leggono
+        // come una voce in più).
+        if (cur > 0) {
+          if (measureTotalTicks > cur) {
+            w('      <forward>');
+            w(`        <duration>${measureTotalTicks - cur}</duration>`);
+            w('      </forward>');
+          }
+          dynStreamWritten = true;
+        }
+      }
+
       // Armonia di questa misura, agganciata per localTick (onset). Ogni etichetta emessa
       // UNA sola volta: il romano sul rigo acuto, le cifre sul rigo grave.
       const hMap = part.withHarmony ? harmonyByMeasure.get(m) : undefined;
@@ -464,7 +565,9 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
         staffNotes[idx].push(n);
       }
 
-      let needsBackup = false; // serve un <backup> prima del prossimo flusso di voce?
+      // Serve un <backup> prima del prossimo flusso di voce? Sì anche se la corsia delle
+      // dinamiche ha già percorso la battuta per intero.
+      let needsBackup = dynStreamWritten;
 
       for (let staffIdx = 0; staffIdx < staffNotes.length; staffIdx++) {
         const sNotes = staffNotes[staffIdx];

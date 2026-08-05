@@ -1802,7 +1802,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Servono all'EXPORT MIDI: senza, un brano scritto su una traccia di
         // accompagnamento veniva esportato in un file vuoto.
         accompanimentTracks,
-    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks]);
+        // I segni di dinamica comandano la velocity delle note esportate, esattamente
+        // come comandano il volume in esecuzione.
+        dynamics,
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, dynamics]);
 
     const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
         setRawNotes(next.notes || []);
@@ -6655,6 +6658,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isMinorMode,
                 keySignatureRoot,
                 harmonyLabels,
+                // Dinamiche: <dynamics> e <wedge> nel MusicXML. Valgono per tutto il
+                // brano, quindi ogni parte se le porta.
+                dynamics: dynamicsRef.current || [],
                 satbName,
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.
