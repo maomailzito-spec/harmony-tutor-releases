@@ -12033,6 +12033,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const applicaArticolazioneRef = useRef(applicaArticolazione);
     applicaArticolazioneRef.current = applicaArticolazione;
 
+    /**
+     * Tasto destro su una nota: toglie le sue articolazioni — la stessa regola della
+     * tavolozza, dove il destro toglie sempre.
+     *
+     * Restituisce `false` se quella nota non ne ha: così il clic PROSEGUE verso i menù
+     * che stavano già lì (stanghetta, rigo) e nessuna nota diventa una zona morta.
+     */
+    const togliArticolazioniDaNota = useCallback((noteId: string): boolean => {
+        const suNota = (n: any) => !!n && n.id === noteId;
+        const nota = (latestRawNotes.current || []).find(suNota)
+            ?? (latestAccompanimentTracks.current || []).flatMap(t => t.notes || []).find(suNota);
+        const attuali = (nota as any)?.articulations;
+        if (!Array.isArray(attuali) || attuali.length === 0) return false;
+        const spoglia = (n: any) => {
+            if (!suNota(n)) return n;
+            const { articulations: _via, ...resto } = n;
+            return resto;
+        };
+        setRawNotes(prev => (prev || []).map(spoglia));
+        setAccompanimentTracks(prev => (prev || []).map(t => ({ ...t, notes: (t.notes || []).map(spoglia) })));
+        return true;
+    }, [setRawNotes, setAccompanimentTracks]);
+
     const posaSegno = useCallback((payload: SignDragPayload, target: { systemIndex: number; x: number; y: number; noteId?: string }) => {
         try {
             // Le articolazioni stanno SULLA nota: se sotto il puntatore non c'è una
@@ -15219,6 +15242,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 timeSignatureChanges={systemMarkers}
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
+                                onNoteRightClick={(noteId) => togliArticolazioniDaNota(noteId)}
                                 onBarlineRightClick={(barlineId) => {
                                     // Coerenza coi segni della tavolozza: il tasto destro TOGLIE.
                                     // Se su quella stanghetta non c'è né doppia barra né

@@ -29,6 +29,10 @@ interface VexflowGrandStaffProps {
    *  aver fatto nulla e il clic prosegue verso il menù del rigo: così intercettare le
    *  stanghette non crea una zona morta di 12px attorno a ognuna. */
   onBarlineRightClick?: (barlineId: string, e: MouseEvent) => boolean | void;
+  /** Tasto destro su una NOTA. Come per le stanghette, chi ascolta può DECLINARE
+   *  (`false`) e il clic prosegue verso il menù del rigo: senza, ogni nota sarebbe
+   *  diventata una zona morta per i menù che ci stavano già. */
+  onNoteRightClick?: (noteId: string, e: MouseEvent) => boolean | void;
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
@@ -596,6 +600,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onMouseMoveStaff,
   onStaffMouseDown,
   onBarlineRightClick,
+  onNoteRightClick,
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
@@ -728,6 +733,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   // Right-click on a measure barline (context menu)
   const onBarlineRightClickRef = useRef<typeof onBarlineRightClick>(onBarlineRightClick);
   useEffect(() => { onBarlineRightClickRef.current = onBarlineRightClick; }, [onBarlineRightClick]);
+  const onNoteRightClickRef = useRef<typeof onNoteRightClick>(onNoteRightClick);
+  useEffect(() => { onNoteRightClickRef.current = onNoteRightClick; }, [onNoteRightClick]);
 
   const barlinesRef = useRef<Barline[]>(barlines);
   useEffect(() => { barlinesRef.current = barlines; }, [barlines]);
@@ -3979,6 +3986,31 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const staffCb = onStaffRightClickRef.current;
       const bars = barlinesRef.current;
       const { x, y } = clientToSvgCoords(svg, e);
+
+      // ── Tasto destro su una NOTA: si toglie ciò che le è attaccato ──
+      // Prima l'elemento sotto il puntatore (il glifo dell'articolazione fa parte del
+      // gruppo della nota), poi la vicinanza: gli accordi unificati non portano l'id
+      // nel DOM e si riconoscono solo dai punti d'aggancio, come per la selezione.
+      const noteCb = onNoteRightClickRef.current;
+      if (noteCb) {
+        const info = getTargetNoteInfo(e.target);
+        let idNota: string | null = (!info.isGhost && info.noteId) ? info.noteId : null;
+        if (!idNota) {
+          const RAGGIO = 18;
+          let vicina: { id: string; d2: number } | null = null;
+          for (const p of noteHitPointsRef.current) {
+            if (p.isGhost) continue;
+            const dx = p.x - x, dy = p.y - y, d2 = dx * dx + dy * dy;
+            if (d2 <= RAGGIO * RAGGIO && (!vicina || d2 < vicina.d2)) vicina = { id: p.id, d2 };
+          }
+          idNota = vicina?.id ?? null;
+        }
+        if (idNota) {
+          const gestito = noteCb(idNota, e);
+          if (gestito !== false) { e.stopPropagation(); return; }
+          // declinato → prosegue verso stanghetta e menù del rigo, com'era prima
+        }
+      }
 
       // If we have no barlines (or no barline handler), treat it as a staff right-click.
       if (!cb || !bars || bars.length === 0) {
