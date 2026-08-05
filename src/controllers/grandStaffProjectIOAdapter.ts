@@ -48,6 +48,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         voltaBrackets: any[];
         dynamics?: any[];
         slurs?: any[];
+        octaveShifts?: any[];
         toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
@@ -136,6 +137,8 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		dynamics: args.dynamics || [],
 		// Legature di portamento: idem.
 		slurs: args.slurs || [],
+		// Segni d'ottava: idem.
+		octaveShifts: args.octaveShifts || [],
 		harmonyOverrides: args.latestHarmonyOverrides.current,
 		ornamentOverrides: args.latestOrnamentOverrides?.current || [],
 		// Override manuali dell'analisi ACC — solo se presenti, per file leggeri.
@@ -230,6 +233,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setVoltaBrackets: (next: any) => void;
 	setDynamics?: (next: any) => void;
 	setSlurs?: (next: any) => void;
+	setOctaveShifts?: (next: any) => void;
 	setTempoCurves?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
@@ -604,6 +608,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			// eredita i segni della sessione precedente.
 			args.setDynamics?.(Array.isArray((loadedProject as any).dynamics) ? (loadedProject as any).dynamics : []);
 			args.setSlurs?.(Array.isArray((loadedProject as any).slurs) ? (loadedProject as any).slurs : []);
+			args.setOctaveShifts?.(Array.isArray((loadedProject as any).octaveShifts) ? (loadedProject as any).octaveShifts : []);
 			if (Array.isArray(loadedProject.harmonyOverrides)) {
 				args.setHarmonyOverrides(loadedProject.harmonyOverrides);
 			}

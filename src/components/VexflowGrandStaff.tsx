@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation, Curve } from 'vexflow';
+import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation, Curve, TextBracket } from 'vexflow';
 import { ARTICULATION_VF_CODE } from '../utils/articulations';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
@@ -37,6 +37,10 @@ interface VexflowGrandStaffProps {
   slurs?: Array<{ id: string; fromNoteId: string; toNoteId: string }>;
   /** Tasto destro sulla curva di una legatura. */
   onSlurRightClick?: (slurId: string, e: MouseEvent) => boolean | void;
+  /** Segni d'ottava (8va/8vb): capi = id di due note, come le legature. */
+  octaveShifts?: Array<{ id: string; fromNoteId: string; toNoteId: string; direction: 'up' | 'down' }>;
+  /** Tasto destro sulla parentesi dell'8va. */
+  onOctaveRightClick?: (octaveId: string, e: MouseEvent) => boolean | void;
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
@@ -607,6 +611,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onNoteRightClick,
   slurs,
   onSlurRightClick,
+  octaveShifts,
+  onOctaveRightClick,
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
@@ -743,6 +749,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   useEffect(() => { onNoteRightClickRef.current = onNoteRightClick; }, [onNoteRightClick]);
   const onSlurRightClickRef = useRef<typeof onSlurRightClick>(onSlurRightClick);
   useEffect(() => { onSlurRightClickRef.current = onSlurRightClick; }, [onSlurRightClick]);
+  const onOctaveRightClickRef = useRef<typeof onOctaveRightClick>(onOctaveRightClick);
+  useEffect(() => { onOctaveRightClickRef.current = onOctaveRightClick; }, [onOctaveRightClick]);
 
   const barlinesRef = useRef<Barline[]>(barlines);
   useEffect(() => { barlinesRef.current = barlines; }, [barlines]);
@@ -808,7 +816,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // Le legature stanno in un elenco a parte: senza metterle nella firma, una
         // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo
         // al primo tocco successivo alla partitura.
-        slurs ?? null,
+        slurs ?? null, octaveShifts ?? null,
       ]);
     } catch {
       // Serialization failed → force a redraw (safe: never UNDER-draws).
@@ -1300,6 +1308,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // tracce): le legature di portamento possono unire note di righi diversi, quindi
       // vanno disegnate dopo, quando si sa dove sono finite tutte.
       const vfPerId = new Map<string, StaveNote>();
+      // Note disegnate in questo sistema, in ordine di posizione: quando un segno
+      // d'ottava sconfina, serve sapere qual è l'ultima nota della sua voce QUI per
+      // chiudere la parentesi al bordo invece di non disegnarla affatto.
+      const noteInSistema: Array<{ id: string; voce: number; x: number; vf: StaveNote }> = [];
 
       const drawNotesAtX = (
         staffNotes: StaffNote[],
@@ -3301,6 +3313,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // membri condividono la stessa testa).
         for (const p of prepared) {
           if (p.staffNote.id === '__ghost__') continue;
+          if (!p.staffNote.isRest) {
+            noteInSistema.push({ id: p.staffNote.id, voce: Number((p.staffNote as any).voice ?? 1), x: p.x, vf: p.vfNote });
+          }
           if (!vfPerId.has(p.staffNote.id)) vfPerId.set(p.staffNote.id, p.vfNote);
           const uniti: string[] | undefined = (p.vfNote as any).__mergedIds;
           if (Array.isArray(uniti)) {
@@ -4006,6 +4021,47 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         }
       } catch { /* ignore */ }
 
+      // ── SEGNI D'OTTAVA (8va / 8vb) ──
+      // Come le legature, si disegnano quando tutte le note sono al loro posto. A
+      // differenza della curva, la parentesi di VexFlow pretende due capi: se il segno
+      // sconfina nel sistema seguente si chiude sull'ultima nota della sua voce qui —
+      // altrimenti non si vedrebbe niente proprio nei passaggi lunghi, che sono quelli
+      // per cui il segno esiste.
+      try {
+        for (const os of (octaveShifts || [])) {
+          const daVf = vfPerId.get(os.fromNoteId) || null;
+          const aVf = vfPerId.get(os.toNoteId) || null;
+          if (!daVf && !aVf) continue;
+          const notoId = daVf ? os.fromNoteId : os.toNoteId;
+          const voce = noteInSistema.find(n => n.id === notoId)?.voce ?? 1;
+          const dellaVoce = noteInSistema.filter(n => n.voce === voce).sort((a, b) => a.x - b.x);
+          const start = daVf ?? dellaVoce[0]?.vf;
+          const stop = aVf ?? dellaVoce[dellaVoce.length - 1]?.vf;
+          if (!start || !stop) continue;
+          const g = (context as any).openGroup?.() as SVGGElement | undefined;
+          try {
+            if (g) g.setAttribute('data-octave-id', os.id);
+          } catch { /* ignore */ }
+          try {
+            const parentesi = new TextBracket({
+              start, stop,
+              text: '8',
+              superscript: os.direction === 'up' ? 'va' : 'vb',
+              position: os.direction === 'up' ? TextBracket.Position.TOP : TextBracket.Position.BOTTOM,
+            });
+            parentesi.setContext(context as any);
+            parentesi.draw();
+            if (g) {
+              for (const el of Array.from(g.querySelectorAll('path, text, rect'))) {
+                el.setAttribute('data-octave-id', os.id);
+                (el as any).style.pointerEvents = 'all';
+              }
+            }
+          } catch { /* un segno che non si disegna non deve fermare il resto */ }
+          try { (context as any).closeGroup?.(); } catch { /* ignore */ }
+        }
+      } catch { /* ignore */ }
+
       noteHitPointsRef.current = hitPoints;
       onNoteHitPoints?.(hitPoints);
 
@@ -4062,6 +4118,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // ── Tasto destro sulla CURVA di una legatura ──
       // Prima della nota: qui il bersaglio è colpito in pieno (il tratto porta il suo
       // id), mentre la nota si prende anche per vicinanza e ruberebbe il gesto.
+      const octCb = onOctaveRightClickRef.current;
+      if (octCb && e.target instanceof Element) {
+        const idOtt = (e.target.closest('[data-octave-id]') as Element | null)?.getAttribute('data-octave-id');
+        if (idOtt) {
+          const gestito = octCb(idOtt, e);
+          if (gestito !== false) { e.stopPropagation(); return; }
+        }
+      }
+
       const slurCb = onSlurRightClickRef.current;
       if (slurCb && e.target instanceof Element) {
         const suCurva = e.target.closest('[data-slur-id]') as Element | null;

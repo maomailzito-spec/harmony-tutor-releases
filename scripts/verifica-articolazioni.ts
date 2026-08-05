@@ -124,5 +124,19 @@ ok(readNoteSlurEnds(fintaConLegature([{ type: 'continue' }])).length === 0,
    "il tipo 'continue' non apre e non chiude: si ignora");
 ok(readNoteSlurEnds(fintaConLegature([])).length === 0, 'nota senza legature: nessun capo');
 
+// ── 5. Segni d'ottava ─────────────────────────────────────────────────────
+// Quello che è SCRITTO resta dov'è; il segno cambia quello che SUONA.
+console.log('\nSegni d\'ottava');
+import { octaveOffsetSemitones, type OctaveSpan } from '../src/utils/octaveShifts';
+
+const sopra: OctaveSpan[] = [{ fromTick: 0, toTick: 4 * TPQ, voice: 1, direction: 'up' }];
+ok(octaveOffsetSemitones(sopra, 0, 1) === 12, 'sulla prima nota del tratto: +12');
+ok(octaveOffsetSemitones(sopra, 4 * TPQ, 1) === 12, "anche sull'ULTIMA: gli estremi sono compresi");
+ok(octaveOffsetSemitones(sopra, 4 * TPQ + 1, 1) === 0, 'appena dopo la fine: niente');
+ok(octaveOffsetSemitones(sopra, 2 * TPQ, 4) === 0, "un 8va sul soprano non alza il basso che suona insieme");
+ok(octaveOffsetSemitones([{ ...sopra[0], direction: 'down' }], 0, 1) === -12, "l'8vb scende di un'ottava");
+ok(octaveOffsetSemitones(undefined, 0, 1) === 0 && octaveOffsetSemitones([], 0, 1) === 0, 'senza segni non cambia niente');
+ok(octaveOffsetSemitones([sopra[0], sopra[0]], 0, 1) === 24, 'due segni sovrapposti si sommano (15ma scritta come due 8va)');
+
 console.log(falliti === 0 ? '\nTUTTO A POSTO\n' : `\n${falliti} CONTROLLI FALLITI\n`);
 process.exit(falliti === 0 ? 0 : 1);

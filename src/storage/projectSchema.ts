@@ -29,6 +29,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'tempoCurves',
   'dynamics',
   'slurs',
+  'octaveShifts',
   'analysisLocked',
   'teacherPasswordHash',
   'analysisLockOptions',
@@ -90,6 +91,7 @@ export type ProjectDataV1 = {
   /** Segni di dinamica (pp…ff, sf, fp, forcelle): valgono per tutte le voci. */
   dynamics?: any[];
   slurs?: any[];
+  octaveShifts?: any[];
 
   analysisLocked?: boolean;
   teacherPasswordHash?: string;

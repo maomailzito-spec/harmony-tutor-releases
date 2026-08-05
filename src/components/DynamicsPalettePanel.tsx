@@ -29,6 +29,8 @@ interface DynamicsPalettePanelProps {
     /** Legatura di portamento: fra le due note selezionate (o trascinata su una nota,
      *  e allora arriva alla successiva). Rifarla sulla stessa coppia la toglie. */
     onPlaceSlur: () => void;
+    /** Segno d'ottava sopra (8va) o sotto (8vb) per le note selezionate. */
+    onPlaceOctave: (direction: 'up' | 'down') => void;
     onRemoveAtSelection: () => void;
     onClose: () => void;
     /** Battute: comandi che non sono "segni da posare" ma azioni su una misura. */
@@ -47,7 +49,7 @@ const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff']
 
 const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     selectionCount, hasMarkAtSelection,
-    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
+    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
     const [pos, setPos] = useState<{ x: number; y: number }>({ x: 200, y: 120 });
     // Valori del metro da posare: partono da quello del brano e si regolano qui,
@@ -195,6 +197,24 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     >
                         ⌒
                     </button>
+                </div>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Ottava</div>
+                <div className="grid grid-cols-4 gap-1">
+                    {([['up', '8va'], ['down', '8vb']] as const).map(([dir, etichetta]) => (
+                        <button
+                            key={dir}
+                            onMouseDown={(e) => onStartDrag({ kind: 'octave', data: dir, label: etichetta }, e)}
+                            onClick={() => { if (selectionCount > 0) onPlaceOctave(dir); }}
+                            title={dir === 'up'
+                                ? 'Suona un\'ottava SOPRA il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'
+                                : 'Suona un\'ottava SOTTO il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'}
+                            className={`${bottone} ${attivo} px-1 italic`}
+                            style={{ fontFamily: 'serif' }}
+                        >
+                            {etichetta}
+                        </button>
+                    ))}
                 </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Tempo</div>

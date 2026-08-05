@@ -33,7 +33,8 @@ import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } from '../utils/dynamics';
 import { articulationPlayback } from '../utils/articulations';
-import type { ArticulationMark, Slur } from '../types';
+import type { ArticulationMark, Slur, OctaveShift } from '../types';
+import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -1490,6 +1491,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [slurs, setSlurs] = useState<Slur[]>([]);
     const slursRef = useRef(slurs);
     slursRef.current = slurs;
+    // Segni d'ottava: l'altezza SCRITTA resta quella salvata, il segno cambia come suona.
+    const [octaveShifts, setOctaveShifts] = useState<OctaveShift[]>([]);
+    const octaveShiftsRef = useRef(octaveShifts);
+    octaveShiftsRef.current = octaveShifts;
     const dynamicsRef = useRef(dynamics);
     dynamicsRef.current = dynamics;
 
@@ -4839,6 +4844,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     tempoCurves,
                     dynamics,
                     slurs,
+                    octaveShifts,
                     toolbarGroupOrder,
                     bpm,
                     isBpmActive,
@@ -4896,6 +4902,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setTempoCurves,
                     setDynamics,
                     setSlurs,
+                    setOctaveShifts,
                     setKeyChangeMode,
                     setModalTonicOverride,
                     setAutoLeadingToneInMinor,
@@ -5096,6 +5103,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // di prima, in punti che con la musica nuova non c'entrano niente.
                 setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
                 setSlurs(Array.isArray(imported?.slurs) ? imported.slurs : []);
+                setOctaveShifts([]);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setPasteCaretImmediate(null);
@@ -5165,7 +5173,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, tempoCurves, dynamics, slurs, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, dynamics, slurs, octaveShifts, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -8247,7 +8255,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const v = (n.voice ?? 1) as number;
                     const durSec = Math.max(0.05, beatToTime(it.absStartBeat + it.durationBeats) - beatToTime(it.absStartBeat));
                     const midi = n.midi;
-                    const midiT = (midi ?? 0) + playbackTransposeSemitones;
+                    // Segno d'ottava: quello che è SCRITTO resta dov'è, quello che SUONA
+                    // si sposta di un'ottava. È tutto il senso del segno.
+                    const ott = octaveOffsetSemitones(octaveSpansRef.current, Number((n as any).startTick ?? 0), v);
+                    const midiT = (midi ?? 0) + playbackTransposeSemitones + ott;
                     if (!Number.isFinite(midiT) || midiT < 21 || midiT > 108) return;
                     const instr = voiceInstrumentsRef.current[v] || 'acoustic_grand_piano';
                     // Get-or-create per-voice gain node so volume/mute apply in real-time
@@ -12098,7 +12109,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * finire — e la nota si cerca senza limite di distanza, perché chi sta trascinando
      * un capo vuole comunque posarlo su una nota.
      */
-    const slurDragRef = useRef<{ id: string; capo: 'from' | 'to' } | null>(null);
+    const slurDragRef = useRef<{ tipo: 'legatura' | 'ottava'; id: string; capo: 'from' | 'to' } | null>(null);
 
     useEffect(() => {
         const tickDi = (id: string): number => {
@@ -12111,18 +12122,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (!d) return;
             const nuova = notaAlPunto(e.clientX, e.clientY, Number.POSITIVE_INFINITY);
             if (!nuova) return;
-            setSlurs(prev => (prev || []).map(sl => {
-                if (sl.id !== d.id) return sl;
-                const da = d.capo === 'from' ? nuova : sl.fromNoteId;
-                const a = d.capo === 'to' ? nuova : sl.toNoteId;
-                if (da === a) return sl;                       // su sé stessa non esiste
-                if (da === sl.fromNoteId && a === sl.toNoteId) return sl; // nulla di nuovo: niente ridisegno
-                // I capi si riordinano nel tempo: tirando l'inizio oltre la fine la
-                // legatura si rovescerebbe, e una curva all'indietro non vuol dire nulla.
+            // Vale per qualunque segno a due capi (legatura, 8va): cambia solo l'elenco.
+            const sposta = <T extends { id: string; fromNoteId: string; toNoteId: string }>(x: T): T => {
+                if (x.id !== d.id) return x;
+                const da = d.capo === 'from' ? nuova : x.fromNoteId;
+                const a = d.capo === 'to' ? nuova : x.toNoteId;
+                if (da === a) return x;                        // da una nota a sé stessa non esiste
+                if (da === x.fromNoteId && a === x.toNoteId) return x; // nulla di nuovo: niente ridisegno
+                // I capi si riordinano nel tempo: tirando l'inizio oltre la fine il segno
+                // si rovescerebbe, e disegnato all'indietro non vuol dire nulla.
                 return tickDi(da) <= tickDi(a)
-                    ? { ...sl, fromNoteId: da, toNoteId: a }
-                    : { ...sl, fromNoteId: a, toNoteId: da };
-            }));
+                    ? { ...x, fromNoteId: da, toNoteId: a }
+                    : { ...x, fromNoteId: a, toNoteId: da };
+            };
+            if (d.tipo === 'legatura') setSlurs(prev => (prev || []).map(sposta));
+            else setOctaveShifts(prev => (prev || []).map(sposta));
         };
         const molla = () => { slurDragRef.current = null; };
         window.addEventListener('mousemove', muovi);
@@ -12131,6 +12145,48 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             window.removeEventListener('mousemove', muovi);
             window.removeEventListener('mouseup', molla);
         };
+    }, []);
+
+    /**
+     * Mette un segno d'ottava sulle note selezionate (dalla prima all'ultima nel tempo).
+     * Rifarlo nella stessa direzione sulla stessa coppia lo toglie.
+     *
+     * NON muove le note: l'altezza scritta è quella che si vede. Per ripulire un
+     * passaggio già scritto alto, si abbassa la selezione di un'ottava (⇧↓) e poi si
+     * mette il segno — due gesti visibili invece di uno che cambia le altezze di
+     * nascosto.
+     */
+    const metti8va = useCallback((direction: 'up' | 'down', daId?: string, aId?: string) => {
+        const tutte = [
+            ...(latestRawNotes.current || []),
+            ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+        ].filter(n => n && !n.isRest);
+        let da = daId, a = aId;
+        if (!da || !a) {
+            const scelte = tutte
+                .filter(n => selectedNoteIds.has(n.id))
+                .map(n => ({ id: n.id, t: Number((n as any).startTick ?? 0) }))
+                .sort((x, y) => x.t - y.t);
+            if (scelte.length < 1) return;
+            da = scelte[0].id;
+            a = scelte[scelte.length - 1].id;
+        }
+        if (!da || !a) return;
+        setOctaveShifts(prev => {
+            const esistenti = prev || [];
+            const uguale = (o: OctaveShift) => o.direction === direction
+                && ((o.fromNoteId === da && o.toNoteId === a) || (o.fromNoteId === a && o.toNoteId === da));
+            if (esistenti.some(uguale)) return esistenti.filter(o => !uguale(o));
+            return [...esistenti, { id: crypto.randomUUID(), fromNoteId: da!, toNoteId: a!, direction }];
+        });
+    }, [selectedNoteIds]);
+    const metti8vaRef = useRef(metti8va);
+    metti8vaRef.current = metti8va;
+
+    /** Tasto destro sulla parentesi: il segno d'ottava si toglie. */
+    const togli8va = useCallback((octaveId: string): boolean => {
+        setOctaveShifts(prev => (prev || []).filter(o => o.id !== octaveId));
+        return true;
     }, []);
 
     /** Tasto destro sulla curva: la legatura si toglie. */
@@ -12160,6 +12216,45 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const buone = slurs.filter(s => vive.has(s.fromNoteId) && vive.has(s.toNoteId));
         if (buone.length !== slurs.length) setSlurs(buone);
     }, [rawNotes, accompanimentTracks, slurs]);
+
+    useEffect(() => {
+        if (octaveShifts.length === 0) return;
+        const vive = new Set<string>();
+        for (const n of (rawNotes || [])) if (n?.id) vive.add(n.id);
+        for (const t of (accompanimentTracks || [])) for (const n of (t.notes || [])) if (n?.id) vive.add(n.id);
+        const buoni = octaveShifts.filter(o => vive.has(o.fromNoteId) && vive.has(o.toNoteId));
+        if (buoni.length !== octaveShifts.length) setOctaveShifts(buoni);
+    }, [rawNotes, accompanimentTracks, octaveShifts]);
+
+    /**
+     * I segni d'ottava risolti sui tick, pronti per l'esecuzione: il capo dà il punto,
+     * la voce dice a chi si applica (un 8va sul soprano non alza il basso che suona
+     * nello stesso momento).
+     */
+    const octaveSpans = useMemo<OctaveSpan[]>(() => {
+        const tutte = [
+            ...(rawNotes || []),
+            ...((accompanimentTracks || []).flatMap(t => t.notes || [])),
+        ];
+        const perId = new Map(tutte.map(n => [n.id, n]));
+        const out: OctaveSpan[] = [];
+        for (const o of (octaveShifts || [])) {
+            const a = perId.get(o.fromNoteId);
+            const b = perId.get(o.toNoteId);
+            if (!a || !b) continue;
+            const t1 = Number((a as any).startTick ?? 0);
+            const t2 = Number((b as any).startTick ?? 0);
+            out.push({
+                fromTick: Math.min(t1, t2),
+                toTick: Math.max(t1, t2),
+                voice: Number((a as any).voice ?? 1),
+                direction: o.direction,
+            });
+        }
+        return out;
+    }, [octaveShifts, rawNotes, accompanimentTracks]);
+    const octaveSpansRef = useRef(octaveSpans);
+    octaveSpansRef.current = octaveSpans;
 
     /**
      * Tasto destro su una nota: toglie le sue articolazioni — la stessa regola della
@@ -12197,6 +12292,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // La legatura ha DUE capi: mollata su una nota, arriva alla successiva della
             // stessa voce — il caso più comune, e da lì si allunga rifacendola su una
             // coppia più larga. Con due note già selezionate comanda la selezione.
+            if (payload.kind === 'octave') {
+                if (!target.noteId) return;
+                const tutte = [
+                    ...(latestRawNotes.current || []),
+                    ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+                ].filter(n => n && !n.isRest);
+                const partenza = tutte.find(n => n.id === target.noteId);
+                if (!partenza) return;
+                const voce = Number((partenza as any).voice ?? 1);
+                const mis = Number((partenza as any).measureIndex ?? 0);
+                // Il segno copre almeno la misura in cui si molla: un 8va di una nota
+                // sola non vuol dire niente, e da lì si allunga tirando il capo.
+                const nellaMisura = tutte
+                    .filter(n => Number((n as any).voice ?? 1) === voce && Number((n as any).measureIndex ?? 0) === mis)
+                    .sort((x, y) => Number((x as any).startTick ?? 0) - Number((y as any).startTick ?? 0));
+                const fine = nellaMisura[nellaMisura.length - 1] ?? partenza;
+                metti8vaRef.current?.(payload.data === 'down' ? 'down' : 'up', partenza.id, fine.id);
+                return;
+            }
+
             if (payload.kind === 'slur') {
                 if (!target.noteId) return;
                 const tutte = [
@@ -14387,6 +14502,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         }}
                         onPlaceArticulation={(a) => applicaArticolazione(a)}
                         onPlaceSlur={() => legaNote()}
+                        onPlaceOctave={(dir: 'up' | 'down') => metti8va(dir)}
                         onClose={() => setIsDynamicsPanelOpen(false)}
                         onStartDrag={(payload, ev) => segnoTrascinato.inizia(payload, ev)}
                         currentTimeSignature={timeSignature}
@@ -15392,6 +15508,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 keySignature={keySignature}
                                 barlines={systemBarlines}
                                 slurs={slurs}
+                                octaveShifts={octaveShifts}
+                                onOctaveRightClick={(octaveId) => togli8va(octaveId)}
                                 onSlurRightClick={(slurId) => togliLegatura(slurId)}
                                 onNoteRightClick={(noteId) => togliArticolazioniDaNota(noteId)}
                                 onBarlineRightClick={(barlineId) => {
@@ -16047,7 +16165,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                      Stanno dalla parte in cui la curva passa (sotto per le voci
                                      coi gambi in su, sopra per le altre), spostate quel tanto da
                                      non coprire la testa della nota. */}
-                                {(slurs || []).length > 0 && (() => {
+                                {((slurs || []).length > 0 || (octaveShifts || []).length > 0) && (() => {
                                     const punti = systemNoteHitPointsRef.current[systemIndex] || [];
                                     const posDi = (id: string) => punti.find(p => p.id === id && !p.isGhost);
                                     const voceDi = (id: string): number => {
@@ -16056,31 +16174,52 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         return Number((n as any)?.voice ?? 1);
                                     };
                                     const maniglie: JSX.Element[] = [];
-                                    for (const sl of (slurs || [])) {
+                                    // Un solo modo di fare le maniglie per tutti i segni a due
+                                    // capi: cambia dove stanno e cosa aggiornano, non il gesto.
+                                    const segniADueCapi: Array<{
+                                        tipo: 'legatura' | 'ottava';
+                                        id: string; fromNoteId: string; toNoteId: string;
+                                        /** Da che parte del rigo sta il segno. */
+                                        sopra?: boolean;
+                                        togli: () => void;
+                                    }> = [
+                                        ...(slurs || []).map(sl => ({
+                                            tipo: 'legatura' as const, id: sl.id, fromNoteId: sl.fromNoteId, toNoteId: sl.toNoteId,
+                                            togli: () => setSlurs(prev => (prev || []).filter(x => x.id !== sl.id)),
+                                        })),
+                                        ...(octaveShifts || []).map(o => ({
+                                            tipo: 'ottava' as const, id: o.id, fromNoteId: o.fromNoteId, toNoteId: o.toNoteId,
+                                            sopra: o.direction === 'up',
+                                            togli: () => setOctaveShifts(prev => (prev || []).filter(x => x.id !== o.id)),
+                                        })),
+                                    ];
+                                    for (const sl of segniADueCapi) {
                                         for (const capo of ['from', 'to'] as const) {
                                             const id = capo === 'from' ? sl.fromNoteId : sl.toNoteId;
                                             const p = posDi(id);
                                             if (!p) continue; // l'altro capo sta in un altro sistema
-                                            const gamboSu = voceDi(id) % 2 === 1;
-                                            const cy = p.y + (gamboSu ? 16 : -16);
+                                            // La legatura sta dalla parte opposta ai gambi; l'8va
+                                            // sopra o sotto il rigo secondo la sua direzione.
+                                            const sopra = sl.tipo === 'ottava' ? !!sl.sopra : !(voceDi(id) % 2 === 1);
+                                            const cy = p.y + (sopra ? -16 : 16) + (sl.tipo === 'ottava' ? (sopra ? -14 : 14) : 0);
                                             maniglie.push(
                                                 <g
-                                                    key={`leg-${sl.id}-${capo}`}
+                                                    key={`capo-${sl.id}-${capo}`}
                                                     className="ht-maniglia"
                                                     style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
                                                     onMouseDown={(ev) => {
                                                         if (ev.button !== 0) return; // il destro toglie, non trascina
                                                         ev.preventDefault();
                                                         ev.stopPropagation();
-                                                        slurDragRef.current = { id: sl.id, capo };
+                                                        slurDragRef.current = { tipo: sl.tipo, id: sl.id, capo };
                                                     }}
                                                     onContextMenu={(ev) => {
                                                         ev.preventDefault();
                                                         ev.stopPropagation();
-                                                        setSlurs(prev => (prev || []).filter(x => x.id !== sl.id));
+                                                        sl.togli();
                                                     }}
                                                 >
-                                                    <title>Trascina per spostare il capo della legatura; tasto destro per toglierla</title>
+                                                    <title>Trascina per spostare il capo del segno; tasto destro per toglierlo</title>
                                                     <circle cx={p.x} cy={cy} r={9} fill="transparent" />
                                                     <circle className="ht-maniglia-punto" cx={p.x} cy={cy} r={4} {...MANIGLIA_STILE} />
                                                 </g>

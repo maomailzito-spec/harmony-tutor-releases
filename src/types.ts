@@ -151,6 +151,30 @@ export interface Slur {
   toNoteId: string;
 }
 
+/**
+ * SEGNO D'OTTAVA (8va sopra / 8vb sotto).
+ *
+ * Serve ai passaggi che avrebbero troppi tagli addizionali: si scrivono un'ottava più
+ * in basso (o più in alto) e il segno dice di suonarli spostati. Quindi:
+ *
+ *   l'altezza SCRITTA è quella che si vede sul rigo — e resta quella salvata;
+ *   il segno cambia solo COME SUONA, di un'ottava.
+ *
+ * Niente altezze modificate di nascosto: mettere il segno non muove le note. Per
+ * ripulire un passaggio già scritto alto si abbassa la selezione di un'ottava
+ * (⇧+freccia giù) e POI si mette il segno — due gesti visibili, entrambi annullabili.
+ *
+ * Da non confondere con `octaveTranspose` delle tracce ACC, che riguarda solo il
+ * suono degli strumenti traspositori e non si disegna.
+ */
+export interface OctaveShift {
+  id: string;
+  fromNoteId: string;
+  toNoteId: string;
+  /** `up` = 8va (suona un'ottava sopra), `down` = 8vb (un'ottava sotto). */
+  direction: 'up' | 'down';
+}
+
 /** Articolazioni che si posano su una nota. L'ordine è quello della tavolozza. */
 export type ArticulationMark = 'staccato' | 'staccatissimo' | 'accent' | 'marcato' | 'tenuto';
 
