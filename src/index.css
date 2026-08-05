@@ -13,3 +13,18 @@
      Con un valore fisso, in chiavi antiche restavano visibili tenore/basso. */
   transform: translateY(calc(-1 * var(--ht-satb-hide-shift, 270px)));
 }
+
+/* MANIGLIE DEI SEGNI (capi delle forcelle e delle legature di portamento).
+   Una sola grafia per tutti: il punto d'aggancio resta INVISIBILE finché non ci si
+   passa sopra, così la partitura non è punteggiata di pallini, e compare appena il
+   mouse lo sfiora — senza doverlo indovinare, che era il difetto della prima
+   versione. Il cerchio esterno è trasparente e serve solo ad allargare la presa. */
+.ht-maniglia .ht-maniglia-punto {
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+  pointer-events: none;
+}
+.ht-maniglia:hover .ht-maniglia-punto,
+.ht-maniglia.ht-maniglia-attiva .ht-maniglia-punto {
+  opacity: 1;
+}

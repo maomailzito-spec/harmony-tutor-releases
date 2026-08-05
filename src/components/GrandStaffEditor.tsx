@@ -417,6 +417,17 @@ type PaintSeverity = keyof typeof SEVERITY_PAINT_RANK;
 // Distanza fra le linee di colore diverso che segnano la STESSA coppia di note:
 // abbastanza da distinguere i colori, abbastanza poco da leggerle come un segno solo.
 const CONNECTION_SEVERITY_GAP_PX = 4;
+
+/** Grafia UNICA dei punti d'aggancio dei segni (forcelle, legature, e quelli che
+ *  verranno): sono la stessa cosa e devono avere lo stesso aspetto. Compaiono al
+ *  passaggio del mouse — vedi `.ht-maniglia` in index.css. */
+const MANIGLIA_STILE = {
+    fill: '#0ea5e9',
+    fillOpacity: 0.35,
+    stroke: '#0284c7',
+    strokeOpacity: 0.9,
+    strokeWidth: 1.5,
+} as const;
 const strongerSeverity = <T extends PaintSeverity>(a?: T, b?: T): T | undefined => {
     if (!a) return b;
     if (!b) return a;
@@ -16057,11 +16068,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             const gamboSu = voceDi(id) % 2 === 1;
                                             const cy = p.y + (gamboSu ? 16 : -16);
                                             maniglie.push(
-                                                <circle
+                                                <g
                                                     key={`leg-${sl.id}-${capo}`}
-                                                    cx={p.x} cy={cy} r={5}
-                                                    fill="#0ea5e9" fillOpacity={0.28}
-                                                    stroke="#0284c7" strokeOpacity={0.75} strokeWidth={1}
+                                                    className="ht-maniglia"
                                                     style={{ pointerEvents: 'auto', cursor: 'grab' }}
                                                     onMouseDown={(ev) => {
                                                         if (ev.button !== 0) return; // il destro toglie, non trascina
@@ -16077,7 +16086,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                     }}
                                                 >
                                                     <title>Trascina per spostare il capo della legatura; tasto destro per toglierla</title>
-                                                </circle>
+                                                    <circle cx={p.x} cy={cy} r={9} fill="transparent" />
+                                                    <circle className="ht-maniglia-punto" cx={p.x} cy={cy} r={4} {...MANIGLIA_STILE} />
+                                                </g>
                                             );
                                         }
                                     }
@@ -16119,10 +16130,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             // L'overlay non riceve il mouse (pointer-events: none),
                                             // quindi qui va riacceso caso per caso.
                                             const maniglia = (cx: number, capo: 'from' | 'to') => (
-                                                <circle
+                                                <g
                                                     key={`din-h-${systemIndex}-${i}-${capo}`}
-                                                    cx={cx} cy={yForcella} r={7}
-                                                    fill="transparent" stroke="transparent"
+                                                    className="ht-maniglia"
                                                     style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
                                                     onMouseDown={(ev) => {
                                                         if (ev.button !== 0) return; // vedi sopra: il destro deve cancellare
@@ -16137,7 +16147,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                         ev.stopPropagation();
                                                         setDynamics(prev => (prev || []).filter((_, j) => j !== i));
                                                     }}
-                                                />
+                                                >
+                                                    <title>Trascina per allungare la forcella; tasto destro per toglierla</title>
+                                                    <circle cx={cx} cy={yForcella} r={9} fill="transparent" />
+                                                    <circle className="ht-maniglia-punto" cx={cx} cy={yForcella} r={4} {...MANIGLIA_STILE} />
+                                                </g>
                                             );
                                             pezzi.push(
                                                 <g key={`din-h-${systemIndex}-${i}`} opacity={0.9}>
