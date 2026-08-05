@@ -41,6 +41,10 @@ interface VexflowGrandStaffProps {
   octaveShifts?: Array<{ id: string; fromNoteId: string; toNoteId: string; direction: 'up' | 'down' }>;
   /** Tasto destro sulla parentesi dell'8va. */
   onOctaveRightClick?: (octaveId: string, e: MouseEvent) => boolean | void;
+  /** DOVE cadono davvero i capi delle legature disegnate in questo sistema. Le maniglie
+   *  si mettono lì: appese alla testa della nota finivano lontanissime dalla curva ogni
+   *  volta che il gambo era lungo. */
+  onSlurAnchors?: (capi: Array<{ id: string; capo: 'from' | 'to'; x: number; y: number }>) => void;
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
@@ -613,6 +617,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onSlurRightClick,
   octaveShifts,
   onOctaveRightClick,
+  onSlurAnchors,
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
@@ -3981,6 +3986,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // può unire due note di righi diversi, e prima di qui non si saprebbe dove sono.
       // Quando un solo capo sta in questo sistema, VexFlow disegna la MEZZA curva fino
       // al bordo del rigo: è così che una legatura sopravvive all'a capo.
+      const capiLegature: Array<{ id: string; capo: 'from' | 'to'; x: number; y: number }> = [];
       try {
         for (const sl of (slurs || [])) {
           const da = vfPerId.get(sl.fromNoteId) || null;
@@ -4030,6 +4036,28 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               : { thickness: 2, y_shift: 8 });
             curva.setContext(context as any);
             curva.draw();
+
+            // Dove sono finiti i due capi: stessi conti che fa VexFlow per disegnarli
+            // (àncora sull'estremo del gambo o sulla testa, più lo scarto, nel verso
+            // della curva). Le maniglie ci si appendono, invece di stare sulla testa
+            // della nota che con un gambo lungo è tutt'altro punto.
+            try {
+              const scarto = (curva as any).render_options?.y_shift ?? 6;
+              const metrica = nelCoro ? 'topY' : 'baseY';
+              for (const [capo, vf] of [['from', da], ['to', a]] as const) {
+                if (!vf) continue;
+                const est = (vf as any).getStemExtents?.();
+                const gambo = (vf as any).getStemDirection?.() ?? 1;
+                if (!est || !Number.isFinite(est[metrica])) continue;
+                const verso = gambo * (nelCoro ? -1 : 1);
+                capiLegature.push({
+                  id: sl.id,
+                  capo,
+                  x: capo === 'from' ? (vf as any).getTieRightX?.() : (vf as any).getTieLeftX?.(),
+                  y: est[metrica] + scarto * verso,
+                });
+              }
+            } catch { /* niente maniglia precisa: si ripiega sulla testa della nota */ }
             // Zona di presa più larga del tratto, come per le legature di valore:
             // due pixel di curva sono impossibili da centrare col tasto destro.
             if (g) {
@@ -4094,6 +4122,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           try { (context as any).closeGroup?.(); } catch { /* ignore */ }
         }
       } catch { /* ignore */ }
+      try { onSlurAnchors?.(capiLegature); } catch { /* ignore */ }
 
       noteHitPointsRef.current = hitPoints;
       onNoteHitPoints?.(hitPoints);

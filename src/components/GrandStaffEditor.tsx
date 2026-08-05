@@ -1492,6 +1492,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const slursRef = useRef(slurs);
     slursRef.current = slurs;
     // Segni d'ottava: l'altezza SCRITTA resta quella salvata, il segno cambia come suona.
+    // Dove il disegno ha messo davvero i capi delle legature, sistema per sistema: le
+    // maniglie ci si appendono. Serve uno STATO e non un riferimento, perché il disegno
+    // avviene dopo il render e la maniglia deve comparire subito.
+    const [slurAnchors, setSlurAnchors] = useState<Record<number, Array<{ id: string; capo: 'from' | 'to'; x: number; y: number }>>>({});
     const [octaveShifts, setOctaveShifts] = useState<OctaveShift[]>([]);
     const octaveShiftsRef = useRef(octaveShifts);
     octaveShiftsRef.current = octaveShifts;
@@ -15515,6 +15519,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 slurs={slurs}
                                 octaveShifts={octaveShifts}
                                 onOctaveRightClick={(octaveId) => togli8va(octaveId)}
+                                onSlurAnchors={(capi) => setSlurAnchors(prev => {
+                                    // Solo se sono cambiati davvero: il disegno si ripete a
+                                    // ogni ridisegno e un aggiornamento a vuoto costerebbe un
+                                    // render in più per niente.
+                                    const prima = prev[systemIndex];
+                                    if (prima && prima.length === capi.length
+                                        && prima.every((c, i) => c.id === capi[i].id && c.capo === capi[i].capo
+                                            && Math.abs(c.x - capi[i].x) < 0.5 && Math.abs(c.y - capi[i].y) < 0.5)) return prev;
+                                    return { ...prev, [systemIndex]: capi };
+                                })}
                                 onSlurRightClick={(slurId) => togliLegatura(slurId)}
                                 onNoteRightClick={(noteId) => togliArticolazioniDaNota(noteId)}
                                 onBarlineRightClick={(barlineId) => {
@@ -16203,6 +16217,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             const id = capo === 'from' ? sl.fromNoteId : sl.toNoteId;
                                             const p = posDi(id);
                                             if (!p) continue; // l'altro capo sta in un altro sistema
+                                            // Punto VERO del capo, se il disegno l'ha già riportato:
+                                            // la curva parte dalla cima del gambo, che su una nota
+                                            // grave è tutt'altro posto rispetto alla testa.
+                                            const ancora = sl.tipo === 'legatura'
+                                                ? (slurAnchors[systemIndex] || []).find(c => c.id === sl.id && c.capo === capo)
+                                                : undefined;
                                             // La maniglia sta dove sta il segno: la legatura dalla
                                             // parte dei GAMBI (sopra per soprano e tenore, sotto per
                                             // contralto e basso, così le voci non si accavallano),
@@ -16212,7 +16232,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             const sopra = sl.tipo === 'ottava'
                                                 ? !!sl.sopra
                                                 : (nelCoro ? (voceCapo % 2 === 1) : false);
-                                            const cy = p.y + (sopra ? -16 : 16) + (sl.tipo === 'ottava' ? (sopra ? -14 : 14) : 0);
+                                            const cx = ancora ? ancora.x : p.x;
+                                            const cy = ancora
+                                                ? ancora.y + (sopra ? -4 : 4)
+                                                : p.y + (sopra ? -16 : 16) + (sl.tipo === 'ottava' ? (sopra ? -14 : 14) : 0);
                                             maniglie.push(
                                                 <g
                                                     key={`capo-${sl.id}-${capo}`}
@@ -16231,8 +16254,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                     }}
                                                 >
                                                     <title>Trascina per spostare il capo del segno; tasto destro per toglierlo</title>
-                                                    <circle cx={p.x} cy={cy} r={9} fill="transparent" />
-                                                    <circle className="ht-maniglia-punto" cx={p.x} cy={cy} r={4} {...MANIGLIA_STILE} />
+                                                    <circle cx={cx} cy={cy} r={9} fill="transparent" />
+                                                    <circle className="ht-maniglia-punto" cx={cx} cy={cy} r={4} {...MANIGLIA_STILE} />
                                                 </g>
                                             );
                                         }
