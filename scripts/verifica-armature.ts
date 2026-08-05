@@ -48,5 +48,54 @@ console.log('\nMinore');
 const inMinore = keyAtMeasure({ root: 'C', isMinor: false }, [{ measureIndex: 4, root: 'F', isMinor: true }], 4);
 ok(inMinore.root === 'F' && inMinore.isMinor, 'un Re minore si scrive armatura di Fa + minore');
 
+// ── Nel file: MusicXML e MIDI ─────────────────────────────────────────────
+console.log('\nEsportazione');
+import { exportMusicXML } from '../src/exporters/exportMusicXML';
+import { buildMidiFile } from '../src/utils/midiWriter';
+import { TICKS_PER_QUARTER as TPQ } from '../src/constants';
+
+const note: any[] = [];
+for (let m = 0; m < 3; m++) for (let b = 0; b < 4; b++) note.push({
+    id: `n${m}${b}`, pitch: 'C', octave: 5, midi: 72, voice: 1, clef: 'treble',
+    duration: 'quarter', measureIndex: m, beat: b + 1, startTick: (m * 4 + b) * TPQ, durationTicks: TPQ,
+});
+const xml = exportMusicXML({
+    notes: note, title: 'x', keySignature: { type: 'sharp', count: 0 } as any,
+    timeSignature: { numerator: 4, denominator: 4 } as any,
+    keySignatureRoot: 'C',
+    keySignatureChanges: [{ measureIndex: 1, root: 'Ab', isMinor: false }],
+});
+const misura = (n: number) => xml.split(`<measure number="${n}">`)[1].split('</measure>')[0];
+ok(/<fifths>0<\/fifths>/.test(misura(1)), "la prima battuta dichiara l'armatura d'impianto");
+ok(/<key>[\s\S]*<fifths>-4<\/fifths>/.test(misura(2)), 'la battuta del cambio dichiara la nuova (La bemolle = −4)');
+ok(!/<key>/.test(misura(3)), 'le battute dopo non ridichiarano niente');
+
+const senza = exportMusicXML({
+    notes: note, title: 'x', keySignature: { type: 'sharp', count: 0 } as any,
+    timeSignature: { numerator: 4, denominator: 4 } as any, keySignatureRoot: 'C',
+});
+ok((senza.match(/<key>/g) || []).length === 1, 'senza cambi il file dichiara una sola armatura');
+
+console.log('\nMIDI');
+const leggiArmature = (bytes: Uint8Array): Array<{ sf: number; minore: number }> => {
+    const out: Array<{ sf: number; minore: number }> = [];
+    for (let i = 0; i < bytes.length - 4; i++) {
+        if (bytes[i] === 0xff && bytes[i + 1] === 0x59 && bytes[i + 2] === 0x02) {
+            const sf = bytes[i + 3] > 127 ? bytes[i + 3] - 256 : bytes[i + 3];
+            out.push({ sf, minore: bytes[i + 4] });
+        }
+    }
+    return out;
+};
+const midi = buildMidiFile({
+    notes: note, timeSignature: { numerator: 4, denominator: 4 } as any, bpm: 90, midiType: 1,
+    keySignatures: [{ measureIndex: 0, fifths: 0, isMinor: false }, { measureIndex: 1, fifths: -4, isMinor: false }],
+});
+const armature = leggiArmature(midi);
+ok(armature.length === 2, `il file MIDI dichiara ${armature.length} armature`);
+ok(armature[0].sf === 0 && armature[1].sf === -4, `d'impianto ${armature[0]?.sf}, poi ${armature[1]?.sf} (La bemolle)`);
+ok(leggiArmature(buildMidiFile({ notes: note, timeSignature: { numerator: 4, denominator: 4 } as any, bpm: 90, midiType: 1 })).length === 0,
+   'senza armature dichiarate il file resta com era');
+
 console.log(falliti === 0 ? '\nTUTTO A POSTO\n' : `\n${falliti} CONTROLLI FALLITI\n`);
 process.exit(falliti === 0 ? 0 : 1);

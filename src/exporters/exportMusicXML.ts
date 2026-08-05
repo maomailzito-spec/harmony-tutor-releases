@@ -6,7 +6,7 @@
 import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
-import type { ArticulationMark, Slur, OctaveShift } from '../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +40,10 @@ export interface ExportMusicXMLOptions {
   /** LEGATURE DI PORTAMENTO: `<slur type="start">` sulla prima nota e `type="stop"`
    *  sull'ultima, con lo stesso `number` — è così che si riconoscono i due capi. */
   slurs?: Slur[];
+  /** CAMBI D'ARMATURA a metà brano: `<key>` dichiarato nella misura in cui entrano in
+   *  vigore, come si fa per il metro. Senza, un brano che modula usciva tutto
+   *  nell'armatura d'inizio e chi lo riapre lo vede pieno di alterazioni scritte. */
+  keySignatureChanges?: KeySignatureChange[];
   /** SEGNI D'OTTAVA (8va/8vb).
    *
    *  ATTENZIONE alla convenzione del formato, che è l'opposto di come si dice a parole:
@@ -550,6 +554,15 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
   const fifths = computeFifths(keySignature, keySignatureRoot);
   const mode = isMinorMode ? 'minor' : 'major';
 
+  // ── CAMBI D'ARMATURA: misura → <key> da dichiarare lì ──
+  const armaturaPerMisura = new Map<number, { fifths: number; mode: string }>();
+  for (const c of (opts.keySignatureChanges || [])) {
+    if (!c || !Number.isFinite(c.measureIndex) || c.measureIndex <= 0) continue;
+    const f = FIFTHS_MAP[String(c.root)];
+    if (f == null) continue;
+    armaturaPerMisura.set(Math.round(c.measureIndex), { fifths: f, mode: c.isMinor ? 'minor' : 'major' });
+  }
+
   // ── Build XML ──
   const lines: string[] = [];
   const w = (s: string) => lines.push(s);
@@ -612,18 +625,32 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
           w('        </clef>');
         }
         w('      </attributes>');
-      } else if (measureLenTicks(m) !== measureLenTicks(m - 1)
-        || tsAtMeasure(m).numerator !== tsAtMeasure(m - 1).numerator
-        || tsAtMeasure(m).denominator !== tsAtMeasure(m - 1).denominator) {
-        // CAMBIO DI METRO: va dichiarato nella battuta in cui entra in vigore, altrimenti
-        // il file resta nel metro iniziale e chi lo rilegge divide le battute sbagliate.
-        const ts = tsAtMeasure(m);
-        w('      <attributes>');
-        w('        <time>');
-        w(`          <beats>${ts.numerator}</beats>`);
-        w(`          <beat-type>${ts.denominator}</beat-type>`);
-        w('        </time>');
-        w('      </attributes>');
+      } else {
+        // CAMBIO DI METRO e/o D'ARMATURA: vanno dichiarati nella battuta in cui entrano
+        // in vigore, altrimenti il file resta in quelli iniziali e chi lo rilegge divide
+        // le battute sbagliate o scrive le note nell'armatura sbagliata. Nello STESSO
+        // <attributes>, e con la chiave prima del metro come vuole il formato.
+        const cambioMetro = measureLenTicks(m) !== measureLenTicks(m - 1)
+          || tsAtMeasure(m).numerator !== tsAtMeasure(m - 1).numerator
+          || tsAtMeasure(m).denominator !== tsAtMeasure(m - 1).denominator;
+        const cambioArmatura = armaturaPerMisura.get(m);
+        if (cambioMetro || cambioArmatura) {
+          w('      <attributes>');
+          if (cambioArmatura) {
+            w('        <key>');
+            w(`          <fifths>${cambioArmatura.fifths}</fifths>`);
+            w(`          <mode>${cambioArmatura.mode}</mode>`);
+            w('        </key>');
+          }
+          if (cambioMetro) {
+            const ts = tsAtMeasure(m);
+            w('        <time>');
+            w(`          <beats>${ts.numerator}</beats>`);
+            w(`          <beat-type>${ts.denominator}</beat-type>`);
+            w('        </time>');
+          }
+          w('      </attributes>');
+        }
       }
 
       const measureNotes = notesByMeasure.get(m) || [];

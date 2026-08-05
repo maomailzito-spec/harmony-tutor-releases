@@ -1,7 +1,7 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
-import type { ArticulationMark, Slur, OctaveShift } from '../../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../../types';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -34,6 +34,11 @@ export type MusicXMLImportResult = {
   projectTitle?: string;
   /** Le parti del file tenute separate (vedi MusicXMLPart). Stesso ordine del file. */
   parts: MusicXMLPart[];
+  /** CAMBI D'ARMATURA a metà brano letti dal file. Il primo `<key>` è l'armatura
+   *  d'impianto (finisce in `keySignatureRoot`); quelli dichiarati più avanti diventano
+   *  cambi. Prima venivano semplicemente ignorati e un brano che modula tornava indietro
+   *  tutto nella tonalità iniziale. */
+  keySignatureChanges: KeySignatureChange[];
   /** SEGNI D'OTTAVA letti dal file. Nel formato `type` dice di quanto è spostato lo
    *  SCRITTO: `down` = scritto sotto, suonato sopra = il nostro 8va (`up`). */
   octaveShifts: OctaveShift[];
@@ -462,6 +467,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   // Legature: i capi arrivano separati e vanno appaiati per numero, dentro la parte.
   const slurs: Slur[] = [];
   const octaveShifts: OctaveShift[] = [];
+  const keySignatureChanges: KeySignatureChange[] = [];
 
   for (let partIndex = 0; partIndex < partsToParse.length; partIndex++) {
     const part = partsToParse[partIndex];
@@ -550,11 +556,20 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           const fifths = intOf(keyEl.querySelector('fifths')) ?? 0;
           const modeRaw = textOf(keyEl.querySelector('mode')).toLowerCase();
           const mode = (modeRaw === 'minor') ? 'minor' : 'major';
+          const k = keyRootFromFifths(fifths, mode);
           if (!didSetKey) {
-            const k = keyRootFromFifths(fifths, mode);
             keySignatureRoot = k.root;
             isMinorMode = k.isMinor;
             didSetKey = true;
+          } else if (partIndex === 0 && measureIndex > 0) {
+            // Un <key> dichiarato più avanti è un CAMBIO. Si legge dalla prima parte
+            // sola: l'armatura è del brano e nel file è ripetuta su ogni rigo.
+            const ultimo = keySignatureChanges.length > 0
+              ? keySignatureChanges[keySignatureChanges.length - 1]
+              : { root: keySignatureRoot, isMinor: isMinorMode, measureIndex: 0 };
+            if (ultimo.root !== k.root || !!ultimo.isMinor !== !!k.isMinor) {
+              keySignatureChanges.push({ measureIndex, root: k.root, isMinor: k.isMinor });
+            }
           }
         }
       }
@@ -941,6 +956,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     staffSystemMode,
     projectTitle: title || undefined,
     parts: partsOut,
+    keySignatureChanges,
     slurs,
     octaveShifts,
     dynamics: dynamics.sort((a, b) => {

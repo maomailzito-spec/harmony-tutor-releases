@@ -27,6 +27,8 @@ export type GrandStaffMidiProject = {
   dynamics?: DynamicMark[];
   /** Segni d'ottava risolti sui tick: il MIDI porta l'altezza suonata. */
   octaveSpans?: OctaveSpan[];
+  /** Armatura d'impianto e cambi, in quinte, per il meta-evento di tonalità. */
+  keySignatures?: Array<{ measureIndex: number; fifths: number; isMinor: boolean }>;
 };
 
 export type UseGrandStaffMidiArgs = {
@@ -1730,6 +1732,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       dynamics: project.dynamics || [],
       // …e gli 8va spostano l'altezza, come in esecuzione.
       octaveSpans: project.octaveSpans || [],
+      keySignatures: project.keySignatures || [],
       midiType: (midiExportType === '0' ? 0 : 1) as 0 | 1,
       voicePrograms,
     });

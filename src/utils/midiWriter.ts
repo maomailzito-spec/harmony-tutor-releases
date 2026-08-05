@@ -93,6 +93,13 @@ function tempoMetaEventBpm(bpm: number): number[] {
   return [0xff, 0x51, 0x03, (microsPerQuarter >> 16) & 0xff, (microsPerQuarter >> 8) & 0xff, microsPerQuarter & 0xff];
 }
 
+/** Meta-evento di TONALITÀ: quinte (−7…+7) e modo. Senza, un file che modula usciva
+ *  senza dirlo e chi lo riapre lo scrive tutto nell'armatura iniziale. */
+function keySignatureMetaEvent(fifths: number, isMinor: boolean): number[] {
+  const sf = Math.max(-7, Math.min(7, Math.round(fifths)));
+  return [0xff, 0x59, 0x02, sf & 0xff, isMinor ? 1 : 0];
+}
+
 function timeSignatureMetaEvent(ts: TimeSignature): number[] {
   const n = Math.max(1, Math.round(Number(ts?.numerator) || 4));
   const d = Math.max(1, Math.round(Number(ts?.denominator) || 4));
@@ -130,6 +137,9 @@ export type MidiWriterProject = {
    *  la velocity della nota (import MIDI, registrazione), che è l'unica informazione
    *  dinamica del brano. */
   dynamics?: DynamicMark[];
+  /** ARMATURA d'impianto e suoi cambi, in quinte (Do = 0, Sol = 1, Fa = −1…), con la
+   *  battuta da cui valgono. Vanno nella traccia direttore, come i cambi di metro. */
+  keySignatures?: Array<{ measureIndex: number; fifths: number; isMinor?: boolean }>;
   /** SEGNI D'OTTAVA risolti sui tick. Il MIDI porta l'altezza SUONATA: senza questi,
    *  un passaggio scritto sotto con l'8va usciva un'ottava più in basso di come si sente. */
   octaveSpans?: OctaveSpan[];
@@ -204,6 +214,27 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       cur = { numerator: ch.numerator, denominator: ch.denominator };
       events.push({ tick, order: 1, bytes: timeSignatureMetaEvent(cur) });
     }
+    // Armatura d'impianto e cambi: al tick d'inizio della loro battuta, con la stessa
+    // mappa usata per il metro (le battute non sono tutte lunghe uguali).
+    {
+      const armature = (project.keySignatures || [])
+        .filter(k => k && Number.isFinite(k.measureIndex) && Number.isFinite(k.fifths))
+        .map(k => ({ measureIndex: Math.max(0, Math.round(k.measureIndex)), fifths: k.fifths, isMinor: !!k.isMinor }))
+        .sort((a, b) => a.measureIndex - b.measureIndex);
+      let cur: TimeSignature = timeSignature;
+      let tick = 0;
+      let measure = 0;
+      const cambi = [...changes].sort((a, b) => a.measureIndex - b.measureIndex);
+      for (const k of armature) {
+        while (measure < k.measureIndex) {
+          for (const ch of cambi) if (ch.measureIndex === measure) cur = { numerator: ch.numerator, denominator: ch.denominator };
+          tick += Math.round(cur.numerator * (4 / cur.denominator) * DEFAULT_TPQ);
+          measure++;
+        }
+        events.push({ tick, order: 1, bytes: keySignatureMetaEvent(k.fifths, k.isMinor) });
+      }
+    }
+
     return eventsToTrackData(events);
   }
 

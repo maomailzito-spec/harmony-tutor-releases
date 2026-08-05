@@ -1502,6 +1502,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [keySignatureChanges, setKeySignatureChanges] = useState<KeySignatureChange[]>([]);
     const keySignatureChangesRef = useRef(keySignatureChanges);
     keySignatureChangesRef.current = keySignatureChanges;
+    /** Armatura d'impianto e cambi in QUINTE, per il meta-evento del file MIDI. */
+    const midiKeySignatures = useMemo(() => {
+        // Le quinte si ricavano dalla sola fondamentale: `keySignature` è derivata più
+        // avanti nel componente e qui non esiste ancora.
+        const inQuinte = (root: string) => {
+            const mappa: Record<string, number> = {
+                'Cb': -7, 'Gb': -6, 'Db': -5, 'Ab': -4, 'Eb': -3, 'Bb': -2, 'F': -1,
+                'C': 0, 'G': 1, 'D': 2, 'A': 3, 'E': 4, 'B': 5, 'F#': 6, 'C#': 7,
+            };
+            if (mappa[root] != null) return mappa[root];
+            const ks = getKeySignature(root, 'Major');
+            return ks.type === 'sharp' ? ks.count : -ks.count;
+        };
+        const out = [{ measureIndex: 0, fifths: inQuinte(keySignatureRoot), isMinor: isMinorMode }];
+        for (const c of normalizeKeyChanges(keySignatureChanges)) {
+            out.push({ measureIndex: c.measureIndex, fifths: inQuinte(c.root), isMinor: !!c.isMinor });
+        }
+        return out;
+    }, [keySignatureRoot, isMinorMode, keySignatureChanges]);
+
     /** I punti in cui l'armatura cambia, già risolti: servono al disegno per decidere le
      *  alterazioni da stampare misura per misura. */
     const keySignatureByMeasure = useMemo(
@@ -1879,7 +1899,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         dynamics,
         // …e i segni d'ottava l'altezza: il MIDI porta quello che si sente.
         octaveSpans,
-    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, dynamics, octaveSpans]);
+        // Armatura d'impianto e cambi, in quinte: il file MIDI le dichiara.
+        keySignatures: midiKeySignatures,
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, dynamics, octaveSpans, midiKeySignatures]);
 
     const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
         setRawNotes(next.notes || []);
@@ -5209,7 +5231,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
                 setSlurs(Array.isArray(imported?.slurs) ? imported.slurs : []);
                 setOctaveShifts(Array.isArray(imported?.octaveShifts) ? imported.octaveShifts : []);
-                setKeySignatureChanges([]);
+                setKeySignatureChanges(Array.isArray(imported?.keySignatureChanges) ? imported.keySignatureChanges : []);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setPasteCaretImmediate(null);
@@ -6838,6 +6860,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 dynamics: dynamicsRef.current || [],
                 slurs: slursRef.current || [],
                 octaveShifts: octaveShiftsRef.current || [],
+                keySignatureChanges: keySignatureChangesRef.current || [],
                 satbName,
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.
