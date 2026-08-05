@@ -6001,6 +6001,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // updates instantly when a note is inserted.
         const notesToLayout = notes;
         const keySigWidth = keySignature.count * 14;
+
+        // ── Spazio da riservare a un CAMBIO D'ARMATURA in mezzo al sistema ──
+        // Senza, l'armatura nuova veniva disegnata sopra le prime note della misura.
+        // Larghezza = alterazioni nuove + bequadri d'annullamento, più un po' d'aria.
+        const LARGHEZZA_ALTERAZIONE = 14;
+        const armaturaDiMisuraLayout = (m: number): KeySignature => {
+            if (!keySignatureChanges || keySignatureChanges.length === 0) return keySignature;
+            const inVigore = keyAtMeasure({ root: keySignatureRoot, isMinor: isMinorMode }, keySignatureChanges, m);
+            return getKeySignature(inVigore.root, 'Major');
+        };
+        const keyChangeExtraByMeasure: Record<number, number> = {};
+        if (keySignatureChanges && keySignatureChanges.length > 0) {
+            for (const c of normalizeKeyChanges(keySignatureChanges)) {
+                const nuova = getKeySignature(c.root, 'Major');
+                const prima = armaturaDiMisuraLayout(c.measureIndex - 1);
+                if (nuova.type === prima.type && nuova.count === prima.count) continue;
+                // Bequadri: si annulla tutta la vecchia se cambia il segno, altrimenti solo
+                // le alterazioni in eccesso.
+                const annullati = (nuova.type !== prima.type)
+                    ? prima.count
+                    : Math.max(0, prima.count - nuova.count);
+                keyChangeExtraByMeasure[c.measureIndex] =
+                    (nuova.count + annullati) * LARGHEZZA_ALTERAZIONE + 10;
+            }
+        }
+        const extraArmatura = (m: number) => keyChangeExtraByMeasure[m] ?? 0;
         const timeSigWidthWithPadding = timeSignature ? 55 : 0;
         const startOffset = START_X + keySigWidth + timeSigWidthWithPadding;
         const systemRightX = layoutWidth - START_X;
@@ -6141,7 +6167,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         const naturalMeasureWidth = (_mIdx: number, isFirstMeasureInSystem: boolean) => {
             const content = Math.round(measureDemand(_mIdx));
-            const extraLeft = isFirstMeasureInSystem ? (keySigWidth + timeSigWidthWithPadding) : 0;
+            const extraLeft = isFirstMeasureInSystem
+                ? (armaturaDiMisuraLayout(_mIdx).count * LARGHEZZA_ALTERAZIONE + timeSigWidthWithPadding)
+                : extraArmatura(_mIdx);
             return content + (MEASURE_PADDING_X * 2) + extraLeft;
         };
 
@@ -6273,7 +6301,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // If this is the first measure in the system, reserve space for key/time glyphs
                 // so notes don't overlap the clef/time.
                 const isFirstMeasureInSystem = idx === 0;
-                const extraLeft = isFirstMeasureInSystem ? (keySigWidth + timeSigWidthWithPadding) : 0;
+                const extraLeft = isFirstMeasureInSystem
+                    ? (armaturaDiMisuraLayout(m).count * LARGHEZZA_ALTERAZIONE + timeSigWidthWithPadding)
+                    : extraArmatura(m);
                 const measureWidth = contentWidthForMeasure + (MEASURE_PADDING_X * 2) + extraLeft;
                 measureFinalWidths.set(m, measureWidth);
                 // store start X relative to the start of this system (local coordinates)
@@ -6361,8 +6391,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch (e) {
             // ignore logging errors
         }
-        return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure };
-    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
+        return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
+    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA
@@ -15723,7 +15753,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 timeSignatureChanges={systemMarkers}
                                 keySignatureChanges={(keySignatureMarkersBySystem?.[systemIndex] || [])}
                                 keySignatureByMeasure={keySignatureByMeasure}
-                                keySignature={keySignature}
+                                // Ogni sistema porta in testa l'armatura in vigore alla SUA
+                                // prima misura: dopo un cambio, i sistemi seguenti devono
+                                // mostrare quella nuova, non quella d'impianto.
+                                keySignature={keySignatureAtMeasure(systemStartMeasureIndex)}
                                 barlines={systemBarlines}
                                 slurs={slurs}
                                 octaveShifts={octaveShifts}

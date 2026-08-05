@@ -5796,8 +5796,14 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             const system = layoutData.systemsParams[sysIndex];
             const idx = system.measureIndices.indexOf(ch.measureIndex);
             if (idx === -1) continue;
+            // Se il cambio cade sulla PRIMA misura del sistema, l'armatura nuova è già
+            // quella stampata in testa al rigo: ridisegnarla in mezzo sarebbe un doppione.
+            if (idx === 0) continue;
+            // La misura ha uno spazio riservato a sinistra per l'armatura nuova: il segno
+            // va DENTRO quello spazio, non sopra le note che cominciano dopo.
+            const spazio = Number((layoutData as any)?.keyChangeExtraByMeasure?.[ch.measureIndex] ?? 0);
             markersBySystem[sysIndex].push({
-                x: system.startMeasuresX[idx] + 6,
+                x: system.startMeasuresX[idx] - spazio + 4,
                 nuova: cambio.nuova,
                 daAnnullare: cambio.daAnnullare,
                 measureIndex: ch.measureIndex,
