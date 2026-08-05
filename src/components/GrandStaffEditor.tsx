@@ -4165,14 +4165,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const sharpOrder = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
         const flatOrder = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
 
-        const keySigAccidentalForLetter = (letter: string): number => {
+        // L'armatura di ogni misura, calcolata una volta sola per misura.
+        // QUESTO è il passaggio che rimetteva i bequadri: ricalcola l'altezza di OGNI
+        // nota partendo dall'alterazione che la sua lettera ha in armatura, e la prendeva
+        // sempre da quella d'impianto. Un La bemolle scritto dopo un cambio in La bemolle
+        // tornava La naturale un istante dopo essere stato inserito — si sentiva giusto
+        // (l'anteprima suona l'altezza appena ricavata) e si vedeva sbagliato.
+        const armaturePerMisura = new Map<number, KeySignature>();
+        const armaturaDiMisura = (measureIdx: number): KeySignature => {
+            if (!keySignatureChanges || keySignatureChanges.length === 0) return keySignature;
+            const gia = armaturePerMisura.get(measureIdx);
+            if (gia) return gia;
+            const inVigore = keyAtMeasure({ root: keySignatureRoot, isMinor: isMinorMode }, keySignatureChanges, measureIdx);
+            const ks = getKeySignature(inVigore.root, 'Major');
+            armaturePerMisura.set(measureIdx, ks);
+            return ks;
+        };
+
+        const keySigAccidentalForLetter = (letter: string, measureIdx: number): number => {
             const l = (letter || '').toUpperCase();
             if (!l || !basePc.hasOwnProperty(l)) return 0;
-            if (keySignature.type === 'sharp' && keySignature.count > 0) {
-                return sharpOrder.slice(0, keySignature.count).includes(l) ? 1 : 0;
+            const ks = armaturaDiMisura(measureIdx);
+            if (ks.type === 'sharp' && ks.count > 0) {
+                return sharpOrder.slice(0, ks.count).includes(l) ? 1 : 0;
             }
-            if (keySignature.type === 'flat' && keySignature.count > 0) {
-                return flatOrder.slice(0, keySignature.count).includes(l) ? -1 : 0;
+            if (ks.type === 'flat' && ks.count > 0) {
+                return flatOrder.slice(0, ks.count).includes(l) ? -1 : 0;
             }
             return 0;
         };
@@ -4229,7 +4247,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 } else {
                     // Check if a previous note in the same measure/voice/pitch+octave set an accidental
                     const carried = accState.get(stateKey);
-                    delta = (carried != null) ? carried : keySigAccidentalForLetter(letter);
+                    delta = (carried != null) ? carried : keySigAccidentalForLetter(letter, measureIdx);
                 }
 
                 const noteIndex = ((basePc[letter] + delta) % 12 + 12) % 12;
@@ -4259,7 +4277,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
 
         return result;
-    }, [rawNotes, keySignature]);
+    }, [rawNotes, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode]);
 
     const notes = useMemo(() => {
         try {
