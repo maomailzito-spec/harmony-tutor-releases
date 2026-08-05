@@ -12064,6 +12064,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // dove è stato mollato. Qui si traduce il rilascio in un segno di dinamica; per
     // gli altri segni futuri basterà aggiungere un caso.
     /**
+     * Da una nota all'ACCORDO di cui fa parte: tutte quelle della STESSA VOCE che
+     * attaccano nello stesso istante.
+     *
+     * Serve perché un'articolazione posata su un accordo riguarda l'accordo, non una
+     * delle sue note: il punto si disegna una volta sola sopra il gruppo, e se suonasse
+     * corta una nota sola si vedrebbe una cosa e se ne sentirebbe un'altra.
+     *
+     * Nel coro le quattro voci restano indipendenti — attaccano insieme ma sono voci
+     * diverse — quindi uno staccato sul soprano resta del soprano. È il senso della
+     * scrittura a parti.
+     */
+    const espandiAllAccordo = useCallback((ids: string[]): Set<string> => {
+        const fuori = new Set(ids);
+        if (fuori.size === 0) return fuori;
+        const tutte = [
+            ...(latestRawNotes.current || []),
+            ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+        ].filter(n => n && !n.isRest);
+        for (const id of ids) {
+            const n = tutte.find(x => x.id === id);
+            if (!n) continue;
+            const voce = Number((n as any).voice ?? 1);
+            const tick = Number((n as any).startTick ?? 0);
+            for (const altra of tutte) {
+                if (Number((altra as any).voice ?? 1) !== voce) continue;
+                if (Number((altra as any).startTick ?? 0) !== tick) continue;
+                fuori.add(altra.id);
+            }
+        }
+        return fuori;
+    }, []);
+
+    /**
      * Mette o toglie un'articolazione sulle note indicate (senza indicazioni: quelle
      * selezionate). È un INTERRUTTORE, come la corona con ⌥F: se ce l'hanno già tutte,
      * il gesto la toglie — così lo stesso pulsante serve a mettere e a ripensarci,
@@ -12073,7 +12106,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * staccato che sia scritto nel coro o nell'organo.
      */
     const applicaArticolazione = useCallback((tipo: ArticulationMark, ids?: string[]) => {
-        const bersagli = new Set((ids && ids.length) ? ids : Array.from(selectedNoteIds));
+        const bersagli = espandiAllAccordo((ids && ids.length) ? ids : Array.from(selectedNoteIds));
         if (bersagli.size === 0) return;
         const tutteLeNote = [
             ...(latestRawNotes.current || []),
@@ -12097,7 +12130,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
         setRawNotes(prev => (prev || []).map(applica));
         setAccompanimentTracks(prev => (prev || []).map(t => ({ ...t, notes: (t.notes || []).map(applica) })));
-    }, [selectedNoteIds, setRawNotes, setAccompanimentTracks]);
+    }, [espandiAllAccordo, selectedNoteIds, setRawNotes, setAccompanimentTracks]);
     const applicaArticolazioneRef = useRef(applicaArticolazione);
     applicaArticolazioneRef.current = applicaArticolazione;
 
@@ -12273,11 +12306,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * che stavano già lì (stanghetta, rigo) e nessuna nota diventa una zona morta.
      */
     const togliArticolazioniDaNota = useCallback((noteId: string): boolean => {
-        const suNota = (n: any) => !!n && n.id === noteId;
-        const nota = (latestRawNotes.current || []).find(suNota)
-            ?? (latestAccompanimentTracks.current || []).flatMap(t => t.notes || []).find(suNota);
-        const attuali = (nota as any)?.articulations;
-        if (!Array.isArray(attuali) || attuali.length === 0) return false;
+        // Si toglie dall'intero accordo, come si era messa: un segno che si mette su
+        // tutte e si toglie da una sola lascerebbe un punto disegnato a metà.
+        const gruppo = espandiAllAccordo([noteId]);
+        const suNota = (n: any) => !!n && gruppo.has(n.id);
+        const tutte = [
+            ...(latestRawNotes.current || []),
+            ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+        ];
+        const conSegni = tutte.some(n => suNota(n) && Array.isArray((n as any)?.articulations) && (n as any).articulations.length > 0);
+        if (!conSegni) return false;
         const spoglia = (n: any) => {
             if (!suNota(n)) return n;
             const { articulations: _via, ...resto } = n;
@@ -12286,7 +12324,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setRawNotes(prev => (prev || []).map(spoglia));
         setAccompanimentTracks(prev => (prev || []).map(t => ({ ...t, notes: (t.notes || []).map(spoglia) })));
         return true;
-    }, [setRawNotes, setAccompanimentTracks]);
+    }, [espandiAllAccordo, setRawNotes, setAccompanimentTracks]);
 
     const posaSegno = useCallback((payload: SignDragPayload, target: { systemIndex: number; x: number; y: number; noteId?: string }) => {
         try {
