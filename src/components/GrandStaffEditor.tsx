@@ -3786,10 +3786,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return getKeySignature(inVigore.root, 'Major');
     }, [keySignatureChanges, keySignatureRoot, isMinorMode, keySignature]);
 
+    /**
+     * ATTENZIONE: fuori dai `useMemo` si passa SEMPRE dal riferimento, mai dalla funzione.
+     * I gestori del clic e del fantasma sono `useCallback` e fra le loro dipendenze c'è
+     * l'armatura d'IMPIANTO — che aggiungendo un cambio a metà brano non cambia. Il
+     * gestore quindi non si ricreava e continuava a usare la versione della funzione di
+     * quando i cambi non c'erano: le note nascevano nella tonalità vecchia, e il difetto
+     * sembrava non corretto.
+     */
+    const keySignatureAtMeasureRef = useRef<(m: number) => KeySignature>(() => keySignature);
+
     const keyAccidentalsAtMeasure = useCallback((measureIndex: number): string[] => {
         if (!keySignatureChanges || keySignatureChanges.length === 0) return keyAccidentals;
         return keyAccidentalNotes(keySignatureAtMeasure(measureIndex));
     }, [keySignatureChanges, keySignatureAtMeasure, keyAccidentals]);
+    keySignatureAtMeasureRef.current = keySignatureAtMeasure;
 
     const noteNameToChromaticIndex = useCallback((name: string): number => {
         const idxSharp = NOTE_NAMES.indexOf(name);
@@ -9816,7 +9827,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const map = buildMeasureAccidentals(working as any, measureIdx, Number(n.startTick));
             const clefAcc: Record<string, string> = {};
             for (const [k, v] of Object.entries(map)) if (k.startsWith(clef + '-')) clefAcc[k.slice(clef.length + 1)] = v;
-            n.explicitAccidental = calculateAccidentalWithMeasureContext(spelledNoteName(n), keyAccidentalsAtMeasure(measureIdx), clefAcc);
+            n.explicitAccidental = calculateAccidentalWithMeasureContext(spelledNoteName(n), keyAccidentalNotes(keySignatureAtMeasureRef.current(measureIdx)), clefAcc);
             working.push(n);
         }
 
@@ -10826,7 +10837,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 accProps = makeDrumNoteProps(element, palette, accClef, keySignature);
                 drumVoiceClick = drumPieceVoice(element); // mani→1 (su), piedi→2 (giù)
             } else {
-                accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignatureAtMeasure(hit.measureIndex));
+                accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignatureAtMeasureRef.current(hit.measureIndex));
                 accProps = applyAutoLeadingToneInMinor(accProps);
                 accProps = applyActiveAccidental(accProps);
             }
@@ -11198,7 +11209,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // del La in La bemolle deve uscire un La BEMOLLE, senza segni scritti. Con
         // l'armatura d'inizio usciva un La naturale, e il disegno — che l'armatura nuova
         // la conosce — ci metteva il bequadro.
-        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasure(hit.measureIndex));
+        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasureRef.current(hit.measureIndex));
         props = applyAutoLeadingToneInMinor(props);
         props = applyActiveAccidental(props);
 
@@ -11787,7 +11798,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const clef = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
             // Trascinando una nota di grado, la nuova altezza segue l'armatura della SUA
             // misura: in La bemolle, salendo di grado da Sol si arriva a La bemolle.
-            let props: any = getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignatureAtMeasure(Number(n.measureIndex ?? 0)));
+            let props: any = getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignatureAtMeasureRef.current(Number(n.measureIndex ?? 0)));
             props = applyAutoLeadingToneInMinor(props);
             props = applyMeasureAccidentalCarry(props, {
                 notes: siblings,
@@ -11826,7 +11837,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const pos = diatonicPosOf(n);
                 if (pos == null) return false;
                 const clef = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
-                const midi = Number(getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignatureAtMeasure(Number((n as any).measureIndex ?? 0))).midi);
+                const midi = Number(getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignatureAtMeasureRef.current(Number((n as any).measureIndex ?? 0))).midi);
                 return !Number.isFinite(midi) || midi < 21 || midi > 108; // La0 … Do8
             });
             if (outOfRange) return;
@@ -12718,7 +12729,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 accGhostProps = makeDrumNoteProps(element, palette, accGhostClef, keySignature);
             } else {
-                accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignatureAtMeasure(hitGhost?.measureIndex ?? 0));
+                accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignatureAtMeasureRef.current(hitGhost?.measureIndex ?? 0));
                 accGhostProps = applyAutoLeadingToneInMinor(accGhostProps);
                 accGhostProps = applyActiveAccidental(accGhostProps);
             }
@@ -12861,7 +12872,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Il fantasma deve mostrare la stessa nota che uscirà dal clic, armatura di
         // questa misura compresa.
-        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasure(hit.measureIndex));
+        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasureRef.current(hit.measureIndex));
         props = applyAutoLeadingToneInMinor(props);
         props = applyActiveAccidental(props);
 
