@@ -16203,9 +16203,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             const id = capo === 'from' ? sl.fromNoteId : sl.toNoteId;
                                             const p = posDi(id);
                                             if (!p) continue; // l'altro capo sta in un altro sistema
-                                            // La legatura sta dalla parte opposta ai gambi; l'8va
-                                            // sopra o sotto il rigo secondo la sua direzione.
-                                            const sopra = sl.tipo === 'ottava' ? !!sl.sopra : !(voceDi(id) % 2 === 1);
+                                            // La maniglia sta dove sta il segno: la legatura dalla
+                                            // parte dei GAMBI (sopra per soprano e tenore, sotto per
+                                            // contralto e basso, così le voci non si accavallano),
+                                            // l'8va sopra o sotto secondo la sua direzione.
+                                            const voceCapo = voceDi(id);
+                                            const nelCoro = voceCapo >= 1 && voceCapo <= 4;
+                                            const sopra = sl.tipo === 'ottava'
+                                                ? !!sl.sopra
+                                                : (nelCoro ? (voceCapo % 2 === 1) : false);
                                             const cy = p.y + (sopra ? -16 : 16) + (sl.tipo === 'ottava' ? (sopra ? -14 : 14) : 0);
                                             maniglie.push(
                                                 <g

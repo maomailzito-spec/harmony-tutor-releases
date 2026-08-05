@@ -3994,7 +3994,40 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             }
           } catch { /* ignore */ }
           try {
-            const curva = new Curve(da as any, a as any, { thickness: 2, y_shift: 8 });
+            // DA CHE PARTE va la curva. Nel coro le voci stanno a due a due sullo stesso
+            // rigo, quindi la posizione «giusta» dell'incisione — dalla parte delle teste,
+            // opposta ai gambi — manda la legatura del soprano ADDOSSO al contralto.
+            // Nel SATB si mette allora dalla parte dei GAMBI: sopra per soprano e tenore
+            // (gambi in su), sotto per contralto e basso. Ogni voce sta larga dalle altre.
+            // Fuori dal coro (tracce, voce 0) resta la posizione consueta.
+            const voceCapo = noteInSistema.find(n => n.id === (da ? sl.fromNoteId : sl.toNoteId))?.voce ?? 0;
+            const nelCoro = voceCapo >= 1 && voceCapo <= 4;
+            const curva = new Curve(da as any, a as any, nelCoro
+              ? {
+                  thickness: 2,
+                  // Ancorata all'estremo LONTANO del gambo e rovesciata: così la curva
+                  // parte da lì e si allontana, invece di attraversare il gambo.
+                  position: Curve.Position.NEAR_TOP,
+                  position_end: Curve.Position.NEAR_TOP,
+                  invert: true,
+                  // Stretta ai gambi, e sul soprano anche col TETTO delle sigle: quelle
+                  // stanno una ventina di pixel sopra il rigo, e un gambo lungo ci arriva
+                  // da solo. Qui la curva si schiaccia contro i gambi invece di salirci
+                  // dentro; se perfino il gambo è più in alto della riga delle sigle non
+                  // c'è spazio da contendere e resta il minimo.
+                  y_shift: (() => {
+                    if (voceCapo !== 1) return 6;
+                    const cime = [da, a]
+                      .map(v => (v as any)?.getStemExtents?.()?.topY)
+                      .filter((y: any) => Number.isFinite(y)) as number[];
+                    if (cime.length === 0) return 6;
+                    const cimaPiuAlta = Math.min(...cime);
+                    // 18 = riga delle sigle, +6 d'aria, +6 di gonfiore della curva.
+                    return Math.max(2, Math.min(6, cimaPiuAlta - 30));
+                  })(),
+                  cps: [{ x: 0, y: 6 }, { x: 0, y: 6 }],
+                }
+              : { thickness: 2, y_shift: 8 });
             curva.setContext(context as any);
             curva.draw();
             // Zona di presa più larga del tratto, come per le legature di valore:
