@@ -79,7 +79,7 @@ import CompressorWindow from './CompressorWindow';
 import EqWindow from './EqWindow';
 import DrumPalettePanel from './DrumPalettePanel';
 import DynamicsPalettePanel from './DynamicsPalettePanel';
-import { useSignDrag, type SignDragPayload } from '../hooks/useSignDrag';
+import { useSignDrag, notaAlPunto, type SignDragPayload } from '../hooks/useSignDrag';
 import NewProjectDialog, { type NewProjectConfig } from './NewProjectDialog';
 
 interface GrandStaffEditorProps {
@@ -12076,6 +12076,41 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const legaNoteRef = useRef(legaNote);
     legaNoteRef.current = legaNote;
 
+    /**
+     * Presa di un capo della legatura: si tira la curva su un'altra nota e la legatura
+     * si allunga (o si accorcia). Senza questo l'unico modo di cambiarla era toglierla
+     * e rifarla, che su una legatura lunga è un lavoro inutile.
+     *
+     * Al rilascio i due capi si riordinano nel tempo: tirando l'inizio oltre la fine la
+     * legatura si rovescerebbe, e una curva disegnata all'indietro non vuol dire nulla.
+     */
+    const prendiCapoLegatura = useCallback((slurId: string, capo: 'from' | 'to'): boolean => {
+        const cursorePrima = document.body.style.cursor;
+        document.body.style.cursor = 'grabbing';
+        const finisci = (ev: MouseEvent) => {
+            window.removeEventListener('mouseup', finisci, true);
+            document.body.style.cursor = cursorePrima;
+            const nuovaNota = notaAlPunto(ev.clientX, ev.clientY);
+            if (!nuovaNota) return;
+            const tickDi = (id: string): number => {
+                const n = (latestRawNotes.current || []).find(x => x.id === id)
+                    ?? (latestAccompanimentTracks.current || []).flatMap(t => t.notes || []).find(x => x.id === id);
+                return Number((n as any)?.startTick ?? 0);
+            };
+            setSlurs(prev => (prev || []).map(sl => {
+                if (sl.id !== slurId) return sl;
+                const da = capo === 'from' ? nuovaNota : sl.fromNoteId;
+                const a = capo === 'to' ? nuovaNota : sl.toNoteId;
+                if (da === a) return sl; // una legatura da una nota a sé stessa non esiste
+                return tickDi(da) <= tickDi(a)
+                    ? { ...sl, fromNoteId: da, toNoteId: a }
+                    : { ...sl, fromNoteId: a, toNoteId: da };
+            }));
+        };
+        window.addEventListener('mouseup', finisci, true);
+        return true;
+    }, []);
+
     /** Tasto destro sulla curva: la legatura si toglie. */
     const togliLegatura = useCallback((slurId: string): boolean => {
         let trovata = false;
@@ -15336,6 +15371,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 barlines={systemBarlines}
                                 slurs={slurs}
                                 onSlurRightClick={(slurId) => togliLegatura(slurId)}
+                                onSlurEndPick={(slurId, capo) => prendiCapoLegatura(slurId, capo)}
                                 onNoteRightClick={(noteId) => togliArticolazioniDaNota(noteId)}
                                 onBarlineRightClick={(barlineId) => {
                                     // Coerenza coi segni della tavolozza: il tasto destro TOGLIE.

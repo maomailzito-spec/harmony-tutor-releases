@@ -39,7 +39,7 @@ export interface SignDropTarget {
 const RAGGIO_NOTA_PX = 26;
 
 /** La nota sotto il puntatore: quella esatta, o la più vicina entro il raggio. */
-function notaSottoIlPuntatore(sotto: Element | null, svg: SVGSVGElement, cx: number, cy: number): string | undefined {
+export function notaSottoIlPuntatore(sotto: Element | null, svg: SVGSVGElement, cx: number, cy: number): string | undefined {
     const valida = (el: Element | null): string | undefined => {
         const id = el?.getAttribute?.('data-note-id') || '';
         if (!id || id === '__ghost__' || el?.getAttribute('data-is-ghost')) return undefined;
@@ -62,6 +62,23 @@ function notaSottoIlPuntatore(sotto: Element | null, svg: SVGSVGElement, cx: num
 
 /** Oltre questi pixel il gesto diventa un trascinamento (sotto, resta un clic). */
 const SOGLIA_PX = 4;
+
+/**
+ * La nota in un punto dello schermo, partendo dalle sole coordinate del mouse.
+ * Serve al rilascio di un segno e a chiunque debba riagganciare qualcosa a una nota
+ * (per esempio il capo di una legatura che si sta allungando).
+ */
+export function notaAlPunto(clientX: number, clientY: number): string | undefined {
+    try {
+        const sotto = document.elementFromPoint(clientX, clientY);
+        const contenitore = (sotto as Element | null)?.closest?.('[data-system-index]') as HTMLElement | null;
+        const svg = contenitore?.querySelector('svg') as SVGSVGElement | null;
+        if (!svg) return undefined;
+        return notaSottoIlPuntatore(sotto, svg, clientX, clientY);
+    } catch {
+        return undefined;
+    }
+}
 
 export function useSignDrag(onDrop: (payload: SignDragPayload, target: SignDropTarget) => void) {
     const [carico, setCarico] = useState<SignDragPayload | null>(null);

@@ -189,7 +189,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'slur', label: '⌒' }, e)}
                         onClick={() => { if (selectionCount >= 2) onPlaceSlur(); }}
-                        title="Legatura di portamento: seleziona due note e clicca, oppure trascinala su una nota (arriva alla successiva). Tasto destro sulla curva per toglierla."
+                        title="Legatura di portamento: seleziona due note e clicca, oppure trascinala su una nota (arriva alla successiva). Poi tira i capi della curva per allungarla; tasto destro per toglierla."
                         className={`${bottone} ${attivo} px-1`}
                         style={{ fontFamily: 'serif', lineHeight: 1 }}
                     >

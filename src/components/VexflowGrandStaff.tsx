@@ -37,6 +37,10 @@ interface VexflowGrandStaffProps {
   slurs?: Array<{ id: string; fromNoteId: string; toNoteId: string }>;
   /** Tasto destro sulla curva di una legatura. */
   onSlurRightClick?: (slurId: string, e: MouseEvent) => boolean | void;
+  /** Presa di un CAPO della legatura (tasto sinistro sulla curva): `from` se si è
+   *  premuto nella metà sinistra, `to` nella destra. Chi ascolta porta il capo su
+   *  un'altra nota. */
+  onSlurEndPick?: (slurId: string, capo: 'from' | 'to', e: MouseEvent) => boolean | void;
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
@@ -607,6 +611,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   onNoteRightClick,
   slurs,
   onSlurRightClick,
+  onSlurEndPick,
   ghostNote,
   onNoteHitPoints,
   enableProximityPick = true,
@@ -743,6 +748,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   useEffect(() => { onNoteRightClickRef.current = onNoteRightClick; }, [onNoteRightClick]);
   const onSlurRightClickRef = useRef<typeof onSlurRightClick>(onSlurRightClick);
   useEffect(() => { onSlurRightClickRef.current = onSlurRightClick; }, [onSlurRightClick]);
+  const onSlurEndPickRef = useRef<typeof onSlurEndPick>(onSlurEndPick);
+  useEffect(() => { onSlurEndPickRef.current = onSlurEndPick; }, [onSlurEndPick]);
 
   const barlinesRef = useRef<Barline[]>(barlines);
   useEffect(() => { barlinesRef.current = barlines; }, [barlines]);
@@ -4426,6 +4433,27 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
       // Only handle events that originate inside the SVG.
       if (!(e.target instanceof Element) || !svg.contains(e.target)) return;
+
+      // ── Capo di una LEGATURA ──
+      // Premendo sulla curva si prende il capo dalla parte in cui si è premuto e lo si
+      // porta su un'altra nota: è così che una legatura si allunga o si accorcia, senza
+      // doverla rifare. Prima del resto, perché la curva passa sopra alle note.
+      const suCurva = e.target.closest('[data-slur-id]') as Element | null;
+      const idCurva = suCurva?.getAttribute('data-slur-id');
+      if (idCurva && onSlurEndPickRef.current) {
+        // La zona di presa della curva è larga 12px e passa accanto alle teste di nota:
+        // se lì sotto c'è una nota, il gesto è suo. Selezionare una nota conta più che
+        // agguantare una legatura, e nel mezzo dell'arco — dove la curva si stacca dal
+        // rigo — di spazio per prenderla ce n'è comunque.
+        const { x: sx, y: sy } = clientToSvgCoords(svg, e);
+        const notaLiSotto = noteHitPointsRef.current.some(p => !p.isGhost && Math.hypot(p.x - sx, p.y - sy) <= 14);
+        if (!notaLiSotto) {
+          const box = (suCurva as SVGGraphicsElement).getBoundingClientRect();
+          const capo: 'from' | 'to' = (e.clientX < box.left + box.width / 2) ? 'from' : 'to';
+          const preso = onSlurEndPickRef.current(idCurva, capo, e);
+          if (preso !== false) { e.preventDefault(); return; }
+        }
+      }
 
       // If the user pressed on a tie path, keep it from starting a marquee selection.
       // We still allow mouseup to resolve the click.
