@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { DynamicLevel } from '../utils/dynamics';
 import type { SignDragPayload } from '../hooks/useSignDrag';
+import type { ArticulationMark } from '../types';
+import { ARTICULATIONS, ARTICULATION_UI } from '../utils/articulations';
 
 /**
  * Tavolozza dei SEGNI, flottante e trascinabile (stesso modello del modulo
- * percussioni e del mixer). Nasce per le dinamiche ma è pensata per ospitare in
- * seguito accenti, staccati e legature, così non se ne dovrà aprire una seconda.
+ * percussioni e del mixer). Nata per le dinamiche, ospita ora anche le articolazioni;
+ * quando si affollerà andrà divisa in sotto-menù per argomento.
  *
  * Come si usa: si seleziona una nota e si clicca il segno — il segno si piazza in
  * quel punto e vale per TUTTE le voci. Per una forcella si selezionano due note
@@ -20,6 +22,10 @@ interface DynamicsPalettePanelProps {
     onPlaceAccent: (label: 'sf' | 'sfz' | 'rf') => void;
     onPlaceFp: () => void;
     onPlaceHairpin: (direction: 'cresc' | 'dim') => void;
+    /** Articolazioni: stanno sulla NOTA, quindi valgono per tutte quelle selezionate
+     *  (e trascinandole si posano su quella sotto il puntatore). Rimettere lo stesso
+     *  segno lo toglie. */
+    onPlaceArticulation: (a: ArticulationMark) => void;
     onRemoveAtSelection: () => void;
     onClose: () => void;
     /** Battute: comandi che non sono "segni da posare" ma azioni su una misura. */
@@ -38,7 +44,7 @@ const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff']
 
 const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     selectionCount, hasMarkAtSelection,
-    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
+    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
     const [pos, setPos] = useState<{ x: number; y: number }>({ x: 200, y: 120 });
     // Valori del metro da posare: partono da quello del brano e si regolano qui,
@@ -157,6 +163,22 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     >
                         dim. ⟩
                     </button>
+                </div>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Articolazioni</div>
+                <div className="grid grid-cols-5 gap-1">
+                    {ARTICULATIONS.map(a => (
+                        <button
+                            key={a}
+                            onMouseDown={(e) => onStartDrag({ kind: 'articulation', data: a, label: ARTICULATION_UI[a].simbolo }, e)}
+                            onClick={() => { if (selectionCount > 0) onPlaceArticulation(a); }}
+                            title={`${ARTICULATION_UI[a].nome}: trascinalo su una nota, oppure seleziona le note e clicca. Rimettendolo si toglie.`}
+                            className={`${bottone} ${attivo} px-1`}
+                            style={{ fontFamily: 'serif', lineHeight: 1 }}
+                        >
+                            {ARTICULATION_UI[a].simbolo}
+                        </button>
+                    ))}
                 </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Tempo</div>

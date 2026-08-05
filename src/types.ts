@@ -139,6 +139,9 @@ export type NoteDuration = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth'
 export type ClefType = 'treble' | 'bass' | 'soprano' | 'alto' | 'tenor';
 export type Voice = 1 | 2 | 3 | 4;
 
+/** Articolazioni che si posano su una nota. L'ordine è quello della tavolozza. */
+export type ArticulationMark = 'staccato' | 'staccatissimo' | 'accent' | 'marcato' | 'tenuto';
+
 export type StaffNote = {
   id: string;
   pitch: string; // e.g., 'C', 'F'
@@ -196,6 +199,13 @@ export type StaffNote = {
   isSuspension?: any;
   ornamentMark?: string;
   ornamentOverride?: OrnamentType;
+  /** ARTICOLAZIONI della nota: staccato, staccatissimo, accento, marcato, tenuto.
+   *  È un ELENCO perché si combinano davvero — accento + staccato è scrittura
+   *  corrente. Stanno sulla NOTA e non sul brano (a differenza delle dinamiche, che
+   *  valgono per tutte le voci): un segno d'articolazione riguarda quel suono lì.
+   *  Si disegnano sopra le voci 1/3 e sotto le 2/4, come la corona, e si SENTONO:
+   *  vedi `src/utils/articulations.ts`. */
+  articulations?: ArticulationMark[];
   /** Fermata (corona) — playback-only effect: doubles the note's sounding duration
    *  and shifts all subsequent events by the same amount. Rendered as a fermata
    *  glyph above (voices 1/3) or below (voices 2/4) the note. */

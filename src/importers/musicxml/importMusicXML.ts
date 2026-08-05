@@ -1,6 +1,7 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
+import type { ArticulationMark } from '../../types';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -197,6 +198,31 @@ function velocityFromDirection(el: Element): number | null {
     }
   }
   return null;
+}
+
+/** Articolazioni: elementi MusicXML → nomi nostri. Quelle che non abbiamo (spiccato,
+ *  detached-legato…) si ignorano: meglio non scritte che scritte per un'altra cosa. */
+const XML_ARTICULATION: Record<string, ArticulationMark> = {
+  staccato: 'staccato',
+  staccatissimo: 'staccatissimo',
+  accent: 'accent',
+  'strong-accent': 'marcato',
+  tenuto: 'tenuto',
+};
+
+/** Articolazioni di una <note>, dal suo <notations><articulations>.
+ *  (Esportata per il banco di prova, come `readDynamicSigns`.) */
+export function readNoteArticulations(noteEl: Element): ArticulationMark[] {
+  const out: ArticulationMark[] = [];
+  try {
+    for (const grp of Array.from(noteEl.querySelectorAll('notations > articulations'))) {
+      for (const c of Array.from(grp.children)) {
+        const a = XML_ARTICULATION[c.tagName.toLowerCase()];
+        if (a && !out.includes(a)) out.push(a);
+      }
+    }
+  } catch { /* nota senza notations */ }
+  return out;
 }
 
 /** Nomi MusicXML dei livelli → i nostri. Gli estremi che non abbiamo (pppp, ffff)
@@ -704,6 +730,13 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           voice,
           // Le pause non suonano: la velocity resta solo sulle note.
           ...(isRest ? {} : { velocity: currentVelocity }),
+          // Articolazioni scritte nel file: entrano come segni veri, disegnati e
+          // modificabili, non come un accorciamento già cotto nella durata.
+          ...(() => {
+            if (isRest) return {};
+            const arts = readNoteArticulations(noteEl);
+            return arts.length > 0 ? { articulations: arts } : {};
+          })(),
         };
 
         if (partIndex < MAX_SATB_PARTS) notes.push(staffNote);

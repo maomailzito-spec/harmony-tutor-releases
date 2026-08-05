@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation } from 'vexflow';
+import { ARTICULATION_VF_CODE } from '../utils/articulations';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 
@@ -2926,6 +2927,36 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                   (vfNote as any).addModifier(art, 0);
                 }
               } catch { /* ignore fermata render errors */ }
+
+              // ── Articolazioni (staccato, accento, marcato, tenuto) ──
+              // Stessa impalcatura della corona: sopra per le voci 1/3, sotto per le
+              // 2/4, così due voci sullo stesso rigo non si pestano i segni. Su un
+              // accordo unificato si raccolgono quelle di tutte le note fuse: il segno
+              // vale per l'attacco, e disegnarlo una volta sola è ciò che si vede in
+              // partitura.
+              try {
+                const raccolte = new Set<string>();
+                const raccogli = (sn: any) => {
+                  const arr = sn?.articulations;
+                  if (Array.isArray(arr)) for (const a of arr) raccolte.add(String(a));
+                };
+                raccogli(n);
+                const mergedForArt: string[] | undefined = (vfNote as any)?.__mergedIds;
+                if (Array.isArray(mergedForArt)) {
+                  for (const mid of mergedForArt) {
+                    const sn = staffNoteById.get(String(mid));
+                    if (sn) raccogli(sn);
+                  }
+                }
+                if (raccolte.size > 0 && !n.isRest && n.id !== '__ghost__') {
+                  const suGambo = (n.voice ?? 1) % 2 === 1; // voci 1/3 → gambo in su → segno sopra
+                  for (const a of raccolte) {
+                    const code = (ARTICULATION_VF_CODE as any)[a];
+                    if (!code) continue;
+                    (vfNote as any).addModifier(new Articulation(code).setPosition(suGambo ? 3 : 4), 0);
+                  }
+                }
+              } catch { /* ignore articulation render errors */ }
 
               tc.preFormat();
               tc.setX(x);

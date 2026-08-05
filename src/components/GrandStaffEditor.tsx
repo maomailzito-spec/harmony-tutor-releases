@@ -32,6 +32,8 @@ import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasure
 import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody, spelledNoteName, keyAccidentalNotes, type TransformMode } from '../utils/melodicTransforms';
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } from '../utils/dynamics';
+import { articulationPlayback } from '../utils/articulations';
+import type { ArticulationMark } from '../types';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
 import { importMusicXML } from '../importers/musicxml/importMusicXML';
@@ -8214,7 +8216,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const velDinAcc = (dynamicsRef.current && dynamicsRef.current.length > 0)
                             ? velocityAtAbsBeat(dynamicsRef.current, it.absStartBeat)
                             : n.velocity;
-                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec, volume: velocityToGain(velDinAcc), output: drumOut, sustain: true, velocity: velDinAcc, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc, bank: isDrum ? 'orchestral' : (((track as any).soundBank) ?? 'orchestral') });
+                        // Articolazioni: accorciano e rinforzano la singola nota.
+                        const artAcc = articulationPlayback((n as any).articulations);
+                        const velArtAcc = (velDinAcc != null && Number.isFinite(velDinAcc))
+                            ? Math.max(1, Math.min(127, Math.round(velDinAcc + artAcc.velocityDelta)))
+                            : velDinAcc;
+                        void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: playDurSec * artAcc.durationFactor, volume: velocityToGain(velDinAcc) * artAcc.gainFactor, output: drumOut, sustain: true, velocity: velArtAcc, applyDrumPieceGain: !isDrum, slotSec: slotSecAcc, bank: isDrum ? 'orchestral' : (((track as any).soundBank) ?? 'orchestral') });
                         return;
                     }
                     const v = (n.voice ?? 1) as number;
@@ -8254,7 +8261,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const velDinFine = (dynamicsRef.current && dynamicsRef.current.length > 0)
                         ? velocityAtAbsBeat(dynamicsRef.current, it.absStartBeat + it.durationBeats)
                         : undefined;
-                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec, volume: velocityToGain(velDin), volumeEnd: velDinFine != null ? velocityToGain(velDinFine) : undefined, output: voiceGain, sustain: true, velocity: velDin, slotSec: slotSecV, bank: voiceSoundBanksRef.current[v] ?? 'orchestral' });
+                    // Articolazioni: lo staccato accorcia DAVVERO, l'accento si sente.
+                    // Il rinforzo agisce sul volume e non sulla sola velocity perché una
+                    // nota scritta a mano, in un brano senza dinamiche, la velocity non
+                    // ce l'ha: sommare a un numero che non c'è avrebbe lasciato muto
+                    // l'accento proprio nel caso più comune.
+                    const art = articulationPlayback((n as any).articulations);
+                    const velArt = (velDin != null && Number.isFinite(velDin))
+                        ? Math.max(1, Math.min(127, Math.round(velDin + art.velocityDelta)))
+                        : velDin;
+                    void audioService.playNoteForInstrument(instr, midiToName(midiT), { when, duration: durSec * art.durationFactor, volume: velocityToGain(velDin) * art.gainFactor, volumeEnd: velDinFine != null ? velocityToGain(velDinFine) * art.gainFactor : undefined, output: voiceGain, sustain: true, velocity: velArt, slotSec: slotSecV, bank: voiceSoundBanksRef.current[v] ?? 'orchestral' });
                 });
             }
 
@@ -11979,8 +11995,54 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // L'impalcatura è generica (useSignDrag): trasporta un carico qualunque e dice
     // dove è stato mollato. Qui si traduce il rilascio in un segno di dinamica; per
     // gli altri segni futuri basterà aggiungere un caso.
-    const posaSegno = useCallback((payload: SignDragPayload, target: { systemIndex: number; x: number; y: number }) => {
+    /**
+     * Mette o toglie un'articolazione sulle note indicate (senza indicazioni: quelle
+     * selezionate). È un INTERRUTTORE, come la corona con ⌥F: se ce l'hanno già tutte,
+     * il gesto la toglie — così lo stesso pulsante serve a mettere e a ripensarci,
+     * senza un comando "togli" a parte.
+     *
+     * Vale anche per le note delle tracce d'accompagnamento: uno staccato è uno
+     * staccato che sia scritto nel coro o nell'organo.
+     */
+    const applicaArticolazione = useCallback((tipo: ArticulationMark, ids?: string[]) => {
+        const bersagli = new Set((ids && ids.length) ? ids : Array.from(selectedNoteIds));
+        if (bersagli.size === 0) return;
+        const tutteLeNote = [
+            ...(latestRawNotes.current || []),
+            ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+        ].filter(n => n && bersagli.has(n.id) && !n.isRest);
+        if (tutteLeNote.length === 0) return;
+        const ha = (n: any) => Array.isArray(n?.articulations) && n.articulations.includes(tipo);
+        const togli = tutteLeNote.every(ha);
+        const applica = (n: any) => {
+            if (!n || !bersagli.has(n.id) || n.isRest) return n;
+            const attuali: ArticulationMark[] = Array.isArray(n.articulations) ? n.articulations : [];
+            const prossime = togli
+                ? attuali.filter(a => a !== tipo)
+                : (attuali.includes(tipo) ? attuali : [...attuali, tipo]);
+            if (prossime.length === 0) {
+                // Niente campo vuoto nel file: la nota torna com'era prima.
+                const { articulations: _via, ...resto } = n;
+                return resto;
+            }
+            return { ...n, articulations: prossime };
+        };
+        setRawNotes(prev => (prev || []).map(applica));
+        setAccompanimentTracks(prev => (prev || []).map(t => ({ ...t, notes: (t.notes || []).map(applica) })));
+    }, [selectedNoteIds, setRawNotes, setAccompanimentTracks]);
+    const applicaArticolazioneRef = useRef(applicaArticolazione);
+    applicaArticolazioneRef.current = applicaArticolazione;
+
+    const posaSegno = useCallback((payload: SignDragPayload, target: { systemIndex: number; x: number; y: number; noteId?: string }) => {
         try {
+            // Le articolazioni stanno SULLA nota: se sotto il puntatore non c'è una
+            // nota il gesto non ha bersaglio, e non si fa nulla (meglio di posarla su
+            // una nota a caso lì vicino).
+            if (payload.kind === 'articulation') {
+                if (target.noteId) applicaArticolazioneRef.current?.(payload.data as ArticulationMark, [target.noteId]);
+                return;
+            }
+
             const rng = ghostInsertTickRangeRef.current?.(target.systemIndex, target.x);
             if (!rng) return;
             const dove = rng.startTick / TICKS_PER_QUARTER;
@@ -14152,6 +14214,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     : Math.abs(m.absBeat - primo) >= EPSD
                             )));
                         }}
+                        onPlaceArticulation={(a) => applicaArticolazione(a)}
                         onClose={() => setIsDynamicsPanelOpen(false)}
                         onStartDrag={(payload, ev) => segnoTrascinato.inizia(payload, ev)}
                         currentTimeSignature={timeSignature}

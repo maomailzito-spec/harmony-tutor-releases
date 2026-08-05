@@ -6,6 +6,7 @@
 import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
+import type { ArticulationMark } from '../types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,15 @@ const DURATION_TICKS: Record<NoteDuration, number> = {
   'sixteenth': DIVISIONS / 4,
   'thirty-second': DIVISIONS / 8,
   'sixty-fourth': DIVISIONS / 16,
+};
+
+/** Articolazioni: nomi nostri → elementi MusicXML (dentro <notations><articulations>). */
+const ARTICULATION_XML: Record<ArticulationMark, string> = {
+  staccato: 'staccato',
+  staccatissimo: 'staccatissimo',
+  accent: 'accent',
+  marcato: 'strong-accent',
+  tenuto: 'tenuto',
 };
 
 /** Map internal accidental names → MusicXML <accidental> values. */
@@ -193,10 +203,18 @@ function emitNote(
   }
   w(`        <staff>${staffNum}</staff>`);
 
-  if (note.isTiedToNext || note.isTiedFromPrev) {
+  // <notations> è UNO solo per nota: legature e articolazioni vanno nello stesso.
+  const artNota = (Array.isArray((note as any).articulations) ? (note as any).articulations : [])
+    .filter((a: string) => !!ARTICULATION_XML[a as ArticulationMark]);
+  if (note.isTiedToNext || note.isTiedFromPrev || artNota.length > 0) {
     w('        <notations>');
     if (note.isTiedFromPrev) w('          <tied type="stop"/>');
     if (note.isTiedToNext) w('          <tied type="start"/>');
+    if (artNota.length > 0) {
+      w('          <articulations>');
+      for (const a of artNota) w(`            <${ARTICULATION_XML[a as ArticulationMark]}/>`);
+      w('          </articulations>');
+    }
     w('        </notations>');
   }
 

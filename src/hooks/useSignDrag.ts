@@ -29,6 +29,35 @@ export interface SignDropTarget {
     /** Coordinate DENTRO l'SVG del sistema, le stesse che usa il clic sul rigo. */
     x: number;
     y: number;
+    /** Nota su cui è stato mollato il segno, se ce n'è una lì sotto. Serve ai segni
+     *  che stanno SULLA nota (articolazioni) invece che in un punto del tempo. */
+    noteId?: string;
+}
+
+/** Quanto si può sbagliare la mira e trovare lo stesso la nota. Le teste di nota sono
+ *  piccole: pretendere il centro esatto renderebbe il gesto una prova di precisione. */
+const RAGGIO_NOTA_PX = 26;
+
+/** La nota sotto il puntatore: quella esatta, o la più vicina entro il raggio. */
+function notaSottoIlPuntatore(sotto: Element | null, svg: SVGSVGElement, cx: number, cy: number): string | undefined {
+    const valida = (el: Element | null): string | undefined => {
+        const id = el?.getAttribute?.('data-note-id') || '';
+        if (!id || id === '__ghost__' || el?.getAttribute('data-is-ghost')) return undefined;
+        return id;
+    };
+    const esatta = valida((sotto as Element | null)?.closest?.('[data-note-id]') ?? null);
+    if (esatta) return esatta;
+
+    let migliore: { id: string; d: number } | null = null;
+    for (const g of Array.from(svg.querySelectorAll('[data-note-id]'))) {
+        const id = valida(g);
+        if (!id) continue;
+        const r = (g as SVGGraphicsElement).getBoundingClientRect();
+        if (!r.width && !r.height) continue;
+        const d = Math.hypot(cx - (r.left + r.width / 2), cy - (r.top + r.height / 2));
+        if (d <= RAGGIO_NOTA_PX && (!migliore || d < migliore.d)) migliore = { id, d };
+    }
+    return migliore?.id;
 }
 
 /** Oltre questi pixel il gesto diventa un trascinamento (sotto, resta un clic). */
@@ -90,6 +119,7 @@ export function useSignDrag(onDrop: (payload: SignDragPayload, target: SignDropT
                     systemIndex: idx,
                     x: (e.clientX - rect.left) * scaleX,
                     y: (e.clientY - rect.top) * scaleY,
+                    noteId: notaSottoIlPuntatore(sotto, svg, e.clientX, e.clientY),
                 });
             } catch { /* rilascio fuori bersaglio: si abbandona */ }
         };
