@@ -3776,15 +3776,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * secondo quella d'inizio. Tutti i punti che decidono la grafia di una nota passano
      * di qui.
      */
-    const keyAccidentalsAtMeasure = useCallback((measureIndex: number): string[] => {
-        if (!keySignatureChanges || keySignatureChanges.length === 0) return keyAccidentals;
+    const keySignatureAtMeasure = useCallback((measureIndex: number): KeySignature => {
+        if (!keySignatureChanges || keySignatureChanges.length === 0) return keySignature;
         const inVigore = keyAtMeasure(
             { root: keySignatureRoot, isMinor: isMinorMode },
             keySignatureChanges,
             Number.isFinite(measureIndex) ? Number(measureIndex) : 0,
         );
-        return keyAccidentalNotes(getKeySignature(inVigore.root, 'Major'));
-    }, [keySignatureChanges, keySignatureRoot, isMinorMode, keyAccidentals]);
+        return getKeySignature(inVigore.root, 'Major');
+    }, [keySignatureChanges, keySignatureRoot, isMinorMode, keySignature]);
+
+    const keyAccidentalsAtMeasure = useCallback((measureIndex: number): string[] => {
+        if (!keySignatureChanges || keySignatureChanges.length === 0) return keyAccidentals;
+        return keyAccidentalNotes(keySignatureAtMeasure(measureIndex));
+    }, [keySignatureChanges, keySignatureAtMeasure, keyAccidentals]);
 
     const noteNameToChromaticIndex = useCallback((name: string): number => {
         const idxSharp = NOTE_NAMES.indexOf(name);
@@ -10821,7 +10826,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 accProps = makeDrumNoteProps(element, palette, accClef, keySignature);
                 drumVoiceClick = drumPieceVoice(element); // mani→1 (su), piedi→2 (giù)
             } else {
-                accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignature);
+                accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignatureAtMeasure(hit.measureIndex));
                 accProps = applyAutoLeadingToneInMinor(accProps);
                 accProps = applyActiveAccidental(accProps);
             }
@@ -11189,7 +11194,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             pos = Math.round(pos);
         }
 
-        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
+        // L'altezza si ricava dall'armatura in vigore in QUESTA misura: cliccando la riga
+        // del La in La bemolle deve uscire un La BEMOLLE, senza segni scritti. Con
+        // l'armatura d'inizio usciva un La naturale, e il disegno — che l'armatura nuova
+        // la conosce — ci metteva il bequadro.
+        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasure(hit.measureIndex));
         props = applyAutoLeadingToneInMinor(props);
         props = applyActiveAccidental(props);
 
@@ -11776,7 +11785,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const pos = diatonicPosOf(n);
             if (pos == null) return n;
             const clef = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
-            let props: any = getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignature);
+            // Trascinando una nota di grado, la nuova altezza segue l'armatura della SUA
+            // misura: in La bemolle, salendo di grado da Sol si arriva a La bemolle.
+            let props: any = getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignatureAtMeasure(Number(n.measureIndex ?? 0)));
             props = applyAutoLeadingToneInMinor(props);
             props = applyMeasureAccidentalCarry(props, {
                 notes: siblings,
@@ -11815,7 +11826,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const pos = diatonicPosOf(n);
                 if (pos == null) return false;
                 const clef = ((n as any).clefOverride || n.clef || clefForVoice(n.voice)) as ClefType;
-                const midi = Number(getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignature).midi);
+                const midi = Number(getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignatureAtMeasure(Number((n as any).measureIndex ?? 0))).midi);
                 return !Number.isFinite(midi) || midi < 21 || midi > 108; // La0 … Do8
             });
             if (outOfRange) return;
@@ -12707,7 +12718,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 accGhostProps = makeDrumNoteProps(element, palette, accGhostClef, keySignature);
             } else {
-                accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignature);
+                accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignatureAtMeasure(hitGhost?.measureIndex ?? 0));
                 accGhostProps = applyAutoLeadingToneInMinor(accGhostProps);
                 accGhostProps = applyActiveAccidental(accGhostProps);
             }
@@ -12848,7 +12859,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             pos = Math.round(pos);
         }
 
-        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignature);
+        // Il fantasma deve mostrare la stessa nota che uscirà dal clic, armatura di
+        // questa misura compresa.
+        let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasure(hit.measureIndex));
         props = applyAutoLeadingToneInMinor(props);
         props = applyActiveAccidental(props);
 
