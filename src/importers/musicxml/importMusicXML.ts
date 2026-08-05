@@ -1,7 +1,7 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
-import type { ArticulationMark, Slur } from '../../types';
+import type { ArticulationMark, Slur, OctaveShift } from '../../types';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -34,6 +34,9 @@ export type MusicXMLImportResult = {
   projectTitle?: string;
   /** Le parti del file tenute separate (vedi MusicXMLPart). Stesso ordine del file. */
   parts: MusicXMLPart[];
+  /** SEGNI D'OTTAVA letti dal file. Nel formato `type` dice di quanto è spostato lo
+   *  SCRITTO: `down` = scritto sotto, suonato sopra = il nostro 8va (`up`). */
+  octaveShifts: OctaveShift[];
   /** LEGATURE DI PORTAMENTO lette dal file, con i capi già risolti sugli id delle note
    *  importate. I due capi arrivano separati (`<slur type="start">` … `type="stop">`) e
    *  spesso a battute di distanza: si appaiano per `number`. */
@@ -458,6 +461,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   const dynSeen = new Set<string>();
   // Legature: i capi arrivano separati e vanno appaiati per numero, dentro la parte.
   const slurs: Slur[] = [];
+  const octaveShifts: OctaveShift[] = [];
 
   for (let partIndex = 0; partIndex < partsToParse.length; partIndex++) {
     const part = partsToParse[partIndex];
@@ -480,6 +484,10 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     const partDynamics: DynamicMark[] = [];
     // Legature aperte in questa parte, in attesa del loro `stop` (chiave = number).
     const legatureAperte = new Map<string, string>();
+    // Segni d'ottava: il file dice DA DOVE e FIN DOVE in tick; le note a cui agganciarli
+    // si sanno solo dopo averle lette, quindi si tiene l'elenco di quelle della parte.
+    let ottavaAperta: { daTick: number; direzione: 'up' | 'down' } | null = null;
+    const noteDiParte: Array<{ id: string; tick: number }> = [];
     const openWedges = new Map<string, { from: number; direction: 'cresc' | 'dim' }>();
     let finePartAbsBeat = 0;
 
@@ -606,6 +614,28 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           if (tag === 'direction') {
             const absBeat = measureStartAbsBeat + (divisions > 0 ? curPosDiv / divisions : 0);
             readDynamicSigns(child, absBeat, partDynamics, openWedges);
+            // Segno d'ottava: si apre e si chiude a distanza, e i capi sono NOTE, che
+            // qui non sono ancora tutte lette → si tiene il punto e si aggancia al `stop`.
+            try {
+              const os = child.querySelector('direction-type > octave-shift');
+              const tipo = String(os?.getAttribute('type') || '').toLowerCase();
+              const tick = Math.round(absBeat * TICKS_PER_QUARTER);
+              if (tipo === 'down' || tipo === 'up') {
+                // down = scritto sotto, suonato sopra = il nostro 'up'.
+                ottavaAperta = { daTick: tick, direzione: tipo === 'down' ? 'up' : 'down' };
+              } else if (tipo === 'stop' && ottavaAperta) {
+                const dentro = noteDiParte.filter(x => x.tick >= ottavaAperta!.daTick - 1 && x.tick < tick - 1);
+                if (dentro.length > 0) {
+                  octaveShifts.push({
+                    id: makeId(),
+                    fromNoteId: dentro[0].id,
+                    toNoteId: dentro[dentro.length - 1].id,
+                    direction: ottavaAperta.direzione,
+                  });
+                }
+                ottavaAperta = null;
+              }
+            } catch { /* direzione senza octave-shift */ }
           }
           continue;
         }
@@ -760,6 +790,8 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           })(),
         };
 
+        if (!isRest) noteDiParte.push({ id: staffNote.id, tick: startTick });
+
         // Capi di legatura: `start` mette in attesa l'id di questa nota, `stop` la chiude
         // sulla nota corrente. Il numero tiene distinte le legature sovrapposte.
         if (!isRest) {
@@ -856,6 +888,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     projectTitle: title || undefined,
     parts: partsOut,
     slurs,
+    octaveShifts,
     dynamics: dynamics.sort((a, b) => {
       const aa = a.kind === 'hairpin' ? a.fromAbsBeat : a.absBeat;
       const bb = b.kind === 'hairpin' ? b.fromAbsBeat : b.absBeat;

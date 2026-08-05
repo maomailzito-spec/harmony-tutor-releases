@@ -6,7 +6,7 @@
 import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
-import type { ArticulationMark, Slur } from '../types';
+import type { ArticulationMark, Slur, OctaveShift } from '../types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +40,14 @@ export interface ExportMusicXMLOptions {
   /** LEGATURE DI PORTAMENTO: `<slur type="start">` sulla prima nota e `type="stop"`
    *  sull'ultima, con lo stesso `number` — è così che si riconoscono i due capi. */
   slurs?: Slur[];
+  /** SEGNI D'OTTAVA (8va/8vb).
+   *
+   *  ATTENZIONE alla convenzione del formato, che è l'opposto di come si dice a parole:
+   *  `type` dichiara di quanto è stato spostato lo SCRITTO rispetto a quello che suona.
+   *  Un 8va — scritto un'ottava sotto, suonato sopra — è quindi `type="down"`.
+   *  Vanno solo nella parte che contiene le note a cui sono agganciati: un 8va sul coro
+   *  non riguarda l'organo. */
+  octaveShifts?: OctaveShift[];
   /** SEGNI DI DINAMICA: <dynamics> per i livelli e gli accenti, <wedge> per le forcelle.
    *  In questo programma valgono per tutto il brano (non appartengono a una voce), quindi
    *  ogni <part> se li porta: chi apre il file li trova su ogni rigo, come in una
@@ -438,14 +446,20 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     return m;
   };
   const dynByMeasure = new Map<number, DynDirection[]>();
-  const pushDyn = (absBeat: number, ordine: number, corpo: string[], velocity?: number): void => {
+  /** Mette una direzione nella corsia della sua battuta, dato il punto in semiminime. */
+  const pushInLane = (
+    lane: Map<number, DynDirection[]>,
+    absBeat: number, ordine: number, corpo: string[], velocity?: number,
+  ): void => {
     if (!Number.isFinite(absBeat)) return;
     const tick = Math.round(Math.max(0, absBeat) * DIVISIONS);
     const m = measureOfTick(tick);
     const localTick = Math.max(0, tick - measureStartTicks(m));
-    if (!dynByMeasure.has(m)) dynByMeasure.set(m, []);
-    dynByMeasure.get(m)!.push({ localTick, ordine, lines: buildDynDirection(corpo, velocity) });
+    if (!lane.has(m)) lane.set(m, []);
+    lane.get(m)!.push({ localTick, ordine, lines: buildDynDirection(corpo, velocity) });
   };
+  const pushDyn = (absBeat: number, ordine: number, corpo: string[], velocity?: number): void =>
+    pushInLane(dynByMeasure, absBeat, ordine, corpo, velocity);
   for (const d of (opts.dynamics || [])) {
     if (!d) continue;
     if (d.kind === 'level') {
@@ -478,6 +492,31 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     inizioLegatura.get(sl.fromNoteId)!.push(num);
     fineLegatura.get(sl.toNoteId)!.push(num);
   });
+
+  // ── SEGNI D'OTTAVA, parte per parte ──
+  // Sono agganciati a due note: si scrivono solo nella parte che quelle note ce l'ha.
+  const ottavePerParte = new Map<string, Map<number, DynDirection[]>>();
+  for (const parte of finalParts) {
+    const perId = new Map(parte.notes.filter(n => n?.id).map(n => [n.id, n]));
+    const corsia = new Map<number, DynDirection[]>();
+    for (const o of (opts.octaveShifts || [])) {
+      const a = perId.get(o?.fromNoteId);
+      const b = perId.get(o?.toNoteId);
+      if (!a || !b) continue; // il segno non è di questa parte
+      const t1 = Number((a as any).startTick ?? 0);
+      const t2 = Number((b as any).startTick ?? 0);
+      const inizio = Math.min(t1, t2) / DIVISIONS;
+      // La chiusura va DOPO l'ultima nota coperta: messa sul suo attacco, chi legge
+      // escluderebbe proprio la nota sotto la fine della parentesi.
+      const ultima = t2 >= t1 ? b : a;
+      const fine = (Math.max(t1, t2) + Number((ultima as any).durationTicks ?? DIVISIONS)) / DIVISIONS;
+      // 8va (suona sopra) = scritto sotto = type="down". Vedi il commento sul tipo.
+      const tipo = o.direction === 'up' ? 'down' : 'up';
+      pushInLane(corsia, inizio, 2, [`          <octave-shift type="${tipo}" size="8"/>`]);
+      pushInLane(corsia, fine, 0, ['          <octave-shift type="stop" size="8"/>']);
+    }
+    if (corsia.size > 0) ottavePerParte.set(parte.id, corsia);
+  }
 
   const fifths = computeFifths(keySignature, keySignatureRoot);
   const mode = isMinorMode ? 'minor' : 'major';
@@ -566,7 +605,10 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       // della battuta, così il flusso delle note riparte da capo col solito <backup>.
       // Corsia dedicata e non agganciata agli attacchi perché la coda di una forcella
       // cade spesso dove nessuna voce attacca, e lì non avrebbe trovato un posto.
-      const dynHere = dynByMeasure.get(m) || [];
+      const dynHere = [
+        ...(dynByMeasure.get(m) || []),
+        ...((ottavePerParte.get(part.id)?.get(m)) || []),
+      ].sort((x, y) => (x.localTick - y.localTick) || (x.ordine - y.ordine));
       let dynStreamWritten = false;
       if (dynHere.length > 0) {
         let cur = 0;

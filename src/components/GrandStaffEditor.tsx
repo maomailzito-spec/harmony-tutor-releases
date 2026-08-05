@@ -5103,7 +5103,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // di prima, in punti che con la musica nuova non c'entrano niente.
                 setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
                 setSlurs(Array.isArray(imported?.slurs) ? imported.slurs : []);
-                setOctaveShifts([]);
+                setOctaveShifts(Array.isArray(imported?.octaveShifts) ? imported.octaveShifts : []);
                 setClipboard(null);
                 setSelectedNoteIds(new Set());
                 setPasteCaretImmediate(null);
@@ -6700,6 +6700,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // brano, quindi ogni parte se le porta.
                 dynamics: dynamicsRef.current || [],
                 slurs: slursRef.current || [],
+                octaveShifts: octaveShiftsRef.current || [],
                 satbName,
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.

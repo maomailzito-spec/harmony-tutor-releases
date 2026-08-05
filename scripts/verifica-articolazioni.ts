@@ -138,5 +138,38 @@ ok(octaveOffsetSemitones([{ ...sopra[0], direction: 'down' }], 0, 1) === -12, "l
 ok(octaveOffsetSemitones(undefined, 0, 1) === 0 && octaveOffsetSemitones([], 0, 1) === 0, 'senza segni non cambia niente');
 ok(octaveOffsetSemitones([sopra[0], sopra[0]], 0, 1) === 24, 'due segni sovrapposti si sommano (15ma scritta come due 8va)');
 
+// ── 6. L'8va nel file ─────────────────────────────────────────────────────
+// La convenzione del formato è l'opposto delle parole: `type` dice di quanto è
+// spostato lo SCRITTO, quindi 8va (suona sopra, scritto sotto) = type="down".
+console.log('\nL\'8va nel MusicXML');
+const treNote = [nota({ id: 'x1' }), nota({ id: 'x2', beat: 2, startTick: TPQ }), nota({ id: 'x3', beat: 3, startTick: 2 * TPQ })];
+const xml8va = exportMusicXML({ ...base, notes: treNote as any, octaveShifts: [{ id: 'o1', fromNoteId: 'x1', toNoteId: 'x3', direction: 'up' }] });
+ok(xml8va.includes('<octave-shift type="down" size="8"/>'), '8va → type="down" (lo scritto è un\'ottava sotto)');
+ok(xml8va.includes('<octave-shift type="stop" size="8"/>'), 'e la sua chiusura');
+
+const xml8vb = exportMusicXML({ ...base, notes: treNote as any, octaveShifts: [{ id: 'o2', fromNoteId: 'x1', toNoteId: 'x3', direction: 'down' }] });
+ok(xml8vb.includes('<octave-shift type="up" size="8"/>'), '8vb → type="up", cioè l\'opposto');
+
+// La chiusura deve cadere DOPO l'ultima nota coperta, altrimenti chi legge la esclude.
+// Le direzioni stanno in una corsia loro all'inizio della battuta e si posizionano nel
+// TEMPO con <forward>: quindi non si guarda l'ordine nel testo ma i tick percorsi.
+const fraApreEChiude = xml8va.slice(xml8va.indexOf('type="down"'), xml8va.indexOf('type="stop"'));
+const percorsi = [...fraApreEChiude.matchAll(/<forward>\s*<duration>(\d+)<\/duration>/g)]
+    .reduce((tot, m) => tot + Number(m[1]), 0);
+ok(percorsi === 3 * TPQ,
+   `la chiusura cade alla FINE dell'ultima nota coperta (${percorsi} tick invece di ${2 * TPQ}, che sarebbe il suo attacco)`);
+
+const xmlNoOtt = exportMusicXML({ ...base, notes: treNote as any });
+ok(!xmlNoOtt.includes('octave-shift'), 'senza segni non esce nessun tag');
+
+// Un 8va agganciato a note di un'ALTRA parte non deve finire in questa.
+const xmlAltraParte = exportMusicXML({
+    ...base, notes: treNote as any,
+    accompanimentTracks: [{ name: 'Organo', notes: [nota({ id: 'y1' })] as any }],
+    octaveShifts: [{ id: 'o3', fromNoteId: 'y1', toNoteId: 'y1', direction: 'up' }],
+});
+const parteCoro = xmlAltraParte.split('<part id="P1">')[1]?.split('</part>')[0] || '';
+ok(!parteCoro.includes('octave-shift'), "un 8va dell'organo non compare nella parte del coro");
+
 console.log(falliti === 0 ? '\nTUTTO A POSTO\n' : `\n${falliti} CONTROLLI FALLITI\n`);
 process.exit(falliti === 0 ? 0 : 1);
