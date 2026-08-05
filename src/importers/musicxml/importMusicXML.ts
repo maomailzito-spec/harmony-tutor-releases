@@ -684,7 +684,11 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         const pitchEl = noteEl.querySelector('pitch');
         const step = textOf(pitchEl?.querySelector('step'));
         const alter = intOf(pitchEl?.querySelector('alter')) ?? 0;
-        const octave = intOf(pitchEl?.querySelector('octave')) ?? 4;
+        // Il <pitch> del file è l'altezza che SUONA. Dentro un tratto d'ottava, quella
+        // SCRITTA (l'unica che salviamo) sta un'ottava più in là: senza questa riga un
+        // brano esportato e riletto saliva di un'ottava a ogni giro.
+        const ottavaLetta = intOf(pitchEl?.querySelector('octave')) ?? 4;
+        const octave = ottavaLetta - (ottavaAperta ? (ottavaAperta.direzione === 'up' ? 1 : -1) : 0);
 
         const letter = String(step || '').trim().toUpperCase();
         const basePc = NOTE_PC_BY_LETTER[letter];

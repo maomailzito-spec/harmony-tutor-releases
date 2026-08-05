@@ -166,6 +166,11 @@ function emitNote(
   unpitched?: boolean,
   /** Numeri delle legature che COMINCIANO e che FINISCONO su questa nota. */
   capiLegatura?: { start: number[]; stop: number[] },
+  /** Ottave da aggiungere all'altezza scritta per ottenere quella che SUONA (segni 8va).
+   *  Nel MusicXML `<pitch>` è l'altezza SUONATA: è `<octave-shift>` a dire di quanto va
+   *  DISEGNATA più in basso. Verificato in MuseScore: esportando l'altezza scritta, le
+   *  note comparivano un'ottava sotto l'originale. */
+  ottaveDaSommare?: number,
 ): void {
   const dur = note.duration || 'quarter';
   const durationTicks = getNoteDurationTicks(note);
@@ -187,7 +192,7 @@ function emitNote(
     w('        </unpitched>');
   } else {
     const step = (note.pitch || 'C').toUpperCase();
-    const octave = note.octave ?? 4;
+    const octave = (note.octave ?? 4) + (ottaveDaSommare ?? 0);
     const acc = getEffectiveAccidental(note);
     const accInfo = acc ? ACCIDENTAL_MAP[acc] : null;
 
@@ -496,13 +501,22 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
   // ── SEGNI D'OTTAVA, parte per parte ──
   // Sono agganciati a due note: si scrivono solo nella parte che quelle note ce l'ha.
   const ottavePerParte = new Map<string, Map<number, DynDirection[]>>();
+  /** Tratti d'ottava della parte, risolti sui tick: servono anche ad alzare le altezze. */
+  const trattiPerParte = new Map<string, Array<{ da: number; a: number; voce: number; ottave: number }>>();
   for (const parte of finalParts) {
     const perId = new Map(parte.notes.filter(n => n?.id).map(n => [n.id, n]));
     const corsia = new Map<number, DynDirection[]>();
+    const tratti: Array<{ da: number; a: number; voce: number; ottave: number }> = [];
     for (const o of (opts.octaveShifts || [])) {
       const a = perId.get(o?.fromNoteId);
       const b = perId.get(o?.toNoteId);
       if (!a || !b) continue; // il segno non è di questa parte
+      tratti.push({
+        da: Math.min(Number((a as any).startTick ?? 0), Number((b as any).startTick ?? 0)),
+        a: Math.max(Number((a as any).startTick ?? 0), Number((b as any).startTick ?? 0)),
+        voce: Number((a as any).voice ?? 1),
+        ottave: o.direction === 'up' ? 1 : -1,
+      });
       const t1 = Number((a as any).startTick ?? 0);
       const t2 = Number((b as any).startTick ?? 0);
       const inizio = Math.min(t1, t2) / DIVISIONS;
@@ -516,7 +530,22 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       pushInLane(corsia, fine, 0, ['          <octave-shift type="stop" size="8"/>']);
     }
     if (corsia.size > 0) ottavePerParte.set(parte.id, corsia);
+    if (tratti.length > 0) trattiPerParte.set(parte.id, tratti);
   }
+  /** Ottave da sommare all'altezza scritta di una nota per ottenere quella suonata. */
+  const ottaveDi = (partId: string, n: StaffNote): number => {
+    const tratti = trattiPerParte.get(partId);
+    if (!tratti) return 0;
+    const t = Number((n as any).startTick ?? 0);
+    const v = Number((n as any).voice ?? 1);
+    let tot = 0;
+    for (const x of tratti) {
+      if (x.voce !== v) continue;
+      if (t < x.da - 1e-6 || t > x.a + 1e-6) continue;
+      tot += x.ottave;
+    }
+    return tot;
+  };
 
   const fifths = computeFifths(keySignature, keySignatureRoot);
   const mode = isMinorMode ? 'minor' : 'major';
@@ -720,7 +749,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
               emitNote(w, note, voiceNum, staffNum, isFirstInChord, part.unpitched, {
                 start: inizioLegatura.get(note.id) || [],
                 stop: fineLegatura.get(note.id) || [],
-              });
+              }, ottaveDi(part.id, note));
               isFirstInChord = false;
             }
 

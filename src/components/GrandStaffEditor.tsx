@@ -1495,6 +1495,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [octaveShifts, setOctaveShifts] = useState<OctaveShift[]>([]);
     const octaveShiftsRef = useRef(octaveShifts);
     octaveShiftsRef.current = octaveShifts;
+
+    /**
+     * I segni d'ottava risolti sui tick, pronti per l'esecuzione: il capo dà il punto,
+     * la voce dice a chi si applica (un 8va sul soprano non alza il basso che suona
+     * nello stesso momento).
+     */
+    const octaveSpans = useMemo<OctaveSpan[]>(() => {
+        const tutte = [
+            ...(rawNotes || []),
+            ...((accompanimentTracks || []).flatMap(t => t.notes || [])),
+        ];
+        const perId = new Map(tutte.map(n => [n.id, n]));
+        const out: OctaveSpan[] = [];
+        for (const o of (octaveShifts || [])) {
+            const a = perId.get(o.fromNoteId);
+            const b = perId.get(o.toNoteId);
+            if (!a || !b) continue;
+            const t1 = Number((a as any).startTick ?? 0);
+            const t2 = Number((b as any).startTick ?? 0);
+            out.push({
+                fromTick: Math.min(t1, t2),
+                toTick: Math.max(t1, t2),
+                voice: Number((a as any).voice ?? 1),
+                direction: o.direction,
+            });
+        }
+        return out;
+    }, [octaveShifts, rawNotes, accompanimentTracks]);
+    const octaveSpansRef = useRef(octaveSpans);
+    octaveSpansRef.current = octaveSpans;
     const dynamicsRef = useRef(dynamics);
     dynamicsRef.current = dynamics;
 
@@ -1828,7 +1858,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // I segni di dinamica comandano la velocity delle note esportate, esattamente
         // come comandano il volume in esecuzione.
         dynamics,
-    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, dynamics]);
+        // …e i segni d'ottava l'altezza: il MIDI porta quello che si sente.
+        octaveSpans,
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, dynamics, octaveSpans]);
 
     const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
         setRawNotes(next.notes || []);
@@ -12227,35 +12259,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (buoni.length !== octaveShifts.length) setOctaveShifts(buoni);
     }, [rawNotes, accompanimentTracks, octaveShifts]);
 
-    /**
-     * I segni d'ottava risolti sui tick, pronti per l'esecuzione: il capo dà il punto,
-     * la voce dice a chi si applica (un 8va sul soprano non alza il basso che suona
-     * nello stesso momento).
-     */
-    const octaveSpans = useMemo<OctaveSpan[]>(() => {
-        const tutte = [
-            ...(rawNotes || []),
-            ...((accompanimentTracks || []).flatMap(t => t.notes || [])),
-        ];
-        const perId = new Map(tutte.map(n => [n.id, n]));
-        const out: OctaveSpan[] = [];
-        for (const o of (octaveShifts || [])) {
-            const a = perId.get(o.fromNoteId);
-            const b = perId.get(o.toNoteId);
-            if (!a || !b) continue;
-            const t1 = Number((a as any).startTick ?? 0);
-            const t2 = Number((b as any).startTick ?? 0);
-            out.push({
-                fromTick: Math.min(t1, t2),
-                toTick: Math.max(t1, t2),
-                voice: Number((a as any).voice ?? 1),
-                direction: o.direction,
-            });
-        }
-        return out;
-    }, [octaveShifts, rawNotes, accompanimentTracks]);
-    const octaveSpansRef = useRef(octaveSpans);
-    octaveSpansRef.current = octaveSpans;
+
 
     /**
      * Tasto destro su una nota: toglie le sue articolazioni — la stessa regola della

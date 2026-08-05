@@ -171,5 +171,42 @@ const xmlAltraParte = exportMusicXML({
 const parteCoro = xmlAltraParte.split('<part id="P1">')[1]?.split('</part>')[0] || '';
 ok(!parteCoro.includes('octave-shift'), "un 8va dell'organo non compare nella parte del coro");
 
+// ── 7. L'ALTEZZA sotto l'8va: scritta qui, suonata nel file ───────────────
+// Verificato in MuseScore (04/08/2026): nel MusicXML <pitch> è l'altezza che SUONA, e
+// <octave-shift> dice di quanto va DISEGNATA più in basso. Esportando l'altezza scritta,
+// le note comparivano un'ottava sotto l'originale.
+console.log('\nAltezza sotto l\'8va');
+const laNota = (id: string, tick: number) => nota({ id, beat: tick / TPQ + 1, startTick: tick, octave: 5 });
+const dentroFuori = [laNota('p1', 0), laNota('p2', TPQ), laNota('p3', 2 * TPQ)];
+
+const conOttava = exportMusicXML({
+    ...base, notes: dentroFuori as any,
+    octaveShifts: [{ id: 'o', fromNoteId: 'p1', toNoteId: 'p2', direction: 'up' }],
+});
+const ottaveScritte = [...conOttava.matchAll(/<octave>(\d+)<\/octave>/g)].map(m => Number(m[1]));
+ok(ottaveScritte[0] === 6 && ottaveScritte[1] === 6,
+   `le note sotto l'8va escono all'altezza SUONATA (${ottaveScritte[0]}, ${ottaveScritte[1]} invece di 5)`);
+ok(ottaveScritte[2] === 5, `la nota fuori dal tratto resta com'è scritta (${ottaveScritte[2]})`);
+
+const giuOttava = exportMusicXML({
+    ...base, notes: dentroFuori as any,
+    octaveShifts: [{ id: 'o', fromNoteId: 'p1', toNoteId: 'p2', direction: 'down' }],
+});
+ok([...giuOttava.matchAll(/<octave>(\d+)<\/octave>/g)].map(m => Number(m[1]))[0] === 4,
+   "l'8vb scende: la nota esce un'ottava sotto lo scritto");
+
+// E nel MIDI, che è tutto altezza suonata.
+import { buildMidiFile as buildMidi2 } from '../src/utils/midiWriter';
+const leggiPrimo = (bytes: Uint8Array): number => {
+    for (let i = 14; i < bytes.length - 2; i++) {
+        if ((bytes[i] & 0xf0) === 0x90 && bytes[i + 2] > 0) return bytes[i + 1];
+    }
+    return -1;
+};
+const progettoOtt = { notes: dentroFuori as any, timeSignature: { numerator: 4, denominator: 4 } as any, bpm: 90, midiType: 1 as const };
+ok(leggiPrimo(buildMidi2(progettoOtt)) === 72, 'senza segni il MIDI porta l\'altezza scritta');
+ok(leggiPrimo(buildMidi2({ ...progettoOtt, octaveSpans: [{ fromTick: 0, toTick: TPQ, voice: 1, direction: 'up' }] })) === 84,
+   "sotto l'8va il MIDI porta l'altezza suonata (+12)");
+
 console.log(falliti === 0 ? '\nTUTTO A POSTO\n' : `\n${falliti} CONTROLLI FALLITI\n`);
 process.exit(falliti === 0 ? 0 : 1);

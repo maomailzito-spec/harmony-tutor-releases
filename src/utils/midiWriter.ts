@@ -1,6 +1,7 @@
 import type { StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { velocityAtAbsBeat, type DynamicMark } from './dynamics';
+import { octaveOffsetSemitones, type OctaveSpan } from './octaveShifts';
 
 const DEFAULT_TPQ = 480;
 const APP_TPQ = Math.max(1, Number(TICKS_PER_QUARTER) || 480);
@@ -129,6 +130,9 @@ export type MidiWriterProject = {
    *  la velocity della nota (import MIDI, registrazione), che è l'unica informazione
    *  dinamica del brano. */
   dynamics?: DynamicMark[];
+  /** SEGNI D'OTTAVA risolti sui tick. Il MIDI porta l'altezza SUONATA: senza questi,
+   *  un passaggio scritto sotto con l'8va usciva un'ottava più in basso di come si sente. */
+  octaveSpans?: OctaveSpan[];
   /** 0 = single track (all voices merged), 1 = multi-track (one per voice). Default: 1 */
   midiType?: 0 | 1;
   /** General-MIDI program (0-127) per SATB voice (1-4). When present, a Program
@@ -154,6 +158,10 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
   // con dinamiche vere non va appiattito su un mezzoforte solo perché nessuno ha
   // ancora scritto un segno.
   const segni = (project.dynamics || []).filter(Boolean);
+  const tratti = (project.octaveSpans || []).filter(Boolean);
+  /** Semitoni d'ottava per una nota (0 se non sta sotto nessun segno). */
+  const scartoOttava = (note: StaffNote): number =>
+    tratti.length === 0 ? 0 : octaveOffsetSemitones(tratti, Number((note as any).startTick ?? 0), Number((note as any).voice ?? 1));
   const velocityDaScrivere = segni.length > 0
     ? (note: StaffNote) => velocityAtAbsBeat(segni, noteAbsBeat(note, beatsPerMeasure))
     : noteVelocity;
@@ -215,7 +223,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
     for (const note of voiceNotes) {
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
-      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
+      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi) + scartoOttava(note))));
       const velOn = velocityDaScrivere(note);
       events.push({ tick, order: 2, bytes: [0x90 | ch, midi, velOn] });
       events.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
@@ -260,7 +268,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       if (!note || note.isRest || !Number.isFinite(note.midi as number)) continue;
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
-      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi) + shift)));
+      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi) + shift + scartoOttava(note))));
       out.push({ tick, order: 2, bytes: [0x90 | ch, midi, velocityDaScrivere(note)] });
       out.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
@@ -298,7 +306,7 @@ export function buildMidiFile(project: MidiWriterProject): Uint8Array {
       const tick = noteTick(note, beatsPerMeasure);
       const dur = noteDurationTicks(note);
       const ch = Math.max(0, Math.min(15, (note.voice ?? 1) - 1));
-      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi))));
+      const midi = Math.max(0, Math.min(127, Math.round(Number(note.midi) + scartoOttava(note))));
       allEvents.push({ tick, order: 2, bytes: [0x90 | ch, midi, velocityDaScrivere(note)] });
       allEvents.push({ tick: tick + dur, order: 1, bytes: [0x80 | ch, midi, 0] });
     }
