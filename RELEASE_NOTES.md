@@ -1,3 +1,42 @@
+## Novità in v1.5.0
+
+### 🎵 Dinamiche che si sentono
+- **Segni di dinamica veri**: pp…fff, sf, sfz, rf, fp e forcelle di crescendo/diminuendo. Non sono disegni: comandano il volume dell'esecuzione, e la differenza fra un *pp* e un *ff* è di 28 dB — tarata a orecchio, non a tavolino.
+- Le forcelle interpolano **in decibel**, con i passi più larghi dove il suono è debole: è lì che l'orecchio distingue di più. Su una nota tenuta di uno strumento ad arco la forcella gonfia il suono *dentro* la nota.
+- Escono e rientrano nei file: `<dynamics>` e `<wedge>` nel MusicXML, velocity nel MIDI. Un file esportato e riletto conserva quello che avevi scritto.
+
+### 🎼 Articolazioni, legature, ottave
+- **Staccato, staccatissimo, accento, marcato, tenuto**: si posano trascinandoli su una nota o selezionando e cliccando. Si sentono davvero — lo staccato accorcia la nota *e* la sua coda, l'accento rinforza il volume e sceglie un campione più brillante.
+- **Legature di portamento**: si tirano da una nota all'altra, si allungano afferrandone i capi, e sopravvivono all'a capo. Nel coro stanno dalla parte dei gambi, così quella del soprano non finisce addosso al contralto.
+- **8va e 8vb**: per i passaggi che avrebbero troppi tagli addizionali. Le note **non si spostano**: scrivi dove vanno lette, il segno le fa suonare un'ottava sopra o sotto.
+- Tasto destro su un segno per toglierlo, ovunque: sulla nota, sulla curva, sulla scritta.
+
+### 🔑 Cambio d'armatura a metà brano
+- Si sceglie la tonalità nella tavolozza e la si trascina sulla misura da cui vale. Compare l'armatura nuova coi bequadri che annullano la vecchia, e i righi successivi la portano in testa.
+- **Da lì in poi si scrive nella tonalità nuova**: cliccando la riga del La in La bemolle nasce un La bemolle, senza segni da aggiungere a mano.
+- **L'analisi segue**: romani e cifre si allineano da soli. E il cambio porta con sé la doppia barra, che ferma il confronto fra il prima e il dopo — attraversare un cambio di tonalità non è un errore di condotta delle parti.
+
+### 🎨 Tavolozza dei segni
+- Undici famiglie raccolte in **tre gruppi a fisarmonica** — Dinamiche, Articolazioni ed espressione, Struttura — divisi per che cosa il segno riguarda. Un gruppo aperto per volta, e resta aperto mentre trascini.
+- Dentro ci sono anche i comandi che prima vivevano nascosti: rallentando, cambio di metro, ritornelli, doppia barra, testo, aggiungi e togli misura.
+
+### ✍️ Scrittura
+- **La voce si sceglie col cursore**: cliccando sul rigo si scrive nella voce di quella zona, e il fantasma ne prende il colore prima ancora del clic. Il tasto V resta e ha l'ultima parola.
+- **Accordi per sigla anche sul coro**: l'accordo scritto si sente subito, come ogni nota inserita col mouse.
+
+### 📥 Import ed export
+- **Tutto il nuovo esce e rientra**: dinamiche, articolazioni, legature, 8va, cambi d'armatura — in MusicXML e, dove ha senso, in MIDI.
+- **L'export per non vedenti funziona anche per i brani strumentali.** Un pezzo importato entra come *traccia*, non nel coro: prima quel file usciva vuoto e senza una riga d'analisi. Ora porta le note di cui l'analisi parla — e se le parti sono quattro, tutte e quattro.
+- **Il tenore in chiave di violino con l'8 sotto** — come lo scrivono i corali — arriva dove deve: prima compariva un'ottava più in basso, con due tagli addizionali.
+- **Ogni parte dichiara il proprio strumento**: senza, chi apriva il file lo indovinava dal nome, e un rigo chiamato «Tenore» veniva letto come sax tenore, con le note spostate di un tono.
+- Le dinamiche di un file importato entrano come **segni**, non più solo come volume; le forcelle prima si perdevano del tutto.
+
+### 🔊 Audio
+- **Riavvia il motore audio** (menù *Partitura*): quando il suono non esce più — cuffie staccate, uscita cambiata, sistema audio non pronto all'avvio — si rimette in moto senza chiudere il programma e senza perdere il lavoro.
+
+### ⌨️ Aiuto
+- **L'elenco delle scorciatoie è stato riscritto leggendo il codice**: diceva che T è la legatura (T apre le proprietà, la legatura è L) e ne mancava una quindicina, fra cui l'importazione MusicXML.
+
 ## Novità in v1.4.1
 
 ### ♿ Accessibilità
