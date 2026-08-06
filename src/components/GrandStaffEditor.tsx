@@ -16401,7 +16401,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             if (_ovC && (overlayFreezeActiveRef.current || (_ovC.k.length === _ovKey.length && _ovC.k.every((v, i) => Object.is(v, _ovKey[i]))))) return _ovC.el;
                                                             const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
-                                                                {/* Modulation / tonicization markers */}
+                                                                {/* Modulation / tonicization markers.
+                                                                    Tasto destro = TOGLI, come per ogni altro segno: prima una scritta
+                                                                    si posava trascinandola dalla tavolozza, ma per cancellarla
+                                                                    bisognava sapere che viveva nel pannello delle proprietà. */}
                                                                 {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
                                                                     <text
                                                                         key={`ctx-${systemIndex}-${i}`}
@@ -16412,7 +16415,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         fontWeight={600}
                                                                         fill="black"
                                                                         opacity={0.85}
+                                                                        style={{ pointerEvents: 'auto', cursor: 'context-menu' }}
+                                                                        onContextMenu={(ev) => {
+                                                                            ev.preventDefault();
+                                                                            ev.stopPropagation();
+                                                                            handleRemoveContextLabelOnly(Number((m as any).absBeat));
+                                                                        }}
                                                                     >
+                                                                        <title>Tasto destro per togliere questa scritta</title>
                                                                         {m.label}
                                                                     </text>
                                                                 ))}

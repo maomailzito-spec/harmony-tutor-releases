@@ -5678,7 +5678,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
     // Modulation / tonicization markers per system (from analysisContexts)
     const contextMarkersBySystem = useMemo(() => {
-        if (!layoutData || analysisContexts.length === 0) return [] as { x: number; label: string }[][];
+        if (!layoutData || analysisContexts.length === 0) return [] as { x: number; label: string; absBeat: number }[][];
 
         const formatLabel = (ctx: AnalysisContext) => {
             const quality = ctx.newIsMinor ? 'min' : 'Maj';
@@ -5692,7 +5692,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             return custom ? `${custom} ${tonicLabel}` : tonicLabel;
         };
 
-        const markersBySystem: { x: number; label: string }[][] = layoutData.systemsParams.map(() => []);
+        // `absBeat` viaggia col marcatore: serve a chi lo vuole TOGLIERE dalla partitura
+        // col tasto destro, che altrimenti saprebbe dove sta sullo schermo ma non nel brano.
+        const markersBySystem: { x: number; label: string; absBeat: number }[][] = layoutData.systemsParams.map(() => []);
         const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
         const measureBeats = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
 
@@ -5729,7 +5731,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / bpm));
                 const x = startX + MEASURE_PADDING_X + (rel * contentWidth);
 
-                markersBySystem[systemIndex].push({ x: x + 10, label: formatLabel(ctx) });
+                markersBySystem[systemIndex].push({ x: x + 10, label: formatLabel(ctx), absBeat });
                 break;
             }
         }
