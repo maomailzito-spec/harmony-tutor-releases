@@ -67,6 +67,10 @@ export interface ExportMusicXMLOptions {
     staffMode?: 'grandstaff' | 'treble_only';
     clef?: ClefType;
     isDrum?: boolean;
+    /** Rigo TRASPOSITORE (−1 = chiave con l'8 sotto, il tenore dei corali). Le note sono
+     *  salvate all'altezza LETTA; nel file `<pitch>` è l'altezza SUONATA, quindi va
+     *  spostata — e la chiave lo dichiara con `<clef-octave-change>`. */
+    octaveTranspose?: number;
   }>;
 }
 
@@ -374,6 +378,8 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     withHarmony: boolean;
     /** Percussioni: altezze non intonate (<unpitched>), la posizione è convenzionale. */
     unpitched?: boolean;
+    /** Rigo traspositore: ottave da togliere all'altezza scritta per avere la suonata. */
+    octaveTranspose?: number;
   };
 
   const CLEF_XML: Record<string, { sign: string; line: number }> = {
@@ -413,6 +419,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       staffOf: grand ? ((n) => (n.clef === 'bass' ? 1 : 0)) : (() => 0),
       withHarmony: false,
       unpitched: isDrum,
+      ...(t.octaveTranspose ? { octaveTranspose: Number(t.octaveTranspose) } : {}),
     });
   });
 
@@ -629,6 +636,9 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
           w(`        <clef number="${c.number}">`);
           w(`          <sign>${c.sign}</sign>`);
           w(`          <line>${c.line}</line>`);
+          // Rigo traspositore: senza questa riga chi riapre il file disegna la parte
+          // un'ottava più in alto di com'è scritta (il tenore dei corali).
+          if (part.octaveTranspose) w(`          <clef-octave-change>${part.octaveTranspose}</clef-octave-change>`);
           w('        </clef>');
         }
         w('      </attributes>');
@@ -786,7 +796,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
               emitNote(w, note, voiceNum, staffNum, isFirstInChord, part.unpitched, {
                 start: inizioLegatura.get(note.id) || [],
                 stop: fineLegatura.get(note.id) || [],
-              }, ottaveDi(part.id, note));
+              }, ottaveDi(part.id, note) + (part.octaveTranspose ?? 0));
               isFirstInChord = false;
             }
 

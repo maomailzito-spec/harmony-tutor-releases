@@ -112,13 +112,29 @@ export function musicXmlPartsToAccTracks(
     const groupId = newGroupId();
     return withNotes.map((p, i) => {
         const grand = p.hasSecondStaff;
+        // CHIAVE TRASPOSITRICE (il tenore dei corali: violino con l'8 sotto). Il file
+        // porta l'altezza SUONATA; il programma scrive l'altezza LETTA e traspone per il
+        // suono. Quindi le note vanno alzate di un'ottava e la traccia riceve la sua
+        // chiave 8vb: senza, il tenore compariva un'ottava più in basso di come lo scrive
+        // chi ha esportato il file — un Sol di seconda riga finiva sotto il rigo con due
+        // tagli addizionali, mentre il suono era giusto.
+        const ott = Number((p as any).clefOctaveChange) || 0;
+        const note = (ott === 0 || grand)
+            ? p.notes
+            : p.notes.map(n => (n.isRest ? n : ({
+                ...n,
+                midi: Number(n.midi ?? 60) - ott * 12,
+                octave: Number(n.octave ?? 4) - ott,
+                ...(Number.isFinite(Number((n as any).position)) ? { position: Number((n as any).position) - ott * 7 } : {}),
+            } as StaffNote)));
         return {
             id: newTrackId(i),
             name: p.name.trim() || `Parte ${i + 1}`,
             instrumentId: instrOf(p),
-            notes: p.notes,
+            notes: note,
             staffMode: grand ? 'grandstaff' : 'treble_only',
             ...(grand ? { voiced: true } : { clef: p.clef }),
+            ...(ott !== 0 && !grand ? { octaveTranspose: ott } : {}),
             groupId,
             ...base,
         } as AccompanimentTrack;

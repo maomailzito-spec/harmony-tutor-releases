@@ -6970,6 +6970,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     staffMode: t.staffMode,
                     clef: t.clef,
                     isDrum: !!(t as any).isDrum,
+                    // Righi traspositori (tenore in chiave di violino 8vb): il file porta
+                    // l'altezza suonata e lo dichiara nella chiave.
+                    octaveTranspose: (t as any).octaveTranspose,
                 })),
             };
 
@@ -7270,9 +7273,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const groupTracks = gid
                 ? accompanimentTracks.filter(t => !(t as any).isDrum && (t as any).groupId === gid)
                 : [analysisAccTrack];
+            // L'armonia è fatta di ciò che SUONA. Su un rigo traspositore (il tenore in
+            // chiave di violino con l'8 sotto) le note sono salvate all'altezza LETTA:
+            // date all'analisi così com'erano, quel tenore risulterebbe un'ottava sopra
+            // dove sta davvero, e con lui gli intervalli sopra il basso.
+            const suonate = (t: any) => {
+                const semi = accTransposeSemitones(t);
+                const arr = ((t?.notes as any[]) || []);
+                return semi === 0 ? arr : arr.map((n: any) => (n?.isRest ? n : { ...n, midi: Number(n.midi ?? 60) + semi }));
+            };
             const combinedNotes = groupTracks.length > 1
-                ? groupTracks.flatMap(t => (t.notes as any[]) || []).slice().sort((a, b) => (a.startTick ?? 0) - (b.startTick ?? 0))
-                : (analysisAccTrack.notes as any);
+                ? groupTracks.flatMap(suonate).slice().sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0))
+                : (suonate(analysisAccTrack) as any);
             let labels = computeAccChordAnalysis({
                 notes: combinedNotes as any,
                 keySignature: getKeySignature(keySignatureRoot, 'Major'),
@@ -7347,9 +7359,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const delGruppo = gid
             ? accompanimentTracks.filter(x => !(x as any).isDrum && (x as any).groupId === gid)
             : [t];
-        if (delGruppo.length <= 1) return (t.notes || []) as StaffNote[];
+        // Altezze SUONATE, come per l'analisi: il file accessibile non ha chiavi
+        // traspositrici, quindi deve dire l'altezza vera — chi lo legge con lo screen
+        // reader sente i nomi delle note, non vede la chiave.
+        const suonate = (x: any): StaffNote[] => {
+            const semi = accTransposeSemitones(x);
+            const arr = ((x?.notes as StaffNote[]) || []);
+            return semi === 0 ? arr : arr.map(n => (n.isRest ? n : ({ ...n, midi: Number(n.midi ?? 60) + semi } as StaffNote)));
+        };
+        if (delGruppo.length <= 1) return suonate(t);
         return delGruppo
-            .flatMap(x => (x.notes as StaffNote[]) || [])
+            .flatMap(suonate)
             .slice()
             .sort((a, b) => Number((a as any).startTick ?? 0) - Number((b as any).startTick ?? 0));
     }, [analysisAccTrack, accompanimentTracks]);

@@ -19,6 +19,10 @@ export type MusicXMLPart = {
   hasSecondStaff: boolean;
   /** Chiave del rigo 1 (usata quando la parte sta su un rigo solo). */
   clef: ClefType;
+  /** Ottave dichiarate dalla CHIAVE (`clef-octave-change`): −1 = chiave di violino con
+   *  l'8 sotto, quella del TENORE nei corali. Il file porta l'altezza SUONATA; noi
+   *  scriviamo l'altezza LETTA e trasponiamo per il suono, quindi serve saperlo. */
+  clefOctaveChange?: number;
   /** Strumento GM dichiarato dalla <part-list> (<midi-program>, 1-128 nel file → 0-127
    *  qui). Senza, la traccia importata userebbe il pianoforte per qualsiasi parte. */
   instrumentId?: number;
@@ -477,6 +481,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     const partNotes: StaffNote[] = [];
     let partSawSecondStaff = false;
     let partFirstClef: ClefType | null = null;
+    let partClefOctaveChange = 0;
     // Le voci MusicXML del rigo (1,2… oppure 5,6 per il rigo sinistro pianistico)
     // rimappate, nell'ordine in cui compaiono, sulla convenzione del "grand staff a voci"
     // dell'app: rigo 1 → voci 1-2, rigo 2 → voci 3-4 (gambi 1/3 su, 2/4 giù). Max 2 voci
@@ -593,6 +598,14 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
           const staffNum = Number.parseInt(c.getAttribute('number') || '1', 10);
           const sign = textOf(c.querySelector('sign'));
           const line = intOf(c.querySelector('line'));
+          // Chiave TRASPOSITRICE (il tenore dei corali: violino con l'8 sotto). Si
+          // registra dalla prima chiave della parte: senza, la parte veniva disegnata
+          // un'ottava più in basso di come la scrive chi l'ha esportata — un Sol che
+          // sta sulla seconda riga finiva sotto il rigo con due tagli addizionali.
+          if ((staffNum === 1 || !Number.isFinite(staffNum)) && partClefOctaveChange === 0) {
+            const oc = intOf(c.querySelector('clef-octave-change'));
+            if (oc === -1 || oc === 1) partClefOctaveChange = oc;
+          }
           clefByStaff.set(Number.isFinite(staffNum) ? staffNum : 1, clefFromMusicXML(sign, line));
         }
       } catch {
@@ -930,6 +943,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
       notes: partNotes,
       hasSecondStaff: partSawSecondStaff,
       clef: partFirstClef || 'treble',
+      ...(partClefOctaveChange !== 0 ? { clefOctaveChange: partClefOctaveChange } : {}),
       ...(partId && partProgramById.has(partId) ? { instrumentId: partProgramById.get(partId) } : {}),
     });
   }
