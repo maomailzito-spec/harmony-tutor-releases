@@ -5,9 +5,16 @@ import type { ArticulationMark } from '../types';
 import { ARTICULATIONS, ARTICULATION_UI } from '../utils/articulations';
 
 /**
- * Tavolozza dei SEGNI, flottante e trascinabile (stesso modello del modulo
- * percussioni e del mixer). Nata per le dinamiche, ospita ora anche le articolazioni;
- * quando si affollerà andrà divisa in sotto-menù per argomento.
+ * Tavolozza dei SEGNI, flottante e trascinabile (stesso modello del modulo percussioni
+ * e del mixer). Undici famiglie di segni raccolte in TRE gruppi a fisarmonica, secondo
+ * che cosa il segno riguardi: l'intensità (dinamica), il modo di attaccare e collegare i
+ * suoni (articolazione ed espressione), l'impianto della pagina (struttura). Gli accenti
+ * compaiono in due gruppi perché sono due cose diverse: sf/sfz/rf sono accenti DINAMICI,
+ * > e ^ accenti d'ARTICOLAZIONE.
+ *
+ * A fisarmonica e NON a tendina: una tendina si chiude al primo movimento del mouse, e
+ * qui il gesto principale è trascinare il segno sulla partitura — si chiuderebbe sempre
+ * a metà strada. Un gruppo aperto per volta, così la tavolozza resta corta.
  *
  * Come si usa: si seleziona una nota e si clicca il segno — il segno si piazza in
  * quel punto e vale per TUTTE le voci. Per una forcella si selezionano due note
@@ -72,6 +79,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     // metro. Le tonalità sono elencate come si scrivono in partitura (per quinte).
     const [tonalita, setTonalita] = useState<string>(currentKeyRoot || 'C');
     const [tonalitaMinore, setTonalitaMinore] = useState<boolean>(!!currentKeyIsMinor);
+    /**
+     * Quale gruppo è aperto. UNO alla volta: la tavolozza resta corta e non serve
+     * scorrere. È un accordion e non un menù a tendina di proposito — una tendina si
+     * chiude al primo movimento del mouse, e qui il gesto principale è TRASCINARE il
+     * segno sulla partitura: si chiuderebbe sempre a metà strada.
+     */
+    const [gruppoAperto, setGruppoAperto] = useState<'dinamica' | 'articolazione' | 'struttura' | null>('dinamica');
     const dragRef = useRef<{ dx: number; dy: number } | null>(null);
 
     const onTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -121,6 +135,16 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
             </div>
 
             <div className="p-2">
+                {/* ── Dinamica ── */}
+                <button
+                    onClick={() => setGruppoAperto(g => (g === 'dinamica' ? null : 'dinamica'))}
+                    className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                >
+                    <span>Dinamica</span>
+                    <span className="text-[10px] text-gray-400">{gruppoAperto === 'dinamica' ? '▾' : '▸'}</span>
+                </button>
+                {gruppoAperto === 'dinamica' && (
+                    <div className="px-0.5 pb-1">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Livelli</div>
                 <div className="grid grid-cols-4 gap-1">
                     {LIVELLI.map(l => (
@@ -182,7 +206,19 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     </button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Articolazioni</div>
+                    </div>
+                )}
+                {/* ── Articolazione ed espressione ── */}
+                <button
+                    onClick={() => setGruppoAperto(g => (g === 'articolazione' ? null : 'articolazione'))}
+                    className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                >
+                    <span>Articolazione ed espressione</span>
+                    <span className="text-[10px] text-gray-400">{gruppoAperto === 'articolazione' ? '▾' : '▸'}</span>
+                </button>
+                {gruppoAperto === 'articolazione' && (
+                    <div className="px-0.5 pb-1">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Articolazioni</div>
                 <div className="grid grid-cols-5 gap-1">
                     {ARTICULATIONS.map(a => (
                         <button
@@ -198,7 +234,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     ))}
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Legature</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Legature</div>
                 <div className="grid grid-cols-4 gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'slur', label: '⌒' }, e)}
@@ -211,25 +247,58 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     </button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Ottava</div>
-                <div className="grid grid-cols-4 gap-1">
-                    {([['up', '8va'], ['down', '8vb']] as const).map(([dir, etichetta]) => (
-                        <button
-                            key={dir}
-                            onMouseDown={(e) => onStartDrag({ kind: 'octave', data: dir, label: etichetta }, e)}
-                            onClick={() => { if (selectionCount > 0) onPlaceOctave(dir); }}
-                            title={dir === 'up'
-                                ? 'Suona un\'ottava SOPRA il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'
-                                : 'Suona un\'ottava SOTTO il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'}
-                            className={`${bottone} ${attivo} px-1 italic`}
-                            style={{ fontFamily: 'serif' }}
-                        >
-                            {etichetta}
-                        </button>
-                    ))}
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Tempo</div>
+                <div className="grid grid-cols-2 gap-1">
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'rall', label: 'rall.' }, e)}
+                        title="Rallentando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
+                        className={`${bottone} ${attivo} italic`}
+                        style={{ fontFamily: 'serif' }}
+                    >
+                        rall.
+                    </button>
+                    <button
+                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'accel', label: 'accel.' }, e)}
+                        title="Accelerando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
+                        className={`${bottone} ${attivo} italic`}
+                        style={{ fontFamily: 'serif' }}
+                    >
+                        accel.
+                    </button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Armatura</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Testo</div>
+                <div className="flex items-center gap-1">
+                    <button
+                        onMouseDown={(e) => { if (testo.trim()) onStartDrag({ kind: 'text-marker', data: testo.trim(), label: testo.trim() }, e); }}
+                        disabled={!testo.trim()}
+                        title={testo.trim() ? `Trascina "${testo.trim()}" sul punto della partitura` : 'Scrivi prima il testo qui accanto'}
+                        className={`${bottone} ${attivo} px-3`}
+                        style={{ fontFamily: 'serif', fontSize: 15 }}
+                    >
+                        T
+                    </button>
+                    <input
+                        value={testo}
+                        onChange={(e) => setTesto(e.target.value)}
+                        placeholder="dolce, poco rit., Fine…"
+                        className="flex-1 h-7 text-[11px] bg-slate-700 text-gray-100 border border-slate-600 rounded px-2 placeholder-gray-500"
+                    />
+                </div>
+
+                    </div>
+                )}
+                {/* ── Struttura ── */}
+                <button
+                    onClick={() => setGruppoAperto(g => (g === 'struttura' ? null : 'struttura'))}
+                    className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                >
+                    <span>Struttura</span>
+                    <span className="text-[10px] text-gray-400">{gruppoAperto === 'struttura' ? '▾' : '▸'}</span>
+                </button>
+                {gruppoAperto === 'struttura' && (
+                    <div className="px-0.5 pb-1">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Armatura</div>
                 <div className="flex items-center gap-1">
                     <select
                         value={tonalita}
@@ -263,27 +332,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     Togli il cambio d'armatura
                 </button>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Tempo</div>
-                <div className="grid grid-cols-2 gap-1">
-                    <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'rall', label: 'rall.' }, e)}
-                        title="Rallentando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
-                        className={`${bottone} ${attivo} italic`}
-                        style={{ fontFamily: 'serif' }}
-                    >
-                        rall.
-                    </button>
-                    <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'accel', label: 'accel.' }, e)}
-                        title="Accelerando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
-                        className={`${bottone} ${attivo} italic`}
-                        style={{ fontFamily: 'serif' }}
-                    >
-                        accel.
-                    </button>
-                </div>
-
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Metro</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Metro</div>
                 <div className="flex items-center gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'time-sig', data: { n: metroN, d: metroD }, label: `${metroN}/${metroD}` }, e)}
@@ -315,26 +364,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                     Togli il cambio di metro
                 </button>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Testo</div>
-                <div className="flex items-center gap-1">
-                    <button
-                        onMouseDown={(e) => { if (testo.trim()) onStartDrag({ kind: 'text-marker', data: testo.trim(), label: testo.trim() }, e); }}
-                        disabled={!testo.trim()}
-                        title={testo.trim() ? `Trascina "${testo.trim()}" sul punto della partitura` : 'Scrivi prima il testo qui accanto'}
-                        className={`${bottone} ${attivo} px-3`}
-                        style={{ fontFamily: 'serif', fontSize: 15 }}
-                    >
-                        T
-                    </button>
-                    <input
-                        value={testo}
-                        onChange={(e) => setTesto(e.target.value)}
-                        placeholder="dolce, poco rit., Fine…"
-                        className="flex-1 h-7 text-[11px] bg-slate-700 text-gray-100 border border-slate-600 rounded px-2 placeholder-gray-500"
-                    />
-                </div>
-
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-3 mb-1">Battute</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Battute</div>
                 <div className="grid grid-cols-4 gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'bar-double', label: '𝄀𝄀' }, e)}
@@ -383,7 +413,26 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                         − misura
                     </button>
                 </div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Ottava</div>
+                <div className="grid grid-cols-4 gap-1">
+                    {([['up', '8va'], ['down', '8vb']] as const).map(([dir, etichetta]) => (
+                        <button
+                            key={dir}
+                            onMouseDown={(e) => onStartDrag({ kind: 'octave', data: dir, label: etichetta }, e)}
+                            onClick={() => { if (selectionCount > 0) onPlaceOctave(dir); }}
+                            title={dir === 'up'
+                                ? 'Suona un\'ottava SOPRA il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'
+                                : 'Suona un\'ottava SOTTO il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'}
+                            className={`${bottone} ${attivo} px-1 italic`}
+                            style={{ fontFamily: 'serif' }}
+                        >
+                            {etichetta}
+                        </button>
+                    ))}
+                </div>
 
+                    </div>
+                )}
                 <button
                     disabled={!hasMarkAtSelection}
                     onClick={onRemoveAtSelection}
@@ -394,9 +443,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 </button>
 
                 <div className="text-[9px] text-gray-400 mt-2 leading-snug">
-                    Trascina un segno dove vuoi sulla partitura. Oppure: seleziona una nota e
-                    clicca il segno (due note per una forcella). Sul rigo i segni si spostano
-                    trascinandoli e si tolgono col tasto destro. Valgono per tutte le voci.
+                    Apri un gruppo e trascina un segno dove vuoi sulla partitura: il gruppo
+                    resta aperto per tutto il tempo. Oppure: seleziona una nota e clicca il
+                    segno (due note per una forcella). Sul rigo i segni si spostano
+                    trascinandoli e si tolgono col tasto destro.
                 </div>
             </div>
         </div>
