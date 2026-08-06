@@ -990,6 +990,87 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
     }, [audioService]);
 
+    const stopPlaybackRef = useRef<(() => void) | null>(null);
+
+    /**
+     * RICOSTRUZIONE del motore audio.
+     *
+     * Il contesto può restare agganciato a un'uscita che non c'è più — cuffie spente,
+     * scheda scollegata, sistema audio non ancora pronto quando l'app è partita — e da
+     * dentro non c'è modo di accorgersene: si vede il segnale passare nel mixer e non si
+     * sente niente. L'unica cura è rifare il contesto; qui si buttano via anche tutti i
+     * nodi del mixer, che appartenevano al vecchio e verranno ricostruiti da soli alla
+     * prima nota.
+     */
+    const riavviaMotoreAudio = useCallback(async () => {
+        // Si passa dal riferimento: `stopPlayback` è dichiarato più avanti nel componente.
+        try { stopPlaybackRef.current?.(); } catch { /* non stava suonando */ }
+        await audioService.restartEngine();
+    }, [audioService]);
+
+    useEffect(() => {
+        // Quando il contesto viene rifatto, i nodi del mixer sono di un contesto morto:
+        // si azzerano tutti e i costruttori pigri li rifanno alla prima nota.
+        const scollega = audioService.onContextRebuilt(() => {
+            mixerMasterGainRef.current = null;
+            satbMasterGainRef.current = null;
+            accMasterGainRef.current = null;
+            masterLimiterRef.current = null;
+            satbMasterAnalyserRef.current = null;
+            accMasterAnalyserRef.current = null;
+            mixerMasterAnalyserRef.current = null;
+            masterEqNodesRef.current = null;
+            compressorRef.current = null;
+            compMakeupGainRef.current = null;
+            reverbConvolverRef.current = null;
+            reverbReturnRef.current = null;
+            busSatbEqNodesRef.current = null;
+            busSatbCompNodeRef.current = null;
+            busSatbMakeupRef.current = null;
+            busAccEqNodesRef.current = null;
+            busAccCompNodeRef.current = null;
+            busAccMakeupRef.current = null;
+            voiceGainsRef.current.clear();
+            voiceAnalysersRef.current.clear();
+            voicePannersRef.current.clear();
+            voiceRevSendNodesRef.current.clear();
+            voiceEqRef.current.clear();
+            voiceCompNodesRef.current.clear();
+            voiceCompMakeupRef.current.clear();
+            accTrackGainsRef.current.clear();
+            accTrackAnalysersRef.current.clear();
+            accPannersRef.current.clear();
+            accRevSendNodesRef.current.clear();
+            accEqRef.current.clear();
+            accCompNodesRef.current.clear();
+            accCompMakeupRef.current.clear();
+            accDrumPieceGainsRef.current.clear();
+        });
+        return scollega;
+    }, [audioService]);
+
+    // ── Cambio del dispositivo audio: si rifà il motore ──
+    // È il momento in cui il contesto resta appeso a un'uscita che non esiste più
+    // (cuffie Bluetooth che si spengono, monitor scollegato, scheda esterna staccata):
+    // il sistema lo annuncia, e qui il riavvio è mirato invece che a tentativi. Non si
+    // fa mentre si suona, che taglierebbe l'esecuzione a metà.
+    useEffect(() => {
+        const dispositivi = (navigator as any)?.mediaDevices;
+        if (!dispositivi?.addEventListener) return;
+        let inCorso = false;
+        const cambiato = () => {
+            if (inCorso || isPlayingRef.current) return;
+            inCorso = true;
+            // Un cambio di dispositivo genera più eventi di fila: si aspetta che si posi.
+            window.setTimeout(async () => {
+                try { await audioService.restartEngine(); } catch { /* ignore */ }
+                inCorso = false;
+            }, 400);
+        };
+        dispositivi.addEventListener('devicechange', cambiato);
+        return () => { try { dispositivi.removeEventListener('devicechange', cambiato); } catch { /* ignore */ } };
+    }, [audioService]);
+
     // Risveglio del motore audio quando si torna sulla finestra. Il contesto può
     // addormentarsi da solo (cambio del dispositivo d'uscita, sospensione, un'altra
     // istanza dell'app che prende la scheda) e finora nessuno lo risvegliava: quella
@@ -1757,6 +1838,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         isMidiMenuOpen, setIsMidiMenuOpen,
         handleActivateMidi,
     } = usePlayback({ bpmInputRef, audioService, isAudioReady, timeSignature, timeSignatureChanges, animationFrameRef });
+    // Serve al riavvio del motore audio, che è dichiarato più in alto: si ferma
+    // l'esecuzione prima di buttare via il contesto.
+    stopPlaybackRef.current = stopPlayback;
     const playheadPositionRef = useRef<{ x: number; systemIndex: number } | null>(null);
     useEffect(() => { playheadPositionRef.current = playheadPosition; }, [playheadPosition]);
     const [ghostNote, setGhostNote] = useState<(StaffNote & { systemIndex: number }) | null>(null);
@@ -14612,6 +14696,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 accTracksForAnalysis={accompanimentTracks.filter(t => !(t as any).isDrum).map(t => ({ id: t.id, name: t.name }))}
                 analysisAccTrackId={analysisAccTrackId ?? (analysisAccTrack?.id ?? null)}
                 setAnalysisAccTrackId={setAnalysisAccTrackId}
+                onRestartAudio={() => { void riavviaMotoreAudio(); }}
                 moreMenuRef={moreMenuRef}
                 isMoreMenuOpen={isMoreMenuOpen}
                 setIsMoreMenuOpen={setIsMoreMenuOpen}

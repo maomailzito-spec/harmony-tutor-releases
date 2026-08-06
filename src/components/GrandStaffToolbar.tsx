@@ -198,6 +198,9 @@ type GrandStaffToolbarProps = {
     analysisAccTrackId: string | null;
     setAnalysisAccTrackId: (value: string | null) => void;
 
+    /** Rifà il motore audio (contesto + mixer): rete di sicurezza quando il suono non
+     *  esce più e non c'è modo di accorgersene da dentro. */
+    onRestartAudio?: () => void;
     moreMenuRef: React.RefObject<HTMLDivElement>;
     isMoreMenuOpen: boolean;
     setIsMoreMenuOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -398,6 +401,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         accTracksForAnalysis,
         analysisAccTrackId,
         setAnalysisAccTrackId,
+        onRestartAudio,
         moreMenuRef,
         isMoreMenuOpen,
         setIsMoreMenuOpen,
@@ -1497,6 +1501,19 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 <span>{tT('more_format_show_page_breaks')}</span>
                                 <span className="text-[11px]">{showPageBreaks ? '☑' : '☐'}</span>
                             </button>
+                        )}
+                        {onRestartAudio && (
+                            <>
+                                <div className="px-2 pt-2 pb-1 text-[11px] text-slate-300">Audio</div>
+                                <button
+                                    onClick={() => { onRestartAudio(); setIsMoreMenuOpen(false); }}
+                                    className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                    title="Se il suono non esce più — cuffie staccate, uscita cambiata, sistema audio non pronto all'avvio — questo rifà il motore senza chiudere il programma. Il lavoro non si tocca."
+                                >
+                                    <span>Riavvia il motore audio</span>
+                                    <span className="text-[11px]">↻</span>
+                                </button>
+                            </>
                         )}
                     </div>
                 )}

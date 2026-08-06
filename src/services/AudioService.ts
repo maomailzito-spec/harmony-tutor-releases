@@ -274,6 +274,36 @@ export class AudioService {
     });
   }
 
+  /** Chi vuole sapere che il contesto è stato rifatto (per ricostruire i suoi nodi). */
+  private contextListeners: Array<() => void> = [];
+  public onContextRebuilt(cb: () => void): () => void {
+    this.contextListeners.push(cb);
+    return () => { this.contextListeners = this.contextListeners.filter(x => x !== cb); };
+  }
+
+  /**
+   * RIFÀ il motore audio da capo: chiude il contesto e ne apre uno nuovo.
+   *
+   * Serve perché un contesto può restare agganciato a un'uscita che non c'è più (cuffie
+   * spente, scheda scollegata, sistema audio non ancora pronto all'avvio) e da dentro NON
+   * si può accorgersene: l'API dice se il contesto è in funzione, non se il suono esce
+   * davvero. L'unica cura è ricostruirlo.
+   *
+   * Non è un'operazione cara: i campioni già decodificati restano in memoria e valgono
+   * anche per il contesto nuovo — si rifanno solo i nodi. Taglia però il suono in corso,
+   * quindi va chiamato quando non si sta suonando.
+   */
+  public async restartEngine(): Promise<void> {
+    const vecchio = this.audioContext;
+    this.audioContext = null;
+    try { await vecchio?.close(); } catch { /* già chiuso o non chiudibile */ }
+    // I nodi del vecchio contesto non valgono più: chi li tiene deve rifarli.
+    try { await this.init(); } catch { /* init segnala da sé */ }
+    for (const cb of this.contextListeners) {
+      try { cb(); } catch { /* un ascoltatore rotto non deve fermare gli altri */ }
+    }
+  }
+
   public async ensureAudioIsReady(): Promise<void> {
       if (!this.audioContext) {
           await this.init();
