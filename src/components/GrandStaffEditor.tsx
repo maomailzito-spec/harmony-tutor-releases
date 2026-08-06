@@ -6973,6 +6973,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // Righi traspositori (tenore in chiave di violino 8vb): il file porta
                     // l'altezza suonata e lo dichiara nella chiave.
                     octaveTranspose: (t as any).octaveTranspose,
+                    // …e lo strumento, così chi apre il file non lo indovina dal nome.
+                    instrumentId: (t as any).instrumentId,
                 })),
             };
 

@@ -71,6 +71,8 @@ export interface ExportMusicXMLOptions {
      *  salvate all'altezza LETTA; nel file `<pitch>` è l'altezza SUONATA, quindi va
      *  spostata — e la chiave lo dichiara con `<clef-octave-change>`. */
     octaveTranspose?: number;
+    /** Strumento General MIDI della traccia (0-127). */
+    instrumentId?: number;
   }>;
 }
 
@@ -117,6 +119,14 @@ const ACCIDENTAL_MAP: Record<string, { alter: number; accText: string }> = {
   'natural': { alter: 0, accText: 'natural' },
   'double-sharp': { alter: 2, accText: 'double-sharp' },
   'double-flat': { alter: -2, accText: 'double-flat' },
+};
+
+/** Nome dello strumento per i programmi GM che il programma usa davvero. Serve solo a
+ *  dire a chi legge «questo è questo», così non tira a indovinare dal nome della parte. */
+const GM_INSTRUMENT_NAME: Record<number, string> = {
+  0: 'Piano', 6: 'Harpsichord', 19: 'Church Organ', 24: 'Classical Guitar',
+  32: 'Acoustic Bass', 40: 'Violin', 41: 'Viola', 42: 'Cello', 48: 'Strings',
+  52: 'Choir Aahs', 56: 'Trumpet', 71: 'Clarinet', 73: 'Flute',
 };
 
 /** Key signature: fifths value for each tonic. */
@@ -380,6 +390,8 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     unpitched?: boolean;
     /** Rigo traspositore: ottave da togliere all'altezza scritta per avere la suonata. */
     octaveTranspose?: number;
+    /** Programma General MIDI (0-127) da dichiarare nella <part-list>. */
+    instrumentId?: number;
   };
 
   const CLEF_XML: Record<string, { sign: string; line: number }> = {
@@ -420,6 +432,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       withHarmony: false,
       unpitched: isDrum,
       ...(t.octaveTranspose ? { octaveTranspose: Number(t.octaveTranspose) } : {}),
+      ...(Number.isFinite(t.instrumentId as any) ? { instrumentId: Number(t.instrumentId) } : {}),
     });
   });
 
@@ -601,6 +614,19 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
   for (const p of finalParts) {
     w(`    <score-part id="${p.id}">`);
     w(`      <part-name>${escapeXml(p.name)}</part-name>`);
+    // STRUMENTO DICHIARATO. Senza, chi apre il file lo INDOVINA dal nome della parte —
+    // e un rigo chiamato «Tenore» finisce riconosciuto come sax tenore, che è uno
+    // strumento traspositore in Si bemolle: le note compaiono spostate di un tono e con
+    // grafie impossibili (doppi bemolli). Dichiarando programma e nome dello strumento
+    // non c'è più niente da indovinare.
+    const prog = Number.isFinite(p.instrumentId as any) ? Math.max(0, Math.min(127, Number(p.instrumentId))) : 0;
+    w(`      <score-instrument id="${p.id}-I1">`);
+    w(`        <instrument-name>${escapeXml(GM_INSTRUMENT_NAME[prog] || 'Piano')}</instrument-name>`);
+    w('      </score-instrument>');
+    w(`      <midi-instrument id="${p.id}-I1">`);
+    w(`        <midi-channel>${Math.min(16, finalParts.indexOf(p) + 1)}</midi-channel>`);
+    w(`        <midi-program>${prog + 1}</midi-program>`);
+    w('      </midi-instrument>');
     w('    </score-part>');
   }
   w('  </part-list>');
