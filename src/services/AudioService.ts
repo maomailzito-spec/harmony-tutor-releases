@@ -296,9 +296,13 @@ export class AudioService {
   public async restartEngine(): Promise<void> {
     const vecchio = this.audioContext;
     this.audioContext = null;
-    try { await vecchio?.close(); } catch { /* già chiuso o non chiudibile */ }
-    // I nodi del vecchio contesto non valgono più: chi li tiene deve rifarli.
+    // Prima si apre il nuovo, poi si chiude il vecchio SENZA aspettarlo: chiudere un
+    // contesto agganciato a un dispositivo che se n'è appena andato può bloccare per
+    // decine di secondi dentro CoreAudio — e con l'audio nel processo principale quel
+    // blocco è la rotellina del Mac sull'intera app. Meglio ritrovarsi il suono subito e
+    // lasciare che il vecchio si chiuda per conto suo.
     try { await this.init(); } catch { /* init segnala da sé */ }
+    setTimeout(() => { try { void vecchio?.close(); } catch { /* ignore */ } }, 0);
     for (const cb of this.contextListeners) {
       try { cb(); } catch { /* un ascoltatore rotto non deve fermare gli altri */ }
     }

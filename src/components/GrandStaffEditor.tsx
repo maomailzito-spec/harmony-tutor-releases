@@ -1049,23 +1049,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return scollega;
     }, [audioService]);
 
-    // ── Cambio del dispositivo audio: si rifà il motore ──
-    // È il momento in cui il contesto resta appeso a un'uscita che non esiste più
-    // (cuffie Bluetooth che si spengono, monitor scollegato, scheda esterna staccata):
-    // il sistema lo annuncia, e qui il riavvio è mirato invece che a tentativi. Non si
-    // fa mentre si suona, che taglierebbe l'esecuzione a metà.
+    // ── Cambio del dispositivo audio ──
+    // PRIMA qui si rifaceva tutto il motore. Provato sul campo: attaccare le cuffie era
+    // rapido, staccarle costava venti secondi di rotellina — con l'audio nel processo
+    // principale, smontare un dispositivo appena sparito blocca l'intera app. E il
+    // guadagno era dubbio, perché Chromium segue già da sé il dispositivo di sistema.
+    // Resta quindi solo il risveglio, che non costa nulla: se il contesto si è sospeso
+    // nel passaggio, torna in funzione. Per i casi veri di motore appeso c'è il comando
+    // «Riavvia il motore audio», che si paga solo quando serve davvero.
     useEffect(() => {
         const dispositivi = (navigator as any)?.mediaDevices;
         if (!dispositivi?.addEventListener) return;
-        let inCorso = false;
         const cambiato = () => {
-            if (inCorso || isPlayingRef.current) return;
-            inCorso = true;
-            // Un cambio di dispositivo genera più eventi di fila: si aspetta che si posi.
-            window.setTimeout(async () => {
-                try { await audioService.restartEngine(); } catch { /* ignore */ }
-                inCorso = false;
-            }, 400);
+            window.setTimeout(() => {
+                try { void audioService.ensureAudioIsReady(); } catch { /* ignore */ }
+            }, 300);
         };
         dispositivi.addEventListener('devicechange', cambiato);
         return () => { try { dispositivi.removeEventListener('devicechange', cambiato); } catch { /* ignore */ } };
