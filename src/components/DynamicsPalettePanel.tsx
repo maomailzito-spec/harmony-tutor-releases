@@ -7,8 +7,8 @@ import { ARTICULATIONS, ARTICULATION_UI } from '../utils/articulations';
 /**
  * Tavolozza dei SEGNI, flottante e trascinabile (stesso modello del modulo percussioni
  * e del mixer). Undici famiglie di segni raccolte in TRE gruppi a fisarmonica, secondo
- * che cosa il segno riguardi: l'intensità (dinamica), il modo di attaccare e collegare i
- * suoni (articolazione ed espressione), l'impianto della pagina (struttura). Gli accenti
+ * che cosa il segno riguardi: l'intensità (dinamiche), il modo di attaccare e collegare
+ * i suoni (articolazioni ed espressione), l'impianto della pagina (struttura). Gli accenti
  * compaiono in due gruppi perché sono due cose diverse: sf/sfz/rf sono accenti DINAMICI,
  * > e ^ accenti d'ARTICOLAZIONE.
  *
@@ -135,12 +135,12 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
             </div>
 
             <div className="p-2">
-                {/* ── Dinamica ── */}
+                {/* ── Dinamiche ── */}
                 <button
                     onClick={() => setGruppoAperto(g => (g === 'dinamica' ? null : 'dinamica'))}
                     className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
-                    <span>Dinamica</span>
+                    <span>Dinamiche</span>
                     <span className="text-[10px] text-gray-400">{gruppoAperto === 'dinamica' ? '▾' : '▸'}</span>
                 </button>
                 {gruppoAperto === 'dinamica' && (
@@ -208,12 +208,12 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
 
                     </div>
                 )}
-                {/* ── Articolazione ed espressione ── */}
+                {/* ── Articolazioni ed espressione ── */}
                 <button
                     onClick={() => setGruppoAperto(g => (g === 'articolazione' ? null : 'articolazione'))}
                     className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
-                    <span>Articolazione ed espressione</span>
+                    <span>Articolazioni ed espressione</span>
                     <span className="text-[10px] text-gray-400">{gruppoAperto === 'articolazione' ? '▾' : '▸'}</span>
                 </button>
                 {gruppoAperto === 'articolazione' && (
