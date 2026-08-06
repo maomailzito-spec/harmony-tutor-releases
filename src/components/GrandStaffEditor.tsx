@@ -6942,8 +6942,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Le note da mettere nel file accessibile sono quelle di cui l'analisi PARLA.
             // Con un brano su traccia il coro è vuoto, e il .mscx usciva con una sola
             // battuta di 4/4: un file valido e senza musica.
-            const noteAccessibili = (analisiSuTraccia && (analysisAccTrackRef.current?.notes?.length ?? 0) > 0)
-                ? (analysisAccTrackRef.current.notes as StaffNote[])
+            const noteAccessibili = (analisiSuTraccia && (noteAnalizzateAccRef.current?.length ?? 0) > 0)
+                ? noteAnalizzateAccRef.current
                 : exportNotes;
 
             const baseOpts = {
@@ -7330,11 +7330,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setClefMenu(null);
     }, [analysisAccTrack, accompanimentTracks, handleUpdateTrack]);
 
-    // L'export accessibile è dichiarato PRIMA di queste due: passa dai riferimenti.
+    /**
+     * Le note di cui l'analisi ACC sta parlando: quelle della traccia analizzata, oppure
+     * di TUTTE le tracce del suo gruppo quando l'analisi è d'insieme.
+     *
+     * È lo stesso criterio che usa `accHarmonyLabels` qui sopra, e deve restare lo
+     * stesso: l'export accessibile scrive queste note, e se ne scrivesse meno di quante
+     * l'analisi ne ha lette, il file uscirebbe con un rigo solo e i romani di quattro
+     * parti — coerente all'apparenza e falso in sostanza, che per chi legge con lo
+     * screen reader è peggio di un file vuoto.
+     */
+    const noteAnalizzateAcc = useMemo<StaffNote[]>(() => {
+        const t = analysisAccTrack as any;
+        if (!t) return [];
+        const gid = t.groupId as string | undefined;
+        const delGruppo = gid
+            ? accompanimentTracks.filter(x => !(x as any).isDrum && (x as any).groupId === gid)
+            : [t];
+        if (delGruppo.length <= 1) return (t.notes || []) as StaffNote[];
+        return delGruppo
+            .flatMap(x => (x.notes as StaffNote[]) || [])
+            .slice()
+            .sort((a, b) => Number((a as any).startTick ?? 0) - Number((b as any).startTick ?? 0));
+    }, [analysisAccTrack, accompanimentTracks]);
+
+    // L'export accessibile è dichiarato PRIMA di queste: passa dai riferimenti.
     const accHarmonyLabelsRef = useRef<any[]>([]);
     accHarmonyLabelsRef.current = accHarmonyLabels as any[];
     const analysisAccTrackRef = useRef<any>(null);
     analysisAccTrackRef.current = analysisAccTrack;
+    const noteAnalizzateAccRef = useRef<StaffNote[]>([]);
+    noteAnalizzateAccRef.current = noteAnalizzateAcc;
 
     // Etichette ACC per sistema: X via getPlayheadPosForAbsBeat (già absBeat→x per sistema).
     const accLabelsBySystem = useMemo(() => {
