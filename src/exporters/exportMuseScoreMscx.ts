@@ -66,8 +66,14 @@ function midiTpc(note: StaffNote): { midi: number; tpc: number } {
   const octave = note.octave ?? 4;
   const naturalMidi = (octave + 1) * 12 + (BASE_PC[letter] ?? 0);
   const midi = Number.isFinite(note.midi) ? Math.round(note.midi) : naturalMidi;
-  let alter = midi - naturalMidi;
-  if (alter > 2) alter = 2; if (alter < -2) alter = -2; // clamp difensivo (bb..##)
+  // L'alterazione si ricava dalle CLASSI DI SUONO, non dalla differenza in semitoni:
+  // la grafia di una nota non dipende dall'ottava in cui sta. Prima si sottraeva
+  // `naturalMidi`, e bastava che `midi` e `octave` non fossero d'accordo (succede quando
+  // qualcuno sposta l'uno e dimentica l'altro) perché lo scarto valesse dodici semitoni.
+  // La protezione che lo schiacciava a −2 rendeva il difetto invisibile e plausibile:
+  // usciva un doppio bemolle, che è una nota vera e sbagliata — peggio di un errore.
+  let alter = (((midi - naturalMidi) % 12) + 18) % 12 - 6;   // → −6…+5, senza le ottave
+  if (alter > 2) alter = 2; if (alter < -2) alter = -2;
   const tpc = (NATURAL_TPC[letter] ?? 14) + 7 * alter;
   return { midi, tpc };
 }

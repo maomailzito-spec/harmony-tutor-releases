@@ -7282,7 +7282,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const suonate = (t: any) => {
                 const semi = accTransposeSemitones(t);
                 const arr = ((t?.notes as any[]) || []);
-                return semi === 0 ? arr : arr.map((n: any) => (n?.isRest ? n : { ...n, midi: Number(n.midi ?? 60) + semi }));
+                if (semi === 0) return arr;
+                const ott = Math.round(semi / 12);
+                // Altezza e ottava insieme, come per l'export: due dati che si
+                // contraddicono producono grafie impossibili a valle.
+                return arr.map((n: any) => (n?.isRest ? n : {
+                    ...n, midi: Number(n.midi ?? 60) + semi, octave: Number(n.octave ?? 4) + ott,
+                }));
             };
             const combinedNotes = groupTracks.length > 1
                 ? groupTracks.flatMap(suonate).slice().sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0))
@@ -7367,7 +7373,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const suonate = (x: any): StaffNote[] => {
             const semi = accTransposeSemitones(x);
             const arr = ((x?.notes as StaffNote[]) || []);
-            return semi === 0 ? arr : arr.map(n => (n.isRest ? n : ({ ...n, midi: Number(n.midi ?? 60) + semi } as StaffNote)));
+            if (semi === 0) return arr;
+            // Si sposta l'altezza E l'OTTAVA insieme. Spostando il solo `midi`, i due dati
+            // si contraddicono — e chi ne ricava la grafia (l'esportatore .mscx deduce
+            // l'alterazione da `midi` meno l'ottava) leggeva uno scarto di dodici
+            // semitoni e lo schiacciava a due: tutte le note del tenore uscivano col
+            // doppio bemolle.
+            const ott = Math.round(semi / 12);
+            return arr.map(n => (n.isRest ? n : ({
+                ...n,
+                midi: Number(n.midi ?? 60) + semi,
+                octave: Number(n.octave ?? 4) + ott,
+                ...(Number.isFinite(Number((n as any).position)) ? { position: Number((n as any).position) + ott * 7 } : {}),
+            } as StaffNote)));
         };
         if (delGruppo.length <= 1) return suonate(t);
         return delGruppo
