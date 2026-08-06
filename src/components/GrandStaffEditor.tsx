@@ -6901,7 +6901,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             const seenTick = new Set<number>();
             const harmonyLabels: Array<{ measureIndex: number; tick: number; roman?: string; figures?: string[]; token?: string }> = [];
-            for (const l of (_harmonyLabelsRef.current || []).flat() as any[]) {
+            // DA DOVE viene l'analisi: dal coro o dalla traccia analizzata. Un brano
+            // strumentale importato (una chitarra, un pianoforte) entra come TRACCIA, e
+            // le sue etichette stanno in un altro elenco: leggendo solo quelle del coro,
+            // il file usciva senza una riga d'analisi — proprio nel caso in cui l'analisi
+            // è tutto ciò che serve a chi legge con lo screen reader.
+            const analisiSuTraccia = analysisSubject === 'acc' && !!analysisAccTrackRef.current;
+            const sorgenteEtichette: any[] = analisiSuTraccia
+                ? (accHarmonyLabelsRef.current || []).map((l: any) => ({
+                    absBeat: l.absBeat, roman: l.roman, figures: l.figures, symbol: l.sigla,
+                }))
+                : ((_harmonyLabelsRef.current || []).flat() as any[]);
+            for (const l of sorgenteEtichette) {
                 if (!l || l.hiddenMarker) continue;
                 const roman = String(l.romanDisplay ?? l.sequenceRomanFunctional ?? l.sequenceRoman ?? l.roman ?? '').trim();
                 const figures = Array.isArray(l.figures) ? l.figures.map((x: any) => String(x).trim()).filter(Boolean) : [];
@@ -6927,6 +6938,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (text) harmonyLabels.push({ measureIndex, tick, token: text });
                 }
             }
+
+            // Le note da mettere nel file accessibile sono quelle di cui l'analisi PARLA.
+            // Con un brano su traccia il coro è vuoto, e il .mscx usciva con una sola
+            // battuta di 4/4: un file valido e senza musica.
+            const noteAccessibili = (analisiSuTraccia && (analysisAccTrackRef.current?.notes?.length ?? 0) > 0)
+                ? (analysisAccTrackRef.current.notes as StaffNote[])
+                : exportNotes;
 
             const baseOpts = {
                 notes: exportNotes,
@@ -6960,7 +6978,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             } else {
                 // Salva un .mscx nativo di MuseScore 4 (via SAVE_BINARY_FILE, base64 UTF-8).
                 // Font piccolo solo per la "parlata" (frasi lunghe → niente gonfiore pagine).
-                const mscx = exportMuseScoreMscx(baseOpts, choice.mode === 'spoken');
+                const mscx = exportMuseScoreMscx({ ...baseOpts, notes: noteAccessibili }, choice.mode === 'spoken');
                 const bytes = new TextEncoder().encode(mscx);
                 let bin = '';
                 for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -7311,6 +7329,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
         setClefMenu(null);
     }, [analysisAccTrack, accompanimentTracks, handleUpdateTrack]);
+
+    // L'export accessibile è dichiarato PRIMA di queste due: passa dai riferimenti.
+    const accHarmonyLabelsRef = useRef<any[]>([]);
+    accHarmonyLabelsRef.current = accHarmonyLabels as any[];
+    const analysisAccTrackRef = useRef<any>(null);
+    analysisAccTrackRef.current = analysisAccTrack;
 
     // Etichette ACC per sistema: X via getPlayheadPosForAbsBeat (già absBeat→x per sistema).
     const accLabelsBySystem = useMemo(() => {

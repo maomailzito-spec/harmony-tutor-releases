@@ -422,6 +422,13 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
   const nonEmpty = parts.filter(p => p.notes.some(n => !n.isRest));
   const finalParts = (nonEmpty.length > 0 ? nonEmpty : parts.slice(0, 1))
     .map((p, i) => ({ ...p, id: `P${i + 1}` }));
+  // L'ANALISI va scritta su una parte che esiste. È assegnata al coro, ma un brano
+  // strumentale importato sta su una traccia e il coro viene scartato perché vuoto: le
+  // etichette non trovavano più dove andare e il file usciva senza una riga d'analisi.
+  // Se nessuna parte superstite la porta, la prende la prima.
+  if (finalParts.length > 0 && !finalParts.some(p => p.withHarmony)) {
+    finalParts[0] = { ...finalParts[0], withHarmony: true };
+  }
 
   // Armonia per misura → { localTick → {roman, figures} }. localTick calcolato con la
   // STESSA convenzione delle note (tick − inizio battuta) così coincide con gli onset.
@@ -765,7 +772,10 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
                 const roman = hMap.get(onsetTick)?.roman;
                 if (roman) { emitHarmonyDirection(w, roman, staffNum); emittedRoman.add(onsetTick); }
               }
-              if (staffIdx === 1 && !emittedFig.has(onsetTick)) {
+              // Le cifre stanno sotto il BASSO, cioè sul secondo rigo. Se la parte ha un
+              // rigo solo — un brano strumentale importato come traccia — quel rigo non
+              // esiste e le cifre non uscivano affatto: lì vanno sull'unico rigo che c'è.
+              if ((staffIdx === 1 || part.staves === 1) && !emittedFig.has(onsetTick)) {
                 const figures = hMap.get(onsetTick)?.figures;
                 if (figures && figures.length) { emitFiguredBass(w, figures); emittedFig.add(onsetTick); }
               }
