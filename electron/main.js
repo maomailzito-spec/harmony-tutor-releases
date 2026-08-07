@@ -30,8 +30,20 @@ function registraProtocolloSuoni() {
       const relativo = decodeURIComponent(pathname).replace(/^\/+/, '');
       const assoluto = path.normalize(path.join(radice, relativo));
       if (!assoluto.startsWith(radice)) return new Response('forbidden', { status: 403 });
-      const dati = await fs.promises.readFile(assoluto);
-      return new Response(dati, { status: 200, headers: { 'content-type': 'application/octet-stream' } });
+      // Nell'app impacchettata i campioni NON stanno sul disco: sono dentro l'asar.
+      // `fs.readFileSync` è la via che l'asar la attraversa sempre (le versioni a
+      // promessa no, ed è per questo che funzionava lanciando dalla cartella e non
+      // dall'app installata). I file sono piccoli, la lettura è immediata.
+      const dati = fs.readFileSync(assoluto);
+      return new Response(dati, {
+        status: 200,
+        headers: {
+          'content-type': 'application/octet-stream',
+          // La pagina è servita da `file://`: senza questo la richiesta è
+          // considerata di origine diversa e il renderer la rifiuta.
+          'access-control-allow-origin': '*',
+        },
+      });
     } catch {
       // Nota fuori dal set renderizzato: 404 pulito, il chiamante decide.
       return new Response('not found', { status: 404 });
