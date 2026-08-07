@@ -1,9 +1,38 @@
 
 import { CHROMATIC_SCALE } from '../constants';
 
+/**
+ * Radice dei campioni che viaggiano DENTRO l'app.
+ *
+ * Nell'app impacchettata la pagina è servita da `file://`, e Chromium vieta
+ * `fetch()` sui file locali: ogni campione nostro falliva, e si finiva sul CDN
+ * remoto — cioè l'app installata non ha mai suonato coi propri suoni, e senza
+ * rete restava muta. Il processo principale registra allora uno schema suo
+ * (`ht://suoni/…`, vedi electron/main.js) che serve gli stessi file e con cui
+ * fetch funziona. In sviluppo, dove la pagina sta su http://localhost, il
+ * percorso relativo va benissimo e resta quello.
+ */
+export const SOUNDS_ROOT =
+  typeof location !== 'undefined' && location.protocol === 'file:' ? 'ht://suoni/' : './sounds/';
+
+/**
+ * Un campione NOSTRO che non si apre è un difetto, non un caso previsto: se
+ * tace, si finisce sui suoni remoti senza che nessuno se ne accorga — ed è
+ * andata così per mesi. Si avvisa una volta sola per non allagare la console.
+ */
+let campioneLocaleGiaSegnalato = false;
+function avvisaCampioneLocaleMancante(url: string, motivo: string): void {
+  if (campioneLocaleGiaSegnalato || url.startsWith('http')) return;
+  campioneLocaleGiaSegnalato = true;
+  console.warn(
+    `[audio] campione locale non caricato (${url}): ${motivo}. ` +
+    `Si ripiega sui campioni remoti: senza rete l'app resta muta.`
+  );
+}
+
 // Local bundled piano samples (FluidR3_GM acoustic_grand_piano).
 // Falls back to the remote CDN only if the local file fails to load.
-const SOUND_BASE_URL_LOCAL = './sounds/piano/';
+const SOUND_BASE_URL_LOCAL = `${SOUNDS_ROOT}piano/`;
 const SOUND_BASE_URL_REMOTE = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_grand_piano-mp3/';
 
 /**
@@ -465,20 +494,21 @@ export class AudioService {
     // then fall back to remote CDN (mp3 only). Per gli strumenti LOCAL_ONLY (i bassi
     // custom) NIENTE fallback GM: oltre il range renderizzato la nota resta muta invece
     // di passare a un timbro/livello GM diverso (era il "calo" percepito al confine).
-    const localUrl = `./sounds/${instrument}/${audioFile}.${instrumentExt(instrument)}`;
+    const localUrl = `${SOUNDS_ROOT}${instrument}/${audioFile}.${instrumentExt(instrument)}`;
     const remoteUrl = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/${audioFile}.mp3`;
     const urls = LOCAL_ONLY.has(instrument) ? [localUrl] : [localUrl, remoteUrl];
 
     for (const url of urls) {
       try {
         const response = await fetch(url);
-        if (!response.ok) continue;
+        if (!response.ok) { avvisaCampioneLocaleMancante(url, `HTTP ${response.status}`); continue; }
         const arrayBuffer = await response.arrayBuffer();
         if (arrayBuffer.byteLength < 100) continue; // empty / error page
         const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
         this.audioBuffers.set(key, audioBuffer);
         return;
-      } catch {
+      } catch (e) {
+        avvisaCampioneLocaleMancante(url, (e as Error)?.message || 'errore');
         // try next source
       }
     }
@@ -509,7 +539,7 @@ export class AudioService {
   private async _loadLayeredSample(dir: string, note: string, layer: number, cacheKey: string): Promise<void> {
     if (!this.audioContext || this.audioBuffers.has(cacheKey) || this.failedLoads.has(cacheKey)) return;
     try {
-      const response = await fetch(`./sounds/${dir}/${note}_v${layer}.mp3`);
+      const response = await fetch(`${SOUNDS_ROOT}${dir}/${note}_v${layer}.mp3`);
       if (!response.ok) { this.failedLoads.add(cacheKey); return; }
       const arrayBuffer = await response.arrayBuffer();
       if (arrayBuffer.byteLength < 100) { this.failedLoads.add(cacheKey); return; }

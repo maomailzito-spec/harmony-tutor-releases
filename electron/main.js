@@ -1,6 +1,43 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, screen, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// -----------------------------------------------------------------------------
+// Campioni audio: un indirizzo interno invece dei file
+// -----------------------------------------------------------------------------
+// Nell'app impacchettata la pagina è servita da `file://`, e Chromium NON permette
+// `fetch()` sui file locali. Il caricatore dei campioni lo faceva, falliva in
+// silenzio e ripiegava sui campioni remoti (gleitz.github.io): l'app installata
+// non ha MAI suonato coi campioni suoi, e senza rete restava muta. In sviluppo
+// non si vedeva, perché lì la pagina sta su http://localhost e i file si aprono.
+//
+// Qui si registra uno schema tutto nostro, `ht://suoni/<strumento>/<nota>.flac`,
+// che il processo principale serve leggendo dal disco (fs legge anche dentro
+// l'asar). `supportFetchAPI` è ciò che permette al renderer di usare fetch.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ht', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+]);
+
+/** Serve `ht://suoni/...` dalla cartella dei campioni impacchettata. */
+function registraProtocolloSuoni() {
+  const radice = path.join(__dirname, '../dist/sounds');
+  protocol.handle('ht', async (request) => {
+    try {
+      const { host, pathname } = new URL(request.url);
+      if (host !== 'suoni') return new Response('not found', { status: 404 });
+      // Niente uscite dalla cartella dei campioni: il percorso si normalizza e
+      // si verifica che resti dentro la radice.
+      const relativo = decodeURIComponent(pathname).replace(/^\/+/, '');
+      const assoluto = path.normalize(path.join(radice, relativo));
+      if (!assoluto.startsWith(radice)) return new Response('forbidden', { status: 403 });
+      const dati = await fs.promises.readFile(assoluto);
+      return new Response(dati, { status: 200, headers: { 'content-type': 'application/octet-stream' } });
+    } catch {
+      // Nota fuori dal set renderizzato: 404 pulito, il chiamante decide.
+      return new Response('not found', { status: 404 });
+    }
+  });
+}
 const { autoUpdater } = require('electron-updater');
 const { checkTrial, getTrialInfo } = require('./licensing/trialManager');
 const { activateLicense, checkLicense, deactivateLicense, getLicenseInfo, areUpdatesEnabled } = require('./licensing/licenseManager');
@@ -1723,6 +1760,7 @@ app.commandLine.appendSwitch('disable-background-timer-throttling')
 // Tenendo l'audio dentro il processo principale il punto di rottura sparisce.
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess')
 app.whenReady().then(async () => {
+  registraProtocolloSuoni();
   // ── Trial / License gate (skip in dev mode) ──
   const isDev = !app.isPackaged;
   const trial = isDev ? { status: 'licensed' } : checkTrial();
