@@ -38,6 +38,7 @@ export const MENU_ACTIONS = {
   DECREASE_TITLE_FONT: 'decrease-title-font',
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice',
+  SET_ANALYSIS_SUBJECT: 'set-analysis-subject',
   SET_APP_MODE: 'set-app-mode',
   GENERATE_FROM_ROMAN: 'generate-from-roman',
   TOGGLE_ANALYSIS_LOCK: 'toggle-analysis-lock',
@@ -96,6 +97,12 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
     case MENU_ACTIONS.SET_SELECT_ONLY_VOICE: {
       const p = payload as any;
       return { enabled: toBoolean(p?.enabled) } as MenuActionPayloadMap[A];
+    }
+
+    case MENU_ACTIONS.SET_ANALYSIS_SUBJECT: {
+      const p = payload as any;
+      const subject = typeof p?.subject === 'string' ? p.subject : '';
+      return (subject === 'acc' ? { subject: 'acc' } : { subject: 'satb' }) as MenuActionPayloadMap[A];
     }
 
     case MENU_ACTIONS.SET_ENGRAVING_MODE:

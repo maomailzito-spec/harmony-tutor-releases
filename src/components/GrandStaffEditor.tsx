@@ -2730,6 +2730,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         try { localStorage.setItem('harmony.analysis.subject.v1', analysisSubject); } catch { /* ignore */ }
     }, [analysisSubject]);
     const [analysisAccTrackId, setAnalysisAccTrackId] = useState<string | null>(null);
+
+    /**
+     * L'analisi si sposta DA SÉ sulla traccia quando il coro è vuoto.
+     *
+     * Analizzare un coro vuoto mentre nella pagina c'è un brano su traccia non è mai
+     * quello che qualcuno vuole: il programma lo faceva in silenzio, e chi importava un
+     * pezzo strumentale non vedeva nessuna analisi senza capire perché. Chi non vede lo
+     * schermo non aveva proprio modo di accorgersene.
+     *
+     * Si sposta una volta sola e solo verso la traccia: se poi l'utente torna al coro a
+     * mano, la sua scelta vale. E scrivendo la prima nota nel coro non si torna indietro
+     * da soli, che sarebbe un cambio sotto le dita.
+     */
+    const spostatoDaSoloRef = useRef(false);
+    useEffect(() => {
+        if (spostatoDaSoloRef.current) return;
+        if (analysisSubject !== 'satb') return;
+        const coroVuoto = !(rawNotes || []).some(n => n && !n.isRest);
+        const tracce = (accompanimentTracks || []).filter(t => t && !(t as any).isDrum && (t.notes || []).some(n => n && !n.isRest));
+        if (!coroVuoto || tracce.length === 0) return;
+        spostatoDaSoloRef.current = true;
+        setAnalysisSubject('acc');
+        setAnalysisAccTrackId(prev => prev ?? (tracce[0] as any).id ?? null);
+    }, [rawNotes, accompanimentTracks, analysisSubject]);
     type AccStaffLayout = { trackIdx: number; trackId?: string; topLineY: number; bottomLineY: number; lineSpacing: number; isDrum?: boolean };
     const [accStavesLayout, setAccStavesLayout] = useState<AccStaffLayout[]>([]);
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
@@ -4926,6 +4950,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // On unexpected renderer-side failures, keep silent (avoid blocking modals).
                 // Main-layer failures are already surfaced via `menu-error`.
                 void err;
+            }
+            return;
+        }
+
+        // Soggetto dell'analisi dal menù (e dalle sue scorciatoie): è la strada
+        // raggiungibile da chi non vede la barra degli strumenti.
+        if (action === MENU_ACTIONS.SET_ANALYSIS_SUBJECT) {
+            const subject = (payload as any)?.subject;
+            if (subject === 'satb' || subject === 'acc') {
+                // Scegliendo a mano si spegne l'automatismo: da qui in poi comanda l'utente.
+                spostatoDaSoloRef.current = true;
+                setAnalysisSubject(subject);
             }
             return;
         }

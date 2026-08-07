@@ -44,6 +44,10 @@ const MENU_ACTIONS = Object.freeze({
   DECREASE_TITLE_FONT: 'decrease-title-font',
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice',
+  // Soggetto dell'analisi: il coro o una traccia. Dal MENÙ e non solo dalla toolbar,
+  // perché i menù di sistema sono il modo in cui chi usa uno screen reader esplora
+  // l'applicazione — e senza questa voce il comando era di fatto irraggiungibile.
+  SET_ANALYSIS_SUBJECT: 'set-analysis-subject',
   SET_APP_MODE: 'set-app-mode',
   GENERATE_FROM_ROMAN: 'generate-from-roman',
   TOGGLE_ANALYSIS_LOCK: 'toggle-analysis-lock',
@@ -114,6 +118,12 @@ function normalizeMenuActionPayload(action, payload) {
       const family = normalizeString(payload && payload.family);
       if (family !== 'serif' && family !== 'sans-serif' && family !== 'monospace') return null;
       return { family };
+    }
+
+    case MENU_ACTIONS.SET_ANALYSIS_SUBJECT: {
+      const subject = normalizeString(payload && payload.subject);
+      if (subject !== 'satb' && subject !== 'acc') return null;
+      return { subject };
     }
 
     case MENU_ACTIONS.SET_APP_MODE: {

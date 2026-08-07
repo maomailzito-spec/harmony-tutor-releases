@@ -450,6 +450,8 @@ function createMenu() {
       shortcuts: 'Shortcuts…', noRecent: 'No recent files',
       collisionEnhanced: 'Check collisions (Enhanced)…', collisionLegacy: 'Check collisions (Legacy)…',
       manageLicense: 'Manage License…',
+      analyzeChoir: 'Analyse the choir (SATB)',
+      analyzeTrack: 'Analyse the accompaniment track',
       about: 'About Harmony Tutor…',
     },
   };
@@ -516,6 +518,11 @@ function createMenu() {
           'Shift+↑ ↓ — Trasporta di un\'ottava',
           'Alt/Option+↑ ↓ — Sposta al rigo superiore / inferiore',
           'Trascinamento col mouse — Sposta di grado (diatonico)',
+        ]},
+        { title: "SOGGETTO DELL'ANALISI", items: [
+          'Cmd/Ctrl+Alt+1 — Analizza il coro (SATB)',
+          "Cmd/Ctrl+Alt+2 — Analizza la traccia d'accompagnamento (un brano importato entra come traccia)",
+          "Le stesse due voci stanno nel menù Strumenti. Se il coro è vuoto e c'è una traccia con delle note, l'analisi ci si sposta da sé.",
         ]},
         { title: 'ANALISI E MARCATURE (note selezionate)', items: [
           'Alt/Option+P — Nota di passaggio   |   ⌥V — Nota di volta   |   ⌥A — Appoggiatura',
@@ -1015,6 +1022,22 @@ function createMenu() {
           label: mt('generateChorale'),
           accelerator: 'CmdOrCtrl+Shift+G',
           click: () => { sendAction(MENU_ACTIONS.GENERATE_FROM_ROMAN); }
+        },
+        { type: 'separator' },
+        // SOGGETTO DELL'ANALISI. Esisteva solo come pulsante «ACC» nella toolbar: tre
+        // lettere in mezzo a decine di controlli, senza voce di menù e senza scorciatoia.
+        // Chi usa uno screen reader esplora dai MENÙ (e su macOS li cerca per nome dal
+        // menù Aiuto): senza questa voce il comando era di fatto irraggiungibile — e
+        // senza di esso un brano strumentale importato non viene analizzato affatto.
+        {
+          label: mt('analyzeChoir', 'Analizza il coro (SATB)'),
+          accelerator: 'CmdOrCtrl+Alt+1',
+          click: () => { sendAction(MENU_ACTIONS.SET_ANALYSIS_SUBJECT, { subject: 'satb' }); }
+        },
+        {
+          label: mt('analyzeTrack', "Analizza la traccia d'accompagnamento"),
+          accelerator: 'CmdOrCtrl+Alt+2',
+          click: () => { sendAction(MENU_ACTIONS.SET_ANALYSIS_SUBJECT, { subject: 'acc' }); }
         },
         { type: 'separator' },
         {

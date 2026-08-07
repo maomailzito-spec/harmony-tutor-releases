@@ -1,3 +1,9 @@
+## Novità in v1.5.1
+
+### ♿ Accessibilità
+- **L'analisi si sposta da sé sulla traccia.** Un brano strumentale importato — una chitarra, un pianoforte, le parti di un corale — entra come *traccia*, non nel coro; il programma però continuava ad analizzare il coro vuoto, in silenzio. Ora, se il coro è vuoto e c'è una traccia con delle note, l'analisi ci si sposta senza chiedere niente. Scegliendo a mano, comanda la scelta dell'utente.
+- **Il soggetto dell'analisi è nel menù** (Strumenti ▸ *Analizza il coro* / *Analizza la traccia d'accompagnamento*), con le scorciatoie **⌘⌥1** e **⌘⌥2**. Prima esisteva solo come pulsante «ACC» in mezzo alla barra degli strumenti: tre lettere senza contesto, irraggiungibili per chi lavora con uno screen reader — e senza quel comando un brano importato non veniva analizzato affatto.
+
 ## Novità in v1.5.0
 
 ### 🎵 Dinamiche che si sentono
