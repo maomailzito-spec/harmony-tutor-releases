@@ -1145,6 +1145,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             T▼
                         </button>
                         <button
+                            aria-label="Inverti la melodia (rovescia i movimenti)"
                             onClick={() => onMelodicTransform('invert')}
                             title={transformMode === 'real'
                                 ? '⚠ Inversione REALE = cromatica: esce dalla tonalità (per contesti atonali/dodecafonici). Per un risultato in chiave passa a Ton.'
@@ -1154,6 +1155,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             {transformMode === 'real' ? 'Inv⚠' : 'Inv'}
                         </button>
                         <button
+                            aria-label="Retrogrado: rovescia l'ordine nel tempo"
                             onClick={() => onMelodicTransform('retrograde')}
                             title="Retrogrado: ordine temporale rovesciato (note e ritmo). Inserito dopo l'originale."
                             className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
@@ -1161,6 +1163,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             Retr
                         </button>
                         <button
+                            aria-label="Retrogrado inverso"
                             onClick={() => onMelodicTransform('retrogradeInvert')}
                             title={transformMode === 'real'
                                 ? "⚠ Retrogrado-inverso REALE: contiene l'inversione cromatica → esce dalla tonalità. Per un risultato in chiave passa a Ton."
@@ -1222,11 +1225,13 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         <div className="flex items-center p-0.5 bg-gray-900/50 rounded-md">
                             <button
                                 onClick={() => setAnalysisSubject('satb')}
+                                aria-label="Analizza il coro (SATB)"
                                 className={`px-2 rounded-sm py-0.5 font-semibold transition-all ${analysisSubject === 'satb' ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
                                 title="Analizza il coro SATB"
                             >SATB</button>
                             <button
                                 onClick={() => setAnalysisSubject('acc')}
+                                aria-label="Analizza la traccia d'accompagnamento"
                                 className={`px-2 rounded-sm py-0.5 font-semibold transition-all ${analysisSubject === 'acc' ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
                                 title="Analizza una traccia di accompagnamento (piano/chitarra)"
                             >ACC</button>
@@ -1246,6 +1251,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 {isAnalysisEnabled && (
                     <div className="flex items-center gap-1 p-0.5 bg-gray-900/50 rounded-md text-xs ml-2">
                         <button
+                            aria-label="Mostra i settimi di dominante"
                             onClick={() => setShowRomanAnalysis(prev => !prev)}
                             className={`w-10 rounded-sm py-0.5 font-bold transition-all ${showRomanAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
                             title={showRomanAnalysis ? t('toolbar_hide_roman') : t('toolbar_show_roman')}

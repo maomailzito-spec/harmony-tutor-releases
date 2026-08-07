@@ -1,17 +1,14 @@
 {
   "filters_title": "Filtri",
   "shown_count": "Mostrati: {{shown}}/{{total}}",
-
   "filter_errors": "Errori ({{count}})",
   "filter_warnings": "Warning ({{count}})",
   "filter_exceptions": "Eccezioni ({{count}})",
   "filter_chromatics": "Cromatici ({{count}})",
-
   "filter_errors_tooltip": "Mostra/Nascondi errori",
   "filter_warnings_tooltip": "Mostra/Nascondi warning",
   "filter_exceptions_tooltip": "Mostra/Nascondi eccezioni",
   "filter_chromatics_tooltip": "Mostra/Nascondi cromatici",
-
   "rules_title": "Regole",
   "rules_show_all": "Tutte",
   "rules_hide_all": "Nessuna",
@@ -21,7 +18,6 @@
   "rules_none_found": "Nessuna regola trovata.",
   "rule_click_hide": "Clicca per nascondere questa regola",
   "rule_click_show": "Clicca per mostrare questa regola",
-
   "sequences_title": "Sequenze",
   "sequences_toggle_on": "Sequenze: ON",
   "sequences_toggle_off": "Sequenze: OFF",
@@ -33,13 +29,13 @@
   "sequence_measure_range": "Misure {{from}}–{{to}}",
   "sequence_summary": "{{range}} · L={{length}} · conf {{conf}}%",
   "sequence_model_to_repeat": "Modello {{model}} → {{repeat}}",
-
   "empty_filtered_title": "Nessun elemento con questi filtri.",
   "empty_filtered_hint": "Prova a modificare i filtri.",
   "empty_clean_title": "Nessuna segnalazione.",
   "empty_clean_hint": "Nessun errore/warning rilevato.",
-
   "violation_exception": "Eccezione",
   "violation_chromatic": "Cromatico",
-  "violation_suggestion_label": "Consiglio:"
+  "violation_suggestion_label": "Consiglio:",
+  "violation_at_measure": "misura {{m}}",
+  "violation_at_measure_beat": "misura {{m}}, movimento {{b}}"
 }

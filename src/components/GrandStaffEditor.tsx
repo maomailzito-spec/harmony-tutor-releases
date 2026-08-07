@@ -17935,6 +17935,24 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         ) : isAnalysisEnabled ? (
                             <HarmonyAnalysisPanel
                                 violations={violations}
+                                // DOVE sta la violazione. Il pannello è già testo — uno
+                                // screen reader lo legge — ma diceva soltanto CHE COSA:
+                                // «quinte parallele fra soprano e basso» e la spiegazione
+                                // della regola, senza il punto del brano. Chi non vede la
+                                // pagina non aveva modo di trovarlo.
+                                posizioneViolazione={(v) => {
+                                    try {
+                                        const id = (v as any).primaryNoteId || (v.noteIds || [])[0];
+                                        if (!id) return null;
+                                        const n = (latestRawNotes.current || []).find(x => x.id === id)
+                                            ?? (latestAccompanimentTracks.current || []).flatMap(t => t.notes || []).find(x => x.id === id);
+                                        if (!n) return null;
+                                        const misura = Number((n as any).measureIndex ?? -1);
+                                        if (!Number.isFinite(misura) || misura < 0) return null;
+                                        const battuta = Number((n as any).beat);
+                                        return { misura: misura + 1, movimento: Number.isFinite(battuta) ? battuta : undefined };
+                                    } catch { return null; }
+                                }}
                                 sequenceMatches={sequenceMatches}
                                 sequencesEnabled={isSequencesEnabled}
                                 onToggleSequences={() => setIsSequencesEnabled(prev => !prev)}

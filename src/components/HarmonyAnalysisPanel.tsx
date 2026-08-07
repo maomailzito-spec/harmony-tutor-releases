@@ -6,6 +6,10 @@ import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegis
 
 interface HarmonyAnalysisPanelProps {
     violations: RuleViolation[];
+    /** DOVE sta la violazione nel brano. Il pannello è già leggibile da uno screen
+     *  reader — è testo — ma diceva solo CHE COSA non va, non in quale punto: chi non
+     *  vede la pagina restava senza il dato più importante. */
+    posizioneViolazione?: (v: RuleViolation) => { misura: number; movimento?: number } | null;
     sequenceMatches?: SequenceMatch[];
     sequencesEnabled?: boolean;
     onToggleSequences?: () => void;
@@ -47,7 +51,7 @@ const VOICE_ABBR: Record<number, string> = { 0: 'Acc', 1: 'S', 2: 'A', 3: 'T', 4
 const MOTIF_TYPE_LABEL: Record<string, string> = { transpose: 'Trasposizione', invert: 'Inversione', retrograde: 'Retrogrado', retrogradeInvert: 'Retro-inverso' };
 const MOTIF_TYPE_HUE: Record<string, string> = { invert: '#6d28d9', retrograde: '#0f766e', retrogradeInvert: '#a21caf', transpose: '#be185d' };
 
-const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, sequenceMatches, sequencesEnabled, onToggleSequences, motifsEnabled, onToggleMotifs, motifMatches, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
+const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, posizioneViolazione, sequenceMatches, sequencesEnabled, onToggleSequences, motifsEnabled, onToggleMotifs, motifMatches, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     const { t } = useTranslation('analysis');
     const [filters, setFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [ruleSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
@@ -421,6 +425,16 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         const summaryLine = descLines[0];
                         const detailLines = descLines.slice(1).join('\n').trim();
 
+                        // Il PUNTO del brano, detto a parole: si legge sullo schermo e si
+                        // sente con lo screen reader. Il movimento si scrive solo se è un
+                        // numero pulito — «misura 4, movimento 2,5» non aiuta nessuno.
+                        const pos = posizioneViolazione?.(violation) ?? null;
+                        const dove = pos
+                            ? (pos.movimento != null && Math.abs(pos.movimento - Math.round(pos.movimento)) < 1e-6
+                                ? t('violation_at_measure_beat', { m: pos.misura, b: Math.round(pos.movimento), defaultValue: `misura ${pos.misura}, movimento ${Math.round(pos.movimento)}` })
+                                : t('violation_at_measure', { m: pos.misura, defaultValue: `misura ${pos.misura}` }))
+                            : '';
+
                         return (
                             <li
                                 key={`${violation.ruleId}-${index}`}
@@ -447,6 +461,9 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                                 <span className="ml-1 text-gray-500 text-[10px] font-normal">{isSelected ? '▲' : '▼'}</span>
                                             )}
                                         </p>
+                                        {dove && (
+                                            <p className="text-[10px] text-gray-400 leading-snug">{dove}</p>
+                                        )}
                                         {isSelected && detailLines && (
                                             <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
                                                 {detailLines}
