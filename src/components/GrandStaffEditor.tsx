@@ -2824,6 +2824,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [showVoiceColors, setShowVoiceColors] = useState(false);
     const [showIncompleteMeasureWarnings, setShowIncompleteMeasureWarnings] = useState(true);
+    /** Quante misure incomplete ci sono NEL BRANO, indipendentemente dal fatto che i
+     *  rettangoli rossi siano mostrati. Spegnerli è legittimo — sono d'intralcio mentre
+     *  si scrive, e una misura a metà è normale finché si sta scrivendo — ma l'errore
+     *  metrico resta, e l'analisi di quei punti resta parziale: il segnale deve
+     *  sopravvivere allo spegnimento del disegno. */
+    const misureIncompleteRef = useRef<Record<number, number>>({});
+    const [misureIncompleteTotali, setMisureIncompleteTotali] = useState(0);
 
     // Menu-driven toggles (Electron)
     const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
@@ -14648,13 +14655,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             >
                 {analysisLocked && !sessionUnlocked ? '🔒' : '🔓'}
             </button>
+            {/* Due significati, e vanno tenuti distinti:
+                 · PREMUTO o no = i rettangoli rossi sulle misure si vedono. Spegnerli è
+                   legittimo: sono d'intralcio mentre si scrive, e una misura a metà è
+                   normale finché la si sta riempiendo.
+                 · ROSSO = nel brano CI SONO misure incomplete. Questo non dipende dai
+                   rettangoli. Prima i due significati stavano sullo stesso interruttore:
+                   spegnendo il disegno spariva anche l'avviso, e l'analisi continuava a
+                   dire di meno in quei punti senza che niente lo ricordasse. */}
             <button
                 type="button"
                 onClick={() => setShowIncompleteMeasureWarnings(v => !v)}
-                title={showIncompleteMeasureWarnings ? 'Nascondi avvisi misure incomplete' : 'Mostra avvisi misure incomplete'}
-                className={`absolute right-12 top-2 z-[60] flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md shadow transition-colors ${showIncompleteMeasureWarnings ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-gray-300 text-gray-600 hover:bg-gray-400'}`}
+                aria-pressed={showIncompleteMeasureWarnings}
+                aria-label={misureIncompleteTotali > 0
+                    ? `${misureIncompleteTotali} misure incomplete — ${showIncompleteMeasureWarnings ? 'nascondi' : 'mostra'} i riquadri`
+                    : 'Nessuna misura incompleta'}
+                title={misureIncompleteTotali > 0
+                    ? `${misureIncompleteTotali} ${misureIncompleteTotali === 1 ? 'misura incompleta' : 'misure incomplete'}: l'analisi di quei punti è parziale.\n${showIncompleteMeasureWarnings ? 'Clicca per nascondere i riquadri rossi (l\'avviso resta).' : 'Clicca per rivedere i riquadri rossi.'}`
+                    : 'Nessuna misura incompleta'}
+                className={`absolute right-12 top-2 z-[60] flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md shadow transition-colors ${
+                    misureIncompleteTotali > 0
+                        ? (showIncompleteMeasureWarnings ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-red-600/40 text-red-50 hover:bg-red-600/60 ring-1 ring-red-500')
+                        : 'bg-gray-300 text-gray-600 hover:bg-gray-400'
+                }`}
             >
-                ⚠
+                ⚠{misureIncompleteTotali > 0 ? <span className="tabular-nums">{misureIncompleteTotali}</span> : null}
             </button>
             {featuresLimited && (
                 <div className="w-full flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-500 text-amber-950 text-xs font-semibold shadow z-[55]">
@@ -15742,6 +15767,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                                 const invalidMeasures = new Set<number>();
                                 const invalidVoicesByMeasure = new Map<number, Set<number>>();
+                                // Le misure incomplete si contano SEMPRE, anche quando i
+                                // rettangoli sono spenti: spegnerli serve a togliere
+                                // l'ingombro mentre si scrive, non a dire che il problema
+                                // non c'è. È il triangolo in alto a destra a doverlo
+                                // ricordare — vedi `misureIncompleteTotali`.
+                                const segnalaTotale = (n: number) => {
+                                    misureIncompleteRef.current[systemIndex] = n;
+                                    const somma = Object.values(misureIncompleteRef.current).reduce((a, b) => a + (b || 0), 0);
+                                    if (somma !== misureIncompleteTotali) {
+                                        // fuori dal render: aggiornare lo stato qui dentro romperebbe il disegno
+                                        window.setTimeout(() => setMisureIncompleteTotali(somma), 0);
+                                    }
+                                };
 
                                 const validateVoiceMeasure = (mi: number, line: StaffNote[]): boolean => {
                                     const expectedTicks = Math.round(beatsPerMeasureForIndex(mi) * TICKS_PER_QUARTER);
@@ -15801,6 +15839,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     }
                                 }
 
+                                segnalaTotale(invalidMeasures.size);
                                 if (!invalidMeasures.size) return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
 
                                 const barByMeasure = new Map<number, number>();
