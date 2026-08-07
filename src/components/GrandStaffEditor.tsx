@@ -2729,6 +2729,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         try { localStorage.setItem('harmony.analysis.subject.v1', analysisSubject); } catch { /* ignore */ }
     }, [analysisSubject]);
+    /** Vero se il soggetto lo ha scelto l'AUTOMATISMO e non l'utente. Va ricordato fra
+     *  una sessione e l'altra: senza, riaprendo l'app non si sa più di chi era la scelta
+     *  e non si può correggerla. */
+    const sceltoDaSolo = () => { try { return localStorage.getItem('harmony.analysis.subject.auto.v1') === '1'; } catch { return false; } };
+    const segnaScelta = (automatica: boolean) => { try { localStorage.setItem('harmony.analysis.subject.auto.v1', automatica ? '1' : '0'); } catch { /* ignore */ } };
+    /** La scelta dell'UTENTE: da qui in poi l'automatismo non tocca più niente. */
+    const scegliSoggettoAnalisi = useCallback((soggetto: 'satb' | 'acc') => {
+        segnaScelta(false);
+        setAnalysisSubject(soggetto);
+    }, []);
     const [analysisAccTrackId, setAnalysisAccTrackId] = useState<string | null>(null);
 
     /**
@@ -2743,16 +2753,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * mano, la sua scelta vale. E scrivendo la prima nota nel coro non si torna indietro
      * da soli, che sarebbe un cambio sotto le dita.
      */
-    const spostatoDaSoloRef = useRef(false);
     useEffect(() => {
-        if (spostatoDaSoloRef.current) return;
-        if (analysisSubject !== 'satb') return;
-        const coroVuoto = !(rawNotes || []).some(n => n && !n.isRest);
-        const tracce = (accompanimentTracks || []).filter(t => t && !(t as any).isDrum && (t.notes || []).some(n => n && !n.isRest));
-        if (!coroVuoto || tracce.length === 0) return;
-        spostatoDaSoloRef.current = true;
-        setAnalysisSubject('acc');
-        setAnalysisAccTrackId(prev => prev ?? (tracce[0] as any).id ?? null);
+        // L'automatismo interviene SOLO quando il soggetto attuale non ha niente da
+        // analizzare: non discute mai una scelta dell'utente, e si limita a togliere
+        // dalle secche.
+        //
+        // Il difetto che ha corretto (mio, 1.5.1): spostandosi da sé sulla traccia,
+        // la scelta veniva ricordata per sempre — anche aprendo un progetto nuovo col
+        // solo coro. Chi scriveva quinte e ottave parallele non vedeva più segnalato
+        // nulla, perché il programma stava analizzando una traccia che non c'era.
+        if (!sceltoDaSolo() && analysisSubject === 'acc') {
+            // Scelta dell'utente: non si tocca. (Al primo avvio il segno non c'è e il
+            // valore di serie è 'satb', quindi questa condizione non blocca nulla.)
+            const mai = (() => { try { return localStorage.getItem('harmony.analysis.subject.auto.v1') == null; } catch { return true; } })();
+            if (!mai) return;
+        }
+        const coroHaNote = (rawNotes || []).some(n => n && !n.isRest);
+        const tracceConNote = (accompanimentTracks || []).filter(t => t && !(t as any).isDrum && (t.notes || []).some(n => n && !n.isRest));
+
+        if (analysisSubject === 'satb' && !coroHaNote && tracceConNote.length > 0) {
+            segnaScelta(true);
+            setAnalysisSubject('acc');
+            setAnalysisAccTrackId(prev => prev ?? ((tracceConNote[0] as any).id ?? null));
+            return;
+        }
+        if (analysisSubject === 'acc' && tracceConNote.length === 0 && coroHaNote) {
+            segnaScelta(true);
+            setAnalysisSubject('satb');
+        }
     }, [rawNotes, accompanimentTracks, analysisSubject]);
     type AccStaffLayout = { trackIdx: number; trackId?: string; topLineY: number; bottomLineY: number; lineSpacing: number; isDrum?: boolean };
     const [accStavesLayout, setAccStavesLayout] = useState<AccStaffLayout[]>([]);
@@ -4958,11 +4986,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // raggiungibile da chi non vede la barra degli strumenti.
         if (action === MENU_ACTIONS.SET_ANALYSIS_SUBJECT) {
             const subject = (payload as any)?.subject;
-            if (subject === 'satb' || subject === 'acc') {
-                // Scegliendo a mano si spegne l'automatismo: da qui in poi comanda l'utente.
-                spostatoDaSoloRef.current = true;
-                setAnalysisSubject(subject);
-            }
+            if (subject === 'satb' || subject === 'acc') scegliSoggettoAnalisi(subject);
             return;
         }
 
@@ -14816,7 +14840,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 showSymbolAnalysis={showSymbolAnalysis}
                 setShowSymbolAnalysis={setShowSymbolAnalysis}
                 analysisSubject={analysisSubject}
-                setAnalysisSubject={setAnalysisSubject}
+                setAnalysisSubject={scegliSoggettoAnalisi}
                 accTracksForAnalysis={accompanimentTracks.filter(t => !(t as any).isDrum).map(t => ({ id: t.id, name: t.name }))}
                 analysisAccTrackId={analysisAccTrackId ?? (analysisAccTrack?.id ?? null)}
                 setAnalysisAccTrackId={setAnalysisAccTrackId}
