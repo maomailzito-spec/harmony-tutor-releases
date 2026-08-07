@@ -1900,6 +1900,13 @@ app.whenReady().then(async () => {
         text = text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
         // Collapse excessive blank lines
         text = text.replace(/\n{3,}/g, '\n\n').trim();
+        // Solo la versione che si sta installando. Il corpo della RELEASE su GitHub
+        // contiene la sola sezione nuova (il CI la estrae), ma il canale
+        // d'aggiornamento no: `releaseInfo.releaseNotesFile` in electron-builder.yml
+        // ci infila RELEASE_NOTES.md PER INTERO, quindi qui arrivano anche tutte le
+        // versioni passate. Si taglia alla seconda intestazione.
+        const secondaSezione = text.indexOf('\n## ', text.indexOf('## ') + 1);
+        if (secondaSezione > 0) text = text.slice(0, secondaSezione).trim();
         // Taglio di sicurezza. Il corpo della release contiene ORA la sola versione che
         // si sta installando (il CI estrae la sua sezione da RELEASE_NOTES.md), quindi
         // ci sta l'elenco completo — correzioni e import/export compresi. Prima il limite
