@@ -1940,11 +1940,26 @@ app.whenReady().then(async () => {
           return Math.max(6, Math.floor((height - 320) / 18));
         } catch { return 18; }
       };
+      // Attenzione: contare gli A CAPO non basta — è l'errore che aveva questa
+      // funzione. Le novità sono paragrafi lunghi che il dialogo manda a capo da
+      // sé: una riga sola ne occupa cinque o sei sullo schermo, il conto diceva
+      // «ci stanno» e la finestra debordava comunque, col pulsante fuori vista.
+      // Qui si stima l'ingombro VERO, dividendo per la larghezza del dialogo.
+      const CARATTERI_PER_RIGA = 60;
       const accorcia = (testo) => {
         const max = righeCheCiStanno();
         const righe = String(testo || '').split('\n');
-        if (righe.length <= max) return { testo, tagliato: false };
-        return { testo: righe.slice(0, max).join('\n') + '\n…', tagliato: true };
+        const tenute = [];
+        let occupate = 0;
+        for (const riga of righe) {
+          const alta = Math.max(1, Math.ceil(riga.length / CARATTERI_PER_RIGA));
+          if (occupate + alta > max) {
+            return { testo: tenute.join('\n').trimEnd() + '\n…', tagliato: true };
+          }
+          tenute.push(riga);
+          occupate += alta;
+        }
+        return { testo, tagliato: false };
       };
 
       const { testo: notesBrevi, tagliato } = accorcia(notes);
