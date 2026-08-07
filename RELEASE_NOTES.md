@@ -1,3 +1,21 @@
+## Novità in v1.5.2
+
+### 🔊 I suoni sono dentro l'app
+- **Non serve più la connessione per sentire.** Fino a ieri il programma, una volta installato, andava a prendere i campioni su Internet a ogni nota: bastava una rete assente o filtrata — un treno, la rete di un conservatorio, una connessione lenta — e l'app restava **muta**, senza dire perché. Adesso i suoni vengono dal programma stesso, dove sono sempre stati.
+- **E sono suoni migliori.** Quelli scaricati erano un banco generico; quelli che escono ora sono i campioni orchestrali dell'app, registrati e bilanciati apposta. Violino, archi, fiati e pianoforte suonano diversi da come li ha sentiti chiunque fino a questa versione.
+- Se un campione non si apre, ora il programma lo dice invece di far finta di niente: era il silenzio di quel guasto ad averlo tenuto nascosto.
+
+### ⚠️ Segnalazioni che tornano a segnalare
+- **Il triangolo delle misure incomplete non si spegne più insieme ai riquadri.** Il riquadro rosso sulla misura è d'intralcio mentre si scrive — una misura a metà è normale finché la si riempie — e per questo si spegne cliccandoci sopra. Ma l'errore di metrica resta, e con lui un'analisi che in quel punto dice di meno. Ora il pulsante ⚠ resta acceso col **numero delle misure incomplete** anche a riquadri spenti, e spiega la conseguenza: l'analisi di quei punti è parziale.
+- **L'analisi torna al coro da sé.** Chi aveva importato un brano su traccia si portava dietro quella scelta anche nei lavori successivi, e nel coro non compariva più nessuna segnalazione. Ora, se non ci sono tracce e il coro ha delle note, il soggetto torna al coro — a meno che non l'abbiate scelto voi a mano.
+
+### ♿ Accessibilità
+- **Le violazioni dicono dove sono**: «misura 4, movimento 2», nel pannello, oltre che nei colori sulla partitura. Prima la posizione si poteva solo guardare.
+- I pulsanti-sigla della barra degli strumenti hanno un **nome leggibile** da uno screen reader, compreso quello delle misure incomplete, che ora annuncia anche il conto.
+
+### 🔄 Aggiornamenti
+- La finestra delle novità **scorre**: quando l'elenco era lungo, il pulsante di conferma finiva sotto il bordo dello schermo e non si riusciva a chiuderla.
+
 ## Novità in v1.5.1
 
 ### ♿ Accessibilità
