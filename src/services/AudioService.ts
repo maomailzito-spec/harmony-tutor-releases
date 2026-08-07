@@ -2,23 +2,26 @@
 import { CHROMATIC_SCALE } from '../constants';
 
 /**
- * Radice dei campioni che viaggiano DENTRO l'app.
+ * Radice dei campioni che viaggiano DENTRO l'app: un percorso RELATIVO alla
+ * pagina, sia in sviluppo (http://localhost) sia nell'app impacchettata
+ * (file://). È la via che ha sempre funzionato, fino alla 1.5.1 compresa.
  *
- * Nell'app impacchettata la pagina è servita da `file://`, e Chromium vieta
- * `fetch()` sui file locali: ogni campione nostro falliva, e si finiva sul CDN
- * remoto — cioè l'app installata non ha mai suonato coi propri suoni, e senza
- * rete restava muta. Il processo principale registra allora uno schema suo
- * (`ht://suoni/…`, vedi electron/main.js) che serve gli stessi file e con cui
- * fetch funziona. In sviluppo, dove la pagina sta su http://localhost, il
- * percorso relativo va benissimo e resta quello.
+ * NON sostituirla con uno schema proprio (`ht://…`) né con qualsiasi altro
+ * indirizzo assoluto: da una pagina `file://` Chromium rifiuta ogni richiesta
+ * verso un altro schema — «cross origin requests are only supported for
+ * protocol schemes: chrome, chrome-extension, chrome-untrusted, data, http,
+ * https» — e la lista è chiusa, nessuna intestazione CORS la apre. È l'errore
+ * introdotto nella 1.5.2/1.5.3: tutti i campioni nostri fallivano e si finiva
+ * sul CDN remoto (i suoni "brutti"), col selettore Orch/GM ridotto a un
+ * interruttore che non cambiava niente.
  */
-export const SOUNDS_ROOT =
-  typeof location !== 'undefined' && location.protocol === 'file:' ? 'ht://suoni/' : './sounds/';
+export const SOUNDS_ROOT = './sounds/';
 
 /**
  * Un campione NOSTRO che non si apre è un difetto, non un caso previsto: se
  * tace, si finisce sui suoni remoti senza che nessuno se ne accorga — ed è
- * andata così per mesi. Si avvisa una volta sola per non allagare la console.
+ * esattamente ciò che ha nascosto la regressione. Si avvisa una volta sola per
+ * non allagare la console.
  */
 let campioneLocaleGiaSegnalato = false;
 function avvisaCampioneLocaleMancante(url: string, motivo: string): void {

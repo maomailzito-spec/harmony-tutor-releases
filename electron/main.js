@@ -1,55 +1,20 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, screen, protocol } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 // -----------------------------------------------------------------------------
-// Campioni audio: un indirizzo interno invece dei file
+// Campioni audio: NIENTE protocollo su misura
 // -----------------------------------------------------------------------------
-// Nell'app impacchettata la pagina è servita da `file://`, e Chromium NON permette
-// `fetch()` sui file locali. Il caricatore dei campioni lo faceva, falliva in
-// silenzio e ripiegava sui campioni remoti (gleitz.github.io): l'app installata
-// non ha MAI suonato coi campioni suoi, e senza rete restava muta. In sviluppo
-// non si vedeva, perché lì la pagina sta su http://localhost e i file si aprono.
+// I campioni impacchettati si caricano con un percorso relativo (`./sounds/…`,
+// vedi SOUNDS_ROOT in src/services/AudioService.ts): la pagina dell'app
+// installata sta su `file://`, e da lì il percorso relativo resta nello stesso
+// schema — quindi passa. Ha funzionato così fino alla 1.5.1 compresa.
 //
-// Qui si registra uno schema tutto nostro, `ht://suoni/<strumento>/<nota>.flac`,
-// che il processo principale serve leggendo dal disco (fs legge anche dentro
-// l'asar). `supportFetchAPI` è ciò che permette al renderer di usare fetch.
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'ht', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
-]);
-
-/** Serve `ht://suoni/...` dalla cartella dei campioni impacchettata. */
-function registraProtocolloSuoni() {
-  const radice = path.join(__dirname, '../dist/sounds');
-  protocol.handle('ht', async (request) => {
-    try {
-      const { host, pathname } = new URL(request.url);
-      if (host !== 'suoni') return new Response('not found', { status: 404 });
-      // Niente uscite dalla cartella dei campioni: il percorso si normalizza e
-      // si verifica che resti dentro la radice.
-      const relativo = decodeURIComponent(pathname).replace(/^\/+/, '');
-      const assoluto = path.normalize(path.join(radice, relativo));
-      if (!assoluto.startsWith(radice)) return new Response('forbidden', { status: 403 });
-      // Nell'app impacchettata i campioni NON stanno sul disco: sono dentro l'asar.
-      // `fs.readFileSync` è la via che l'asar la attraversa sempre (le versioni a
-      // promessa no, ed è per questo che funzionava lanciando dalla cartella e non
-      // dall'app installata). I file sono piccoli, la lettura è immediata.
-      const dati = fs.readFileSync(assoluto);
-      return new Response(dati, {
-        status: 200,
-        headers: {
-          'content-type': 'application/octet-stream',
-          // La pagina è servita da `file://`: senza questo la richiesta è
-          // considerata di origine diversa e il renderer la rifiuta.
-          'access-control-allow-origin': '*',
-        },
-      });
-    } catch {
-      // Nota fuori dal set renderizzato: 404 pulito, il chiamante decide.
-      return new Response('not found', { status: 404 });
-    }
-  });
-}
+// Qui c'era, nella 1.5.2/1.5.3, uno schema nostro (`ht://suoni/…`) servito dal
+// processo principale: NON funziona e non è aggiustabile con le intestazioni.
+// Da una pagina `file://` Chromium consente richieste solo verso chrome,
+// chrome-extension, chrome-untrusted, data, http, https — la lista è chiusa.
+// Risultato: ogni campione nostro falliva e si ripiegava sul CDN remoto.
 const { autoUpdater } = require('electron-updater');
 const { checkTrial, getTrialInfo } = require('./licensing/trialManager');
 const { activateLicense, checkLicense, deactivateLicense, getLicenseInfo, areUpdatesEnabled } = require('./licensing/licenseManager');
@@ -1772,7 +1737,6 @@ app.commandLine.appendSwitch('disable-background-timer-throttling')
 // Tenendo l'audio dentro il processo principale il punto di rottura sparisce.
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess')
 app.whenReady().then(async () => {
-  registraProtocolloSuoni();
   // ── Trial / License gate (skip in dev mode) ──
   const isDev = !app.isPackaged;
   const trial = isDev ? { status: 'licensed' } : checkTrial();
