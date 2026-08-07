@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -1809,6 +1809,44 @@ app.whenReady().then(async () => {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
 
+    /** Le novità per intero, in una finestra che SCORRE — al contrario del finestrino
+     *  di sistema, che cresce e basta finché i pulsanti finiscono fuori schermo. */
+    let novitaWindow = null;
+    const mostraNovita = (versione, testo) => {
+      try {
+        if (novitaWindow && !novitaWindow.isDestroyed()) { novitaWindow.focus(); return; }
+        const esc = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">
+<title>Novità della versione ${esc(versione)}</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.55; }
+  body { display: flex; flex-direction: column; background: #fafafa; color: #222; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e1e; color: #ddd; } header, footer { background: #2a2a2a !important; border-color: #444 !important; } button { background: #3a3a3a !important; color: #ddd !important; border-color: #555 !important; } }
+  header { padding: 12px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  main { flex: 1; overflow-y: auto; padding: 14px 20px 20px; white-space: pre-wrap; }
+  footer { padding: 10px 20px; background: #fff; border-top: 1px solid #e0e0e0; text-align: right; flex-shrink: 0; }
+  button { font-size: 13px; padding: 6px 16px; border-radius: 6px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
+</style></head><body>
+<header><h1>Novità della versione ${esc(versione)}</h1></header>
+<main>${esc(testo)}</main>
+<footer><button onclick="window.close()" autofocus>Chiudi</button></footer>
+</body></html>`;
+        novitaWindow = new BrowserWindow({
+          parent: mainWindow, modal: true, width: 720, height: 560,
+          minWidth: 460, minHeight: 320, title: `Novità della versione ${versione}`,
+          autoHideMenuBar: true,
+          webPreferences: { nodeIntegration: false, contextIsolation: true },
+        });
+        novitaWindow.removeMenu();
+        novitaWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+        novitaWindow.on('closed', () => { novitaWindow = null; });
+      } catch (err) {
+        console.warn('[MAIN] finestra novità non aperta:', err);
+      }
+    };
+
     autoUpdater.on('update-available', (info) => {
       safeStdioWrite(process.stdout, `[AutoUpdate] Update available: v${info.version}`);
       // Format release notes for display in the dialog.
@@ -1833,26 +1871,66 @@ app.whenReady().then(async () => {
         return text;
       };
       const notes = formatNotes(info.releaseNotes);
-      const detail = notes
-        ? `Novità in questa versione:\n\n${notes}\n\nVuoi scaricare e installare l'aggiornamento?`
+
+      // QUANTO TESTO CI STA. Il finestrino di sistema NON scorre: cresce finché non
+      // sfonda lo schermo, e i pulsanti finiscono sotto il bordo — cioè l'utente non
+      // può nemmeno aggiornare. Si taglia quindi su misura dello schermo che c'è, e le
+      // novità per intero si leggono nella finestra apposita (terzo pulsante).
+      const righeCheCiStanno = () => {
+        try {
+          const { height } = screen.getPrimaryDisplay().workAreaSize;
+          // ~18px per riga, meno lo spazio di titolo, messaggio, pulsanti e margini.
+          return Math.max(6, Math.floor((height - 320) / 18));
+        } catch { return 18; }
+      };
+      const accorcia = (testo) => {
+        const max = righeCheCiStanno();
+        const righe = String(testo || '').split('\n');
+        if (righe.length <= max) return { testo, tagliato: false };
+        return { testo: righe.slice(0, max).join('\n') + '\n…', tagliato: true };
+      };
+
+      const { testo: notesBrevi, tagliato } = accorcia(notes);
+      const detail = notesBrevi
+        ? `Novità in questa versione:\n\n${notesBrevi}\n\nVuoi scaricare e installare l'aggiornamento?`
         : 'Vuoi scaricare e installare l\'aggiornamento?';
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: 'Aggiornamento disponibile',
-        message: `È disponibile Harmony Tutor v${info.version}.`,
-        detail,
-        buttons: ['Aggiorna ora', 'Rimanda'],
-        defaultId: 0,
-        cancelId: 1,
-      }).then(({ response }) => {
-        if (response === 0) {
-          // Notify renderer that download is starting
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('UPDATE_DOWNLOAD_PROGRESS', { percent: 0, status: 'downloading' });
+
+      const bottoni = tagliato
+        ? ['Aggiorna ora', 'Leggi tutte le novità…', 'Rimanda']
+        : ['Aggiorna ora', 'Rimanda'];
+      const iRimanda = tagliato ? 2 : 1;
+
+      const chiedi = () => {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'Aggiornamento disponibile',
+          message: `È disponibile Harmony Tutor v${info.version}.`,
+          detail,
+          buttons: bottoni,
+          defaultId: 0,
+          cancelId: iRimanda,
+        }).then(({ response }) => {
+          if (response === 0) {
+            // Notify renderer that download is starting
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('UPDATE_DOWNLOAD_PROGRESS', { percent: 0, status: 'downloading' });
+            }
+            autoUpdater.downloadUpdate();
+            return;
           }
-          autoUpdater.downloadUpdate();
-        }
-      });
+          // Le novità per intero, in una finestra che SCORRE; poi si torna a chiedere,
+          // così la scelta non si perde per essere andati a leggere.
+          if (tagliato && response === 1) {
+            mostraNovita(info.version, notes);
+            if (novitaWindow && !novitaWindow.isDestroyed()) {
+              novitaWindow.once('closed', () => { try { chiedi(); } catch { /* ignore */ } });
+            } else {
+              chiedi();
+            }
+          }
+        });
+      };
+      chiedi();
     });
 
     autoUpdater.on('download-progress', (progress) => {
