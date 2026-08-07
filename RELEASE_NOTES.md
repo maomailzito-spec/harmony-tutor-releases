@@ -1,3 +1,10 @@
+## Novità in v1.5.4
+
+### 🔊 I suoni dell'app tornano al loro posto
+- **Le due versioni precedenti suonavano peggio, e la colpa era nostra.** Nella 1.5.2 e nella 1.5.3 i campioni dell'app non si aprivano più: il programma ripiegava in silenzio sul banco generico scaricato da Internet, quello che violino e archi li fa sembrare un altro strumento. Da questa versione si sentono di nuovo i campioni orchestrali dell'app.
+- **Il selettore Orchestra / GM torna a funzionare.** Nelle due versioni precedenti spostarlo non cambiava niente, perché da una parte e dall'altra usciva comunque il banco generico.
+- Le novità annunciate nella 1.5.2 e nella 1.5.3 — «i suoni sono dentro l'app», «non serve la connessione» — **non erano vere**: quel lavoro ha rotto ciò che già funzionava. Chi è rimasto sulla 1.5.1 non ha perso nulla; chi ha aggiornato ritrova ora i suoi suoni.
+
 ## Novità in v1.5.3
 
 ### 🔊 Adesso i suoni escono davvero dall'app
