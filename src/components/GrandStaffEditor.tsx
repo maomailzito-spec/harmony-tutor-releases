@@ -16668,9 +16668,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             // Punto VERO del capo, se il disegno l'ha già riportato:
                                             // la curva parte dalla cima del gambo, che su una nota
                                             // grave è tutt'altro posto rispetto alla testa.
-                                            const ancora = sl.tipo === 'legatura'
-                                                ? (slurAnchors[systemIndex] || []).find(c => c.id === sl.id && c.capo === capo)
-                                                : undefined;
+                                            // Vale per tutti i segni a due capi: la legatura riporta
+                                            // i suoi estremi, l'8va l'ingombro della parentesi.
+                                            const ancora = (slurAnchors[systemIndex] || []).find(c => c.id === sl.id && c.capo === capo);
                                             // La maniglia sta dove sta il segno: la legatura dalla
                                             // parte dei GAMBI (sopra per soprano e tenore, sotto per
                                             // contralto e basso, così le voci non si accavallano),

@@ -48,9 +48,10 @@ interface VexflowGrandStaffProps {
   /** ARMATURA IN VIGORE misura per misura (solo i punti in cui cambia). Serve alla
    *  grafia delle alterazioni, che va decisa sull'armatura di QUEL punto. */
   keySignatureByMeasure?: Array<{ measureIndex: number; keySignature: KeySignature }>;
-  /** DOVE cadono davvero i capi delle legature disegnate in questo sistema. Le maniglie
-   *  si mettono lì: appese alla testa della nota finivano lontanissime dalla curva ogni
-   *  volta che il gambo era lungo. */
+  /** DOVE cadono davvero i capi dei segni a due capi disegnati in questo sistema
+   *  (legature e segni d'ottava). Le maniglie si mettono lì: appese alla testa della nota
+   *  finivano lontanissime dal segno — sotto la curva quando il gambo era lungo, e a
+   *  mezzo rigo dalla parentesi dell'8va, che è disegnata ben sopra il pentagramma. */
   onSlurAnchors?: (capi: Array<{ id: string; capo: 'from' | 'to'; x: number; y: number }>) => void;
   ghostNote?: StaffNote | null;
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
@@ -4170,6 +4171,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 el.setAttribute('data-octave-id', os.id);
                 (el as any).style.pointerEvents = 'all';
               }
+              // Dove è finita davvero la parentesi. VexFlow la posiziona da sé, sopra o
+              // sotto il rigo secondo le note: invece di rifare i suoi conti si misura
+              // l'ingombro di ciò che ha disegnato, e le maniglie si appendono ai due
+              // estremi. Senza, restavano sulla testa della nota — a mezzo rigo di
+              // distanza dal segno, e da quando si vedono solo al passaggio del mouse
+              // erano diventate introvabili.
+              try {
+                const box = (g as any).getBBox?.();
+                if (box && Number.isFinite(box.x) && box.width > 0) {
+                  const yMed = box.y + box.height / 2;
+                  capiLegature.push({ id: os.id, capo: 'from', x: box.x, y: yMed });
+                  capiLegature.push({ id: os.id, capo: 'to', x: box.x + box.width, y: yMed });
+                }
+              } catch { /* niente maniglia precisa: si ripiega sulla nota */ }
             }
           } catch { /* un segno che non si disegna non deve fermare il resto */ }
           try { (context as any).closeGroup?.(); } catch { /* ignore */ }
