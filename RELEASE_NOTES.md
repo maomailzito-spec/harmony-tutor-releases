@@ -1,3 +1,12 @@
+## Novità in v1.5.3
+
+### 🔊 Adesso i suoni escono davvero dall'app
+- La 1.5.2 aveva risolto **solo a metà**: il programma continuava a scaricare i campioni da Internet, e chi era senza rete restava muto. Da questa versione i suoni vengono dal programma, sempre e comunque.
+- Si sente la differenza a parità di strumento: quelli scaricati erano un banco generico, questi sono i **campioni orchestrali dell'app**. Se il violino o gli archi vi sembrano un altro strumento, è perché fino a ieri lo erano.
+
+### 🔄 Aggiornamenti
+- L'avviso di aggiornamento mostra **solo le novità della versione nuova**. Prima elencava di seguito anche tutte quelle passate: un testo lunghissimo in cui il pulsante di conferma finiva fuori dallo schermo.
+
 ## Novità in v1.5.2
 
 ### 🔊 I suoni sono dentro l'app
