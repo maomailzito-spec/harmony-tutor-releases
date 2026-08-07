@@ -16479,7 +16479,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 systemNoteHitPointsRef.current[systemIndex],
                                                                 showRomanAnalysis, showSymbolAnalysis, isMotifsEnabled, isAnalysisEnabled, analysisSubject,
                                                                 actualSystemWidth, systemHeightPx, staffSystemMode, accLabelY,
-                                                                violationLevelByNoteId, analysisContexts, timeSignatureChanges, dynamics,
+                                                                violationLevelByNoteId, analysisContexts, timeSignatureChanges, dynamics, slurs, octaveShifts,
                                                                 // notePositions / noteVoiceById intentionally NOT keyed: they are pure
                                                                 // derivations of layoutData (+ staffSystemMode), both already in the key,
                                                                 // and their useMemo identity is unstable every render (would defeat the cache).
@@ -16489,7 +16489,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             const _ovC = overlayCacheRef.current[systemIndex];
                                                             // Frozen during an edit burst → reuse cached element even if the key changed.
                                                             if (_ovC && (overlayFreezeActiveRef.current || (_ovC.k.length === _ovKey.length && _ovC.k.every((v, i) => Object.is(v, _ovKey[i]))))) return _ovC.el;
-                                                            const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
+                                                            // Questo strato non contiene più solo l'ANALISI: ci stanno anche i
+                                                            // segni della partitura — dinamiche, legature, 8va e le loro maniglie.
+                                                            // Erano rimasti fuori dall'elenco, e spegnendo l'analisi sparivano dalla
+                                                            // pagina pur continuando a suonare: si vedeva una partitura senza le
+                                                            // sfumature che si sentivano.
+                                                            const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || (dynamics?.length ?? 0) > 0 || (slurs?.length ?? 0) > 0 || (octaveShifts?.length ?? 0) > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* Modulation / tonicization markers.
                                                                     Tasto destro = TOGLI, come per ogni altro segno: prima una scritta
