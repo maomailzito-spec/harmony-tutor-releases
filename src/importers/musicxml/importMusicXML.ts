@@ -1,7 +1,7 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
-import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange, TempoCurve } from '../../types';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -58,6 +58,12 @@ export type MusicXMLImportResult = {
    *  con 60 al minuto vale 120. Prima non veniva letto affatto e ogni brano entrava a
    *  120 — un Weiss segnato a 60 partiva al doppio della velocità. */
   tempoBpm?: number;
+  /** TUTTI i segni di metronomo, col punto in cui cadono. Il primo è l'andamento del
+   *  brano (`tempoBpm`); gli altri sono cambi, e diventano curve di tempo PIATTE (vedi
+   *  `tempoCurvesFromMarks`). Tenere solo il primo non è un'approssimazione da poco: la
+   *  Fantaisie di Weiss passa da 60 a 140 alla battuta 16 e resta lì per 47 battute su
+   *  65 — quasi tutto il brano al 43% della velocità voluta. */
+  tempoMarks: Array<{ absBeat: number; bpm: number }>;
   /** Scritte libere del file (`<words>`): nella musica per chitarra sono le posizioni
    *  della mano sinistra — CVII, CV, «1/2 II». Arrivano come SEGNI DI TESTO, gli stessi
    *  che si posano dalla tavolozza, quindi si spostano e si tolgono come tutti gli
@@ -472,6 +478,53 @@ function createIdFactory(prefix: string) {
   };
 }
 
+/**
+ * Cambi d'andamento del file → CURVE DI TEMPO PIATTE.
+ *
+ * Il programma non ha un oggetto "segno di metronomo a metà brano", ma ha le curve di
+ * tempo (accelerando/rallentando): due note per capi e un andamento che va dall'uno
+ * all'altro. Un cambio SECCO è quella stessa cosa con `fromBpm` uguale a `toBpm` —
+ * niente di nuovo da inventare, e in riproduzione vale anche per le tracce ACC.
+ *
+ * Ogni segno copre da dove cade fino all'ultima nota prima del segno successivo. Il
+ * primo segno resta fuori: è l'andamento del brano (`bpm` del progetto), e fuori dalle
+ * curve la riproduzione usa proprio quello.
+ *
+ * Un segno con una sola nota sotto non produce curva: i capi sono due note DISTINTE, e
+ * la riproduzione scarta i segmenti che non si aprono. In quel punto vale l'andamento
+ * del brano — un'imprecisione di una battuta, preferibile a segmenti sovrapposti.
+ */
+export function tempoCurvesFromMarks(
+  marks: Array<{ absBeat: number; bpm: number }>,
+  notes: StaffNote[],
+): TempoCurve[] {
+  if (!Array.isArray(marks) || marks.length <= 1) return [];
+  const suonate = (notes || [])
+    .filter(n => n && !n.isRest && (n as any).id)
+    .map(n => ({
+      id: String((n as any).id),
+      beat: Number((n as any).startTick ?? 0) / TICKS_PER_QUARTER,
+    }))
+    .sort((a, b) => a.beat - b.beat);
+  if (suonate.length === 0) return [];
+
+  const out: TempoCurve[] = [];
+  for (let i = 1; i < marks.length; i++) {
+    const da = marks[i].absBeat;
+    const finoA = i + 1 < marks.length ? marks[i + 1].absBeat : Infinity;
+    const primo = suonate.find(n => n.beat >= da - 1e-6);
+    if (!primo) continue;
+    let ultimo: { id: string; beat: number } | null = null;
+    for (const n of suonate) {
+      if (n.beat >= finoA - 1e-6) break;
+      if (n.beat >= primo.beat) ultimo = n;
+    }
+    if (!ultimo || ultimo.id === primo.id) continue;
+    out.push({ startNoteId: primo.id, endNoteId: ultimo.id, fromBpm: marks[i].bpm, toBpm: marks[i].bpm });
+  }
+  return out;
+}
+
 function parseXmlOrThrow(xml: string): Document {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'application/xml');
@@ -562,10 +615,12 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   const octaveShifts: OctaveShift[] = [];
   const keySignatureChanges: KeySignatureChange[] = [];
 
-  // Andamento: vale il PRIMO segno del brano. I successivi sono cambi di andamento, che
-  // il programma non ha ancora; prenderli sovrascriverebbe quello d'inizio con l'ultimo
-  // letto, cioè col contrario di quello che serve.
-  let tempoBpm: number | null = null;
+  // Andamento. Il PRIMO segno è quello del brano; gli altri sono cambi, e si tengono
+  // tutti (diventano curve piatte, vedi tempoCurvesFromMarks). Come le dinamiche, nel
+  // file stanno dentro le parti e un esportatore li ripete su ognuna: si raccolgono
+  // una volta sola, per punto nel tempo.
+  const tempoMarks: Array<{ absBeat: number; bpm: number }> = [];
+  const tempoSeen = new Set<number>();
   // Scritte libere, raccolte una volta sola: come le dinamiche, nel file stanno dentro
   // le parti e un esportatore le ripete su ognuna.
   const textMarks: Array<{ absBeat: number; label: string }> = [];
@@ -777,10 +832,17 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         if (tag === 'direction' || tag === 'sound') {
           const v = velocityFromDirection(child);
           if (v != null) currentVelocity = v;
-          // ANDAMENTO: il primo che si incontra è quello del brano.
-          if (tempoBpm == null) {
+          // ANDAMENTO, col punto in cui cade: il primo è quello del brano, gli altri
+          // sono cambi. Un punto già visto si scarta — le parti li ripetono.
+          {
             const b = bpmFromDirection(child);
-            if (b != null) tempoBpm = b;
+            if (b != null) {
+              const beat = Math.max(0, Math.round((measureStartAbsBeat + (divisions > 0 ? curPosDiv / divisions : 0)) * 1e6) / 1e6);
+              if (!tempoSeen.has(beat)) {
+                tempoSeen.add(beat);
+                tempoMarks.push({ absBeat: beat, bpm: Math.max(20, Math.min(300, Math.round(b))) });
+              }
+            }
           }
           // …e il segno GRAFICO, al punto in cui si trova il cursore della battuta.
           if (tag === 'direction') {
@@ -1109,6 +1171,10 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     return (a.midi ?? 0) - (b.midi ?? 0);
   });
 
+  // I segni d'andamento si ordinano PRIMA di leggerne il primo: quello del brano è il
+  // più a sinistra nel tempo, non il primo che è capitato sotto gli occhi.
+  const tempoMarksOrdinati = tempoMarks.slice().sort((a, b) => a.absBeat - b.absBeat);
+
   return {
     notes,
     timeSignature,
@@ -1118,11 +1184,8 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     staffSystemMode,
     projectTitle: title || undefined,
     projectComposer: composer || undefined,
-    // Il metronomo si arrotonda: il programma tiene i battiti al minuto come numero
-    // intero, e i limiti sono quelli del cursore in barra.
-    ...(tempoBpm != null
-      ? { tempoBpm: Math.max(20, Math.min(300, Math.round(tempoBpm))) }
-      : {}),
+    ...(tempoMarksOrdinati.length > 0 ? { tempoBpm: tempoMarksOrdinati[0].bpm } : {}),
+    tempoMarks: tempoMarksOrdinati,
     textMarks: textMarks.sort((a, b) => a.absBeat - b.absBeat),
     parts: partsOut,
     keySignatureChanges,

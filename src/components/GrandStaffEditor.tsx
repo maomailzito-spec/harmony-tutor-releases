@@ -38,7 +38,7 @@ import { normalizeKeyChanges, keyAtMeasure } from '../utils/keySignatureChanges'
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
-import { importMusicXML } from '../importers/musicxml/importMusicXML';
+import { importMusicXML, tempoCurvesFromMarks } from '../importers/musicxml/importMusicXML';
 import { musicXmlPartsToAccTracks } from '../importers/musicxml/musicXmlToAccTracks';
 import { exportMusicXML } from '../exporters/exportMusicXML';
 import { exportMuseScoreMscx } from '../exporters/exportMuseScoreMscx';
@@ -5364,6 +5364,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (typeof imported?.tempoBpm === 'number' && Number.isFinite(imported.tempoBpm)) {
                             setBpm(imported.tempoBpm);
                         }
+                        // …e i CAMBI d'andamento, come curve piatte. Tenere solo il primo
+                        // segno non era un'approssimazione da poco: questa Fantaisie passa
+                        // da 60 a 140 alla battuta 16 e ci resta per 47 battute su 65.
+                        setTempoCurves(tempoCurvesFromMarks(
+                            Array.isArray(imported?.tempoMarks) ? imported.tempoMarks : [],
+                            tracks.flatMap(t => t.notes || []),
+                        ));
                         // SCRITTE del file (per la chitarra: le posizioni della mano
                         // sinistra). Entrano come segni di testo, con la tonalità corrente
                         // ricopiata: un testo NON è un cambio di tonica e non deve spostare
@@ -5432,6 +5439,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (typeof imported?.tempoBpm === 'number' && Number.isFinite(imported.tempoBpm)) {
                     setBpm(imported.tempoBpm);
                 }
+                // I cambi d'andamento del file. Vanno posati SEMPRE, anche vuoti: sono
+                // stato del progetto precedente, e resterebbero ancorati a note che nel
+                // brano nuovo non esistono più.
+                setTempoCurves(tempoCurvesFromMarks(
+                    Array.isArray(imported?.tempoMarks) ? imported.tempoMarks : [],
+                    importedNotes as any,
+                ));
                 setTimeSignature(nextTimeSignature);
                 setTimeSignatureChanges(nextTimeSignatureChanges);
                 setIsMinorMode(nextIsMinor);
