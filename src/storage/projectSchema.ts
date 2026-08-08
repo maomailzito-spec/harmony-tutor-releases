@@ -9,6 +9,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'keySignatureRoot',
   'isMinorMode',
   'projectTitle',
+  'projectComposer',
   'titleFontSize',
   'titleFontFamily',
   'timeSignature',
@@ -64,6 +65,8 @@ export type ProjectDataV1 = {
   keySignatureRoot?: string;
   isMinorMode?: boolean;
   projectTitle?: string;
+  /** Autore del brano, stampato sotto il titolo e letto dai file importati. */
+  projectComposer?: string;
   titleFontSize?: number;
   titleFontFamily?: string;
 

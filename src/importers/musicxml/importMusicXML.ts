@@ -23,6 +23,20 @@ export type MusicXMLPart = {
    *  l'8 sotto, quella del TENORE nei corali. Il file porta l'altezza SUONATA; noi
    *  scriviamo l'altezza LETTA e trasponiamo per il suono, quindi serve saperlo. */
   clefOctaveChange?: number;
+  /** STRUMENTO TRASPOSITORE, da `<attributes><transpose>`: quante ottave sotto suona
+   *  rispetto a come si scrive. La chitarra vale −1.
+   *
+   *  ATTENZIONE — semantica OPPOSTA a `clefOctaveChange`, ed è l'errore facile. Con
+   *  `<transpose>` il file porta l'altezza **scritta** e dice come ricavarne quella
+   *  suonata; con `clef-octave-change` porta l'altezza **suonata** e cambia solo dove
+   *  la nota si disegna. Quindi qui le note NON si toccano: si accende soltanto la
+   *  traspozione della traccia. */
+  transposeOctave?: number;
+  /** Parte della traspozione che NON è un'ottave tonda (clarinetto in Si♭: −2
+   *  semitoni). Il programma sa trasporre le tracce solo di ottave, quindi questi
+   *  semitoni si applicano alle note in lettura: entrano come altezza SUONATA, cioè
+   *  come le scriverebbe una partitura in suoni reali. */
+  transposeChromaticRest?: number;
   /** Strumento GM dichiarato dalla <part-list> (<midi-program>, 1-128 nel file → 0-127
    *  qui). Senza, la traccia importata userebbe il pianoforte per qualsiasi parte. */
   instrumentId?: number;
@@ -36,6 +50,19 @@ export type MusicXMLImportResult = {
   isMinorMode: boolean;
   staffSystemMode: 'grandstaff' | 'treble_only' | 'satb_ancient';
   projectTitle?: string;
+  /** Autore, da `<identification><creator type="composer">`. Prima non veniva letto e
+   *  ogni brano importato arrivava senza firma. */
+  projectComposer?: string;
+  /** ANDAMENTO in battiti al minuto, dal primo segno di metronomo del file (o da un
+   *  `<sound tempo>`). Riportato sempre alla semiminima: `<beat-unit>half</beat-unit>`
+   *  con 60 al minuto vale 120. Prima non veniva letto affatto e ogni brano entrava a
+   *  120 — un Weiss segnato a 60 partiva al doppio della velocità. */
+  tempoBpm?: number;
+  /** Scritte libere del file (`<words>`): nella musica per chitarra sono le posizioni
+   *  della mano sinistra — CVII, CV, «1/2 II». Arrivano come SEGNI DI TESTO, gli stessi
+   *  che si posano dalla tavolozza, quindi si spostano e si tolgono come tutti gli
+   *  altri. Fuori restano le scritte di metronomo, che sono andamento e non testo. */
+  textMarks: Array<{ absBeat: number; label: string }>;
   /** Le parti del file tenute separate (vedi MusicXMLPart). Stesso ordine del file. */
   parts: MusicXMLPart[];
   /** CAMBI D'ARMATURA a metà brano letti dal file. Il primo `<key>` è l'armatura
@@ -190,6 +217,61 @@ function inferDurationFromBeats(beats: number): { duration: NoteDuration; dotted
  * per specifica); `<dynamics><p/></dynamics>` è il segno grafico, mappato ai valori d'uso.
  */
 const DEFAULT_VELOCITY = 88; // nominale dell'app per le note senza dinamica (vedi midiWriter)
+
+/** Quante semiminime vale l'unità di battito di un segno di metronomo. */
+const BEAT_UNIT_QUARTERS: Record<string, number> = {
+  whole: 4, half: 2, quarter: 1, eighth: 0.5,
+  '16th': 0.25, '32nd': 0.125, '64th': 0.0625, breve: 8, long: 16,
+};
+
+/**
+ * ANDAMENTO da un `<direction>`: battiti al minuto riportati alla SEMIMINIMA.
+ *
+ * Il segno del file dichiara la propria unità di battito, che non è per forza la
+ * semiminima: `<beat-unit>half</beat-unit>` con `<per-minute>60</per-minute>` è una
+ * MINIMA a 60, cioè 120 alla semiminima. Prendere `per-minute` così com'è dimezzerebbe
+ * o raddoppierebbe l'andamento a seconda di come è scritta la partitura. Il punto di
+ * valore (`<beat-unit-dot/>`) moltiplica per 1,5, e ce ne può essere più d'uno.
+ *
+ * Ripiego: `<sound tempo="…">`, che per specifica è già in semiminime al minuto.
+ */
+function bpmFromDirection(el: Element): number | null {
+  const metro = el.tagName === 'metronome' ? el : el.querySelector('direction-type > metronome');
+  if (metro) {
+    const perMinute = Number.parseFloat(textOf(metro.querySelector('per-minute')));
+    const unitRaw = textOf(metro.querySelector('beat-unit')).toLowerCase();
+    if (Number.isFinite(perMinute) && perMinute > 0) {
+      const dots = metro.querySelectorAll('beat-unit-dot').length;
+      // Il punto vale metà del valore che lo precede, il secondo metà del primo…
+      const dotFactor = dots > 0 ? 2 - Math.pow(2, -dots) : 1;
+      const unit = (BEAT_UNIT_QUARTERS[unitRaw] ?? 1) * dotFactor;
+      const bpm = perMinute * unit;
+      if (Number.isFinite(bpm) && bpm > 0) return bpm;
+    }
+  }
+  const sound = el.tagName === 'sound' ? el : el.querySelector('sound[tempo]');
+  const tempoRaw = sound?.getAttribute('tempo');
+  if (tempoRaw != null) {
+    const t = Number.parseFloat(tempoRaw);
+    if (Number.isFinite(t) && t > 0) return t;
+  }
+  return null;
+}
+
+/**
+ * Scritte libere di un `<direction>`, unite quando ne porta più d'una.
+ *
+ * Si escludono le direzioni che portano un metronomo: lì il `<words>` è la parte
+ * scritta dell'andamento («Allegro», «♩ = 60»), non un'indicazione da posare come
+ * testo — e finirebbe stampata due volte.
+ */
+function wordsFromDirection(el: Element): string {
+  if (el.querySelector('direction-type > metronome')) return '';
+  const parti = Array.from(el.querySelectorAll('direction-type > words'))
+    .map(w => String(w.textContent ?? '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return parti.join(' ');
+}
 
 const DYNAMIC_MARK_VELOCITY: Record<string, number> = {
   pppp: 10, ppp: 16, pp: 33, p: 49, mp: 64,
@@ -413,6 +495,13 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     textOf(doc.querySelector('credit credit-words')),
   );
 
+  // Autore. `creator` senza tipo esiste (esportatori sciatti): si prende come ripiego,
+  // ma solo dopo aver cercato quello dichiarato compositore.
+  const composer = getFirstNonEmpty(
+    textOf(doc.querySelector('identification > creator[type="composer"]')),
+    textOf(doc.querySelector('identification > creator:not([type])')),
+  );
+
   const parts = Array.from(doc.querySelectorAll('part'));
   if (parts.length === 0) throw new Error('MusicXML non valido: nessun <part>.');
 
@@ -473,6 +562,15 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   const octaveShifts: OctaveShift[] = [];
   const keySignatureChanges: KeySignatureChange[] = [];
 
+  // Andamento: vale il PRIMO segno del brano. I successivi sono cambi di andamento, che
+  // il programma non ha ancora; prenderli sovrascriverebbe quello d'inizio con l'ultimo
+  // letto, cioè col contrario di quello che serve.
+  let tempoBpm: number | null = null;
+  // Scritte libere, raccolte una volta sola: come le dinamiche, nel file stanno dentro
+  // le parti e un esportatore le ripete su ognuna.
+  const textMarks: Array<{ absBeat: number; label: string }> = [];
+  const textSeen = new Set<string>();
+
   for (let partIndex = 0; partIndex < partsToParse.length; partIndex++) {
     const part = partsToParse[partIndex];
     const measures = Array.from(part.querySelectorAll(':scope > measure'));
@@ -482,6 +580,10 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     let partSawSecondStaff = false;
     let partFirstClef: ClefType | null = null;
     let partClefOctaveChange = 0;
+    // Traspozione dello STRUMENTO (`<transpose>`), separata in ottave tonde e resto.
+    let partTransposeOctave = 0;
+    let partTransposeChromaticRest = 0;
+    let partSawTranspose = false;
     // Le voci MusicXML del rigo (1,2… oppure 5,6 per il rigo sinistro pianistico)
     // rimappate, nell'ordine in cui compaiono, sulla convenzione del "grand staff a voci"
     // dell'app: rigo 1 → voci 1-2, rigo 2 → voci 3-4 (gambi 1/3 su, 2/4 giù). Max 2 voci
@@ -612,6 +714,29 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         // ignore
       }
 
+      // STRUMENTO TRASPOSITORE. Vale la prima dichiarazione della parte: la chitarra
+      // porta `<octave-change>-1</octave-change>`, cioè suona un'ottava sotto il
+      // scritto. Senza leggerlo il brano usciva un'ottava troppo in alto — e nessuna
+      // chitarra al mondo suona lì.
+      if (!partSawTranspose) {
+        try {
+          const tr = measure.querySelector(':scope > attributes > transpose');
+          if (tr) {
+            partSawTranspose = true;
+            const octaveChange = intOf(tr.querySelector('octave-change')) ?? 0;
+            const chromatic = intOf(tr.querySelector('chromatic')) ?? 0;
+            // I semitoni possono già valere ottave tonde (un tenore in Do scritto in
+            // chiave di violino arriva come chromatic −12): si sommano e si separa la
+            // parte in ottave da quella che non lo è.
+            const totale = chromatic + octaveChange * 12;
+            partTransposeOctave = Math.trunc(totale / 12);
+            partTransposeChromaticRest = totale - partTransposeOctave * 12;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const measureStartAbsBeat = (() => {
         // Compute via accumulated beats from 0 to measureIndex, honoring timeSignatureChanges.
         let acc = 0;
@@ -652,10 +777,31 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
         if (tag === 'direction' || tag === 'sound') {
           const v = velocityFromDirection(child);
           if (v != null) currentVelocity = v;
+          // ANDAMENTO: il primo che si incontra è quello del brano.
+          if (tempoBpm == null) {
+            const b = bpmFromDirection(child);
+            if (b != null) tempoBpm = b;
+          }
           // …e il segno GRAFICO, al punto in cui si trova il cursore della battuta.
           if (tag === 'direction') {
             const absBeat = measureStartAbsBeat + (divisions > 0 ? curPosDiv / divisions : 0);
             readDynamicSigns(child, absBeat, partDynamics, openWedges);
+            // SCRITTE LIBERE (le posizioni della mano sinistra, per la chitarra). Due
+            // scritte sullo stesso punto si uniscono: nel programma il testo occupa un
+            // punto solo nel tempo, e la seconda scalzerebbe la prima.
+            try {
+              const parole = wordsFromDirection(child);
+              if (parole) {
+                const beat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+                const chiave = `${beat}|${parole}`;
+                if (!textSeen.has(chiave)) {
+                  textSeen.add(chiave);
+                  const gia = textMarks.find(t => Math.abs(t.absBeat - beat) <= 1e-6);
+                  if (gia) gia.label = `${gia.label} ${parole}`;
+                  else textMarks.push({ absBeat: beat, label: parole });
+                }
+              }
+            } catch { /* direzione senza parole */ }
             // Segno d'ottava: si apre e si chiude a distanza, e i capi sono NOTE, che
             // qui non sono ancora tutte lette → si tiene il punto e si aggancia al `stop`.
             try {
@@ -944,6 +1090,8 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
       hasSecondStaff: partSawSecondStaff,
       clef: partFirstClef || 'treble',
       ...(partClefOctaveChange !== 0 ? { clefOctaveChange: partClefOctaveChange } : {}),
+      ...(partTransposeOctave !== 0 ? { transposeOctave: partTransposeOctave } : {}),
+      ...(partTransposeChromaticRest !== 0 ? { transposeChromaticRest: partTransposeChromaticRest } : {}),
       ...(partId && partProgramById.has(partId) ? { instrumentId: partProgramById.get(partId) } : {}),
     });
   }
@@ -969,6 +1117,13 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     isMinorMode,
     staffSystemMode,
     projectTitle: title || undefined,
+    projectComposer: composer || undefined,
+    // Il metronomo si arrotonda: il programma tiene i battiti al minuto come numero
+    // intero, e i limiti sono quelli del cursore in barra.
+    ...(tempoBpm != null
+      ? { tempoBpm: Math.max(20, Math.min(300, Math.round(tempoBpm))) }
+      : {}),
+    textMarks: textMarks.sort((a, b) => a.absBeat - b.absBeat),
     parts: partsOut,
     keySignatureChanges,
     slurs,

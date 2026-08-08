@@ -1511,6 +1511,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [keySignatureRoot, setKeySignatureRoot] = useState('C');
     const [projectTitle, setProjectTitle] = useState<string>('');
+    /** Autore del brano. Sta sotto il titolo, a destra, come in ogni edizione a stampa —
+     *  e si legge dai file importati, che l'autore ce l'hanno sempre. */
+    const [projectComposer, setProjectComposer] = useState<string>('');
     const [titleFontSize, setTitleFontSize] = useState<number>(18);
     const [titleFontFamily, setTitleFontFamily] = useState<string>('serif');
     const [keyChangeMode, setKeyChangeMode] = useState<'none' | 'transpose' | 'modal'>('none');
@@ -4553,6 +4556,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         }
                     }
 
+                    // Stessa sorte per l'AUTORE: il campo di scrittura non si stampa (la
+                    // regola `input{display:none}` più sotto lo toglierebbe comunque), quindi
+                    // va sostituito con la scritta vera. Segue l'interruttore del titolo:
+                    // chi stampa senza intestazione non vuole nemmeno la firma.
+                    const composerInput = clone.querySelector('input[placeholder="Autore"]') as HTMLInputElement | null;
+                    if (composerInput) {
+                        const wrapper = composerInput.closest('div');
+                        const composerText = String(projectComposer || composerInput.value || '').trim();
+                        if (!exportIncludeTitle || !composerText) {
+                            (wrapper ?? composerInput).remove();
+                        } else {
+                            const composerDiv = document.createElement('div');
+                            composerDiv.textContent = composerText;
+                            composerDiv.style.textAlign = 'right';
+                            composerDiv.style.fontStyle = 'italic';
+                            composerDiv.style.color = '#4b5563';
+                            composerDiv.style.marginBottom = '12px';
+                            composerDiv.style.fontSize = `${Math.max(10, Math.round(titleFontSize * 0.7))}px`;
+                            composerDiv.style.fontFamily = String(titleFontFamily || 'serif');
+                            if (wrapper) wrapper.replaceWith(composerDiv);
+                            else composerInput.replaceWith(composerDiv);
+                        }
+                    }
+
                     // Export layout: make each rendered system fluid (no fixed pixel width).
                     try {
                         const systemEls = Array.from(clone.querySelectorAll('[data-system-index]')) as HTMLElement[];
@@ -4609,7 +4636,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch {
             return null;
         }
-    }, [exportIncludeTitle, projectTitle, titleFontFamily, titleFontSize, canvasFormat]);
+    }, [exportIncludeTitle, projectTitle, projectComposer, titleFontFamily, titleFontSize, canvasFormat]);
 
     // Print handler (moved above menu handler to avoid temporal dead zone): opens a print window for the staff container
     const handlePrint = useCallback(() => {
@@ -5101,6 +5128,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     staffSystemMode,
                     keySignatureRoot,
                     projectTitle,
+                    projectComposer,
                     titleFontSize,
                     titleFontFamily,
                     timeSignature,
@@ -5157,6 +5185,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     defaultToolbarGroupOrder: DEFAULT_TOOLBAR_ORDER,
                     setRawNotes,
                     setProjectTitle,
+                    setProjectComposer,
                     setSatbName,
                     setSatbVisible,
                     setPartCount,
@@ -5300,6 +5329,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         parts,
                         dest === 'acc-grandstaff' ? 'grandstaff' : 'separate',
                         fileTitle,
+                        // Serve a trascrivere con la grafia giusta gli strumenti traspositori
+                        // che non vanno a ottave tonde (un clarinetto in Si♭). `keySignatureRoot`
+                        // è SEMPRE la tonica maggiore relativa, quindi 'Major' anche in minore:
+                        // è la convenzione dell'app, non una svista.
+                        getKeySignature(String(imported?.keySignatureRoot || 'C').trim() || 'C', 'Major'),
                     );
                     if (tracks.length === 0) {
                         try { window.alert('Il file MusicXML non contiene note da importare.'); } catch { /* ignore */ }
@@ -5321,6 +5355,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // quelli di una traccia aggiunta a una partitura già scritta
                         // cancellerebbero le dinamiche che ci sono già.
                         setDynamics(Array.isArray(imported?.dynamics) ? imported.dynamics : []);
+                        // TITOLO E AUTORE. Erano già nel file e si perdevano: qui servivano
+                        // solo a battezzare la traccia. Un brano importato arrivava anonimo.
+                        setProjectTitle(String(imported?.projectTitle || '').trim());
+                        setProjectComposer(String(imported?.projectComposer || '').trim());
+                        // ANDAMENTO dichiarato dal file. Senza, ogni brano partiva a 120:
+                        // un Weiss segnato a 60 andava al doppio della velocità.
+                        if (typeof imported?.tempoBpm === 'number' && Number.isFinite(imported.tempoBpm)) {
+                            setBpm(imported.tempoBpm);
+                        }
+                        // SCRITTE del file (per la chitarra: le posizioni della mano
+                        // sinistra). Entrano come segni di testo, con la tonalità corrente
+                        // ricopiata: un testo NON è un cambio di tonica e non deve spostare
+                        // l'analisi di un millimetro.
+                        const testi = Array.isArray(imported?.textMarks) ? imported.textMarks : [];
+                        if (testi.length > 0) {
+                            const tonica = String(imported?.keySignatureRoot || 'C').trim() || 'C';
+                            const minore = Boolean(imported?.isMinorMode);
+                            setAnalysisContexts(testi.map(t => ({
+                                absBeat: t.absBeat,
+                                newTonic: tonica,
+                                newIsMinor: minore,
+                                label: t.label,
+                                markerMode: 'text' as const,
+                            })));
+                        }
+                        // IL CORO VUOTO NON SI MOSTRA. Va tutto su tracce: il rigo SATB
+                        // resterebbe lì a cinque righe deserte — ingombro per chi guarda e,
+                        // per chi naviga con lo screen reader, un rigo in più da attraversare
+                        // ogni volta. L'interruttore resta nel mixer per chi lo rivuole.
+                        setSatbVisible(false);
                     } else if (
                         importedTs.numerator !== timeSignature.numerator ||
                         importedTs.denominator !== timeSignature.denominator
@@ -5360,6 +5424,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setRawNotes(importedNotes as any);
                 setKeySignatureRoot(nextKeyRoot);
                 setProjectTitle(nextTitle);
+                // L'autore si azzera SEMPRE, anche se il file non ce l'ha: altrimenti il
+                // brano nuovo si porterebbe dietro la firma di quello di prima.
+                setProjectComposer(String(imported?.projectComposer || '').trim());
+                // Importando come coro il rigo SATB è il protagonista: torna visibile.
+                setSatbVisible(true);
+                if (typeof imported?.tempoBpm === 'number' && Number.isFinite(imported.tempoBpm)) {
+                    setBpm(imported.tempoBpm);
+                }
                 setTimeSignature(nextTimeSignature);
                 setTimeSignatureChanges(nextTimeSignatureChanges);
                 setIsMinorMode(nextIsMinor);
@@ -5367,7 +5439,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setAutoLeadingToneInMinor(true);
                 setKeyChangeMode('none');
                 setModalTonicOverride('');
-                setAnalysisContexts([]);
+                // Le scritte del file diventano segni di testo, con la tonica corrente
+                // ricopiata: un testo non è un cambio di tonalità e non tocca l'analisi.
+                setAnalysisContexts(
+                    (Array.isArray(imported?.textMarks) ? imported.textMarks : []).map(t => ({
+                        absBeat: t.absBeat,
+                        newTonic: nextKeyRoot,
+                        newIsMinor: nextIsMinor,
+                        label: t.label,
+                        markerMode: 'text' as const,
+                    })),
+                );
                 setHarmonyOverrides([]);
                 setAccHarmonyOverrides([]);
                 setTonicizationHints([]);
@@ -5447,7 +5529,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Keep draft snapshot args current every render (used by backup timer + beforeunload).
     draftArgsRef.current = {
         latestRawNotes, latestHarmonyOverrides, latestAccHarmonyOverrides, latestOrnamentOverrides, projectExtrasRef,
-        staffSystemMode, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily,
+        staffSystemMode, keySignatureRoot, projectTitle, projectComposer, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
         repeatBarlines, voltaBrackets, tempoCurves, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
@@ -5540,6 +5622,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setKeySignatureRoot(p.keySignatureRoot || 'C');
                 setIsMinorMode(!!p.isMinorMode);
                 setProjectTitle(p.projectTitle || '');
+                setProjectComposer((p as any).projectComposer || '');
                 setTimeSignature(p.timeSignature || { numerator: 4, denominator: 4 });
                 setTimeSignatureChanges(p.timeSignatureChanges || []);
                 setHarmonyOverrides(p.harmonyOverrides || []);
@@ -15676,15 +15759,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 // tagliato invece di poter scorrere.
                                 style={{ width: contentWidth }}
                             >
-                        <div className="w-full flex justify-center mb-3">
+                        <div className="w-full flex justify-center mb-1">
                             <input
                                 value={projectTitle}
                                 onChange={(e) => setProjectTitle(e.target.value)}
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
                                 placeholder="Titolo"
+                                aria-label="Titolo del brano"
                                 className="w-full max-w-2xl bg-transparent text-center font-semibold text-slate-800 placeholder:text-slate-400 outline-none"
                                 style={{ fontSize: `${titleFontSize}px`, fontFamily: titleFontFamily }}
+                            />
+                        </div>
+                        {/* AUTORE. Sta sotto il titolo e allineato a DESTRA: è dove lo mette
+                            ogni edizione a stampa, e dove l'occhio lo cerca. Più piccolo del
+                            titolo, in corsivo, come vuole l'uso. */}
+                        <div className="w-full flex justify-center mb-3">
+                            <input
+                                value={projectComposer}
+                                onChange={(e) => setProjectComposer(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                placeholder="Autore"
+                                aria-label="Autore del brano"
+                                className="w-full max-w-2xl bg-transparent text-right italic text-slate-600 placeholder:text-slate-400 outline-none"
+                                style={{ fontSize: `${Math.max(10, Math.round(titleFontSize * 0.7))}px`, fontFamily: titleFontFamily }}
                             />
                         </div>
                         {/* ADD guard (avoid crash on first render if layoutData is not ready) */}

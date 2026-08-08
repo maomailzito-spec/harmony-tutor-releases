@@ -29,6 +29,7 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 
 	keySignatureRoot: string;
 	projectTitle: string;
+	projectComposer: string;
 	titleFontSize: number;
 	titleFontFamily: string;
 
@@ -119,6 +120,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		// Project-level settings
 		keySignatureRoot: args.keySignatureRoot,
 		projectTitle: args.projectTitle,
+		projectComposer: args.projectComposer,
 		titleFontSize: args.titleFontSize,
 		titleFontFamily: args.titleFontFamily,
 		timeSignature: args.timeSignature,
@@ -220,6 +222,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 
 	setRawNotes: (next: any) => void;
 	setProjectTitle: (next: any) => void;
+	setProjectComposer: (next: any) => void;
 	setCurrentProjectFilePath: (next: string | null) => void;
 	setKeySignatureRoot: (next: any) => void;
 	setIsMinorMode: (next: any) => void;
@@ -324,6 +327,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	if (cmd.type === 'new') {
 		args.setRawNotes([]);
 		args.setProjectTitle('');
+		args.setProjectComposer('');
 		args.setCurrentProjectFilePath(null);
 		args.setKeySignatureRoot('C');
 		args.setIsMinorMode(false);
@@ -394,6 +398,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	// inherit settings from the previously opened project.
 	args.setKeySignatureRoot('C');
 	args.setProjectTitle('');
+	args.setProjectComposer('');
 	args.setTimeSignature({ numerator: 4, denominator: 4 });
 	args.setTimeSignatureChanges([]);
 	args.setIsMinorMode(false);
@@ -540,6 +545,10 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			if (typeof loadedProject.projectTitle === 'string') {
 				args.setProjectTitle(loadedProject.projectTitle);
 			}
+			// L'autore si azzera anche quando il file NON ce l'ha: un progetto vecchio
+			// erediterebbe altrimenti la firma di quello aperto prima (è la stessa
+			// trappola dei mute/solo per voce).
+			args.setProjectComposer(typeof loadedProject.projectComposer === 'string' ? loadedProject.projectComposer : '');
 			if (typeof loadedProject.titleFontSize === 'number' && Number.isFinite(loadedProject.titleFontSize)) {
 				args.setTitleFontSize(Math.max(12, Math.min(72, loadedProject.titleFontSize)));
 			}
@@ -767,6 +776,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setRawNotes([]);
 		args.apply.setKeySignatureRoot('C');
 		args.apply.setProjectTitle('');
+		args.apply.setProjectComposer('');
 		args.apply.setTimeSignature({ numerator: 4, denominator: 4 });
 		args.apply.setTimeSignatureChanges([]);
 		args.apply.setClipboard(null);
