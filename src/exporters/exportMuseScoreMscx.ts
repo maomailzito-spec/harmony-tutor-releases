@@ -469,11 +469,12 @@ function emitRestSeg(w: (s: string) => void, r: { type: string; dots: number }):
 }
 
 /**
- * @param traspSemitoni  Traspozione dello STRUMENTO, in semitoni (chitarra: −12).
- *   MuseScore memorizza le altezze SUONATE e riporta a video quelle scritte
- *   applicando la traspozione dichiarata nell'Instrument. Il programma invece tiene
- *   le altezze SCRITTE: qui si converte. Dichiarare la traspozione senza convertire
- *   (o viceversa) sposta la parte di un'ottava — in un verso o nell'altro.
+ * @param traspSemitoni  Traspozione dello strumento, in semitoni. Serve SOLO a scrivere
+ *   `tpc2` (la grafia della parte scritta): le altezze arrivano qui già SUONATE — chi
+ *   prepara le note per il file accessibile le converte apposta, perché chi legge con
+ *   lo screen reader sente i nomi delle note e non vede la chiave. Sommare qui la
+ *   traspozione le abbasserebbe una seconda volta: è l'errore che ha lasciato il
+ *   disegno dov'era e ha fatto scendere il suono di un'altra ottava.
  */
 function emitChord(w: (s: string) => void, chordNotes: StaffNote[], stem?: 'up' | 'down', durOverride?: { type: string; dots: number }, traspSemitoni = 0): void {
   const { type, dots } = durOverride ?? noteDurType(chordNotes[0]);
@@ -484,11 +485,13 @@ function emitChord(w: (s: string) => void, chordNotes: StaffNote[], stem?: 'up' 
   for (const n of chordNotes) {
     const { midi, tpc } = midiTpc(n);
     w('            <Note>');
-    w(`              <pitch>${midi + traspSemitoni}</pitch>`);
+    w(`              <pitch>${midi}</pitch>`);
     w(`              <tpc>${tpc}</tpc>`);
     // Con uno strumento traspositore MuseScore vuole ANCHE la grafia della parte
-    // scritta (`tpc2`): la traspozione qui è di ottave tonde, quindi la lettera non
-    // cambia e le due grafie coincidono.
+    // scritta (`tpc2`): la traspozione è di ottave tonde, quindi la lettera non cambia
+    // e le due grafie coincidono. L'altezza a video la ricava lui, sottraendo la
+    // traspozione dichiarata: memorizzato Re2 (suonato) con −12, disegna Re3 — cioè
+    // quello che c'è sulla partitura stampata, mentre suona la nota vera.
     if (traspSemitoni !== 0) w(`              <tpc2>${tpc}</tpc2>`);
     w('              </Note>');
   }
