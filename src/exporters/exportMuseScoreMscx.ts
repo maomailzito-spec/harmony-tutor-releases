@@ -221,7 +221,36 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
     if (si === 1) bassStaffHasNotes = true;
     voicesByStaff[si].add(n.voice ?? (si === 0 ? 1 : 3));
   }
+  // RIGHI: due solo se servono davvero. Prima ne scriveva SEMPRE due, quindi un brano
+  // su rigo singolo — una chitarra, un violino, una parte sola — arrivava in MuseScore
+  // su grand staff, con un rigo grave vuoto sotto. Per chi legge con lo screen reader
+  // non è un dettaglio estetico: è un rigo in più da attraversare a ogni battuta.
+  const numeroRighi = bassStaffHasNotes ? 2 : 1;
   const harmonyStaffIdx = bassStaffHasNotes ? 1 : 0;
+
+  /**
+   * Lo STRUMENTO della parte esportata.
+   *
+   * Prima era sempre e comunque «Piano», anche per una Fantaisie per chitarra: uno
+   * screen reader annunciava lo strumento sbagliato a ogni apertura. Quando il brano
+   * sta su UNA sola traccia, quella traccia sa già come si chiama, che programma GM
+   * ha e se traspone.
+   */
+  const strumento = (() => {
+    const tracce = (opts.accompanimentTracks || []).filter(t => (t.notes || []).some(n => n && !n.isRest));
+    const sola = tracce.length === 1 ? tracce[0] : null;
+    const gm = (typeof sola?.instrumentId === 'number' && sola.instrumentId >= 0 && sola.instrumentId <= 127)
+      ? sola.instrumentId
+      : 0;
+    return {
+      nome: (sola?.name || '').trim() || 'Piano',
+      // Il nome del timbro nel formato di MuseScore: senza un id valido lo strumento
+      // resta quello di default, quindi meglio il pianoforte che un id inventato.
+      id: gm >= 24 && gm <= 25 ? 'pluck.guitar' : 'keyboard.piano',
+      programma: gm,
+      traspOttave: Number(sola?.octaveTranspose) || 0,
+    };
+  })();
   const harmonyVoiceNum = voicesByStaff[harmonyStaffIdx].size
     ? Math.max(...voicesByStaff[harmonyStaffIdx])
     : (harmonyStaffIdx === 0 ? 1 : 3);
@@ -239,22 +268,33 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
   w('    <Part id="1">');
   w('      <Staff>');
   w('        <StaffType group="pitched"><name>stdNormal</name></StaffType>');
-  w('        <bracket type="1" span="2" col="1" visible="1"/>');
-  w('        <barLineSpan>1</barLineSpan>');
+  if (numeroRighi === 2) {
+    w('        <bracket type="1" span="2" col="1" visible="1"/>');
+    w('        <barLineSpan>1</barLineSpan>');
+  }
   w('        </Staff>');
-  w('      <Staff>');
-  w('        <StaffType group="pitched"><name>stdNormal</name></StaffType>');
-  w('        </Staff>');
-  w('      <trackName>Piano</trackName>');
-  w('      <Instrument id="piano">');
-  w('        <longName>Piano</longName>');
-  w('        <instrumentId>keyboard.piano</instrumentId>');
-  w('        <Channel><program value="0"/><synti>Fluid</synti></Channel>');
+  if (numeroRighi === 2) {
+    w('      <Staff>');
+    w('        <StaffType group="pitched"><name>stdNormal</name></StaffType>');
+    w('        </Staff>');
+  }
+  w(`      <trackName>${escapeXml(strumento.nome)}</trackName>`);
+  w(`      <Instrument id="${strumento.id}">`);
+  w(`        <longName>${escapeXml(strumento.nome)}</longName>`);
+  w(`        <instrumentId>${strumento.id}</instrumentId>`);
+  if (strumento.traspOttave !== 0) {
+    // STRUMENTO TRASPOSITORE: la chitarra suona un'ottava sotto lo scritto. MuseScore
+    // conserva le altezze SUONATE e riporta a video quelle SCRITTE applicando questa
+    // traspozione — senza dichiararla, la parte compariva un'ottava più in basso.
+    w(`        <transposeDiatonic>${strumento.traspOttave * 7}</transposeDiatonic>`);
+    w(`        <transposeChromatic>${strumento.traspOttave * 12}</transposeChromatic>`);
+  }
+  w(`        <Channel><program value="${strumento.programma}"/><synti>Fluid</synti></Channel>`);
   w('        </Instrument>');
   w('      </Part>');
 
   // ── Rigo 1 (violino) e Rigo 2 (basso) come sequenze di misure separate ──
-  for (let staffIdx = 0; staffIdx < 2; staffIdx++) {
+  for (let staffIdx = 0; staffIdx < numeroRighi; staffIdx++) {
     const staffId = staffIdx + 1;
     w(`    <Staff id="${staffId}">`);
     if (staffIdx === 0) {
@@ -327,6 +367,7 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
           measureStartTickOf(m), measureLenOf(m),
           isHarmonyVoice ? (tokensByMeasure.get(m) || []) : [],
           stem,
+          strumento.traspOttave * 12,
         );
 
         w('          </voice>');
@@ -353,6 +394,8 @@ function emitVoiceStream(
   measureStartTick: number, measureLen: number,
   tokens: Token[],
   stem?: 'up' | 'down',
+  /** Traspozione dello strumento, in semitoni (vedi emitChord). */
+  traspSemitoni = 0,
 ): void {
   // onset (localTick) → note[] (accordo reale: stessa voce, stesso onset)
   const onsets = new Map<number, StaffNote[]>();
@@ -415,7 +458,7 @@ function emitVoiceStream(
       emitFiguredBass(w, tokens[tIdx].text, seg.dur);
       tIdx++;
     }
-    if (seg.chord) emitChord(w, seg.chord, stem, seg.durOverride);
+    if (seg.chord) emitChord(w, seg.chord, stem, seg.durOverride, traspSemitoni);
     else emitRestSeg(w, seg.rest!);
   }
   while (tIdx < tokens.length) { emitFiguredBass(w, tokens[tIdx].text, TPQ); tIdx++; }
@@ -425,7 +468,14 @@ function emitRestSeg(w: (s: string) => void, r: { type: string; dots: number }):
   w(`          <Rest><durationType>${r.type}</durationType>${r.dots ? `<dots>${r.dots}</dots>` : ''}</Rest>`);
 }
 
-function emitChord(w: (s: string) => void, chordNotes: StaffNote[], stem?: 'up' | 'down', durOverride?: { type: string; dots: number }): void {
+/**
+ * @param traspSemitoni  Traspozione dello STRUMENTO, in semitoni (chitarra: −12).
+ *   MuseScore memorizza le altezze SUONATE e riporta a video quelle scritte
+ *   applicando la traspozione dichiarata nell'Instrument. Il programma invece tiene
+ *   le altezze SCRITTE: qui si converte. Dichiarare la traspozione senza convertire
+ *   (o viceversa) sposta la parte di un'ottava — in un verso o nell'altro.
+ */
+function emitChord(w: (s: string) => void, chordNotes: StaffNote[], stem?: 'up' | 'down', durOverride?: { type: string; dots: number }, traspSemitoni = 0): void {
   const { type, dots } = durOverride ?? noteDurType(chordNotes[0]);
   w('          <Chord>');
   w(`            <durationType>${type}</durationType>`);
@@ -434,8 +484,12 @@ function emitChord(w: (s: string) => void, chordNotes: StaffNote[], stem?: 'up' 
   for (const n of chordNotes) {
     const { midi, tpc } = midiTpc(n);
     w('            <Note>');
-    w(`              <pitch>${midi}</pitch>`);
+    w(`              <pitch>${midi + traspSemitoni}</pitch>`);
     w(`              <tpc>${tpc}</tpc>`);
+    // Con uno strumento traspositore MuseScore vuole ANCHE la grafia della parte
+    // scritta (`tpc2`): la traspozione qui è di ottave tonde, quindi la lettera non
+    // cambia e le due grafie coincidono.
+    if (traspSemitoni !== 0) w(`              <tpc2>${tpc}</tpc2>`);
     w('              </Note>');
   }
   w('            </Chord>');
