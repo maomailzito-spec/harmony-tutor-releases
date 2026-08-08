@@ -14,6 +14,7 @@
  * exportMusicXML.
  */
 import type { StaffNote, KeySignature, NoteDuration } from '../types';
+import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { TICKS_PER_QUARTER } from '../constants';
 import type { ExportMusicXMLOptions } from './exportMusicXML';
 
@@ -132,7 +133,24 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
   } = opts;
 
   const numerator = timeSignature.numerator;
-  const measureLen = numerator * (4 / timeSignature.denominator) * TPQ;
+  // BATTUTE IRREGOLARI. Qui la durata della battuta era UNA COSTANTE, e le note si
+  // collocavano con `tick − m × numerator × TPQ`: dopo una battuta che contiene più
+  // del metro (la 15 della Fantaisie ne ha cinque, di movimenti) ogni nota risultava
+  // un movimento in ritardo, e il riempimento a fine battuta infilava una PAUSA DI
+  // SEMIMINIMA sul primo movimento — in ogni battuta, fino alla fine. Suonava giusto
+  // perché gli attacchi erano al loro posto: era il conto a non tornare.
+  const nominaleQuarti = numerator * (4 / timeSignature.denominator);
+  const eccezioniDurata = measureLengthMap(opts.measureLengths);
+  const measureLenOf = (m: number): number =>
+    Math.round(beatsOfMeasure(m, nominaleQuarti, eccezioniDurata) * TPQ);
+  const _startCache: number[] = [0];
+  const measureStartTickOf = (m: number): number => {
+    while (_startCache.length <= m) {
+      const prev = _startCache.length - 1;
+      _startCache.push(_startCache[prev] + measureLenOf(prev));
+    }
+    return _startCache[m];
+  };
   const fifths = computeFifths(keySignature, keySignatureRoot);
   const mode = isMinorMode ? 'minor' : 'major';
 
@@ -152,7 +170,7 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
     const text = String(h.token ?? h.roman ?? '').trim();
     if (!text) continue;
     const mi = h.measureIndex ?? 0;
-    const localTick = h.tick - mi * numerator * TPQ;
+    const localTick = h.tick - measureStartTickOf(mi);
     if (!tokensByMeasure.has(mi)) tokensByMeasure.set(mi, []);
     tokensByMeasure.get(mi)!.push({ tick: localTick, text });
   }
@@ -257,7 +275,7 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
         emitVoiceStream(
           w,
           staffNotes.filter(n => (n.voice ?? (staffIdx === 0 ? 1 : 3)) === vNum),
-          m, numerator, measureLen,
+          measureStartTickOf(m), measureLenOf(m),
           isHarmonyVoice ? (tokensByMeasure.get(m) || []) : [],
           stem,
         );
@@ -283,7 +301,7 @@ interface Seg { start: number; dur: number; chord: StaffNote[] | null; rest: { t
 function emitVoiceStream(
   w: (s: string) => void,
   voiceNotes: StaffNote[],
-  m: number, numerator: number, measureLen: number,
+  measureStartTick: number, measureLen: number,
   tokens: Token[],
   stem?: 'up' | 'down',
 ): void {
@@ -291,7 +309,7 @@ function emitVoiceStream(
   const onsets = new Map<number, StaffNote[]>();
   for (const n of voiceNotes) {
     const tick = n.startTick ?? ((n.beat ?? 1) - 1) * TPQ;
-    const localTick = tick - m * numerator * TPQ;
+    const localTick = tick - measureStartTick;
     if (!onsets.has(localTick)) onsets.set(localTick, []);
     onsets.get(localTick)!.push(n);
   }
