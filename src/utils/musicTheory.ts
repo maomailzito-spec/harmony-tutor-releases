@@ -6,7 +6,11 @@
 export function getActiveNotesTimeline(
     notes: StaffNote[],
     timeSignature: TimeSignature,
-    timeSignatureChanges?: TimeSignatureChange[]
+    timeSignatureChanges?: TimeSignatureChange[],
+    /** DURATE REALI delle battute irregolari. Senza, l'ANALISI legge il brano su una
+     *  griglia diversa da quella del disegno e del suono: dopo una battuta che contiene
+     *  più del metro, gli accordi finiscono sfasati di un movimento. */
+    measureLengths?: MeasureLength[],
 ): Array<{ absBeat: number; measureIndex: number; beat: number; notes: StaffNote[] }> {
     const baseBeatsPerMeas = timeSignature.numerator * (4 / timeSignature.denominator);
     const normalizeChanges = (): { measureIndex: number; numerator: number; denominator: number }[] => {
@@ -40,11 +44,12 @@ export function getActiveNotesTimeline(
     };
 
     const maxMeasureIndex = Math.max(0, ...notes.map(n => Number.isFinite(n.measureIndex) ? (n.measureIndex as number) : 0));
+    const eccezioniDurata = measureLengthMap(measureLengths);
     const measureStartAbsBeat: number[] = [];
     let acc = 0;
     for (let m = 0; m <= maxMeasureIndex + 1; m++) {
         measureStartAbsBeat[m] = acc;
-        acc += getBeatsPerMeasureForIndex(m);
+        acc += beatsOfMeasure(m, getBeatsPerMeasureForIndex(m), eccezioniDurata);
     }
 
     const findMeasureIndexForAbsBeat = (absBeat: number): number => {
@@ -96,6 +101,8 @@ import { NOTE_NAMES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, FRET_COUNT, G
 import { ENABLE_LEARNED_ORNAMENTS_KEY } from '../storage/storageKeys';
 import { getString } from '../storage/localStorage';
 import { detectVoiceLeadingSequences } from './sequenceDetector';
+import type { MeasureLength } from '../types';
+import { measureLengthMap, beatsOfMeasure } from './measureLengths';
 import { ORNAMENT_LEARNED_PATTERNS } from '../data/ornamentPatterns';
 import {
     midiToOctave, staffNoteToSp, letterIndex, spToPc, spToString,
@@ -4927,7 +4934,7 @@ export function normalizeNotePitchFieldsWithKey(note: any, keySignature: any): a
     }
 }
 
-export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignature, timeSignatureChanges?: TimeSignatureChange[]): StaffNote[] {
+export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignature, timeSignatureChanges?: TimeSignatureChange[], measureLengths?: MeasureLength[]): StaffNote[] {
     // Self-heal stale/corrupt MIDI: many analysis and playback paths rely on `midi`.
     // If an editor operation updates octave/spelling but leaves `midi` stale (or missing),
     // labels can change "depending on context" (e.g. inversion appears correct only after
@@ -5033,9 +5040,10 @@ export function calculateNoteBeats(notes: StaffNote[], timeSignature: TimeSignat
     let acc = 0;
     let m = 0;
     const maxNeeded = Math.max(0, maxAbsBeat) + (Math.max(1, Number.isFinite(baseBeatsPerMeasure) ? baseBeatsPerMeasure : 4) * 2);
+    const eccezioniDurataBeats = measureLengthMap(measureLengths);
     while (acc <= maxNeeded || m < 4) {
         measureStartAbsBeat[m] = acc;
-        acc += getBeatsPerMeasureForIndex(m);
+        acc += beatsOfMeasure(m, getBeatsPerMeasureForIndex(m), eccezioniDurataBeats);
         m++;
         if (m > 10000) break; // hard safety
     }

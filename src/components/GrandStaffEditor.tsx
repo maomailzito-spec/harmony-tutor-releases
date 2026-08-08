@@ -3084,6 +3084,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             })
             .filter(c => Number.isFinite(c.measureIndex))
             .sort((a, b) => a.measureIndex - b.measureIndex);
+        // ATTENZIONE: da qui si RISCRIVONO gli startTick a partire da battuta+movimento.
+        // Con la griglia nominale, su un brano con battute irregolari questo DISFA il
+        // lavoro dell'import — le note della battuta dopo una da cinque movimenti
+        // verrebbero riportate indietro di un quarto. È il punto più pericoloso di
+        // tutti quelli che ricostruiscono la griglia.
+        const eccezioniDurataRicollocazione = measureLengthMap(measureLengthsRef.current);
         const measureStartsUpTo = (maxIdx: number): number[] => {
             const out: number[] = [];
             let acc2 = 0;
@@ -3095,7 +3101,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     else break;
                 }
                 const bpm2 = active.numerator * (4 / active.denominator);
-                acc2 += Math.max(1, Number.isFinite(bpm2) ? bpm2 : baseBeatsShared || 4);
+                const nominale = Math.max(1, Number.isFinite(bpm2) ? bpm2 : baseBeatsShared || 4);
+                acc2 += beatsOfMeasure(m, nominale, eccezioniDurataRicollocazione);
             }
             return out;
         };
@@ -3143,7 +3150,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     else break;
                 }
                 const bpm = active.numerator * (4 / active.denominator);
-                acc += Math.max(1, Number.isFinite(bpm) ? bpm : baseBeats || 4);
+                const nominale = Math.max(1, Number.isFinite(bpm) ? bpm : baseBeats || 4);
+                // Come per le tracce qui sopra: con la griglia nominale questa
+                // ricollocazione riporterebbe indietro di un quarto tutte le note che
+                // stanno dopo una battuta irregolare.
+                acc += beatsOfMeasure(m, nominale, eccezioniDurataRicollocazione);
             }
 
             return prev.map(n => {
@@ -4484,7 +4495,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const notes = useMemo(() => {
         try {
-            return calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges);
+            return calculateNoteBeats(normalizedRawNotes, timeSignature, timeSignatureChanges, measureLengths);
         } catch (e) {
             console.error('[GrandStaffEditor] calculateNoteBeats crashed:', e);
             return normalizedRawNotes || [];
@@ -7086,7 +7097,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Timeline-based harmony labels per system (roman+figures and symbol)
     // ADAPTER LAYER — harmony analysis overlay data (extracted to useHarmonyLabels hook)
     const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, keySignatureMarkersBySystem, tempoMarkMarkersBySystem, sequenceMatches, motifNoteStyles, motifBracketsBySystem, motifMatches } = useHarmonyLabels({
-        layoutData, timeSignature, timeSignatureChanges, keySignatureChanges, keySignatureRoot, tempoMarks,
+        layoutData, timeSignature, timeSignatureChanges, keySignatureChanges, keySignatureRoot, tempoMarks, measureLengths,
         analysisContexts: effectiveAnalysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
@@ -14212,7 +14223,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
 
                 try {
-                    const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges);
+                    const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges, measureLengthsRef.current);
                     const selected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
                     if (selected.length === 0) return;
 
@@ -14767,7 +14778,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // ── SATB pass ──
         try {
-            const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges);
+            const notesWithBeats = calculateNoteBeats(rawNotes, timeSignature, timeSignatureChanges, measureLengthsRef.current);
             const satbSelected = notesWithBeats.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
             if (satbSelected.length > 0) {
                 const _tieMidi = (n: any): number => {

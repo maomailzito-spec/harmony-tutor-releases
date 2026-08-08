@@ -1,6 +1,7 @@
 import { DURATION_VALUES, TICKS_PER_QUARTER } from '../constants';
 import type { AccompanimentTrack, TimeSignature, TimeSignatureChange } from '../types';
 import { getKeySignature, normalizeNotePitchFieldsWithKey } from '../utils/musicTheory';
+import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { extractProjectExtras, migrateProjectData, CURRENT_PROJECT_SCHEMA_VERSION } from '../storage/projectSchema';
 import { readPreference, writePreference } from '../preferences/preferencesStore';
 
@@ -497,6 +498,11 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 					.sort((a: any, b: any) => a.measureIndex - b.measureIndex);
 
 				const maxIdx = (normalizedNotes as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), 0);
+				// BATTUTE IRREGOLARI: qui si RICALCOLANO gli startTick all'apertura del
+				// file, quindi con la griglia nominale un progetto salvato con una
+				// battuta da cinque movimenti tornava indietro corrotto — le note dopo
+				// di lei riportate di un quarto.
+				const eccezioniDurata = measureLengthMap((loadedProject as any)?.measureLengths);
 				const measureStartAbsBeat: number[] = [];
 				let acc = 0;
 				for (let m = 0; m <= maxIdx + 1; m++) {
@@ -507,7 +513,8 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 						else break;
 					}
 					const bpmLocal = active.numerator * (4 / active.denominator);
-					acc += Math.max(1, Number.isFinite(bpmLocal) ? bpmLocal : baseBeats || 4);
+					const nominale = Math.max(1, Number.isFinite(bpmLocal) ? bpmLocal : baseBeats || 4);
+					acc += beatsOfMeasure(m, nominale, eccezioniDurata);
 				}
 
 				const withTicks = (normalizedNotes as any[]).map(n => {

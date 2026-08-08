@@ -6,7 +6,7 @@
  * sequence markers, modulation markers, and time-signature markers.
  */
 import { useMemo } from 'react';
-import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack, KeySignatureChange, KeySignature, TempoMark } from '../types';
+import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack, KeySignatureChange, KeySignature, TempoMark, MeasureLength } from '../types';
 import { normalizeKeyChanges, keyChangeAtMeasure } from '../utils/keySignatureChanges';
 import { normalizeTempoMarks, tempoMarkLabel } from '../utils/tempoMarks';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol, bassScaleDegreeRoman, isEnharmonicSpellingMismatch } from '../utils/musicTheory';
@@ -74,6 +74,10 @@ export interface UseHarmonyLabelsParams {
     analysisContexts: AnalysisContext[];
     /** Segni di metronomo a metà brano: servono solo a essere disegnati. */
     tempoMarks?: TempoMark[];
+    /** Durate reali delle battute irregolari: l'analisi deve leggere il brano sulla
+     *  STESSA griglia del disegno e del suono, altrimenti dopo una battuta che
+     *  contiene più del metro gli accordi risultano sfasati di un movimento. */
+    measureLengths?: MeasureLength[];
     harmonyOverrides: any[];
     currentTonic: string;
     isMinorMode: boolean;
@@ -134,7 +138,7 @@ function getAccompanimentPcsForBeat(
 export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
     const {
         layoutData, timeSignature, timeSignatureChanges,
-        keySignatureChanges, keySignatureRoot, tempoMarks,
+        keySignatureChanges, keySignatureRoot, tempoMarks, measureLengths,
         analysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes,
@@ -257,7 +261,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         } catch { /* ignore */ }
 
         // Use the timeline of all active notes at each event (start/end of any note)
-        const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges);
+        const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges, measureLengths);
 
         // Labels should follow *structural onsets* rather than every scanpoint.
         // Note-off-only scanpoints can temporarily reduce the verticality (e.g. 2 notes)
@@ -4299,7 +4303,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         let usedFallback = false;
         if (isAnalysisEnabled && events.length === 0) {
             try {
-                const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges);
+                const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges, measureLengths);
                 const ctxAtAbsBeatLocal = (absBeat: number) => (analysisContexts || [])
                     .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
                     .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
@@ -4493,7 +4497,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // interval patterns on the bass and soprano lines (and their vertical interval).
         // This is designed to work even when Roman labels are unstable.
         try {
-            const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges);
+            const timeline = getActiveNotesTimeline(layoutData.positionedNotes, timeSignature, timeSignatureChanges, measureLengths);
             const absBeats = (timeline || []).map(ev => Number(ev?.absBeat)).filter(Number.isFinite) as number[];
 
             const getNotesAtAbsBeat = (absBeat: number): any[] => {
@@ -4899,7 +4903,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         // even when layout changes (e.g. measures-per-line causes different system breaks).
         // The per-system harmony label suppression logic resets at system boundaries;
         // using it for sequence detection makes matches jump around.
-        const timeline = getActiveNotesTimeline((analyzedNotes || notes) as any, timeSignature, timeSignatureChanges);
+        const timeline = getActiveNotesTimeline((analyzedNotes || notes) as any, timeSignature, timeSignatureChanges, measureLengths);
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const isCompoundMeter = timeSignature.denominator === 8 && (timeSignature.numerator % 3 === 0) && timeSignature.numerator > 3;
         const isStrongPulseInMeasure = (inMeasureBeats0: number) => {
