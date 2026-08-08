@@ -1,7 +1,7 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
-import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange, MeasureLength } from '../../types';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -74,6 +74,10 @@ export type MusicXMLImportResult = {
     /** Lo stesso segno riportato alla semiminima: serve ai conti, non alla stampa. */
     quarterBpm: number;
   }>;
+  /** DURATA REALE delle battute che NON coincidono col metro (elenco sparso). In
+   *  MusicXML una battuta porta la propria durata: senza questo, l'eccedenza di una
+   *  battuta finiva disegnata sopra il primo movimento della successiva. */
+  measureLengths: MeasureLength[];
   /** Scritte libere del file (`<words>`): nella musica per chitarra sono le posizioni
    *  della mano sinistra — CVII, CV, «1/2 II». Arrivano come SEGNI DI TESTO, gli stessi
    *  che si posano dalla tavolozza, quindi si spostano e si tolgono come tutti gli
@@ -629,6 +633,64 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   // ammucchiate nel basso.
   const MAX_SATB_PARTS = 4;
   const partsToParse = parts;
+
+  // ── QUANTO DURA DAVVERO OGNI BATTUTA ──────────────────────────────────────
+  // Va saputo PRIMA di collocare qualunque nota, perché l'inizio di una battuta
+  // dipende da quanto durano tutte quelle che la precedono. In MusicXML una battuta
+  // non è tenuta a coincidere col metro — porta la propria durata — e questo file ne
+  // ha 26 su 65 che non coincidono: la 15, per dire, contiene cinque semiminime in
+  // 4/4 (`<backup>` di 1280 su 256 per semiminima). Accumulando il metro, la battuta
+  // 16 cominciava un movimento troppo presto e l'eccedenza della 15 finiva disegnata
+  // sopra il suo primo movimento.
+  //
+  // Si misura camminando i figli della battuta come fa il lettore vero (note, accordi,
+  // `<backup>`, `<forward>`), e si prende il punto più avanzato raggiunto. Fra le parti
+  // vince la più lunga: le altre, se restano indietro, sono incomplete — è un altro
+  // problema e lo dice il rilevatore delle misure incomplete.
+  const lunghezzaMisuraQuarti = new Map<number, number>();
+  try {
+    for (const part of partsToParse) {
+      const measures = Array.from(part.querySelectorAll(':scope > measure'));
+      let div = 1;
+      for (let mi = 0; mi < measures.length; mi++) {
+        const measure = measures[mi];
+        const d = intOf(measure.querySelector(':scope > attributes > divisions'));
+        if (d != null && d > 0) div = d;
+        let pos = 0;
+        let massimo = 0;
+        let ultimoAccordoInizio: number | null = null;
+        for (const child of Array.from(measure.children)) {
+          const tag = child.tagName;
+          if (tag === 'backup') {
+            pos = Math.max(0, pos - (intOf(child.querySelector('duration')) ?? 0));
+            ultimoAccordoInizio = null;
+            continue;
+          }
+          if (tag === 'forward') {
+            pos += intOf(child.querySelector('duration')) ?? 0;
+            massimo = Math.max(massimo, pos);
+            ultimoAccordoInizio = null;
+            continue;
+          }
+          if (tag !== 'note') continue;
+          // Gli abbellimenti non hanno durata e non muovono il cursore.
+          if (child.querySelector('grace')) continue;
+          const dur = intOf(child.querySelector('duration')) ?? 0;
+          const inAccordo = !!child.querySelector('chord');
+          const inizio: number = inAccordo && ultimoAccordoInizio != null ? ultimoAccordoInizio : pos;
+          if (!inAccordo) ultimoAccordoInizio = inizio;
+          massimo = Math.max(massimo, inizio + dur);
+          if (!inAccordo) pos = inizio + dur;
+        }
+        if (div > 0 && massimo > 0) {
+          const quarti = massimo / div;
+          lunghezzaMisuraQuarti.set(mi, Math.max(lunghezzaMisuraQuarti.get(mi) ?? 0, quarti));
+        }
+      }
+    }
+  } catch {
+    // Senza la misurazione si ricade sul metro, cioè sul comportamento di prima.
+  }
   const satbPartCount = Math.min(parts.length, MAX_SATB_PARTS);
 
   // Detect multi-part SATB: 3+ parts typically means S/A/T/B as individual parts
@@ -848,7 +910,10 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
       }
 
       const measureStartAbsBeat = (() => {
-        // Compute via accumulated beats from 0 to measureIndex, honoring timeSignatureChanges.
+        // Accumulo dall'inizio, onorando i cambi di metro E la DURATA REALE delle
+        // battute misurata sopra: una battuta che contiene più del metro sposta in
+        // avanti tutte quelle che seguono, altrimenti la sua eccedenza si sovrappone
+        // al primo movimento della successiva.
         let acc = 0;
         for (let m = 0; m < measureIndex; m++) {
           let ts: TimeSignature = timeSignature;
@@ -856,7 +921,12 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
             if ((c.measureIndex ?? 0) <= m) ts = { numerator: c.numerator, denominator: c.denominator };
             else break;
           }
-          acc += ts.numerator * (4 / ts.denominator);
+          const nominale = ts.numerator * (4 / ts.denominator);
+          const reale = lunghezzaMisuraQuarti.get(m);
+          // Solo l'ECCEDENZA allunga la battuta. Una battuta più corta del metro è
+          // incompleta — un difetto da segnalare, non una durata da assecondare:
+          // accorciarla farebbe slittare all'indietro tutto il resto del brano.
+          acc += (typeof reale === 'number' && reale > nominale + 1e-6) ? reale : nominale;
         }
         return acc;
       })();
@@ -1248,6 +1318,19 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     projectComposer: composer || undefined,
     ...(tempoMarksOrdinati.length > 0 ? { tempoBpm: tempoMarksOrdinati[0].quarterBpm } : {}),
     tempoMarks: tempoMarksOrdinati,
+    // Le eccezioni di durata: solo le battute che eccedono il metro (una più corta è
+    // incompleta, che è un difetto e non una durata voluta).
+    measureLengths: Array.from(lunghezzaMisuraQuarti.entries())
+      .map(([measureIndex, beats]) => ({ measureIndex, beats }))
+      .filter(({ measureIndex, beats }) => {
+        let ts: TimeSignature = timeSignature;
+        for (const c of timeSignatureChanges) {
+          if ((c.measureIndex ?? 0) <= measureIndex) ts = { numerator: c.numerator, denominator: c.denominator };
+          else break;
+        }
+        return beats > ts.numerator * (4 / ts.denominator) + 1e-6;
+      })
+      .sort((a, b) => a.measureIndex - b.measureIndex),
     textMarks: textMarks.sort((a, b) => a.absBeat - b.absBeat),
     parts: partsOut,
     keySignatureChanges,

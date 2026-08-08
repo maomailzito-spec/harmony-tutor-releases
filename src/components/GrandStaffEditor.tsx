@@ -35,7 +35,8 @@ import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } fro
 import { articulationPlayback } from '../utils/articulations';
 import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
 import { normalizeKeyChanges, keyAtMeasure } from '../utils/keySignatureChanges';
-import type { TempoMark } from '../types';
+import type { TempoMark, MeasureLength } from '../types';
+import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { normalizeTempoMarks, tempoMarkQuarterBpm } from '../utils/tempoMarks';
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
@@ -1587,6 +1588,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [tempoCurves, setTempoCurves] = useState<TempoCurve[]>([]);
     const tempoCurvesRef = useRef(tempoCurves);
     tempoCurvesRef.current = tempoCurves;
+
+    // DURATA REALE delle battute che non coincidono col metro (levare, battute
+    // d'aggiunta, e i file veri: una Fantaisie di Weiss ne ha 26 su 65). Elenco
+    // sparso: una partitura regolare non ne ha nessuna. Vedi utils/measureLengths.ts.
+    const [measureLengths, setMeasureLengths] = useState<MeasureLength[]>([]);
+    const measureLengthsRef = useRef(measureLengths);
+    measureLengthsRef.current = measureLengths;
 
     // SEGNI DI METRONOMO a metà brano («♩ = 60»). Sono un'altra cosa dalle curve qui
     // sopra: la curva fa scivolare il tempo e non dice quanto, il segno lo cambia di
@@ -5174,6 +5182,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     voltaBrackets,
                     tempoCurves,
                     tempoMarks,
+                    measureLengths,
                     dynamics,
                     slurs,
                     octaveShifts,
@@ -5235,6 +5244,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setVoltaBrackets,
                     setTempoCurves,
                     setTempoMarks,
+                    setMeasureLengths,
                     setDynamics,
                     setSlurs,
                     setOctaveShifts,
@@ -5401,6 +5411,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // erano curve piatte: suonavano giusto ma sulla pagina non
                         // dicevano niente, e chi legge un rallentando non sa quanto.
                         setTempoMarks(segniDiTempoImportati(imported?.tempoMarks));
+                        // Battute che nel file durano più del metro: la griglia deve saperlo,
+                        // altrimenti l'eccedenza si sovrappone alla battuta dopo.
+                        setMeasureLengths(Array.isArray(imported?.measureLengths) ? imported.measureLengths : []);
                         // SCRITTE del file (per la chitarra: le posizioni della mano
                         // sinistra). Entrano come segni di testo, con la tonalità corrente
                         // ricopiata: un testo NON è un cambio di tonica e non deve spostare
@@ -5475,6 +5488,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // note ormai inesistenti.
                 setTempoMarks(segniDiTempoImportati(imported?.tempoMarks));
                 setTempoCurves([]);
+                setMeasureLengths(Array.isArray(imported?.measureLengths) ? imported.measureLengths : []);
                 setTimeSignature(nextTimeSignature);
                 setTimeSignatureChanges(nextTimeSignatureChanges);
                 setIsMinorMode(nextIsMinor);
@@ -5575,7 +5589,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, projectComposer, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, tempoCurves, tempoMarks, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, tempoMarks, measureLengths, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -5679,6 +5693,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setVoltaBrackets(p.voltaBrackets || []);
                 setTempoCurves((p as any).tempoCurves || []);
                 setTempoMarks((p as any).tempoMarks || []);
+                setMeasureLengths((p as any).measureLengths || []);
                 setDynamics((p as any).dynamics || []);
                 setAutoLeadingToneInMinor(p.autoLeadingToneInMinor ?? true);
                 setKeyChangeMode(p.keyChangeMode || 'none');
@@ -6389,9 +6404,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const measureStartAbsBeat: number[] = [];
         const measureTicks: number[] = [];
         let accBeat = 0;
+        // Le battute IRREGOLARI durano quanto contengono, non quanto dice il metro:
+        // senza, l'eccedenza di una battuta finiva disegnata sopra il primo movimento
+        // della successiva (il "grappolo" della battuta 16 nella Fantaisie).
+        const eccezioniDurata = measureLengthMap(measureLengths);
         for (let m = 0; m < targetTotalMeasures; m++) {
             measureStartAbsBeat[m] = accBeat;
-            const bpm = getBeatsPerMeasureForIndex(m);
+            const bpm = beatsOfMeasure(m, getBeatsPerMeasureForIndex(m), eccezioniDurata);
             measureBeatsPerMeasure[m] = bpm;
             measureTicks[m] = bpm * TICKS_PER_QUARTER;
             accBeat += bpm;
@@ -6690,7 +6709,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // ignore logging errors
         }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
-    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks]);
+    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA

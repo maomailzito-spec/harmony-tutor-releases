@@ -171,6 +171,24 @@ export interface KeySignatureChange {
 }
 
 /**
+ * DURATA REALE di una battuta, quando NON coincide col metro.
+ *
+ * Battute di levare, battute d'aggiunta, cadenze: in musica sono normali, e in
+ * MusicXML una battuta porta la propria durata indipendentemente dal metro. Il
+ * programma invece è nato dando per scontato che ogni battuta duri quanto il metro,
+ * e senza questa eccezione le note in eccedenza finivano disegnate sopra il primo
+ * movimento della battuta successiva.
+ *
+ * Elenco SPARSO: ci stanno solo le battute che si discostano. Vedi
+ * `src/utils/measureLengths.ts`.
+ */
+export interface MeasureLength {
+  measureIndex: number;
+  /** Durata reale in semiminime. */
+  beats: number;
+}
+
+/**
  * SEGNO DI METRONOMO a metà brano — «♩ = 60», «𝅗𝅥 = 70».
  *
  * Da non confondere con [TempoCurve], che è un accelerando o un rallentando: là il
