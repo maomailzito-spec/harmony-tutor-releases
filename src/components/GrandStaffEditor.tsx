@@ -8644,7 +8644,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // playback origin (audioStartTime), find the absBeat the audio is at.
         // Uses bisection on beatToTime since closed-form inversion is messy with
         // multiple curve segments. Cheap (≤30 iterations) and runs once per RAF.
-        if (curveSegs.length > 0) {
+        //
+        // SERVE ANCHE PER I SEGNI DI METRONOMO, e non solo per le curve. Quando questa
+        // mappa è nulla il cursore si muove a velocità COSTANTE sul bpm del brano: con
+        // un segno alla battuta 16 l'audio andava a 140 e il cursore restava a 60, e i
+        // due si separavano esattamente lì. La condizione era rimasta alle sole curve.
+        if (curveSegs.length > 0 || baseSegs.length > 1) {
             const lastBeat = (allItems.length > 0
                 ? allItems.reduce((mx, it) => Math.max(mx, it.absStartBeat + it.durationBeats), 0)
                 : startAbsBeat) + 8;
