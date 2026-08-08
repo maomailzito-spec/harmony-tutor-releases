@@ -6708,6 +6708,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch (e) {
             // ignore logging errors
         }
+        // SONDA. Le battute irregolari attraversano import → stato → griglia → disegno,
+        // e a occhio nudo non si vede DOVE la catena si spezza. Qui si espone lo stato
+        // vero, così una segnalazione può portare un dato invece di un'impressione.
+        // In console: `_HT_MISURE()`.
+        try {
+            (window as any)._HT_MISURE = () => ({
+                eccezioniDichiarate: measureLengths,
+                durataBattute_13_18: measureBeatsPerMeasure.slice(12, 18),
+                inizioBattute_13_18: measureStartAbsBeat.slice(12, 18),
+                noteACCallInizioDella16: (accompanimentTracks || []).flatMap(t => (t.notes || [])
+                    .filter(n => Math.abs(Number((n as any).startTick) - beatsToTicks(measureStartAbsBeat[15] ?? 0)) < 1)
+                    .map(n => ({ misura: (n.measureIndex ?? 0) + 1, tick: (n as any).startTick, nota: n.isRest ? 'pausa' : `${n.pitch}${n.octave}` }))),
+            });
+        } catch { /* la sonda non deve mai rompere il disegno */ }
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
     }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths]);
 
