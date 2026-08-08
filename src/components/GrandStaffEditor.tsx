@@ -7191,6 +7191,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 satbName,
                 // Segni di metronomo: escono come <metronome> nella battuta da cui valgono.
                 tempoMarks: tempoMarksRef.current || [],
+                // Le battute irregolari: senza, l'export si ricostruisce una griglia
+                // diversa e riempie lo scarto con pause inventate.
+                measureLengths: measureLengthsRef.current || [],
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.
                 // DALLA REF, non dalla variabile di stato. Questa funzione è un

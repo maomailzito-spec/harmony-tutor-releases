@@ -6,7 +6,8 @@
 import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
-import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange, TempoMark } from '../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange, TempoMark, MeasureLength } from '../types';
+import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { normalizeTempoMarks, tempoMarkQuarterBpm, tempoMarkXmlBeatUnit } from '../utils/tempoMarks';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -64,6 +65,10 @@ export interface ExportMusicXMLOptions {
    *  e chi riapre il file non ritroverebbe la sua partitura. Come le dinamiche, valgono
    *  per tutto il brano: ogni parte se li porta. */
   tempoMarks?: TempoMark[];
+  /** DURATA REALE delle battute che non coincidono col metro. Senza, l'export
+   *  ricostruisce una griglia diversa da quella del progetto e infila pause dove il
+   *  conto non torna. */
+  measureLengths?: MeasureLength[];
   /** Nome della parte del coro nella <part-list> (default "Piano"). */
   satbName?: string;
   /** TRACCE DI ACCOMPAGNAMENTO: ognuna diventa una <part> a sé. Senza, un brano scritto
@@ -366,9 +371,17 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     }
     return cur;
   };
+  // BATTUTE IRREGOLARI anche qui. Questa è la griglia dell'EXPORT, e per un po' è
+  // stata l'ultima a contare tutte le battute uguali al metro: le note delle battute
+  // dopo una da cinque movimenti risultavano un movimento in ritardo rispetto
+  // all'inizio calcolato, e l'esportatore riempiva il buco con una PAUSA DI
+  // SEMIMINIMA sul primo movimento — in ogni battuta, da lì alla fine. Suonava giusto
+  // (gli attacchi erano al loro posto) ma la pagina era piena di pause inventate.
+  const eccezioniDurata = measureLengthMap(opts.measureLengths);
   const measureLenTicks = (m: number): number => {
     const ts = tsAtMeasure(m);
-    return Math.round(ts.numerator * (4 / ts.denominator) * DIVISIONS);
+    const nominale = ts.numerator * (4 / ts.denominator);
+    return Math.round(beatsOfMeasure(m, nominale, eccezioniDurata) * DIVISIONS);
   };
   const measureStartCache: number[] = [0];
   const measureStartTicks = (m: number): number => {
