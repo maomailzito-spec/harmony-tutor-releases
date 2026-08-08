@@ -2870,17 +2870,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *  metrico resta, e l'analisi di quei punti resta parziale: il segnale deve
      *  sopravvivere allo spegnimento del disegno. */
     const misureIncompleteRef = useRef<Record<number, number>>({});
-    /** SONDA temporanea sul rilevatore di misure incomplete: `_HT_INC()` in console. */
-    const diagMisureRef = useRef<Record<number, any>>({});
     const [misureIncompleteTotali, setMisureIncompleteTotali] = useState(0);
-    useEffect(() => {
-        (window as any)._HT_INC = () => ({
-            numeroSulTriangolo: misureIncompleteTotali,
-            riquadriAccesi: showIncompleteMeasureWarnings,
-            perSistema: { ...misureIncompleteRef.current },
-            dettaglio: { ...diagMisureRef.current },
-        });
-    });
 
     // Menu-driven toggles (Electron)
     const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
@@ -16164,16 +16154,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     }
                                 }
 
-                                // SONDA temporanea: che cosa ha trovato questo sistema.
-                                try {
-                                    diagMisureRef.current[systemIndex] = {
-                                        battuteDelSistema: measuresInSystem.slice(),
-                                        noteCoro: (systemNotesForRender || []).length,
-                                        noteTracce: (accompanimentTracks || []).reduce((a, t) => a + (t.notes || []).filter(n => measuresInSystem.includes(n.measureIndex ?? -1)).length, 0),
-                                        incompleteTrovate: Array.from(invalidMeasures).sort((a, c) => a - c).map(x => x + 1),
-                                        ultimaBattutaConNote: currentMeasure,
-                                    };
-                                } catch { /* la sonda non rompe il disegno */ }
                                 segnalaTotale(invalidMeasures.size);
                                 if (!invalidMeasures.size) return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
 
@@ -16455,8 +16435,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                         {showIncompleteMeasureWarnings && invalidMeasureRects.length > 0 && (
                                                             <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {(() => {
-                                                                    const yTop = PLAYHEAD_Y_TOP;
-                                                                    const yBottom = PLAYHEAD_Y_BOTTOM;
+                                                                    // COL CORO NASCOSTO il sistema è traslato in alto di
+                                                                    // SATB_HIDE_SHIFT_PX e questa fascia — che è quella del
+                                                                    // rigo SATB — viene ritagliata via: il conteggio c'era
+                                                                    // (il triangolo restava acceso) ma il rettangolo finiva
+                                                                    // fuori dal visibile, e gli errori sulle tracce non si
+                                                                    // vedevano mai. È la TERZA volta che questa traslazione
+                                                                    // morde: prima i numeri di battuta, poi le scritte, ora
+                                                                    // i riquadri.
+                                                                    const shift = satbVisible ? 0 : SATB_HIDE_SHIFT_PX;
+                                                                    const yTop = PLAYHEAD_Y_TOP + shift;
+                                                                    const yBottom = PLAYHEAD_Y_BOTTOM + shift;
                                                                     const h = yBottom - yTop;
                                                                     return invalidMeasureRects.map((r, i) => {
                                                                         const voiceLabel = r.voices.length > 0
