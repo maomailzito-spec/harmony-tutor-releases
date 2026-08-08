@@ -7960,11 +7960,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
         // Pre-compute cumulative beat offsets per measure so absStartBeat is correct.
         // We build lazily up to the needed measure index.
+        //
+        // LE BATTUTE IRREGOLARI VALGONO ANCHE QUI. Questa è la griglia del PLAYBACK, e
+        // per un po' è stata l'ultima rimasta a contare tutte le battute uguali al
+        // metro: dopo una battuta che ne contiene cinque, l'audio collocava ogni nota
+        // un movimento PRIMA di dove la partitura la disegna, e cursore e suono si
+        // separavano da lì in avanti. Sembrava un difetto del cambio d'andamento
+        // perché il cambio cade esattamente lì.
+        const _eccezioniDurataPlayback = measureLengthMap(measureLengthsRef.current);
         const _measureStartBeatCache: number[] = [0];
         const measureStartBeat = (mi: number): number => {
             while (_measureStartBeatCache.length <= mi) {
                 const prev = _measureStartBeatCache.length - 1;
-                _measureStartBeatCache.push(_measureStartBeatCache[prev] + bpmAtMeasure(prev));
+                _measureStartBeatCache.push(
+                    _measureStartBeatCache[prev] + beatsOfMeasure(prev, bpmAtMeasure(prev), _eccezioniDurataPlayback),
+                );
             }
             return _measureStartBeatCache[mi];
         };
