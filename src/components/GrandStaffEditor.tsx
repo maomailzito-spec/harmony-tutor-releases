@@ -2870,7 +2870,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *  metrico resta, e l'analisi di quei punti resta parziale: il segnale deve
      *  sopravvivere allo spegnimento del disegno. */
     const misureIncompleteRef = useRef<Record<number, number>>({});
+    /** SONDA temporanea sul rilevatore di misure incomplete: `_HT_INC()` in console. */
+    const diagMisureRef = useRef<Record<number, any>>({});
     const [misureIncompleteTotali, setMisureIncompleteTotali] = useState(0);
+    useEffect(() => {
+        (window as any)._HT_INC = () => ({
+            numeroSulTriangolo: misureIncompleteTotali,
+            riquadriAccesi: showIncompleteMeasureWarnings,
+            perSistema: { ...misureIncompleteRef.current },
+            dettaglio: { ...diagMisureRef.current },
+        });
+    });
 
     // Menu-driven toggles (Electron)
     const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
@@ -16154,6 +16164,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     }
                                 }
 
+                                // SONDA temporanea: che cosa ha trovato questo sistema.
+                                try {
+                                    diagMisureRef.current[systemIndex] = {
+                                        battuteDelSistema: measuresInSystem.slice(),
+                                        noteCoro: (systemNotesForRender || []).length,
+                                        noteTracce: (accompanimentTracks || []).reduce((a, t) => a + (t.notes || []).filter(n => measuresInSystem.includes(n.measureIndex ?? -1)).length, 0),
+                                        incompleteTrovate: Array.from(invalidMeasures).sort((a, c) => a - c).map(x => x + 1),
+                                        ultimaBattutaConNote: currentMeasure,
+                                    };
+                                } catch { /* la sonda non rompe il disegno */ }
                                 segnalaTotale(invalidMeasures.size);
                                 if (!invalidMeasures.size) return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
 
