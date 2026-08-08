@@ -479,6 +479,67 @@ function createIdFactory(prefix: string) {
 }
 
 /**
+ * `<instrument-sound>` → programma General MIDI.
+ *
+ * È il nome standard del timbro nel formato («pluck.guitar.nylon-string»), e vari
+ * esportatori lo scrivono AL POSTO di `<midi-program>`. Senza leggerlo ogni parte così
+ * dichiarata entrava come pianoforte.
+ *
+ * La tassonomia completa è lunghissima; qui stanno i casi che si incontrano davvero,
+ * più una regola per FAMIGLIA che copre il resto senza dover elencare tutto. Fra due
+ * regole vince la più specifica, cioè la chiave più lunga che corrisponde all'inizio.
+ */
+const GM_BY_INSTRUMENT_SOUND: Record<string, number> = {
+  'keyboard.piano': 0,
+  'keyboard.harpsichord': 6,
+  'keyboard.organ': 19,
+  'keyboard.organ.pipe': 19,
+  'keyboard.celesta': 8,
+  'pluck.guitar': 24,
+  'pluck.guitar.nylon-string': 24,
+  'pluck.guitar.steel-string': 25,
+  'pluck.guitar.electric': 27,
+  'pluck.lute': 24,
+  'pluck.harp': 46,
+  'pluck.bass': 32,
+  'pluck.bass.electric': 33,
+  'pluck.bass.acoustic': 32,
+  'strings.violin': 40,
+  'strings.viola': 41,
+  'strings.cello': 42,
+  'strings.contrabass': 43,
+  'strings.group': 48,
+  'wind.flutes.flute': 73,
+  'wind.flutes.recorder': 74,
+  'wind.reed.oboe': 68,
+  'wind.reed.clarinet': 71,
+  'wind.reed.bassoon': 70,
+  'wind.reed.saxophone': 65,
+  'brass.trumpet': 56,
+  'brass.trombone': 57,
+  'brass.french-horn': 60,
+  'brass.tuba': 58,
+  'voice': 52,
+  'voice.aa': 52,
+  'pitched-percussion.glockenspiel': 9,
+  'pitched-percussion.marimba': 12,
+  'pitched-percussion.xylophone': 13,
+  'pitched-percussion.timpani': 47,
+  'pitched-percussion.tubular-bells': 14,
+};
+
+function gmFromInstrumentSound(raw: string): number | null {
+  const id = String(raw || '').trim().toLowerCase();
+  if (!id) return null;
+  let miglior: { chiave: string; gm: number } | null = null;
+  for (const [chiave, gm] of Object.entries(GM_BY_INSTRUMENT_SOUND)) {
+    if (id !== chiave && !id.startsWith(`${chiave}.`)) continue;
+    if (!miglior || chiave.length > miglior.chiave.length) miglior = { chiave, gm };
+  }
+  return miglior ? miglior.gm : null;
+}
+
+/**
  * Cambi d'andamento del file → CURVE DI TEMPO PIATTE.
  *
  * Il programma non ha un oggetto "segno di metronomo a metà brano", ma ha le curve di
@@ -598,6 +659,14 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
       if (id) {
         const prog = Number(textOf(sp.querySelector('midi-instrument > midi-program')));
         if (Number.isFinite(prog) && prog >= 1 && prog <= 128) partProgramById.set(id, prog - 1);
+        else {
+          // Ripiego su <instrument-sound>, che molti esportatori scrivono AL POSTO del
+          // numero di programma (Sibelius fra questi): la Fantaisie di Weiss dichiara
+          // `pluck.guitar.nylon-string` e nessun midi-program, quindi la traccia
+          // arrivava col pianoforte — sul rigo, in riproduzione e nei file esportati.
+          const gm = gmFromInstrumentSound(textOf(sp.querySelector('score-instrument > instrument-sound')));
+          if (gm != null) partProgramById.set(id, gm);
+        }
       }
     }
   } catch {

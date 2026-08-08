@@ -7128,7 +7128,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 satbName,
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.
-                accompanimentTracks: (accompanimentTracks || []).map(t => ({
+                // DALLA REF, non dalla variabile di stato. Questa funzione è un
+                // useCallback che si ricostruisce solo quando cambiano metro, tonalità,
+                // titolo o modo: se si tocca una traccia SENZA toccare anche quelli —
+                // aggiungerne una, incidere note, importare un file nella stessa
+                // tonalità e nello stesso metro — la funzione resta quella vecchia e si
+                // porta dietro le tracce di PRIMA. Con le tracce di prima vuote, il file
+                // esportato è una battuta sola e muta: è il "non pervenuto" segnalato,
+                // e prima ancora quello capitato a Valeria. Le note del coro si leggono
+                // già così (latestRawNotes.current) — qui era rimasta la variabile.
+                accompanimentTracks: (latestAccompanimentTracks.current || []).map(t => ({
                     name: t.name,
                     notes: t.notes || [],
                     staffMode: t.staffMode,
@@ -7156,7 +7165,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch {
             // ignore
         }
-    }, [timeSignature, timeSignatureChanges, projectTitle, keySignatureRoot, isMinorMode, exportMidi]);
+        // `satbName` e `analysisSubject` erano catturati e non dichiarati: stessa
+        // trappola delle tracce, con l'effetto più mite di un nome di rigo vecchio o di
+        // un'analisi esportata per il soggetto sbagliato.
+    }, [timeSignature, timeSignatureChanges, projectTitle, keySignatureRoot, isMinorMode, exportMidi, satbName, analysisSubject]);
 
     // Chord identity card (explain modal)
     const { isExplainOpen, explainData, openExplain, closeExplain } = useHarmonyExplain({ analyzedNotes, analysisContexts, currentTonic, isMinorMode, analysisContextAbsBeat, timeSignature });
@@ -16716,12 +16728,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     <text
                                                                         key={`ctx-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        y={staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4)}
+                                                                        // Col coro NASCOSTO il sistema è traslato in alto di
+                                                                        // SATB_HIDE_SHIFT_PX e la fascia dove queste scritte
+                                                                        // stavano viene ritagliata via: restavano disegnate
+                                                                        // sopra il bordo, cioè invisibili. È quello che è
+                                                                        // successo alle posizioni della chitarra, importate
+                                                                        // (18 segni) e mai comparse. Stessa correzione già
+                                                                        // fatta per i numeri di battuta, che stanno a +114:
+                                                                        // il testo va appena sopra il primo rigo ACC.
+                                                                        y={!satbVisible
+                                                                            ? (SATB_HIDE_SHIFT_PX + 96)
+                                                                            : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4))}
                                                                         textAnchor="start"
-                                                                        fontSize={11}
+                                                                        fontSize={13}
+                                                                        fontStyle="italic"
                                                                         fontWeight={600}
-                                                                        fill="black"
-                                                                        opacity={0.85}
+                                                                        fill="#1f2937"
+                                                                        opacity={0.95}
                                                                         style={{ pointerEvents: 'auto', cursor: 'context-menu' }}
                                                                         onContextMenu={(ev) => {
                                                                             ev.preventDefault();
