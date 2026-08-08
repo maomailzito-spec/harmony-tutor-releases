@@ -1205,9 +1205,25 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
 
         if (!isChord) {
           curPosDiv += durDiv;
-          // Stay within measure bounds if the file is slightly inconsistent.
-          if (Number.isFinite(beatsPerMeasure) && beatsPerMeasure > 0) {
-            const maxDiv = Math.round(beatsPerMeasure * divisions);
+          // Il cursore non esce dalla battuta — ma il limite è la sua durata REALE,
+          // non quella nominale del metro.
+          //
+          // QUI STAVA IL "GRAPPOLO". Bloccando al metro, in una battuta che contiene
+          // più di quanto il metro dica ogni nota oltre la soglia riceveva la STESSA
+          // posizione — la fine della battuta — e finivano tutte impilate sulla
+          // stessa x, una sopra l'altra. Nella Fantaisie di Weiss la battuta 15 ne
+          // contiene cinque di semiminime: le ultime quattro semicrome e le due
+          // crome collassavano in un punto solo. MuseScore le distende, perché in
+          // MusicXML una battuta porta la propria durata.
+          //
+          // Il blocco però serve ancora, contro i file davvero incoerenti: senza,
+          // una durata sbagliata spingerebbe le note nella battuta successiva.
+          const realeQuarti = lunghezzaMisuraQuarti.get(measureIndex);
+          const limiteQuarti = (typeof realeQuarti === 'number' && realeQuarti > 0)
+            ? Math.max(realeQuarti, beatsPerMeasure)
+            : beatsPerMeasure;
+          if (Number.isFinite(limiteQuarti) && limiteQuarti > 0) {
+            const maxDiv = Math.round(limiteQuarti * divisions);
             if (maxDiv > 0) curPosDiv = Math.min(curPosDiv, maxDiv);
           }
         }
