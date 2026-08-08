@@ -28,6 +28,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'isSwing',
   'toolbarGroupOrder',
   'tempoCurves',
+  'tempoMarks',
   'dynamics',
   'slurs',
   'octaveShifts',
@@ -92,6 +93,9 @@ export type ProjectDataV1 = {
   toolbarGroupOrder?: any[];
 
   tempoCurves?: any[];
+  /** Segni di metronomo a metà brano («♩ = 60»). Distinti dalle curve di tempo, che
+   *  sono accelerando e rallentando. */
+  tempoMarks?: any[];
   /** Segni di dinamica (pp…ff, sf, fp, forcelle): valgono per tutte le voci. */
   dynamics?: any[];
   slurs?: any[];

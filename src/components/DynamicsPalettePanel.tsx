@@ -62,6 +62,16 @@ const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff']
 /** Le armature come si susseguono per quinte, dai bemolli ai diesis. */
 const TONALITA = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
 
+/** Unità di battito di un segno di metronomo, col suo glifo. */
+type UnitaBattito = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
+const UNITA_GLIFO: Record<UnitaBattito, string> = {
+    whole: '\u{1D15D}',
+    half: '\u{1D15E}',
+    quarter: '♩',
+    eighth: '♪',
+    sixteenth: '\u{1D161}',
+};
+
 const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     selectionCount, hasMarkAtSelection,
     onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
@@ -75,6 +85,12 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     // Testo da posare: si scrive qui e poi si trascina la T dove serve, come per il
     // metro. Così il segno arriva sulla partitura già pronto.
     const [testo, setTesto] = useState<string>('');
+    // Segno di metronomo da posare. L'unità è quella che si vuole STAMPARE: «𝅗𝅥 = 70»
+    // e «♩ = 140» sono la stessa velocità ma non la stessa indicazione, e in partitura
+    // si scrive quella che si legge meglio col metro che c'è.
+    const [tempoBpm, setTempoBpm] = useState<number>(80);
+    const [tempoUnita, setTempoUnita] = useState<UnitaBattito>('quarter');
+    const [tempoPunto, setTempoPunto] = useState<boolean>(false);
     // Armatura da posare: si sceglie qui e si trascina sulla misura da cui vale, come il
     // metro. Le tonalità sono elencate come si scrivono in partitura (per quinte).
     const [tonalita, setTonalita] = useState<string>(currentKeyRoot || 'C');
@@ -363,6 +379,53 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 >
                     Togli il cambio di metro
                 </button>
+
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Andamento</div>
+                <div className="flex items-center gap-1">
+                    <button
+                        onMouseDown={(e) => onStartDrag({
+                            kind: 'tempo-mark',
+                            data: { bpm: tempoBpm, beatUnit: tempoUnita, dotted: tempoPunto },
+                            label: `${UNITA_GLIFO[tempoUnita]}${tempoPunto ? '.' : ''} = ${tempoBpm}`,
+                        }, e)}
+                        title={`Segno di metronomo: trascinalo sulla misura da cui vale. A differenza di un rallentando, dice il NUMERO — chi legge sa a che velocità andare.`}
+                        className={`${bottone} ${attivo} px-2`}
+                        style={{ fontFamily: 'serif', fontSize: 13 }}
+                    >
+                        {UNITA_GLIFO[tempoUnita]}{tempoPunto ? '.' : ''} = {tempoBpm}
+                    </button>
+                    <select
+                        value={tempoUnita}
+                        onChange={(e) => setTempoUnita(e.target.value as UnitaBattito)}
+                        title="Unità di battito: la nota a cui si riferisce il numero"
+                        className="h-7 text-[13px] bg-slate-700 text-gray-100 border border-slate-600 rounded px-1"
+                        style={{ fontFamily: 'serif' }}
+                    >
+                        {(Object.keys(UNITA_GLIFO) as UnitaBattito[]).map(u => (
+                            <option key={u} value={u}>{UNITA_GLIFO[u]}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={() => setTempoPunto(v => !v)}
+                        title={tempoPunto ? 'Unità col punto di valore (vale una volta e mezza)' : 'Unità semplice'}
+                        className={`${bottone} ${attivo} px-1.5`}
+                    >
+                        {tempoPunto ? '•' : '○'}
+                    </button>
+                </div>
+                <div className="flex items-center gap-1 mt-1">
+                    <button onClick={() => setTempoBpm(v => Math.max(20, v - 5))} className={`${bottone} ${attivo} px-1.5`} title="Più lento">−</button>
+                    <input
+                        type="range"
+                        min={20}
+                        max={240}
+                        value={tempoBpm}
+                        onChange={(e) => setTempoBpm(Number(e.target.value))}
+                        className="flex-1 min-w-0 accent-sky-500"
+                        aria-label="Battiti al minuto del segno da posare"
+                    />
+                    <button onClick={() => setTempoBpm(v => Math.min(300, v + 5))} className={`${bottone} ${attivo} px-1.5`} title="Più veloce">+</button>
+                </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Battute</div>
                 <div className="grid grid-cols-4 gap-1">

@@ -171,6 +171,32 @@ export interface KeySignatureChange {
 }
 
 /**
+ * SEGNO DI METRONOMO a metà brano — «♩ = 60», «𝅗𝅥 = 70».
+ *
+ * Da non confondere con [TempoCurve], che è un accelerando o un rallentando: là il
+ * tempo SCIVOLA fra due note, qui CAMBIA di netto da una battuta in poi, ed è scritto.
+ * La differenza non è tecnica ma di lettura: davanti a una curva l'esecutore vede che
+ * qualcosa rallenta e non sa né quanto né fino a dove; davanti a un segno legge il
+ * numero. Un file importato che dichiara i suoi andamenti merita il numero.
+ *
+ * `bpm` è riferito all'UNITÀ dichiarata, non alla semiminima: `beatUnit: 'half'` con
+ * `bpm: 70` è una minima a 70, cioè 140 alla semiminima. Si conserva com'è scritto —
+ * riportarlo subito alla semiminima farebbe stampare «♩ = 140» dove la partitura dice
+ * «𝅗𝅥 = 70», che è la stessa velocità ma non la stessa indicazione. Per il calcolo
+ * c'è `tempoMarkQuarterBpm`.
+ */
+export interface TempoMark {
+  id: string;
+  /** Vale dall'inizio di questa battuta, come i cambi di metro e d'armatura. */
+  measureIndex: number;
+  bpm: number;
+  /** Unità di battito. Assente = semiminima. */
+  beatUnit?: 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
+  /** Unità col punto di valore (♩. = 80): moltiplica per 1,5. */
+  dotted?: boolean;
+}
+
+/**
  * SEGNO D'OTTAVA (8va sopra / 8vb sotto).
  *
  * Serve ai passaggi che avrebbero troppi tagli addizionali: si scrivono un'ottava più

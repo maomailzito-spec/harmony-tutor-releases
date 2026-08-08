@@ -6,7 +6,8 @@
 import type { StaffNote, KeySignature, TimeSignature, TimeSignatureChange, NoteDuration, ClefType } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
 import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
-import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange, TempoMark } from '../types';
+import { normalizeTempoMarks, tempoMarkQuarterBpm, tempoMarkXmlBeatUnit } from '../utils/tempoMarks';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,12 @@ export interface ExportMusicXMLOptions {
    *  ogni <part> se li porta: chi apre il file li trova su ogni rigo, come in una
    *  partitura corale dove il *f* si scrive una volta e riguarda l'insieme. */
   dynamics?: DynamicMark[];
+  /** SEGNI DI METRONOMO a metà brano («♩ = 60»): `<direction>` con `<metronome>` più
+   *  `<sound tempo>` per chi il file lo SUONA. L'unità esce com'è scritta — un
+   *  «𝅗𝅥 = 70» ristampato «♩ = 140» sarebbe la stessa velocità ma un'altra indicazione,
+   *  e chi riapre il file non ritroverebbe la sua partitura. Come le dinamiche, valgono
+   *  per tutto il brano: ogni parte se li porta. */
+  tempoMarks?: TempoMark[];
   /** Nome della parte del coro nella <part-list> (default "Piano"). */
   satbName?: string;
   /** TRACCE DI ACCOMPAGNAMENTO: ognuna diventa una <part> a sé. Senza, un brano scritto
@@ -582,6 +589,30 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
   const mode = isMinorMode ? 'minor' : 'major';
 
   // ── CAMBI D'ARMATURA: misura → <key> da dichiarare lì ──
+  // ── SEGNI DI METRONOMO per battuta ────────────────────────────────────────
+  // Stanno all'inizio della battuta da cui valgono, prima delle note, nella stessa
+  // corsia delle dinamiche (`ordine` basso = escono per primi: l'andamento si legge
+  // prima del resto). `<sound tempo>` è sempre in semiminime al minuto, anche quando
+  // il segno stampato dichiara un'altra unità.
+  const tempoPerMisura = new Map<number, DynDirection[]>();
+  for (const tm of normalizeTempoMarks(opts.tempoMarks)) {
+    const corpo = [
+      '      <direction placement="above">',
+      '        <direction-type>',
+      '          <metronome>',
+      `            <beat-unit>${tempoMarkXmlBeatUnit(tm)}</beat-unit>`,
+      ...(tm.dotted ? ['            <beat-unit-dot/>'] : []),
+      `            <per-minute>${Math.round(tm.bpm)}</per-minute>`,
+      '          </metronome>',
+      '        </direction-type>',
+      `        <sound tempo="${Math.round(tempoMarkQuarterBpm(tm))}"/>`,
+      '      </direction>',
+    ];
+    const lista = tempoPerMisura.get(tm.measureIndex) || [];
+    lista.push({ localTick: 0, ordine: -1, lines: corpo });
+    tempoPerMisura.set(tm.measureIndex, lista);
+  }
+
   const armaturaPerMisura = new Map<number, { fifths: number; mode: string }>();
   for (const c of (opts.keySignatureChanges || [])) {
     if (!c || !Number.isFinite(c.measureIndex) || c.measureIndex <= 0) continue;
@@ -705,6 +736,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       // Corsia dedicata e non agganciata agli attacchi perché la coda di una forcella
       // cade spesso dove nessuna voce attacca, e lì non avrebbe trovato un posto.
       const dynHere = [
+        ...(tempoPerMisura.get(m) || []),
         ...(dynByMeasure.get(m) || []),
         ...((ottavePerParte.get(part.id)?.get(m)) || []),
       ].sort((x, y) => (x.localTick - y.localTick) || (x.ordine - y.ordine));

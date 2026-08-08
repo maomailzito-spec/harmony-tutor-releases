@@ -6,8 +6,9 @@
  * sequence markers, modulation markers, and time-signature markers.
  */
 import { useMemo } from 'react';
-import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack, KeySignatureChange, KeySignature } from '../types';
+import type { StaffNote, TimeSignature, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, AccompanimentTrack, KeySignatureChange, KeySignature, TempoMark } from '../types';
 import { normalizeKeyChanges, keyChangeAtMeasure } from '../utils/keySignatureChanges';
+import { normalizeTempoMarks, tempoMarkLabel } from '../utils/tempoMarks';
 import { getActiveNotesTimeline, identifyChordCandidates, calculateRomanFromChordInfo, getRomanAnalysis, computeFiguredBassFromNotes, FIGURED_BASS_UI_OPTIONS, getKeySignature, getChordSymbol, bassScaleDegreeRoman, isEnharmonicSpellingMismatch } from '../utils/musicTheory';
 import { structuralNotes, buildEngineHarmonyOverrideMap } from '../utils/harmonyLabelPipeline';
 import { usePreference } from '../preferences/usePreference';
@@ -71,6 +72,8 @@ export interface UseHarmonyLabelsParams {
     keySignatureChanges?: KeySignatureChange[];
     keySignatureRoot?: string;
     analysisContexts: AnalysisContext[];
+    /** Segni di metronomo a metà brano: servono solo a essere disegnati. */
+    tempoMarks?: TempoMark[];
     harmonyOverrides: any[];
     currentTonic: string;
     isMinorMode: boolean;
@@ -131,7 +134,7 @@ function getAccompanimentPcsForBeat(
 export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
     const {
         layoutData, timeSignature, timeSignatureChanges,
-        keySignatureChanges, keySignatureRoot,
+        keySignatureChanges, keySignatureRoot, tempoMarks,
         analysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes,
@@ -5820,6 +5823,32 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         return markersBySystem;
     }, [layoutData, keySignatureChanges, keySignatureRoot, isMinorMode]);
 
+    /**
+     * SEGNI DI METRONOMO da disegnare, sistema per sistema. Stessa impalcatura dei
+     * cambi di metro e d'armatura: la x è l'inizio della battuta da cui il segno vale.
+     * L'etichetta è già pronta da stampare («♩ = 60»): l'unità resta quella scritta
+     * nella partitura, non quella dei conti.
+     */
+    const tempoMarkMarkersBySystem = useMemo(() => {
+        const vuoto = [] as Array<Array<{ x: number; label: string; measureIndex: number }>>;
+        if (!layoutData || !(tempoMarks || []).length) return vuoto;
+        const markersBySystem = layoutData.systemsParams.map(() => [] as Array<{ x: number; label: string; measureIndex: number }>);
+        for (const m of normalizeTempoMarks(tempoMarks)) {
+            const sysIndex = layoutData.systemsParams.findIndex((sp: any) => (sp.measureIndices || []).includes(m.measureIndex));
+            if (sysIndex < 0) continue;
+            const system = layoutData.systemsParams[sysIndex];
+            const idx = system.measureIndices.indexOf(m.measureIndex);
+            if (idx === -1) continue;
+            markersBySystem[sysIndex].push({
+                x: system.startMeasuresX[idx] + 2,
+                label: tempoMarkLabel(m),
+                measureIndex: m.measureIndex,
+            });
+        }
+        markersBySystem.forEach((ms: any[]) => ms.sort((a, b) => a.x - b.x));
+        return markersBySystem;
+    }, [layoutData, tempoMarks]);
+
 
     // ── Trasformazioni MELODICHE (idea "simmetria"): T/I/R/RI, dentro-voce e
     // cross-voce, tonale+reale. Banda sotto il MODELLO + bracket con etichetta
@@ -5941,6 +5970,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         contextMarkersBySystem,
         timeSignatureMarkersBySystem,
         keySignatureMarkersBySystem,
+        tempoMarkMarkersBySystem,
         sequenceMatches,
         motifNoteStyles: motifData.styleById,
         motifBracketsBySystem,

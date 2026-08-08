@@ -1,7 +1,7 @@
 import { TICKS_PER_QUARTER } from '../../constants';
 import type { AccidentalType, ClefType, NoteDuration, StaffNote, TimeSignature, TimeSignatureChange } from '../../types';
 import type { DynamicLevel, DynamicMark } from '../../utils/dynamics';
-import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange, TempoCurve } from '../../types';
+import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../../types';
 
 /**
  * Una <part> del file, tenuta a sé. `notes` è lo STESSO materiale che finisce in
@@ -59,11 +59,21 @@ export type MusicXMLImportResult = {
    *  120 — un Weiss segnato a 60 partiva al doppio della velocità. */
   tempoBpm?: number;
   /** TUTTI i segni di metronomo, col punto in cui cadono. Il primo è l'andamento del
-   *  brano (`tempoBpm`); gli altri sono cambi, e diventano curve di tempo PIATTE (vedi
-   *  `tempoCurvesFromMarks`). Tenere solo il primo non è un'approssimazione da poco: la
+   *  brano (`tempoBpm`); gli altri diventano SEGNI DI METRONOMO scritti sulla partitura
+   *  (`TempoMark`). Tenere solo il primo non è un'approssimazione da poco: la
    *  Fantaisie di Weiss passa da 60 a 140 alla battuta 16 e resta lì per 47 battute su
    *  65 — quasi tutto il brano al 43% della velocità voluta. */
-  tempoMarks: Array<{ absBeat: number; bpm: number }>;
+  tempoMarks: Array<{
+    absBeat: number;
+    /** Battuta da cui vale: è lì che il segno si scrive e si posa. */
+    measureIndex: number;
+    /** Numero COM'È SCRITTO, riferito a `beatUnit` (non alla semiminima). */
+    bpm: number;
+    beatUnit?: 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
+    dotted?: boolean;
+    /** Lo stesso segno riportato alla semiminima: serve ai conti, non alla stampa. */
+    quarterBpm: number;
+  }>;
   /** Scritte libere del file (`<words>`): nella musica per chitarra sono le posizioni
    *  della mano sinistra — CVII, CV, «1/2 II». Arrivano come SEGNI DI TESTO, gli stessi
    *  che si posano dalla tavolozza, quindi si spostano e si tolgono come tutti gli
@@ -241,7 +251,20 @@ const BEAT_UNIT_QUARTERS: Record<string, number> = {
  *
  * Ripiego: `<sound tempo="…">`, che per specifica è già in semiminime al minuto.
  */
-function bpmFromDirection(el: Element): number | null {
+type SegnoTempoLetto = {
+  quarterBpm: number;
+  bpm: number;
+  beatUnit?: 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
+  dotted?: boolean;
+};
+
+/** Unità MusicXML → nome nostro. Fuori restano breve/long e i valori più corti della
+ *  semicroma: come unità di metronomo non si scrivono, e non sapremmo disegnarle. */
+const BEAT_UNIT_NAME: Record<string, NonNullable<SegnoTempoLetto['beatUnit']>> = {
+  whole: 'whole', half: 'half', quarter: 'quarter', eighth: 'eighth', '16th': 'sixteenth',
+};
+
+function bpmFromDirection(el: Element): SegnoTempoLetto | null {
   const metro = el.tagName === 'metronome' ? el : el.querySelector('direction-type > metronome');
   if (metro) {
     const perMinute = Number.parseFloat(textOf(metro.querySelector('per-minute')));
@@ -251,15 +274,25 @@ function bpmFromDirection(el: Element): number | null {
       // Il punto vale metà del valore che lo precede, il secondo metà del primo…
       const dotFactor = dots > 0 ? 2 - Math.pow(2, -dots) : 1;
       const unit = (BEAT_UNIT_QUARTERS[unitRaw] ?? 1) * dotFactor;
-      const bpm = perMinute * unit;
-      if (Number.isFinite(bpm) && bpm > 0) return bpm;
+      const quarterBpm = perMinute * unit;
+      if (Number.isFinite(quarterBpm) && quarterBpm > 0) {
+        // Si conserva anche il segno COM'È SCRITTO: «𝅗𝅥 = 70» e «♩ = 140» sono la
+        // stessa velocità ma non la stessa indicazione, e in partitura va ristampata
+        // quella che c'era. Un'unità che non sappiamo scrivere (breve, o più corta
+        // della semicroma) si riporta alla semiminima e amen.
+        const nome = BEAT_UNIT_NAME[unitRaw];
+        return nome && dots <= 1
+          ? { quarterBpm, bpm: perMinute, beatUnit: nome, dotted: dots === 1 }
+          : { quarterBpm, bpm: quarterBpm, beatUnit: 'quarter' };
+      }
     }
   }
   const sound = el.tagName === 'sound' ? el : el.querySelector('sound[tempo]');
   const tempoRaw = sound?.getAttribute('tempo');
   if (tempoRaw != null) {
     const t = Number.parseFloat(tempoRaw);
-    if (Number.isFinite(t) && t > 0) return t;
+    // `<sound tempo>` è per specifica già in semiminime al minuto.
+    if (Number.isFinite(t) && t > 0) return { quarterBpm: t, bpm: t, beatUnit: 'quarter' };
   }
   return null;
 }
@@ -539,53 +572,6 @@ function gmFromInstrumentSound(raw: string): number | null {
   return miglior ? miglior.gm : null;
 }
 
-/**
- * Cambi d'andamento del file → CURVE DI TEMPO PIATTE.
- *
- * Il programma non ha un oggetto "segno di metronomo a metà brano", ma ha le curve di
- * tempo (accelerando/rallentando): due note per capi e un andamento che va dall'uno
- * all'altro. Un cambio SECCO è quella stessa cosa con `fromBpm` uguale a `toBpm` —
- * niente di nuovo da inventare, e in riproduzione vale anche per le tracce ACC.
- *
- * Ogni segno copre da dove cade fino all'ultima nota prima del segno successivo. Il
- * primo segno resta fuori: è l'andamento del brano (`bpm` del progetto), e fuori dalle
- * curve la riproduzione usa proprio quello.
- *
- * Un segno con una sola nota sotto non produce curva: i capi sono due note DISTINTE, e
- * la riproduzione scarta i segmenti che non si aprono. In quel punto vale l'andamento
- * del brano — un'imprecisione di una battuta, preferibile a segmenti sovrapposti.
- */
-export function tempoCurvesFromMarks(
-  marks: Array<{ absBeat: number; bpm: number }>,
-  notes: StaffNote[],
-): TempoCurve[] {
-  if (!Array.isArray(marks) || marks.length <= 1) return [];
-  const suonate = (notes || [])
-    .filter(n => n && !n.isRest && (n as any).id)
-    .map(n => ({
-      id: String((n as any).id),
-      beat: Number((n as any).startTick ?? 0) / TICKS_PER_QUARTER,
-    }))
-    .sort((a, b) => a.beat - b.beat);
-  if (suonate.length === 0) return [];
-
-  const out: TempoCurve[] = [];
-  for (let i = 1; i < marks.length; i++) {
-    const da = marks[i].absBeat;
-    const finoA = i + 1 < marks.length ? marks[i + 1].absBeat : Infinity;
-    const primo = suonate.find(n => n.beat >= da - 1e-6);
-    if (!primo) continue;
-    let ultimo: { id: string; beat: number } | null = null;
-    for (const n of suonate) {
-      if (n.beat >= finoA - 1e-6) break;
-      if (n.beat >= primo.beat) ultimo = n;
-    }
-    if (!ultimo || ultimo.id === primo.id) continue;
-    out.push({ startNoteId: primo.id, endNoteId: ultimo.id, fromBpm: marks[i].bpm, toBpm: marks[i].bpm });
-  }
-  return out;
-}
-
 function parseXmlOrThrow(xml: string): Document {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'application/xml');
@@ -685,10 +671,10 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
   const keySignatureChanges: KeySignatureChange[] = [];
 
   // Andamento. Il PRIMO segno è quello del brano; gli altri sono cambi, e si tengono
-  // tutti (diventano curve piatte, vedi tempoCurvesFromMarks). Come le dinamiche, nel
+  // tutti (diventano segni scritti sulla partitura). Come le dinamiche, nel
   // file stanno dentro le parti e un esportatore li ripete su ognuna: si raccolgono
   // una volta sola, per punto nel tempo.
-  const tempoMarks: Array<{ absBeat: number; bpm: number }> = [];
+  const tempoMarks: MusicXMLImportResult['tempoMarks'] = [];
   const tempoSeen = new Set<number>();
   // Scritte libere, raccolte una volta sola: come le dinamiche, nel file stanno dentro
   // le parti e un esportatore le ripete su ognuna.
@@ -909,7 +895,14 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
               const beat = Math.max(0, Math.round((measureStartAbsBeat + (divisions > 0 ? curPosDiv / divisions : 0)) * 1e6) / 1e6);
               if (!tempoSeen.has(beat)) {
                 tempoSeen.add(beat);
-                tempoMarks.push({ absBeat: beat, bpm: Math.max(20, Math.min(300, Math.round(b))) });
+                tempoMarks.push({
+                  absBeat: beat,
+                  measureIndex,
+                  bpm: Math.max(1, Math.min(999, Math.round(b.bpm))),
+                  beatUnit: b.beatUnit,
+                  dotted: b.dotted,
+                  quarterBpm: Math.max(20, Math.min(300, Math.round(b.quarterBpm))),
+                });
               }
             }
           }
@@ -1253,7 +1246,7 @@ export function importMusicXML(xml: string): MusicXMLImportResult {
     staffSystemMode,
     projectTitle: title || undefined,
     projectComposer: composer || undefined,
-    ...(tempoMarksOrdinati.length > 0 ? { tempoBpm: tempoMarksOrdinati[0].bpm } : {}),
+    ...(tempoMarksOrdinati.length > 0 ? { tempoBpm: tempoMarksOrdinati[0].quarterBpm } : {}),
     tempoMarks: tempoMarksOrdinati,
     textMarks: textMarks.sort((a, b) => a.absBeat - b.absBeat),
     parts: partsOut,

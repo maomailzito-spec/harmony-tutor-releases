@@ -51,6 +51,11 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         slurs?: any[];
         octaveShifts?: any[];
         keySignatureChanges?: any[];
+        /** Curve di tempo (accelerando/rallentando) e SEGNI DI METRONOMO: due cose
+         *  diverse. La curva fa scivolare il tempo fra due note; il segno lo cambia di
+         *  netto da una battuta, ed è scritto sulla pagina col suo numero. */
+        tempoCurves?: any[];
+        tempoMarks?: any[];
         toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
@@ -136,6 +141,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		// Curve di tempo (rallentando/accelerando): salvate sempre, anche vuote, per
 		// round-trip pulito (prima non venivano scritte → sparivano alla riapertura).
 		tempoCurves: args.tempoCurves || [],
+		tempoMarks: args.tempoMarks || [],
 		// Dinamiche: salvate sempre, anche vuote, per un round-trip pulito.
 		dynamics: args.dynamics || [],
 		// Legature di portamento: idem.
@@ -242,6 +248,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setOctaveShifts?: (next: any) => void;
 	setKeySignatureChanges?: (next: any) => void;
 	setTempoCurves?: (next: any) => void;
+	setTempoMarks?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
 	setAutoLeadingToneInMinor: (next: any) => void;
@@ -342,6 +349,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setVoltaBrackets([]);
 		args.setDynamics?.([]);
 		args.setTempoCurves?.([]);
+		args.setTempoMarks?.([]);
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
 		args.setAutoLeadingToneInMinor(true);
@@ -617,6 +625,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			// Curve di tempo: ripristina dal file, oppure azzera (file vecchi senza il campo
 			// → niente carry-over dalla sessione precedente).
 			args.setTempoCurves?.(Array.isArray(loadedProject.tempoCurves) ? loadedProject.tempoCurves : []);
+			args.setTempoMarks?.(Array.isArray((loadedProject as any).tempoMarks) ? (loadedProject as any).tempoMarks : []);
 			// Dinamiche: come sopra — ripristina o azzera, così un file vecchio non
 			// eredita i segni della sessione precedente.
 			args.setDynamics?.(Array.isArray((loadedProject as any).dynamics) ? (loadedProject as any).dynamics : []);
@@ -786,6 +795,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setRepeatBarlines({});
 		args.apply.setVoltaBrackets([]);
 		args.apply.setTempoCurves?.([]);
+		args.apply.setTempoMarks?.([]);
 		args.apply.setMinMeasureCount(4);
 		args.apply.setMeasuresPerLine(4);
 		args.apply.setIsMinorMode(false);

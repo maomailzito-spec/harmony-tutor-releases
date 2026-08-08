@@ -35,10 +35,12 @@ import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } fro
 import { articulationPlayback } from '../utils/articulations';
 import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
 import { normalizeKeyChanges, keyAtMeasure } from '../utils/keySignatureChanges';
+import type { TempoMark } from '../types';
+import { normalizeTempoMarks, tempoMarkQuarterBpm } from '../utils/tempoMarks';
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
-import { importMusicXML, tempoCurvesFromMarks } from '../importers/musicxml/importMusicXML';
+import { importMusicXML } from '../importers/musicxml/importMusicXML';
 import { musicXmlPartsToAccTracks } from '../importers/musicxml/musicXmlToAccTracks';
 import { exportMusicXML } from '../exporters/exportMusicXML';
 import { exportMuseScoreMscx } from '../exporters/exportMuseScoreMscx';
@@ -537,6 +539,26 @@ function accTransposeSemitones(track?: { isDrum?: boolean; octaveTranspose?: num
     if (!track || track.isDrum) return 0;
     const oct = track.octaveTranspose;
     return (typeof oct === 'number' && Number.isFinite(oct)) ? oct * 12 : 0;
+}
+
+/**
+ * Segni di metronomo letti da un file → segni della partitura.
+ *
+ * Il PRIMO si lascia fuori: è l'andamento del brano e finisce nel `bpm`, che è già
+ * l'indicazione d'inizio. Ristamparlo alla prima battuta sarebbe dire due volte la
+ * stessa cosa. Gli altri si posano dove cadono, col numero e l'unità del file.
+ */
+function segniDiTempoImportati(
+    marks: Array<{ measureIndex: number; bpm: number; beatUnit?: TempoMark['beatUnit']; dotted?: boolean }> | undefined,
+): TempoMark[] {
+    const elenco = Array.isArray(marks) ? marks : [];
+    return normalizeTempoMarks(elenco.slice(1).map(m => ({
+        id: crypto.randomUUID(),
+        measureIndex: m.measureIndex,
+        bpm: m.bpm,
+        beatUnit: m.beatUnit,
+        dotted: m.dotted,
+    })));
 }
 
 function findAccTrackForNote(noteId: string, accompanimentTracks: AccompanimentTrack[]): {
@@ -1565,6 +1587,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [tempoCurves, setTempoCurves] = useState<TempoCurve[]>([]);
     const tempoCurvesRef = useRef(tempoCurves);
     tempoCurvesRef.current = tempoCurves;
+
+    // SEGNI DI METRONOMO a metà brano («♩ = 60»). Sono un'altra cosa dalle curve qui
+    // sopra: la curva fa scivolare il tempo e non dice quanto, il segno lo cambia di
+    // netto e lo SCRIVE. Valgono da una battuta in poi, come metro e armatura.
+    const [tempoMarks, setTempoMarks] = useState<TempoMark[]>([]);
+    const tempoMarksRef = useRef(tempoMarks);
+    tempoMarksRef.current = tempoMarks;
 
     // Segni di dinamica (pp…ff, sf, fp, forcelle). Valgono per TUTTE le voci e sono
     // ancorati a un punto nel tempo (absBeat), come gli override d'armonia.
@@ -5144,6 +5173,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     repeatBarlines,
                     voltaBrackets,
                     tempoCurves,
+                    tempoMarks,
                     dynamics,
                     slurs,
                     octaveShifts,
@@ -5204,6 +5234,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setRepeatBarlines,
                     setVoltaBrackets,
                     setTempoCurves,
+                    setTempoMarks,
                     setDynamics,
                     setSlurs,
                     setOctaveShifts,
@@ -5364,13 +5395,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         if (typeof imported?.tempoBpm === 'number' && Number.isFinite(imported.tempoBpm)) {
                             setBpm(imported.tempoBpm);
                         }
-                        // …e i CAMBI d'andamento, come curve piatte. Tenere solo il primo
-                        // segno non era un'approssimazione da poco: questa Fantaisie passa
-                        // da 60 a 140 alla battuta 16 e ci resta per 47 battute su 65.
-                        setTempoCurves(tempoCurvesFromMarks(
-                            Array.isArray(imported?.tempoMarks) ? imported.tempoMarks : [],
-                            tracks.flatMap(t => t.notes || []),
-                        ));
+                        // …e i CAMBI d'andamento, come SEGNI DI METRONOMO scritti sulla
+                        // partitura. Il primo resta il bpm del brano; gli altri si posano
+                        // dove cadono, col numero e l'unità che il file dichiara. Prima
+                        // erano curve piatte: suonavano giusto ma sulla pagina non
+                        // dicevano niente, e chi legge un rallentando non sa quanto.
+                        setTempoMarks(segniDiTempoImportati(imported?.tempoMarks));
                         // SCRITTE del file (per la chitarra: le posizioni della mano
                         // sinistra). Entrano come segni di testo, con la tonalità corrente
                         // ricopiata: un testo NON è un cambio di tonica e non deve spostare
@@ -5439,13 +5469,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (typeof imported?.tempoBpm === 'number' && Number.isFinite(imported.tempoBpm)) {
                     setBpm(imported.tempoBpm);
                 }
-                // I cambi d'andamento del file. Vanno posati SEMPRE, anche vuoti: sono
-                // stato del progetto precedente, e resterebbero ancorati a note che nel
-                // brano nuovo non esistono più.
-                setTempoCurves(tempoCurvesFromMarks(
-                    Array.isArray(imported?.tempoMarks) ? imported.tempoMarks : [],
-                    importedNotes as any,
-                ));
+                // I segni di metronomo del file. Vanno posati SEMPRE, anche vuoti: sono
+                // stato del progetto precedente e non c'entrano col brano nuovo. Stessa
+                // ragione per cui si azzerano le curve di tempo, che restavano ancorate a
+                // note ormai inesistenti.
+                setTempoMarks(segniDiTempoImportati(imported?.tempoMarks));
+                setTempoCurves([]);
                 setTimeSignature(nextTimeSignature);
                 setTimeSignatureChanges(nextTimeSignatureChanges);
                 setIsMinorMode(nextIsMinor);
@@ -5546,7 +5575,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, projectComposer, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, tempoCurves, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, tempoMarks, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -5649,6 +5678,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setRepeatBarlines(p.repeatBarlines || {});
                 setVoltaBrackets(p.voltaBrackets || []);
                 setTempoCurves((p as any).tempoCurves || []);
+                setTempoMarks((p as any).tempoMarks || []);
                 setDynamics((p as any).dynamics || []);
                 setAutoLeadingToneInMinor(p.autoLeadingToneInMinor ?? true);
                 setKeyChangeMode(p.keyChangeMode || 'none');
@@ -7022,8 +7052,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Timeline-based harmony labels per system (roman+figures and symbol)
     // ADAPTER LAYER — harmony analysis overlay data (extracted to useHarmonyLabels hook)
-    const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, keySignatureMarkersBySystem, sequenceMatches, motifNoteStyles, motifBracketsBySystem, motifMatches } = useHarmonyLabels({
-        layoutData, timeSignature, timeSignatureChanges, keySignatureChanges, keySignatureRoot,
+    const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, keySignatureMarkersBySystem, tempoMarkMarkersBySystem, sequenceMatches, motifNoteStyles, motifBracketsBySystem, motifMatches } = useHarmonyLabels({
+        layoutData, timeSignature, timeSignatureChanges, keySignatureChanges, keySignatureRoot, tempoMarks,
         analysisContexts: effectiveAnalysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
@@ -7126,6 +7156,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 octaveShifts: octaveShiftsRef.current || [],
                 keySignatureChanges: keySignatureChangesRef.current || [],
                 satbName,
+                // Segni di metronomo: escono come <metronome> nella battuta da cui valgono.
+                tempoMarks: tempoMarksRef.current || [],
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.
                 // DALLA REF, non dalla variabile di stato. Questa funzione è un
@@ -8521,29 +8553,59 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return (60 / k) * Math.log(b1 / b0);
         };
 
+        // ── ANDAMENTO DI BASE, A GRADINI ──────────────────────────────────────────
+        // Non è più una costante: i SEGNI DI METRONOMO lo cambiano di netto dalla
+        // battuta in cui stanno. Il primo gradino è il bpm del brano, e vale finché non
+        // arriva un segno. Le curve (accelerando/rallentando) restano quello che erano
+        // e vincono dove ci sono: fuori da loro comanda il gradino.
+        const baseSegs: Array<{ from: number; bpm: number }> = [{ from: 0, bpm: safeBpm }];
+        try {
+            const inizioMisura = (layoutDataRef.current as any)?.measureStartAbsBeat as number[] | undefined;
+            const battutePerMisura = timeSignature.numerator * (4 / timeSignature.denominator);
+            for (const m of normalizeTempoMarks(tempoMarksRef.current)) {
+                const from = inizioMisura?.[m.measureIndex] ?? (m.measureIndex * battutePerMisura);
+                const bpm = Math.max(20, Math.min(300, Math.round(tempoMarkQuarterBpm(m))));
+                if (!Number.isFinite(from) || from < 0) continue;
+                // Un segno sulla prima battuta SOSTITUISCE l'andamento di partenza
+                // invece di aggiungersi: sono la stessa cosa detta due volte.
+                if (from <= 1e-9) baseSegs[0] = { from: 0, bpm };
+                else baseSegs.push({ from, bpm });
+            }
+            baseSegs.sort((a, b) => a.from - b.from);
+        } catch { /* senza segni resta il bpm del brano */ }
+
+        /** L'andamento di base in vigore a un certo punto. */
+        const baseBpmAt = (beat: number): number => {
+            let bpm = baseSegs[0].bpm;
+            for (const s of baseSegs) {
+                if (s.from <= beat + 1e-9) bpm = s.bpm;
+                else break;
+            }
+            return bpm;
+        };
+
         const beatToTime = (absBeat: number): number => {
-            // Walks beat 0 → absBeat, splitting at each curve boundary.
+            // Cammina da 0 a absBeat spezzando a OGNI confine: capi delle curve e
+            // gradini dell'andamento. Prima si spezzava solo sulle curve, e il bpm di
+            // base era uno solo per tutto il brano.
             let cursor = 0;
             let acc = 0;
-            for (const seg of curveSegs) {
-                if (absBeat <= cursor + 1e-9) break;
-                if (seg.startBeat >= absBeat) break;
-                // Pre-segment region (base BPM)
-                if (cursor < seg.startBeat) {
-                    const span = Math.min(seg.startBeat, absBeat) - cursor;
-                    if (span > 0) acc += span * 60 / safeBpm;
-                    cursor = Math.min(seg.startBeat, absBeat);
-                    if (cursor >= absBeat - 1e-9) break;
+            let giri = 0;
+            while (cursor < absBeat - 1e-9 && giri++ < 10000) {
+                const dentro = curveSegs.find(s => s.startBeat <= cursor + 1e-9 && s.endBeat > cursor + 1e-9);
+                if (dentro) {
+                    const fine = Math.min(dentro.endBeat, absBeat);
+                    acc += segDurationSec(dentro, cursor, fine);
+                    cursor = fine;
+                    continue;
                 }
-                // Inside-segment region
-                const segEnd = Math.min(seg.endBeat, absBeat);
-                if (segEnd > cursor) {
-                    acc += segDurationSec(seg, cursor, segEnd);
-                    cursor = segEnd;
-                }
-                if (cursor >= absBeat - 1e-9) break;
+                // Fuori dalle curve: si va al prossimo confine, quale che sia.
+                const prossimaCurva = curveSegs.find(s => s.startBeat > cursor + 1e-9)?.startBeat ?? Infinity;
+                const prossimoGradino = baseSegs.find(s => s.from > cursor + 1e-9)?.from ?? Infinity;
+                const fine = Math.min(absBeat, prossimaCurva, prossimoGradino);
+                acc += (fine - cursor) * 60 / baseBpmAt(cursor);
+                cursor = fine;
             }
-            if (cursor < absBeat) acc += (absBeat - cursor) * 60 / safeBpm;
             return acc;
         };
 
@@ -12803,6 +12865,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch { /* ignore */ }
     }, [timeSignature, analysisContextAbsBeat]);
 
+    /**
+     * Posa un SEGNO DI METRONOMO all'inizio di una battuta.
+     *
+     * Vale da lì in avanti, come il metro e l'armatura, e sostituisce quello che c'era
+     * sulla stessa battuta invece di affiancarglisi: due andamenti nello stesso punto
+     * non si possono né leggere né suonare.
+     *
+     * Non tocca il `bpm` del brano: quello resta l'andamento di partenza, e un segno
+     * sulla PRIMA battuta è la stessa cosa detta due volte — chi suona parte da lì.
+     */
+    const mettiSegnoTempo = useCallback((measureIndex: number, bpm: number, beatUnit?: TempoMark['beatUnit'], dotted?: boolean) => {
+        const mis = Math.max(0, Math.round(measureIndex));
+        setTempoMarks(prev => normalizeTempoMarks([
+            ...(prev || []).filter(m => m.measureIndex !== mis),
+            { id: crypto.randomUUID(), measureIndex: mis, bpm, beatUnit, dotted },
+        ]));
+    }, []);
+    const mettiSegnoTempoRef = useRef(mettiSegnoTempo);
+    mettiSegnoTempoRef.current = mettiSegnoTempo;
+
+    /** Tasto destro sul segno: si toglie, come ogni altro segno della partitura. */
+    const togliSegnoTempo = useCallback((measureIndex: number) => {
+        const mis = Math.max(0, Math.round(measureIndex));
+        setTempoMarks(prev => (prev || []).filter(m => m.measureIndex !== mis));
+    }, []);
+    const togliSegnoTempoRef = useRef(togliSegnoTempo);
+    togliSegnoTempoRef.current = togliSegnoTempo;
+
     /** Tasto destro sulla parentesi: il segno d'ottava si toglie. */
     const togli8va = useCallback((octaveId: string): boolean => {
         setOctaveShifts(prev => (prev || []).filter(o => o.id !== octaveId));
@@ -12950,6 +13040,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (payload.kind === 'text-marker') {
                 const scritta = String(payload.data || '').trim();
                 if (scritta) handleApplyContextLabelOnly(dove, scritta);
+                return;
+            }
+
+            // ── Segno di metronomo ──
+            // Come metro e armatura: vale da una MISURA in poi. I valori (numero e
+            // unità di battito) si scelgono nella tavolozza prima di trascinare.
+            if (payload.kind === 'tempo-mark') {
+                const bpm = Number(payload.data?.bpm);
+                if (Number.isFinite(bpm) && bpm > 0) {
+                    mettiSegnoTempoRef.current?.(
+                        rng.measureIndex,
+                        bpm,
+                        payload.data?.beatUnit as TempoMark['beatUnit'],
+                        !!payload.data?.dotted,
+                    );
+                }
                 return;
             }
 
@@ -16709,6 +16815,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 // and their useMemo identity is unstable every render (would defeat the cache).
                                                                 lockActive, analysisLockOptions, romanBassMode, satbVisible, timeSignature,
                                                                 analysisFilters, showHarmonyDebug, hoveredViolationNotes,
+                                                                tempoMarkMarkersBySystem?.[systemIndex],
                                                             ];
                                                             const _ovC = overlayCacheRef.current[systemIndex];
                                                             // Frozen during an edit burst → reuse cached element even if the key changed.
@@ -16718,8 +16825,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             // Erano rimasti fuori dall'elenco, e spegnendo l'analisi sparivano dalla
                                                             // pagina pur continuando a suonare: si vedeva una partitura senza le
                                                             // sfumature che si sentivano.
-                                                            const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || (dynamics?.length ?? 0) > 0 || (slurs?.length ?? 0) > 0 || (octaveShifts?.length ?? 0) > 0 || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
+                                                            const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || (dynamics?.length ?? 0) > 0 || (slurs?.length ?? 0) > 0 || (octaveShifts?.length ?? 0) > 0 || ((tempoMarkMarkersBySystem?.[systemIndex] || []).length > 0) || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                                                {/* SEGNI DI METRONOMO («♩ = 60»). Stanno sopra tutto, all'inizio
+                                                                    della battuta da cui valgono, come si scrivono in partitura.
+                                                                    Tasto destro = togli, la regola di ogni altro segno. */}
+                                                                {(tempoMarkMarkersBySystem?.[systemIndex] || []).map((m: { x: number; label: string; measureIndex: number }, i: number) => (
+                                                                    <text
+                                                                        key={`tempo-${systemIndex}-${i}`}
+                                                                        x={m.x}
+                                                                        y={!satbVisible
+                                                                            ? (SATB_HIDE_SHIFT_PX + 78)
+                                                                            : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y - 14) : (TOP_STAFF_TOP - 14))}
+                                                                        textAnchor="start"
+                                                                        fontSize={15}
+                                                                        fontWeight={700}
+                                                                        fill="#111827"
+                                                                        style={{ pointerEvents: 'auto', cursor: 'context-menu' }}
+                                                                        onContextMenu={(ev) => {
+                                                                            ev.preventDefault();
+                                                                            ev.stopPropagation();
+                                                                            togliSegnoTempoRef.current?.(Number(m.measureIndex));
+                                                                        }}
+                                                                    >
+                                                                        {m.label}
+                                                                    </text>
+                                                                ))}
                                                                 {/* Modulation / tonicization markers.
                                                                     Tasto destro = TOGLI, come per ogni altro segno: prima una scritta
                                                                     si posava trascinandola dalla tavolozza, ma per cancellarla
