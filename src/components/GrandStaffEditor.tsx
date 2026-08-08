@@ -16121,6 +16121,39 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     }
                                 }
 
+                                // ── E LE TRACCE DI ACCOMPAGNAMENTO ────────────────────
+                                // Il rilevatore guardava SOLO il coro (`systemNotesForRender`).
+                                // Su un brano che sta tutto su traccia non segnalava niente: la
+                                // Fantaisie di Weiss ha 25 battute incomplete e non ne diceva
+                                // una. Un difetto di metrica non è meno grave perché la musica
+                                // sta su un rigo invece che su un altro — anzi, lì l'analisi
+                                // resta parziale esattamente allo stesso modo.
+                                for (const track of (accompanimentTracks || [])) {
+                                    if ((track as any).isDrum) continue; // le percussioni non hanno metrica d'altezze
+                                    const perMisura = new Map<number, StaffNote[]>();
+                                    for (const n of (track.notes || [])) {
+                                        const mi = n.measureIndex ?? 0;
+                                        if (!measuresInSystem.includes(mi)) continue;
+                                        if (!perMisura.has(mi)) perMisura.set(mi, []);
+                                        perMisura.get(mi)!.push(n);
+                                    }
+                                    for (const [mi, notesInMeasure] of perMisura) {
+                                        if (typeof currentMeasure === 'number' && mi >= currentMeasure) continue;
+                                        // Le voci di una traccia sono le sue, non quelle del coro:
+                                        // si raggruppa su quelle che ci sono davvero.
+                                        const voci = new Set(notesInMeasure.map(n => Number(n.voice ?? 1)));
+                                        for (const v of voci) {
+                                            const line = notesInMeasure.filter(n => Number(n.voice ?? 1) === v);
+                                            if (!line.length) continue;
+                                            if (!validateVoiceMeasure(mi, line)) {
+                                                invalidMeasures.add(mi);
+                                                if (!invalidVoicesByMeasure.has(mi)) invalidVoicesByMeasure.set(mi, new Set());
+                                                invalidVoicesByMeasure.get(mi)!.add(v);
+                                            }
+                                        }
+                                    }
+                                }
+
                                 segnalaTotale(invalidMeasures.size);
                                 if (!invalidMeasures.size) return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
 
