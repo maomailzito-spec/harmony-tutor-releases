@@ -13,7 +13,8 @@
  * altezze/beat corretti), niente terzine; chiavi normalizzate a violino/basso come in
  * exportMusicXML.
  */
-import type { StaffNote, KeySignature, NoteDuration } from '../types';
+import type { StaffNote, KeySignature, NoteDuration, TempoMark } from '../types';
+import { normalizeTempoMarks } from '../utils/tempoMarks';
 import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { TICKS_PER_QUARTER } from '../constants';
 import type { ExportMusicXMLOptions } from './exportMusicXML';
@@ -125,6 +126,35 @@ function fracOfWhole(ticks: number): string {
 
 interface Token { tick: number; text: string; }
 
+/** Glifo SMuFL dell'unità di battito, per la scritta «♩ = 60» di MuseScore. */
+const SIMBOLO_UNITA: Record<string, string> = {
+  whole: 'metNoteWhole', half: 'metNoteHalfUp', quarter: 'metNoteQuarterUp',
+  eighth: 'met8thNoteUp', sixteenth: 'met16thNoteUp',
+};
+
+/**
+ * Un segno d'andamento nel formato di MuseScore.
+ *
+ * ATTENZIONE all'unità: `<tempo>` è in semiminime al SECONDO (60 al minuto = 1), non
+ * al minuto. Scriverci i battiti al minuto significherebbe un brano sessanta volte
+ * più veloce.
+ */
+function scriviTempo(
+  w: (line: string) => void,
+  bpm: number,
+  beatUnit: NonNullable<TempoMark['beatUnit']>,
+  dotted: boolean,
+): void {
+  const quartiPerUnita = { whole: 4, half: 2, quarter: 1, eighth: 0.5, sixteenth: 0.25 }[beatUnit] ?? 1;
+  const bpmSemiminime = bpm * quartiPerUnita * (dotted ? 1.5 : 1);
+  const sym = SIMBOLO_UNITA[beatUnit] ?? SIMBOLO_UNITA.quarter;
+  w('          <Tempo>');
+  w(`            <tempo>${(bpmSemiminime / 60).toFixed(6)}</tempo>`);
+  w('            <followText>1</followText>');
+  w(`            <text><sym>${sym}</sym>${dotted ? '<sym>metAugmentationDot</sym>' : ''} = ${Math.round(bpm)}</text>`);
+  w('            </Tempo>');
+}
+
 export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = false): string {
   FB_SMALL_FONT = smallFont;
   const {
@@ -140,6 +170,10 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
   // SEMIMINIMA sul primo movimento — in ogni battuta, fino alla fine. Suonava giusto
   // perché gli attacchi erano al loro posto: era il conto a non tornare.
   const nominaleQuarti = numerator * (4 / timeSignature.denominator);
+  // Andamento d'inizio e cambi, per la scrittura qui sotto.
+  const bpmIniziale = Math.max(20, Math.min(300, Math.round(Number(opts.bpm) || 120)));
+  const segnoTempoDiMisura = new Map<number, TempoMark>();
+  for (const tm of normalizeTempoMarks(opts.tempoMarks)) segnoTempoDiMisura.set(tm.measureIndex, tm);
   const eccezioniDurata = measureLengthMap(opts.measureLengths);
   const measureLenOf = (m: number): number =>
     Math.round(beatsOfMeasure(m, nominaleQuarti, eccezioniDurata) * TPQ);
@@ -231,7 +265,13 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
     }
 
     for (let m = 0; m <= maxMeasure; m++) {
-      w('      <Measure>');
+      // Una battuta IRREGOLARE deve DICHIARARE la propria durata, altrimenti MuseScore
+      // le dà quella del metro e l'eccedenza scavalla nella battuta dopo — travata
+      // insieme, che è esattamente il difetto segnalato fra la 15 e la 16. `len` è una
+      // frazione di semibreve: cinque semiminime si scrivono 5/4.
+      const quartiDiQuestaMisura = measureLenOf(m) / TPQ;
+      const irregolare = Math.abs(quartiDiQuestaMisura - nominaleQuarti) > 1e-6;
+      w(irregolare ? `      <Measure len="${quartiDiQuestaMisura}/4">` : '      <Measure>');
       const measureNotes = notesByMeasure.get(m) || [];
       // note di QUESTO rigo
       const staffNotes = measureNotes.filter(n => (clefOf(n) === 'bass' ? 1 : 0) === staffIdx);
@@ -263,6 +303,15 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
           w(`            <sigN>${numerator}</sigN>`);
           w(`            <sigD>${timeSignature.denominator}</sigD>`);
           w('            </TimeSig>');
+          // ANDAMENTO. Non veniva scritto affatto: MuseScore ci metteva il suo 120 di
+          // default, e un brano segnato a 60 andava al doppio della velocità. Nel
+          // formato di MuseScore `<tempo>` è in semiminime al SECONDO, non al minuto.
+          if (staffIdx === 0) scriviTempo(w, bpmIniziale, 'quarter', false);
+        }
+        // Cambi d'andamento a metà brano, sul rigo acuto e sulla prima voce.
+        if (staffIdx === 0 && firstVoiceOfMeasure && m > 0) {
+          const segno = segnoTempoDiMisura.get(m);
+          if (segno) scriviTempo(w, segno.bpm, segno.beatUnit ?? 'quarter', !!segno.dotted);
         }
 
         const isHarmonyVoice = staffIdx === harmonyStaffIdx && vNum === harmonyVoiceNum;

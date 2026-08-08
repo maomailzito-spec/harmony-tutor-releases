@@ -69,6 +69,9 @@ export interface ExportMusicXMLOptions {
    *  ricostruisce una griglia diversa da quella del progetto e infila pause dove il
    *  conto non torna. */
   measureLengths?: MeasureLength[];
+  /** ANDAMENTO d'inizio del brano, in semiminime al minuto. Serve all'export .mscx,
+   *  che senza scriveva niente e lasciava a MuseScore il suo 120 di default. */
+  bpm?: number;
   /** Nome della parte del coro nella <part-list> (default "Piano"). */
   satbName?: string;
   /** TRACCE DI ACCOMPAGNAMENTO: ognuna diventa una <part> a sé. Senza, un brano scritto

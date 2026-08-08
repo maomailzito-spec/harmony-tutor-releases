@@ -7194,6 +7194,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // Le battute irregolari: senza, l'export si ricostruisce una griglia
                 // diversa e riempie lo scarto con pause inventate.
                 measureLengths: measureLengthsRef.current || [],
+                // Andamento d'inizio: senza, l'export .mscx lasciava a MuseScore il suo
+                // 120 di default e il brano andava al doppio.
+                bpm,
                 // Ogni traccia esce come <part> a sé: senza, un brano scritto su una
                 // traccia di accompagnamento veniva esportato in un file vuoto.
                 // DALLA REF, non dalla variabile di stato. Questa funzione è un
