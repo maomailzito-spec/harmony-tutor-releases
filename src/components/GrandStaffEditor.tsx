@@ -1838,6 +1838,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [voiceVolumes, setVoiceVolumes] = useState<Record<number, number>>({ 1: 1, 2: 1, 3: 1, 4: 1 });
     const [mutedVoices, setMutedVoices] = useState<Set<number>>(new Set());
     const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
+    /** Il contenitore del pannello delle violazioni: serve a portarci il FUOCO quando
+     *  lo si apre da tastiera, altrimenti per uno screen reader il pannello compare e
+     *  nessuno lo sa. */
+    const pannelloViolazioniRef = useRef<HTMLDivElement | null>(null);
     const [hoveredViolationNotes, setHoveredViolationNotes] = useState<string[] | null>(null);
     const [selectedViolationIndex, setSelectedViolationIndex] = useState<number | null>(null);
     const staffContainerRef = useRef<HTMLDivElement>(null);
@@ -5069,6 +5073,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (action === MENU_ACTIONS.SET_ANALYSIS_SUBJECT) {
             const subject = (payload as any)?.subject;
             if (subject === 'satb' || subject === 'acc') scegliSoggettoAnalisi(subject);
+            return;
+        }
+
+        // PANNELLO DELLE VIOLAZIONI dal menù (⌘⌥3). Aprirlo non basta: se il fuoco
+        // resta sulla partitura, chi usa uno screen reader non sa che è comparso e non
+        // ha modo di entrarci con la tastiera. Quindi si apre E ci si va dentro; e
+        // chiudendolo il fuoco torna alla partitura, dove si stava scrivendo.
+        if (action === MENU_ACTIONS.TOGGLE_VIOLATIONS_PANEL) {
+            setActiveTab(prev => {
+                const prossimo = prev === 'analysis' ? 'editor' : 'analysis';
+                window.setTimeout(() => {
+                    try {
+                        if (prossimo === 'analysis') pannelloViolazioniRef.current?.focus();
+                        else staffContainerRef.current?.focus();
+                    } catch { /* il pannello resta comunque aperto */ }
+                }, 0);
+                return prossimo;
+            });
             return;
         }
 
@@ -18348,7 +18370,12 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
 
                 {/* Restore analysis panel */}
                 {activeTab === 'analysis' && (
-                    <div className="w-full max-w-sm flex-shrink-0 h-full min-h-0">
+                    <div
+                        ref={pannelloViolazioniRef}
+                        tabIndex={-1}
+                        role="region"
+                        aria-label={`Elenco delle violazioni — ${violations.length} ${violations.length === 1 ? 'violazione' : 'violazioni'}`}
+                        className="w-full max-w-sm flex-shrink-0 h-full min-h-0 outline-none">
                         {lockHides.violations ? (
                             <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-2 p-6">
                                 <span className="text-4xl">🔒</span>

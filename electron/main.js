@@ -1053,6 +1053,15 @@ function createMenu() {
           accelerator: 'CmdOrCtrl+Alt+2',
           click: () => { sendAction(MENU_ACTIONS.SET_ANALYSIS_SUBJECT, { subject: 'acc' }); }
         },
+        // PANNELLO DELLE VIOLAZIONI. Si apriva SOLO con un clic su un pulsante della
+        // barra: per chi naviga con uno screen reader un comando così non esiste. Il
+        // pannello è testo — VoiceOver lo legge benissimo — ma bisognava poterci
+        // arrivare. Da qui, e con una scorciatoia.
+        {
+          label: mt('toggleViolationsPanel', 'Elenco delle violazioni'),
+          accelerator: 'CmdOrCtrl+Alt+3',
+          click: () => { sendAction(MENU_ACTIONS.TOGGLE_VIOLATIONS_PANEL); }
+        },
         { type: 'separator' },
         {
           label: mt('toggleAnalysisLock', 'Blocca/Sblocca analisi\u2026'),

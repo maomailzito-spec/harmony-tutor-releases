@@ -39,6 +39,7 @@ export const MENU_ACTIONS = {
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice',
   SET_ANALYSIS_SUBJECT: 'set-analysis-subject',
+  TOGGLE_VIOLATIONS_PANEL: 'toggle-violations-panel',
   SET_APP_MODE: 'set-app-mode',
   GENERATE_FROM_ROMAN: 'generate-from-roman',
   TOGGLE_ANALYSIS_LOCK: 'toggle-analysis-lock',

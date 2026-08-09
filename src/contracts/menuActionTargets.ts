@@ -45,6 +45,7 @@ export const MENU_ACTION_TARGET: Record<MenuAction, MenuActionTarget> = {
 
   // App-level routing (view switching)
   [MENU_ACTIONS.SET_ANALYSIS_SUBJECT]: 'grandStaff',
+  [MENU_ACTIONS.TOGGLE_VIOLATIONS_PANEL]: 'grandStaff',
   [MENU_ACTIONS.SET_APP_MODE]: 'app',
 };
 

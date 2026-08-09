@@ -48,6 +48,7 @@ const MENU_ACTIONS = Object.freeze({
   // perché i menù di sistema sono il modo in cui chi usa uno screen reader esplora
   // l'applicazione — e senza questa voce il comando era di fatto irraggiungibile.
   SET_ANALYSIS_SUBJECT: 'set-analysis-subject',
+  TOGGLE_VIOLATIONS_PANEL: 'toggle-violations-panel',
   SET_APP_MODE: 'set-app-mode',
   GENERATE_FROM_ROMAN: 'generate-from-roman',
   TOGGLE_ANALYSIS_LOCK: 'toggle-analysis-lock',
