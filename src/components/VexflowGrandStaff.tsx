@@ -1370,6 +1370,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // e si rende trasparente soltanto la sua testa, che tanto sta esattamente sotto
     // quella tenuta.
     const accUnisonTestaNascosta = new Set<string>();
+    /** Tutte le note di una coppia all'unisono — quella tenuta E quella nascosta.
+     *  Vanno tenute sulla STESSA x: se solo una viene scostata, la testa condivisa si
+     *  sdoppia di nuovo. */
+    const accUnisonSenzaScostamento = new Set<string>();
     const allAccompanimentNotes = (() => {
       const tenutePerChiave = new Map<string, StaffNote>();
       for (const n of accompanimentNotesGrezze) {
@@ -1389,6 +1393,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         tenutePerChiave.set(chiave, vincente);
         accUnisonTestaNascosta.add(perdente.id);
         accUnisonTestaNascosta.delete(vincente.id);
+        accUnisonSenzaScostamento.add(perdente.id);
+        accUnisonSenzaScostamento.add(vincente.id);
       }
       return accompanimentNotesGrezze;
     })();
@@ -2995,6 +3001,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               // Applica offset se necessario (stem up: solo la testa up va a destra, stem down: solo la down va a sinistra)
               const isMergedChord = Array.isArray((vfNote as any)?.__mergedIds) && ((vfNote as any).__mergedIds.length > 0);
               let xShift = isMergedChord ? 0 : (offsetMap.get(n.id) ?? 0);
+
+              // UNISONO A TESTA CONDIVISA: nessuno spostamento. `offsetMap` scosta di
+              // lato le note che si toccano, perché due teste sovrapposte sarebbero
+              // illeggibili — ma qui la testa è UNA SOLA, e lo scostamento portava con
+              // sé il gambo, che finiva a destra della nota invece che a sinistra come
+              // vuole la convenzione (gambo in giù = a sinistra). Azzerandolo, le due
+              // note stanno sulla stessa x e i gambi escono dai due lati giusti.
+              if (accUnisonSenzaScostamento.has(n.id)) xShift = 0;
 
               // When this note has an accidental AND there are 4+ accidentals at the
               // same onset, suppress the note-level X shift entirely. The offset
