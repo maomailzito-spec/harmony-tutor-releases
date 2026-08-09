@@ -439,11 +439,36 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                             <li
                                 key={`${violation.ruleId}-${index}`}
                                 ref={(el) => { if (el) itemRefs.current.set(index, el); else itemRefs.current.delete(index); }}
-                                className={`bg-gray-700/50 px-2 py-1.5 rounded-md border border-gray-700/50 hover:bg-gray-600/50 transition-colors cursor-pointer ${isSelected ? 'ring-1 ring-cyan-400 border-cyan-400' : ''}`}
+                                className={`bg-gray-700/50 rounded-md border border-gray-700/50 hover:bg-gray-600/50 transition-colors ${isSelected ? 'ring-1 ring-cyan-400 border-cyan-400' : ''}`}
                                 onMouseEnter={() => onHoverViolation(violation.noteIds)}
                                 onMouseLeave={() => onHoverViolation(null)}
-                                onClick={() => onSelectViolation && onSelectViolation(index)}
                             >
+                                {/* UN PULSANTE VERO, non un riquadro cliccabile.
+                                    Prima era un <li> con onClick: col mouse funzionava,
+                                    da tastiera non si poteva né raggiungere né aprire, e
+                                    uno screen reader annunciava il pannello e poi si
+                                    fermava lì — non c'era niente su cui posarsi.
+                                    Come pulsante ci si arriva col TAB, si apre con Invio
+                                    o barra spaziatrice, e `aria-expanded` dice se il
+                                    dettaglio è aperto. Il nome accessibile porta tutto
+                                    ciò che serve per decidere se aprirla: gravità, punto
+                                    del brano e sunto. */}
+                                <button
+                                    type="button"
+                                    className="w-full text-left px-2 py-1.5 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 rounded-md"
+                                    aria-expanded={!!isSelected}
+                                    aria-label={[
+                                        isError ? t('violation_error', { defaultValue: 'Errore' })
+                                            : isException ? t('violation_exception')
+                                            : isChromatic ? t('violation_chromatic')
+                                            : t('violation_warning', { defaultValue: 'Avvertimento' }),
+                                        dove,
+                                        summaryLine,
+                                    ].filter(Boolean).join('. ')}
+                                    onClick={() => onSelectViolation && onSelectViolation(index)}
+                                    onFocus={() => onHoverViolation(violation.noteIds)}
+                                    onBlur={() => onHoverViolation(null)}
+                                >
                                 <div className="flex items-start gap-2">
                                     <Icon />
                                     <div className="flex-grow">
@@ -483,6 +508,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                         )}
                                     </div>
                                 </div>
+                                </button>
                             </li>
                         );
                     })}
