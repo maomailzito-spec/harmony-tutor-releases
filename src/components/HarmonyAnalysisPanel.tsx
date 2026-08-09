@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RuleViolation, SequenceMatch } from '../types';
+import { pronunciaSigle } from '../utils/pronunciaSigle';
 import { usePreference } from '../preferences/usePreference';
 import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 
@@ -469,7 +470,10 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                             : isChromatic ? t('violation_chromatic')
                                             : t('violation_warning', { defaultValue: 'Avvertimento' }),
                                         dove,
-                                        summaryLine,
+                                        // Le sigle dette a parole: «settima di
+                                        // dominante» invece di «vu sette». Solo qui —
+                                        // sullo schermo resta scritto V7.
+                                        pronunciaSigle(summaryLine),
                                     ].filter(Boolean).join('. ')}
                                     onClick={() => onSelectViolation && onSelectViolation(index)}
                                     onFocus={() => onHoverViolation(violation.noteIds)}
@@ -515,6 +519,14 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                         // sul pulsante e niente segnala che il testo è
                                         // comparso.
                                         aria-live="polite"
+                                        // Stessa ragione: si legge la forma parlata, si
+                                        // vede la sigla. Il testo visibile qui sotto non
+                                        // cambia di una virgola.
+                                        aria-label={pronunciaSigle([
+                                            detailLines,
+                                            violation.suggestion,
+                                            (ruleSuggestions as Record<string,string>)?.[violation.ruleId],
+                                        ].filter(Boolean).join('. '))}
                                         className="px-2 pb-1.5 -mt-0.5">
                                         {detailLines && (
                                             <p className="text-[11px] text-gray-300 whitespace-pre-wrap leading-snug">
