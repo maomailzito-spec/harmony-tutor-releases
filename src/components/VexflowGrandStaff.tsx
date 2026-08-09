@@ -1345,9 +1345,45 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // Route ghost to ACC pipeline when it belongs to an accompaniment voice (voice 0).
     const isGhostAcc = !!(ghostNote && (ghostNote as any).voice === 0);
     const allNotes = (ghostNote && !isGhostAcc) ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes;
-    const allAccompanimentNotes = (ghostNote && isGhostAcc)
+    const accompanimentNotesGrezze = (ghostNote && isGhostAcc)
       ? [...(accompanimentNotes || []), { ...ghostNote, id: '__ghost__' }]
       : (accompanimentNotes || []);
+
+    // ── UNISONI: una testa sola, ma SOLO sulle tracce ────────────────────────
+    // Quando due voci di una traccia suonano la stessa nota nello stesso istante —
+    // capita di continuo nella musica per chitarra o per tastiera, dove l'unisono è
+    // un fatto di corde e di dita — due teste sovrapposte non aggiungono niente: si
+    // vedono come una macchia più scura e basta. MuseScore le fonde, ed è giusto.
+    //
+    // Nel CORO no, e la ragione è musicale: lì le voci sono LINEE, e vedere due teste
+    // dice quale voce sta dove. Fonderle nasconderebbe proprio l'informazione per cui
+    // si scrive a parti reali. Per questo la fusione vive qui, sul ramo delle tracce,
+    // e non tocca `allNotes`.
+    //
+    // Le note scartate non spariscono: i loro id restano agganciati alla testa tenuta
+    // (`accUnisonAliases`), così selezione, legature e alterazioni continuano a
+    // trovarle — è la stessa regola dei membri di un accordo, che pure condividono
+    // una testa sola.
+    const accUnisonAliases = new Map<string, string[]>();
+    const allAccompanimentNotes = (() => {
+      const tenutePerChiave = new Map<string, StaffNote>();
+      const out: StaffNote[] = [];
+      for (const n of accompanimentNotesGrezze) {
+        if (n.isRest || n.id === '__ghost__') { out.push(n); continue; }
+        const chiave = [
+          (n as any)._trackIdx ?? 0,
+          Number((n as any).startTick ?? 0),
+          Number(n.midi ?? 0),
+          Number((n as any).position ?? 0),
+        ].join('|');
+        const tenuta = tenutePerChiave.get(chiave);
+        if (!tenuta) { tenutePerChiave.set(chiave, n); out.push(n); continue; }
+        const elenco = accUnisonAliases.get(tenuta.id) || [];
+        elenco.push(n.id);
+        accUnisonAliases.set(tenuta.id, elenco);
+      }
+      return out;
+    })();
     const hasAccNotes = Array.isArray(allAccompanimentNotes) && allAccompanimentNotes.length > 0;
     if ((allNotes && allNotes.length > 0) || hasAccNotes) {
       const trebleNotes = (staffMode === 'treble_only')
@@ -3380,6 +3416,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           if (Array.isArray(uniti)) {
             for (const mid of uniti) if (!vfPerId.has(String(mid))) vfPerId.set(String(mid), p.vfNote);
           }
+          // Gli unisoni fusi delle tracce: l'id scartato punta alla testa tenuta.
+          for (const id of [p.staffNote.id, ...(uniti || [])]) {
+            for (const alias of (accUnisonAliases.get(String(id)) || [])) {
+              if (!vfPerId.has(alias)) vfPerId.set(alias, p.vfNote);
+            }
+          }
         }
 
         // Draw notes (noteheads, ledger lines, etc.). Beamed notes will not draw stems/flags.
@@ -3482,12 +3524,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               const ysAsc = [...ys].sort((a, b) => a - b);
               for (let i = 0; i < idsByPitchDesc.length; i++) {
                 hitPoints.push({ id: idsByPitchDesc[i], x: xHit, y: ysAsc[i], isGhost: false });
+                // …e gli unisoni fusi su quella testa, allo stesso punto: cliccarla
+                // deve poter prendere anche la voce nascosta sotto.
+                for (const alias of (accUnisonAliases.get(idsByPitchDesc[i]) || [])) {
+                  hitPoints.push({ id: alias, x: xHit, y: ysAsc[i], isGhost: false });
+                }
               }
             } else {
               const yHit = (ys && ys.length > 0)
                 ? (ys.reduce((a, b) => a + b, 0) / ys.length)
                 : stave.getYForLine(2);
               hitPoints.push({ id: n.id, x: xHit, y: yHit, isGhost: n.id === '__ghost__' });
+              for (const alias of (accUnisonAliases.get(n.id) || [])) {
+                hitPoints.push({ id: alias, x: xHit, y: yHit, isGhost: false });
+              }
             }
           } catch {
             // ignore
