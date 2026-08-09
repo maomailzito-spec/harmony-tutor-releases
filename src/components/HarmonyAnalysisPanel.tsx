@@ -457,6 +457,12 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                     type="button"
                                     className="w-full text-left px-2 py-1.5 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 rounded-md"
                                     aria-expanded={!!isSelected}
+                                    // La spiegazione si LEGA al pulsante invece di stare
+                                    // lì accanto ad aspettare. Da sola era un gruppo in
+                                    // cui VoiceOver proponeva di «entrare», e il testo
+                                    // non lo diceva mai; così invece arriva subito dopo
+                                    // il titolo, sullo stesso fuoco, senza navigare.
+                                    aria-describedby={isSelected ? `viol-det-${index}` : undefined}
                                     aria-label={[
                                         isError ? t('violation_error', { defaultValue: 'Errore' })
                                             : isException ? t('violation_exception')
@@ -501,7 +507,15 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                     scorrere. È la forma consueta di un elenco che si
                                     apre: intestazione premibile, contenuto accanto. */}
                                 {isSelected && (detailLines || violation.suggestion || (ruleSuggestions as Record<string,string>)?.[violation.ruleId]) && (
-                                    <div className="px-2 pb-1.5 -mt-0.5">
+                                    <div
+                                        id={`viol-det-${index}`}
+                                        // Compare all'apertura: `polite` la fa annunciare
+                                        // appena c'è, senza interrompere ciò che si sta
+                                        // ascoltando. Senza, premendo Invio il fuoco resta
+                                        // sul pulsante e niente segnala che il testo è
+                                        // comparso.
+                                        aria-live="polite"
+                                        className="px-2 pb-1.5 -mt-0.5">
                                         {detailLines && (
                                             <p className="text-[11px] text-gray-300 whitespace-pre-wrap leading-snug">
                                                 {detailLines}
