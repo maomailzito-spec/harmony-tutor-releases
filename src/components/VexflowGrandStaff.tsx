@@ -1360,16 +1360,20 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // si scrive a parti reali. Per questo la fusione vive qui, sul ramo delle tracce,
     // e non tocca `allNotes`.
     //
-    // Le note scartate non spariscono: i loro id restano agganciati alla testa tenuta
-    // (`accUnisonAliases`), così selezione, legature e alterazioni continuano a
-    // trovarle — è la stessa regola dei membri di un accordo, che pure condividono
-    // una testa sola.
-    const accUnisonAliases = new Map<string, string[]>();
+    // SI NASCONDE LA TESTA, NON LA NOTA. Buttare via la nota doppia fa sparire anche
+    // il suo GAMBO — ed è il gambo, uno su e uno giù, l'unica cosa che dice al lettore
+    // che le voci sono due. Senza, un unisono a due parti diventa indistinguibile da
+    // una nota sola: si perde un'informazione formale che sulla pagina c'era.
+    // MuseScore fa così: testa condivisa, gambi separati.
+    //
+    // Quindi la nota resta in tutto — gambo, travatura, legature, clic, alterazioni —
+    // e si rende trasparente soltanto la sua testa, che tanto sta esattamente sotto
+    // quella tenuta.
+    const accUnisonTestaNascosta = new Set<string>();
     const allAccompanimentNotes = (() => {
       const tenutePerChiave = new Map<string, StaffNote>();
-      const out: StaffNote[] = [];
       for (const n of accompanimentNotesGrezze) {
-        if (n.isRest || n.id === '__ghost__') { out.push(n); continue; }
+        if (n.isRest || n.id === '__ghost__') continue;
         const chiave = [
           (n as any)._trackIdx ?? 0,
           Number((n as any).startTick ?? 0),
@@ -1377,12 +1381,16 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           Number((n as any).position ?? 0),
         ].join('|');
         const tenuta = tenutePerChiave.get(chiave);
-        if (!tenuta) { tenutePerChiave.set(chiave, n); out.push(n); continue; }
-        const elenco = accUnisonAliases.get(tenuta.id) || [];
-        elenco.push(n.id);
-        accUnisonAliases.set(tenuta.id, elenco);
+        if (!tenuta) { tenutePerChiave.set(chiave, n); continue; }
+        // Si nasconde la testa della voce col numero più ALTO: la voce 1 tiene la
+        // testa visibile, com'è d'uso quando si sceglie una parte principale.
+        const perdente = Number((n as any).voice ?? 1) >= Number((tenuta as any).voice ?? 1) ? n : tenuta;
+        const vincente = perdente === n ? tenuta : n;
+        tenutePerChiave.set(chiave, vincente);
+        accUnisonTestaNascosta.add(perdente.id);
+        accUnisonTestaNascosta.delete(vincente.id);
       }
-      return out;
+      return accompanimentNotesGrezze;
     })();
     const hasAccNotes = Array.isArray(allAccompanimentNotes) && allAccompanimentNotes.length > 0;
     if ((allNotes && allNotes.length > 0) || hasAccNotes) {
@@ -2918,6 +2926,25 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 vfNote.setStyle(baseStyle);
               }
             }
+            // UNISONO SULLE TRACCE: la testa di questa nota sta esattamente sotto
+            // quella di un'altra voce → si rende trasparente. Va fatto DOPO ogni altro
+            // stile (selezione, errori, colori di voce, motivi), altrimenti quelli la
+            // ridipingono e la doppia testa torna. Il gambo e la travatura non si
+            // toccano: sono ciò che rende visibili le due voci.
+            if (accUnisonTestaNascosta.has(n.id)) {
+              try {
+                const invisibile = { fillStyle: 'rgba(0,0,0,0)', strokeStyle: 'rgba(0,0,0,0)' };
+                const keysArr: string[] = Array.isArray((vfNote as any)?.keys) ? ((vfNote as any).keys as any) : [];
+                if (typeof (vfNote as any)?.setKeyStyle === 'function') {
+                  const keyStr = `${staffNoteToVexflowKeyName(n)}/${n.octave ?? 4}`;
+                  const idx = Math.max(0, keysArr.indexOf(keyStr));
+                  (vfNote as any).setKeyStyle(idx, invisibile);
+                }
+              } catch {
+                // se non si riesce a nasconderla, resta la doppia testa: sgradevole,
+                // mai sbagliata.
+              }
+            }
             const dotFill = n.id === '__ghost__'
               ? (voiceColor(n.voice) ? hexToRgba(voiceColor(n.voice)!.fill, 0.4) : 'rgba(56,189,248,0.4)')
               : (selectedNoteIds.includes(n.id)
@@ -3416,12 +3443,6 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           if (Array.isArray(uniti)) {
             for (const mid of uniti) if (!vfPerId.has(String(mid))) vfPerId.set(String(mid), p.vfNote);
           }
-          // Gli unisoni fusi delle tracce: l'id scartato punta alla testa tenuta.
-          for (const id of [p.staffNote.id, ...(uniti || [])]) {
-            for (const alias of (accUnisonAliases.get(String(id)) || [])) {
-              if (!vfPerId.has(alias)) vfPerId.set(alias, p.vfNote);
-            }
-          }
         }
 
         // Draw notes (noteheads, ledger lines, etc.). Beamed notes will not draw stems/flags.
@@ -3524,20 +3545,12 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
               const ysAsc = [...ys].sort((a, b) => a - b);
               for (let i = 0; i < idsByPitchDesc.length; i++) {
                 hitPoints.push({ id: idsByPitchDesc[i], x: xHit, y: ysAsc[i], isGhost: false });
-                // …e gli unisoni fusi su quella testa, allo stesso punto: cliccarla
-                // deve poter prendere anche la voce nascosta sotto.
-                for (const alias of (accUnisonAliases.get(idsByPitchDesc[i]) || [])) {
-                  hitPoints.push({ id: alias, x: xHit, y: ysAsc[i], isGhost: false });
-                }
               }
             } else {
               const yHit = (ys && ys.length > 0)
                 ? (ys.reduce((a, b) => a + b, 0) / ys.length)
                 : stave.getYForLine(2);
               hitPoints.push({ id: n.id, x: xHit, y: yHit, isGhost: n.id === '__ghost__' });
-              for (const alias of (accUnisonAliases.get(n.id) || [])) {
-                hitPoints.push({ id: alias, x: xHit, y: yHit, isGhost: false });
-              }
             }
           } catch {
             // ignore
