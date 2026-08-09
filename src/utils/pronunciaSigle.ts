@@ -30,6 +30,27 @@ import { spokenPhrase } from '../exporters/spokenHarmony';
 const SIGLA = /(?<![\w#♭♯])((?:[b#♭♯])?(?:VII|VI|IV|III|II|I|V|vii|iii|iv|vi|ii)(?:[o°ø+]*)(?:\d+)?(?:\/(?:[b#♭♯])?(?:VII|VI|IV|III|II|I|V|vii|iii|iv|vi|ii))?|N6|N|It6|Fr6|Ger6)(?![\w])/g;
 
 /**
+ * CIFRE DEL BASSO FIGURATO scritte con la barra: «6/4» va detto «quarta e sesta»,
+ * non «sei barra quattro». Si leggono dal basso verso l'alto, com'è la convenzione.
+ *
+ * Si convertono SOLO le coppie che sono cifre d'armonia. Fuori restano di proposito
+ * 4/4, 3/4, 2/4, 6/8, 12/8 e simili, che sono METRI: dirli «quarta e quarta» sarebbe
+ * peggio del male che si cura. Resta un'ambiguità vera su 6/4, che è sia un rivolto
+ * sia un metro — nel pannello delle violazioni è sempre il rivolto, ma vale la pena
+ * saperlo.
+ */
+const CIFRE_ITALIANO: Record<string, string> = {
+    '6/4': 'quarta e sesta',
+    '6/5': 'quinta e sesta',
+    '4/3': 'quarta e terza',
+    '4/2': 'quarta e seconda',
+    '7/5': 'quinta e settima',
+    '9/7': 'settima e nona',
+    '6/3': 'sesta',
+};
+const CIFRA = new RegExp(`(?<![\\w/])(${Object.keys(CIFRE_ITALIANO).map(k => k.replace('/', '\\/')).join('|')})(?![\\w/])`, 'g');
+
+/**
  * Il testo con le sigle armoniche sostituite dalla loro forma parlata.
  *
  * Da usare SOLO per `aria-label` / `aria-describedby`: mai per ciò che si stampa o si
@@ -38,7 +59,8 @@ const SIGLA = /(?<![\w#♭♯])((?:[b#♭♯])?(?:VII|VI|IV|III|II|I|V|vii|iii|i
 export function pronunciaSigle(testo: string | null | undefined): string {
     const s = String(testo ?? '');
     if (!s) return '';
-    return s.replace(SIGLA, (match) => {
+    const conCifre = s.replace(CIFRA, (m) => CIFRE_ITALIANO[m] ?? m);
+    return conCifre.replace(SIGLA, (match) => {
         try {
             const detto = spokenPhrase({ roman: match });
             // Se il traduttore non la riconosce restituisce la sigla stessa: in quel
