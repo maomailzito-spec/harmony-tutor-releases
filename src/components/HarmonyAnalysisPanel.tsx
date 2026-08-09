@@ -489,12 +489,25 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                         {dove && (
                                             <p className="text-[10px] text-gray-400 leading-snug">{dove}</p>
                                         )}
-                                        {isSelected && detailLines && (
-                                            <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
+                                    </div>
+                                </div>
+                                </button>
+                                {/* IL DETTAGLIO STA FUORI DAL PULSANTE, ed è il punto:
+                                    `aria-label` sostituisce TUTTO il contenuto del
+                                    pulsante per uno screen reader. Finché la spiegazione
+                                    stava dentro, veniva letto solo il titolo e il resto
+                                    spariva — «legge i titoli ma non i contenuti».
+                                    Fuori, è testo normale che si legge continuando a
+                                    scorrere. È la forma consueta di un elenco che si
+                                    apre: intestazione premibile, contenuto accanto. */}
+                                {isSelected && (detailLines || violation.suggestion || (ruleSuggestions as Record<string,string>)?.[violation.ruleId]) && (
+                                    <div className="px-2 pb-1.5 -mt-0.5">
+                                        {detailLines && (
+                                            <p className="text-[11px] text-gray-300 whitespace-pre-wrap leading-snug">
                                                 {detailLines}
                                             </p>
                                         )}
-                                        {isSelected && (violation.suggestion || (ruleSuggestions as Record<string,string>)?.[violation.ruleId]) && (
+                                        {(violation.suggestion || (ruleSuggestions as Record<string,string>)?.[violation.ruleId]) && (
                                             <p className="text-[11px] text-gray-300 mt-1 whitespace-pre-wrap leading-snug">
                                                 {violation.suggestion && (
                                                     <><span className="font-semibold">{t('violation_suggestion_label')}</span> {violation.suggestion}</>
@@ -507,8 +520,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                                             </p>
                                         )}
                                     </div>
-                                </div>
-                                </button>
+                                )}
                             </li>
                         );
                     })}
