@@ -7586,6 +7586,76 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Y (locale al sistema) per le etichette: sul rigo della traccia analizzata; se questa è
     // in un gruppo, sul rigo PIÙ ALTO del gruppo (le sigle/romani stanno in cima all'insieme).
+    /** Geometria del rigo ACC su cui sta l'analisi: riga superiore e interlinea. Serve a
+     *  convertire la posizione diatonica di una nota nella sua altezza sullo schermo. */
+    const accLabelYGeom = useMemo(() => {
+        const gid = (analysisAccTrack as any)?.groupId as string | undefined;
+        const candidati = gid
+            ? accStavesLayout.filter(s2 => { const t = accompanimentTracks.find(x => x.id === s2.trackId); return !!t && (t as any).groupId === gid; })
+            : accStavesLayout.filter(s2 => s2.trackId === analysisAccTrack?.id);
+        if (!candidati.length) return null;
+        const alto = candidati.reduce((a, b) => (b.topLineY < a.topLineY ? b : a));
+        return { topLineY: alto.topLineY, lineSpacing: alto.lineSpacing || VF_LINE_SPACING };
+    }, [accStavesLayout, analysisAccTrack, accompanimentTracks]);
+
+    /**
+     * QUANTO IN ALTO ARRIVA LA MUSICA, sistema per sistema, sul rigo analizzato.
+     *
+     * Le etichette dell'analisi stavano a una quota FISSA sopra il rigo, e non sapevano
+     * niente di ciò che avevano sotto: dove ci sono semicrome travate — cioè in tutta la
+     * musica strumentale — travature e sigle finivano una dentro l'altra.
+     *
+     * Qui si misura l'ingombro VERO: la nota più alta del sistema, più il gambo e la
+     * travatura quando il gambo va in su. Poi le etichette si posano SOPRA quel profilo.
+     * Una quota per SISTEMA, non per nota: è ciò che fa un incisore — le etichette di
+     * una stessa riga stanno allineate, e la riga si alza solo dove serve.
+     *
+     * La posizione diatonica segue la convenzione del programma: 8 = riga di mezzo in
+     * chiave di violino, 4 in chiave di basso (le stesse delle pause automatiche), e
+     * ogni grado vale mezza interlinea.
+     */
+    const accInkTopBySystem = useMemo<Record<number, number>>(() => {
+        const out: Record<number, number> = {};
+        try {
+            const sysParams = (layoutData as any)?.systemsParams;
+            if (!Array.isArray(sysParams) || !accLabelYGeom) return out;
+            const { topLineY, lineSpacing } = accLabelYGeom;
+            const gid = (analysisAccTrack as any)?.groupId as string | undefined;
+            const tracce = gid
+                ? (accompanimentTracks || []).filter(t => (t as any).groupId === gid)
+                : (analysisAccTrack ? [analysisAccTrack] : []);
+            if (!tracce.length) return out;
+            // Gambo + travatura: un gambo standard vale ~3,5 interlinee, e la travatura
+            // con le sue file aggiunge ancora. Si tiene largo: meglio un dito d'aria in
+            // più che una sigla dentro una traversa.
+            const GAMBO_E_TRAVATURA = lineSpacing * 4.2;
+            for (let si = 0; si < sysParams.length; si++) {
+                const misure: number[] = sysParams[si]?.measureIndices || [];
+                if (!misure.length) continue;
+                let piuAlto = Infinity;
+                for (const t of tracce) {
+                    for (const n of (t.notes || [])) {
+                        if (n.isRest) continue;
+                        if (!misure.includes(n.measureIndex ?? -1)) continue;
+                        const rif = (n.clef === 'bass') ? 4 : 8;
+                        const pos = Number((n as any).position);
+                        if (!Number.isFinite(pos)) continue;
+                        const y = topLineY + 2 * lineSpacing - (pos - rif) * (lineSpacing / 2);
+                        // Il gambo va in su per le voci 1 e 3, in giù per le altre: solo
+                        // quello in su ruba spazio sopra.
+                        const inSu = Number(n.voice ?? 1) === 1 || Number(n.voice ?? 1) === 3;
+                        const cima = inSu ? y - GAMBO_E_TRAVATURA : y;
+                        if (cima < piuAlto) piuAlto = cima;
+                    }
+                }
+                if (Number.isFinite(piuAlto)) out[si] = piuAlto;
+            }
+        } catch {
+            // senza misura si resta alla quota fissa di prima
+        }
+        return out;
+    }, [layoutData, accLabelYGeom, analysisAccTrack, accompanimentTracks]);
+
     const accLabelY = useMemo(() => {
         const gid = (analysisAccTrack as any)?.groupId as string | undefined;
         const candidates = gid
@@ -16931,6 +17001,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 lockActive, analysisLockOptions, romanBassMode, satbVisible, timeSignature,
                                                                 analysisFilters, showHarmonyDebug, hoveredViolationNotes,
                                                                 tempoMarkMarkersBySystem?.[systemIndex],
+                                                                // L'altezza dell'inchiostro decide dove stanno le
+                                                                // etichette: senza, la cache le ridisegna alla quota
+                                                                // vecchia dopo ogni modifica alle note.
+                                                                accInkTopBySystem[systemIndex],
                                                             ];
                                                             const _ovC = overlayCacheRef.current[systemIndex];
                                                             // Frozen during an edit burst → reuse cached element even if the key changed.
@@ -17099,18 +17173,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
 
                                 {/* Analisi ACC (stile SATB): SIGLA sopra il rigo, ROMANO sotto il rigo della traccia analizzata */}
-                                {showHarmony && analysisSubject === 'acc' && accLabelY != null && systemAccLabels.map((p) => (
-                                    <g key={p.id}>
-                                        {/* Sigla e romano IMPILATI SOPRA il rigo alto del gruppo: sotto (bottom+20)
-                                            il romano veniva coperto dalle note gravi del rigo sottostante. */}
-                                        {showSymbolAnalysis && p.sigla ? (
-                                            <text x={p.x + 20} y={accLabelY.top - 44} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">{p.sigla}</text>
-                                        ) : null}
-                                        {showRomanAnalysis && p.roman ? (
-                                            <text x={p.x + 20} y={accLabelY.top - (showSymbolAnalysis && p.sigla ? 26 : 42)} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1e3a8a">{p.roman}</text>
-                                        ) : null}
-                                    </g>
-                                ))}
+                                {showHarmony && analysisSubject === 'acc' && accLabelY != null && (() => {
+                                    // LE ETICHETTE SI POSANO SOPRA LA MUSICA, non a quota fissa.
+                                    // `accInkTopBySystem` dice dove arriva davvero l'inchiostro di
+                                    // questo sistema (nota più alta + gambo + travatura); la corsia
+                                    // parte da lì, e non scende MAI sotto la quota di prima — su una
+                                    // musica che respira niente si muove, dove è fitta si alza.
+                                    const inchiostro = accInkTopBySystem[systemIndex];
+                                    const ARIA = 8; // respiro fra la traversa più alta e la scritta
+                                    const baseRomano = accLabelY.top - (showSymbolAnalysis ? 26 : 42);
+                                    const baseSigla = accLabelY.top - 44;
+                                    // Il romano sta sotto, la sigla sopra: si alza il blocco intero
+                                    // conservando la distanza fra i due.
+                                    // …ma senza uscire dal sistema: una scritta sopra il bordo
+                                    // è invisibile quanto una coperta da una traversa, ed è la
+                                    // trappola in cui il coro nascosto mi ha fatto cadere tre
+                                    // volte. Si lascia sempre un margine in cima.
+                                    const MARGINE_ALTO = 4;
+                                    const alzataGrezza = Number.isFinite(inchiostro)
+                                        ? Math.max(0, baseRomano - (inchiostro - ARIA))
+                                        : 0;
+                                    const alzata = Math.min(alzataGrezza, Math.max(0, baseSigla - MARGINE_ALTO));
+                                    return systemAccLabels.map((p) => (
+                                        <g key={p.id}>
+                                            {showSymbolAnalysis && p.sigla ? (
+                                                <text x={p.x + 20} y={baseSigla - alzata} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">{p.sigla}</text>
+                                            ) : null}
+                                            {showRomanAnalysis && p.roman ? (
+                                                <text x={p.x + 20} y={(accLabelY.top - (showSymbolAnalysis && p.sigla ? 26 : 42)) - alzata} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1e3a8a">{p.roman}</text>
+                                            ) : null}
+                                        </g>
+                                    ));
+                                })()}
 
                                 {/* ── Maniglie delle legature di portamento ──
                                      Stesso modello delle forcelle: un punto che si vede e si
