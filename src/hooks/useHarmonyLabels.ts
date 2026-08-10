@@ -5685,7 +5685,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
     // Modulation / tonicization markers per system (from analysisContexts)
     const contextMarkersBySystem = useMemo(() => {
-        if (!layoutData || analysisContexts.length === 0) return [] as { x: number; label: string; absBeat: number }[][];
+        if (!layoutData || analysisContexts.length === 0) return [] as { x: number; label: string; absBeat: number; isTesto: boolean }[][];
 
         const formatLabel = (ctx: AnalysisContext) => {
             const quality = ctx.newIsMinor ? 'min' : 'Maj';
@@ -5701,7 +5701,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
 
         // `absBeat` viaggia col marcatore: serve a chi lo vuole TOGLIERE dalla partitura
         // col tasto destro, che altrimenti saprebbe dove sta sullo schermo ma non nel brano.
-        const markersBySystem: { x: number; label: string; absBeat: number }[][] = layoutData.systemsParams.map(() => []);
+        const markersBySystem: { x: number; label: string; absBeat: number; isTesto: boolean }[][] = layoutData.systemsParams.map(() => []);
         const measureStarts = (layoutData as any)?.measureStartAbsBeat as number[] | undefined;
         const measureBeats = (layoutData as any)?.measureBeatsPerMeasure as number[] | undefined;
 
@@ -5738,7 +5738,19 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 const rel = Math.max(0, Math.min(1, (beatInMeasure - 1) / bpm));
                 const x = startX + MEASURE_PADDING_X + (rel * contentWidth);
 
-                markersBySystem[systemIndex].push({ x: x + 10, label: formatLabel(ctx), absBeat });
+                // `isTesto` distingue una SCRITTA dell'utente da un marcatore di
+                // tonalità — e da una tonicizzazione DEDOTTA dal motore, che in questa
+                // corsia sta insieme alle altre ma non esiste fra i contesti dell'utente.
+                // Chi vuole spostarle o toglierle deve poterle distinguere: agire su una
+                // dedotta significa non togliere niente (non c'è) e aggiungere un
+                // contesto nuovo, che cambia la lettura tonale e fa comparire sigle
+                // diverse sulla partitura.
+                markersBySystem[systemIndex].push({
+                    x: x + 10,
+                    label: formatLabel(ctx),
+                    absBeat,
+                    isTesto: ctx.markerMode === 'text' && (ctx as any).source !== 'inferred',
+                });
                 break;
             }
         }

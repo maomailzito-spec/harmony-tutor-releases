@@ -17078,9 +17078,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         // gli altri segni — stessa macchina della tavolozza,
                                                                         // con in più il punto di PARTENZA, così chi lo riceve
                                                                         // sa che è uno spostamento e non una copia nuova.
-                                                                        style={{ pointerEvents: 'auto', cursor: 'grab' }}
+                                                                        // SOLO LE SCRITTE DELL'UTENTE si prendono e si
+                                                                        // spostano. In questa corsia stanno anche i
+                                                                        // marcatori di tonalità e le tonicizzazioni DEDOTTE
+                                                                        // dal motore: trascinare una dedotta non toglieva
+                                                                        // niente (fra i contesti dell'utente non c'è) e
+                                                                        // aggiungeva un contesto nuovo — da qui il doppione
+                                                                        // E le sigle estranee, perché un contesto in più
+                                                                        // cambia la lettura tonale di tutto ciò che segue.
+                                                                        style={{ pointerEvents: 'auto', cursor: (m as any).isTesto ? 'grab' : 'context-menu' }}
                                                                         onMouseDown={(ev) => {
                                                                             if (ev.button !== 0) return;
+                                                                            if (!(m as any).isTesto) return;
                                                                             ev.stopPropagation();
                                                                             segnoTrascinato.inizia({
                                                                                 kind: 'text-marker',
