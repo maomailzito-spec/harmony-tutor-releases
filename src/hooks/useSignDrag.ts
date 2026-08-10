@@ -22,10 +22,6 @@ export interface SignDragPayload {
     data?: any;
     /** Come si disegna l'anteprima che segue il cursore. */
     label: string;
-    /** Punto (in semiminime) da cui il segno è stato STACCATO. Presente solo quando lo
-     *  si sta SPOSTANDO invece che posando nuovo: chi riceve il rilascio toglie quello
-     *  vecchio prima di mettere il nuovo, altrimenti si finisce con due copie. */
-    spostaDa?: number;
 }
 
 export interface SignDropTarget {

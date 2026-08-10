@@ -13182,14 +13182,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // funzione del pannello T, quindi finisce nello stesso posto di sempre.
             if (payload.kind === 'text-marker') {
                 const scritta = String(payload.data || '').trim();
-                if (!scritta) return;
-                // SPOSTAMENTO: il testo arrivava dalla partitura, non dalla tavolozza.
-                // Si toglie da dov'era prima di rimetterlo, altrimenti resta il vecchio
-                // e se ne aggiunge un secondo.
-                if (typeof payload.spostaDa === 'number') {
-                    handleRemoveContextLabelOnly(payload.spostaDa);
-                }
-                handleApplyContextLabelOnly(dove, scritta);
+                if (scritta) handleApplyContextLabelOnly(dove, scritta);
                 return;
             }
 
@@ -17072,23 +17065,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         fontWeight={600}
                                                                         fill="#1f2937"
                                                                         opacity={0.95}
-                                                                        // SI PRENDE E SI SPOSTA. Finora un testo posato era
-                                                                        // fisso: per correggere il punto bisognava toglierlo
-                                                                        // e riscriverlo. Ora si trascina come si trascinano
-                                                                        // gli altri segni — stessa macchina della tavolozza,
-                                                                        // con in più il punto di PARTENZA, così chi lo riceve
-                                                                        // sa che è uno spostamento e non una copia nuova.
-                                                                        style={{ pointerEvents: 'auto', cursor: 'grab' }}
-                                                                        onMouseDown={(ev) => {
-                                                                            if (ev.button !== 0) return;
-                                                                            ev.stopPropagation();
-                                                                            segnoTrascinato.inizia({
-                                                                                kind: 'text-marker',
-                                                                                data: m.label,
-                                                                                label: m.label,
-                                                                                spostaDa: Number((m as any).absBeat),
-                                                                            }, ev);
-                                                                        }}
+                                                                        style={{ pointerEvents: 'auto', cursor: 'context-menu' }}
                                                                         onContextMenu={(ev) => {
                                                                             ev.preventDefault();
                                                                             ev.stopPropagation();
