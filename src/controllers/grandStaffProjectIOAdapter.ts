@@ -59,6 +59,8 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         tempoMarks?: any[];
         /** Durata reale delle battute che non coincidono col metro (elenco sparso). */
         measureLengths?: any[];
+        /** Scritte libere: NON sono contesti d'analisi. */
+        textAnnotations?: any[];
         toolbarGroupOrder?: any[];
 	bpm: number;
 	isBpmActive: boolean;
@@ -146,6 +148,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		tempoCurves: args.tempoCurves || [],
 		tempoMarks: args.tempoMarks || [],
 		measureLengths: args.measureLengths || [],
+		textAnnotations: args.textAnnotations || [],
 		// Dinamiche: salvate sempre, anche vuote, per un round-trip pulito.
 		dynamics: args.dynamics || [],
 		// Legature di portamento: idem.
@@ -254,6 +257,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setTempoCurves?: (next: any) => void;
 	setTempoMarks?: (next: any) => void;
 	setMeasureLengths?: (next: any) => void;
+	setTextAnnotations?: (next: any) => void;
 	setKeyChangeMode: (next: any) => void;
 	setModalTonicOverride: (next: any) => void;
 	setAutoLeadingToneInMinor: (next: any) => void;
@@ -356,6 +360,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setTempoCurves?.([]);
 		args.setTempoMarks?.([]);
 		args.setMeasureLengths?.([]);
+		args.setTextAnnotations?.([]);
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
 		args.setAutoLeadingToneInMinor(true);
@@ -613,7 +618,10 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				args.setModalTonicOverride(loadedProject.modalTonicOverride);
 			}
 			if (Array.isArray(loadedProject.analysisContexts)) {
-				args.setAnalysisContexts(loadedProject.analysisContexts);
+				// I contesti «di testo» dei file vecchi NON tornano dentro l'analisi: sono
+				// stati convertiti in scritte qui sotto. Lasciarli sarebbe il difetto che
+				// si sta togliendo — una scritta che dichiara una tonalità.
+				args.setAnalysisContexts(loadedProject.analysisContexts.filter((c: any) => c?.markerMode !== 'text'));
 			}
 			if (Array.isArray(loadedProject.tonicizationHints)) {
 				args.setTonicizationHints?.(loadedProject.tonicizationHints);
@@ -639,6 +647,22 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			args.setTempoCurves?.(Array.isArray(loadedProject.tempoCurves) ? loadedProject.tempoCurves : []);
 			args.setTempoMarks?.(Array.isArray((loadedProject as any).tempoMarks) ? (loadedProject as any).tempoMarks : []);
 			args.setMeasureLengths?.(Array.isArray((loadedProject as any).measureLengths) ? (loadedProject as any).measureLengths : []);
+			// SCRITTE. Nei file salvati PRIMA che avessero un modello loro vivevano dentro
+			// `analysisContexts` con `markerMode: 'text'` — cioè erano dichiarazioni di
+			// tonalità travestite. Qui si tirano fuori: la scritta diventa una scritta, e il
+			// contesto fasullo sparisce dall'analisi, che così torna a leggere il brano per
+			// quello che è.
+			{
+				const salvate = Array.isArray((loadedProject as any).textAnnotations) ? (loadedProject as any).textAnnotations : [];
+				const vecchie = (Array.isArray(loadedProject.analysisContexts) ? loadedProject.analysisContexts : [])
+					.filter((c: any) => c && c.markerMode === 'text' && String(c.label || '').trim())
+					.map((c: any, i: number) => ({
+						id: `txt-migr-${i}`,
+						absBeat: Number(c.absBeat ?? 0),
+						label: String(c.label).trim(),
+					}));
+				args.setTextAnnotations?.([...salvate, ...vecchie]);
+			}
 			// Dinamiche: come sopra — ripristina o azzera, così un file vecchio non
 			// eredita i segni della sessione precedente.
 			args.setDynamics?.(Array.isArray((loadedProject as any).dynamics) ? (loadedProject as any).dynamics : []);
@@ -810,6 +834,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setTempoCurves?.([]);
 		args.apply.setTempoMarks?.([]);
 		args.apply.setMeasureLengths?.([]);
+		args.apply.setTextAnnotations?.([]);
 		args.apply.setMinMeasureCount(4);
 		args.apply.setMeasuresPerLine(4);
 		args.apply.setIsMinorMode(false);

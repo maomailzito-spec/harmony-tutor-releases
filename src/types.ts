@@ -171,6 +171,25 @@ export interface KeySignatureChange {
 }
 
 /**
+ * UNA SCRITTA sulla partitura — «CVII», «dolce», «poco rit.».
+ *
+ * Ha un modello SUO, e questo è il punto. Prima le scritte vivevano dentro
+ * `analysisContexts` con `markerMode: 'text'`: cioè erano dichiarazioni di TONALITÀ
+ * travestite da testo. Ne bastava una in più o in meno perché l'analisi leggesse il
+ * brano in modo diverso — spostando un «CVII» comparivano sigle estranee, cancellandolo
+ * se ne creava un'altra. Non era un difetto del gesto: era il modello sbagliato.
+ *
+ * Una scritta non dice niente sull'armonia. Sta in un punto del tempo, si legge, si
+ * sposta, si toglie. Nient'altro.
+ */
+export interface TextAnnotation {
+  id: string;
+  /** Punto del brano in semiminime dall'inizio, come le dinamiche. */
+  absBeat: number;
+  label: string;
+}
+
+/**
  * DURATA REALE di una battuta, quando NON coincide col metro.
  *
  * Battute di levare, battute d'aggiunta, cadenze: in musica sono normali, e in

@@ -35,7 +35,7 @@ import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } fro
 import { articulationPlayback } from '../utils/articulations';
 import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
 import { normalizeKeyChanges, keyAtMeasure } from '../utils/keySignatureChanges';
-import type { TempoMark, MeasureLength } from '../types';
+import type { TempoMark, MeasureLength, TextAnnotation } from '../types';
 import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { normalizeTempoMarks, tempoMarkQuarterBpm } from '../utils/tempoMarks';
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
@@ -1592,6 +1592,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // DURATA REALE delle battute che non coincidono col metro (levare, battute
     // d'aggiunta, e i file veri: una Fantaisie di Weiss ne ha 26 su 65). Elenco
     // sparso: una partitura regolare non ne ha nessuna. Vedi utils/measureLengths.ts.
+    /** SCRITTE sulla partitura (le posizioni sul manico, «dolce», «Fine»). Hanno un
+     *  modello LORO: non sono contesti d'analisi e non dichiarano nessuna tonalità —
+     *  vedi TextAnnotation. */
+    const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+    const textAnnotationsRef = useRef(textAnnotations);
+    textAnnotationsRef.current = textAnnotations;
+
     const [measureLengths, setMeasureLengths] = useState<MeasureLength[]>([]);
     const measureLengthsRef = useRef(measureLengths);
     measureLengthsRef.current = measureLengths;
@@ -5216,6 +5223,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     tempoCurves,
                     tempoMarks,
                     measureLengths,
+                    textAnnotations,
                     dynamics,
                     slurs,
                     octaveShifts,
@@ -5278,6 +5286,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setTempoCurves,
                     setTempoMarks,
                     setMeasureLengths,
+                    setTextAnnotations,
                     setDynamics,
                     setSlurs,
                     setOctaveShifts,
@@ -5447,22 +5456,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // Battute che nel file durano più del metro: la griglia deve saperlo,
                         // altrimenti l'eccedenza si sovrappone alla battuta dopo.
                         setMeasureLengths(Array.isArray(imported?.measureLengths) ? imported.measureLengths : []);
-                        // SCRITTE del file (per la chitarra: le posizioni della mano
-                        // sinistra). Entrano come segni di testo, con la tonalità corrente
-                        // ricopiata: un testo NON è un cambio di tonica e non deve spostare
-                        // l'analisi di un millimetro.
-                        const testi = Array.isArray(imported?.textMarks) ? imported.textMarks : [];
-                        if (testi.length > 0) {
-                            const tonica = String(imported?.keySignatureRoot || 'C').trim() || 'C';
-                            const minore = Boolean(imported?.isMinorMode);
-                            setAnalysisContexts(testi.map(t => ({
-                                absBeat: t.absBeat,
-                                newTonic: tonica,
-                                newIsMinor: minore,
-                                label: t.label,
-                                markerMode: 'text' as const,
-                            })));
-                        }
+                        // SCRITTE del file: per la chitarra sono le posizioni della mano
+                        // sinistra (CVII, CV, «1/2 II»). Entrano nel loro elenco, che con
+                        // l'analisi non ha niente a che vedere — prima passavano dai
+                        // contesti e ognuna dichiarava una tonalità.
+                        setTextAnnotations((Array.isArray(imported?.textMarks) ? imported.textMarks : [])
+                            .map(t => ({ id: crypto.randomUUID(), absBeat: t.absBeat, label: t.label })));
                         // IL CORO VUOTO NON SI MOSTRA. Va tutto su tracce: il rigo SATB
                         // resterebbe lì a cinque righe deserte — ingombro per chi guarda e,
                         // per chi naviga con lo screen reader, un rigo in più da attraversare
@@ -5529,17 +5528,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setAutoLeadingToneInMinor(true);
                 setKeyChangeMode('none');
                 setModalTonicOverride('');
-                // Le scritte del file diventano segni di testo, con la tonica corrente
-                // ricopiata: un testo non è un cambio di tonalità e non tocca l'analisi.
-                setAnalysisContexts(
-                    (Array.isArray(imported?.textMarks) ? imported.textMarks : []).map(t => ({
-                        absBeat: t.absBeat,
-                        newTonic: nextKeyRoot,
-                        newIsMinor: nextIsMinor,
-                        label: t.label,
-                        markerMode: 'text' as const,
-                    })),
-                );
+                // Le scritte del file vanno nel LORO elenco: non toccano l'analisi.
+                setAnalysisContexts([]);
+                setTextAnnotations((Array.isArray(imported?.textMarks) ? imported.textMarks : [])
+                    .map(t => ({ id: crypto.randomUUID(), absBeat: t.absBeat, label: t.label })));
                 setHarmonyOverrides([]);
                 setAccHarmonyOverrides([]);
                 setTonicizationHints([]);
@@ -5622,7 +5614,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         staffSystemMode, keySignatureRoot, projectTitle, projectComposer, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
         keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
-        repeatBarlines, voltaBrackets, tempoCurves, tempoMarks, measureLengths, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        repeatBarlines, voltaBrackets, tempoCurves, tempoMarks, measureLengths, textAnnotations, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -5727,6 +5719,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setTempoCurves((p as any).tempoCurves || []);
                 setTempoMarks((p as any).tempoMarks || []);
                 setMeasureLengths((p as any).measureLengths || []);
+                setTextAnnotations((p as any).textAnnotations || []);
                 setDynamics((p as any).dynamics || []);
                 setAutoLeadingToneInMinor(p.autoLeadingToneInMinor ?? true);
                 setKeyChangeMode(p.keyChangeMode || 'none');
@@ -6204,40 +6197,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setContextMenu(null);
     };
 
+    /**
+     * Posa una SCRITTA in un punto del brano.
+     *
+     * Prima questa funzione creava un CONTESTO D'ANALISI con `markerMode: 'text'` — cioè
+     * una dichiarazione di tonalità travestita da scritta. Bastava spostarne una perché
+     * l'analisi rileggesse il pezzo e comparissero sigle estranee; cancellandola se ne
+     * generava un'altra. Non era un difetto del gesto ma del modello: una scritta non ha
+     * niente da dire sull'armonia, e ora vive in un elenco suo.
+     */
     const handleApplyContextLabelOnly = (absBeat: number, label?: string) => {
-        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
-        const cleanLabel = label?.trim() || undefined;
-
-        setAnalysisContexts(prev => {
-            const existing = (prev || []).find(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6);
-            if (existing) {
-                return (prev || []).map(c => (Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6)
-                    ? { ...c, label: cleanLabel }
-                    : c
-                );
-            }
-            const baseCtx = (prev || [])
-                .filter(c => analysisContextAbsBeat(c) <= safeAbsBeat + 1e-6)
-                .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a))[0];
-            const baseTonic = baseCtx?.newTonic ?? currentTonic;
-            const baseIsMinor = baseCtx?.newIsMinor ?? isMinorMode;
-            const next = (prev || []).slice();
-            next.push({ absBeat: safeAbsBeat, newTonic: baseTonic, newIsMinor: baseIsMinor, label: cleanLabel, markerMode: 'text' as const });
-            return next.sort((a, b) => analysisContextAbsBeat(a) - analysisContextAbsBeat(b));
-        });
-        setContextMenu(null);
-    };
-
-    const handleRemoveContextLabelOnly = (absBeat: number) => {
-        const safeAbsBeat = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
-        setAnalysisContexts(prev => {
-            const existing = (prev || []).find(c => Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6);
-            if (!existing) return prev || [];
-            if (!existing.label) return prev || [];
-            return (prev || []).map(c => (Math.abs(analysisContextAbsBeat(c) - safeAbsBeat) <= 1e-6)
-                ? { ...c, label: undefined }
-                : c
-            );
+        const punto = Math.max(0, Math.round(absBeat * 1e6) / 1e6);
+        const scritta = String(label ?? '').trim();
+        setTextAnnotations(prev => {
+            const altrove = (prev || []).filter(t => Math.abs(t.absBeat - punto) > 1e-6);
+            // Testo vuoto in un punto dove ce n'era una = la si toglie.
+            if (!scritta) return altrove;
+            return [...altrove, { id: crypto.randomUUID(), absBeat: punto, label: scritta }]
+                .sort((a, b) => a.absBeat - b.absBeat);
         });
         setContextMenu(null);
     };
@@ -7586,6 +7563,51 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Y (locale al sistema) per le etichette: sul rigo della traccia analizzata; se questa è
     // in un gruppo, sul rigo PIÙ ALTO del gruppo (le sigle/romani stanno in cima all'insieme).
+    /**
+     * LE SCRITTE da disegnare, sistema per sistema, con la loro x.
+     *
+     * Stessa impalcatura dei marcatori d'analisi — si trova la battuta, poi il punto
+     * dentro la battuta — ma su un elenco SEPARATO. È tutta la differenza: una scritta
+     * non entra nell'analisi, quindi spostarla o toglierla non può cambiare una sigla.
+     */
+    const testiPerSistema = useMemo<Array<Array<{ x: number; label: string; absBeat: number }>>>(() => {
+        const vuoto: Array<Array<{ x: number; label: string; absBeat: number }>> = [];
+        if (!layoutData || !(textAnnotations || []).length) return vuoto;
+        const sysParams = (layoutData as any).systemsParams || [];
+        const inizi = (layoutData as any).measureStartAbsBeat as number[] | undefined;
+        const battute = (layoutData as any).measureBeatsPerMeasure as number[] | undefined;
+        const out: Array<Array<{ x: number; label: string; absBeat: number }>> = sysParams.map(() => []);
+        const misuraDi = (ab: number): number => {
+            if (!inizi || !inizi.length) {
+                const bpm = timeSignature.numerator * (4 / timeSignature.denominator);
+                return Math.max(0, Math.floor(ab / bpm));
+            }
+            for (let m = inizi.length - 1; m >= 0; m--) if (ab >= (inizi[m] ?? 0) - 1e-9) return m;
+            return 0;
+        };
+        for (const t of textAnnotations) {
+            const ab = Number(t.absBeat);
+            if (!Number.isFinite(ab) || ab < 0) continue;
+            const mi = misuraDi(ab);
+            const bpm = (battute && battute[mi]) ? battute[mi] : (timeSignature.numerator * (4 / timeSignature.denominator));
+            const dentro = ab - ((inizi && inizi[mi] != null) ? inizi[mi] : mi * bpm);
+            for (let si = 0; si < sysParams.length; si++) {
+                const sys = sysParams[si];
+                const idx = (sys.measureIndices || []).indexOf(mi);
+                if (idx < 0) continue;
+                const startX = sys.startMeasuresX[idx];
+                const endX = idx < sys.measureIndices.length - 1 ? sys.startMeasuresX[idx + 1] : (sys.width - START_X);
+                const larghezza = Math.max(1, endX - startX);
+                const contenuto = Math.max(1, larghezza - (MEASURE_PADDING_X * 2));
+                const rel = Math.max(0, Math.min(1, dentro / bpm));
+                out[si].push({ x: startX + MEASURE_PADDING_X + (rel * contenuto) + 10, label: t.label, absBeat: ab });
+                break;
+            }
+        }
+        out.forEach(a => a.sort((x, y) => x.x - y.x));
+        return out;
+    }, [layoutData, textAnnotations, timeSignature]);
+
     /** Geometria del rigo ACC su cui sta l'analisi: riga superiore e interlinea. Serve a
      *  convertire la posizione diatonica di una nota nella sua altezza sullo schermo. */
     const accLabelYGeom = useMemo(() => {
@@ -13183,13 +13205,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (payload.kind === 'text-marker') {
                 const scritta = String(payload.data || '').trim();
                 if (!scritta) return;
-                // SPOSTAMENTO: il testo arrivava dalla partitura, non dalla tavolozza.
-                // Si toglie da dov'era prima di rimetterlo, altrimenti resta il vecchio
-                // e se ne aggiunge un secondo.
-                if (typeof payload.spostaDa === 'number') {
-                    handleRemoveContextLabelOnly(payload.spostaDa);
-                }
-                handleApplyContextLabelOnly(dove, scritta);
+                const punto = Math.max(0, Math.round(dove * 1e6) / 1e6);
+                setTextAnnotations(prev => {
+                    // Spostamento: si toglie quella di partenza. Posa nuova: `spostaDa`
+                    // non c'è e non si toglie niente.
+                    const senzaVecchia = typeof payload.spostaDa === 'number'
+                        ? (prev || []).filter(t => Math.abs(t.absBeat - payload.spostaDa!) > 1e-6)
+                        : (prev || []);
+                    return [...senzaVecchia, { id: crypto.randomUUID(), absBeat: punto, label: scritta }]
+                        .sort((a, b) => a.absBeat - b.absBeat);
+                });
                 return;
             }
 
@@ -17012,6 +17037,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 // etichette: senza, la cache le ridisegna alla quota
                                                                 // vecchia dopo ogni modifica alle note.
                                                                 accInkTopBySystem[systemIndex],
+                                                                testiPerSistema?.[systemIndex],
                                                             ];
                                                             const _ovC = overlayCacheRef.current[systemIndex];
                                                             // Frozen during an edit burst → reuse cached element even if the key changed.
@@ -17021,7 +17047,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             // Erano rimasti fuori dall'elenco, e spegnendo l'analisi sparivano dalla
                                                             // pagina pur continuando a suonare: si vedeva una partitura senza le
                                                             // sfumature che si sentivano.
-                                                            const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || timeSignatureChanges.length > 0 || (dynamics?.length ?? 0) > 0 || (slurs?.length ?? 0) > 0 || (octaveShifts?.length ?? 0) > 0 || ((tempoMarkMarkersBySystem?.[systemIndex] || []).length > 0) || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
+                                                            const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || (testiPerSistema?.[systemIndex] || []).length > 0 || timeSignatureChanges.length > 0 || (dynamics?.length ?? 0) > 0 || (slurs?.length ?? 0) > 0 || (octaveShifts?.length ?? 0) > 0 || ((tempoMarkMarkersBySystem?.[systemIndex] || []).length > 0) || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
                                                                 {/* SEGNI DI METRONOMO («♩ = 60»). Stanno sopra tutto, all'inizio
                                                                     della battuta da cui valgono, come si scrivono in partitura.
@@ -17047,22 +17073,45 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         {m.label}
                                                                     </text>
                                                                 ))}
-                                                                {/* Modulation / tonicization markers.
-                                                                    Tasto destro = TOGLI, come per ogni altro segno: prima una scritta
-                                                                    si posava trascinandola dalla tavolozza, ma per cancellarla
-                                                                    bisognava sapere che viveva nel pannello delle proprietà. */}
-                                                                {(contextMarkersBySystem?.[systemIndex] || []).map((m, i) => (
+                                                                {/* MARCATORI DELL'ANALISI (tonalità, tonicizzazioni). Non si
+                                                                    trascinano: dicono in che tonalità si sta leggendo, e si
+                                                                    spostano cambiando l'analisi, non con le dita. Le SCRITTE
+                                                                    non stanno più qui — hanno un elenco loro, sotto. */}
+                                                                {(contextMarkersBySystem?.[systemIndex] || [])
+                                                                    .filter((m: any) => !m.isTesto)
+                                                                    .map((m, i) => (
                                                                     <text
                                                                         key={`ctx-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        // Col coro NASCOSTO il sistema è traslato in alto di
-                                                                        // SATB_HIDE_SHIFT_PX e la fascia dove queste scritte
-                                                                        // stavano viene ritagliata via: restavano disegnate
-                                                                        // sopra il bordo, cioè invisibili. È quello che è
-                                                                        // successo alle posizioni della chitarra, importate
-                                                                        // (18 segni) e mai comparse. Stessa correzione già
-                                                                        // fatta per i numeri di battuta, che stanno a +114:
-                                                                        // il testo va appena sopra il primo rigo ACC.
+                                                                        y={!satbVisible
+                                                                            ? (SATB_HIDE_SHIFT_PX + 96)
+                                                                            : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4))}
+                                                                        textAnchor="start"
+                                                                        fontSize={11}
+                                                                        fontWeight={600}
+                                                                        fill="black"
+                                                                        opacity={0.85}
+                                                                    >
+                                                                        {m.label}
+                                                                    </text>
+                                                                ))}
+
+                                                                {/* LE SCRITTE — posizioni sul manico, «dolce», «Fine».
+                                                                    Vengono dal loro elenco (`textAnnotations`), non dai
+                                                                    contesti d'analisi: è tutta la differenza. Prima una
+                                                                    scritta ERA una dichiarazione di tonalità travestita, e
+                                                                    spostandola l'analisi rileggeva il brano — comparivano
+                                                                    sigle estranee, e cancellandola se ne creava un'altra.
+                                                                    Ora si prende, si sposta, si toglie, e all'armonia non
+                                                                    dice niente perché non può.
+
+                                                                    Col coro nascosto la fascia va compensata: è la stessa
+                                                                    traslazione che ha morso i numeri di battuta e i riquadri
+                                                                    delle misure incomplete. */}
+                                                                {(testiPerSistema?.[systemIndex] || []).map((m, i) => (
+                                                                    <text
+                                                                        key={`txt-${systemIndex}-${i}`}
+                                                                        x={m.x}
                                                                         y={!satbVisible
                                                                             ? (SATB_HIDE_SHIFT_PX + 96)
                                                                             : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4))}
@@ -17072,39 +17121,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         fontWeight={600}
                                                                         fill="#1f2937"
                                                                         opacity={0.95}
-                                                                        // SI PRENDE E SI SPOSTA. Finora un testo posato era
-                                                                        // fisso: per correggere il punto bisognava toglierlo
-                                                                        // e riscriverlo. Ora si trascina come si trascinano
-                                                                        // gli altri segni — stessa macchina della tavolozza,
-                                                                        // con in più il punto di PARTENZA, così chi lo riceve
-                                                                        // sa che è uno spostamento e non una copia nuova.
-                                                                        // SOLO LE SCRITTE DELL'UTENTE si prendono e si
-                                                                        // spostano. In questa corsia stanno anche i
-                                                                        // marcatori di tonalità e le tonicizzazioni DEDOTTE
-                                                                        // dal motore: trascinare una dedotta non toglieva
-                                                                        // niente (fra i contesti dell'utente non c'è) e
-                                                                        // aggiungeva un contesto nuovo — da qui il doppione
-                                                                        // E le sigle estranee, perché un contesto in più
-                                                                        // cambia la lettura tonale di tutto ciò che segue.
-                                                                        style={{ pointerEvents: 'auto', cursor: (m as any).isTesto ? 'grab' : 'context-menu' }}
+                                                                        style={{ pointerEvents: 'auto', cursor: 'grab' }}
                                                                         onMouseDown={(ev) => {
                                                                             if (ev.button !== 0) return;
-                                                                            if (!(m as any).isTesto) return;
                                                                             ev.stopPropagation();
                                                                             segnoTrascinato.inizia({
                                                                                 kind: 'text-marker',
                                                                                 data: m.label,
                                                                                 label: m.label,
-                                                                                spostaDa: Number((m as any).absBeat),
+                                                                                spostaDa: m.absBeat,
                                                                             }, ev);
                                                                         }}
                                                                         onContextMenu={(ev) => {
                                                                             ev.preventDefault();
                                                                             ev.stopPropagation();
-                                                                            handleRemoveContextLabelOnly(Number((m as any).absBeat));
+                                                                            setTextAnnotations(prev => (prev || []).filter(t => Math.abs(t.absBeat - m.absBeat) > 1e-6));
                                                                         }}
                                                                     >
-                                                                        <title>Tasto destro per togliere questa scritta</title>
+                                                                        <title>Trascina per spostarla · tasto destro per toglierla</title>
                                                                         {m.label}
                                                                     </text>
                                                                 ))}

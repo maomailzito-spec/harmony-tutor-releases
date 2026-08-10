@@ -30,6 +30,7 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'tempoCurves',
   'tempoMarks',
   'measureLengths',
+  'textAnnotations',
   'dynamics',
   'slurs',
   'octaveShifts',
@@ -99,6 +100,9 @@ export type ProjectDataV1 = {
   tempoMarks?: any[];
   /** Durata reale delle battute che non coincidono col metro (elenco sparso). */
   measureLengths?: any[];
+  /** Scritte libere sulla partitura. Distinte dai contesti d'analisi: una scritta
+   *  non dichiara nessuna tonalità. */
+  textAnnotations?: any[];
   /** Segni di dinamica (pp…ff, sf, fp, forcelle): valgono per tutte le voci. */
   dynamics?: any[];
   slurs?: any[];
