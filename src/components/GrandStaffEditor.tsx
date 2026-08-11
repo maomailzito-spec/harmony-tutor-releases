@@ -11291,7 +11291,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             snappedLocalTicks = maxLocalStart;
         }
 
-        const startTick = measureStartTick + snappedLocalTicks;
+        // Stessa calamita del fantasma: quello che si vede è quello che si ottiene.
+        const startTick = agganciaAdAttaccoVicinoRef.current(
+            hit.measureIndex,
+            measureStartTick + snappedLocalTicks,
+            snapGridTicks,
+        );
+        snappedLocalTicks = startTick - measureStartTick;
 
         // Derive beat only for compatibility (do not use it for snapping).
         const beatInMeasure = (snappedLocalTicks / TICKS_PER_QUARTER) + 1;
@@ -12679,6 +12685,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }));
     }, [activeTab, tool, selectedVoice, marqueeSelectOnlyCurrentVoice]);
 
+    /**
+     * CALAMITA SUGLI ATTACCHI ESISTENTI.
+     *
+     * Costruire un accordo vuol dire mettere una nota SOPRA un'altra: si mira alla
+     * verticale di ciò che c'è già. Ma l'aggancio alla griglia non sa niente di ciò che
+     * c'è già — arrotonda a mezze semiminime — e mezzo slot di scarto basta perché la
+     * nota finisca nel movimento dopo, che è il difetto segnalato: il contralto impilato
+     * sopra le altre e comparso più avanti, con due sigle invece di una.
+     *
+     * Qui, se in quella misura c'è già un attacco abbastanza vicino, si usa QUELLO. Vince
+     * sempre il più vicino, e solo entro mezzo slot: più in là si sta chiaramente
+     * mirando altrove, e sarebbe fastidioso vedersi calamitare la nota contro la
+     * volontà. Serve sia al fantasma sia al clic, così ciò che si vede è ciò che si
+     * ottiene.
+     */
+    const agganciaAdAttaccoVicino = useCallback((
+        measureIndex: number,
+        startTickCandidato: number,
+        snapGridTicks: number,
+    ): number => {
+        try {
+            const tolleranza = Math.max(1, snapGridTicks * 0.5);
+            let migliore: number | null = null;
+            let distanzaMigliore = Infinity;
+            const considera = (n: any) => {
+                if (!n || n.isRest) return;
+                if ((n.measureIndex ?? -1) !== measureIndex) return;
+                const t = Number(n.startTick);
+                if (!Number.isFinite(t)) return;
+                const d = Math.abs(t - startTickCandidato);
+                if (d < distanzaMigliore && d <= tolleranza) { distanzaMigliore = d; migliore = t; }
+            };
+            for (const n of (latestRawNotes.current || [])) considera(n);
+            for (const t of (latestAccompanimentTracks.current || [])) {
+                for (const n of (t.notes || [])) considera(n);
+            }
+            return migliore != null ? migliore : startTickCandidato;
+        } catch {
+            return startTickCandidato;
+        }
+    }, []);
+    const agganciaAdAttaccoVicinoRef = useRef(agganciaAdAttaccoVicino);
+    agganciaAdAttaccoVicinoRef.current = agganciaAdAttaccoVicino;
+
     /** Misura e intervallo di tick in cui finirebbe una nota inserita a questa X.
      *  Serve al fantasma per sapere quali voci sono già occupate in quel punto e
      *  mostrare quindi lo stesso colore che userà il clic.
@@ -12720,7 +12770,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (snappedLocalTicks < 0) snappedLocalTicks = 0;
             if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
 
-            const startTick = measureStartTick + snappedLocalTicks;
+            const startTick = agganciaAdAttaccoVicino(
+                hit.measureIndex,
+                measureStartTick + snappedLocalTicks,
+                snapGridTicks,
+            );
             return { measureIndex: hit.measureIndex, startTick, endTick: startTick + durationTicks, measureStartTick };
         } catch {
             return null;
