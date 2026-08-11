@@ -26,6 +26,9 @@ export interface SignDragPayload {
      *  si sta SPOSTANDO invece che posando nuovo: chi riceve il rilascio toglie quello
      *  vecchio prima di mettere il nuovo, altrimenti si finisce con due copie. */
     spostaDa?: number;
+    /** Come `spostaDa`, ma per i segni ancorati a una BATTUTA (metronomo, armatura,
+     *  metro) invece che a un punto nel tempo. */
+    spostaDaMisura?: number;
 }
 
 export interface SignDropTarget {

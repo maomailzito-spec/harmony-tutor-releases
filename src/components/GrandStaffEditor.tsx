@@ -13315,6 +13315,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Come metro e armatura: vale da una MISURA in poi. I valori (numero e
             // unità di battito) si scelgono nella tavolozza prima di trascinare.
             if (payload.kind === 'tempo-mark') {
+                // Spostamento: si toglie dalla battuta di partenza. Se è la stessa in cui
+                // si molla non cambia niente, e va bene così.
+                if (typeof payload.spostaDaMisura === 'number' && payload.spostaDaMisura !== rng.measureIndex) {
+                    togliSegnoTempoRef.current?.(payload.spostaDaMisura);
+                }
                 const bpm = Number(payload.data?.bpm);
                 if (Number.isFinite(bpm) && bpm > 0) {
                     mettiSegnoTempoRef.current?.(
@@ -17156,7 +17161,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         fontSize={15}
                                                                         fontWeight={700}
                                                                         fill="#111827"
-                                                                        style={{ pointerEvents: 'auto', cursor: 'context-menu' }}
+                                                                        // Si prende e si sposta, come le scritte. Vale da una
+                                                                        // BATTUTA in poi, quindi si posa sulla battuta dove lo
+                                                                        // si molla — non su un punto qualsiasi.
+                                                                        style={{ pointerEvents: 'auto', cursor: 'grab' }}
+                                                                        onMouseDown={(ev) => {
+                                                                            if (ev.button !== 0) return;
+                                                                            ev.stopPropagation();
+                                                                            const seg = normalizeTempoMarks(tempoMarksRef.current)
+                                                                                .find(t => t.measureIndex === Number(m.measureIndex));
+                                                                            if (!seg) return;
+                                                                            segnoTrascinato.inizia({
+                                                                                kind: 'tempo-mark',
+                                                                                data: { bpm: seg.bpm, beatUnit: seg.beatUnit, dotted: seg.dotted },
+                                                                                label: m.label,
+                                                                                spostaDaMisura: Number(m.measureIndex),
+                                                                            }, ev);
+                                                                        }}
                                                                         onContextMenu={(ev) => {
                                                                             ev.preventDefault();
                                                                             ev.stopPropagation();
