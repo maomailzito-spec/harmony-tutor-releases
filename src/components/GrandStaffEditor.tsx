@@ -6489,6 +6489,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     demand = Math.max(sum, byTime * 0.6);
                 }
             }
+            // ── LARGHEZZA A GRADINI ────────────────────────────────────────────────
+            // La richiesta di spazio è una somma CONTINUA: ogni nota inserita la cambia
+            // di una ventina di pixel, e siccome le misure di una riga si dividono lo
+            // spazio disponibile, basta una nota perché TUTTE si spostino un poco. Da
+            // qui la misura che «cambia dimensioni durante l'inserimento», e — peggio —
+            // la griglia che scivola sotto il puntatore mentre si scrive: si mira a un
+            // punto, la riga si riflette, e la nota finisce nello slot accanto.
+            //
+            // Arrotondando la richiesta a gradini di mezza semiminima, la larghezza
+            // cambia solo quando cambia DAVVERO la densità: la misura si allarga alla
+            // prima semicroma e poi resta ferma, invece di respirare a ogni nota. Si
+            // arrotonda per ECCESSO — meglio un dito di spazio in più che note strette.
+            const GRADINO_PX = QUARTER_PX / 2;
+            demand = Math.ceil(demand / GRADINO_PX) * GRADINO_PX;
             return (measureDemandCache.set(_mIdx, demand), demand);
         };
 
