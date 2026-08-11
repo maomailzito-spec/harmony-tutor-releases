@@ -6484,6 +6484,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const quarters = Math.max(0.03125, d / TICKS_PER_QUARTER);
                         sum += Math.max(MIN_ONSET_PX, QUARTER_PX * Math.pow(quarters, SPACING_EXPONENT));
                     }
+                    // ── LA PARTE ANCORA VUOTA VALE IL SUO TEMPO ──────────────────────
+                    // La somma qui sopra guarda solo ciò che è GIÀ scritto: una misura
+                    // riempita a metà chiedeva metà spazio, e cresceva a ogni nota fino
+                    // ad arrivare alla larghezza giusta solo all'ultimo accordo. Ma una
+                    // misura di 4/4 vale quattro semiminime di spazio anche quando è
+                    // vuota — è così che si incide, ed è così che ci si aspetta di
+                    // scrivere: la misura ha da subito la sua larghezza e cambia solo se
+                    // il CONTENUTO lo richiede.
+                    //
+                    // Quindi il tempo non ancora occupato si conta alla larghezza «a
+                    // tempo». Una misura di semiminime resta quella del metro dal primo
+                    // accordo; una di semicrome si allarga perché la somma supera il
+                    // metro; una di minime si restringe, perché la somma è minore e non
+                    // c'è vuoto da compensare.
+                    let coperto = 0;
+                    for (const n of notesToLayout) {
+                        if ((n.measureIndex ?? -1) !== _mIdx) continue;
+                        const t = Number((n as any).startTick);
+                        if (!Number.isFinite(t)) continue;
+                        const d = Math.max(0, Number(n.durationTicks) || 0);
+                        const fine = (t - (measureStartAbsBeat[_mIdx] ?? 0) * TICKS_PER_QUARTER) + d;
+                        if (fine > coperto) coperto = fine;
+                    }
+                    const vuoto = Math.max(0, measureTicks - Math.min(measureTicks, coperto));
+                    sum += vuoto * DEFAULT_PX_PER_TICK;
                     // Pavimento: una misura rada non scende sotto il 60% della sua larghezza
                     // "a tempo", altrimenti diventerebbe un francobollo accanto a una fitta.
                     demand = Math.max(sum, byTime * 0.6);
