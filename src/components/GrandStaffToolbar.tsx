@@ -215,6 +215,10 @@ type GrandStaffToolbarProps = {
     setViewMode?: (v: 'page' | 'linear') => void;
     /** Spaziatura proporzionale al contenuto (larghezza della misura secondo le note). */
     contentAwareSpacing?: boolean;
+    /** Avviso delle misure incomplete: quante sono, e se i riquadri rossi si vedono. */
+    misureIncompleteTotali?: number;
+    showIncompleteMeasureWarnings?: boolean;
+    setShowIncompleteMeasureWarnings?: (f: (v: boolean) => boolean) => void;
     setContentAwareSpacing?: (v: boolean) => void;
     setCanvasFormat: (value: CanvasFormat) => void;
     /** Opt-in guide: draw approximate page breaks between systems in the editor. */
@@ -414,6 +418,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         viewMode,
         setViewMode,
         contentAwareSpacing,
+        misureIncompleteTotali = 0,
+        showIncompleteMeasureWarnings = true,
+        setShowIncompleteMeasureWarnings,
         setContentAwareSpacing,
         setCanvasFormat,
         showPageBreaks,
@@ -1087,6 +1094,35 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     {selectedNotesHave7th
                         ? ['auto','S:7','S:3','S:5','S:R'][revoiceDispIdx % 5]
                         : ['auto','S:R','S:3','S:5'][revoiceDispIdx % 4]}
+                </button>
+            </div>
+        ),
+        incompleteMeasures: (
+            <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
+                {/* Due significati distinti, e vanno tenuti separati:
+                    · PREMUTO o no = i riquadri rossi sulle misure si vedono. Spegnerli è
+                      legittimo: sono d'intralcio mentre si scrive, e una misura a metà è
+                      normale finché la si sta riempiendo.
+                    · ROSSO = nel brano CI SONO misure incomplete, e questo non dipende dai
+                      riquadri: l'analisi di quei punti resta parziale, e qualcosa deve
+                      ricordarlo anche a disegno spento. */}
+                <button
+                    type="button"
+                    onClick={() => setShowIncompleteMeasureWarnings?.((v: boolean) => !v)}
+                    aria-pressed={showIncompleteMeasureWarnings}
+                    aria-label={misureIncompleteTotali > 0
+                        ? `${misureIncompleteTotali} misure incomplete — ${showIncompleteMeasureWarnings ? 'nascondi' : 'mostra'} i riquadri`
+                        : 'Nessuna misura incompleta'}
+                    title={misureIncompleteTotali > 0
+                        ? `${misureIncompleteTotali} ${misureIncompleteTotali === 1 ? 'misura incompleta' : 'misure incomplete'}: l'analisi di quei punti è parziale.\n${showIncompleteMeasureWarnings ? 'Clicca per nascondere i riquadri rossi (l\'avviso resta).' : 'Clicca per rivedere i riquadri rossi.'}`
+                        : 'Nessuna misura incompleta'}
+                    className={`flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md transition-colors ${
+                        misureIncompleteTotali > 0
+                            ? (showIncompleteMeasureWarnings ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-red-600/40 text-red-50 hover:bg-red-600/60 ring-1 ring-red-500')
+                            : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
+                    }`}
+                >
+                    ⚠{misureIncompleteTotali > 0 ? <span className="tabular-nums">{misureIncompleteTotali}</span> : null}
                 </button>
             </div>
         ),

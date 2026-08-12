@@ -459,6 +459,7 @@ type ToolbarGroupId =
     | 'accidentals'
     | 'notations'
     | 'analysis'
+    | 'incompleteMeasures'
     | 'midi'
     | 'more';
 
@@ -486,6 +487,10 @@ const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'accidentals',
     'notations',
     'analysis',
+    // L'avviso delle misure incomplete: era un pulsante FISSO appiccicato in alto a
+    // destra, l'unico comando che non si poteva spostare. Ora è un gruppo come gli
+    // altri — si mette dove serve e la posizione si salva.
+    'incompleteMeasures',
     'midi',
     'more',
 ];
@@ -15143,32 +15148,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             >
                 {analysisLocked && !sessionUnlocked ? '🔒' : '🔓'}
             </button>
-            {/* Due significati, e vanno tenuti distinti:
-                 · PREMUTO o no = i rettangoli rossi sulle misure si vedono. Spegnerli è
-                   legittimo: sono d'intralcio mentre si scrive, e una misura a metà è
-                   normale finché la si sta riempiendo.
-                 · ROSSO = nel brano CI SONO misure incomplete. Questo non dipende dai
-                   rettangoli. Prima i due significati stavano sullo stesso interruttore:
-                   spegnendo il disegno spariva anche l'avviso, e l'analisi continuava a
-                   dire di meno in quei punti senza che niente lo ricordasse. */}
-            <button
-                type="button"
-                onClick={() => setShowIncompleteMeasureWarnings(v => !v)}
-                aria-pressed={showIncompleteMeasureWarnings}
-                aria-label={misureIncompleteTotali > 0
-                    ? `${misureIncompleteTotali} misure incomplete — ${showIncompleteMeasureWarnings ? 'nascondi' : 'mostra'} i riquadri`
-                    : 'Nessuna misura incompleta'}
-                title={misureIncompleteTotali > 0
-                    ? `${misureIncompleteTotali} ${misureIncompleteTotali === 1 ? 'misura incompleta' : 'misure incomplete'}: l'analisi di quei punti è parziale.\n${showIncompleteMeasureWarnings ? 'Clicca per nascondere i riquadri rossi (l\'avviso resta).' : 'Clicca per rivedere i riquadri rossi.'}`
-                    : 'Nessuna misura incompleta'}
-                className={`absolute right-12 top-2 z-[60] flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md shadow transition-colors ${
-                    misureIncompleteTotali > 0
-                        ? (showIncompleteMeasureWarnings ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-red-600/40 text-red-50 hover:bg-red-600/60 ring-1 ring-red-500')
-                        : 'bg-gray-300 text-gray-600 hover:bg-gray-400'
-                }`}
-            >
-                ⚠{misureIncompleteTotali > 0 ? <span className="tabular-nums">{misureIncompleteTotali}</span> : null}
-            </button>
             {featuresLimited && (
                 <div className="w-full flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-500 text-amber-950 text-xs font-semibold shadow z-[55]">
                     <span>⏳ Prova terminata — <b>analisi</b> e <b>realizzazione automatica</b> disabilitate. Editor, export, playback e stampa restano attivi.</span>
@@ -15374,6 +15353,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 viewMode={viewMode}
                 setViewMode={setViewMode}
                 contentAwareSpacing={contentAwareSpacing}
+                misureIncompleteTotali={misureIncompleteTotali}
+                showIncompleteMeasureWarnings={showIncompleteMeasureWarnings}
+                setShowIncompleteMeasureWarnings={setShowIncompleteMeasureWarnings}
                 setContentAwareSpacing={setContentAwareSpacing}
                 setCanvasFormat={setCanvasFormat}
                 showPageBreaks={showPageBreaks}
