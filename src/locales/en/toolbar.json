@@ -60,7 +60,7 @@
   "key_tonic_auto": "Auto (first note)",
   "key_major": "Maj",
   "key_minor": "min",
-  "key_auto_leading_tone": "Auto leading-tone",
+  "key_auto_leading_tone": "Auto-lead",
   "key_auto_leading_tone_tooltip": "In a minor key: automatically raises the 7th degree (harmonic minor) when no manual accidental is set.",
   "time_label": "Time:",
   "measures_label": "Mea:",

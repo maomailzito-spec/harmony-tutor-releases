@@ -668,6 +668,12 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     <optgroup label={tT('key_optgroup_flats')}>{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
                 </select>
 
+                <div className="relative flex p-0.5 bg-gray-900/50 rounded-md">
+                    <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${isMinorMode ? '100%' : '0%'})` }}></div>
+                    <button onClick={() => setIsMinorMode(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_major')}</button>
+                    <button onClick={() => setIsMinorMode(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_minor')}</button>
+                </div>
+
                 <label className="flex items-center gap-2 text-xs text-gray-300 select-none">
                     <input
                         type="checkbox"
@@ -705,11 +711,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     </div>
                 )}
 
-                <div className="relative flex p-0.5 bg-gray-900/50 rounded-md">
-                    <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${isMinorMode ? '100%' : '0%'})` }}></div>
-                    <button onClick={() => setIsMinorMode(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_major')}</button>
-                    <button onClick={() => setIsMinorMode(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_minor')}</button>
-                </div>
 
                 <label className="flex items-center gap-2 text-xs text-gray-300 select-none" title={tT('key_auto_leading_tone_tooltip')}>
                     <input

@@ -60,7 +60,7 @@
   "key_tonic_auto": "Auto (prima nota)",
   "key_major": "Mag",
   "key_minor": "min",
-  "key_auto_leading_tone": "Sensibile auto",
+  "key_auto_leading_tone": "Auto-sens.",
   "key_auto_leading_tone_tooltip": "In tonalità minore: alza automaticamente il VII grado (minore armonica) se non scegli un accidentale manuale.",
   "time_label": "Tempo:",
   "measures_label": "Mis:",
