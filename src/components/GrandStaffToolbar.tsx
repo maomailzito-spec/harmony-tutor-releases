@@ -649,7 +649,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             </div>
         ),
         key: (
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
                 <span className="text-xs text-slate-400">{tT('key_label')}</span>
                 <select
                     id="key-signature-select"
@@ -1487,6 +1487,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     onMouseLeave={() => setToolbarHoverTip(null)}
                     className="sticky top-0 z-50 px-2 py-1 bg-slate-800 border-b border-slate-700 rounded-lg"
                 >
+                    {/* La fila va a capo quando serve — su un 14 pollici ne servono tre,
+                        ed è giusto così: meglio tre file che pulsanti nascosti. Quello che
+                        conta è che l'ORDINE non cambi mai (è quello scelto dall'utente e
+                        salvato), così mettendo in fondo i gruppi che si usano meno gli
+                        altri si ritrovano sempre nello stesso posto relativo.
+                        Ogni gruppo resta INTERO: o ci sta sulla riga, o passa tutto alla
+                        successiva — vedi `flex-nowrap` sui gruppi che potrebbero spezzarsi
+                        (la tonalità lo faceva: l'etichetta di qua e il menù di là). */}
                     <div className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1">
                         {visibleGroupIds.map((id, idx) => (
                             <React.Fragment key={id}>
