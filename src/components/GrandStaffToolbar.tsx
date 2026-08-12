@@ -1088,6 +1088,92 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         ? ['auto','S:7','S:3','S:5','S:R'][revoiceDispIdx % 5]
                         : ['auto','S:R','S:3','S:5'][revoiceDispIdx % 4]}
                 </button>
+                {activeStaffArea === 'accompaniment' && (
+                    <>
+                        <div className="w-px h-5 bg-slate-600 mx-0.5" />
+                        {([
+                            { id: 'block',         label: 'Bl',   title: 'Block Chords' },
+                            { id: 'arpeggio_up',   label: 'Ar▲',  title: 'Arpeggio Up' },
+                            { id: 'arpeggio_down', label: 'Ar▼',  title: 'Arpeggio Down' },
+                            { id: 'broken',        label: 'Brk',  title: 'Broken (boom-chick)' },
+                            { id: 'albertino',     label: 'Alb',  title: 'Basso Albertino (0-2-1-2)' },
+                            { id: 'ondulato',      label: 'Ond',  title: 'Ondulato (su e giù)' },
+                        ] as const).map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => onSetAccPattern(p.id)}
+                                title={p.title}
+                                className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accPattern === p.id ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                        <button
+                            onClick={onToggleAccLetRing}
+                            title="Ped — le note risuonano fino al prossimo attacco (pedale/let ring). Vale anche per le note inserite a mano."
+                            className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accLetRing ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                        >
+                            Ped
+                        </button>
+                    </>
+                )}
+                {/* Trasformazioni melodiche sulla selezione (motivo): inserite DOPO l'originale */}
+                {hasSelectedNotes && (
+                    <>
+                        <div className="w-px h-5 bg-slate-600 mx-0.5" />
+                        <button
+                            onClick={onToggleTransformMode}
+                            title={transformMode === 'tonal'
+                                ? 'Trasformazioni TONALI (in chiave, per gradi). Clicca per passare a Reali (cromatiche).'
+                                : 'Trasformazioni REALI (cromatiche, per semitoni). ⚠ Inversione e retro-inverso reali sono cromatici (escono dalla tonalità). Clicca per tornare a Tonali.'}
+                            className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'tonal' ? 'bg-cyan-600 text-white' : 'bg-amber-600 text-white'}`}
+                        >
+                            {transformMode === 'tonal' ? 'Ton' : 'Real'}
+                        </button>
+                        <button
+                            onClick={() => onMelodicTransform('transpose', { amount: 1 })}
+                            title={transformMode === 'tonal' ? 'Trasponi su di un grado (in chiave)' : 'Trasponi su di un semitono'}
+                            className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
+                        >
+                            T▲
+                        </button>
+                        <button
+                            onClick={() => onMelodicTransform('transpose', { amount: -1 })}
+                            title={transformMode === 'tonal' ? 'Trasponi giù di un grado (in chiave)' : 'Trasponi giù di un semitono'}
+                            className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
+                        >
+                            T▼
+                        </button>
+                        <button
+                            aria-label="Inverti la melodia (rovescia i movimenti)"
+                            onClick={() => onMelodicTransform('invert')}
+                            title={transformMode === 'real'
+                                ? '⚠ Inversione REALE = cromatica: esce dalla tonalità (per contesti atonali/dodecafonici). Per un risultato in chiave passa a Ton.'
+                                : "Inversione tonale (in chiave): ogni voce si specchia attorno alla propria prima nota. Inserita dopo l'originale."}
+                            className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
+                        >
+                            {transformMode === 'real' ? 'Inv⚠' : 'Inv'}
+                        </button>
+                        <button
+                            aria-label="Retrogrado: rovescia l'ordine nel tempo"
+                            onClick={() => onMelodicTransform('retrograde')}
+                            title="Retrogrado: ordine temporale rovesciato (note e ritmo). Inserito dopo l'originale."
+                            className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
+                        >
+                            Retr
+                        </button>
+                        <button
+                            aria-label="Retrogrado inverso"
+                            onClick={() => onMelodicTransform('retrogradeInvert')}
+                            title={transformMode === 'real'
+                                ? "⚠ Retrogrado-inverso REALE: contiene l'inversione cromatica → esce dalla tonalità. Per un risultato in chiave passa a Ton."
+                                : "Retrogrado-inverso tonale (in chiave). Inserito dopo l'originale."}
+                            className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
+                        >
+                            {transformMode === 'real' ? 'R+I⚠' : 'R+I'}
+                        </button>
+                    </>
+                )}
             </div>
         ),
         notations: (
@@ -1524,108 +1610,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                     )}
                                     {toolbarGroups[id]}
                                 </div>
-
-                    {/* ── RIGA CONTESTUALE ─────────────────────────────────────────
-                        Questi comandi compaiono e spariscono da soli: i pattern quando
-                        si lavora su una traccia, le trasformazioni quando c'è una
-                        selezione. Finché stavano DENTRO la fila principale, ogni volta
-                        che apparivano spingevano tutti gli altri pulsanti e mandavano la
-                        barra a capo: tonalità, tempo e metro cambiavano posto sotto le
-                        dita, e andavano ricercati ogni volta.
-
-                        Su una riga LORO, la fila principale non si muove mai. Che è la
-                        proprietà che serve a una barra degli strumenti: le cose stanno
-                        dove uno le ha lasciate. */}
-                    {(activeStaffArea === 'accompaniment' || hasSelectedNotes) && (
-                        <div className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1 mt-1 pt-1 border-t border-slate-700/60">
-                        {activeStaffArea === 'accompaniment' && (
-                            <>
-                                <div className="w-px h-5 bg-slate-600 mx-0.5" />
-                                {([
-                                    { id: 'block',         label: 'Bl',   title: 'Block Chords' },
-                                    { id: 'arpeggio_up',   label: 'Ar▲',  title: 'Arpeggio Up' },
-                                    { id: 'arpeggio_down', label: 'Ar▼',  title: 'Arpeggio Down' },
-                                    { id: 'broken',        label: 'Brk',  title: 'Broken (boom-chick)' },
-                                    { id: 'albertino',     label: 'Alb',  title: 'Basso Albertino (0-2-1-2)' },
-                                    { id: 'ondulato',      label: 'Ond',  title: 'Ondulato (su e giù)' },
-                                ] as const).map(p => (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => onSetAccPattern(p.id)}
-                                        title={p.title}
-                                        className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accPattern === p.id ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                                    >
-                                        {p.label}
-                                    </button>
-                                ))}
-                                <button
-                                    onClick={onToggleAccLetRing}
-                                    title="Ped — le note risuonano fino al prossimo attacco (pedale/let ring). Vale anche per le note inserite a mano."
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accLetRing ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    Ped
-                                </button>
-                            </>
-                        )}
-                        {/* Trasformazioni melodiche sulla selezione (motivo): inserite DOPO l'originale */}
-                        {hasSelectedNotes && (
-                            <>
-                                <div className="w-px h-5 bg-slate-600 mx-0.5" />
-                                <button
-                                    onClick={onToggleTransformMode}
-                                    title={transformMode === 'tonal'
-                                        ? 'Trasformazioni TONALI (in chiave, per gradi). Clicca per passare a Reali (cromatiche).'
-                                        : 'Trasformazioni REALI (cromatiche, per semitoni). ⚠ Inversione e retro-inverso reali sono cromatici (escono dalla tonalità). Clicca per tornare a Tonali.'}
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'tonal' ? 'bg-cyan-600 text-white' : 'bg-amber-600 text-white'}`}
-                                >
-                                    {transformMode === 'tonal' ? 'Ton' : 'Real'}
-                                </button>
-                                <button
-                                    onClick={() => onMelodicTransform('transpose', { amount: 1 })}
-                                    title={transformMode === 'tonal' ? 'Trasponi su di un grado (in chiave)' : 'Trasponi su di un semitono'}
-                                    className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
-                                >
-                                    T▲
-                                </button>
-                                <button
-                                    onClick={() => onMelodicTransform('transpose', { amount: -1 })}
-                                    title={transformMode === 'tonal' ? 'Trasponi giù di un grado (in chiave)' : 'Trasponi giù di un semitono'}
-                                    className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
-                                >
-                                    T▼
-                                </button>
-                                <button
-                                    aria-label="Inverti la melodia (rovescia i movimenti)"
-                                    onClick={() => onMelodicTransform('invert')}
-                                    title={transformMode === 'real'
-                                        ? '⚠ Inversione REALE = cromatica: esce dalla tonalità (per contesti atonali/dodecafonici). Per un risultato in chiave passa a Ton.'
-                                        : "Inversione tonale (in chiave): ogni voce si specchia attorno alla propria prima nota. Inserita dopo l'originale."}
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    {transformMode === 'real' ? 'Inv⚠' : 'Inv'}
-                                </button>
-                                <button
-                                    aria-label="Retrogrado: rovescia l'ordine nel tempo"
-                                    onClick={() => onMelodicTransform('retrograde')}
-                                    title="Retrogrado: ordine temporale rovesciato (note e ritmo). Inserito dopo l'originale."
-                                    className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
-                                >
-                                    Retr
-                                </button>
-                                <button
-                                    aria-label="Retrogrado inverso"
-                                    onClick={() => onMelodicTransform('retrogradeInvert')}
-                                    title={transformMode === 'real'
-                                        ? "⚠ Retrogrado-inverso REALE: contiene l'inversione cromatica → esce dalla tonalità. Per un risultato in chiave passa a Ton."
-                                        : "Retrogrado-inverso tonale (in chiave). Inserito dopo l'originale."}
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    {transformMode === 'real' ? 'R+I⚠' : 'R+I'}
-                                </button>
-                            </>
-                        )}
-                        </div>
-                    )}
                                 {idx < visibleGroupIds.length - 1 && <div className="h-5 w-px bg-slate-600/50"></div>}
                             </React.Fragment>
                         ))}
