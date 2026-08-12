@@ -456,7 +456,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         onMelodicTransform,
     } = props;
 
-    const [chromaticModulationEnabled, setChromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
+    // La modulazione cromatica si governa dalle PREFERENZE (analysis.chromaticModulation).
+    // Aveva anche un interruttore in barra: due comandi per la stessa cosa, e in barra
+    // occupava spazio in un gruppo già affollato — vedi il commit che l'ha tolto.
     const { t } = useTranslation('ui');
     const { t: tT } = useTranslation('toolbar');
 
@@ -1215,13 +1217,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             title={showSymbolAnalysis ? t('toolbar_hide_symbols') : t('toolbar_show_symbols')}
                         >
                             G7
-                        </button>
-                        <button
-                            onClick={() => setChromaticModulationEnabled(!chromaticModulationEnabled)}
-                            className={`px-1.5 rounded-sm py-0.5 font-bold transition-all ${chromaticModulationEnabled ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
-                            title={t('toolbar_chromatic_tooltip')}
-                        >
-                            {tT('analysis_chromatic_label')}
                         </button>
                     </div>
                 )}
