@@ -4128,11 +4128,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const modeNamesIt = ['Ionio', 'Dorico', 'Frigio', 'Lidio', 'Misolidio', 'Eolio', 'Locrio'];
 
         if (degree < 0) {
-            return { tonicName, label: `Modo: ${tonicName} (fuori scala)` };
+            return { tonicName, label: `Modo: ${tonicName} (fuori scala)`, degree: -1, terzaMinore: false, haSensibile: true };
         }
 
         const mode = modeNamesIt[degree] ?? '—';
-        return { tonicName, label: `Modo: ${tonicName} ${mode}` };
+        // Il modo non è solo un nome: dice due cose che all'ANALISI servono.
+        //  · com'è la TERZA sopra il finale → l'accordo di tonica è minore o maggiore,
+        //    e quindi il grado si scrive `i` o `I`;
+        //  · se c'è la SENSIBILE, cioè se il settimo grado sta un semitono sotto il
+        //    finale. Ce l'hanno soltanto ionio e lidio; dorico, frigio, misolidio, eolio
+        //    e locrio hanno il settimo abbassato — lì la sensibile non esiste, e le regole
+        //    che parlano di lei non hanno oggetto.
+        const terzaMinore = degree === 1 || degree === 2 || degree === 5 || degree === 6;
+        const haSensibile = degree === 0 || degree === 3;
+        return { tonicName, label: `Modo: ${tonicName} ${mode}`, degree, terzaMinore, haSensibile };
     }, [keyChangeMode, keySignatureRoot, makeNoteNameFromPitchAndMidi, modalTonicOverride, mod12Local, noteNameToChromaticIndex, rawNotes]);
 
     const transposeAllNotesToKey = useCallback((fromRoot: string, toRoot: string) => {
@@ -4383,12 +4392,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [keySignatureRoot, respellAccTracksForKey, setIsMinorMode]);
 
     const { currentTonic, currentQuality } = useMemo(() => {
+        // IL MODO ENTRA NELL'ANALISI. Fin qui la tonica poteva essere solo la
+        // fondamentale maggiore o la sua relativa minore: scrivendo in re dorico con
+        // armatura di Do, il motore leggeva in DO MAGGIORE e un Dm restava `ii` invece
+        // di `i`. L'etichetta sopra il rigo diceva «Dorico» e le sigle sotto ragionavano
+        // in ionico — il programma si contraddiceva, e chi impara non poteva sapere
+        // quale delle due avesse ragione.
+        //
+        // Ora, quando il modo è dichiarato, la tonica dell'analisi è il FINALE del modo
+        // e la qualità è quella della sua terza. Da qui discende tutto il resto: in re
+        // dorico Dm è `i` e Sol è `IV`, non `V`.
+        if (keyChangeMode === 'modal' && modeInfo?.tonicName && (modeInfo as any).degree >= 0) {
+            return {
+                currentTonic: modeInfo.tonicName,
+                currentQuality: (modeInfo as any).terzaMinore ? 'Minore' : 'Maggiore',
+            };
+        }
         if (isMinorMode) {
             const minorRoot = relativeMinors[keySignatureRoot] || 'A';
             return { currentTonic: minorRoot, currentQuality: 'Minore' };
         }
         return { currentTonic: keySignatureRoot, currentQuality: 'Maggiore' };
-    }, [keySignatureRoot, isMinorMode]);
+    }, [keySignatureRoot, isMinorMode, keyChangeMode, modeInfo]);
 
     const normalizedRawNotes = useMemo(() => {
         const basePc: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -9559,7 +9584,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // di un semitono di default, senza selezionare manualmente l’accidentale.
         // Se l’utente ha già scelto un accidentale, non intervenire.
         if (!autoLeadingToneInMinor) return baseProps;
-        if (!isMinorMode) return baseProps;
+        // NEI MODI SENZA SENSIBILE non si alza niente. Dorico, frigio, misolidio, eolio e
+        // locrio hanno il settimo grado ABBASSATO: alzarlo non è un aiuto, è cambiare il
+        // modo sotto le mani di chi scrive — un misolidio diventerebbe ionico alla prima
+        // nota. La sensibile ce l'hanno solo ionio e lidio.
+        if (keyChangeMode === 'modal' && (modeInfo as any)?.haSensibile === false) return baseProps;
+        // Fuori dal modo dichiarato resta la regola di prima: solo in minore.
+        if (keyChangeMode !== 'modal' && !isMinorMode) return baseProps;
         if (activeAccidental) return baseProps;
 
         const tonicLetter = (currentTonic || '').charAt(0);
@@ -18641,6 +18672,16 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         ) : isAnalysisEnabled ? (
                             <HarmonyAnalysisPanel
                                 violations={violations}
+                                // IL MODO SI DICHIARA. Nei modi senza sensibile (dorico,
+                                // frigio, misolidio, eolio, locrio) le regole che parlano
+                                // di lei non hanno oggetto: non si applicano. Tacerlo
+                                // sarebbe peggio che applicarle a sproposito — chi impara
+                                // vedrebbe sparire una regola senza sapere perché.
+                                avvisoModale={
+                                    keyChangeMode === 'modal' && (modeInfo as any)?.haSensibile === false && modeInfo?.label
+                                        ? `${modeInfo.label}. In questo modo la sensibile non esiste: la sua risoluzione e l'alzata automatica del VII non si applicano, e le cadenze si leggono per gradi del modo.`
+                                        : null
+                                }
                                 // DOVE sta la violazione. Il pannello è già testo — uno
                                 // screen reader lo legge — ma diceva soltanto CHE COSA:
                                 // «quinte parallele fra soprano e basso» e la spiegazione

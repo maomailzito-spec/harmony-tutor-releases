@@ -10,6 +10,10 @@ interface HarmonyAnalysisPanelProps {
     /** DOVE sta la violazione nel brano. Il pannello è già leggibile da uno screen
      *  reader — è testo — ma diceva solo CHE COSA non va, non in quale punto: chi non
      *  vede la pagina restava senza il dato più importante. */
+    /** Avviso del MODO: quando si scrive in un modo senza sensibile, le regole che
+     *  parlano di lei non si applicano — e va detto, altrimenti chi impara non capisce
+     *  perché una regola vista ieri oggi non compare. */
+    avvisoModale?: string | null;
     posizioneViolazione?: (v: RuleViolation) => { misura: number; movimento?: number } | null;
     sequenceMatches?: SequenceMatch[];
     sequencesEnabled?: boolean;
@@ -52,7 +56,7 @@ const VOICE_ABBR: Record<number, string> = { 0: 'Acc', 1: 'S', 2: 'A', 3: 'T', 4
 const MOTIF_TYPE_LABEL: Record<string, string> = { transpose: 'Trasposizione', invert: 'Inversione', retrograde: 'Retrogrado', retrogradeInvert: 'Retro-inverso' };
 const MOTIF_TYPE_HUE: Record<string, string> = { invert: '#6d28d9', retrograde: '#0f766e', retrogradeInvert: '#a21caf', transpose: '#be185d' };
 
-const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, posizioneViolazione, sequenceMatches, sequencesEnabled, onToggleSequences, motifsEnabled, onToggleMotifs, motifMatches, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
+const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, avvisoModale, posizioneViolazione, sequenceMatches, sequencesEnabled, onToggleSequences, motifsEnabled, onToggleMotifs, motifMatches, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     const { t } = useTranslation('analysis');
     const [filters, setFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [ruleSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
@@ -194,6 +198,14 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
     const hasAnyViolations = (violations || []).length > 0;
     return (
         <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto">
+            {avvisoModale && (
+                <div
+                    role="note"
+                    className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-200"
+                >
+                    {avvisoModale}
+                </div>
+            )}
             <div className="mb-3 bg-gray-900/30 border border-gray-700/50 rounded-lg p-2">
                 <div className="flex items-center justify-between gap-2">
                     <p className="text-xs uppercase tracking-wide text-gray-400">{t('filters_title')}</p>
