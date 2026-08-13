@@ -10,6 +10,7 @@ import {
   SHOW_ROMAN_ANALYSIS_KEY,
   SHOW_QUICK_INSERT_BAR_KEY,
   SHOW_SYMBOL_ANALYSIS_KEY,
+  SHOW_FIGURED_BASS_KEY,
   SHOW_VOICE_COLORS_KEY,
   TOOLBAR_HIDDEN_KEY,
   HARMONY_ANALYSIS_PROFILE_CUSTOMIZED_KEY,
@@ -46,6 +47,7 @@ export type PreferenceId =
   | 'analysis.showRomanAnalysis'
   | 'analysis.romanBassMode'
   | 'analysis.showSymbolAnalysis'
+  | 'analysis.showFiguredBass'
   | 'analysis.profileBaseId'
   | 'analysis.profileCustomized'
   | 'analysis.sequencesEnabled'
@@ -303,6 +305,22 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     defaultValue: false,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, false),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  // LA CIFRATURA HA UN INTERRUTTORE SUO. Fin qui le cifre si disegnavano attaccate al
+  // numero romano e vivevano o morivano con lui: chi non usa il basso figurato — un
+  // jazzista che legge le sigle, o chi ascolta la partitura con lo screen reader — se lo
+  // portava dietro comunque, sulla pagina e nei file esportati.
+  'analysis.showFiguredBass': {
+    id: 'analysis.showFiguredBass',
+    section: 'Analysis',
+    label: 'Mostra la cifratura del basso',
+    i18nKey: 'pref_analysis_show_figured_bass',
+    storageKey: SHOW_FIGURED_BASS_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 

@@ -191,6 +191,8 @@ type GrandStaffToolbarProps = {
     showRomanAnalysis: boolean;
     setShowRomanAnalysis: (value: boolean | ((prev: boolean) => boolean)) => void;
     showSymbolAnalysis: boolean;
+    showFiguredBass?: boolean;
+    setShowFiguredBass?: (v: boolean | ((p: boolean) => boolean)) => void;
     setShowSymbolAnalysis: (value: boolean | ((prev: boolean) => boolean)) => void;
     analysisSubject: 'satb' | 'acc';
     setAnalysisSubject: (value: 'satb' | 'acc') => void;
@@ -399,6 +401,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         showRomanAnalysis,
         setShowRomanAnalysis,
         showSymbolAnalysis,
+        showFiguredBass = true,
+        setShowFiguredBass,
         setShowSymbolAnalysis,
         analysisSubject,
         setAnalysisSubject,
@@ -1210,6 +1214,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             title={showRomanAnalysis ? t('toolbar_hide_roman') : t('toolbar_show_roman')}
                         >
                             V7
+                        </button>
+                        {/* CIFRATURA. Accanto a V7 e G7 perché sono la stessa famiglia di
+                            scelte: che cosa si vede dell'analisi. Chi legge le sigle o
+                            ascolta la partitura con lo screen reader può spegnerla, e la
+                            pagina — e i file esportati — si alleggeriscono. */}
+                        <button
+                            onClick={() => setShowFiguredBass?.(prev => !prev)}
+                            className={`w-10 rounded-sm py-0.5 font-bold transition-all ${showFiguredBass ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
+                            title={showFiguredBass ? 'Nascondi la cifratura del basso' : 'Mostra la cifratura del basso'}
+                        >
+                            6<span style={{ fontSize: '0.85em' }}>4</span>
                         </button>
                         <button
                             onClick={() => setShowSymbolAnalysis(prev => !prev)}

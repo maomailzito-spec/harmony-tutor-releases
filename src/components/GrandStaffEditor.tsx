@@ -38,6 +38,7 @@ import { normalizeKeyChanges, keyAtMeasure } from '../utils/keySignatureChanges'
 import type { TempoMark, MeasureLength, TextAnnotation } from '../types';
 import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { normalizeTempoMarks, tempoMarkQuarterBpm } from '../utils/tempoMarks';
+import { pronunciaSigle } from '../utils/pronunciaSigle';
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
@@ -2843,6 +2844,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
     const [romanBassMode] = usePreference<boolean>('analysis.romanBassMode');
     const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
+    // La CIFRATURA ha ora un interruttore suo: prima si disegnava attaccata al romano e
+    // spariva solo insieme a lui.
+    const [showFiguredBass, setShowFiguredBass] = usePreference<boolean>('analysis.showFiguredBass');
     const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
     const [harmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
@@ -7204,11 +7208,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     absBeat: l.absBeat, roman: l.roman, figures: l.figures, symbol: l.sigla,
                 }))
                 : ((_harmonyLabelsRef.current || []).flat() as any[]);
+            // L'EXPORT SEGUE CIÒ CHE SI VEDE. I tre interruttori della barra — romani,
+            // sigle, cifratura — decidono anche che cosa esce nel file. È la regola che ci si
+            // aspetta: si prepara la partitura come la si vuole, e la si esporta. Prima
+            // usciva tutto comunque, e chi non usa il basso figurato se lo portava dietro
+            // nel file — peggio ancora per chi lo ASCOLTA, dove ogni cifra in più è tempo
+            // di navigazione.
+            const esportaRomani = !!showRomanAnalysis;
+            const esportaCifre = !!showFiguredBass;
+            const esportaSigle = !!showSymbolAnalysis;
             for (const l of sorgenteEtichette) {
                 if (!l || l.hiddenMarker) continue;
-                const roman = String(l.romanDisplay ?? l.sequenceRomanFunctional ?? l.sequenceRoman ?? l.roman ?? '').trim();
-                const figures = Array.isArray(l.figures) ? l.figures.map((x: any) => String(x).trim()).filter(Boolean) : [];
-                if (!roman && figures.length === 0) continue;
+                const roman = esportaRomani
+                    ? String(l.romanDisplay ?? l.sequenceRomanFunctional ?? l.sequenceRoman ?? l.roman ?? '').trim()
+                    : '';
+                const figures = esportaCifre && Array.isArray(l.figures)
+                    ? l.figures.map((x: any) => String(x).trim()).filter(Boolean)
+                    : [];
+                const sigla = esportaSigle ? String(l.symbol || '').trim() : '';
+                if (!roman && figures.length === 0 && !sigla) continue;
                 const absBeat = Number(l.absBeat);
                 if (!Number.isFinite(absBeat)) continue;
                 const tick = Math.round(absBeat * TICKS_PER_QUARTER);
@@ -7218,6 +7236,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (choice.mode === 'standard') {
                     // Standard: MusicXML — romano sopra + cifre reali sotto (uso visivo).
                     harmonyLabels.push({ measureIndex, tick, roman: roman || undefined, figures: figures.length ? figures : undefined });
+                } else if (!roman && figures.length === 0 && sigla) {
+                    // Solo le sigle accese: il file accessibile porta quelle. Nel modo
+                    // parlato si dicono a parole, altrimenti restano compatte.
+                    const text = choice.mode === 'spoken'
+                        ? pronunciaSigle(sigla)
+                        : (absoluteToken({ symbol: sigla, figures }) || sigla);
+                    if (text) harmonyLabels.push({ measureIndex, tick, token: text });
                 } else {
                     // .mscx NATIVO: il testo del <FiguredBass> (l'unico elemento letto da VoiceOver
                     // navigando il basso). Parlata = FRASE italiana (nessun dizionario). Token =
@@ -7225,7 +7250,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     let tok: string;
                     if (choice.mode === 'spoken') tok = spokenPhrase({ roman, figures });
                     else if (choice.mode === 'functional') tok = functionalToken({ roman, figures });
-                    else tok = absoluteToken({ symbol: String(l.symbol || ''), figures }) || functionalToken({ roman, figures });
+                    else tok = absoluteToken({ symbol: sigla, figures }) || functionalToken({ roman, figures });
                     const text = tok || normalizeRoman(roman) || figures.join('');
                     if (text) harmonyLabels.push({ measureIndex, tick, token: text });
                 }
@@ -15362,6 +15387,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setShowRomanAnalysis={setShowRomanAnalysis}
                 showSymbolAnalysis={showSymbolAnalysis}
                 setShowSymbolAnalysis={setShowSymbolAnalysis}
+                showFiguredBass={showFiguredBass}
+                setShowFiguredBass={setShowFiguredBass}
                 analysisSubject={analysisSubject}
                 setAnalysisSubject={scegliSoggettoAnalisi}
                 accTracksForAnalysis={accompanimentTracks.filter(t => !(t as any).isDrum).map(t => ({ id: t.id, name: t.name }))}
@@ -17661,7 +17688,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 : romanShown;
                                                                             const romanW = measureTextWidth(romanBaseText, romanFont);
                                                                             const figFont = '700 12px serif';
-                                                                            const figures = (lbl.figures || []) as any[];
+                                                                            // Un punto solo: a cifratura spenta l'elenco è vuoto, quindi le
+                                                                            // cifre non entrano né nella misura del blocco né nel disegno.
+                                                                            const figures = (showFiguredBass ? (lbl.figures || []) : []) as any[];
                                                                             const figuresW = figures.length
                                                                                 ? Math.max(...figures.map(f => measureTextWidth(String(f), figFont)))
                                                                                 : 0;
