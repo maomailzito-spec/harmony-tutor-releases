@@ -16246,7 +16246,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const systemTriplets = tripletGroupsBySystem[systemIndex] || [];
 
                         // In modo ACC l'analisi SATB non si mostra (esclusività SATB/ACC).
-                        const systemHarmonyLabels = analysisSubject === 'acc' ? [] : (harmonyLabelsBySystemSequenced?.[systemIndex] || []);
+                        // LE CIFRE SI SPENGONO QUI, ALLA SORGENTE. Più a valle il disegno le
+                        // legge dall'etichetta in quattro punti diversi — larghezze, colonna
+                        // delle cifre, linea di tenuta — e spegnerne uno solo lascia gli altri
+                        // accesi: è l'errore del primo tentativo, dove spariva lo spazio ma non
+                        // le cifre. Togliendole dall'etichetta, tutto ciò che le usa smette di
+                        // vederle senza doverlo sapere.
+                        const systemHarmonyLabelsBase = analysisSubject === 'acc' ? [] : (harmonyLabelsBySystemSequenced?.[systemIndex] || []);
+                        const systemHarmonyLabels = showFiguredBass
+                            ? systemHarmonyLabelsBase
+                            : systemHarmonyLabelsBase.map(l => (((l as any)?.figures?.length) ? { ...l, figures: [] } : l));
                         const systemAccLabels = analysisSubject === 'acc' ? (accLabelsBySystem?.[systemIndex] || []) : [];
 
                         const invalidMeasureRects = (() => {
@@ -17688,9 +17697,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 : romanShown;
                                                                             const romanW = measureTextWidth(romanBaseText, romanFont);
                                                                             const figFont = '700 12px serif';
-                                                                            // Un punto solo: a cifratura spenta l'elenco è vuoto, quindi le
-                                                                            // cifre non entrano né nella misura del blocco né nel disegno.
-                                                                            const figures = (showFiguredBass ? (lbl.figures || []) : []) as any[];
+                                                                            const figures = (lbl.figures || []) as any[];
                                                                             const figuresW = figures.length
                                                                                 ? Math.max(...figures.map(f => measureTextWidth(String(f), figFont)))
                                                                                 : 0;
