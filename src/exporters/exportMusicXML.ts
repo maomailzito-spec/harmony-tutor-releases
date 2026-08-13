@@ -9,11 +9,16 @@ import { DYNAMIC_VELOCITY, type DynamicMark } from '../utils/dynamics';
 import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange, TempoMark, MeasureLength } from '../types';
 import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { normalizeTempoMarks, tempoMarkQuarterBpm, tempoMarkXmlBeatUnit } from '../utils/tempoMarks';
+import { parseChordSymbol } from '../utils/chordSymbol';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 /** Etichetta d'analisi armonica da serializzare, agganciata a un onset (beat). */
 export interface HarmonyExportLabel {
+  /** SIGLA dell'accordo (`Cmaj7`, `Gm(add9)/A`). Esce come `<harmony>` — l'elemento
+   *  vero del formato, non testo: chi apre il file la vede come un accordo, la
+   *  traspone, la modifica. Prima le sigle non uscivano affatto. */
+  symbol?: string;
   /** Indice di misura (0-based) a cui appartiene l'etichetta. */
   measureIndex: number;
   /** Tick assoluto dell'onset (coincide con lo startTick delle note a quel beat). */
@@ -302,6 +307,35 @@ function parseFigure(f: string): { prefix?: string; number?: string; raw: string
 }
 
 /** Basso figurato col tag dedicato <figured-bass> (ben supportato, storico). */
+/**
+ * `<harmony>` — la sigla come accordo, non come testo.
+ *
+ * `kind` porta anche l'attributo `text`: è la grafia della QUALITÀ come l'ha scritta
+ * l'utente (`m(add9)`), e chi apre stampa quella. Senza, la sigla verrebbe ristampata
+ * secondo le convenzioni del programma che legge — cioè non come l'aveva scritta chi
+ * l'ha scritta. Attenzione: lì va SOLO la qualità, non la sigla intera: fondamentale e
+ * basso li stampa il programma da `<root>` e `<bass>`, e ripeterli darebbe «GGm…/A/A».
+ * Le sigle che non si riescono a classificare escono come `other` col loro testo:
+ * meglio un accordo dichiarato «altro» ma scritto giusto, che una sigla persa.
+ */
+function emitChordSymbol(w: (s: string) => void, symbol: string): void {
+  const p = parseChordSymbol(symbol);
+  if (!p) return;
+  w('      <harmony>');
+  w('        <root>');
+  w(`          <root-step>${p.rootStep}</root-step>`);
+  if (p.rootAlter) w(`          <root-alter>${p.rootAlter}</root-alter>`);
+  w('        </root>');
+  w(`        <kind text="${escapeXml(p.quality)}">${p.kind}</kind>`);
+  if (p.bassStep) {
+    w('        <bass>');
+    w(`          <bass-step>${p.bassStep}</bass-step>`);
+    if (p.bassAlter) w(`          <bass-alter>${p.bassAlter}</bass-alter>`);
+    w('        </bass>');
+  }
+  w('      </harmony>');
+}
+
 function emitFiguredBass(w: (s: string) => void, figures: string[]): void {
   const figs = figures.map(f => String(f).trim()).filter(Boolean);
   if (figs.length === 0) return;
@@ -475,7 +509,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
 
   // Armonia per misura → { localTick → {roman, figures} }. localTick calcolato con la
   // STESSA convenzione delle note (tick − inizio battuta) così coincide con gli onset.
-  const harmonyByMeasure = new Map<number, Map<number, { roman?: string; figures?: string[] }>>();
+  const harmonyByMeasure = new Map<number, Map<number, { roman?: string; figures?: string[]; symbol?: string }>>();
   for (const h of harmonyLabels) {
     const mi = h.measureIndex ?? 0;
     const localTick = h.tick - measureStartTicks(mi);
@@ -484,6 +518,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
     harmonyByMeasure.get(mi)!.set(localTick, {
       roman: h.roman ?? existing.roman,
       figures: (h.figures && h.figures.length) ? h.figures : existing.figures,
+      symbol: h.symbol ?? existing.symbol,
     });
   }
 
@@ -788,6 +823,7 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
       const hMap = part.withHarmony ? harmonyByMeasure.get(m) : undefined;
       const emittedRoman = new Set<number>();
       const emittedFig = new Set<number>();
+      const emittedSym = new Set<number>();
 
       // Note divise per rigo della parte.
       const staffNotes: StaffNote[][] = part.staves === 2 ? [[], []] : [[]];
@@ -852,6 +888,14 @@ export function exportMusicXML(opts: ExportMusicXMLOptions): string {
             }
 
             if (hMap) {
+              // SIGLA D'ACCORDO come `<harmony>`, l'elemento vero del formato: chi apre il
+              // file la vede come un accordo — la traspone, la modifica, la riconosce —
+              // invece che come una scritta. Va PRIMA della nota del suo attacco, com'è
+              // nella specifica. Prima le sigle non uscivano affatto.
+              if (staffIdx === 0 && !emittedSym.has(onsetTick)) {
+                const sigla = hMap.get(onsetTick)?.symbol;
+                if (sigla) { emitChordSymbol(w, sigla); emittedSym.add(onsetTick); }
+              }
               if (staffIdx === 0 && !emittedRoman.has(onsetTick)) {
                 const roman = hMap.get(onsetTick)?.roman;
                 if (roman) { emitHarmonyDirection(w, roman, staffNum); emittedRoman.add(onsetTick); }

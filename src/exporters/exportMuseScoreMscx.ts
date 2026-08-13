@@ -16,6 +16,7 @@
 import type { StaffNote, KeySignature, NoteDuration, TempoMark } from '../types';
 import { normalizeTempoMarks } from '../utils/tempoMarks';
 import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
+import { parseChordSymbol, tpcOf } from '../utils/chordSymbol';
 import { TICKS_PER_QUARTER } from '../constants';
 import type { ExportMusicXMLOptions } from './exportMusicXML';
 
@@ -125,6 +126,34 @@ function fracOfWhole(ticks: number): string {
 // ── Serializzazione ──────────────────────────────────────────────────────────
 
 interface Token { tick: number; text: string; }
+interface Sigla { tick: number; symbol: string; }
+
+/**
+ * `<Harmony>` nativo di MuseScore: la sigla come ACCORDO, non come testo.
+ *
+ * Finora le sigle nel .mscx non uscivano affatto: chi apriva il file accessibile con
+ * romani accesi non trovava un solo accordo scritto. Ora escono come oggetto vero —
+ * si traspone, si modifica, si stampa con le convenzioni di MuseScore.
+ *
+ * NOTA sulla lettura vocale: l'elemento che sappiamo per certo essere letto da
+ * VoiceOver è `<FiguredBass><text>`, ed è lì che continua ad andare il testo
+ * dell'analisi. Che `<Harmony>` venga annunciato navigando NON è verificato: se lo è,
+ * la sigla si sente due volte nel caso "solo sigle accese" — da provare sul campo
+ * prima di togliere qualcosa.
+ *
+ * `<root>` è un numero TPC (linea delle quinte); `<name>` è la qualità come stringa —
+ * MuseScore ristampa quella, quindi ci va la grafia dell'utente e non una
+ * ricostruzione.
+ */
+function emitHarmony(w: (s: string) => void, symbol: string): void {
+  const p = parseChordSymbol(symbol);
+  if (!p) return;
+  w('          <Harmony>');
+  w(`            <root>${tpcOf(p.rootStep, p.rootAlter)}</root>`);
+  if (p.quality) w(`            <name>${escapeXml(p.quality)}</name>`);
+  if (p.bassStep) w(`            <base>${tpcOf(p.bassStep, p.bassAlter ?? 0)}</base>`);
+  w('          </Harmony>');
+}
 
 /** Glifo SMuFL dell'unità di battito, per la scritta «♩ = 60» di MuseScore. */
 const SIMBOLO_UNITA: Record<string, string> = {
@@ -209,6 +238,20 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
     tokensByMeasure.get(mi)!.push({ tick: localTick, text });
   }
   for (const arr of tokensByMeasure.values()) arr.sort((a, b) => a.tick - b.tick);
+
+  // SIGLE per battuta → localTick. Vivono accanto ai token d'analisi ma su un altro
+  // elemento: il basso figurato dice il GRADO, la sigla dice l'ACCORDO, e chi studia
+  // usa spesso l'una o l'altra.
+  const sigleByMeasure = new Map<number, Sigla[]>();
+  for (const h of harmonyLabels) {
+    const sym = String((h as any).symbol ?? '').trim();
+    if (!sym) continue;
+    const mi = h.measureIndex ?? 0;
+    const localTick = h.tick - measureStartTickOf(mi);
+    if (!sigleByMeasure.has(mi)) sigleByMeasure.set(mi, []);
+    sigleByMeasure.get(mi)!.push({ tick: localTick, symbol: sym });
+  }
+  for (const arr of sigleByMeasure.values()) arr.sort((a, b) => a.tick - b.tick);
 
   // Determina il rigo/voce "d'armonia" (dove appendere il basso figurato): rigo grave se
   // esiste, altrimenti acuto; dentro, la voce più bassa (numero app più alto = basso).
@@ -368,6 +411,9 @@ export function exportMuseScoreMscx(opts: ExportMusicXMLOptions, smallFont = fal
           isHarmonyVoice ? (tokensByMeasure.get(m) || []) : [],
           stem,
           strumento.traspOttave * 12,
+          // Le sigle stanno sopra il rigo ACUTO e sulla prima voce: è dove si scrivono, e
+          // dove chi naviga se le aspetta.
+          (staffIdx === 0 && firstVoiceOfMeasure) ? (sigleByMeasure.get(m) || []) : [],
         );
 
         w('          </voice>');
@@ -396,6 +442,7 @@ function emitVoiceStream(
   stem?: 'up' | 'down',
   /** Traspozione dello strumento, in semitoni (vedi emitChord). */
   traspSemitoni = 0,
+  sigle: Sigla[] = [],
 ): void {
   // onset (localTick) → note[] (accordo reale: stessa voce, stesso onset)
   const onsets = new Map<number, StaffNote[]>();
@@ -406,7 +453,10 @@ function emitVoiceStream(
     onsets.get(localTick)!.push(n);
   }
   const sortedOnsets = [...onsets.entries()].sort((a, b) => a[0] - b[0]);
-  const tokenTicks = [...new Set(tokens.map(t => t.tick))].sort((a, b) => a - b);
+  // I confini che spezzano i segmenti sono quelli dei token E quelli delle sigle: una
+  // sigla che cade a metà di una nota tenuta deve avere il suo posto lì, altrimenti
+  // finisce attaccata all'attacco precedente — cioè su un altro tempo.
+  const tokenTicks = [...new Set([...tokens.map(t => t.tick), ...sigle.map(s => s.tick)])].sort((a, b) => a - b);
 
   // ── Costruisci la lista ordinata dei segmenti (accordi + pause di riempimento,
   //    spezzate sui tick dei token così ogni token ha un confine di segmento) ──
@@ -453,15 +503,21 @@ function emitVoiceStream(
 
   // ── Emissione: prima di ogni segmento scarica i token che suonano su di esso ──
   let tIdx = 0;
+  let sIdx = 0;
   for (const seg of segs) {
     while (tIdx < tokens.length && tokens[tIdx].tick < seg.start + seg.dur) {
       emitFiguredBass(w, tokens[tIdx].text, seg.dur);
       tIdx++;
     }
+    while (sIdx < sigle.length && sigle[sIdx].tick < seg.start + seg.dur) {
+      emitHarmony(w, sigle[sIdx].symbol);
+      sIdx++;
+    }
     if (seg.chord) emitChord(w, seg.chord, stem, seg.durOverride, traspSemitoni);
     else emitRestSeg(w, seg.rest!);
   }
   while (tIdx < tokens.length) { emitFiguredBass(w, tokens[tIdx].text, TPQ); tIdx++; }
+  while (sIdx < sigle.length) { emitHarmony(w, sigle[sIdx].symbol); sIdx++; }
 }
 
 function emitRestSeg(w: (s: string) => void, r: { type: string; dots: number }): void {

@@ -7196,7 +7196,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const bpmMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
 
             const seenTick = new Set<number>();
-            const harmonyLabels: Array<{ measureIndex: number; tick: number; roman?: string; figures?: string[]; token?: string }> = [];
+            const harmonyLabels: Array<{ measureIndex: number; tick: number; roman?: string; figures?: string[]; token?: string; symbol?: string }> = [];
             // DA DOVE viene l'analisi: dal coro o dalla traccia analizzata. Un brano
             // strumentale importato (una chitarra, un pianoforte) entra come TRACCIA, e
             // le sue etichette stanno in un altro elenco: leggendo solo quelle del coro,
@@ -7235,14 +7235,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const measureIndex = measureByTick.get(tick) ?? Math.max(0, Math.floor(absBeat / bpmMeasure));
                 if (choice.mode === 'standard') {
                     // Standard: MusicXML — romano sopra + cifre reali sotto (uso visivo).
-                    harmonyLabels.push({ measureIndex, tick, roman: roman || undefined, figures: figures.length ? figures : undefined });
+                    harmonyLabels.push({ measureIndex, tick, roman: roman || undefined, figures: figures.length ? figures : undefined, symbol: sigla || undefined });
                 } else if (!roman && figures.length === 0 && sigla) {
                     // Solo le sigle accese: il file accessibile porta quelle. Nel modo
                     // parlato si dicono a parole, altrimenti restano compatte.
                     const text = choice.mode === 'spoken'
                         ? pronunciaSigle(sigla)
                         : (absoluteToken({ symbol: sigla, figures }) || sigla);
-                    if (text) harmonyLabels.push({ measureIndex, tick, token: text });
+                    if (text) harmonyLabels.push({ measureIndex, tick, token: text, symbol: sigla || undefined });
                 } else {
                     // .mscx NATIVO: il testo del <FiguredBass> (l'unico elemento letto da VoiceOver
                     // navigando il basso). Parlata = FRASE italiana (nessun dizionario). Token =
@@ -7252,7 +7252,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     else if (choice.mode === 'functional') tok = functionalToken({ roman, figures });
                     else tok = absoluteToken({ symbol: sigla, figures }) || functionalToken({ roman, figures });
                     const text = tok || normalizeRoman(roman) || figures.join('');
-                    if (text) harmonyLabels.push({ measureIndex, tick, token: text });
+                    if (text) harmonyLabels.push({ measureIndex, tick, token: text, symbol: sigla || undefined });
                 }
             }
 
