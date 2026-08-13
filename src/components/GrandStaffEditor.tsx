@@ -17162,7 +17162,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 motifBracketsBySystem?.[systemIndex],
                                                                 analyzedNoteLookups, layoutData,
                                                                 systemNoteHitPointsRef.current[systemIndex],
-                                                                showRomanAnalysis, showSymbolAnalysis, isMotifsEnabled, isAnalysisEnabled, analysisSubject,
+                                                                showRomanAnalysis, showSymbolAnalysis, showFiguredBass, isMotifsEnabled, isAnalysisEnabled, analysisSubject,
                                                                 actualSystemWidth, systemHeightPx, staffSystemMode, accLabelY,
                                                                 violationLevelByNoteId, analysisContexts, timeSignatureChanges, dynamics, slurs, octaveShifts,
                                                                 // notePositions / noteVoiceById intentionally NOT keyed: they are pure
