@@ -144,14 +144,23 @@ interface Sigla { tick: number; symbol: string; }
  * `<root>` è un numero TPC (linea delle quinte); `<name>` è la qualità come stringa —
  * MuseScore ristampa quella, quindi ci va la grafia dell'utente e non una
  * ricostruzione.
+ *
+ * IL CONTENITORE CONTA. MuseScore 4 vuole root/name/bass dentro `<harmonyInfo>`, e il
+ * basso si chiama `<bass>`: la disposizione di MuseScore 3 (i tre elementi diretti
+ * dentro `<Harmony>`, col basso scritto `<base>`) viene letta come un accordo VUOTO e
+ * scartata senza un avviso. Il file si apriva benissimo e le sigle non c'erano — il
+ * difetto peggiore, perché somiglia a un successo. Verificato facendo rileggere il
+ * nostro file a MuseScore 4.7.3 e contando le sigle che ne escono.
  */
 function emitHarmony(w: (s: string) => void, symbol: string): void {
   const p = parseChordSymbol(symbol);
   if (!p) return;
   w('          <Harmony>');
-  w(`            <root>${tpcOf(p.rootStep, p.rootAlter)}</root>`);
-  if (p.quality) w(`            <name>${escapeXml(p.quality)}</name>`);
-  if (p.bassStep) w(`            <base>${tpcOf(p.bassStep, p.bassAlter ?? 0)}</base>`);
+  w('            <harmonyInfo>');
+  if (p.quality) w(`              <name>${escapeXml(p.quality)}</name>`);
+  w(`              <root>${tpcOf(p.rootStep, p.rootAlter)}</root>`);
+  if (p.bassStep) w(`              <bass>${tpcOf(p.bassStep, p.bassAlter ?? 0)}</bass>`);
+  w('            </harmonyInfo>');
   w('          </Harmony>');
 }
 

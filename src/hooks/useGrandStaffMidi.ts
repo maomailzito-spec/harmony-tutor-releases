@@ -23,6 +23,8 @@ export type GrandStaffMidiProject = {
   /** Tracce di accompagnamento: vanno esportate anche loro (un brano scritto su una
    *  traccia usciva in un file MIDI vuoto). */
   accompanimentTracks?: AccompanimentTrack[];
+  /** Coro a schermo: un rigo spento non finisce nel file esportato. */
+  satbVisible?: boolean;
   /** Segni di dinamica: decidono la velocity delle note esportate, come in esecuzione. */
   dynamics?: DynamicMark[];
   /** Segni d'ottava risolti sui tick: il MIDI porta l'altezza suonata. */
@@ -1713,13 +1715,23 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       const v = Number(k);
       if (Number.isFinite(v)) voicePrograms[v] = soundfontToGm(vi[v]);
     }
+    // L'ESPORTAZIONE SEGUE CIÒ CHE SI VEDE, come per MusicXML e .mscx: spegnere un rigo
+    // è il modo naturale di dire «questo non mi serve». Se non resta niente, esce tutto:
+    // un file valido e muto sembra riuscito, ed è il risultato peggiore.
+    const coro = project.satbVisible === false ? [] : (project.notes || []);
+    const tutte = project.accompanimentTracks || [];
+    const visibili = tutte.filter(t => (t as any).visible !== false);
+    const nienteDaScrivere = coro.length === 0 && visibili.every(t => (t.notes || []).length === 0);
+    const coroFinale = nienteDaScrivere ? (project.notes || []) : coro;
+    const tracceFinali = nienteDaScrivere ? tutte : visibili;
+
     const midiBytes = buildMidiFile({
-      notes: project.notes || [],
+      notes: coroFinale,
       timeSignature: project.timeSignature,
       timeSignatureChanges: toMeasureIndexedChanges(project.timeSignature, project.timeSignatureChanges),
       // Le tracce escono come tracce MIDI a sé (nome, strumento, canale). Le pause non
       // esistono nel formato: restano i silenzi fra le note.
-      accompanimentTracks: (project.accompanimentTracks || []).map(t => ({
+      accompanimentTracks: tracceFinali.map(t => ({
         name: t.name,
         notes: t.notes || [],
         instrumentId: t.instrumentId,

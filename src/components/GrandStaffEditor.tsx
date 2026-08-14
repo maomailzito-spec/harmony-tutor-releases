@@ -2033,6 +2033,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Servono all'EXPORT MIDI: senza, un brano scritto su una traccia di
         // accompagnamento veniva esportato in un file vuoto.
         accompanimentTracks,
+        // Anche il MIDI esce come si vede: un rigo spento non ci finisce.
+        satbVisible,
         // I segni di dinamica comandano la velocity delle note esportate, esattamente
         // come comandano il volume in esecuzione.
         dynamics,
@@ -2040,7 +2042,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         octaveSpans,
         // Armatura d'impianto e cambi, in quinte: il file MIDI le dichiara.
         keySignatures: midiKeySignatures,
-    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, dynamics, octaveSpans, midiKeySignatures]);
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, satbVisible, dynamics, octaveSpans, midiKeySignatures]);
 
     const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
         setRawNotes(next.notes || []);
@@ -2847,6 +2849,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // La CIFRATURA ha ora un interruttore suo: prima si disegnava attaccata al romano e
     // spariva solo insieme a lui.
     const [showFiguredBass, setShowFiguredBass] = usePreference<boolean>('analysis.showFiguredBass');
+
+    // COSA SI VEDE, letto da una ref e non da una variabile catturata.
+    //
+    // L'esportazione deve seguire gli interruttori della barra, ma `runXmlExport` è un
+    // useCallback che si ricostruisce solo quando cambiano metro, tonalità, titolo o
+    // modo. Toccando SOLO un interruttore la funzione restava quella vecchia e leggeva i
+    // valori di quando l'app era stata aperta: romani e cifratura (accesi per difetto)
+    // uscivano sempre, comunque li si spegnesse, e le sigle (spente per difetto) non
+    // uscivano MAI, nemmeno accese. Sembravano tre difetti diversi ed era uno solo.
+    // È la stessa trappola già documentata qui sotto per le tracce: la cura è la stessa.
+    const interruttoriRef = useRef({ roman: false, figuredBass: false, symbols: false, satbVisible: true });
+    interruttoriRef.current = {
+        roman: !!showRomanAnalysis,
+        figuredBass: !!showFiguredBass,
+        symbols: !!showSymbolAnalysis,
+        satbVisible,
+    };
+
     const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
     const [harmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
@@ -7187,6 +7207,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
             const exportNotes = latestRawNotes.current || [];
+
+            // CHE COSA ESCE: quello che si vede. Un rigo spento non finisce nel file.
+            // Attenzione: `exportNotes` resta COMPLETO — serve più sotto a sapere in che
+            // battuta cade un tick, e con le battute irregolari quella mappa non si può
+            // ricostruire dal metro. Si filtra solo ciò che va scritto.
+            const tutteLeTracce = latestAccompanimentTracks.current || [];
+            let coroDaEsportare = interruttoriRef.current.satbVisible ? exportNotes : [];
+            let tracceDaEsportare = tutteLeTracce.filter(t => (t as any).visible !== false);
+            // Se non resta niente da scrivere, si esporta tutto: un file valido e MUTO è
+            // il risultato peggiore, perché sembra riuscito.
+            if (coroDaEsportare.length === 0 && tracceDaEsportare.every(t => (t.notes || []).length === 0)) {
+                coroDaEsportare = exportNotes;
+                tracceDaEsportare = tutteLeTracce;
+            }
+
             const measureByTick = new Map<number, number>();
             for (const n of exportNotes as any[]) {
                 if (typeof n?.startTick === 'number' && typeof n?.measureIndex === 'number' && !measureByTick.has(n.startTick)) {
@@ -7214,9 +7249,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // usciva tutto comunque, e chi non usa il basso figurato se lo portava dietro
             // nel file — peggio ancora per chi lo ASCOLTA, dove ogni cifra in più è tempo
             // di navigazione.
-            const esportaRomani = !!showRomanAnalysis;
-            const esportaCifre = !!showFiguredBass;
-            const esportaSigle = !!showSymbolAnalysis;
+            const esportaRomani = interruttoriRef.current.roman;
+            const esportaCifre = interruttoriRef.current.figuredBass;
+            const esportaSigle = interruttoriRef.current.symbols;
             for (const l of sorgenteEtichette) {
                 if (!l || l.hiddenMarker) continue;
                 const roman = esportaRomani
@@ -7261,10 +7296,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // battuta di 4/4: un file valido e senza musica.
             const noteAccessibili = (analisiSuTraccia && (noteAnalizzateAccRef.current?.length ?? 0) > 0)
                 ? noteAnalizzateAccRef.current
-                : exportNotes;
+                : coroDaEsportare;
 
             const baseOpts = {
-                notes: exportNotes,
+                notes: coroDaEsportare,
                 title: projectTitle || 'Untitled',
                 keySignature: getKeySignature(keySignatureRoot, 'Major'),
                 timeSignature,
@@ -7298,7 +7333,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // esportato è una battuta sola e muta: è il "non pervenuto" segnalato,
                 // e prima ancora quello capitato a Valeria. Le note del coro si leggono
                 // già così (latestRawNotes.current) — qui era rimasta la variabile.
-                accompanimentTracks: (latestAccompanimentTracks.current || []).map(t => ({
+                // …e SOLO quelle a schermo: spegnere un rigo è il modo naturale di dire
+                // «questo non mi serve», e finora l'esportazione lo ignorava — usciva
+                // tutto comunque, senza un modo per scegliere.
+                accompanimentTracks: tracceDaEsportare.map(t => ({
                     name: t.name,
                     notes: t.notes || [],
                     staffMode: t.staffMode,
@@ -16320,6 +16358,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                                 const invalidMeasures = new Set<number>();
                                 const invalidVoicesByMeasure = new Map<number, Set<number>>();
+                                // …e le tracce, TENUTE SEPARATE dal coro. Il rettangolo va
+                                // disegnato sul rigo che sbaglia: segnarlo sul coro manda a
+                                // cercare l'errore dove non c'è. Chiave: `misura:idTraccia`.
+                                const invalidVoicesByTrack = new Map<string, Set<number>>();
                                 // Le misure incomplete si contano SEMPRE, anche quando i
                                 // rettangoli sono spenti: spegnerli serve a togliere
                                 // l'ingombro mentre si scrive, non a dire che il problema
@@ -16418,15 +16460,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             if (!line.length) continue;
                                             if (!validateVoiceMeasure(mi, line)) {
                                                 invalidMeasures.add(mi);
-                                                if (!invalidVoicesByMeasure.has(mi)) invalidVoicesByMeasure.set(mi, new Set());
-                                                invalidVoicesByMeasure.get(mi)!.add(v);
+                                                const k = `${mi}:${String((track as any).id ?? '')}`;
+                                                if (!invalidVoicesByTrack.has(k)) invalidVoicesByTrack.set(k, new Set());
+                                                invalidVoicesByTrack.get(k)!.add(v);
                                             }
                                         }
                                     }
                                 }
 
                                 segnalaTotale(invalidMeasures.size);
-                                if (!invalidMeasures.size) return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
+                                if (!invalidMeasures.size) return [] as Array<{ x: number; w: number; mi: number; voices: number[]; trackId?: string }>;
 
                                 const barByMeasure = new Map<number, number>();
                                 (systemBarlines || []).forEach(b => {
@@ -16441,7 +16484,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     }
                                 });
 
-                                const rects: Array<{ x: number; w: number; mi: number; voices: number[] }> = [];
+                                const rects: Array<{ x: number; w: number; mi: number; voices: number[]; trackId?: string }> = [];
                                 measuresInSystem.forEach((mi, idx) => {
                                     if (!invalidMeasures.has(mi)) return;
                                     const x1 = barByMeasure.get(mi);
@@ -16450,13 +16493,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         : (idx > 0 ? (barByMeasure.get(measuresInSystem[idx - 1]) ?? NaN) : START_X);
                                     if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) return;
                                     const pad = 2;
-                                    const voices = Array.from(invalidVoicesByMeasure.get(mi) ?? []).sort((a, b) => a - b);
-                                    rects.push({ x: x0 + pad, w: (x1 - x0) - (2 * pad), mi, voices });
+                                    const x = x0 + pad;
+                                    const w = (x1 - x0) - (2 * pad);
+                                    // UN RETTANGOLO PER RIGO che sbaglia, non uno per misura: la
+                                    // stessa battuta può essere incompleta nel coro e a posto
+                                    // nella chitarra, o viceversa.
+                                    const vCoro = Array.from(invalidVoicesByMeasure.get(mi) ?? []).sort((a, b) => a - b);
+                                    if (vCoro.length) rects.push({ x, w, mi, voices: vCoro });
+                                    for (const [k, set] of invalidVoicesByTrack) {
+                                        const [kMi, kId] = k.split(':');
+                                        if (Number(kMi) !== mi) continue;
+                                        rects.push({ x, w, mi, voices: Array.from(set).sort((a, b) => a - b), trackId: kId });
+                                    }
                                 });
 
                                 return rects;
                             } catch {
-                                return [] as Array<{ x: number; w: number; mi: number; voices: number[] }>;
+                                return [] as Array<{ x: number; w: number; mi: number; voices: number[]; trackId?: string }>;
                             }
                         })();
 
@@ -16715,10 +16768,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     // morde: prima i numeri di battuta, poi le scritte, ora
                                                                     // i riquadri.
                                                                     const shift = satbVisible ? 0 : SATB_HIDE_SHIFT_PX;
-                                                                    const yTop = PLAYHEAD_Y_TOP + shift;
-                                                                    const yBottom = PLAYHEAD_Y_BOTTOM + shift;
-                                                                    const h = yBottom - yTop;
                                                                     return invalidMeasureRects.map((r, i) => {
+                                                                        // OGNI RIGO RISPONDE DEI PROPRI ERRORI. La fascia qui
+                                                                        // sotto è quella del coro; una battuta sbagliata in una
+                                                                        // traccia veniva segnata lì sopra, cioè su musica che
+                                                                        // poteva essere giusta — e l'errore vero, due righi più
+                                                                        // in basso, restava senza segno. La geometria dei righi
+                                                                        // ACC è già nota (`accStavesLayout`): si usa quella.
+                                                                        const rigo = r.trackId
+                                                                            ? accStavesLayout.find(s2 => s2.trackId === r.trackId)
+                                                                            : undefined;
+                                                                        const marg = rigo ? Math.max(6, rigo.lineSpacing) : 0;
+                                                                        const yTop = rigo
+                                                                            ? (rigo.topLineY - marg)
+                                                                            : (PLAYHEAD_Y_TOP + shift);
+                                                                        const yBottom = rigo
+                                                                            ? (rigo.bottomLineY + marg)
+                                                                            : (PLAYHEAD_Y_BOTTOM + shift);
+                                                                        const h = Math.max(8, yBottom - yTop);
                                                                         const voiceLabel = r.voices.length > 0
                                                                             ? `V. ${r.voices.join(',')} ⚠`
                                                                             : '⚠';
