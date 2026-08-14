@@ -39,6 +39,10 @@ import type { TempoMark, MeasureLength, TextAnnotation } from '../types';
 import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { normalizeTempoMarks, tempoMarkQuarterBpm } from '../utils/tempoMarks';
 import { pronunciaSigle } from '../utils/pronunciaSigle';
+// Omonimo di `parseChordSymbol` qui sopra, che serve a COSTRUIRE le note di un accordo:
+// questo lo smonta per DIRLO e per scriverlo nei file. Nomi diversi, così nessuno dei due
+// finisce chiamato al posto dell'altro.
+import { parseChordSymbol as smontaSigla } from '../utils/chordSymbol';
 import { octaveOffsetSemitones, type OctaveSpan } from '../utils/octaveShifts';
 import HarmonyAnalysisPanel from './HarmonyAnalysisPanel';
 import { NOTE_NAMES, DURATION_VALUES, ALL_NOTE_SPELLINGS, CROSS_LETTER_ENHARMONICS, CHORD_FORMULAS, TICKS_PER_QUARTER, DEFAULT_PX_PER_TICK } from '../constants';
@@ -7274,8 +7278,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 } else if (!roman && figures.length === 0 && sigla) {
                     // Solo le sigle accese: il file accessibile porta quelle. Nel modo
                     // parlato si dicono a parole, altrimenti restano compatte.
+                    // LA SIGLA HA IL SUO VOCABOLARIO. `pronunciaSigle` conosce i numeri
+                    // ROMANI: davanti a `Bb/D` non trovava niente da tradurre e lasciava
+                    // passare la sigla tal quale, così chi ascoltava sentiva lo screen
+                    // reader indovinare la barra. Qui sappiamo che è una sigla, e la
+                    // diciamo: «Si bemolle basso Re».
                     const text = choice.mode === 'spoken'
-                        ? pronunciaSigle(sigla)
+                        ? (smontaSigla(sigla)?.spoken || pronunciaSigle(sigla))
                         : (absoluteToken({ symbol: sigla, figures }) || sigla);
                     if (text) harmonyLabels.push({ measureIndex, tick, token: text, symbol: sigla || undefined });
                 } else {

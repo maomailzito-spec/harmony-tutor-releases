@@ -4,8 +4,8 @@
  * Serve a tre cose che vogliono la sigla a pezzi e non come stringa:
  *  · `<harmony>` del MusicXML, che chiede radice, tipo e basso separati;
  *  · `<Harmony>` del formato nativo di MuseScore;
- *  · la forma PARLATA per lo screen reader — «Sol minore con nona aggiunta sul
- *    basso di La» invece di «gi-emme-parentesi-a-di-di-nove».
+ *  · la forma PARLATA per lo screen reader — «Sol minore con nona aggiunta basso La»
+ *    invece di «gi-emme-parentesi-a-di-di-nove».
  *
  * REGOLA DI FONDO: una sigla che non si riesce a scomporre NON si perde. Si
  * restituisce comunque la radice (che è la parte che si riconosce quasi sempre) e
@@ -61,7 +61,11 @@ const QUALITA: Array<[string, string, string]> = [
     ['+',                       'augmented',           'aumentato'],
     ['°',                       'diminished',          'diminuito'],
     ['ø',                       'half-diminished',     'semidiminuito'],
-    ['',                        'major',               'maggiore'],
+    // La triade maggiore NON si dice. In una sigla `C` vuol dire Do maggiore per
+    // convenzione, e chi legge le sigle ad alta voce dice «Do»: il modo si nomina solo
+    // quando NON è quello sottinteso (minore, diminuito, aumentato). Aggiungere
+    // «maggiore» a ogni accordo raddoppia le parole da ascoltare per non dire niente.
+    ['',                        'major',               ''],
 ];
 
 /** CODE che si aggiungono alla qualità: `m(add9)`, `7b9`, `9#11`. Vanno DETTE, non
@@ -164,7 +168,9 @@ export function parseChordSymbol(symbol: string | null | undefined): ChordSymbol
 
     const basso = bassoRaw ? leggiRadice(bassoRaw) : null;
 
-    const parlatoBasso = basso ? ` sul basso di ${nomeParlato(basso.step, basso.alter)}` : '';
+    // «basso Re», non «sul basso di Re»: è come si dice leggendo le sigle, e per chi
+    // ascolta un brano intero ogni parola in più è tempo di navigazione.
+    const parlatoBasso = basso ? ` basso ${nomeParlato(basso.step, basso.alter)}` : '';
     const spoken = `${nomeParlato(radice.step, radice.alter)} ${dettoQualita || qualita}`.trim() + parlatoBasso;
 
     return {
