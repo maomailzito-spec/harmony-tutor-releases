@@ -9,6 +9,7 @@
     "dev": "vite",
     "start": "vite",
     "audit:contracts": "tsx scripts/audit-contracts.ts",
+    "menu:dump": "node scripts/dump-menu.js",
     "extract-stats": "tsx scripts/_build_corpus.ts",
     "extract-ornament-stats": "tsx scripts/extract-ornament-stats.ts",
     "rebuild-corpus": "tsx scripts/_build_corpus.ts && tsx scripts/extract-ornament-stats.ts && tsx scripts/buildDefaultStyleProfile.ts && tsx scripts/extract-progression-stats.ts",
