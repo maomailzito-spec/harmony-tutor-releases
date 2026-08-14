@@ -2590,9 +2590,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         : PLAYHEAD_Y_TOP;
     // When ACC is visible, extend the playhead down to cover the ACC staves so the
     // playback cursor spans both SATB and accompaniment systems.
+    //
+    // A RIGO SINGOLO la linea deve finire col rigo. Qui c'erano due soli casi — chiavi
+    // antiche e «tutto il resto» — e `treble_only` finiva nel secondo: il fondo restava
+    // quello del GRANDE RIGO, cioè dove starebbe il pentagramma di basso che non c'è.
+    // La linea continuava sotto il rigo nel vuoto. Stesso conto per il riquadro rosso
+    // delle misure incomplete, che legge questi stessi valori.
     const playheadYBottomPxBase = staffSystemMode === 'satb_ancient'
         ? ((VF_SATB_BASS_Y + (4 * VF_LINE_SPACING)) + PLAYHEAD_Y_OFFSET_PX)
-        : PLAYHEAD_Y_BOTTOM;
+        : staffSystemMode === 'treble_only'
+            ? ((VF_TREBLE_Y + (4 * VF_LINE_SPACING)) + PLAYHEAD_Y_OFFSET_PX)
+            : PLAYHEAD_Y_BOTTOM;
     const playheadYBottomPx = playheadYBottomPxBase + accExtraPx;
 
     const vfStaveTopYForClef = useCallback((clef: ClefType): number => {
@@ -2917,7 +2925,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [misureIncompleteTotali, setMisureIncompleteTotali] = useState(0);
 
     // Menu-driven toggles (Electron)
-    const [showQuickInsertBar, setShowQuickInsertBar] = useState(false);
+    // TRANSPORT A TOOLBAR CHIUSA. La preferenza `editor.showQuickInsertBar` esisteva —
+    // registro, chiave di salvataggio, difetto acceso — ma NESSUNO la leggeva: qui c'era
+    // uno `useState(false)` scollegato. Conseguenze: il valore non sopravviveva al
+    // riavvio (si ripartiva sempre spenti), la casella nel pannello Preferenze scriveva
+    // nel vuoto, e il processo principale partiva da «acceso» mentre il renderer partiva
+    // da «spento» — cioè la spunta nel menù diceva il contrario dello schermo.
+    const [showQuickInsertBar, setShowQuickInsertBar] = usePreference<boolean>('editor.showQuickInsertBar');
     const [showHarmonyDebug, setShowHarmonyDebug] = useState(
         () => { try { return localStorage.getItem('harmony-tutor.showHarmonyDebug.v1') === '1'; } catch { return false; } }
     );
@@ -16893,12 +16907,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             ? accStavesLayout.find(s2 => s2.trackId === r.trackId)
                                                                             : undefined;
                                                                         const marg = rigo ? Math.max(6, rigo.lineSpacing) : 0;
+                                                                        // Gli stessi confini della linea di lettura, che
+                                                                        // sanno di che modo si tratta: a rigo singolo il
+                                                                        // riquadro finiva sotto il pentagramma, nel vuoto.
                                                                         const yTop = rigo
                                                                             ? (rigo.topLineY - marg)
-                                                                            : (PLAYHEAD_Y_TOP + shift);
+                                                                            : (playheadYTopPx + shift);
                                                                         const yBottom = rigo
                                                                             ? (rigo.bottomLineY + marg)
-                                                                            : (PLAYHEAD_Y_BOTTOM + shift);
+                                                                            : (playheadYBottomPxBase + shift);
                                                                         const h = Math.max(8, yBottom - yTop);
                                                                         const voiceLabel = r.voices.length > 0
                                                                             ? `V. ${r.voices.join(',')} ⚠`

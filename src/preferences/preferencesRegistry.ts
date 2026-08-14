@@ -210,7 +210,10 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
   'editor.showQuickInsertBar': {
     id: 'editor.showQuickInsertBar',
     section: 'Editor',
-    label: 'Transport (toolbar chiusa)',
+    // «Transport» non diceva niente a nessuno: la striscia contiene voci, inserimento,
+    // alterazioni e notazioni, e si vede SOLO a toolbar nascosta (⌥T). Chi la accendeva
+    // con la toolbar aperta non vedeva comparire nulla e la dava per rotta.
+    label: 'Barra comandi a toolbar nascosta (⌥T)',
     i18nKey: 'pref_editor_show_quick_insert_bar',
     storageKey: SHOW_QUICK_INSERT_BAR_KEY,
     defaultValue: true,

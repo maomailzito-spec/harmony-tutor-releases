@@ -3,6 +3,7 @@ import { ArrowUturnLeftIcon, PauseIcon as PauseSolidIcon, PlayIcon as PlaySolidI
 import type { AccidentalType, NoteDuration, StaffNote, Voice } from '../types';
 import { activeVoicesForPartCount, type PartCount } from '../utils/voiceParts';
 import { INSTRUMENTS, gmToSoundfont, soundfontToGm } from '../constants/instruments';
+import { useFloatingPanel } from '../hooks/useFloatingPanel';
 import {
     WholeNoteIcon,
     HalfNoteIcon,
@@ -1494,6 +1495,12 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
     const isToolbarVisible = forceToolbarVisible || !isToolbarHidden;
 
+    // La striscia dei comandi a toolbar nascosta si SPOSTA: la si mette dove non dà
+    // fastidio e ci resta, anche dopo aver chiuso l'applicazione. Prima era inchiodata
+    // in cima e spingeva la partitura più in basso — cioè si rubava lo spazio che
+    // nascondere la toolbar serviva a guadagnare.
+    const barraComandi = useFloatingPanel({ x: 12, y: 8 }, 'harmony-tutor.barraComandiPos.v1');
+
     const toolbarHoverRef = useRef<HTMLDivElement | null>(null);
     const [toolbarHoverTip, setToolbarHoverTip] = useState<{ x: number; y: number; text: string } | null>(null);
     const handleToolbarMouseMove = useCallback((e: React.MouseEvent) => {
@@ -1696,8 +1703,21 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
             )}
 
             {!isToolbarVisible && showQuickInsertBar && (
-                <div className="sticky top-0 z-50 px-2 py-1 bg-slate-800 border-b border-slate-700 rounded-lg">
+                <div
+                    style={{ position: 'fixed', left: barraComandi.pos.x, top: barraComandi.pos.y, zIndex: 1000 }}
+                    className="px-1 py-1 bg-slate-800/95 backdrop-blur border border-slate-700 rounded-lg shadow-2xl"
+                >
                     <div className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1">
+                        {/* La MANIGLIA. Il trascinamento sta qui e non su tutta la striscia:
+                            prendendola dallo sfondo, ogni pulsante diventerebbe un punto di
+                            presa e smetterebbe di rispondere al clic. */}
+                        <div
+                            onMouseDown={barraComandi.prendi}
+                            title="Trascina per spostare la barra"
+                            className="px-1 self-stretch flex items-center cursor-move text-slate-500 hover:text-slate-300 select-none"
+                        >
+                            ⠿
+                        </div>
                         <div className="flex items-center gap-2">
                             {toolbarGroups.voices}
                             {toolbarGroups.insert}
@@ -1708,10 +1728,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 </div>
             )}
 
-            {(showQuickInsertBar || showHarmonyDebug) && (
+            {/* La targhetta «Quick Insert: ON» compariva anche a TOOLBAR APERTA, dove il
+                transport non si disegna affatto: si accendeva l'interruttore, non appariva
+                nessuna barra e spuntava una scritta che sembrava un residuo di debug.
+                Si mostra solo dove la cosa ha un effetto, cioè a toolbar chiusa. */}
+            {((showQuickInsertBar && !isToolbarVisible) || showHarmonyDebug) && (
                 <div className="sticky top-0 z-40 mt-2 px-2">
                     <div className="inline-flex items-center gap-2 rounded-md bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] text-slate-200">
-                        {showQuickInsertBar && <span className="px-1.5 py-0.5 rounded bg-slate-700">Quick Insert: ON</span>}
+                        {showQuickInsertBar && !isToolbarVisible && <span className="px-1.5 py-0.5 rounded bg-slate-700">Quick Insert: ON</span>}
                         {showHarmonyDebug && <span className="px-1.5 py-0.5 rounded bg-slate-700">Harmony Debug: ON</span>}
                     </div>
                 </div>
