@@ -32,6 +32,11 @@ export const MENU_ACTIONS: Readonly<{
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice';
   SET_ANALYSIS_SUBJECT: 'set-analysis-subject';
+  SET_SHOW_ROMAN: 'set-show-roman';
+  SET_SHOW_SYMBOLS: 'set-show-symbols';
+  SET_SHOW_FIGURED_BASS: 'set-show-figured-bass';
+  SET_SATB_VISIBLE: 'set-satb-visible';
+  SET_TRACK_VISIBLE: 'set-track-visible';
   TOGGLE_VIOLATIONS_PANEL: 'toggle-violations-panel';
   SET_APP_MODE: 'set-app-mode';
   GENERATE_FROM_ROMAN: 'generate-from-roman';
@@ -73,6 +78,12 @@ export type MenuActionPayloadMap = {
   'decrease-title-font': undefined;
 
   'set-select-only-voice': { enabled: boolean };
+
+  'set-show-roman': { enabled: boolean };
+  'set-show-symbols': { enabled: boolean };
+  'set-show-figured-bass': { enabled: boolean };
+  'set-satb-visible': { enabled: boolean };
+  'set-track-visible': { trackId: string; enabled: boolean };
   'set-analysis-subject': { subject: 'satb' | 'acc' };
   'toggle-violations-panel': undefined;
   'set-app-mode': { mode: 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff' };

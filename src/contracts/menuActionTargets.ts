@@ -45,6 +45,11 @@ export const MENU_ACTION_TARGET: Record<MenuAction, MenuActionTarget> = {
 
   // App-level routing (view switching)
   [MENU_ACTIONS.SET_ANALYSIS_SUBJECT]: 'grandStaff',
+  [MENU_ACTIONS.SET_SHOW_ROMAN]: 'grandStaff',
+  [MENU_ACTIONS.SET_SHOW_SYMBOLS]: 'grandStaff',
+  [MENU_ACTIONS.SET_SHOW_FIGURED_BASS]: 'grandStaff',
+  [MENU_ACTIONS.SET_SATB_VISIBLE]: 'grandStaff',
+  [MENU_ACTIONS.SET_TRACK_VISIBLE]: 'grandStaff',
   [MENU_ACTIONS.TOGGLE_VIOLATIONS_PANEL]: 'grandStaff',
   [MENU_ACTIONS.SET_APP_MODE]: 'app',
 };

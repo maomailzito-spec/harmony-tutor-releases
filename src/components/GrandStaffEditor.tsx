@@ -4627,6 +4627,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         showHarmonyDebugEnabled: showHarmonyDebug,
         showVoiceColorsEnabled: showVoiceColors,
         showQuickInsertBarEnabled: showQuickInsertBar,
+        // …e lo stato dei tre strati e dei righi, perché le spunte del menù dicano il
+        // vero: una spunta che mente è peggio di una voce mancante, soprattutto per chi
+        // il menù lo ASCOLTA e non ha modo di verificare guardando la pagina.
+        showRomanEnabled: showRomanAnalysis,
+        showSymbolsEnabled: showSymbolAnalysis,
+        showFiguredBassEnabled: showFiguredBass,
+        satbVisibleEnabled: satbVisible,
+        accTracks: accompanimentTracks.map(t => ({ id: t.id, name: t.name || '', visible: t.visible !== false })),
         engravingMode,
     });
 
@@ -5138,6 +5146,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (action === MENU_ACTIONS.SET_ANALYSIS_SUBJECT) {
             const subject = (payload as any)?.subject;
             if (subject === 'satb' || subject === 'acc') scegliSoggettoAnalisi(subject);
+            return;
+        }
+
+        // I TRE STRATI D'ANALISI dal menù (⌘⌥R, ⌘⌥S, ⌘⌥F). Decidono che cosa si legge
+        // sulla pagina E che cosa finisce nei file esportati: stavano solo su tre
+        // pulsanti della barra, cioè fuori portata per chi non usa il mouse.
+        if (action === MENU_ACTIONS.SET_SHOW_ROMAN) {
+            setShowRomanAnalysis(!!(payload as any)?.enabled);
+            return;
+        }
+        if (action === MENU_ACTIONS.SET_SHOW_SYMBOLS) {
+            setShowSymbolAnalysis(!!(payload as any)?.enabled);
+            return;
+        }
+        if (action === MENU_ACTIONS.SET_SHOW_FIGURED_BASS) {
+            setShowFiguredBass(!!(payload as any)?.enabled);
+            return;
+        }
+
+        // I RIGHI: il coro (⌘⌥C) e ogni traccia col suo nome. Spegnere un rigo lo toglie
+        // dalla pagina e dai file: è il comando con cui si sceglie che cosa esportare.
+        if (action === MENU_ACTIONS.SET_SATB_VISIBLE) {
+            setSatbVisible(!!(payload as any)?.enabled);
+            return;
+        }
+        if (action === MENU_ACTIONS.SET_TRACK_VISIBLE) {
+            const id = String((payload as any)?.trackId || '');
+            const acceso = !!(payload as any)?.enabled;
+            if (id) setAccompanimentTracks(prev => prev.map(t => (t.id === id ? { ...t, visible: acceso } : t)));
             return;
         }
 
@@ -5654,7 +5691,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } else if (action === 'toggle-analysis-lock') {
             setIsAnalysisLockModalOpen(true);
         }
-    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi, importMidiAsAccompaniment, pickMidiFile, askImportDestination, setAccompanimentTracks, applyNewProjectConfig]);
+    }, [setRawNotes, setKeySignatureRoot, setProjectTitle, setTimeSignature, setClipboard, setSelectedNoteIds, setActiveTab, setDoubleBarlineMeasures, setMinMeasureCount, setMeasuresPerLine, setIsMinorMode, setKeyChangeMode, setModalTonicOverride, setIsTriplet, setIsDuplet, setIsSwing, setTupletNoteCount, setTripletBaseDuration, setActiveAccidental, setSelectedVoice, setHoveredViolationNotes, setSelectedViolationIndex, setViewMode, pasteMarker, setPasteCaret, setAnalysisContexts, setHarmonyOverrides, setContextMenu, setShowRomanAnalysis, setShowSymbolAnalysis, setShowFiguredBass, setSatbVisible, setShowMeasureNumbers, setToolbarGroupOrder, setIsToolbarCustomizeOpen, setMidiOutputs, setSelectedMidiOutput, setBpm, setIsBpmActive, setIsMetronomeOn, setCurrentProjectFilePath, bpm, isBpmActive, isMetronomeOn, metronomeUnit, toolbarGroupOrder, keySignatureRoot, projectTitle, titleFontSize, titleFontFamily, timeSignature, analysisContexts, isMinorMode, keyChangeMode, modalTonicOverride, undoNotes, redoNotes, handlePrint, staffSystemMode, setStaffSystemMode, setMarqueeSelectOnlyCurrentVoice, importMidi, exportMidi, importMidiAsAccompaniment, pickMidiFile, askImportDestination, setAccompanimentTracks, applyNewProjectConfig]);
 
     // Routing: single source of truth for where actions are handled.
     const dispatchMenuAction = useCallback((action: MenuAction, payload: any) => {

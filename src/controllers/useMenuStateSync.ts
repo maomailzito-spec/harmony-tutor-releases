@@ -11,6 +11,10 @@ const keys: Key[] = [
   'showHarmonyDebugEnabled',
   'showVoiceColorsEnabled',
   'showQuickInsertBarEnabled',
+  'showRomanEnabled',
+  'showSymbolsEnabled',
+  'showFiguredBassEnabled',
+  'satbVisibleEnabled',
   'engravingMode',
   'language',
 ];
@@ -20,6 +24,15 @@ function shallowEqualByKeys(a: MenuState | null, b: MenuState | null): boolean {
   if (!a || !b) return false;
   for (const k of keys) {
     if (a[k] !== b[k]) return false;
+  }
+  // Le tracce sono una LISTA: il confronto per riferimento la direbbe sempre diversa
+  // (si ricostruisce a ogni render) e il menù si rifarebbe di continuo. Conta ciò che
+  // il menù mostra davvero: quante sono, come si chiamano, se sono accese.
+  const ta = a.accTracks || [];
+  const tb = b.accTracks || [];
+  if (ta.length !== tb.length) return false;
+  for (let i = 0; i < ta.length; i++) {
+    if (ta[i].id !== tb[i].id || ta[i].name !== tb[i].name || ta[i].visible !== tb[i].visible) return false;
   }
   return true;
 }

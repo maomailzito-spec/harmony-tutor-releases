@@ -90,6 +90,16 @@ let selectOnlyCurrentVoiceEnabled = false;
 let showMeasureNumbersEnabled = true;
 let showHarmonyDebugEnabled = false;
 let showVoiceColorsEnabled = false;
+// I TRE STRATI D'ANALISI E I RIGHI, rispecchiati qui perché il menù possa mostrare la
+// spunta giusta. Il renderer li manda con SET_MENU_STATE a ogni cambiamento: senza,
+// la spunta direbbe una cosa e lo schermo un'altra. I difetti di partenza sono quelli
+// delle preferenze (romani e cifratura accesi, sigle spente).
+let showRomanEnabled = true;
+let showSymbolsEnabled = false;
+let showFiguredBassEnabled = true;
+let satbVisibleEnabled = true;
+/** [{ id, name, visible }] — le tracce di accompagnamento, per il sottomenu dei righi. */
+let accTracksState = [];
 let showQuickInsertBarEnabled = true;
 let engravingMode = 'enhanced';
 let currentLanguage = 'it';
@@ -437,6 +447,10 @@ function createMenu() {
       reorderToolbar: 'Riordina toolbar (drag)…', transport: 'Transport (toolbar chiusa)',
       measureNumbers: 'Numeri misure', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Colori voci (BTAS)',
+      analysisLayers: 'Analisi mostrata', showRoman: 'Numeri romani',
+      showSymbols: 'Sigle accordi', showFiguredBass: 'Cifratura del basso',
+      staves: 'Righi da mostrare ed esportare', staffChoir: 'Coro (SATB)',
+      exportFollowsView: 'Quel che si vede è quel che si esporta',
       generateChorale: 'Genera corale da Roman Numerals…',
       shortcuts: 'Scorciatoie…', noRecent: 'Nessun file recente',
       collisionEnhanced: 'Verifica collisioni (Enhanced)…', collisionLegacy: 'Verifica collisioni (Legacy)…',
@@ -460,6 +474,10 @@ function createMenu() {
       reorderToolbar: 'Reorder toolbar (drag)…', transport: 'Transport (closed toolbar)',
       measureNumbers: 'Measure numbers', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Voice colors (BTAS)',
+      analysisLayers: 'Analysis shown', showRoman: 'Roman numerals',
+      showSymbols: 'Chord symbols', showFiguredBass: 'Figured bass',
+      staves: 'Staves shown and exported', staffChoir: 'Choir (SATB)',
+      exportFollowsView: 'What you see is what you export',
       generateChorale: 'Generate chorale from Roman Numerals…',
       shortcuts: 'Shortcuts…', noRecent: 'No recent files',
       collisionEnhanced: 'Check collisions (Enhanced)…', collisionLegacy: 'Check collisions (Legacy)…',
@@ -996,6 +1014,77 @@ function createMenu() {
               sendAction(MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS, { enabled: showMeasureNumbersEnabled });
             }
           },
+          { type: 'separator' },
+          // ── QUEL CHE SI VEDE È QUEL CHE SI ESPORTA ────────────────────────
+          // Questi comandi stavano SOLO sulla barra degli strumenti: pulsanti
+          // piccoli, raggiungibili col mouse. Ma decidono due cose grosse — che
+          // analisi si legge sulla pagina e che cosa finisce nei file — e per chi
+          // usa uno screen reader il menù di sistema È l'applicazione. Senza queste
+          // voci, chi non vede poteva esportare solo la combinazione che si era
+          // trovato addosso.
+          {
+            label: mt('analysisLayers'),
+            submenu: [
+              {
+                label: mt('showRoman'),
+                type: 'checkbox',
+                accelerator: 'CmdOrCtrl+Alt+R',
+                checked: !!showRomanEnabled,
+                click: (menuItem) => {
+                  showRomanEnabled = !!menuItem.checked;
+                  sendAction(MENU_ACTIONS.SET_SHOW_ROMAN, { enabled: showRomanEnabled });
+                }
+              },
+              {
+                label: mt('showSymbols'),
+                type: 'checkbox',
+                accelerator: 'CmdOrCtrl+Alt+S',
+                checked: !!showSymbolsEnabled,
+                click: (menuItem) => {
+                  showSymbolsEnabled = !!menuItem.checked;
+                  sendAction(MENU_ACTIONS.SET_SHOW_SYMBOLS, { enabled: showSymbolsEnabled });
+                }
+              },
+              {
+                label: mt('showFiguredBass'),
+                type: 'checkbox',
+                accelerator: 'CmdOrCtrl+Alt+F',
+                checked: !!showFiguredBassEnabled,
+                click: (menuItem) => {
+                  showFiguredBassEnabled = !!menuItem.checked;
+                  sendAction(MENU_ACTIONS.SET_SHOW_FIGURED_BASS, { enabled: showFiguredBassEnabled });
+                }
+              },
+            ]
+          },
+          {
+            label: mt('staves'),
+            submenu: [
+              {
+                label: mt('staffChoir'),
+                type: 'checkbox',
+                accelerator: 'CmdOrCtrl+Alt+C',
+                checked: !!satbVisibleEnabled,
+                click: (menuItem) => {
+                  satbVisibleEnabled = !!menuItem.checked;
+                  sendAction(MENU_ACTIONS.SET_SATB_VISIBLE, { enabled: satbVisibleEnabled });
+                }
+              },
+              // Le tracce si chiamano col LORO nome — «Chitarra», «Basso» — perché
+              // è così che chi ascolta il menù sa quale sta spegnendo. L'elenco
+              // arriva dal renderer e il menù si ricostruisce quando cambia.
+              ...(accTracksState.length ? [{ type: 'separator' }] : []),
+              ...accTracksState.map((t, i) => ({
+                label: t.name || `Traccia ${i + 1}`,
+                type: 'checkbox',
+                checked: t.visible !== false,
+                click: (menuItem) => {
+                  sendAction(MENU_ACTIONS.SET_TRACK_VISIBLE, { trackId: t.id, enabled: !!menuItem.checked });
+                }
+              })),
+            ]
+          },
+          { label: mt('exportFollowsView'), enabled: false },
           {
             label: mt('harmonyDebug'),
             type: 'checkbox',
@@ -1118,6 +1207,15 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
     }
     if (typeof state.showQuickInsertBarEnabled === 'boolean') {
       showQuickInsertBarEnabled = state.showQuickInsertBarEnabled;
+    }
+    if (typeof state.showRomanEnabled === 'boolean') showRomanEnabled = state.showRomanEnabled;
+    if (typeof state.showSymbolsEnabled === 'boolean') showSymbolsEnabled = state.showSymbolsEnabled;
+    if (typeof state.showFiguredBassEnabled === 'boolean') showFiguredBassEnabled = state.showFiguredBassEnabled;
+    if (typeof state.satbVisibleEnabled === 'boolean') satbVisibleEnabled = state.satbVisibleEnabled;
+    if (Array.isArray(state.accTracks)) {
+      accTracksState = state.accTracks
+        .filter(t => t && typeof t.id === 'string')
+        .map(t => ({ id: t.id, name: typeof t.name === 'string' ? t.name : '', visible: t.visible !== false }));
     }
 
     if (state.engravingMode === 'legacy' || state.engravingMode === 'enhanced') {

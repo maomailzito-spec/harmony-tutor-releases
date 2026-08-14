@@ -39,6 +39,11 @@ export const MENU_ACTIONS = {
 
   SET_SELECT_ONLY_VOICE: 'set-select-only-voice',
   SET_ANALYSIS_SUBJECT: 'set-analysis-subject',
+  SET_SHOW_ROMAN: 'set-show-roman',
+  SET_SHOW_SYMBOLS: 'set-show-symbols',
+  SET_SHOW_FIGURED_BASS: 'set-show-figured-bass',
+  SET_SATB_VISIBLE: 'set-satb-visible',
+  SET_TRACK_VISIBLE: 'set-track-visible',
   TOGGLE_VIOLATIONS_PANEL: 'toggle-violations-panel',
   SET_APP_MODE: 'set-app-mode',
   GENERATE_FROM_ROMAN: 'generate-from-roman',
@@ -95,9 +100,20 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
     case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
     case MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG:
     case MENU_ACTIONS.SET_SHOW_VOICE_COLORS:
-    case MENU_ACTIONS.SET_SELECT_ONLY_VOICE: {
+    case MENU_ACTIONS.SET_SELECT_ONLY_VOICE:
+    case MENU_ACTIONS.SET_SHOW_ROMAN:
+    case MENU_ACTIONS.SET_SHOW_SYMBOLS:
+    case MENU_ACTIONS.SET_SHOW_FIGURED_BASS:
+    case MENU_ACTIONS.SET_SATB_VISIBLE: {
       const p = payload as any;
       return { enabled: toBoolean(p?.enabled) } as MenuActionPayloadMap[A];
+    }
+
+    case MENU_ACTIONS.SET_TRACK_VISIBLE: {
+      const p = payload as any;
+      const trackId = typeof p?.trackId === 'string' ? p.trackId : '';
+      if (!trackId) return null;
+      return { trackId, enabled: toBoolean(p?.enabled) } as MenuActionPayloadMap[A];
     }
 
     case MENU_ACTIONS.SET_ANALYSIS_SUBJECT: {

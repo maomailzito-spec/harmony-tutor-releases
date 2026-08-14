@@ -48,6 +48,16 @@ const MENU_ACTIONS = Object.freeze({
   // perché i menù di sistema sono il modo in cui chi usa uno screen reader esplora
   // l'applicazione — e senza questa voce il comando era di fatto irraggiungibile.
   SET_ANALYSIS_SUBJECT: 'set-analysis-subject',
+  // I TRE STRATI D'ANALISI E I RIGHI, DAL MENÙ. Erano raggiungibili solo dalla barra
+  // degli strumenti — cioè col mouse, su pulsanti piccoli. Per chi usa uno screen
+  // reader il menù di sistema È l'applicazione: senza queste voci le scelte che
+  // decidono cosa si vede E cosa finisce nei file esportati restavano di fatto
+  // precluse. Stessa ragione per cui SET_ANALYSIS_SUBJECT è finito qui.
+  SET_SHOW_ROMAN: 'set-show-roman',
+  SET_SHOW_SYMBOLS: 'set-show-symbols',
+  SET_SHOW_FIGURED_BASS: 'set-show-figured-bass',
+  SET_SATB_VISIBLE: 'set-satb-visible',
+  SET_TRACK_VISIBLE: 'set-track-visible',
   TOGGLE_VIOLATIONS_PANEL: 'toggle-violations-panel',
   SET_APP_MODE: 'set-app-mode',
   GENERATE_FROM_ROMAN: 'generate-from-roman',
@@ -104,8 +114,18 @@ function normalizeMenuActionPayload(action, payload) {
     case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
     case MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG:
     case MENU_ACTIONS.SET_SHOW_VOICE_COLORS:
-    case MENU_ACTIONS.SET_SELECT_ONLY_VOICE: {
+    case MENU_ACTIONS.SET_SELECT_ONLY_VOICE:
+    case MENU_ACTIONS.SET_SHOW_ROMAN:
+    case MENU_ACTIONS.SET_SHOW_SYMBOLS:
+    case MENU_ACTIONS.SET_SHOW_FIGURED_BASS:
+    case MENU_ACTIONS.SET_SATB_VISIBLE: {
       return { enabled: toBoolean(payload && payload.enabled) };
+    }
+
+    case MENU_ACTIONS.SET_TRACK_VISIBLE: {
+      const trackId = normalizeString(payload && payload.trackId);
+      if (!trackId) return null;
+      return { trackId, enabled: toBoolean(payload && payload.enabled) };
     }
 
     case MENU_ACTIONS.SET_ENGRAVING_MODE:

@@ -47,6 +47,24 @@ function normalizeMenuState(state) {
     out.showQuickInsertBarEnabled = toBoolean(s.showQuickInsertBarEnabled);
   }
 
+  // I TRE STRATI D'ANALISI E I RIGHI: il menù mostra la spunta, quindi deve sapere
+  // com'è messa la pagina. Senza, la spunta direbbe una cosa e lo schermo un'altra.
+  for (const k of ['showRomanEnabled', 'showSymbolsEnabled', 'showFiguredBassEnabled', 'satbVisibleEnabled']) {
+    if (typeof s[k] === 'boolean') out[k] = s[k];
+    else if (s[k] != null) out[k] = toBoolean(s[k]);
+  }
+
+  // Le tracce si chiamano col loro nome nel menù: l'elenco arriva da qui.
+  if (Array.isArray(s.accTracks)) {
+    out.accTracks = s.accTracks
+      .filter((t) => t && typeof t.id === 'string' && t.id.length > 0)
+      .map((t) => ({
+        id: t.id,
+        name: typeof t.name === 'string' ? t.name : '',
+        visible: t.visible !== false,
+      }));
+  }
+
   if (s.engravingMode === 'legacy' || s.engravingMode === 'enhanced') {
     out.engravingMode = s.engravingMode;
   }

@@ -6,6 +6,12 @@ export type MenuState = Partial<{
   showHarmonyDebugEnabled: boolean;
   showVoiceColorsEnabled: boolean;
   showQuickInsertBarEnabled: boolean;
+  showRomanEnabled: boolean;
+  showSymbolsEnabled: boolean;
+  showFiguredBassEnabled: boolean;
+  satbVisibleEnabled: boolean;
+  /** Le tracce di accompagnamento, per il sottomenu dei righi: nome e visibilità. */
+  accTracks: Array<{ id: string; name: string; visible: boolean }>;
   engravingMode: EngravingMode;
   language: string;
 }>;
