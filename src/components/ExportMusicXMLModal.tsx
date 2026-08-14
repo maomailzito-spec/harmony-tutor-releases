@@ -8,6 +8,10 @@ type Props = {
     open: boolean;
     onClose: () => void;
     onConfirm: (choice: ExportMusicXMLChoice) => void;
+    /** I righi che finiranno nel file, già filtrati: «Coro», «Chitarra»… */
+    righiInclusi?: string[];
+    /** Gli strati d'analisi accesi: «numeri romani», «sigle», «cifratura». */
+    analisiInclusa?: string[];
 };
 
 type Main = 'midi' | 'standard' | 'spoken' | 'token';
@@ -18,7 +22,7 @@ type Main = 'midi' | 'standard' | 'spoken' | 'token';
  * formati generali; Parlata e Token stanno sotto l'intestazione "Per non vedenti".
  * Stringhe localizzate via i18next (italiano come defaultValue, inglese in en/ui.json).
  */
-export default function ExportMusicXMLModal({ open, onClose, onConfirm }: Props) {
+export default function ExportMusicXMLModal({ open, onClose, onConfirm, righiInclusi = [], analisiInclusa = [] }: Props) {
     const { t } = useTranslation('ui');
     const [main, setMain] = useState<Main>('standard');
     const [sub, setSub] = useState<'functional' | 'absolute'>('functional');
@@ -51,6 +55,25 @@ export default function ExportMusicXMLModal({ open, onClose, onConfirm }: Props)
 
     const resolved: ExportMusicXMLMode = main === 'token' ? sub : main;
     const confirm = () => onConfirm({ mode: resolved });
+
+    // CHE COSA STA PER USCIRE, detto a parole prima di salvare.
+    //
+    // Righi e strati d'analisi si scelgono altrove — sulla barra, o dal menù «Vista»
+    // per chi non usa il mouse — e la pagina lo mostra. Ma chi non vede la pagina
+    // arrivava qui senza sapere in che stato fosse: premeva Esporta e lo scopriva
+    // riaprendo il file. Questa riga è l'ultimo controllo prima di scrivere, ed è
+    // legata al pulsante con aria-describedby: il fuoco parte da lì, quindi si sente
+    // insieme al pulsante senza doverla cercare.
+    const elenco = (voci: string[]) => voci.join(', ');
+    const righiDetti = righiInclusi.length
+        ? t('export_music_summary_staves', { defaultValue: 'Righi: {{elenco}}.', elenco: elenco(righiInclusi) })
+        : '';
+    const analisiDetta = resolved === 'midi'
+        ? t('export_music_summary_midi', { defaultValue: 'Il MIDI porta le note, non l\'analisi.' })
+        : (analisiInclusa.length
+            ? t('export_music_summary_analysis', { defaultValue: 'Analisi: {{elenco}}.', elenco: elenco(analisiInclusa) })
+            : t('export_music_summary_no_analysis', { defaultValue: 'Nessuna analisi: sono spente tutte e tre.' }));
+    const riepilogo = [righiDetti, analisiDetta].filter(Boolean).join(' ');
 
     return (
         <div
@@ -93,9 +116,18 @@ export default function ExportMusicXMLModal({ open, onClose, onConfirm }: Props)
                     ))}
                 </div>
 
+                <div
+                    id="export-riepilogo"
+                    role="status"
+                    className="mt-4 rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300"
+                >
+                    <span className="font-semibold text-slate-200">{t('export_music_summary_label', { defaultValue: 'Verrà esportato' })}</span>
+                    {' — '}{riepilogo}
+                </div>
+
                 <div className="mt-4 flex justify-end gap-2">
                     <button type="button" className="rounded-md px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700" onClick={onClose}>{t('export_music_cancel', { defaultValue: 'Annulla' })}</button>
-                    <button ref={confirmRef} type="button" className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500" onClick={confirm}>{t('export_music_confirm', { defaultValue: 'Esporta' })}</button>
+                    <button ref={confirmRef} type="button" aria-describedby="export-riepilogo" className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500" onClick={confirm}>{t('export_music_confirm', { defaultValue: 'Esporta' })}</button>
                 </div>
             </div>
         </div>

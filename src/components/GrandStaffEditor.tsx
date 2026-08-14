@@ -7426,6 +7426,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // un'analisi esportata per il soggetto sbagliato.
     }, [timeSignature, timeSignatureChanges, projectTitle, keySignatureRoot, isMinorMode, exportMidi, satbName, analysisSubject]);
 
+    // CHE COSA STA PER USCIRE — la stessa regola che applica l'esportazione, non una
+    // seconda copia che col tempo divergerebbe: righi accesi, e se non ne resta nessuno
+    // escono tutti (un file valido e muto è il risultato peggiore). Serve al riepilogo
+    // del dialogo, che è l'ultimo controllo per chi non vede la pagina.
+    const righiEsportati = useMemo(() => {
+        const nomiTracce = (accompanimentTracks || [])
+            .filter(t => t.visible !== false && (t.notes || []).length > 0)
+            .map((t, i) => (t.name || '').trim() || `Traccia ${i + 1}`);
+        const coro = satbVisible && (rawNotes || []).length > 0;
+        if (!coro && nomiTracce.length === 0) {
+            // Nessuno acceso: esce tutto. Il riepilogo deve dirlo, non tacerlo.
+            const tutte = (accompanimentTracks || [])
+                .filter(t => (t.notes || []).length > 0)
+                .map((t, i) => (t.name || '').trim() || `Traccia ${i + 1}`);
+            return [(satbName || 'Coro'), ...tutte];
+        }
+        return [...(coro ? [satbName || 'Coro'] : []), ...nomiTracce];
+    }, [accompanimentTracks, satbVisible, rawNotes, satbName]);
+
+    const analisiEsportata = useMemo(() => {
+        const out: string[] = [];
+        if (showRomanAnalysis) out.push(tUI('export_music_layer_roman', { defaultValue: 'numeri romani' }));
+        if (showSymbolAnalysis) out.push(tUI('export_music_layer_symbols', { defaultValue: 'sigle accordi' }));
+        if (showFiguredBass) out.push(tUI('export_music_layer_figured', { defaultValue: 'cifratura del basso' }));
+        return out;
+    }, [showRomanAnalysis, showSymbolAnalysis, showFiguredBass, tUI]);
+
     // Chord identity card (explain modal)
     const { isExplainOpen, explainData, openExplain, closeExplain } = useHarmonyExplain({ analyzedNotes, analysisContexts, currentTonic, isMinorMode, analysisContextAbsBeat, timeSignature });
 
@@ -15700,6 +15727,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 open={exportXmlModalOpen}
                 onClose={() => setExportXmlModalOpen(false)}
                 onConfirm={(choice) => { setExportXmlModalOpen(false); void runXmlExport(choice); }}
+                righiInclusi={righiEsportati}
+                analisiInclusa={analisiEsportata}
             />
             <PreferencesModal
                 isOpen={isPreferencesOpen}

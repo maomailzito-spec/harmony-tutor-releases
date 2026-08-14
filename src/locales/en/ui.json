@@ -224,5 +224,13 @@
   "import_kit_rock": "rock",
   "import_kit_orch": "orchestral",
   "menu_panel_title": "Properties",
-  "menu_modulation_title": "Modulation / tonicisation"
+  "menu_modulation_title": "Modulation / tonicisation",
+  "export_music_summary_label": "Will be exported",
+  "export_music_summary_staves": "Staves: {{elenco}}.",
+  "export_music_summary_analysis": "Analysis: {{elenco}}.",
+  "export_music_summary_no_analysis": "No analysis: all three are off.",
+  "export_music_summary_midi": "MIDI carries the notes, not the analysis.",
+  "export_music_layer_roman": "Roman numerals",
+  "export_music_layer_symbols": "chord symbols",
+  "export_music_layer_figured": "figured bass"
 }

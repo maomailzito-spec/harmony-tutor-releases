@@ -199,5 +199,13 @@
   "import_kit_rock": "rock",
   "import_kit_orch": "orchestrale",
   "menu_panel_title": "Proprietà",
-  "menu_modulation_title": "Modulazione / tonicizzazione"
+  "menu_modulation_title": "Modulazione / tonicizzazione",
+  "export_music_summary_label": "Verrà esportato",
+  "export_music_summary_staves": "Righi: {{elenco}}.",
+  "export_music_summary_analysis": "Analisi: {{elenco}}.",
+  "export_music_summary_no_analysis": "Nessuna analisi: sono spente tutte e tre.",
+  "export_music_summary_midi": "Il MIDI porta le note, non l'analisi.",
+  "export_music_layer_roman": "numeri romani",
+  "export_music_layer_symbols": "sigle accordi",
+  "export_music_layer_figured": "cifratura del basso"
 }
