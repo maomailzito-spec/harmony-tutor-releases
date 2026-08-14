@@ -7292,7 +7292,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // navigando il basso). Parlata = FRASE italiana (nessun dizionario). Token =
                     // sigla compatta (richiede dizionario): funzionale (V7) o assoluto (Bb7).
                     let tok: string;
-                    if (choice.mode === 'spoken') tok = spokenPhrase({ roman, figures });
+                    if (choice.mode === 'spoken') {
+                        // ACCESI TUTT'E DUE, SI SENTONO TUTT'E DUE. Finora, appena c'era un
+                        // romano la sigla spariva dal parlato: usciva sopra il rigo come
+                        // accordo — visibile a chi vede — e chi ascolta non la sentiva mai.
+                        // Ma sono due informazioni diverse: la sigla dice CHE ACCORDO è, il
+                        // romano dice CHE FUNZIONE ha, ed è esattamente il paragone che si
+                        // fa studiando. Prima la sigla, poi la funzione; la virgola serve a
+                        // far respirare lo screen reader fra le due.
+                        const frase = spokenPhrase({ roman, figures });
+                        const dettaSigla = sigla ? (smontaSigla(sigla)?.spoken || '') : '';
+                        tok = (dettaSigla && frase) ? `${dettaSigla}, ${frase}` : (frase || dettaSigla);
+                    }
                     else if (choice.mode === 'functional') tok = functionalToken({ roman, figures });
                     else tok = absoluteToken({ symbol: sigla, figures }) || functionalToken({ roman, figures });
                     const text = tok || normalizeRoman(roman) || figures.join('');
