@@ -502,7 +502,7 @@ function createMenu() {
       // GrandStaffEditor.tsx e dagli acceleratori dei menù. Se aggiungi una scorciatoia
       // là, aggiungila QUI: era già capitato che l'elenco raccontasse cose false (diceva
       // che T è la legatura, mentre T apre le proprietà e la legatura è L).
-      const sections = [
+      const sezioniIt = [
         { title: `MENU (${app.name})`, items: [
           'Cmd/Ctrl+N — Nuovo progetto',
           'Cmd/Ctrl+O — Apri…',
@@ -591,15 +591,111 @@ function createMenu() {
           ]},
         ] : []),
       ];
+      // STESSO ELENCO IN INGLESE. Prima la finestra era in italiano anche con
+      // l'interfaccia in inglese: un elenco di scorciatoie che non si legge non è
+      // un elenco di scorciatoie. Le due liste vanno tenute allineate a mano —
+      // aggiungendo una voce di là, aggiungerla anche qui.
+      const sezioniEn = [
+        { title: `MENU (${app.name})`, items: [
+          'Cmd/Ctrl+N — New project',
+          'Cmd/Ctrl+O — Open…',
+          'Cmd/Ctrl+I — Import MIDI…   |   Cmd/Ctrl+Shift+I — Import MusicXML…',
+          'Cmd/Ctrl+Shift+E — Export music…',
+          'Cmd/Ctrl+Shift+P — Export PDF…   |   Cmd/Ctrl+Shift+G — Export PNG…',
+          'Cmd/Ctrl+P — Print',
+          'Cmd/Ctrl+S — Save   |   Cmd/Ctrl+Shift+S — Save as…',
+          'Cmd/Ctrl+W — Close project',
+          'Cmd/Ctrl+, — Preferences…',
+          'Cmd/Ctrl+Z — Undo   |   Shift+Cmd/Ctrl+Z — Redo',
+          'Cmd/Ctrl+X — Cut   |   Cmd/Ctrl+C — Copy   |   Cmd/Ctrl+V — Paste   |   Cmd/Ctrl+A — Select all',
+          'Alt/Option+S — Select current voice only (marquee)',
+          'Ctrl+C — Voice colors',
+          'Cmd/Ctrl+] — Larger title   |   Cmd/Ctrl+[ — Smaller title',
+        ]},
+        { title: 'PANELS AND VIEW', items: [
+          'T — Properties at the cursor (key of the passage, modulations, text, overrides)',
+          'P — "More" menu',
+          'Alt/Option+T — Show/hide the toolbar',
+          'Alt/Option+L — Cycle staves: grand staff ↔ old clefs ↔ single staff',
+          'Alt/Option+M — Wide/narrow parts from the cursor onwards',
+          'Cmd/Ctrl+0 — Reset zoom',
+        ]},
+        { title: 'PLAYBACK', items: [
+          'Space — Play / stop',
+          'Arrow ← → — Move the cursor (Shift = finer step)',
+          'Enter — Back to the start without playing',
+          'K — Metronome',
+          'Shift+R — Recording (arm / disarm / stop)',
+        ]},
+        { title: 'WRITING', items: [
+          'Cmd/Ctrl+click on the staff — Insert a note (a plain click picks the voice)',
+          '1…7 — Duration: whole, half, quarter, eighth, 16th, 32nd, 64th',
+          '. — Dotted value',
+          'R — Toggle note / rest',
+          'b — flat   |   n — natural   |   # — sharp',
+          'V — Cycle the voice (B→T→A→S)',
+          'L — Tie',
+          'J — Enharmonic respelling (D♯ ⇄ E♭)',
+          '+ — Add an accompaniment track',
+          'Backspace / Delete — Delete the selection',
+        ]},
+        { title: 'PITCHES AND STAVES (selected notes)', items: [
+          'Arrow ↑ ↓ — Transpose by a semitone',
+          'Shift+↑ ↓ — Transpose by an octave',
+          'Alt/Option+↑ ↓ — Move to the staff above / below',
+          'Mouse drag — Move by step (diatonic)',
+        ]},
+        { title: 'SUBJECT OF THE ANALYSIS', items: [
+          'Cmd/Ctrl+Alt+1 — Analyse the choir (SATB)',
+          'Cmd/Ctrl+Alt+2 — Analyse the accompaniment track (an imported piece comes in as a track)',
+          'Cmd/Ctrl+Alt+3 — Violations list (it opens AND moves the focus there; closing it returns the focus to the score)',
+          'The first two also sit in the Tools menu. If the choir is empty and a track has notes, the analysis moves there by itself.',
+        ]},
+        { title: 'ANALYSIS SHOWN AND STAVES (View menu)', items: [
+          'Cmd/Ctrl+Alt+R — Roman numerals',
+          'Cmd/Ctrl+Alt+S — Chord symbols',
+          'Cmd/Ctrl+Alt+F — Figured bass',
+          'Cmd/Ctrl+Alt+C — Choir (SATB): show or hide it',
+          'Accompaniment tracks are switched on and off from View → "Staves shown and exported", each by its own name.',
+          'WHAT STAYS ON IS WHAT GOES INTO THE EXPORTED FILES: these commands also choose the contents of what you save.',
+        ]},
+        { title: 'ANALYSIS AND MARKINGS (selected notes)', items: [
+          'Alt/Option+P — Passing note   |   ⌥V — Neighbour note   |   ⌥A — Appoggiatura',
+          'Alt/Option+R — Suspension   |   ⌥S — Escape note   |   ⌥C — Cambiata   |   ⌥N — Anticipation',
+          'Alt/Option+H — Force STRUCTURAL note   |   ⌥O — Force ORNAMENTAL note',
+          'Alt/Option+Shift+H — Read the selection as a single chord',
+          'Alt/Option+F — Fermata',
+          'Alt/Option+Shift+R — Tempo curve (rallentando / accelerando) — also from the Signs palette',
+        ]},
+        { title: 'SIGNS PALETTE ("pf" button in the toolbar)', items: [
+          'Drag a sign onto the score to drop it: dynamics, rall./accel., time signature, text, double barline, repeats, +/− measure',
+          'Right-click on a sign — Remove it',
+          'Drag the ends of hairpins and rallentando — Lengthen or shorten',
+          'Or: select a note and click the sign (two notes for a hairpin)',
+        ]},
+        ...(getAppFlavor() !== 'grandstaff' ? [
+          { title: 'GUITAR VIEWS (Scales · Chords · Intervals)', items: [
+            'Scales: Cmd/Ctrl+Z undoes; Backspace/Delete removes the box; arrows and numbers to move and select',
+            'Chords: arrows ← → previous/next voicing; ↑ ↓ change string set',
+            'Intervals: Cmd/Ctrl+Z undoes',
+          ]},
+        ] : []),
+      ];
+      const sections = lng === 'en' ? sezioniEn : sezioniIt;
       const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const sectionsHtml = sections.map(sec =>
         `<section><h2>${escapeHtml(sec.title)}</h2><ul>${sec.items.map(it => `<li>${escapeHtml(it)}</li>`).join('')}</ul></section>`
       ).join('');
+      const titoloFinestra = lng === 'en' ? 'Keyboard shortcuts' : 'Scorciatoie da tastiera';
+      const intestazione = lng === 'en'
+        ? '⌨️ Keyboard shortcuts and quick actions'
+        : '⌨️ Scorciatoie da tastiera e funzioni rapide';
+      const chiudi = lng === 'en' ? 'Close (Esc)' : 'Chiudi (Esc)';
       const html = `<!DOCTYPE html>
-<html lang="it">
+<html lang="${lng === 'en' ? 'en' : 'it'}">
 <head>
 <meta charset="utf-8">
-<title>Scorciatoie da tastiera</title>
+<title>${titoloFinestra}</title>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
@@ -619,9 +715,9 @@ function createMenu() {
 </style>
 </head>
 <body>
-<header><h1>⌨️ Scorciatoie da tastiera e funzioni rapide</h1></header>
+<header><h1>${intestazione}</h1></header>
 <main>${sectionsHtml}</main>
-<footer><button id="closeBtn" autofocus>Chiudi (Esc)</button></footer>
+<footer><button id="closeBtn" autofocus>${chiudi}</button></footer>
 <script>
   const { ipcRenderer } = require('electron');
   document.getElementById('closeBtn').addEventListener('click', () => window.close());
@@ -636,7 +732,7 @@ function createMenu() {
         height: 640,
         minWidth: 480,
         minHeight: 360,
-        title: 'Scorciatoie',
+        title: titoloFinestra,
         autoHideMenuBar: true,
         webPreferences: {
           nodeIntegration: true,
