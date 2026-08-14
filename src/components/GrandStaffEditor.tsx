@@ -10137,6 +10137,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             : null;
         const accDestMode = accDestTrack?.staffMode ?? 'grandstaff';
         const accDestClef: ClefType = (accDestTrack?.clef ?? 'treble') as ClefType;
+        // GRAND STAFF «A VOCI»: una traccia che tiene quattro voci come il coro.
+        // Incollandoci il SATB, le voci venivano schiacciate tutte su voice 0 — la
+        // convenzione delle tracce normali — e il rigo si sceglieva dall'ALTEZZA della
+        // nota (sopra il Do centrale in violino, sotto in basso). Risultato: le quattro
+        // parti diventavano una sola, e un tenore acuto saliva nel rigo di violino
+        // mentre un soprano grave scendeva in quello di basso. Qui invece la voce si
+        // conserva e il rigo lo decide la VOCE, come nel coro: 1-2 sopra, 3-4 sotto.
+        const accDestVoiced = !!(accDestTrack as any)?.voiced && accDestMode === 'grandstaff';
+        const vocePerAcc = (srcVoice: number): number => {
+            if (!accDestVoiced) return 0;
+            const scelta = (forceSelectedVoice || !srcVoice) ? selectedVoice : srcVoice;
+            return Math.min(4, Math.max(1, Number(scelta) || 1));
+        };
+        const rigoPerAcc = (voce: number, midi: number): ClefType => {
+            if (accDestVoiced) return voce <= 2 ? 'treble' : 'bass';
+            if (accDestMode === 'grandstaff') return midi >= 60 ? 'treble' : 'bass';
+            return accDestClef;
+        };
         // Maps each source note id to its freshly-generated paste id, so per-note marks
         // (ornamentOverrides, e.g. Opt+H/Opt+O) can travel with the copied notes (Q5).
         const noteIdRemap = new Map<string, string>();
@@ -10177,9 +10195,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const durationTicks = Math.round(durBeats * TICKS_PER_QUARTER);
 
                     const srcVoice = (n as any).voice ?? selectedVoice;
-                    const targetVoice = pasteIntoAcc ? 0 : ((forceSelectedVoice || srcVoice === 0) ? selectedVoice : srcVoice);
+                    const targetVoice = pasteIntoAcc
+                        ? vocePerAcc(srcVoice)
+                        : ((forceSelectedVoice || srcVoice === 0) ? selectedVoice : srcVoice);
                     const targetClef = pasteIntoAcc
-                        ? (accDestMode === 'grandstaff' ? ((((n as any).midi ?? 60) >= 60) ? 'treble' : 'bass') : accDestClef)
+                        ? rigoPerAcc(targetVoice, (n as any).midi ?? 60)
                         : clefForVoice(targetVoice as any);
                     return {
                         ...(rest as StaffNote),
@@ -10196,9 +10216,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     };
                 } catch (e) {
                     const srcVoice = (n as any).voice ?? selectedVoice;
-                    const targetVoice = pasteIntoAcc ? 0 : ((forceSelectedVoice || srcVoice === 0) ? selectedVoice : srcVoice);
+                    const targetVoice = pasteIntoAcc
+                        ? vocePerAcc(srcVoice)
+                        : ((forceSelectedVoice || srcVoice === 0) ? selectedVoice : srcVoice);
                     const targetClef = pasteIntoAcc
-                        ? (accDestMode === 'grandstaff' ? ((((n as any).midi ?? 60) >= 60) ? 'treble' : 'bass') : accDestClef)
+                        ? rigoPerAcc(targetVoice, (n as any).midi ?? 60)
                         : clefForVoice(targetVoice as any);
                     return {
                         ...(rest as StaffNote),
@@ -10237,9 +10259,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const maxTick = Math.max(...pasted.map(n => ((n as any).startTick ?? 0) + ((n as any).durationTicks ?? 0)));
                 setAccompanimentTracks(prev => prev.map((track) => {
                     if (track.id !== destId) return track;
+                    // Su una traccia A VOCI le quattro parti convivono nello stesso
+                    // istante: cancellare per tempo soltanto vuol dire che incollando il
+                    // contralto si perde il soprano appena incollato. Si sgombra solo
+                    // dove si scrive davvero — le voci che stanno arrivando.
+                    const vociInArrivo = new Set(pasted.map(n => Number((n as any).voice ?? 0)));
                     const filtered = track.notes.filter(n => {
                         const s = (n as any).startTick ?? 0;
-                        return s < minTick || s >= maxTick;
+                        if (s < minTick || s >= maxTick) return true;
+                        return accDestVoiced && !vociInArrivo.has(Number((n as any).voice ?? 0));
                     });
                     return { ...track, notes: [...filtered, ...pasted].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)) };
                 }));
