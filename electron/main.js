@@ -512,6 +512,7 @@ function createMenu() {
           'Cmd/Ctrl+P — Stampa',
           'Cmd/Ctrl+S — Salva   |   Cmd/Ctrl+Shift+S — Salva con nome…',
           'Cmd/Ctrl+W — Chiudi progetto',
+          'Cmd/Ctrl+, — Preferenze…',
           'Cmd/Ctrl+Z — Annulla   |   Shift+Cmd/Ctrl+Z — Ripeti',
           'Cmd/Ctrl+X — Taglia   |   Cmd/Ctrl+C — Copia   |   Cmd/Ctrl+V — Incolla   |   Cmd/Ctrl+A — Seleziona tutto',
           'Alt/Option+S — Seleziona solo la voce corrente (rettangolo)',
@@ -554,7 +555,16 @@ function createMenu() {
         { title: "SOGGETTO DELL'ANALISI", items: [
           'Cmd/Ctrl+Alt+1 — Analizza il coro (SATB)',
           "Cmd/Ctrl+Alt+2 — Analizza la traccia d'accompagnamento (un brano importato entra come traccia)",
-          "Le stesse due voci stanno nel menù Strumenti. Se il coro è vuoto e c'è una traccia con delle note, l'analisi ci si sposta da sé.",
+          'Cmd/Ctrl+Alt+3 — Elenco delle violazioni (si apre E ci si va dentro; chiudendolo il fuoco torna alla partitura)',
+          "Le prime due voci stanno nel menù Strumenti. Se il coro è vuoto e c'è una traccia con delle note, l'analisi ci si sposta da sé.",
+        ]},
+        { title: 'ANALISI MOSTRATA E RIGHI (menù Vista)', items: [
+          'Cmd/Ctrl+Alt+R — Numeri romani',
+          'Cmd/Ctrl+Alt+S — Sigle degli accordi',
+          'Cmd/Ctrl+Alt+F — Cifratura del basso',
+          'Cmd/Ctrl+Alt+C — Coro (SATB): mostralo o nascondilo',
+          "Le tracce d'accompagnamento si accendono e si spengono dal menù Vista → «Righi da mostrare ed esportare», ognuna col suo nome.",
+          'QUEL CHE RESTA ACCESO È QUEL CHE FINISCE NEI FILE ESPORTATI: questi comandi scelgono anche il contenuto di ciò che si salva.',
         ]},
         { title: 'ANALISI E MARCATURE (note selezionate)', items: [
           'Alt/Option+P — Nota di passaggio   |   ⌥V — Nota di volta   |   ⌥A — Appoggiatura',
