@@ -15,6 +15,14 @@ files:
 extraResources:
   - from: docs/THIRD-PARTY-NOTICES.txt
     to: THIRD-PARTY-NOTICES.txt
+  # IL MANUALE VIAGGIA CON L'APPLICAZIONE. Chi compra scarica un file solo e ha
+  # dentro anche la guida: niente da cercare sul sito, e soprattutto la guida è
+  # quella della versione che sta usando — un manuale scaricato a parte invecchia
+  # per conto suo. Cinque megabyte su un pacchetto che ne pesa quasi quattrocento.
+  - from: docs/manuali/Harmony_Tutor_Manuale_ITA.pdf
+    to: manuali/Harmony_Tutor_Manuale_ITA.pdf
+  - from: docs/manuali/Harmony_Tutor_Manual_EN.pdf
+    to: manuali/Harmony_Tutor_Manual_EN.pdf
 
 extraMetadata:
   main: electron/main.js

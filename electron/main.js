@@ -452,7 +452,8 @@ function createMenu() {
       staves: 'Righi da mostrare ed esportare', staffChoir: 'Coro (SATB)',
       exportFollowsView: 'Quel che si vede è quel che si esporta',
       generateChorale: 'Genera corale da Roman Numerals…',
-      shortcuts: 'Scorciatoie…', noRecent: 'Nessun file recente',
+      shortcuts: 'Scorciatoie…', manual: 'Manuale utente (PDF)…', manualMissing: 'Manuale non trovato',
+      noRecent: 'Nessun file recente',
       collisionEnhanced: 'Verifica collisioni (Enhanced)…', collisionLegacy: 'Verifica collisioni (Legacy)…',
       manageLicense: 'Gestisci Licenza…',
       about: 'Informazioni su Harmony Tutor…',
@@ -479,7 +480,8 @@ function createMenu() {
       staves: 'Staves shown and exported', staffChoir: 'Choir (SATB)',
       exportFollowsView: 'What you see is what you export',
       generateChorale: 'Generate chorale from Roman Numerals…',
-      shortcuts: 'Shortcuts…', noRecent: 'No recent files',
+      shortcuts: 'Shortcuts…', manual: 'User manual (PDF)…', manualMissing: 'Manual not found',
+      noRecent: 'No recent files',
       collisionEnhanced: 'Check collisions (Enhanced)…', collisionLegacy: 'Check collisions (Legacy)…',
       manageLicense: 'Manage License…',
       analyzeChoir: 'Analyse the choir (SATB)',
@@ -746,6 +748,43 @@ function createMenu() {
       console.warn('[MAIN] Failed to show shortcuts dialog:', err);
     }
   };
+  /**
+   * Apre il manuale dell'utente, nella lingua dell'applicazione.
+   *
+   * Il PDF viaggia DENTRO l'applicazione (extraResources), non sul sito: chi compra
+   * scarica un file solo, e la guida che si ritrova è quella della versione che sta
+   * usando — un manuale scaricato a parte invecchia per conto suo e nessuno se ne
+   * accorge finché non cerca una funzione che nel testo non c'è.
+   *
+   * In sviluppo `resources/` non esiste: si ricade sulla copia nel repo, altrimenti
+   * la voce di menù sarebbe morta proprio a chi sta lavorando al manuale.
+   */
+  const apriManuale = () => {
+    try {
+      const { shell } = require('electron');
+      const path = require('path');
+      const fs = require('fs');
+      const nome = lng === 'en' ? 'Harmony_Tutor_Manual_EN.pdf' : 'Harmony_Tutor_Manuale_ITA.pdf';
+      const candidati = [
+        path.join(process.resourcesPath || '', 'manuali', nome),
+        path.join(app.getAppPath(), 'docs', 'manuali', nome),
+        path.join(__dirname, '..', 'docs', 'manuali', nome),
+      ];
+      const trovato = candidati.find(f => { try { return f && fs.existsSync(f); } catch { return false; } });
+      if (!trovato) {
+        dialog.showMessageBox(mainWindow || undefined, {
+          type: 'warning',
+          message: mt('manualMissing'),
+          detail: candidati.join('\n'),
+        });
+        return;
+      }
+      shell.openPath(trovato);
+    } catch (err) {
+      console.warn('[MAIN] Impossibile aprire il manuale:', err);
+    }
+  };
+
   const showAboutDialog = () => {
     try {
       const version = app.getVersion();
@@ -1282,6 +1321,10 @@ function createMenu() {
         {
           label: mt('shortcuts'),
           click: () => showShortcutsDialog(),
+        },
+        {
+          label: mt('manual'),
+          click: () => apriManuale(),
         }
       ]
     }
