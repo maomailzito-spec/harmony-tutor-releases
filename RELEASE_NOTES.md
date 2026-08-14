@@ -1,3 +1,27 @@
+## Novità in v1.6.0
+
+### 🎼 Le sigle degli accordi escono come accordi, non come scritte
+- Finora, esportando, le sigle **non uscivano affatto**: chi apriva il file trovava numeri romani e cifratura, e nessun accordo. Ora escono come elementi veri del formato — `<harmony>` nel MusicXML, `<Harmony>` in MuseScore. Chi apre il file le vede come accordi: le **traspone insieme alle note**, le modifica, le ristampa con le proprie convenzioni.
+- Una sigla che il programma non riesce a classificare non si perde: esce comunque, con la grafia esatta con cui l'hai scritta. Meglio un accordo dichiarato «altro» ma scritto giusto che una sigla mancante.
+
+### 📤 Quel che si vede è quel che si esporta
+- I tre interruttori dell'analisi — **numeri romani, sigle, cifratura del basso** — non governano più soltanto la pagina: decidono anche il contenuto dei file. Chi non usa il basso figurato non se lo porta più dietro nei file esportati.
+- Lo stesso vale per i **righi**: uno rigo nascosto, il coro o una traccia, resta fuori dal file. È il modo per esportare una traccia sola, o due su tre — si spegne quello che non serve e si esporta. Vale per MusicXML, per il formato accessibile e per il MIDI.
+- Prima di salvare, il dialogo dice per esteso che cosa sta per uscire: «Verrà esportato — Righi: Coro, Chitarra. Analisi: numeri romani, cifratura del basso.»
+
+### ♿️ Le scelte che contano si raggiungono senza mouse
+- I tre interruttori e la visibilità dei righi stavano solo su pulsanti piccoli della barra. Ora sono nel menu **Vista**, con le scorciatoie: `⌘⌥R` romani, `⌘⌥S` sigle, `⌘⌥F` cifratura, `⌘⌥C` coro. Le tracce si accendono e si spengono **una per una, col loro nome** — «Chitarra», «Basso» — così chi ascolta il menu sa quale sta togliendo.
+- Nella lettura parlata le sigle si **sentono dette per esteso**: `Bb/D` diventa «Si bemolle basso Re». E se sono accesi sia i romani sia le sigle, il file dice tutt'e due: «Si bemolle basso Re, settima di dominante in primo rivolto». La sigla dice che accordo è, il romano che funzione ha.
+- L'elenco delle scorciatoie (Aiuto → Scorciatoie…) esiste ora **anche in inglese**, e si legge nella lingua dell'applicazione.
+
+### 📖 Il manuale viaggia dentro l'applicazione
+- **Aiuto → «Manuale utente (PDF)…»** apre la guida nella lingua dell'interfaccia. Non va scaricata a parte, e soprattutto è sempre quella della **versione installata**: un manuale scaricato per conto suo invecchia senza che nessuno se ne accorga.
+
+### 🔧 Correzioni
+- **Le voci copiate nel grand staff «a voci» restavano quattro.** Incollando il coro in una traccia a voci le quattro parti diventavano una sola, e la divisione fra i righi seguiva l'altezza delle note invece delle parti: un tenore acuto finiva nel rigo di violino. Ora la voce si conserva e il rigo lo decide la voce.
+- **Il rettangolo rosso delle misure incomplete** finiva sul coro anche quando l'errore era in una traccia. Ora segna il rigo che sbaglia davvero.
+- **Le sigle nel file accessibile arrivavano vuote**: MuseScore 4 le scartava in silenzio perché scritte nella forma della versione 3. Il file si apriva benissimo e le sigle non c'erano.
+
 ## Novità in v1.5.4
 
 ### 🔊 I suoni dell'app tornano al loro posto
