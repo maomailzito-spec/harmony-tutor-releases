@@ -108,10 +108,14 @@ const MEASURE_PADDING_X = 20;
 // treble stave; the two used to collide at 100px. 140px = ~40px Roman row + ~30px
 // acc ledger headroom + breathing room between the two Grand Staffs.
 const ACCOMPANIMENT_STAFF_GAP = 140;
-// Gap TRA righi ACC consecutivi (dal 2° blocco in poi): molto più stretto del gap
-// iniziale (SATB→ACC), per compattare le parti di un brano multi-traccia e dare un
-// colpo d'occhio d'insieme. Il primo blocco resta a 140 (riga dei romani + ledger).
-const ACC_INTER_STAFF_GAP = 50;
+// Gap TRA righi ACC consecutivi (dal 2° blocco in poi): più stretto del gap iniziale
+// (SATB→ACC), per compattare le parti di un brano multi-traccia e dare un colpo
+// d'occhio d'insieme. Il primo blocco resta a 140 (riga dei romani + ledger).
+//
+// Era 50, e non bastava: fra due righi ci devono stare i GAMBI che scendono da quello
+// sopra (~40 px) e le ETICHETTE d'analisi che salgono sopra quello sotto (la sigla si
+// posa a 44 px dal rigo, e su musica fitta si alza ancora). Con 50 si toccavano.
+const ACC_INTER_STAFF_GAP = 64;
 // Span between accompaniment treble and bass tops (mirrors SATB BASS_Y - TREBLE_Y = 130).
 const ACCOMPANIMENT_GS_SPAN = 130;
 // 5 lines * 10px per line.
@@ -129,8 +133,14 @@ export const ACCOMPANIMENT_EXTRA_PX = ACCOMPANIMENT_STAFF_GAP + STAVE_LINES_HEIG
 // Each visible track draws its own staff block, stacked below the SATB system.
 // "occupied" = vertical space the block's staff lines actually take (excl. the
 // leading gap); a grand staff spans treble→bass, a single staff is one pentagram.
-const ACC_OCCUPIED_GRANDSTAFF = ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT; // 170
-const ACC_OCCUPIED_SINGLE = STAVE_LINES_HEIGHT + 30; // 70 (lines + breathing room)
+// Quanto respiro serve SOTTO l'ultimo rigo di un blocco, per i gambi che scendono e
+// per le note fuori dal pentagramma. Vale per tutti e due i tipi di blocco: il rigo
+// singolo ce l'aveva, il GRAND STAFF no — e infatti bastava mettere un pianoforte in
+// mezzo alle tracce perché il rigo successivo gli finisse addosso. Una parte non ha
+// bisogno di meno aria perché è scritta su due righi invece che su uno.
+const ACC_RESPIRO_SOTTO = 30;
+const ACC_OCCUPIED_GRANDSTAFF = ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT + ACC_RESPIRO_SOTTO; // 200
+const ACC_OCCUPIED_SINGLE = STAVE_LINES_HEIGHT + ACC_RESPIRO_SOTTO; // 70
 const accBlockOccupied = (mode: 'grandstaff' | 'treble_only') =>
   mode === 'grandstaff' ? ACC_OCCUPIED_GRANDSTAFF : ACC_OCCUPIED_SINGLE;
 

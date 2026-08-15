@@ -135,5 +135,10 @@
   "midi_type1": "Type 1 — multi-track",
   "midi_type0": "Type 0 — single track",
   "midi_type1_tooltip": "One track per voice: read by MuseScore, Finale, Sibelius",
-  "midi_type0_tooltip": "All voices in a single track: maximum compatibility"
+  "midi_type0_tooltip": "All voices in a single track: maximum compatibility",
+  "customize_title": "Customize the toolbar",
+  "customize_close": "Close",
+  "customize_hint": "Uncheck to hide a group. Drag a group by its ⋮⋮ handle to reorder.",
+  "customize_reset": "Reset",
+  "customize_done": "Done"
 }

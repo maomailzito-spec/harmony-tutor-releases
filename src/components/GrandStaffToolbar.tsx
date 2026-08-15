@@ -4,6 +4,34 @@ import type { AccidentalType, NoteDuration, StaffNote, Voice } from '../types';
 import { activeVoicesForPartCount, type PartCount } from '../utils/voiceParts';
 import { INSTRUMENTS, gmToSoundfont, soundfontToGm } from '../constants/instruments';
 import { useFloatingPanel } from '../hooks/useFloatingPanel';
+
+/**
+ * COME SI CHIAMANO I GRUPPI, per chi li accende e li spegne.
+ *
+ * Sulla barra i gruppi non hanno un nome: si riconoscono dalle icone. In un elenco
+ * di caselle le icone non ci sono, quindi il nome deve dire che cosa si perde
+ * togliendolo — «Riproduzione (play, stop, registra)», non «Playback».
+ */
+const NOMI_GRUPPI: Record<ToolbarGroupId, { it: string; en: string }> = {
+    playback:           { it: 'Riproduzione (play, stop, registra)', en: 'Playback (play, stop, record)' },
+    measurePanel:       { it: 'Proprietà del punto (T)',            en: 'Properties at the cursor (T)' },
+    bpm:                { it: 'Velocità e metronomo',               en: 'Tempo and metronome' },
+    key:                { it: 'Tonalità',                           en: 'Key' },
+    time:               { it: 'Metro',                              en: 'Time signature' },
+    measures:           { it: 'Misure e impaginazione',             en: 'Measures and layout' },
+    voices:             { it: 'Voci (S A T B)',                     en: 'Voices (S A T B)' },
+    voiceInstrument:    { it: 'Strumento della voce',               en: 'Voice instrument' },
+    mixer:              { it: 'Mixer',                              en: 'Mixer' },
+    signs:              { it: 'Tavolozza dei segni',                en: 'Signs palette' },
+    insert:             { it: 'Durate e inserimento',               en: 'Durations and entry' },
+    chordInsert:        { it: 'Inserimento accordi',                en: 'Chord entry' },
+    accidentals:        { it: 'Alterazioni',                        en: 'Accidentals' },
+    notations:          { it: 'Legature e articolazioni',           en: 'Ties and articulations' },
+    analysis:           { it: 'Analisi (romani, sigle, cifre)',     en: 'Analysis (Roman, symbols, figures)' },
+    incompleteMeasures: { it: 'Avviso misure incomplete',           en: 'Incomplete-measure warning' },
+    midi:               { it: 'MIDI',                               en: 'MIDI' },
+    more:               { it: 'Menu «Altro»',                       en: '“More” menu' },
+};
 import {
     WholeNoteIcon,
     HalfNoteIcon,
@@ -240,7 +268,12 @@ type GrandStaffToolbarProps = {
 
     toolbarGroupOrder: ToolbarGroupId[];
     reorderToolbarGroups: (dragId: ToolbarGroupId, overId: ToolbarGroupId) => void;
+    /** I gruppi tolti dalla barra. Elenco esplicito: vedi il commento nell'editor. */
+    hiddenToolbarGroups: ToolbarGroupId[];
+    onToggleToolbarGroup: (id: ToolbarGroupId) => void;
+    onResetToolbarGroups: () => void;
     isToolbarCustomizeOpen: boolean;
+    onCloseToolbarCustomize: () => void;
     isToolbarHidden: boolean;
 
     showQuickInsertBar: boolean;
@@ -441,7 +474,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         onToggleMidiStepInput,
         toolbarGroupOrder,
         reorderToolbarGroups,
+        hiddenToolbarGroups,
+        onToggleToolbarGroup,
+        onResetToolbarGroups,
         isToolbarCustomizeOpen,
+        onCloseToolbarCustomize,
         isToolbarHidden,
         showQuickInsertBar,
         showHarmonyDebug,
@@ -465,7 +502,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     // Aveva anche un interruttore in barra: due comandi per la stessa cosa, e in barra
     // occupava spazio in un gruppo già affollato — vedi il commit che l'ha tolto.
     const { t } = useTranslation('ui');
-    const { t: tT } = useTranslation('toolbar');
+    const { t: tT, i18n: i18nToolbar } = useTranslation('toolbar');
+    const nomeGruppo = useCallback(
+        (id: ToolbarGroupId) => (i18nToolbar.language || 'it').startsWith('en') ? NOMI_GRUPPI[id].en : NOMI_GRUPPI[id].it,
+        [i18nToolbar.language],
+    );
 
     const voiceName = useCallback((v: number): string => {
         return tT(v === 1 ? 'voice_soprano' : v === 2 ? 'voice_alto' : v === 3 ? 'voice_tenor' : 'voice_bass');
@@ -739,7 +780,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         measures: (
             <div className="flex items-center gap-1.5">
                 <span className="text-xs text-slate-400">{tT('measures_label')}</span>
-                <div className="flex items-center">
+                {/* `items-stretch`: la colonnina delle frecce prende l'altezza del campo,
+                    invece di imporne una sua. Prima erano 18+18 = 36 px contro i 30 del
+                    campo, e il gruppo sporgeva di sei pixel sopra e sotto tutti gli altri. */}
+                <div className="flex items-stretch">
                     <input
                         value={minMeasureCountDraft}
                         onChange={e => setMinMeasureCountDraft(e.target.value)}
@@ -758,7 +802,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     <div className="flex flex-col">
                         <button
                             onClick={() => bumpMinMeasureCount(+1)}
-                            className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-slate-600 rounded-tr-md text-[10px] text-gray-200 hover:bg-slate-600"
+                            className="flex-1 w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-slate-600 rounded-tr-md text-[10px] leading-none text-gray-200 hover:bg-slate-600"
                             title={tT('measures_increase')}
                             aria-label={tT('measures_increase')}
                         >
@@ -766,7 +810,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         </button>
                         <button
                             onClick={() => bumpMinMeasureCount(-1)}
-                            className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-t-0 border-slate-600 rounded-br-md text-[10px] text-gray-200 hover:bg-slate-600"
+                            className="flex-1 w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-t-0 border-slate-600 rounded-br-md text-[10px] leading-none text-gray-200 hover:bg-slate-600"
                             title={tT('measures_decrease')}
                             aria-label={tT('measures_decrease')}
                         >
@@ -777,7 +821,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 <div className="w-px h-5 bg-slate-600 mx-1"></div>
                 <div className="flex items-center gap-1">
                     <span className="text-xs text-slate-400">{tT('measures_per_line_label')}</span>
-                    <div className="flex items-center">
+                    <div className="flex items-stretch">
                         <input
                             value={measuresPerLineDraft}
                             onChange={e => setMeasuresPerLineDraft(e.target.value)}
@@ -797,7 +841,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         <div className="flex flex-col">
                             <button
                                 onClick={() => bumpMeasuresPerLine(+1)}
-                                className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-slate-600 rounded-tr-md text-[10px] text-gray-200 hover:bg-slate-600"
+                                className="flex-1 w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-slate-600 rounded-tr-md text-[10px] leading-none text-gray-200 hover:bg-slate-600"
                                 title={tT('measures_per_line_increase')}
                                 aria-label={tT('measures_per_line_increase')}
                             >
@@ -805,7 +849,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             </button>
                             <button
                                 onClick={() => bumpMeasuresPerLine(-1)}
-                                className="h-[18px] w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-t-0 border-slate-600 rounded-br-md text-[10px] text-gray-200 hover:bg-slate-600"
+                                className="flex-1 w-6 flex items-center justify-center bg-slate-700 border border-l-0 border-t-0 border-slate-600 rounded-br-md text-[10px] leading-none text-gray-200 hover:bg-slate-600"
                                 title={tT('measures_per_line_decrease')}
                                 aria-label={tT('measures_per_line_decrease')}
                             >
@@ -1489,7 +1533,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         ),
     };
 
-    const visibleGroupIds = toolbarGroupOrder;
+    // In personalizzazione si vede TUTTO, anche ciò che è spento: altrimenti per
+    // rimettere un gruppo bisognerebbe indovinare dove ricomparirà.
+    const visibleGroupIds = isToolbarCustomizeOpen
+        ? toolbarGroupOrder
+        : toolbarGroupOrder.filter(id => !hiddenToolbarGroups.includes(id));
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
 
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
@@ -1500,6 +1548,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     // in cima e spingeva la partitura più in basso — cioè si rubava lo spazio che
     // nascondere la toolbar serviva a guadagnare.
     const barraComandi = useFloatingPanel({ x: 12, y: 8 }, 'harmony-tutor.barraComandiPos.v1');
+    const pannelloPersonalizza = useFloatingPanel({ x: 24, y: 120 }, 'harmony-tutor.personalizzaPos.v1');
 
     const toolbarHoverRef = useRef<HTMLDivElement | null>(null);
     const [toolbarHoverTip, setToolbarHoverTip] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -1534,6 +1583,72 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
 
     return (
         <>
+            {/* PERSONALIZZAZIONE DELLA BARRA — accendere e spegnere, oltre a riordinare.
+                I gruppi si trascinavano già; quello che mancava era poterli TOGLIERE, ed
+                è la richiesta di chi trova la barra troppo piena. L'elenco segue l'ordine
+                della barra, così una casella e il suo gruppo si corrispondono a vista. */}
+            {isToolbarCustomizeOpen && (
+                <div
+                    style={{ position: 'fixed', left: pannelloPersonalizza.pos.x, top: pannelloPersonalizza.pos.y, zIndex: 1100, width: 320 }}
+                    className="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 select-none"
+                >
+                    <div
+                        onMouseDown={pannelloPersonalizza.prendi}
+                        className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded-t-lg cursor-move"
+                    >
+                        <span className="text-[11px] font-bold text-gray-300 tracking-wide">
+                            {tT('customize_title', { defaultValue: 'Personalizza la barra' })}
+                        </span>
+                        <button
+                            onClick={onCloseToolbarCustomize}
+                            title={tT('customize_close', { defaultValue: 'Chiudi' })}
+                            className="w-5 h-5 text-gray-500 hover:text-gray-200 flex items-center justify-center text-xs rounded"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div className="px-2 py-1 text-[11px] text-slate-400 border-b border-slate-700">
+                        {tT('customize_hint', { defaultValue: 'Togli il segno di spunta per nascondere un gruppo. I gruppi si trascinano dalla maniglia ⋮⋮ per riordinarli.' })}
+                    </div>
+
+                    <div className="max-h-[52vh] overflow-y-auto py-1">
+                        {toolbarGroupOrder.map(id => {
+                            const acceso = !hiddenToolbarGroups.includes(id);
+                            return (
+                                <label
+                                    key={id}
+                                    className="flex items-center gap-2 px-2 py-1 text-[12px] text-slate-200 hover:bg-slate-700/50 cursor-pointer"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={acceso}
+                                        onChange={() => onToggleToolbarGroup(id)}
+                                        className="accent-blue-500"
+                                    />
+                                    <span className={acceso ? '' : 'text-slate-500 line-through'}>{nomeGruppo(id)}</span>
+                                </label>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex items-center justify-between px-2 py-1 border-t border-slate-700">
+                        <button
+                            onClick={onResetToolbarGroups}
+                            className="text-[11px] px-2 py-1 rounded text-slate-300 hover:bg-slate-700"
+                        >
+                            {tT('customize_reset', { defaultValue: 'Ripristina' })}
+                        </button>
+                        <button
+                            onClick={onCloseToolbarCustomize}
+                            className="text-[11px] px-3 py-1 rounded bg-blue-600 text-white font-semibold hover:bg-blue-500"
+                        >
+                            {tT('customize_done', { defaultValue: 'Fatto' })}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {isToolbarVisible && (
                 <div
                     ref={toolbarHoverRef}
@@ -1553,7 +1668,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         {visibleGroupIds.map((id, idx) => (
                             <React.Fragment key={id}>
                                 <div
-                                    className="relative"
+                                    className={`relative ${isToolbarCustomizeOpen && hiddenToolbarGroups.includes(id) ? 'opacity-30' : ''}`}
                                     onDragOver={(e) => {
                                         if (!isToolbarCustomizeOpen) return;
                                         if (!draggingToolbarGroupId) return;

@@ -2945,12 +2945,46 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
             const cleanedOrder = order.filter((id: any): id is ToolbarGroupId => all.has(id));
+            // I gruppi non ancora conosciuti si aggiungono in coda: una versione nuova
+            // che porta un comando nuovo lo fa comparire, invece di nasconderlo a chi ha
+            // già personalizzato la barra. È anche il motivo per cui «nascosto» NON può
+            // essere «assente dall'ordine»: sarebbe rimesso qui dentro a ogni avvio.
             const fullOrder: ToolbarGroupId[] = Array.from(new Set([...cleanedOrder, ...DEFAULT_TOOLBAR_ORDER]));
             return fullOrder;
         } catch {
             return DEFAULT_TOOLBAR_ORDER;
         }
     });
+    /**
+     * I GRUPPI TOLTI DALLA BARRA.
+     *
+     * Elenco esplicito, non «ciò che manca dall'ordine»: l'ordine si ricompone a ogni
+     * avvio aggiungendo in coda i gruppi che non conosce, quindi un gruppo nascosto per
+     * omissione tornerebbe da solo. Chi non ha mai personalizzato niente non ha nessun
+     * nascosto, e vede la barra completa come prima.
+     */
+    const [hiddenToolbarGroups, setHiddenToolbarGroups] = useState<ToolbarGroupId[]>(() => {
+        try {
+            const raw = localStorage.getItem(TOOLBAR_PREFS_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            const nascosti = Array.isArray(parsed?.hidden) ? parsed.hidden : [];
+            const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
+            return nascosti.filter((id: any): id is ToolbarGroupId => all.has(id));
+        } catch {
+            return [];
+        }
+    });
+
+    const toggleToolbarGroup = useCallback((id: ToolbarGroupId) => {
+        setHiddenToolbarGroups(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+    }, []);
+
+    const resetToolbarGroups = useCallback(() => {
+        setHiddenToolbarGroups([]);
+        setToolbarGroupOrder(DEFAULT_TOOLBAR_ORDER);
+    }, []);
+
     const [isToolbarCustomizeOpen, setIsToolbarCustomizeOpen] = useState(false);
 
     const [currentProjectFilePath, setCurrentProjectFilePath] = useState<string | null>(null);
@@ -3263,11 +3297,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     useEffect(() => {
         try {
-            localStorage.setItem(TOOLBAR_PREFS_KEY, JSON.stringify({ order: toolbarGroupOrder }));
+            localStorage.setItem(TOOLBAR_PREFS_KEY, JSON.stringify({ order: toolbarGroupOrder, hidden: hiddenToolbarGroups }));
         } catch {
             // ignore quota/errors
         }
-    }, [toolbarGroupOrder]);
+    }, [toolbarGroupOrder, hiddenToolbarGroups]);
 
     const reorderToolbarGroups = useCallback((dragId: ToolbarGroupId, overId: ToolbarGroupId) => {
         setToolbarGroupOrder(prev => {
@@ -15592,8 +15626,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 midiStepInputDeviceName={midiStepInput.deviceName}
                 onToggleMidiStepInput={midiStepInput.toggle}
                 toolbarGroupOrder={toolbarGroupOrder}
+                hiddenToolbarGroups={hiddenToolbarGroups}
+                onToggleToolbarGroup={toggleToolbarGroup}
+                onResetToolbarGroups={resetToolbarGroups}
                 reorderToolbarGroups={reorderToolbarGroups}
                 isToolbarCustomizeOpen={isToolbarCustomizeOpen}
+                onCloseToolbarCustomize={() => setIsToolbarCustomizeOpen(false)}
                 isToolbarHidden={isToolbarHidden}
                 showQuickInsertBar={showQuickInsertBar}
                 showHarmonyDebug={showHarmonyDebug}

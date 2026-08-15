@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { TimeSignature } from '../types';
 
 export const VALID_DENOMINATORS = [2, 4, 8, 16];
@@ -11,99 +11,123 @@ export const denominatorStepFn = (current: number, direction: 'up' | 'down') => 
     return VALID_DENOMINATORS[Math.max(0, currentIndex - 1)];
 };
 
-export const TimeSignatureControlNumber: React.FC<{
+/** `6/8`, `6 8`, `6|8` → { 6, 8 }. null se non è un metro scrivibile. */
+export function parseTimeSignature(testo: string): TimeSignature | null {
+    const m = String(testo).trim().match(/^(\d{1,2})\s*[/|\s]\s*(\d{1,2})$/);
+    if (!m) return null;
+    const numerator = Number(m[1]);
+    const denominator = Number(m[2]);
+    if (!Number.isFinite(numerator) || numerator < 1 || numerator > 16) return null;
+    if (!VALID_DENOMINATORS.includes(denominator)) return null;
+    return { numerator, denominator };
+}
+
+/**
+ * UNA DELLE DUE CIFRE DEL METRO.
+ *
+ * Tre modi di cambiarla, perché tre sono le abitudini diverse: si SCRIVE (chi sa già
+ * che vuole 7/8 lo digita e basta), si SCORRE con la rotella stando col mouse sopra,
+ * si spinge con le FRECCE ↑↓ da tastiera. Nessuno dei tre è il modo «giusto»: erano
+ * frecce da cliccare, ed era il più lento dei tre.
+ *
+ * La rotella si ascolta con un listener NON passivo aggiunto a mano: React attacca
+ * `onWheel` come passivo, quindi da lì `preventDefault()` non funziona e sotto le
+ * cifre scorrerebbe la partitura mentre si cambia il metro.
+ */
+const CifraMetro: React.FC<{
     value: number;
-    onChange: (newValue: number) => void;
-    min: number;
-    max: number;
-    stepFunction?: (current: number, direction: 'up' | 'down') => number;
-}> = ({ value, onChange, min, max, stepFunction }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editValue, setEditValue] = useState(value.toString());
-    const inputRef = useRef<HTMLInputElement>(null);
+    onChange: (v: number) => void;
+    passo: (current: number, direction: 'up' | 'down') => number;
+    valida: (v: number) => boolean;
+    etichetta: string;
+}> = ({ value, onChange, passo, valida, etichetta }) => {
+    const [bozza, setBozza] = useState<string | null>(null);
+    const ref = useRef<HTMLInputElement>(null);
+
+    const muovi = useCallback((direction: 'up' | 'down') => {
+        const nuovo = passo(value, direction);
+        if (nuovo !== value) onChange(nuovo);
+    }, [value, passo, onChange]);
 
     useEffect(() => {
-        if (isEditing) {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-        }
-    }, [isEditing]);
+        const el = ref.current;
+        if (!el) return;
+        const onWheel = (e: WheelEvent) => {
+            e.preventDefault();   // niente scorrimento della partitura sotto il puntatore
+            e.stopPropagation();
+            if (Math.abs(e.deltaY) < 1) return;
+            muovi(e.deltaY < 0 ? 'up' : 'down');
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    }, [muovi]);
 
-    const commitChange = (valStr: string) => {
-        let val = parseInt(valStr, 10);
-        if (!isNaN(val)) {
-            val = Math.max(min, Math.min(max, val));
-            onChange(val);
+    const conferma = () => {
+        if (bozza !== null) {
+            const n = parseInt(bozza, 10);
+            // Un valore che non esiste come cifra di metro non si applica: si torna a
+            // quello di prima invece di inventare un 5/5.
+            if (Number.isFinite(n) && valida(n)) onChange(n);
+            setBozza(null);
         }
-        setIsEditing(false);
     };
-
-    const step = (direction: 'up' | 'down') => {
-        if (isEditing) return;
-        if (stepFunction) {
-            onChange(stepFunction(value, direction));
-            return;
-        }
-        const delta = direction === 'up' ? 1 : -1;
-        onChange(Math.max(min, Math.min(max, value + delta)));
-    };
-
-    if (isEditing) {
-        return (
-            <input
-                ref={inputRef}
-                type="text"
-                value={editValue}
-                onChange={e => setEditValue(e.target.value)}
-                onBlur={() => commitChange(editValue)}
-                onKeyDown={e => { if (e.key === 'Enter') commitChange(editValue); if (e.key === 'Escape') setIsEditing(false); }}
-                className="w-full h-full text-center bg-gray-900 text-white font-serif text-xl p-0 border-0 outline-none"
-            />
-        );
-    }
 
     return (
-        <div className="w-full h-1/2 flex items-stretch">
-            <button
-                type="button"
-                className="flex-1 flex items-center justify-center font-serif text-xl text-white"
-                onClick={() => { setEditValue(value.toString()); setIsEditing(true); }}
-            >
-                {value}
-            </button>
-
-            <div className="w-5 flex flex-col border-l border-gray-600">
-                <button
-                    type="button"
-                    className="h-1/2 text-[10px] leading-none text-white/80 hover:text-white"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); step('up'); }}
-                    aria-label="Increment"
-                >
-                    ▲
-                </button>
-                <button
-                    type="button"
-                    className="h-1/2 text-[10px] leading-none text-white/80 hover:text-white"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); step('down'); }}
-                    aria-label="Decrement"
-                >
-                    ▼
-                </button>
-            </div>
-        </div>
+        <input
+            ref={ref}
+            type="text"
+            inputMode="numeric"
+            value={bozza ?? String(value)}
+            onChange={e => setBozza(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+            onFocus={e => e.currentTarget.select()}
+            onBlur={conferma}
+            onKeyDown={e => {
+                if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); setBozza(null); muovi('up'); }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); setBozza(null); muovi('down'); }
+                else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); conferma(); e.currentTarget.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setBozza(null); e.currentTarget.blur(); }
+                else e.stopPropagation();   // le lettere non devono arrivare all'editor
+            }}
+            title="Scrivi, oppure usa la rotella o le frecce ↑↓"
+            aria-label={etichetta}
+            className="w-6 bg-transparent text-center outline-none focus:bg-slate-600 rounded-sm"
+        />
     );
 };
 
-const TimeSignatureControl: React.FC<{ value: TimeSignature; onChange: (newValue: TimeSignature) => void; }> = ({ value, onChange }) => {
-    const handleNumeratorChange = (newNum: number) => onChange({ ...value, numerator: newNum });
-    const handleDenominatorChange = (newDenom: number) => onChange({ ...value, denominator: newDenom });
-    
-    return (
-        <div className="flex flex-col items-center justify-center w-10 h-14 bg-gray-700 rounded-md text-white font-serif relative overflow-hidden divide-y divide-gray-600">
-            <TimeSignatureControlNumber value={value.numerator} onChange={handleNumeratorChange} min={1} max={16} />
-            <TimeSignatureControlNumber value={value.denominator} onChange={handleDenominatorChange} min={2} max={16} stepFunction={denominatorStepFn}/>
-        </div>
-    );
-};
+/**
+ * IL METRO NELLA BARRA — alto come tutto il resto, e con le due cifre indipendenti.
+ *
+ * Era un riquadro di 40×56 px con le cifre impilate e quattro frecce: due volte
+ * l'altezza di ogni altro comando. Impilarle è giusto SULLA PARTITURA, dove il metro
+ * si scrive così; in una barra alta trenta pixel non ci sta senza diventare
+ * illeggibile. Le due cifre restano però due cose separate — un 6/8 non si cambia in
+ * 3/8 toccando il denominatore — e ognuna si modifica per conto suo.
+ */
+const TimeSignatureControl: React.FC<{
+    value: TimeSignature;
+    onChange: (newValue: TimeSignature) => void;
+}> = ({ value, onChange }) => (
+    <div
+        className="flex items-center h-[30px] px-1 bg-slate-700 border border-slate-600 rounded-md text-white font-serif text-sm"
+        title="Metro — scrivi la cifra, o cambiala con la rotella e le frecce ↑↓"
+    >
+        <CifraMetro
+            value={value.numerator}
+            onChange={n => onChange({ ...value, numerator: n })}
+            passo={(c, d) => Math.max(1, Math.min(16, c + (d === 'up' ? 1 : -1)))}
+            valida={n => n >= 1 && n <= 16}
+            etichetta="Numeratore del metro"
+        />
+        <span className="text-slate-400 select-none">/</span>
+        <CifraMetro
+            value={value.denominator}
+            onChange={n => onChange({ ...value, denominator: n })}
+            passo={denominatorStepFn}
+            valida={n => VALID_DENOMINATORS.includes(n)}
+            etichetta="Denominatore del metro"
+        />
+    </div>
+);
 
 export default TimeSignatureControl;
