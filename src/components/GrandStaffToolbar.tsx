@@ -62,11 +62,32 @@ import { FlipStemIcon } from './icons/FlipStemIcon';
 
 const TOOLBAR_ICON_CLASS = 'h-5 w-5';
 
+/**
+ * IL METRONOMO — e non un triangolo.
+ *
+ * Prima era un triangolo con due tratti dentro: cioè la stessa forma dell'avviso
+ * delle misure incomplete, che un triangolo lo è per convenzione universale. Due
+ * comandi diversi con lo stesso segno si confondono, e uno dei due perde.
+ *
+ * Quello che rende riconoscibile un metronomo di Maelzel non è la forma a punta —
+ * quella ce l'ha anche il triangolo d'avviso — ma tre dettagli: il corpo TRONCATO
+ * in cima (un trapezio, non un triangolo), l'asta che ne esce SOPRA, e il pesetto
+ * infilato sull'asta. Senza quei tre resta un triangolo con dentro una riga.
+ *
+ * L'asta è ferma di proposito: farla oscillare a tempo vorrebbe dire ridisegnare
+ * a ogni battito, ed è esattamente il genere di ridisegno continuo che in questa
+ * applicazione ha già affamato il thread audio.
+ */
 const MetronomeIcon = () => (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3L4 21h16L12 3z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6" />
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        {/* corpo troncato in cima */}
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 20.5 L9.5 5 H14.5 L18.5 20.5 Z" />
+        {/* base d'appoggio, più larga del corpo */}
+        <path strokeLinecap="round" d="M4 20.5 H20" />
+        {/* asta, che esce sopra il corpo */}
+        <path strokeLinecap="round" d="M12 19 L14.6 3.5" />
+        {/* pesetto infilato sull'asta */}
+        <path strokeLinecap="round" strokeWidth="2.4" d="M11.7 12.2 L14.6 11.1" />
     </svg>
 );
 
