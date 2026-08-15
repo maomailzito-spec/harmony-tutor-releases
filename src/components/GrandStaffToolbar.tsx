@@ -560,19 +560,26 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     {isPlaying ? <PauseSolidIcon className={TOOLBAR_ICON_CLASS} /> : <PlaySolidIcon className={TOOLBAR_ICON_CLASS} />}
                 </button>
                 {onToggleRecording && (
+                  /* IL TASTO DI REGISTRAZIONE si riconosce a colpo d'occhio.
+                     Era un cerchietto grigio come tutti gli altri comandi: il rosso è
+                     l'unico modo in cui un tasto REC si dice, su qualunque apparecchio
+                     dal 1960 in qua. E i due stati che contano non si distinguono per
+                     sfumatura ma per INVERSIONE — a riposo il pallino è rosso sul
+                     fondo scuro, mentre si registra il fondo diventa rosso e il pallino
+                     bianco: si vede con la coda dell'occhio, senza doverlo cercare.
+                     Il conto alla rovescia resta arancione, perché è un'attesa e non
+                     una registrazione: fermarsi lì non perde niente. */
                   <button
                     onClick={canRecord ? onToggleRecording : undefined}
                     disabled={!canRecord}
-                    className={`p-2 rounded-full transition-colors ${
+                    className={`p-2 rounded-md transition-colors ${
                       !canRecord
-                        ? 'text-gray-600 cursor-not-allowed opacity-40'
+                        ? 'cursor-not-allowed opacity-40'
                         : isRecording
-                          ? isCountingIn
-                            ? 'text-orange-400 animate-pulse'
-                            : 'text-red-500 animate-pulse'
+                          ? (isCountingIn ? 'bg-orange-500' : 'bg-red-600')
                           : isRecArmed
-                            ? 'text-red-400 animate-pulse'
-                            : 'text-gray-300 hover:bg-gray-600'
+                            ? 'ring-2 ring-red-500/70 hover:bg-gray-600'
+                            : 'hover:bg-gray-600'
                     }`}
                     title={
                       !canRecord
@@ -585,7 +592,13 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     }
                   >
                     <span className={`inline-block w-4 h-4 rounded-full border-2 ${
-                      isRecording ? 'bg-red-500 border-red-500' : 'border-current'
+                      !canRecord
+                        ? 'bg-gray-500 border-gray-500'
+                        : isRecording
+                          ? 'bg-white border-white'
+                          : isRecArmed
+                            ? 'bg-red-500 border-red-500 animate-pulse'
+                            : 'bg-red-500 border-red-500'
                     }`} />
                   </button>
                 )}
