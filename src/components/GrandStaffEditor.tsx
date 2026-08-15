@@ -13740,6 +13740,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const accTargetGhost = resolveAccTarget(yCalGhost, ACC_TREBLE_TOP_Y_GHOST);
             if (!accTargetGhost) { clearGhost(); return; }
             const accGhostTrackIdx = accTargetGhost.visIdx;
+            // LA VOCE CHE IL FANTASMA MOSTRA. Su una traccia «a voci» le voci sono
+            // quattro come nel coro, e la nota finirà in quella scelta in barra: se il
+            // fantasma non la porta non ha colore, e l'anteprima non può dire dove la
+            // nota andrà a finire. Sulle altre tracce resta 0, che è la loro voce unica.
+            const tracciaGhost = (latestAccompanimentTracks.current || []).find(t => t.id === accTargetGhost.trackId);
+            const ghostAccVoiced = ((tracciaGhost as any)?.staffMode ?? 'grandstaff') === 'grandstaff' && !!(tracciaGhost as any)?.voiced;
+            const accGhostVoice: number = ghostAccVoiced ? Number(selectedVoice) : 0;
 
             if (selectedInsertion.type === 'rest') {
                 setGhostNote(prev => {
@@ -13758,11 +13765,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         isDotted,
                         xPosition: x,
                         clef: accGhostClef,
-                        voice: 0 as any,
+                        voice: accGhostVoice as any,
                         systemIndex,
                         _trackIdx: accGhostTrackIdx,
                     };
-                    if (prev && prev.isRest && prev.xPosition === x && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                    if (prev && prev.isRest && prev.xPosition === x && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
                     return next as any;
                 });
                 return;
@@ -13806,11 +13813,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isDotted,
                     xPosition: x,
                     clef: accGhostClef,
-                    voice: 0 as any,
+                    voice: accGhostVoice as any,
                     systemIndex,
                     _trackIdx: accGhostTrackIdx,
                 };
-                if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === 0 && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
                 return next as any;
             });
             return;

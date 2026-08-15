@@ -1352,8 +1352,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       ctxAny.restore?.();
     }
 
-    // Route ghost to ACC pipeline when it belongs to an accompaniment voice (voice 0).
-    const isGhostAcc = !!(ghostNote && (ghostNote as any).voice === 0);
+    // A QUALE DISEGNO VA IL FANTASMA: quello delle tracce o quello del coro.
+    //
+    // Si guarda la TRACCIA di destinazione, che il fantasma porta già con sé, non più
+    // la voce. Prima il contrassegno era `voice === 0`, e funzionava finché ogni
+    // traccia aveva una voce sola; sul grand staff «a voci», dove le voci sono quattro
+    // come nel coro, costringeva il fantasma a dichiararsi voce 0 per finire sul rigo
+    // giusto — e restava senza voce, quindi senza colore. L'anteprima non poteva dire
+    // in quale voce sarebbe finita la nota: lo diceva solo la barra.
+    const isGhostAcc = !!(ghostNote && (ghostNote as any)._trackIdx != null);
     const allNotes = (ghostNote && !isGhostAcc) ? [...notes, { ...ghostNote, id: '__ghost__' }] : notes;
     const accompanimentNotesGrezze = (ghostNote && isGhostAcc)
       ? [...(accompanimentNotes || []), { ...ghostNote, id: '__ghost__' }]
@@ -4069,7 +4076,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         if (bass) drawNotesAtX(bassNotes, bass, 'bass');
       }
 
-      // Accompaniment notes (including ACC ghost when voice === 0): route each note to
+      // Accompaniment notes (fantasma compreso: si riconosce da `_trackIdx`): route each note to
       // its track's block via `_trackIdx`, then draw on that block's stave(s).
       if (accBlocks.length > 0 && allAccompanimentNotes.length > 0) {
         const notesByTrack = new Map<number, StaffNote[]>();
