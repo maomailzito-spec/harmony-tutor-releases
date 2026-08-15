@@ -138,7 +138,7 @@ export const ACCOMPANIMENT_EXTRA_PX = ACCOMPANIMENT_STAFF_GAP + STAVE_LINES_HEIG
 // singolo ce l'aveva, il GRAND STAFF no — e infatti bastava mettere un pianoforte in
 // mezzo alle tracce perché il rigo successivo gli finisse addosso. Una parte non ha
 // bisogno di meno aria perché è scritta su due righi invece che su uno.
-const ACC_RESPIRO_SOTTO = 30;
+export const ACC_RESPIRO_SOTTO = 30;
 const ACC_OCCUPIED_GRANDSTAFF = ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT + ACC_RESPIRO_SOTTO; // 200
 const ACC_OCCUPIED_SINGLE = STAVE_LINES_HEIGHT + ACC_RESPIRO_SOTTO; // 70
 const accBlockOccupied = (mode: 'grandstaff' | 'treble_only') =>

@@ -76,7 +76,7 @@ import { applyMeasureAccidentalCarry } from '../utils/measureAccidentalCarry';
 import { enharmonicRespell } from '../utils/enharmonicRespell';
 import { activeVoicesForPartCount, inactiveVoicesForPartCount, nearestActiveVoice, normalizePartCount, voiceShortLabel, type PartCount } from '../utils/voiceParts';
 import GrandStaffToolbar from './GrandStaffToolbar';
-import VexflowGrandStaff, { accompanimentExtraPxForTracks, accompanimentTrackTrebleOffsets } from './VexflowGrandStaff';
+import VexflowGrandStaff, { accompanimentExtraPxForTracks, accompanimentTrackTrebleOffsets, ACC_RESPIRO_SOTTO } from './VexflowGrandStaff';
 import PreferencesModal from './PreferencesModal';
 import AnalysisLockModal from './AnalysisLockModal';
 import TempoCurveDialog from './TempoCurveDialog';
@@ -2601,7 +2601,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         : staffSystemMode === 'treble_only'
             ? ((VF_TREBLE_Y + (4 * VF_LINE_SPACING)) + PLAYHEAD_Y_OFFSET_PX)
             : PLAYHEAD_Y_BOTTOM;
-    const playheadYBottomPx = playheadYBottomPxBase + accExtraPx;
+    // LA LINEA DI LETTURA FINISCE COL RIGO, non con lo spazio che lo segue.
+    // `accExtraPx` è l'altezza che i righi ACC OCCUPANO nell'impaginazione, e comprende
+    // il respiro sotto l'ultimo blocco — quello che tiene i gambi lontani dal rigo
+    // successivo. Sotto l'ultimo, però, un rigo successivo non c'è: quel respiro è aria,
+    // e la linea ci sporgeva dentro di 30 px, sia col grand staff sia col rigo singolo.
+    const playheadYBottomPx = playheadYBottomPxBase
+        + (accExtraPx > 0 ? accExtraPx - ACC_RESPIRO_SOTTO : 0);
 
     const vfStaveTopYForClef = useCallback((clef: ClefType): number => {
         if (staffSystemMode === 'satb_ancient') {
