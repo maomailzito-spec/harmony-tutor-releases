@@ -3153,6 +3153,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const mutedVoicesRef = useRef(mutedVoices);
     // Voce SATB attiva (per il monitor tastiera: suona lo strumento assegnato, non il piano)
     const selectedVoiceRef = useRef(selectedVoice);
+
+    /**
+     * LA VOCE SU UNA TRACCIA «A VOCI», dalla posizione del clic — la stessa regola del
+     * coro, perché è lo stesso problema: due righi, due voci per rigo, e la terza linea
+     * a fare da confine (pos 6 in violino, −6 in basso, esattamente come in `voceDiZona`).
+     *
+     * Prima la voce la dava soltanto il pulsante in barra: si poteva scrivere solo dove
+     * si era dichiarato di voler scrivere, e per un accordo bisognava cambiare voce a
+     * mano fra una nota e l'altra. La cascata è quella del coro:
+     *  1. se la voce attiva ABITA questo rigo resta lei, a qualunque altezza — così una
+     *     linea che scavalca la terza linea non cambia voce sotto le dita;
+     *  2. se è già occupata lì e la sorella è libera, passa alla libera: è il gesto con
+     *     cui si completa un accordo voce per voce;
+     *  3. solo cambiando rigo decide la zona, dove non c'è nessun altro indizio.
+     */
+    const voceAccPerZona = useCallback((
+        clef: ClefType,
+        pos: number,
+        occupata: (v: Voice) => boolean,
+    ): Voice => {
+        const areaBassa = clef === 'bass';
+        const alta: Voice = areaBassa ? 3 : 1;
+        const bassa: Voice = areaBassa ? 4 : 2;
+        const terzaLinea = areaBassa ? -6 : 6;
+        const daZona: Voice = pos >= terzaLinea ? alta : bassa;
+        const attiva = selectedVoiceRef.current;
+        const partenza: Voice = (attiva === alta || attiva === bassa) ? attiva : daZona;
+        const sorella: Voice = partenza === alta ? bassa : alta;
+        return (occupata(partenza) && !occupata(sorella)) ? sorella : partenza;
+    }, []);
+
     useEffect(() => { selectedVoiceRef.current = selectedVoice; }, [selectedVoice]);
     // Per-voice gain nodes (twin of accTrackGainsRef): notes route through these so
     // mute/volume changes apply in real-time to already-scheduled playback.
@@ -11691,7 +11722,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // voce dal selettore, clicchi dove vuoi piazzarla. Le altre tracce → voce 0.
             const accTrackObj = (latestAccompanimentTracks.current || []).find(t => t.id === accTarget.trackId);
             const isVoicedClick = (((accTrackObj as any)?.staffMode ?? 'grandstaff') === 'grandstaff') && !!(accTrackObj as any)?.voiced;
-            const accVoiceClick = isVoicedClick ? Number(selectedVoice) : 0;
+            // LA VOCE DALLA POSIZIONE, come nel coro. Prima era solo il pulsante in
+            // barra: si poteva scrivere unicamente dove si era dichiarato di voler
+            // scrivere, e un accordo richiedeva di cambiare voce a mano fra una nota e
+            // l'altra.
+            const occupataAcc = (v: Voice) => ((accTrackObj as any)?.notes || []).some((n: any) => {
+                if (!n || n.isRest) return false;
+                if (Number(n.voice ?? -1) !== Number(v)) return false;
+                const st = Number(n.startTick ?? 0);
+                const du = Number(n.durationTicks ?? 0) || TICKS_PER_QUARTER;
+                const eps = TICKS_PER_QUARTER * 0.001;
+                return st < startTick + durationTicks - eps && (st + du) > startTick + eps;
+            });
+            const accVoiceClick = isVoicedClick
+                ? voceAccPerZona(accClef, accTarget.pos, occupataAcc)
+                : 0;
+            if (isVoicedClick && accVoiceClick !== selectedVoice) setSelectedVoice(accVoiceClick as Voice);
 
             // ── Rest insertion into the clicked ACC track (mirror of the SATB rest path) ──
             if (selectedInsertion.type === 'rest') {
@@ -13746,7 +13792,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // nota andrà a finire. Sulle altre tracce resta 0, che è la loro voce unica.
             const tracciaGhost = (latestAccompanimentTracks.current || []).find(t => t.id === accTargetGhost.trackId);
             const ghostAccVoiced = ((tracciaGhost as any)?.staffMode ?? 'grandstaff') === 'grandstaff' && !!(tracciaGhost as any)?.voiced;
-            const accGhostVoice: number = ghostAccVoiced ? Number(selectedVoice) : 0;
+            // La STESSA regola del clic, altrimenti l'anteprima direbbe una voce e la
+            // nota ne prenderebbe un'altra — e un'anteprima che mente è peggio che non
+            // averla, perché non si controlla ciò di cui ci si fida.
+            const rngGhostAcc = ghostInsertTickRange(systemIndex, x);
+            const occupataGhostAcc = (v: Voice) => !!rngGhostAcc && ((tracciaGhost as any)?.notes || []).some((n: any) => {
+                if (!n || n.isRest) return false;
+                if (Number(n.voice ?? -1) !== Number(v)) return false;
+                const st = Number(n.startTick ?? 0);
+                const du = Number(n.durationTicks ?? 0) || TICKS_PER_QUARTER;
+                const eps = TICKS_PER_QUARTER * 0.001;
+                return st < rngGhostAcc.endTick - eps && (st + du) > rngGhostAcc.startTick + eps;
+            });
+            const accGhostVoice: number = ghostAccVoiced
+                ? voceAccPerZona(accTargetGhost.clef, accTargetGhost.pos, occupataGhostAcc)
+                : 0;
 
             if (selectedInsertion.type === 'rest') {
                 setGhostNote(prev => {
