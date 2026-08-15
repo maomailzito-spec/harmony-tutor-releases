@@ -3168,6 +3168,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *     cui si completa un accordo voce per voce;
      *  3. solo cambiando rigo decide la zona, dove non c'è nessun altro indizio.
      */
+    /** La voce indicata dalla sola ZONA su una traccia «a voci»: sopra la terza linea
+     *  la voce alta del rigo, sotto quella bassa. Senza cascata — la usa il clic
+     *  semplice, che serve a SCEGLIERE e quindi deve poter andare ovunque. */
+    const voceAccDaZona = useCallback((clef: ClefType, pos: number): Voice => {
+        const areaBassa = clef === 'bass';
+        const alta: Voice = areaBassa ? 3 : 1;
+        const bassa: Voice = areaBassa ? 4 : 2;
+        return pos >= (areaBassa ? -6 : 6) ? alta : bassa;
+    }, []);
+
     const voceAccPerZona = useCallback((
         clef: ClefType,
         pos: number,
@@ -3176,13 +3186,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const areaBassa = clef === 'bass';
         const alta: Voice = areaBassa ? 3 : 1;
         const bassa: Voice = areaBassa ? 4 : 2;
-        const terzaLinea = areaBassa ? -6 : 6;
-        const daZona: Voice = pos >= terzaLinea ? alta : bassa;
+        const daZona: Voice = voceAccDaZona(clef, pos);
         const attiva = selectedVoiceRef.current;
         const partenza: Voice = (attiva === alta || attiva === bassa) ? attiva : daZona;
         const sorella: Voice = partenza === alta ? bassa : alta;
         return (occupata(partenza) && !occupata(sorella)) ? sorella : partenza;
-    }, []);
+    }, [voceAccDaZona]);
 
     useEffect(() => { selectedVoiceRef.current = selectedVoice; }, [selectedVoice]);
     // Per-voice gain nodes (twin of accTrackGainsRef): notes route through these so
@@ -11709,6 +11718,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // caret was already positioned at the clicked X by the snap block above,
             // so a following paste lands here. Do not insert a note.
             if (isPlainClick) {
+                // …e su una traccia «a voci» SCEGLIE ANCHE LA VOCE, dalla fascia in cui
+                // cade — lo stesso gesto che nel coro conferma la voce senza scrivere.
+                // Mancava: qui il clic semplice si limitava a deselezionare, e il ramo
+                // che sceglie la voce vive nel percorso SATB, dove le tracce non
+                // arrivano mai. Si poteva cambiare voce solo dai pulsanti in barra.
+                try {
+                    const traccia = (latestAccompanimentTracks.current || []).find(t => t.id === accTarget.trackId);
+                    const aVoci = ((traccia as any)?.staffMode ?? 'grandstaff') === 'grandstaff' && !!(traccia as any)?.voiced;
+                    if (aVoci) setSelectedVoice(voceAccDaZona(accTarget.clef, accTarget.pos));
+                } catch { /* nel dubbio si tiene la voce attiva */ }
                 setSelectedNoteIds(new Set());
                 return;
             }
