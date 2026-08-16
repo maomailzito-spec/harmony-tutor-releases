@@ -72,7 +72,15 @@ const UNITA_GLIFO: Record<UnitaBattito, string> = {
     sixteenth: '\u{1D161}',
 };
 
-const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
+const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
+    /** Agganciata a sinistra: occupa il margine che la riga dello spartito le lascia. */
+    agganciata?: boolean;
+    /** Dov'è la riga dello spartito, misurata dall'editor: la tavolozza agganciata ci si
+     *  appoggia esattamente, invece di indovinare dove cominci il contenuto. */
+    ancoraggio?: { left: number; top: number; height: number } | null;
+    onToggleAggancio?: () => void;
+}> = ({
+    agganciata: agganciataProp, ancoraggio, onToggleAggancio,
     selectionCount, hasMarkAtSelection,
     onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
@@ -163,21 +171,54 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     }, []);
 
     const unaSola = selectionCount === 1;
+    const agganciata = !!agganciataProp;
     const bottone = 'h-7 px-2 text-[11px] font-bold rounded border transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
     const attivo = 'bg-slate-700 text-gray-100 border-slate-600 hover:bg-slate-600 active:bg-sky-600 active:text-white';
 
     return (
+        /* AGGANCIATA o GALLEGGIANTE.
+         *
+         * Da agganciata è un elemento della riga flex che contiene lo spartito: lo
+         * spartito si stringe da sé e si reimpagina, perché la sua larghezza la misura
+         * un ResizeObserver sul contenitore. È il modello Guitar Pro — la pagina fa
+         * posto invece di finirci sotto.
+         *
+         * Da galleggiante copre lo spartito ma si mette dove si vuole. Le due cose
+         * servono a momenti diversi: agganciata mentre si scrive, galleggiante quando
+         * serve solo un segno e non si vuole rimpaginare tutto. */
         <div
-            style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, width: 268 }}
-            className="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 select-none"
+            style={(agganciata && ancoraggio)
+                ? {
+                    position: 'fixed', left: ancoraggio.left, top: ancoraggio.top,
+                    height: ancoraggio.height, width: 268, zIndex: 900,
+                    display: 'flex', flexDirection: 'column',
+                }
+                : {
+                    position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, width: 268,
+                    maxHeight: 'calc(100vh - 96px)', display: 'flex', flexDirection: 'column',
+                }}
+            className={`bg-slate-800 border border-slate-700 select-none ${agganciata ? 'rounded-lg' : 'rounded-lg shadow-2xl'}`}
         >
             <div
-                onMouseDown={onTitleMouseDown}
-                className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded-t-lg cursor-move"
+                onMouseDown={agganciata ? undefined : onTitleMouseDown}
+                className={`flex items-center justify-between px-2 py-1 bg-slate-900 rounded-t-lg shrink-0 ${agganciata ? '' : 'cursor-move'}`}
             >
                 <span className="text-[11px] font-bold text-gray-300 tracking-wide truncate">
-                    𝆑 Segni
+                    {agganciata ? '𝆑 Segni' : '⠿ 𝆑 Segni'}
                 </span>
+                <div className="flex items-center gap-1 shrink-0">
+                    {onToggleAggancio && (
+                        <button
+                            onClick={onToggleAggancio}
+                            title={agganciata
+                                ? 'Sgancia: torna a galleggiare sopra la partitura, e si sposta dove vuoi'
+                                : 'Aggancia a sinistra: la partitura si stringe e le fa posto'}
+                            className="w-5 h-5 text-gray-500 hover:text-gray-200 flex items-center justify-center text-[11px] rounded"
+                        >
+                            {agganciata ? '⇥' : '⇤'}
+                        </button>
+                    )}
+                </div>
                 <button
                     onClick={onClose}
                     title="Chiudi la tavolozza dei segni"
@@ -187,7 +228,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 </button>
             </div>
 
-            <div className="p-2">
+            {/* IL CORPO SCORRE. Con tutti i gruppi aperti l'ultimo finiva tagliato fuori
+                dal pannello: un pannello che non scorre ha un'altezza massima anche se
+                nessuno gliel'ha detta, ed è quella dello schermo. */}
+            <div className="p-2 overflow-y-auto min-h-0">
                 {/* RICERCA — apre il gruppo che contiene quello che cerchi. Non filtra i
                     singoli pulsanti: quelli si trascinano, e un elenco che si accorcia
                     sotto il puntatore mentre stai per afferrare un segno è peggio del

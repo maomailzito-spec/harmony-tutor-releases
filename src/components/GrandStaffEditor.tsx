@@ -1868,6 +1868,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [selectedViolationIndex, setSelectedViolationIndex] = useState<number | null>(null);
     const staffContainerRef = useRef<HTMLDivElement>(null);
     const scoreScrollRef = useRef<HTMLDivElement>(null);
+
+    /** TAVOLOZZA AGGANCIATA a sinistra: la scelta si ricorda, come la sua posizione. */
+    const [tavolozzaAgganciata, setTavolozzaAgganciata] = useState<boolean>(() => {
+        try { return localStorage.getItem('harmony-tutor.tavolozzaAgganciata.v1') === '1'; } catch { return false; }
+    });
+    const alternaAggancioTavolozza = useCallback(() => {
+        setTavolozzaAgganciata(v => {
+            const next = !v;
+            try { localStorage.setItem('harmony-tutor.tavolozzaAgganciata.v1', next ? '1' : '0'); } catch { /* ignora */ }
+            return next;
+        });
+    }, []);
+
+    /** Dove sta la riga dello spartito, per appoggiarci la tavolozza agganciata. Si
+     *  rimisura da sé: nascondendo la toolbar la riga sale, e una quota fissa la
+     *  lascerebbe scollata dal contenuto. */
+    const rigaSpartitoRef = useRef<HTMLDivElement | null>(null);
+    const [ancoraggioTavolozza, setAncoraggioTavolozza] = useState<{ left: number; top: number; height: number } | null>(null);
+    useEffect(() => {
+        const el = rigaSpartitoRef.current;
+        if (!el) return;
+        const misura = () => {
+            const r = el.getBoundingClientRect();
+            setAncoraggioTavolozza({ left: r.left, top: r.top, height: r.height });
+        };
+        misura();
+        const ro = new ResizeObserver(misura);
+        ro.observe(el);
+        window.addEventListener('resize', misura);
+        window.addEventListener('scroll', misura, true);
+        return () => { ro.disconnect(); window.removeEventListener('resize', misura); window.removeEventListener('scroll', misura, true); };
+    }, [tavolozzaAgganciata]);
     const systemElementByIndexRef = useRef<Map<number, HTMLDivElement>>(new Map());
     const measureToSystemIndexRef = useRef<Map<number, number>>(new Map());
     const noteToSystemIndexRef = useRef<Map<string, number>>(new Map());
@@ -15807,6 +15839,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
                 return (
                     <DynamicsPalettePanel
+                        agganciata={tavolozzaAgganciata}
+                        ancoraggio={ancoraggioTavolozza}
+                        onToggleAggancio={alternaAggancioTavolozza}
                         selectionCount={battute.length}
                         hasMarkAtSelection={segnoQui}
                         onPlaceLevel={(level) => { if (primo != null) metti({ kind: 'level', absBeat: primo, level }); }}
@@ -16484,7 +16519,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 </>
             )}
 
-            <div className="flex flex-row gap-1 flex-grow min-h-0">
+            {/* LA RIGA DELLO SPARTITO fa posto alla tavolozza agganciata con un margine
+                interno: il contenitore si stringe, il ResizeObserver che ne misura la
+                larghezza se ne accorge, e la partitura si REIMPAGINA da sola. È la
+                differenza fra una tavolozza che copre la pagina e una che le sta accanto. */}
+            <div
+                ref={rigaSpartitoRef}
+                className="flex flex-row gap-1 flex-grow min-h-0"
+                style={{ paddingLeft: tavolozzaAgganciata ? 272 : 0 }}
+            >
                 <div
                     ref={scoreScrollRef}
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
