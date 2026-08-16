@@ -2872,6 +2872,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // La CIFRATURA ha ora un interruttore suo: prima si disegnava attaccata al romano e
     // spariva solo insieme a lui.
     const [showFiguredBass, setShowFiguredBass] = usePreference<boolean>('analysis.showFiguredBass');
+    const [staffLineWeight] = usePreference<'sottile' | 'normale' | 'marcato'>('editor.staffLineWeight');
 
     // COSA SI VEDE, letto da una ref e non da una variabile catturata.
     //
@@ -17020,6 +17021,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         systemNoteHitPointsRef.current[systemIndex] = points;
                                                                 }}
                                 ghostNote={ghost}
+                                staffLineWeight={staffLineWeight}
                                                                 engravingMode={engravingMode}
                                                                 showVoiceColors={showVoiceColors}
                                                                 accompanimentNotes={accompanimentNotesForSystem}

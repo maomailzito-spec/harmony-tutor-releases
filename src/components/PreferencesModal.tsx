@@ -130,6 +130,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [profileBaseId, setProfileBaseId] = usePreference<AnalysisProfileBaseId>('analysis.profileBaseId');
   const [profileCustomized, setProfileCustomized] = usePreference<boolean>('analysis.profileCustomized');
 
+  const [staffLineWeight, setStaffLineWeight] = usePreference<'sottile' | 'normale' | 'marcato'>('editor.staffLineWeight');
   const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
   const [romanBassMode, setRomanBassMode] = usePreference<boolean>('analysis.romanBassMode');
   const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
@@ -690,6 +691,36 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
             {activeTab !== 'Analysis' && (
               <div className="space-y-2">
+                {activeTab === 'Editor' && (
+                  <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3 mb-3">
+                    <div className="text-sm font-semibold text-slate-100">
+                      {tp('staff_line_weight_title', 'Corpo delle righe del pentagramma')}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      {tp('staff_line_weight_hint', 'Chi legge a schermo e chi stampa su carta hanno bisogni opposti: una riga sottile in antialiasing perde densità e il pentagramma sembra grigio, mentre sulla carta la stessa riga è nitida.')}
+                    </div>
+                    <div className="mt-2 flex items-center gap-1">
+                      {([
+                        ['sottile', tp('staff_line_thin', 'Sottile')],
+                        ['normale', tp('staff_line_normal', 'Normale')],
+                        ['marcato', tp('staff_line_bold', 'Marcato')],
+                      ] as const).map(([valore, etichetta]) => (
+                        <button
+                          key={valore}
+                          type="button"
+                          onClick={() => setStaffLineWeight(valore)}
+                          className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                            staffLineWeight === valore
+                              ? 'bg-cyan-600 text-white font-semibold'
+                              : 'text-gray-200 hover:bg-slate-700'
+                          }`}
+                        >
+                          {etichetta}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {activeTab === 'Editor' && (
                   <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                     <div className="text-sm font-semibold text-slate-100">{t('language_section_title')}</div>

@@ -36,6 +36,7 @@ export type PreferenceSectionId = 'Editor' | 'Analysis' | 'Render' | 'MIDI' | 'E
 
 export type PreferenceId =
   | 'editor.staffSystemMode'
+  | 'editor.staffLineWeight'
   | 'editor.toolbarHidden'
   | 'editor.toolbarPrefs'
   | 'editor.showMeasureNumbers'
@@ -120,6 +121,10 @@ const parseNumber = (raw: string | null, fallback: number): number => {
 };
 
 export type StaffSystemModePref = 'grandstaff' | 'treble_only' | 'satb_ancient';
+/** Corpo delle righe del pentagramma. Non è una scelta estetica soltanto: chi legge su
+ *  un portatile e chi stampa su carta hanno esigenze opposte, e VexFlow disegna per
+ *  difetto una riga da 1 px che in antialiasing perde densità. */
+export type StaffLineWeightPref = 'sottile' | 'normale' | 'marcato';
 export type EngravingModePref = 'legacy' | 'enhanced';
 
 export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
@@ -141,6 +146,26 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
       return (v === 'grandstaff' || v === 'treble_only' || v === 'satb_ancient') ? v : 'grandstaff';
     },
     serialize: (value: StaffSystemModePref) => String(value),
+  },
+
+  'editor.staffLineWeight': {
+    id: 'editor.staffLineWeight',
+    section: 'Editor',
+    label: 'Corpo delle righe del pentagramma',
+    i18nKey: 'pref_editor_staff_line_weight',
+    storageKey: 'ht.editor.staffLineWeight',
+    defaultValue: 'normale' as StaffLineWeightPref,
+    kind: 'enum',
+    options: [
+      { value: 'sottile', label: 'Sottile (come prima)', i18nKey: 'opt_line_thin' },
+      { value: 'normale', label: 'Normale', i18nKey: 'opt_line_normal' },
+      { value: 'marcato', label: 'Marcato', i18nKey: 'opt_line_bold' },
+    ],
+    parse: (raw) => {
+      const v = String(raw ?? '').trim();
+      return (v === 'sottile' || v === 'normale' || v === 'marcato') ? v : 'normale';
+    },
+    serialize: (value: StaffLineWeightPref) => String(value),
   },
 
   'editor.toolbarHidden': {

@@ -54,6 +54,8 @@ interface VexflowGrandStaffProps {
    *  mezzo rigo dalla parentesi dell'8va, che è disegnata ben sopra il pentagramma. */
   onSlurAnchors?: (capi: Array<{ id: string; capo: 'from' | 'to'; x: number; y: number }>) => void;
   ghostNote?: StaffNote | null;
+  /** Corpo delle righe del pentagramma: 'sottile' | 'normale' | 'marcato'. */
+  staffLineWeight?: 'sottile' | 'normale' | 'marcato';
   onNoteHitPoints?: (points: Array<{ id: string; x: number; y: number; isGhost: boolean }>) => void;
   enableProximityPick?: boolean;
   showVoiceColors?: boolean;
@@ -633,6 +635,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   keySignatureChanges,
   keySignatureByMeasure,
   ghostNote,
+  staffLineWeight = 'normale',
   onNoteHitPoints,
   enableProximityPick = true,
   showVoiceColors = false,
@@ -962,6 +965,26 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // (Internal measure barlines are handled separately below.)
     const stavesForEndBarSuppression: Stave[] = [treble, bass, satbSoprano, satbAlto, satbTenor, satbBass,
       ...accBlocks.flatMap(b => [b.treble, b.bass])].filter(Boolean) as Stave[];
+
+    // CORPO DELLE RIGHE. VexFlow disegna per difetto una riga nera da 1 px: in
+    // antialiasing, a zoom ridotto, perde densità e il pentagramma sembra grigio.
+    // Si tocca qui, su TUTTI i righi in una volta — coro, chiavi antiche e tracce —
+    // perché righe di peso diverso sulla stessa pagina si notano subito.
+    //
+    // Il colore accompagna lo spessore invece di restare nero: una riga più grossa e
+    // nera pesa troppo e schiaccia le teste delle note, che sono l'informazione. Più
+    // corpo, tono appena più tenue: il pentagramma si legge senza gridare.
+    {
+      const PESI: Record<string, { lineWidth: number; strokeStyle: string }> = {
+        sottile: { lineWidth: 1, strokeStyle: '#000000' },
+        normale: { lineWidth: 1.3, strokeStyle: '#1f2937' },
+        marcato: { lineWidth: 1.7, strokeStyle: '#374151' },
+      };
+      const peso = PESI[staffLineWeight] ?? PESI.normale;
+      for (const st of stavesForEndBarSuppression) {
+        try { st.setStyle(peso); } catch { /* un rigo senza stile resta quello di prima */ }
+      }
+    }
     for (const s of stavesForEndBarSuppression) {
       try {
         s.setEndBarType(VFBarline.type.NONE);
