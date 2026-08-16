@@ -3109,6 +3109,30 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setToolbarGroupOrder(prev => [...prev, TOOLBAR_ACAPO as ToolbarGroupId]);
     }, []);
 
+    /**
+     * Sposta l'a capo che sta in `daIndice` prima del gruppo `verso` (o in fondo).
+     *
+     * Va per INDICE e non per identificativo come i gruppi: gli a capo sono tutti
+     * uguali, quindi cercarli per id troverebbe sempre il primo — e trascinandone uno
+     * si sarebbe mosso un altro.
+     */
+    const spostaACapoToolbar = useCallback((quale: number, verso: string) => {
+        setToolbarGroupOrder(prev => {
+            // `quale` è il NUMERO D'ORDINE fra gli a capo (il primo, il secondo…), non
+            // una posizione nell'elenco: gli a capo sono tutti uguali, e un indice
+            // assoluto sarebbe sbagliato appena i gruppi intorno si spostano.
+            let visti = -1;
+            const daIndice = prev.findIndex(g => ((g as string) === TOOLBAR_ACAPO) && (++visti === quale));
+            if (daIndice < 0) return prev;
+            const next = [...prev];
+            const [segnaposto] = next.splice(daIndice, 1);
+            if (verso === 'fine') { next.push(segnaposto); return next; }
+            const to = next.indexOf(verso as ToolbarGroupId);
+            next.splice(to < 0 ? next.length : to, 0, segnaposto);
+            return next;
+        });
+    }, []);
+
     /** Toglie l'a capo in quella posizione (gli a capo non sono unici: serve l'indice). */
     const togliACapoToolbar = useCallback((indice: number) => {
         setToolbarGroupOrder(prev => prev.filter((_, i) => i !== indice));
@@ -15840,6 +15864,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 hiddenToolbarGroups={hiddenToolbarGroups}
                 onAddToolbarBreak={aggiungiACapoToolbar}
                 onMoveGroupToEnd={spostaToolbarGroupInFondo}
+                onMoveToolbarBreak={spostaACapoToolbar}
                 onRemoveToolbarBreak={togliACapoToolbar}
                 onToggleToolbarGroup={toggleToolbarGroup}
                 onResetToolbarGroups={resetToolbarGroups}

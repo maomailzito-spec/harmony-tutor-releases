@@ -296,6 +296,7 @@ type GrandStaffToolbarProps = {
     onAddToolbarBreak?: () => void;
     onRemoveToolbarBreak?: (indice: number) => void;
     onMoveGroupToEnd?: (id: ToolbarGroupId) => void;
+    onMoveToolbarBreak?: (daIndice: number, verso: string) => void;
     onToggleToolbarGroup: (id: ToolbarGroupId) => void;
     onResetToolbarGroups: () => void;
     isToolbarCustomizeOpen: boolean;
@@ -504,6 +505,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         onAddToolbarBreak,
         onRemoveToolbarBreak,
         onMoveGroupToEnd,
+        onMoveToolbarBreak,
         onToggleToolbarGroup,
         onResetToolbarGroups,
         isToolbarCustomizeOpen,
@@ -1608,6 +1610,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
      *  riga all'altra, perché ogni riordino sposta gli elementi sotto il puntatore e
      *  quello scatena il riordino successivo — un'oscillazione, non un trascinamento. */
     const [destinazioneToolbar, setDestinazioneToolbar] = useState<ToolbarGroupId | 'fine' | null>(null);
+    /** Indice di ciò che si sta trascinando. Serve SOLO agli a capo, che sono tutti
+     *  uguali fra loro: per identificativo si troverebbe sempre il primo. */
+    const [indiceTrascinato, setIndiceTrascinato] = useState<number | null>(null);
     const rigaGruppiRef = useRef<HTMLDivElement | null>(null);
 
     /**
@@ -1801,13 +1806,16 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             if (!isToolbarCustomizeOpen || !draggingToolbarGroupId) return;
                             e.preventDefault();
                             const d = destinazioneToolbar ?? destinazioneDaPuntatore(e.clientX, e.clientY);
-                            if (d === 'fine') {
+                            if ((draggingToolbarGroupId as string) === ACAPO) {
+                                if (indiceTrascinato != null && d) onMoveToolbarBreak?.(indiceTrascinato, d);
+                            } else if (d === 'fine') {
                                 onMoveGroupToEnd?.(draggingToolbarGroupId);
                             } else if (d && d !== draggingToolbarGroupId) {
                                 reorderToolbarGroups(draggingToolbarGroupId, d);
                             }
                             setDraggingToolbarGroupId(null);
                             setDestinazioneToolbar(null);
+                            setIndiceTrascinato(null);
                         }}
                     >
                         {visibleGroupIds.map((id, idx) => (id === ACAPO ? (
@@ -1817,6 +1825,28 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             <div key={`acapo-${idx}`} className="basis-full h-0 flex items-center">
                                 {isToolbarCustomizeOpen && (
                                     <div className="flex items-center gap-1 -mt-1">
+                                        {/* La presa: senza, il segnaposto restava dove
+                                            nasceva e l'a capo era inutile. */}
+                                        <span
+                                            draggable
+                                            onDragStart={(e) => {
+                                                setDraggingToolbarGroupId(ACAPO as ToolbarGroupId);
+                                                // QUALE a capo: il suo numero d'ordine fra
+                                                // gli a capo (il primo, il secondo…). Sono
+                                                // tutti uguali, quindi è l'unico modo di
+                                                // distinguerli — e non cambia se i gruppi
+                                                // intorno si spostano.
+                                                setIndiceTrascinato(
+                                                    visibleGroupIds.slice(0, idx).filter(x => (x as string) === ACAPO).length,
+                                                );
+                                                try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ACAPO); } catch (_) {}
+                                            }}
+                                            onDragEnd={() => { setDraggingToolbarGroupId(null); setDestinazioneToolbar(null); setIndiceTrascinato(null); }}
+                                            title="Trascina l'a capo dove vuoi che cominci la riga nuova"
+                                            className="cursor-grab px-1 rounded bg-sky-700/70 hover:bg-sky-600 text-sky-100 text-[10px] leading-none"
+                                        >
+                                            ⠿
+                                        </span>
                                         <span className="text-[9px] uppercase tracking-wider text-sky-400">a capo</span>
                                         <button
                                             onClick={() => onRemoveToolbarBreak?.(toolbarGroupOrder.indexOf(id as any))}
