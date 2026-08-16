@@ -622,10 +622,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'cresc', label: '⟨ cresc.' }, e)}
                         onClick={() => { if (selectionCount >= 2) onPlaceHairpin('cresc'); }}
-                        title="Trascina il crescendo sulla partitura (poi allungalo dai capi), oppure seleziona due note e clicca"
+                        title="Crescendo: trascinalo sulla partitura (poi allungalo dai capi), oppure seleziona due note e clicca"
                         className={`${bottone} ${attivo}`}
                     >
-                        ⟨ cresc.
+                        <span style={{ fontSize: 17, lineHeight: 1 }}>&lt;</span>
                     </button>
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'dim', label: 'dim. ⟩' }, e)}
@@ -633,7 +633,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         title="Trascina il diminuendo sulla partitura (poi accorcialo dai capi), oppure seleziona due note e clicca"
                         className={`${bottone} ${attivo}`}
                     >
-                        dim. ⟩
+                        <span style={{ fontSize: 17, lineHeight: 1 }}>&gt;</span>
                     </button>
                 </div>
 
@@ -663,19 +663,6 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             {ARTICULATION_UI[a].simbolo}
                         </button>
                     ))}
-                </div>
-
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Legature</div>
-                <div className="grid grid-cols-4 gap-1">
-                    <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'slur', label: '⌒' }, e)}
-                        onClick={() => { if (selectionCount >= 2) onPlaceSlur(); }}
-                        title="Legatura di portamento: seleziona due note e clicca, oppure trascinala su una nota (arriva alla successiva). Poi tira i capi della curva per allungarla; tasto destro per toglierla."
-                        className={`${bottone} ${attivo} px-1`}
-                        style={{ fontFamily: 'serif', lineHeight: 1 }}
-                    >
-                        ⌒
-                    </button>
                 </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Tempo</div>
@@ -778,29 +765,42 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Metro</div>
+                {/* DUE NUMERI, non più/meno e un menù a tendina. Il metro si legge come si
+                    scrive — 6 sopra 8 — e ogni cifra si sceglie cliccandola. La fila
+                    precedente aveva un meno, un numero, un più e una tendina: quattro
+                    comandi per dire «6/8», e nessuno dei quattro somigliava a un metro. */}
                 <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5 bg-slate-700 border border-slate-600 rounded px-1 h-7">
+                        <select
+                            value={metroN}
+                            onChange={(e) => setMetroN(Number(e.target.value))}
+                            title="Quanti movimenti per misura"
+                            className="bg-transparent text-gray-100 text-[13px] outline-none appearance-none text-center cursor-pointer"
+                            style={{ fontFamily: 'serif' }}
+                        >
+                            {Array.from({ length: 32 }, (_, i) => i + 1).map(n => (
+                                <option key={n} value={n} className="bg-slate-800">{n}</option>
+                            ))}
+                        </select>
+                        <span className="text-slate-500 text-[13px]">/</span>
+                        <select
+                            value={metroD}
+                            onChange={(e) => setMetroD(Number(e.target.value))}
+                            title="Valore del movimento"
+                            className="bg-transparent text-gray-100 text-[13px] outline-none appearance-none text-center cursor-pointer"
+                            style={{ fontFamily: 'serif' }}
+                        >
+                            {DENOMINATORI.map(d => <option key={d} value={d} className="bg-slate-800">{d}</option>)}
+                        </select>
+                    </div>
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'time-sig', data: { n: metroN, d: metroD }, label: `${metroN}/${metroD}` }, e)}
                         title={`Cambio di metro ${metroN}/${metroD}: trascinalo sulla misura da cui vale`}
-                        className={`${bottone} ${attivo} px-3`}
+                        className={`${bottone} ${attivo} flex-1`}
                         style={{ fontFamily: 'serif', fontSize: 13 }}
                     >
                         {metroN}/{metroD}
                     </button>
-                    <div className="flex items-center gap-0.5">
-                        <button onClick={() => setMetroN(v => Math.max(1, v - 1))} className={`${bottone} ${attivo} px-1.5`} title="Meno movimenti">−</button>
-                        <span className="text-[10px] text-gray-400 w-4 text-center">{metroN}</span>
-                        <button onClick={() => setMetroN(v => Math.min(32, v + 1))} className={`${bottone} ${attivo} px-1.5`} title="Più movimenti">+</button>
-                    </div>
-                    <select
-                        value={metroD}
-                        onChange={(e) => setMetroD(Number(e.target.value))}
-                        title="Valore del movimento"
-                        className="h-7 text-[11px] bg-slate-700 text-gray-100 border border-slate-600 rounded px-1"
-                    >
-                        {DENOMINATORI.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    {/* Stesso principio dell'armatura: il segno con la croce, in riga. */}
                     <button
                         onClick={onRemoveTimeSignatureAtPlayhead}
                         title="Togli il cambio di metro dalla misura in cui si trova il cursore"
@@ -839,9 +839,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     <button
                         onClick={() => setTempoPunto(v => !v)}
                         title={tempoPunto ? 'Unità col punto di valore (vale una volta e mezza)' : 'Unità semplice'}
-                        className={`${bottone} ${attivo} px-1.5`}
+                        className={`${bottone} ${tempoPunto ? nudoAcceso : attivo} px-1.5`}
                     >
-                        {tempoPunto ? '•' : '○'}
+                        {/* Il segno dice DI COSA si parla: una nota col punto, non un
+                            pallino pieno o vuoto che non somiglia a niente di musicale. */}
+                        <span style={{ fontFamily: 'serif', fontSize: 13 }}>
+                            {UNITA_GLIFO[tempoUnita]}.
+                        </span>
                     </button>
                 </div>
                 <div className="flex items-center gap-1 mt-1">
