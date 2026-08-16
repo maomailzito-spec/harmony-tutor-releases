@@ -15916,6 +15916,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         alterazione={activeAccidental}
                         onSetAlterazione={(a) => setActiveAccidentalAndApplyFromSource(a, 'toolbar')}
                         onToggleCorona={alternaCorona}
+                        modoCambioTonalita={keyChangeMode}
+                        onSetModoCambioTonalita={(m) => (m === 'transpose' ? setTransposeKeyChangeEnabled(true) : setKeyChangeMode(m))}
+                        sensibileAutomatica={autoLeadingToneInMinor}
+                        onSetSensibileAutomatica={setAutoLeadingToneInMinor}
                         selectionCount={battute.length}
                         hasMarkAtSelection={segnoQui}
                         onPlaceLevel={(level) => { if (primo != null) metti({ kind: 'level', absBeat: primo, level }); }}

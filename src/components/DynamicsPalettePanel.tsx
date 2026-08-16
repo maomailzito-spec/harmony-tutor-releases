@@ -141,12 +141,19 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     alterazione?: string | null;
     onSetAlterazione?: (a: any) => void;
     onToggleCorona?: () => void;
+    /** I tre modificatori che accompagnano la tonalità: come si comporta un CAMBIO
+     *  d'armatura (trasporta o reinterpreta) e se in minore la sensibile si alza da sé. */
+    modoCambioTonalita?: 'none' | 'modal' | 'transpose';
+    onSetModoCambioTonalita?: (m: 'none' | 'modal' | 'transpose') => void;
+    sensibileAutomatica?: boolean;
+    onSetSensibileAutomatica?: (v: boolean) => void;
 }> = ({
     agganciata: agganciataProp, ancoraggio, onToggleAggancio, onScriviTestoAlCursore,
     durata, onSetDurata, onTogglePausa, onTogglePunto,
     accPattern, onSetAccPattern, accLetRing, onToggleAccLetRing, suTracciaAcc,
     transformMode, onToggleTransformMode, onMelodicTransform,
     onToggleTie, onToggleBeam, onFlipStem, alterazione, onSetAlterazione, onToggleCorona,
+    modoCambioTonalita, onSetModoCambioTonalita, sensibileAutomatica, onSetSensibileAutomatica,
     selectionCount, hasMarkAtSelection,
     onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
@@ -785,6 +792,39 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         <span className="opacity-50">♯♭</span>
                         <span className="absolute inset-0 flex items-center justify-center text-red-500 font-black text-[13px] leading-none pointer-events-none">✕</span>
                     </button>
+                </div>
+
+                {/* COME SI COMPORTA UN CAMBIO D'ARMATURA — stanno qui perché è qui che
+                    l'armatura si posa: erano in toolbar, cioè lontani dalla cosa che
+                    modificano, e si potevano cambiare senza vedere su cosa agivano. */}
+                <div className="flex flex-col gap-0.5 mt-1">
+                    <label className="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer" title="Cambiando armatura le note già scritte vengono TRASPORTATE nella tonalità nuova">
+                        <input
+                            type="checkbox"
+                            checked={modoCambioTonalita === 'transpose'}
+                            onChange={(e) => onSetModoCambioTonalita?.(e.target.checked ? 'transpose' : 'none')}
+                            className="accent-sky-500"
+                        />
+                        Trasporta le note
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer" title="Modale: le note restano dove sono e cambia la lettura — la stessa musica letta in un altro modo">
+                        <input
+                            type="checkbox"
+                            checked={modoCambioTonalita === 'modal'}
+                            onChange={(e) => onSetModoCambioTonalita?.(e.target.checked ? 'modal' : 'none')}
+                            className="accent-sky-500"
+                        />
+                        Modale
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer" title="In tonalità minore la sensibile si alza da sé quando serve">
+                        <input
+                            type="checkbox"
+                            checked={!!sensibileAutomatica}
+                            onChange={(e) => onSetSensibileAutomatica?.(e.target.checked)}
+                            className="accent-sky-500"
+                        />
+                        Sensibile automatica
+                    </label>
                 </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Metro</div>
