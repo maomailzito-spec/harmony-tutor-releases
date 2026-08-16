@@ -374,13 +374,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Durate ── PRIMA di tutto: è quello che si tocca a ogni nota. */}
                 <button
                     onClick={() => alterna('durate')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('durate') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Note</span>
-                    <span className="text-[10px] text-gray-400">{apertoOra('durate') ? '▾' : '▸'}</span>
+                    <span className="text-[10px] opacity-70">{apertoOra('durate') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('durate') && (
-                    <div className="px-0.5 pb-0.5">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
                         <div className="grid grid-cols-7 gap-1 mt-1">
                             {([
                                 ['whole', WholeNoteIcon, 'Semibreve', '1'],
@@ -515,13 +515,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     <>
                         <button
                             onClick={() => alterna('pattern')}
-                            className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                            className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('pattern') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                         >
                             <span>Pattern</span>
-                            <span className="text-[10px] text-gray-400">{apertoOra('pattern') ? '▾' : '▸'}</span>
+                            <span className="text-[10px] opacity-70">{apertoOra('pattern') ? '▾' : '▸'}</span>
                         </button>
                         {apertoOra('pattern') && (
-                            <div className="px-0.5 pb-0.5">
+                            <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
                                 <div className="grid grid-cols-3 gap-1 mt-1">
                                     {([
                                         ['block', 'Bl', 'Accordi a blocco'],
@@ -556,13 +556,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Trasformazioni ── agiscono sulla SELEZIONE, non sul cursore. */}
                 <button
                     onClick={() => alterna('trasformazioni')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('trasformazioni') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Trasformazioni</span>
-                    <span className="text-[10px] text-gray-400">{apertoOra('trasformazioni') ? '▾' : '▸'}</span>
+                    <span className="text-[10px] opacity-70">{apertoOra('trasformazioni') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('trasformazioni') && (
-                    <div className="px-0.5 pb-0.5">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
                         {/* Il modo sta SOPRA e da solo: è un modificatore che vale per
                             tutte e cinque le operazioni sotto, non una sesta operazione.
                             In toolbar l'ambiguità passava, in colonna no. */}
@@ -588,13 +588,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Dinamiche ── */}
                 <button
                     onClick={() => alterna('dinamica')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('dinamica') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Dinamiche</span>
-                    <span className="text-[10px] text-gray-400">{apertoOra('dinamica') ? '▾' : '▸'}</span>
+                    <span className="text-[10px] opacity-70">{apertoOra('dinamica') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('dinamica') && (
-                    <div className="px-0.5 pb-0.5">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
                 {/* DINAMICHE E ACCENTI IN UN BLOCCO SOLO.
                     sf, sfz, rf e fp sono dinamiche improvvise: separarle in una seconda
                     griglia costava un'intestazione, uno stacco e — soprattutto — le faceva
@@ -638,8 +638,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     </button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Forcelle</div>
-                <div className="grid grid-cols-2 gap-1">
+                {/* Nessuna intestazione: una forcella si riconosce dalla forma, e la
+                    parola «Forcelle» costava una riga per dire quello che il segno dice
+                    da sé. Niente scatola, come gli altri segni disegnati. */}
+                <div className="grid grid-cols-2 gap-1 mt-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'cresc', label: '⟨ cresc.' }, e)}
                         onClick={() => { if (selectionCount >= 2) onPlaceHairpin('cresc'); }}
@@ -663,13 +665,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Articolazioni ed espressione ── */}
                 <button
                     onClick={() => alterna('articolazione')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('articolazione') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Articolazioni ed espressione</span>
-                    <span className="text-[10px] text-gray-400">{apertoOra('articolazione') ? '▾' : '▸'}</span>
+                    <span className="text-[10px] opacity-70">{apertoOra('articolazione') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('articolazione') && (
-                    <div className="px-0.5 pb-0.5">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Articolazioni</div>
                 <div className="grid grid-cols-6 gap-1">
                     {ARTICULATIONS.map(a => (
@@ -738,13 +740,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Struttura ── */}
                 <button
                     onClick={() => alterna('struttura')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('struttura') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Struttura</span>
-                    <span className="text-[10px] text-gray-400">{apertoOra('struttura') ? '▾' : '▸'}</span>
+                    <span className="text-[10px] opacity-70">{apertoOra('struttura') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('struttura') && (
-                    <div className="px-0.5 pb-0.5">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Armatura</div>
                 <div className="flex items-center gap-1">
                     <select
