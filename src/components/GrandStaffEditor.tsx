@@ -16526,7 +16526,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             <div
                 ref={rigaSpartitoRef}
                 className="flex flex-row gap-1 flex-grow min-h-0"
-                style={{ paddingLeft: tavolozzaAgganciata ? 272 : 0 }}
+                style={{ paddingLeft: tavolozzaAgganciata ? 212 : 0 }}
             >
                 <div
                     ref={scoreScrollRef}

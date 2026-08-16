@@ -172,7 +172,11 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
 
     const unaSola = selectionCount === 1;
     const agganciata = !!agganciataProp;
-    const bottone = 'h-7 px-2 text-[11px] font-bold rounded border transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
+    // DENSITÀ. Erano 28 px d'altezza e 8 di margine per lato, per contenere un glifo da
+    // 11: sessanta pixel di pulsante per undici di contenuto, cinque volte e mezzo. Il
+    // margine largo serviva alla simmetria del modulo, e il modulo era largo perché i
+    // pulsanti lo erano — un cerchio che si autoalimenta. Rotto dal lato dei pulsanti.
+    const bottone = 'h-6 px-1 text-[11px] font-bold rounded border transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
     const attivo = 'bg-slate-700 text-gray-100 border-slate-600 hover:bg-slate-600 active:bg-sky-600 active:text-white';
 
     return (
@@ -190,11 +194,11 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
             style={(agganciata && ancoraggio)
                 ? {
                     position: 'fixed', left: ancoraggio.left, top: ancoraggio.top,
-                    height: ancoraggio.height, width: 268, zIndex: 900,
+                    height: ancoraggio.height, width: 208, zIndex: 900,
                     display: 'flex', flexDirection: 'column',
                 }
                 : {
-                    position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, width: 268,
+                    position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, width: 208,
                     maxHeight: 'calc(100vh - 96px)', display: 'flex', flexDirection: 'column',
                 }}
             className={`bg-slate-800 border border-slate-700 select-none ${agganciata ? 'rounded-lg' : 'rounded-lg shadow-2xl'}`}
@@ -276,7 +280,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {apertoOra('dinamica') && (
                     <div className="px-0.5 pb-1">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Livelli</div>
-                <div className="grid grid-cols-4 gap-1">
+                <div className="grid grid-cols-6 gap-1">
                     {LIVELLI.map(l => (
                         <button
                             key={l}
@@ -292,7 +296,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 </div>
 
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Accenti</div>
-                <div className="grid grid-cols-4 gap-1">
+                <div className="grid grid-cols-6 gap-1">
                     {(['sf', 'sfz', 'rf'] as const).map(a => (
                         <button
                             key={a}
@@ -349,7 +353,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {apertoOra('articolazione') && (
                     <div className="px-0.5 pb-1">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Articolazioni</div>
-                <div className="grid grid-cols-5 gap-1">
+                <div className="grid grid-cols-6 gap-1">
                     {ARTICULATIONS.map(a => (
                         <button
                             key={a}
@@ -591,7 +595,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     </button>
                 </div>
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Ottava</div>
-                <div className="grid grid-cols-4 gap-1">
+                <div className="grid grid-cols-6 gap-1">
                     {([['up', '8va'], ['down', '8vb']] as const).map(([dir, etichetta]) => (
                         <button
                             key={dir}
