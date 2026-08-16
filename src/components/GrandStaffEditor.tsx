@@ -15877,7 +15877,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         onSetAccPattern={handleSelectAccPattern}
                         accLetRing={accSelectionHeld}
                         onToggleAccLetRing={handleToggleAccHold}
-                        haTracceAcc={hasVisibleAccompaniment}
+                        suTracciaAcc={activeStaffArea === 'accompaniment' || hasVisibleAccompaniment}
                         transformMode={transformMode}
                         onToggleTransformMode={() => setTransformMode(m => m === 'tonal' ? 'real' : 'tonal')}
                         onMelodicTransform={applyMelodicTransform}

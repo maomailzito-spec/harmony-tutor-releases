@@ -1,4 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+// Le icone delle durate sono quelle della toolbar, non glifi Unicode: i caratteri
+// musicali composti (nota + bandierina) li disegna il font di sistema, e le bandierine
+// di sedicesimi e trentaduesimi uscivano rovesciate. Un'icona disegnata da noi si vede
+// com'è, ovunque — e il set ha già le pause e i sessantaquattresimi.
+import {
+    WholeNoteIcon, HalfNoteIcon, QuarterNoteIcon, EighthNoteIcon,
+    SixteenthNoteIcon, ThirtySecondNoteIcon, SixtyFourthNoteIcon,
+    QuarterRestIcon,
+} from './icons/NoteValueIcons';
 import type { DynamicLevel } from '../utils/dynamics';
 import type { SignDragPayload } from '../hooks/useSignDrag';
 import type { ArticulationMark } from '../types';
@@ -87,12 +96,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     onSetDurata?: (d: string) => void;
     onTogglePausa?: () => void;
     onTogglePunto?: () => void;
-    /** Pattern d'accompagnamento: solo con una traccia ACC. */
+    /** Pattern d'accompagnamento: si mostrano quando si sta lavorando SU una traccia,
+     *  non solo quando ne esiste una. È la stessa condizione della toolbar. */
     accPattern?: string;
     onSetAccPattern?: (id: any) => void;
     accLetRing?: boolean;
     onToggleAccLetRing?: () => void;
-    haTracceAcc?: boolean;
+    suTracciaAcc?: boolean;
     /** Trasformazioni melodiche: agiscono sulla selezione. */
     transformMode?: 'tonal' | 'real';
     onToggleTransformMode?: () => void;
@@ -100,7 +110,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
 }> = ({
     agganciata: agganciataProp, ancoraggio, onToggleAggancio, onScriviTestoAlCursore,
     durata, onSetDurata, onTogglePausa, onTogglePunto,
-    accPattern, onSetAccPattern, accLetRing, onToggleAccLetRing, haTracceAcc,
+    accPattern, onSetAccPattern, accLetRing, onToggleAccLetRing, suTracciaAcc,
     transformMode, onToggleTransformMode, onMelodicTransform,
     selectionCount, hasMarkAtSelection,
     onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
@@ -303,29 +313,38 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 </button>
                 {apertoOra('durate') && (
                     <div className="px-0.5 pb-0.5">
-                        <div className="grid grid-cols-6 gap-1 mt-1">
+                        <div className="grid grid-cols-7 gap-1 mt-1">
                             {([
-                                ['whole', '𝅝'], ['half', '𝅗𝅥'], ['quarter', '♩'],
-                                ['eighth', '♪'], ['sixteenth', '𝅘𝅥𝅯'], ['thirty-second', '𝅘𝅥𝅰'],
-                            ] as const).map(([d, glifo]) => (
+                                ['whole', WholeNoteIcon, 'Semibreve'],
+                                ['half', HalfNoteIcon, 'Minima'],
+                                ['quarter', QuarterNoteIcon, 'Semiminima'],
+                                ['eighth', EighthNoteIcon, 'Croma'],
+                                ['sixteenth', SixteenthNoteIcon, 'Semicroma'],
+                                ['thirty-second', ThirtySecondNoteIcon, 'Biscroma'],
+                                ['sixty-fourth', SixtyFourthNoteIcon, 'Semibiscroma'],
+                            ] as const).map(([d, Icona, nome]) => (
                                 <button
                                     key={d}
                                     onClick={() => onSetDurata?.(d)}
-                                    title={d}
-                                    className={`${bottone} ${durata?.duration === d ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
-                                    style={{ fontFamily: 'serif', fontSize: 14 }}
+                                    title={nome}
+                                    aria-label={nome}
+                                    className={`${bottone} px-0 flex items-center justify-center ${durata?.duration === d ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
                                 >
-                                    {glifo}
+                                    <Icona className="h-4 w-4" />
                                 </button>
                             ))}
                         </div>
                         <div className="grid grid-cols-2 gap-1 mt-1">
+                            {/* L'interruttore mostra la PAUSA, non lo stato: un pulsante che
+                                dice «nota» mentre stai già inserendo note non dice niente.
+                                Acceso = si stanno inserendo pause. */}
                             <button
                                 onClick={onTogglePausa}
-                                title="Alterna nota e pausa (R)"
-                                className={`${bottone} ${durata?.type === 'rest' ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                title={durata?.type === 'rest' ? 'Stai inserendo PAUSE — clicca per tornare alle note (R)' : 'Inserisci pause (R)'}
+                                aria-label="Alterna nota e pausa"
+                                className={`${bottone} px-0 flex items-center justify-center ${durata?.type === 'rest' ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
                             >
-                                {durata?.type === 'rest' ? 'pausa' : 'nota'}
+                                <QuarterRestIcon className="h-4 w-4" />
                             </button>
                             <button
                                 onClick={onTogglePunto}
@@ -339,7 +358,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 )}
 
                 {/* ── Pattern ── contestuale: senza tracce ACC non ha nulla su cui agire. */}
-                {haTracceAcc && (
+                {suTracciaAcc && (
                     <>
                         <button
                             onClick={() => alterna('pattern')}
