@@ -107,11 +107,19 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     transformMode?: 'tonal' | 'real';
     onToggleTransformMode?: () => void;
     onMelodicTransform?: (kind: 'transpose' | 'invert' | 'retrograde' | 'retrogradeInvert', opts?: { amount?: number }) => void;
+    // Modifiche alla NOTA: stanno con le durate perché si usano nello stesso momento.
+    onToggleTie?: () => void;
+    onToggleBeam?: () => void;
+    onFlipStem?: () => void;
+    alterazione?: string | null;
+    onSetAlterazione?: (a: any) => void;
+    onToggleCorona?: () => void;
 }> = ({
     agganciata: agganciataProp, ancoraggio, onToggleAggancio, onScriviTestoAlCursore,
     durata, onSetDurata, onTogglePausa, onTogglePunto,
     accPattern, onSetAccPattern, accLetRing, onToggleAccLetRing, suTracciaAcc,
     transformMode, onToggleTransformMode, onMelodicTransform,
+    onToggleTie, onToggleBeam, onFlipStem, alterazione, onSetAlterazione, onToggleCorona,
     selectionCount, hasMarkAtSelection,
     onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
@@ -326,25 +334,28 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     onClick={() => alterna('durate')}
                     className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
-                    <span>Durate</span>
+                    <span>Note</span>
                     <span className="text-[10px] text-gray-400">{apertoOra('durate') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('durate') && (
                     <div className="px-0.5 pb-0.5">
                         <div className="grid grid-cols-7 gap-1 mt-1">
                             {([
-                                ['whole', WholeNoteIcon, 'Semibreve'],
-                                ['half', HalfNoteIcon, 'Minima'],
-                                ['quarter', QuarterNoteIcon, 'Semiminima'],
-                                ['eighth', EighthNoteIcon, 'Croma'],
-                                ['sixteenth', SixteenthNoteIcon, 'Semicroma'],
-                                ['thirty-second', ThirtySecondNoteIcon, 'Biscroma'],
-                                ['sixty-fourth', SixtyFourthNoteIcon, 'Semibiscroma'],
-                            ] as const).map(([d, Icona, nome]) => (
+                                ['whole', WholeNoteIcon, 'Semibreve', '1'],
+                                ['half', HalfNoteIcon, 'Minima', '2'],
+                                ['quarter', QuarterNoteIcon, 'Semiminima', '3'],
+                                ['eighth', EighthNoteIcon, 'Croma', '4'],
+                                ['sixteenth', SixteenthNoteIcon, 'Semicroma', '5'],
+                                ['thirty-second', ThirtySecondNoteIcon, 'Biscroma', '6'],
+                                ['sixty-fourth', SixtyFourthNoteIcon, 'Semibiscroma', '7'],
+                            ] as const).map(([d, Icona, nome, tasto]) => (
                                 <button
                                     key={d}
                                     onClick={() => onSetDurata?.(d)}
-                                    title={nome}
+                                    /* La scorciatoia nel suggerimento: chi usa la tavolozza
+                                       col mouse impara i tasti senza cercarli altrove, e
+                                       smette di usare la tavolozza per quelli che ricorda. */
+                                    title={`${nome}  ·  ${tasto}`}
                                     aria-label={nome}
                                     className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.duration === d ? nudoAcceso : nudo}`}
                                 >
@@ -358,7 +369,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 Acceso = si stanno inserendo pause. */}
                             <button
                                 onClick={onTogglePausa}
-                                title={durata?.type === 'rest' ? 'Stai inserendo PAUSE — clicca per tornare alle note (R)' : 'Inserisci pause (R)'}
+                                title={durata?.type === 'rest' ? 'Stai inserendo PAUSE — clicca per tornare alle note  ·  R' : 'Inserisci pause  ·  R'}
                                 aria-label="Alterna nota e pausa"
                                 className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.type === 'rest' ? nudoAcceso : nudo}`}
                             >
@@ -366,10 +377,90 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             </button>
                             <button
                                 onClick={onTogglePunto}
-                                title="Punto di valore (.)"
+                                title="Punto di valore  ·  ."
                                 className={`${bottone} h-8 ${durata?.isDotted ? nudoAcceso : nudo}`}
                             >
                                 ♩.
+                            </button>
+                        </div>
+
+                        {/* ALTERAZIONI. Stanno con le durate perché si scelgono nello stesso
+                            momento — prima di posare la nota, non dopo. Erano nella toolbar,
+                            cioè lontane dal punto in cui si guarda mentre si scrive. */}
+                        <div className="grid grid-cols-5 gap-1 mt-1">
+                            {([
+                                ['flat', '♭', 'Bemolle', 'b'],
+                                ['natural', '♮', 'Bequadro', 'n'],
+                                ['sharp', '♯', 'Diesis', '#'],
+                                ['doubleFlat', '𝄫', 'Doppio bemolle', ''],
+                                ['doubleSharp', '𝄪', 'Doppio diesis', ''],
+                            ] as const).map(([id, glifo, nome, tasto]) => (
+                                <button
+                                    key={id}
+                                    onClick={() => onSetAlterazione?.(alterazione === id ? null : id)}
+                                    title={tasto ? `${nome}  ·  ${tasto}` : nome}
+                                    aria-label={nome}
+                                    className={`${bottone} px-0 ${alterazione === id ? nudoAcceso : nudo}`}
+                                    style={{ fontFamily: 'serif', fontSize: 14 }}
+                                >
+                                    {glifo}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* MODIFICHE alla nota già scritta: legatura di valore, traversa,
+                            verso del gambo. Si usano subito dopo aver inserito, guardando
+                            lo stesso punto della partitura. */}
+                        <div className="grid grid-cols-6 gap-1 mt-1">
+                            <button
+                                onClick={onToggleTie}
+                                title="Legatura di valore  ·  L"
+                                className={`${bottone} px-0 ${nudo}`}
+                                style={{ fontFamily: 'serif', lineHeight: 1 }}
+                            >
+                                ⌣
+                            </button>
+                            <button
+                                onClick={onToggleBeam}
+                                title="Unisci o separa le traverse"
+                                className={`${bottone} px-0 ${nudo}`}
+                                style={{ fontFamily: 'serif', lineHeight: 1 }}
+                            >
+                                ♫
+                            </button>
+                            <button
+                                onClick={onFlipStem}
+                                title="Gira il gambo (su/giù)"
+                                className={`${bottone} px-0 ${nudo}`}
+                                style={{ fontFamily: 'serif', lineHeight: 1 }}
+                            >
+                                ↕
+                            </button>
+                            <button
+                                onMouseDown={(e) => onStartDrag({ kind: 'slur', label: '⌒' }, e)}
+                                onClick={() => { if (selectionCount >= 2) onPlaceSlur(); }}
+                                title="Legatura di portamento: due note selezionate e clicca, oppure trascinala"
+                                className={`${bottone} px-0 ${nudo}`}
+                                style={{ fontFamily: 'serif', lineHeight: 1 }}
+                            >
+                                ⌒
+                            </button>
+                            <button
+                                onClick={onToggleCorona}
+                                disabled={!selectionCount}
+                                title="Corona  ·  ⌥F"
+                                className={`${bottone} px-0 ${nudo}`}
+                                style={{ fontFamily: 'serif', lineHeight: 1, fontSize: 15 }}
+                            >
+                                𝄐
+                            </button>
+                            <button
+                                onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'rall', label: 'rall.' }, e)}
+                                title="Rallentando: trascinalo dove comincia  ·  ⌥⇧R"
+                                className={`${bottone} px-0 italic ${nudo}`}
+                                style={{ fontFamily: 'serif', fontSize: 10 }}
+                            >
+                                rall.
                             </button>
                         </div>
                     </div>

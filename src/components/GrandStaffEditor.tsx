@@ -1620,6 +1620,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * sta il cursore di lettura — e resta solo da scrivere. Riusa lo stesso campo che
      * corregge le scritte esistenti: un modo solo di scrivere una scritta, non due.
      */
+    /** Corona sulle note selezionate: c'era solo come scorciatoia ⌥F, quindi era
+     *  invisibile a chi non la conosce già. Estratta per darle anche un pulsante. */
+    const alternaCorona = useCallback(() => {
+        setRawNotes(prev => {
+            const arr = prev || [];
+            const ids = latestSelectedNoteIds.current;
+            if (!ids || ids.size === 0) return arr;
+            const tutteConCorona = arr.filter(n => ids.has(n.id)).every(n => !!(n as any).isFermata);
+            return arr.map(n => {
+                if (!ids.has(n.id)) return n;
+                if (n.isRest) return n;
+                return { ...n, isFermata: !tutteConCorona } as StaffNote;
+            });
+        });
+    }, [setRawNotes]);
+
     const scriviTestoAlCursore = useCallback(() => {
         try {
             const absBeat = playheadAbsBeatRef.current?.();
@@ -15881,6 +15897,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         transformMode={transformMode}
                         onToggleTransformMode={() => setTransformMode(m => m === 'tonal' ? 'real' : 'tonal')}
                         onMelodicTransform={applyMelodicTransform}
+                        onToggleTie={handleToggleTie}
+                        onToggleBeam={handleToggleBeamGroup}
+                        onFlipStem={handleFlipStem}
+                        alterazione={activeAccidental}
+                        onSetAlterazione={(a) => setActiveAccidentalAndApplyFromSource(a, 'toolbar')}
+                        onToggleCorona={alternaCorona}
                         selectionCount={battute.length}
                         hasMarkAtSelection={segnoQui}
                         onPlaceLevel={(level) => { if (primo != null) metti({ kind: 'level', absBeat: primo, level }); }}
