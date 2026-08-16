@@ -79,8 +79,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
      *  appoggia esattamente, invece di indovinare dove cominci il contenuto. */
     ancoraggio?: { left: number; top: number; height: number } | null;
     onToggleAggancio?: () => void;
+    /** Apre la casella di testo SULLA PARTITURA, dov'è il cursore di lettura. */
+    onScriviTestoAlCursore?: () => void;
 }> = ({
-    agganciata: agganciataProp, ancoraggio, onToggleAggancio,
+    agganciata: agganciataProp, ancoraggio, onToggleAggancio, onScriviTestoAlCursore,
     selectionCount, hasMarkAtSelection,
     onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
@@ -272,14 +274,14 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Dinamiche ── */}
                 <button
                     onClick={() => alterna('dinamica')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
                     <span>Dinamiche</span>
                     <span className="text-[10px] text-gray-400">{apertoOra('dinamica') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('dinamica') && (
-                    <div className="px-0.5 pb-1">
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Livelli</div>
+                    <div className="px-0.5 pb-0.5">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Livelli</div>
                 <div className="grid grid-cols-6 gap-1">
                     {LIVELLI.map(l => (
                         <button
@@ -295,8 +297,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     ))}
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Accenti</div>
-                <div className="grid grid-cols-6 gap-1">
+                {/* Gli accenti stanno CON le dinamiche: sf, sfz, rf sono dinamiche
+                    improvvise, non un'altra famiglia. Erano separati per abitudine di
+                    catalogo, e la separazione costava un'intestazione e uno stacco. */}
+                <div className="grid grid-cols-6 gap-1 mt-1">
                     {(['sf', 'sfz', 'rf'] as const).map(a => (
                         <button
                             key={a}
@@ -320,7 +324,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     </button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Forcelle</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Forcelle</div>
                 <div className="grid grid-cols-2 gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'cresc', label: '⟨ cresc.' }, e)}
@@ -345,14 +349,14 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Articolazioni ed espressione ── */}
                 <button
                     onClick={() => alterna('articolazione')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
                     <span>Articolazioni ed espressione</span>
                     <span className="text-[10px] text-gray-400">{apertoOra('articolazione') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('articolazione') && (
-                    <div className="px-0.5 pb-1">
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Articolazioni</div>
+                    <div className="px-0.5 pb-0.5">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Articolazioni</div>
                 <div className="grid grid-cols-6 gap-1">
                     {ARTICULATIONS.map(a => (
                         <button
@@ -368,7 +372,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     ))}
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Legature</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Legature</div>
                 <div className="grid grid-cols-4 gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'slur', label: '⌒' }, e)}
@@ -381,7 +385,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     </button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Tempo</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Tempo</div>
                 <div className="grid grid-cols-2 gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'rall', label: 'rall.' }, e)}
@@ -401,12 +405,20 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     </button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Testo</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Testo</div>
                 <div className="flex items-center gap-1">
                     <button
+                        /* SI SCRIVE SULLA PAGINA. Il clic apre la casella dov'è il cursore
+                           di lettura: il punto è già deciso, resta solo da scrivere. Prima
+                           bisognava scrivere QUI e poi trascinare la T sul punto — due gesti
+                           in due posti, e il punto lo si azzeccava a occhio.
+                           Il trascinamento resta per chi ha già scritto nel campo accanto:
+                           serve a posare la stessa scritta in più punti. */
+                        onClick={() => { if (!testo.trim()) onScriviTestoAlCursore?.(); }}
                         onMouseDown={(e) => { if (testo.trim()) onStartDrag({ kind: 'text-marker', data: testo.trim(), label: testo.trim() }, e); }}
-                        disabled={!testo.trim()}
-                        title={testo.trim() ? `Trascina "${testo.trim()}" sul punto della partitura` : 'Scrivi prima il testo qui accanto'}
+                        title={testo.trim()
+                            ? `Trascina "${testo.trim()}" sul punto della partitura`
+                            : 'Scrivi una scritta dov\'è il cursore di lettura'}
                         className={`${bottone} ${attivo} px-3`}
                         style={{ fontFamily: 'serif', fontSize: 15 }}
                     >
@@ -425,14 +437,14 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Struttura ── */}
                 <button
                     onClick={() => alterna('struttura')}
-                    className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
                     <span>Struttura</span>
                     <span className="text-[10px] text-gray-400">{apertoOra('struttura') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('struttura') && (
-                    <div className="px-0.5 pb-1">
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Armatura</div>
+                    <div className="px-0.5 pb-0.5">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Armatura</div>
                 <div className="flex items-center gap-1">
                     <select
                         value={tonalita}
@@ -457,16 +469,22 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     >
                         ♯♭
                     </button>
+                    {/* TOGLIERE è la stessa cosa che mettere, al contrario: stesso segno
+                        con una croce sopra, accanto al pulsante che lo posa. Erano due
+                        pulsanti a tutta larghezza con la frase per esteso — due righe
+                        intere per un'azione che si fa di rado. */}
+                    <button
+                        onClick={onRemoveKeySignatureAtPlayhead}
+                        title="Toglie il cambio d'armatura nella misura dov'è il cursore"
+                        className={`${bottone} ${attivo} px-1 relative`}
+                        style={{ fontFamily: 'serif' }}
+                    >
+                        <span className="opacity-50">♯♭</span>
+                        <span className="absolute inset-0 flex items-center justify-center text-red-500 font-black text-[13px] leading-none pointer-events-none">✕</span>
+                    </button>
                 </div>
-                <button
-                    onClick={onRemoveKeySignatureAtPlayhead}
-                    title="Toglie il cambio d'armatura nella misura dov'è il cursore"
-                    className={`${bottone} ${attivo} w-full mt-1`}
-                >
-                    Togli il cambio d'armatura
-                </button>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Metro</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Metro</div>
                 <div className="flex items-center gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'time-sig', data: { n: metroN, d: metroD }, label: `${metroN}/${metroD}` }, e)}
@@ -489,16 +507,18 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     >
                         {DENOMINATORI.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
+                    {/* Stesso principio dell'armatura: il segno con la croce, in riga. */}
+                    <button
+                        onClick={onRemoveTimeSignatureAtPlayhead}
+                        title="Togli il cambio di metro dalla misura in cui si trova il cursore"
+                        className={`${bottone} ${attivo} px-1 relative`}
+                    >
+                        <span className="opacity-50 text-[10px]">4/4</span>
+                        <span className="absolute inset-0 flex items-center justify-center text-red-500 font-black text-[13px] leading-none pointer-events-none">✕</span>
+                    </button>
                 </div>
-                <button
-                    onClick={onRemoveTimeSignatureAtPlayhead}
-                    title="Togli il cambio di metro dalla misura in cui si trova il cursore"
-                    className={`${bottone} w-full mt-1 bg-slate-700 text-gray-300 border-slate-600 hover:bg-rose-700 hover:text-white hover:border-rose-600`}
-                >
-                    Togli il cambio di metro
-                </button>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Andamento</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Andamento</div>
                 <div className="flex items-center gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({
@@ -545,7 +565,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     <button onClick={() => setTempoBpm(v => Math.min(300, v + 5))} className={`${bottone} ${attivo} px-1.5`} title="Più veloce">+</button>
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Battute</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Battute</div>
                 <div className="grid grid-cols-4 gap-1">
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'bar-double', label: '𝄀𝄀' }, e)}
@@ -594,7 +614,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         − misura
                     </button>
                 </div>
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Ottava</div>
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Ottava</div>
                 <div className="grid grid-cols-6 gap-1">
                     {([['up', '8va'], ['down', '8vb']] as const).map(([dir, etichetta]) => (
                         <button

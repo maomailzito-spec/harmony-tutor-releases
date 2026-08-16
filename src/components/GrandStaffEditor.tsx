@@ -1610,7 +1610,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *  Finora un testo si poteva spostare e togliere, ma non CAMBIARE: per correggere un
      *  refuso bisognava cancellarlo, tornare alla tavolozza, riscriverlo e riposarlo al
      *  punto giusto. Quattro gesti per una lettera. */
-    const [testoInModifica, setTestoInModifica] = useState<{ absBeat: number; label: string; x: number; y: number } | null>(null);
+    const [testoInModifica, setTestoInModifica] = useState<{ absBeat: number; label: string; x: number; y: number; nuovo?: boolean } | null>(null);
+
+    /**
+     * SCRIVERE UNA SCRITTA DOVE STA IL CURSORE.
+     *
+     * Prima si scriveva nella tavolozza e poi si trascinava la T sul punto: due gesti in
+     * due posti, e il punto lo si azzeccava a occhio. Qui il punto è già deciso — è dove
+     * sta il cursore di lettura — e resta solo da scrivere. Riusa lo stesso campo che
+     * corregge le scritte esistenti: un modo solo di scrivere una scritta, non due.
+     */
+    const scriviTestoAlCursore = useCallback(() => {
+        try {
+            const absBeat = playheadAbsBeatRef.current?.();
+            if (!Number.isFinite(absBeat as number)) return;
+            const pos = playheadPositionRef.current;
+            const container = staffContainerRef.current;
+            let x = window.innerWidth / 2;
+            let y = 160;
+            if (container && pos) {
+                const sysEl = container.querySelector(`[data-system-index="${pos.systemIndex}"]`) as HTMLElement | null;
+                const r = (sysEl ?? container).getBoundingClientRect();
+                x = r.left + pos.x;
+                y = r.top + 8;
+            }
+            setTestoInModifica({ absBeat: Math.max(0, Number(absBeat)), label: '', x, y, nuovo: true });
+        } catch { /* niente cursore, niente scritta */ }
+    }, []);
     const textAnnotationsRef = useRef(textAnnotations);
     textAnnotationsRef.current = textAnnotations;
 
@@ -15842,6 +15868,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         agganciata={tavolozzaAgganciata}
                         ancoraggio={ancoraggioTavolozza}
                         onToggleAggancio={alternaAggancioTavolozza}
+                        onScriviTestoAlCursore={scriviTestoAlCursore}
                         selectionCount={battute.length}
                         hasMarkAtSelection={segnoQui}
                         onPlaceLevel={(level) => { if (primo != null) metti({ kind: 'level', absBeat: primo, level }); }}
@@ -15929,9 +15956,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     onBlur={(e) => {
                         const nuovo = e.currentTarget.value.trim();
                         const punto = testoInModifica.absBeat;
-                        setTextAnnotations(prev => (nuovo
-                            ? (prev || []).map(t => (Math.abs(t.absBeat - punto) <= 1e-6 ? { ...t, label: nuovo } : t))
-                            : (prev || []).filter(t => Math.abs(t.absBeat - punto) > 1e-6)));
+                        const eNuova = !!testoInModifica.nuovo;
+                        setTextAnnotations(prev => {
+                            const elenco = prev || [];
+                            if (!nuovo) {
+                                // Svuotato: se stava nascendo non nasce, se esisteva se ne va.
+                                return eNuova ? elenco : elenco.filter(t => Math.abs(t.absBeat - punto) > 1e-6);
+                            }
+                            if (eNuova) {
+                                return [...elenco, { id: crypto.randomUUID(), absBeat: punto, label: nuovo }]
+                                    .sort((a, b) => a.absBeat - b.absBeat);
+                            }
+                            return elenco.map(t => (Math.abs(t.absBeat - punto) <= 1e-6 ? { ...t, label: nuovo } : t));
+                        });
                         setTestoInModifica(null);
                     }}
                     onKeyDown={(e) => {
@@ -15947,7 +15984,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         zIndex: 10050,
                     }}
                     className="px-2 py-1 text-sm italic rounded-md border border-blue-500 bg-white text-gray-900 shadow-lg outline-none"
-                    aria-label="Correggi la scritta"
+                    placeholder={testoInModifica.nuovo ? 'scrivi qui…' : undefined}
+                    aria-label={testoInModifica.nuovo ? 'Scrivi una scritta sulla partitura' : 'Correggi la scritta'}
                 />
             )}
 
