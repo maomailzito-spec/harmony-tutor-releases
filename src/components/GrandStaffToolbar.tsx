@@ -1591,7 +1591,45 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
      *  applicarla: riordinare a ogni movimento del mouse faceva saltare i gruppi da una
      *  riga all'altra, perché ogni riordino sposta gli elementi sotto il puntatore e
      *  quello scatena il riordino successivo — un'oscillazione, non un trascinamento. */
-    const [destinazioneToolbar, setDestinazioneToolbar] = useState<ToolbarGroupId | null>(null);
+    const [destinazioneToolbar, setDestinazioneToolbar] = useState<ToolbarGroupId | 'fine' | null>(null);
+    const rigaGruppiRef = useRef<HTMLDivElement | null>(null);
+
+    /**
+     * DOVE FINIREBBE MOLLANDO ADESSO, calcolato sull'intera riga e non sui singoli
+     * gruppi.
+     *
+     * Prima l'ascolto stava su ogni gruppo: nei VUOTI fra l'uno e l'altro — e sulle
+     * stanghette che li separano — non c'era nessun bersaglio, quindi la linea spariva
+     * e il rilascio non faceva niente. Ed erano proprio i vuoti il posto in cui viene
+     * naturale mollare, perché è lì che si vuole infilare il gruppo.
+     *
+     * Si guarda la riga in cui cade il puntatore e, dentro quella, il gruppo di cui si
+     * è superata la metà: così esiste una destinazione per ogni punto della barra,
+     * compreso lo spazio dopo l'ultimo gruppo.
+     */
+    const destinazioneDaPuntatore = useCallback((clientX: number, clientY: number): ToolbarGroupId | 'fine' | null => {
+        const riga = rigaGruppiRef.current;
+        if (!riga) return null;
+        const celle = Array.from(riga.querySelectorAll('[data-gruppo-id]')) as HTMLElement[];
+        if (celle.length === 0) return null;
+
+        // Solo i gruppi della RIGA in cui si trova il puntatore: la barra va a capo, e
+        // il gruppo più vicino in orizzontale può stare su un'altra riga.
+        const stessaRiga = celle.filter(c => {
+            const r = c.getBoundingClientRect();
+            return clientY >= r.top - 4 && clientY <= r.bottom + 4;
+        });
+        const candidati = stessaRiga.length ? stessaRiga : celle;
+
+        for (const c of candidati) {
+            const r = c.getBoundingClientRect();
+            if (clientX < r.left + r.width / 2) return (c.dataset.gruppoId as ToolbarGroupId);
+        }
+        // Oltre la metà dell'ultimo gruppo della riga: si infila dopo di lui.
+        const ultimo = candidati[candidati.length - 1];
+        const dopo = celle.indexOf(ultimo) + 1;
+        return dopo < celle.length ? (celle[dopo].dataset.gruppoId as ToolbarGroupId) : 'fine';
+    }, []);
 
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
     const isToolbarVisible = forceToolbarVisible || !isToolbarHidden;
@@ -1717,7 +1755,29 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         Ogni gruppo resta INTERO: o ci sta sulla riga, o passa tutto alla
                         successiva — vedi `flex-nowrap` sui gruppi che potrebbero spezzarsi
                         (la tonalità lo faceva: l'etichetta di qua e il menù di là). */}
-                    <div className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1">
+                    <div
+                        ref={rigaGruppiRef}
+                        className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1"
+                        onDragOver={(e) => {
+                            if (!isToolbarCustomizeOpen || !draggingToolbarGroupId) return;
+                            e.preventDefault();
+                            const d = destinazioneDaPuntatore(e.clientX, e.clientY);
+                            if (d !== destinazioneToolbar) setDestinazioneToolbar(d);
+                        }}
+                        onDrop={(e) => {
+                            if (!isToolbarCustomizeOpen || !draggingToolbarGroupId) return;
+                            e.preventDefault();
+                            const d = destinazioneToolbar ?? destinazioneDaPuntatore(e.clientX, e.clientY);
+                            if (d === 'fine') {
+                                const ultimo = visibleGroupIds[visibleGroupIds.length - 1];
+                                if (ultimo && ultimo !== draggingToolbarGroupId) reorderToolbarGroups(draggingToolbarGroupId, ultimo);
+                            } else if (d && d !== draggingToolbarGroupId) {
+                                reorderToolbarGroups(draggingToolbarGroupId, d);
+                            }
+                            setDraggingToolbarGroupId(null);
+                            setDestinazioneToolbar(null);
+                        }}
+                    >
                         {visibleGroupIds.map((id, idx) => (
                             <React.Fragment key={id}>
                                 <div
@@ -1726,27 +1786,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                             ? 'before:content-[""] before:absolute before:-left-1 before:top-0 before:bottom-0 before:w-0.5 before:bg-sky-400 before:rounded'
                                             : ''
                                     }`}
-                                    /* Si SEGNA la destinazione, non si riordina: il riordino
-                                       avviene una volta sola, quando si molla. Riordinando a
-                                       ogni movimento, ogni passo spostava gli elementi sotto
-                                       il puntatore e il puntatore si trovava sopra un altro
-                                       gruppo, che faceva riordinare di nuovo. */
-                                    onDragOver={(e) => {
-                                        if (!isToolbarCustomizeOpen) return;
-                                        if (!draggingToolbarGroupId) return;
-                                        e.preventDefault();
-                                        if (draggingToolbarGroupId === id) return;
-                                        if (destinazioneToolbar !== id) setDestinazioneToolbar(id);
-                                    }}
-                                    onDrop={(e) => {
-                                        if (!isToolbarCustomizeOpen) return;
-                                        e.preventDefault();
-                                        if (draggingToolbarGroupId && draggingToolbarGroupId !== id) {
-                                            reorderToolbarGroups(draggingToolbarGroupId, id);
-                                        }
-                                        setDraggingToolbarGroupId(null);
-                                        setDestinazioneToolbar(null);
-                                    }}
+                                    data-gruppo-id={id}
                                 >
                                     {isToolbarCustomizeOpen && (
                                         <span
@@ -1775,6 +1815,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 {idx < visibleGroupIds.length - 1 && <div className="h-5 w-px bg-slate-600/50"></div>}
                             </React.Fragment>
                         ))}
+                        {/* La destinazione «in fondo»: senza, l'ultima posizione della barra
+                            era l'unica irraggiungibile. */}
+                        {destinazioneToolbar === 'fine' && draggingToolbarGroupId && (
+                            <div className="w-0.5 self-stretch bg-sky-400 rounded" />
+                        )}
                     </div>
 
                     {/* ── RIGA CONTESTUALE ─────────────────────────────────────────
