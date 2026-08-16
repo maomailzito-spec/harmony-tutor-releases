@@ -374,13 +374,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Durate ── PRIMA di tutto: è quello che si tocca a ogni nota. */}
                 <button
                     onClick={() => alterna('durate')}
-                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('durate') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('durate') ? 'bg-sky-800 text-sky-50 border border-sky-600 border-b-0 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Note</span>
                     <span className="text-[10px] opacity-70">{apertoOra('durate') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('durate') && (
-                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
                         <div className="grid grid-cols-7 gap-1 mt-1">
                             {([
                                 ['whole', WholeNoteIcon, 'Semibreve', '1'],
@@ -515,13 +515,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     <>
                         <button
                             onClick={() => alterna('pattern')}
-                            className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('pattern') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
+                            className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('pattern') ? 'bg-sky-800 text-sky-50 border border-sky-600 border-b-0 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                         >
                             <span>Pattern</span>
                             <span className="text-[10px] opacity-70">{apertoOra('pattern') ? '▾' : '▸'}</span>
                         </button>
                         {apertoOra('pattern') && (
-                            <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
+                            <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
                                 <div className="grid grid-cols-3 gap-1 mt-1">
                                     {([
                                         ['block', 'Bl', 'Accordi a blocco'],
@@ -535,7 +535,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                             key={id}
                                             onClick={() => onSetAccPattern?.(id)}
                                             title={tit}
-                                            className={`${bottone} font-mono ${accPattern === id ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                            className={`${bottone} font-mono ${accPattern === id ? nudoAcceso : nudo}`}
                                         >
                                             {lab}
                                         </button>
@@ -544,7 +544,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 <button
                                     onClick={onToggleAccLetRing}
                                     title="Pedale: le note del pattern restano a risuonare"
-                                    className={`${bottone} w-full mt-1 font-mono ${accLetRing ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                    className={`${bottone} w-full mt-1 font-mono ${accLetRing ? nudoAcceso : nudo}`}
                                 >
                                     Ped
                                 </button>
@@ -556,13 +556,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Trasformazioni ── agiscono sulla SELEZIONE, non sul cursore. */}
                 <button
                     onClick={() => alterna('trasformazioni')}
-                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('trasformazioni') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('trasformazioni') ? 'bg-sky-800 text-sky-50 border border-sky-600 border-b-0 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Trasformazioni</span>
                     <span className="text-[10px] opacity-70">{apertoOra('trasformazioni') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('trasformazioni') && (
-                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
                         {/* Il modo sta SOPRA e da solo: è un modificatore che vale per
                             tutte e cinque le operazioni sotto, non una sesta operazione.
                             In toolbar l'ambiguità passava, in colonna no. */}
@@ -576,11 +576,11 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             {transformMode === 'tonal' ? 'Tonali' : 'Reali'}
                         </button>
                         <div className="grid grid-cols-3 gap-1 mt-1">
-                            <button onClick={() => onMelodicTransform?.('transpose', { amount: 1 })} disabled={!selectionCount} title="Trasponi su" className={`${bottone} ${attivo} font-mono`}>T▲</button>
-                            <button onClick={() => onMelodicTransform?.('transpose', { amount: -1 })} disabled={!selectionCount} title="Trasponi giù" className={`${bottone} ${attivo} font-mono`}>T▼</button>
-                            <button onClick={() => onMelodicTransform?.('invert')} disabled={!selectionCount} title="Inversione" className={`${bottone} ${attivo} font-mono`}>Inv</button>
-                            <button onClick={() => onMelodicTransform?.('retrograde')} disabled={!selectionCount} title="Retrogrado" className={`${bottone} ${attivo} font-mono`}>Retr</button>
-                            <button onClick={() => onMelodicTransform?.('retrogradeInvert')} disabled={!selectionCount} title="Retrogrado-inverso" className={`${bottone} ${attivo} font-mono`}>R+I</button>
+                            <button onClick={() => onMelodicTransform?.('transpose', { amount: 1 })} disabled={!selectionCount} title="Trasponi su  ·  selezione" className={`${bottone} ${nudo} font-mono`}>T▲</button>
+                            <button onClick={() => onMelodicTransform?.('transpose', { amount: -1 })} disabled={!selectionCount} title="Trasponi giù" className={`${bottone} ${nudo} font-mono`}>T▼</button>
+                            <button onClick={() => onMelodicTransform?.('invert')} disabled={!selectionCount} title="Inversione" className={`${bottone} ${nudo} font-mono`}>Inv</button>
+                            <button onClick={() => onMelodicTransform?.('retrograde')} disabled={!selectionCount} title="Retrogrado" className={`${bottone} ${nudo} font-mono`}>Retr</button>
+                            <button onClick={() => onMelodicTransform?.('retrogradeInvert')} disabled={!selectionCount} title="Retrogrado-inverso" className={`${bottone} ${nudo} font-mono`}>R+I</button>
                         </div>
                     </div>
                 )}
@@ -588,13 +588,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Dinamiche ── */}
                 <button
                     onClick={() => alterna('dinamica')}
-                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('dinamica') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('dinamica') ? 'bg-sky-800 text-sky-50 border border-sky-600 border-b-0 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Dinamiche</span>
                     <span className="text-[10px] opacity-70">{apertoOra('dinamica') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('dinamica') && (
-                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
                 {/* DINAMICHE E ACCENTI IN UN BLOCCO SOLO.
                     sf, sfz, rf e fp sono dinamiche improvvise: separarle in una seconda
                     griglia costava un'intestazione, uno stacco e — soprattutto — le faceva
@@ -646,7 +646,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'cresc', label: '⟨ cresc.' }, e)}
                         onClick={() => { if (selectionCount >= 2) onPlaceHairpin('cresc'); }}
                         title="Crescendo: trascinalo sulla partitura (poi allungalo dai capi), oppure seleziona due note e clicca"
-                        className={`${bottone} ${attivo}`}
+                        className={`${bottone} ${nudo} px-0`}
                     >
                         <Forcella verso="cresc" className="w-full h-3" />
                     </button>
@@ -654,7 +654,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'dim', label: 'dim. ⟩' }, e)}
                         onClick={() => { if (selectionCount >= 2) onPlaceHairpin('dim'); }}
                         title="Trascina il diminuendo sulla partitura (poi accorcialo dai capi), oppure seleziona due note e clicca"
-                        className={`${bottone} ${attivo}`}
+                        className={`${bottone} ${nudo} px-0`}
                     >
                         <Forcella verso="dim" className="w-full h-3" />
                     </button>
@@ -665,13 +665,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Articolazioni ed espressione ── */}
                 <button
                     onClick={() => alterna('articolazione')}
-                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('articolazione') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('articolazione') ? 'bg-sky-800 text-sky-50 border border-sky-600 border-b-0 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Articolazioni ed espressione</span>
                     <span className="text-[10px] opacity-70">{apertoOra('articolazione') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('articolazione') && (
-                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Articolazioni</div>
                 <div className="grid grid-cols-6 gap-1">
                     {ARTICULATIONS.map(a => (
@@ -740,13 +740,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 {/* ── Struttura ── */}
                 <button
                     onClick={() => alterna('struttura')}
-                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('struttura') ? 'bg-sky-900/70 text-sky-100 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
+                    className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('struttura') ? 'bg-sky-800 text-sky-50 border border-sky-600 border-b-0 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                 >
                     <span>Struttura</span>
                     <span className="text-[10px] opacity-70">{apertoOra('struttura') ? '▾' : '▸'}</span>
                 </button>
                 {apertoOra('struttura') && (
-                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/40 border border-sky-900/60 border-t-0 rounded-b-md">
+                    <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Armatura</div>
                 <div className="flex items-center gap-1">
                     <select
@@ -897,21 +897,21 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-begin', label: '𝄆' }, e)}
                         title="Inizio ritornello: trascinalo sulla misura da cui si riprende"
-                        className={`${bottone} ${attivo}`}
+                        className={`${bottone} ${nudo}`}
                     >
                         𝄆
                     </button>
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-end', label: '𝄇' }, e)}
                         title="Fine ritornello: trascinalo sulla misura dove si torna indietro"
-                        className={`${bottone} ${attivo}`}
+                        className={`${bottone} ${nudo}`}
                     >
                         𝄇
                     </button>
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-both', label: '𝄆𝄇' }, e)}
                         title="Ritornello doppio: finisce qui e ricomincia"
-                        className={`${bottone} ${attivo}`}
+                        className={`${bottone} ${nudo}`}
                     >
                         𝄆𝄇
                     </button>
