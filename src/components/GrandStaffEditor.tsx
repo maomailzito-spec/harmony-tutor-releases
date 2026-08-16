@@ -3089,6 +3089,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setHiddenToolbarGroups(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
     }, []);
 
+    /** Porta un gruppo IN FONDO all'elenco. Serve al rilascio nello spazio dopo
+     *  l'ultimo gruppo: `reorderToolbarGroups` inserisce ALLA POSIZIONE di un altro,
+     *  quindi mirando all'ultimo si finiva prima di lui, non dopo — ed è il modo con cui
+     *  si mette un gruppo in cima alla riga che segue un a capo. */
+    const spostaToolbarGroupInFondo = useCallback((dragId: ToolbarGroupId) => {
+        setToolbarGroupOrder(prev => {
+            const from = prev.indexOf(dragId);
+            if (from < 0) return prev;
+            const next = [...prev];
+            next.splice(from, 1);
+            next.push(dragId);
+            return next;
+        });
+    }, []);
+
     /** Aggiunge un a capo in fondo: da lì si trascina dove serve, come un gruppo. */
     const aggiungiACapoToolbar = useCallback(() => {
         setToolbarGroupOrder(prev => [...prev, TOOLBAR_ACAPO as ToolbarGroupId]);
@@ -15824,6 +15839,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 toolbarGroupOrder={toolbarGroupOrder}
                 hiddenToolbarGroups={hiddenToolbarGroups}
                 onAddToolbarBreak={aggiungiACapoToolbar}
+                onMoveGroupToEnd={spostaToolbarGroupInFondo}
                 onRemoveToolbarBreak={togliACapoToolbar}
                 onToggleToolbarGroup={toggleToolbarGroup}
                 onResetToolbarGroups={resetToolbarGroups}

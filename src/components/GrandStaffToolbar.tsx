@@ -295,6 +295,7 @@ type GrandStaffToolbarProps = {
      *  risultato dell'impaginazione — questo le rende decidibili. */
     onAddToolbarBreak?: () => void;
     onRemoveToolbarBreak?: (indice: number) => void;
+    onMoveGroupToEnd?: (id: ToolbarGroupId) => void;
     onToggleToolbarGroup: (id: ToolbarGroupId) => void;
     onResetToolbarGroups: () => void;
     isToolbarCustomizeOpen: boolean;
@@ -502,6 +503,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         hiddenToolbarGroups,
         onAddToolbarBreak,
         onRemoveToolbarBreak,
+        onMoveGroupToEnd,
         onToggleToolbarGroup,
         onResetToolbarGroups,
         isToolbarCustomizeOpen,
@@ -531,7 +533,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     const { t } = useTranslation('ui');
     const { t: tT, i18n: i18nToolbar } = useTranslation('toolbar');
     const nomeGruppo = useCallback(
-        (id: ToolbarGroupId) => (i18nToolbar.language || 'it').startsWith('en') ? NOMI_GRUPPI[id].en : NOMI_GRUPPI[id].it,
+        (id: ToolbarGroupId) => {
+            // Un id senza nome NON deve far cadere la barra: prima leggeva `.en` di
+            // `undefined` e portava giù l'intero componente. È successo col segnaposto
+            // dell'a capo, che nell'elenco c'è ma un nome non ce l'ha.
+            const voce = NOMI_GRUPPI[id];
+            if (!voce) return String(id);
+            return (i18nToolbar.language || 'it').startsWith('en') ? voce.en : voce.it;
+        },
         [i18nToolbar.language],
     );
 
@@ -1711,7 +1720,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     </div>
 
                     <div className="max-h-[52vh] overflow-y-auto py-1">
-                        {toolbarGroupOrder.map(id => {
+                        {toolbarGroupOrder.filter(id => (id as string) !== ACAPO).map(id => {
                             const acceso = !hiddenToolbarGroups.includes(id);
                             return (
                                 <label
@@ -1793,8 +1802,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             e.preventDefault();
                             const d = destinazioneToolbar ?? destinazioneDaPuntatore(e.clientX, e.clientY);
                             if (d === 'fine') {
-                                const ultimo = visibleGroupIds[visibleGroupIds.length - 1];
-                                if (ultimo && ultimo !== draggingToolbarGroupId) reorderToolbarGroups(draggingToolbarGroupId, ultimo);
+                                onMoveGroupToEnd?.(draggingToolbarGroupId);
                             } else if (d && d !== draggingToolbarGroupId) {
                                 reorderToolbarGroups(draggingToolbarGroupId, d);
                             }
