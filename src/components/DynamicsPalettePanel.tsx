@@ -460,7 +460,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 </button>
                 {apertoOra('dinamica') && (
                     <div className="px-0.5 pb-0.5">
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Livelli</div>
+                {/* DINAMICHE E ACCENTI IN UN BLOCCO SOLO.
+                    sf, sfz, rf e fp sono dinamiche improvvise: separarle in una seconda
+                    griglia costava un'intestazione, uno stacco e — soprattutto — le faceva
+                    leggere come un'altra famiglia. Dodici segni in due file continue si
+                    leggono come una cosa sola, che è quello che sono.
+                    Senza scatola, come le durate: a riposo il rumore sparisce, e i segni
+                    diventano un blocco riconoscibile invece di dodici unità separate. */}
                 <div className="grid grid-cols-6 gap-1">
                     {LIVELLI.map(l => (
                         <button
@@ -468,25 +474,19 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             onMouseDown={(e) => onStartDrag({ kind: 'dyn-level', data: l, label: l }, e)}
                             onClick={() => { if (unaSola) onPlaceLevel(l); }}
                             title={`Trascina ${l} sulla partitura, oppure seleziona una nota e clicca`}
-                            className={`${bottone} ${attivo} italic`}
+                            className={`${bottone} ${nudo} italic`}
                             style={{ fontFamily: 'serif' }}
                         >
                             {l}
                         </button>
                     ))}
-                </div>
-
-                {/* Gli accenti stanno CON le dinamiche: sf, sfz, rf sono dinamiche
-                    improvvise, non un'altra famiglia. Erano separati per abitudine di
-                    catalogo, e la separazione costava un'intestazione e uno stacco. */}
-                <div className="grid grid-cols-6 gap-1 mt-1">
                     {(['sf', 'sfz', 'rf'] as const).map(a => (
                         <button
                             key={a}
                             onMouseDown={(e) => onStartDrag({ kind: 'dyn-accent', data: a, label: a }, e)}
                             onClick={() => { if (unaSola) onPlaceAccent(a); }}
                             title={`Trascina ${a} sulla partitura, oppure seleziona una nota e clicca`}
-                            className={`${bottone} ${attivo} italic`}
+                            className={`${bottone} ${nudo} italic`}
                             style={{ fontFamily: 'serif' }}
                         >
                             {a}
@@ -496,7 +496,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-fp', label: 'fp' }, e)}
                         onClick={() => { if (unaSola) onPlaceFp(); }}
                         title="Forte piano: trascinalo sulla partitura, oppure seleziona una nota e clicca"
-                        className={`${bottone} ${attivo} italic`}
+                        className={`${bottone} ${nudo} italic`}
                         style={{ fontFamily: 'serif' }}
                     >
                         fp
