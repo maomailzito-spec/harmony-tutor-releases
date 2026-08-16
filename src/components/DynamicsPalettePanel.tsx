@@ -211,6 +211,24 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     // margine largo serviva alla simmetria del modulo, e il modulo era largo perché i
     // pulsanti lo erano — un cerchio che si autoalimenta. Rotto dal lato dei pulsanti.
     const bottone = 'h-6 px-1 text-[11px] font-bold rounded border transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
+    /**
+     * SENZA SCATOLA — prova sulle durate.
+     *
+     * A riposo resta solo il glifo: sette riquadri in fila fanno contare i contenitori
+     * invece di leggere i segni, e sei di quei sette sono sempre spenti. Il bordo resta
+     * TRASPARENTE e non tolto, così passando da spento ad acceso il pulsante non cambia
+     * dimensione e la riga non si muove sotto il dito.
+     *
+     * Al passaggio del mouse un fondo appena accennato: un glifo nudo non dice di essere
+     * cliccabile, e chi apre l'applicazione la prima volta non ha modo di saperlo.
+     *
+     * Acceso, il riquadro pieno torna: qui gli interruttori sono la maggioranza — durata,
+     * pausa, punto, pattern, tonali/reali — e lo stato acceso è l'unica informazione che
+     * quel riquadro porta. Toglierlo anche lì vorrebbe dire inventare un secondo modo di
+     * dire «questo è quello attivo», più debole di un blocco pieno.
+     */
+    const nudo = 'bg-transparent border-transparent text-gray-200 hover:bg-slate-700/70';
+    const nudoAcceso = 'bg-cyan-600 text-white border-cyan-500';
     const attivo = 'bg-slate-700 text-gray-100 border-slate-600 hover:bg-slate-600 active:bg-sky-600 active:text-white';
 
     return (
@@ -328,7 +346,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                     onClick={() => onSetDurata?.(d)}
                                     title={nome}
                                     aria-label={nome}
-                                    className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.duration === d ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                    className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.duration === d ? nudoAcceso : nudo}`}
                                 >
                                     <Icona className="h-6 w-6" />
                                 </button>
@@ -342,14 +360,14 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 onClick={onTogglePausa}
                                 title={durata?.type === 'rest' ? 'Stai inserendo PAUSE — clicca per tornare alle note (R)' : 'Inserisci pause (R)'}
                                 aria-label="Alterna nota e pausa"
-                                className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.type === 'rest' ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.type === 'rest' ? nudoAcceso : nudo}`}
                             >
                                 <QuarterRestIcon className="h-6 w-6" />
                             </button>
                             <button
                                 onClick={onTogglePunto}
                                 title="Punto di valore (.)"
-                                className={`${bottone} h-8 ${durata?.isDotted ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                className={`${bottone} h-8 ${durata?.isDotted ? nudoAcceso : nudo}`}
                             >
                                 ♩.
                             </button>
