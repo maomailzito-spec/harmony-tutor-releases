@@ -20,6 +20,27 @@ import { ARTICULATIONS, ARTICULATION_UI } from '../utils/articulations';
 import { useHoverTip } from '../hooks/useHoverTip';
 
 /**
+ * FORCELLA — disegnata, non scritta.
+ *
+ * `<` e `>` sono segni di MAGGIORE e MINORE: corti, spessi, con l'angolo aperto — a
+ * fianco delle articolazioni sembrano accenti, che è esattamente come li leggeva
+ * l'occhio. Una forcella d'incisione è tutt'altro: lunga, sottile, con l'apertura
+ * schiacciata, perché deve stendersi sotto più note.
+ *
+ * E non è un carattere per una ragione di fondo: in Bravura — il font che VexFlow usa
+ * per la partitura — LE FORCELLE NON ESISTONO come glifo. Nell'incisione si tracciano
+ * come due linee che convergono, e la loro lunghezza dipende dal passaggio che coprono.
+ * Quindi qui si disegnano, com'è giusto.
+ */
+const Forcella: React.FC<{ verso: 'cresc' | 'dim'; className?: string }> = ({ verso, className }) => (
+    <svg viewBox="0 0 40 12" className={className} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+        {verso === 'cresc'
+            ? <><path d="M2 6 L38 1.5" /><path d="M2 6 L38 10.5" /></>
+            : <><path d="M38 6 L2 1.5" /><path d="M38 6 L2 10.5" /></>}
+    </svg>
+);
+
+/**
  * Tavolozza dei SEGNI, flottante e trascinabile (stesso modello del modulo percussioni
  * e del mixer). Undici famiglie di segni raccolte in TRE gruppi a fisarmonica, secondo
  * che cosa il segno riguardi: l'intensità (dinamiche), il modo di attaccare e collegare
@@ -625,7 +646,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         title="Crescendo: trascinalo sulla partitura (poi allungalo dai capi), oppure seleziona due note e clicca"
                         className={`${bottone} ${attivo}`}
                     >
-                        <span style={{ fontSize: 17, lineHeight: 1 }}>&lt;</span>
+                        <Forcella verso="cresc" className="w-full h-3" />
                     </button>
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'dyn-hairpin', data: 'dim', label: 'dim. ⟩' }, e)}
@@ -633,7 +654,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         title="Trascina il diminuendo sulla partitura (poi accorcialo dai capi), oppure seleziona due note e clicca"
                         className={`${bottone} ${attivo}`}
                     >
-                        <span style={{ fontSize: 17, lineHeight: 1 }}>&gt;</span>
+                        <Forcella verso="dim" className="w-full h-3" />
                     </button>
                 </div>
 
