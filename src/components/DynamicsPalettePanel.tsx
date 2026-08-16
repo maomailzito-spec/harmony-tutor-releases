@@ -543,7 +543,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             onMouseDown={(e) => onStartDrag({ kind: 'articulation', data: a, label: ARTICULATION_UI[a].simbolo }, e)}
                             onClick={() => { if (selectionCount > 0) onPlaceArticulation(a); }}
                             title={`${ARTICULATION_UI[a].nome}: trascinalo su una nota, oppure seleziona le note e clicca. Rimettendolo si toglie.`}
-                            className={`${bottone} ${attivo} px-1`}
+                            className={`${bottone} ${nudo} px-1`}
                             style={{ fontFamily: 'serif', lineHeight: 1 }}
                         >
                             {ARTICULATION_UI[a].simbolo}
@@ -803,7 +803,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             title={dir === 'up'
                                 ? 'Suona un\'ottava SOPRA il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'
                                 : 'Suona un\'ottava SOTTO il scritto: seleziona il passaggio e clicca, oppure trascinalo su una nota (copre la misura). Le note NON si spostano — scrivile dove vanno lette.'}
-                            className={`${bottone} ${attivo} px-1 italic`}
+                            className={`${bottone} ${nudo} px-1 italic`}
                             style={{ fontFamily: 'serif' }}
                         >
                             {etichetta}
