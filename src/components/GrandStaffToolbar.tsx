@@ -291,6 +291,10 @@ type GrandStaffToolbarProps = {
     reorderToolbarGroups: (dragId: ToolbarGroupId, overId: ToolbarGroupId) => void;
     /** I gruppi tolti dalla barra. Elenco esplicito: vedi il commento nell'editor. */
     hiddenToolbarGroups: ToolbarGroupId[];
+    /** A capo fissato a mano: le righe della barra non esistono nel modello, sono il
+     *  risultato dell'impaginazione — questo le rende decidibili. */
+    onAddToolbarBreak?: () => void;
+    onRemoveToolbarBreak?: (indice: number) => void;
     onToggleToolbarGroup: (id: ToolbarGroupId) => void;
     onResetToolbarGroups: () => void;
     isToolbarCustomizeOpen: boolean;
@@ -496,6 +500,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         toolbarGroupOrder,
         reorderToolbarGroups,
         hiddenToolbarGroups,
+        onAddToolbarBreak,
+        onRemoveToolbarBreak,
         onToggleToolbarGroup,
         onResetToolbarGroups,
         isToolbarCustomizeOpen,
@@ -1585,7 +1591,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     // quello. E tenerli visibili aveva due costi reali, segnalati usandola: non si
     // capiva come sarebbe cambiato lo spazio, e c'erano il doppio degli elementi da
     // scansare mentre si trascina.
-    const visibleGroupIds = toolbarGroupOrder.filter(id => !hiddenToolbarGroups.includes(id));
+    const ACAPO = '__acapo__';
+    const visibleGroupIds = toolbarGroupOrder.filter(id => id === ACAPO || !hiddenToolbarGroups.includes(id));
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
     /** Dove finirebbe mollando adesso. Serve a MOSTRARE la destinazione invece di
      *  applicarla: riordinare a ogni movimento del mouse faceva saltare i gruppi da una
@@ -1723,6 +1730,23 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         })}
                     </div>
 
+                    {/* L'A CAPO È UN COMANDO, non una conseguenza della larghezza. Senza,
+                        «metti questo gruppo in cima alla seconda riga» non era esprimibile:
+                        spostandolo, quello prima scivolava in fondo alla prima. */}
+                    <div className="px-2 py-1 border-t border-slate-700">
+                        <button
+                            onClick={onAddToolbarBreak}
+                            className="w-full text-[11px] px-2 py-1 rounded text-sky-300 hover:bg-sky-900/50 border border-dashed border-sky-700"
+                        >
+                            ↵ Aggiungi un a capo
+                        </button>
+                        <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                            Compare in fondo alla barra: trascinalo dove vuoi che cominci la
+                            riga nuova. Da lì l'ordine non dipende più dalla larghezza della
+                            finestra.
+                        </div>
+                    </div>
+
                     <div className="flex items-center justify-between px-2 py-1 border-t border-slate-700">
                         <button
                             onClick={onResetToolbarGroups}
@@ -1778,7 +1802,25 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             setDestinazioneToolbar(null);
                         }}
                     >
-                        {visibleGroupIds.map((id, idx) => (
+                        {visibleGroupIds.map((id, idx) => (id === ACAPO ? (
+                            /* Occupa tutta la larghezza rimasta: quello che segue comincia
+                               per forza sulla riga dopo, e non dipende più da quanto è
+                               larga la finestra. In personalizzazione si vede e si toglie. */
+                            <div key={`acapo-${idx}`} className="basis-full h-0 flex items-center">
+                                {isToolbarCustomizeOpen && (
+                                    <div className="flex items-center gap-1 -mt-1">
+                                        <span className="text-[9px] uppercase tracking-wider text-sky-400">a capo</span>
+                                        <button
+                                            onClick={() => onRemoveToolbarBreak?.(toolbarGroupOrder.indexOf(id as any))}
+                                            title="Togli questo a capo"
+                                            className="text-[10px] text-slate-400 hover:text-rose-400"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
                             <React.Fragment key={id}>
                                 <div
                                     className={`relative ${draggingToolbarGroupId === id ? 'opacity-40' : ''} ${
@@ -1812,9 +1854,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                     )}
                                     {toolbarGroups[id]}
                                 </div>
-                                {idx < visibleGroupIds.length - 1 && <div className="h-5 w-px bg-slate-600/50"></div>}
+                                {idx < visibleGroupIds.length - 1 && visibleGroupIds[idx + 1] !== ACAPO && <div className="h-5 w-px bg-slate-600/50"></div>}
                             </React.Fragment>
-                        ))}
+                        )))}
                         {/* La destinazione «in fondo»: senza, l'ultima posizione della barra
                             era l'unica irraggiungibile. */}
                         {destinazioneToolbar === 'fine' && draggingToolbarGroupId && (

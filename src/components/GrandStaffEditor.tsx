@@ -468,6 +468,19 @@ type ToolbarGroupId =
     | 'midi'
     | 'more';
 
+/**
+ * A CAPO FISSATO A MANO.
+ *
+ * La barra è una fila sola che va a capo da sé quando finisce lo spazio: le righe non
+ * esistono nel modello, sono il risultato dell'impaginazione. Per questo «metti questo
+ * gruppo all'inizio della seconda riga» non era esprimibile — spostandolo, quello prima
+ * scivolava in fondo alla prima, e non c'era modo di impedirlo.
+ *
+ * Questo segnaposto occupa tutta la larghezza rimasta e forza l'a capo dove lo si mette.
+ * Da lì in poi l'ordine è quello scelto, e non dipende più dalla larghezza della finestra.
+ */
+const TOOLBAR_ACAPO = '__acapo__';
+
 const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
 const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
 const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
@@ -3030,12 +3043,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const order: ToolbarGroupId[] = Array.isArray(parsed?.order) ? parsed.order : [];
 
             const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
-            const cleanedOrder = order.filter((id: any): id is ToolbarGroupId => all.has(id));
+            // Gli a capo si conservano e possono essere PIÙ D'UNO: la deduplica qui sotto
+            // vale per i gruppi, che sono unici, non per i segnaposto.
+            const cleanedOrder = order.filter((id: any) => all.has(id) || id === TOOLBAR_ACAPO);
             // I gruppi non ancora conosciuti si aggiungono in coda: una versione nuova
             // che porta un comando nuovo lo fa comparire, invece di nasconderlo a chi ha
             // già personalizzato la barra. È anche il motivo per cui «nascosto» NON può
             // essere «assente dall'ordine»: sarebbe rimesso qui dentro a ogni avvio.
-            const fullOrder: ToolbarGroupId[] = Array.from(new Set([...cleanedOrder, ...DEFAULT_TOOLBAR_ORDER]));
+            const visti = new Set<string>();
+            const fullOrder: ToolbarGroupId[] = [];
+            for (const id of cleanedOrder) {
+                if ((id as string) === TOOLBAR_ACAPO) { fullOrder.push(id as ToolbarGroupId); continue; }
+                if (visti.has(id)) continue;
+                visti.add(id);
+                fullOrder.push(id);
+            }
+            for (const id of DEFAULT_TOOLBAR_ORDER) if (!visti.has(id)) fullOrder.push(id);
             return fullOrder;
         } catch {
             return DEFAULT_TOOLBAR_ORDER;
@@ -3064,6 +3087,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const toggleToolbarGroup = useCallback((id: ToolbarGroupId) => {
         setHiddenToolbarGroups(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+    }, []);
+
+    /** Aggiunge un a capo in fondo: da lì si trascina dove serve, come un gruppo. */
+    const aggiungiACapoToolbar = useCallback(() => {
+        setToolbarGroupOrder(prev => [...prev, TOOLBAR_ACAPO as ToolbarGroupId]);
+    }, []);
+
+    /** Toglie l'a capo in quella posizione (gli a capo non sono unici: serve l'indice). */
+    const togliACapoToolbar = useCallback((indice: number) => {
+        setToolbarGroupOrder(prev => prev.filter((_, i) => i !== indice));
     }, []);
 
     const resetToolbarGroups = useCallback(() => {
@@ -15790,6 +15823,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 onToggleMidiStepInput={midiStepInput.toggle}
                 toolbarGroupOrder={toolbarGroupOrder}
                 hiddenToolbarGroups={hiddenToolbarGroups}
+                onAddToolbarBreak={aggiungiACapoToolbar}
+                onRemoveToolbarBreak={togliACapoToolbar}
                 onToggleToolbarGroup={toggleToolbarGroup}
                 onResetToolbarGroups={resetToolbarGroups}
                 reorderToolbarGroups={reorderToolbarGroups}
