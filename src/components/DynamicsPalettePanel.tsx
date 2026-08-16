@@ -7,6 +7,11 @@ import {
     WholeNoteIcon, HalfNoteIcon, QuarterNoteIcon, EighthNoteIcon,
     SixteenthNoteIcon, ThirtySecondNoteIcon, SixtyFourthNoteIcon,
     QuarterRestIcon,
+    // Anche le alterazioni sono icone disegnate: il doppio diesis come CARATTERE (𝄪) a
+    // quattordici pixel è una macchia indistinguibile dal doppio bemolle, e ingrandire
+    // il carattere non basta perché il disegno del font resta minuto dentro il suo
+    // quadrato. L'icona invece riempie lo spazio che le dai.
+    SharpIcon, FlatIcon, NaturalIcon, DoubleSharpIcon, DoubleFlatIcon,
 } from './icons/NoteValueIcons';
 import type { DynamicLevel } from '../utils/dynamics';
 import type { SignDragPayload } from '../hooks/useSignDrag';
@@ -389,21 +394,20 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             cioè lontane dal punto in cui si guarda mentre si scrive. */}
                         <div className="grid grid-cols-5 gap-1 mt-1">
                             {([
-                                ['flat', '♭', 'Bemolle', 'b'],
-                                ['natural', '♮', 'Bequadro', 'n'],
-                                ['sharp', '♯', 'Diesis', '#'],
-                                ['doubleFlat', '𝄫', 'Doppio bemolle', ''],
-                                ['doubleSharp', '𝄪', 'Doppio diesis', ''],
-                            ] as const).map(([id, glifo, nome, tasto]) => (
+                                ['flat', FlatIcon, 'Bemolle', 'b'],
+                                ['natural', NaturalIcon, 'Bequadro', 'n'],
+                                ['sharp', SharpIcon, 'Diesis', '#'],
+                                ['doubleFlat', DoubleFlatIcon, 'Doppio bemolle', ''],
+                                ['doubleSharp', DoubleSharpIcon, 'Doppio diesis', ''],
+                            ] as const).map(([id, Icona, nome, tasto]) => (
                                 <button
                                     key={id}
                                     onClick={() => onSetAlterazione?.(alterazione === id ? null : id)}
                                     title={tasto ? `${nome}  ·  ${tasto}` : nome}
                                     aria-label={nome}
-                                    className={`${bottone} px-0 ${alterazione === id ? nudoAcceso : nudo}`}
-                                    style={{ fontFamily: 'serif', fontSize: 14 }}
+                                    className={`${bottone} h-8 px-0 flex items-center justify-center ${alterazione === id ? nudoAcceso : nudo}`}
                                 >
-                                    {glifo}
+                                    <Icona className="h-6 w-6" />
                                 </button>
                             ))}
                         </div>
