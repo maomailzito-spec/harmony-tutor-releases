@@ -662,11 +662,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         signs: onToggleDynamicsPanel ? (
             <button
                 onClick={onToggleDynamicsPanel}
-                title="Tavolozza dei segni: dinamiche, tempo, metro, testo, battute (apri/chiudi)"
+                title="Tavolozza: durate, alterazioni, dinamiche, articolazioni, struttura, pattern e trasformazioni (apri/chiudi)"
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${isDynamicsPanelOpen ? 'bg-sky-600 text-white' : 'bg-slate-700 text-gray-100 border border-slate-600 hover:bg-slate-600'}`}
             >
                 <span style={{ fontFamily: 'serif', fontStyle: 'italic', fontWeight: 700, fontSize: 15, lineHeight: 1 }}>pf</span>
-                <span>Segni</span>
+                <span>Tavolozza</span>
             </button>
         ) : null,
         measurePanel: onOpenMeasurePanel ? (

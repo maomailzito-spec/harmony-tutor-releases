@@ -16615,7 +16615,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             <div
                 ref={rigaSpartitoRef}
                 className="flex flex-row gap-1 flex-grow min-h-0"
-                style={{ paddingLeft: tavolozzaAgganciata ? 212 : 0 }}
+                /* Il margine c'è solo se la tavolozza è agganciata E APERTA: dipendeva
+                   dal solo aggancio, quindi chiudendola restava una fascia vuota a
+                   sinistra e lo spartito non si riprendeva la pagina. */
+                style={{ paddingLeft: (tavolozzaAgganciata && isDynamicsPanelOpen) ? 212 : 0 }}
             >
                 <div
                     ref={scoreScrollRef}
