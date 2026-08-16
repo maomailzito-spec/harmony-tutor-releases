@@ -1567,11 +1567,15 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         ),
     };
 
-    // In personalizzazione si vede TUTTO, anche ciò che è spento: altrimenti per
-    // rimettere un gruppo bisognerebbe indovinare dove ricomparirà.
-    const visibleGroupIds = isToolbarCustomizeOpen
-        ? toolbarGroupOrder
-        : toolbarGroupOrder.filter(id => !hiddenToolbarGroups.includes(id));
+    // ANCHE IN PERSONALIZZAZIONE LA BARRA MOSTRA IL RISULTATO.
+    //
+    // Prima i gruppi spenti restavano lì sbiaditi, perché temevo che sparendo non si
+    // sapesse più dove rimetterli. Era una preoccupazione infondata: rimetterli si fa
+    // dal PANNELLO, che li elenca tutti con la loro casella — la barra non serve a
+    // quello. E tenerli visibili aveva due costi reali, segnalati usandola: non si
+    // capiva come sarebbe cambiato lo spazio, e c'erano il doppio degli elementi da
+    // scansare mentre si trascina.
+    const visibleGroupIds = toolbarGroupOrder.filter(id => !hiddenToolbarGroups.includes(id));
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
 
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
@@ -1702,7 +1706,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         {visibleGroupIds.map((id, idx) => (
                             <React.Fragment key={id}>
                                 <div
-                                    className={`relative ${isToolbarCustomizeOpen && hiddenToolbarGroups.includes(id) ? 'opacity-30' : ''}`}
+                                    className={`relative ${draggingToolbarGroupId === id ? 'opacity-40' : ''}`}
                                     onDragOver={(e) => {
                                         if (!isToolbarCustomizeOpen) return;
                                         if (!draggingToolbarGroupId) return;
@@ -1727,7 +1731,12 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                                 } catch (_) {}
                                             }}
                                             onDragEnd={() => setDraggingToolbarGroupId(null)}
-                                            className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none cursor-grab px-1 text-gray-300"
+                                            /* Prima era un ⋮⋮ di pochi pixel, mezzo fuori
+                                               dal gruppo: prenderlo era il passaggio più
+                                               difficile di tutta l'operazione. Ora è una
+                                               barretta alta quanto il gruppo, con un fondo
+                                               che si vede. */
+                                            className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-7 w-4 rounded bg-slate-600/90 hover:bg-sky-600 select-none cursor-grab text-gray-100 text-[10px] leading-none shadow"
                                             title={tT('more_drag_to_reorder')}
                                         >
                                             ⋮⋮
