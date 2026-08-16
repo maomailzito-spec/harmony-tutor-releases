@@ -17,6 +17,7 @@ import type { DynamicLevel } from '../utils/dynamics';
 import type { SignDragPayload } from '../hooks/useSignDrag';
 import type { ArticulationMark } from '../types';
 import { ARTICULATIONS, ARTICULATION_UI } from '../utils/articulations';
+import { useHoverTip } from '../hooks/useHoverTip';
 
 /**
  * Tavolozza dei SEGNI, flottante e trascinabile (stesso modello del modulo percussioni
@@ -218,6 +219,10 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     }, []);
 
     const unaSola = selectionCount === 1;
+    // I `title` nativi qui non compaiono: la toolbar si era già costruita il suo
+    // riquadro, la tavolozza no — e tutti i suoi suggerimenti, tasti compresi, erano
+    // scritti e invisibili.
+    const suggerimento = useHoverTip();
     const agganciata = !!agganciataProp;
     // DENSITÀ. Erano 28 px d'altezza e 8 di margine per lato, per contenere un glifo da
     // 11: sessanta pixel di pulsante per undici di contenuto, cinque volte e mezzo. Il
@@ -267,7 +272,18 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     maxHeight: 'calc(100vh - 96px)', display: 'flex', flexDirection: 'column',
                 }}
             className={`bg-slate-800 border border-slate-700 select-none ${agganciata ? 'rounded-lg' : 'rounded-lg shadow-2xl'}`}
+            ref={suggerimento.radice}
+            onMouseMove={suggerimento.suMovimento}
+            onMouseLeave={suggerimento.nascondi}
         >
+            {suggerimento.tip && (
+                <div
+                    className="fixed z-[9999] pointer-events-none bg-slate-900/95 text-slate-100 text-[11px] px-2 py-1 rounded shadow-lg border border-slate-700"
+                    style={{ left: suggerimento.tip.x, top: suggerimento.tip.y, maxWidth: 320 }}
+                >
+                    {suggerimento.tip.text}
+                </div>
+            )}
             <div
                 onMouseDown={agganciata ? undefined : onTitleMouseDown}
                 className={`flex items-center justify-between px-2 py-1 bg-slate-900 rounded-t-lg shrink-0 ${agganciata ? '' : 'cursor-move'}`}
@@ -405,9 +421,12 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                     onClick={() => onSetAlterazione?.(alterazione === id ? null : id)}
                                     title={tasto ? `${nome}  ·  ${tasto}` : nome}
                                     aria-label={nome}
-                                    className={`${bottone} h-8 px-0 flex items-center justify-center ${alterazione === id ? nudoAcceso : nudo}`}
+                                    /* Misura della toolbar (h-5): un'alterazione è larga
+                                       quanto alta, quindi a 24 px pesa il doppio di una
+                                       nota, che di larghezza ne occupa sei. */
+                                    className={`${bottone} h-7 px-0 flex items-center justify-center ${alterazione === id ? nudoAcceso : nudo}`}
                                 >
-                                    <Icona className="h-6 w-6" />
+                                    <Icona className="h-5 w-5" />
                                 </button>
                             ))}
                         </div>
@@ -638,8 +657,8 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             onMouseDown={(e) => onStartDrag({ kind: 'articulation', data: a, label: ARTICULATION_UI[a].simbolo }, e)}
                             onClick={() => { if (selectionCount > 0) onPlaceArticulation(a); }}
                             title={`${ARTICULATION_UI[a].nome}: trascinalo su una nota, oppure seleziona le note e clicca. Rimettendolo si toglie.`}
-                            className={`${bottone} ${nudo} px-1`}
-                            style={{ fontFamily: 'serif', lineHeight: 1 }}
+                            className={`${bottone} h-7 ${nudo} px-1`}
+                            style={{ fontFamily: 'serif', lineHeight: 1, fontSize: 15 }}
                         >
                             {ARTICULATION_UI[a].simbolo}
                         </button>
