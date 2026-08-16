@@ -81,8 +81,27 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     onToggleAggancio?: () => void;
     /** Apre la casella di testo SULLA PARTITURA, dov'è il cursore di lettura. */
     onScriviTestoAlCursore?: () => void;
+
+    // ── Le tre sezioni arrivate dalla toolbar ──
+    durata?: { type: 'note' | 'rest'; duration: string; isDotted?: boolean };
+    onSetDurata?: (d: string) => void;
+    onTogglePausa?: () => void;
+    onTogglePunto?: () => void;
+    /** Pattern d'accompagnamento: solo con una traccia ACC. */
+    accPattern?: string;
+    onSetAccPattern?: (id: any) => void;
+    accLetRing?: boolean;
+    onToggleAccLetRing?: () => void;
+    haTracceAcc?: boolean;
+    /** Trasformazioni melodiche: agiscono sulla selezione. */
+    transformMode?: 'tonal' | 'real';
+    onToggleTransformMode?: () => void;
+    onMelodicTransform?: (kind: 'transpose' | 'invert' | 'retrograde' | 'retrogradeInvert', opts?: { amount?: number }) => void;
 }> = ({
     agganciata: agganciataProp, ancoraggio, onToggleAggancio, onScriviTestoAlCursore,
+    durata, onSetDurata, onTogglePausa, onTogglePunto,
+    accPattern, onSetAccPattern, accLetRing, onToggleAccLetRing, haTracceAcc,
+    transformMode, onToggleTransformMode, onMelodicTransform,
     selectionCount, hasMarkAtSelection,
     onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
@@ -143,6 +162,9 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     const PAROLE: Record<string, string> = {
         dinamica: 'dinamica dinamiche piano forte pianissimo fortissimo pp p mp mf f ff fff sf sfz rf fp accento accenti forcella forcelle crescendo diminuendo cresc dim livelli',
         articolazione: 'articolazione articolazioni staccato staccatissimo tenuto marcato accento legatura legature portamento slur tempo rallentando accelerando rall accel curva testo scritta parole dolce fine cvii posizione',
+        durate: 'durata durate valore valori nota note pausa pause semibreve minima semiminima croma semicroma biscroma punto puntata terzina',
+        pattern: 'pattern arpeggio arpeggi accompagnamento albertino ondulato spezzato blocco pedale risonanza let ring',
+        trasformazioni: 'trasformazione trasformazioni motivo motivi melodico trasposizione trasponi inversione inverti retrogrado retrogrado-inverso tonale reale',
         struttura: 'struttura armatura tonalità chiave metro tempo misura misure battuta battute barra doppia ritornello ritornelli volta ottava 8va 8vb andamento metronomo bpm velocità corona fermata',
     };
     const q = ricerca.trim().toLowerCase();
@@ -265,9 +287,129 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         </button>
                     )}
                 </div>
-                {q && !['dinamica', 'articolazione', 'struttura'].some(combacia) && (
+                {q && !['dinamica', 'articolazione', 'struttura', 'durate', 'pattern', 'trasformazioni'].some(combacia) && (
                     <div className="px-1 pb-1 text-[10px] text-amber-400">
                         Nessun segno con «{ricerca}».
+                    </div>
+                )}
+
+                {/* ── Durate ── PRIMA di tutto: è quello che si tocca a ogni nota. */}
+                <button
+                    onClick={() => alterna('durate')}
+                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                >
+                    <span>Durate</span>
+                    <span className="text-[10px] text-gray-400">{apertoOra('durate') ? '▾' : '▸'}</span>
+                </button>
+                {apertoOra('durate') && (
+                    <div className="px-0.5 pb-0.5">
+                        <div className="grid grid-cols-6 gap-1 mt-1">
+                            {([
+                                ['whole', '𝅝'], ['half', '𝅗𝅥'], ['quarter', '♩'],
+                                ['eighth', '♪'], ['sixteenth', '𝅘𝅥𝅯'], ['thirty-second', '𝅘𝅥𝅰'],
+                            ] as const).map(([d, glifo]) => (
+                                <button
+                                    key={d}
+                                    onClick={() => onSetDurata?.(d)}
+                                    title={d}
+                                    className={`${bottone} ${durata?.duration === d ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                    style={{ fontFamily: 'serif', fontSize: 14 }}
+                                >
+                                    {glifo}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 mt-1">
+                            <button
+                                onClick={onTogglePausa}
+                                title="Alterna nota e pausa (R)"
+                                className={`${bottone} ${durata?.type === 'rest' ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                            >
+                                {durata?.type === 'rest' ? 'pausa' : 'nota'}
+                            </button>
+                            <button
+                                onClick={onTogglePunto}
+                                title="Punto di valore (.)"
+                                className={`${bottone} ${durata?.isDotted ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                            >
+                                ♩.
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Pattern ── contestuale: senza tracce ACC non ha nulla su cui agire. */}
+                {haTracceAcc && (
+                    <>
+                        <button
+                            onClick={() => alterna('pattern')}
+                            className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                        >
+                            <span>Pattern</span>
+                            <span className="text-[10px] text-gray-400">{apertoOra('pattern') ? '▾' : '▸'}</span>
+                        </button>
+                        {apertoOra('pattern') && (
+                            <div className="px-0.5 pb-0.5">
+                                <div className="grid grid-cols-3 gap-1 mt-1">
+                                    {([
+                                        ['block', 'Bl', 'Accordi a blocco'],
+                                        ['arpeggio_up', 'Ar▲', 'Arpeggio ascendente'],
+                                        ['arpeggio_down', 'Ar▼', 'Arpeggio discendente'],
+                                        ['broken', 'Brk', 'Spezzato (boom-chick)'],
+                                        ['albertino', 'Alb', 'Basso albertino (0-2-1-2)'],
+                                        ['ondulato', 'Ond', 'Ondulato (su e giù)'],
+                                    ] as const).map(([id, lab, tit]) => (
+                                        <button
+                                            key={id}
+                                            onClick={() => onSetAccPattern?.(id)}
+                                            title={tit}
+                                            className={`${bottone} font-mono ${accPattern === id ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                        >
+                                            {lab}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={onToggleAccLetRing}
+                                    title="Pedale: le note del pattern restano a risuonare"
+                                    className={`${bottone} w-full mt-1 font-mono ${accLetRing ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                >
+                                    Ped
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* ── Trasformazioni ── agiscono sulla SELEZIONE, non sul cursore. */}
+                <button
+                    onClick={() => alterna('trasformazioni')}
+                    className="w-full flex items-center justify-between rounded-md px-2 py-0.5 mt-0.5 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
+                >
+                    <span>Trasformazioni</span>
+                    <span className="text-[10px] text-gray-400">{apertoOra('trasformazioni') ? '▾' : '▸'}</span>
+                </button>
+                {apertoOra('trasformazioni') && (
+                    <div className="px-0.5 pb-0.5">
+                        {/* Il modo sta SOPRA e da solo: è un modificatore che vale per
+                            tutte e cinque le operazioni sotto, non una sesta operazione.
+                            In toolbar l'ambiguità passava, in colonna no. */}
+                        <button
+                            onClick={onToggleTransformMode}
+                            title={transformMode === 'tonal'
+                                ? 'Trasformazioni TONALI (in chiave, per gradi). Clicca per passare a reali.'
+                                : 'Trasformazioni REALI (cromatiche). Inversione e retro-inverso escono dalla tonalità.'}
+                            className={`${bottone} w-full mt-1 font-mono ${transformMode === 'tonal' ? 'bg-cyan-600 text-white border-cyan-500' : 'bg-amber-600 text-white border-amber-500'}`}
+                        >
+                            {transformMode === 'tonal' ? 'Tonali' : 'Reali'}
+                        </button>
+                        <div className="grid grid-cols-3 gap-1 mt-1">
+                            <button onClick={() => onMelodicTransform?.('transpose', { amount: 1 })} disabled={!selectionCount} title="Trasponi su" className={`${bottone} ${attivo} font-mono`}>T▲</button>
+                            <button onClick={() => onMelodicTransform?.('transpose', { amount: -1 })} disabled={!selectionCount} title="Trasponi giù" className={`${bottone} ${attivo} font-mono`}>T▼</button>
+                            <button onClick={() => onMelodicTransform?.('invert')} disabled={!selectionCount} title="Inversione" className={`${bottone} ${attivo} font-mono`}>Inv</button>
+                            <button onClick={() => onMelodicTransform?.('retrograde')} disabled={!selectionCount} title="Retrogrado" className={`${bottone} ${attivo} font-mono`}>Retr</button>
+                            <button onClick={() => onMelodicTransform?.('retrogradeInvert')} disabled={!selectionCount} title="Retrogrado-inverso" className={`${bottone} ${attivo} font-mono`}>R+I</button>
+                        </div>
                     </div>
                 )}
 

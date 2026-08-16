@@ -15869,6 +15869,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         ancoraggio={ancoraggioTavolozza}
                         onToggleAggancio={alternaAggancioTavolozza}
                         onScriviTestoAlCursore={scriviTestoAlCursore}
+                        durata={selectedInsertion}
+                        onSetDurata={(d) => setSelectedInsertion(prev => ({ ...prev, duration: d as any }))}
+                        onTogglePausa={() => setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' }))}
+                        onTogglePunto={() => setSelectedInsertion(prev => ({ ...prev, isDotted: !prev.isDotted }))}
+                        accPattern={accPattern}
+                        onSetAccPattern={handleSelectAccPattern}
+                        accLetRing={accSelectionHeld}
+                        onToggleAccLetRing={handleToggleAccHold}
+                        haTracceAcc={hasVisibleAccompaniment}
+                        transformMode={transformMode}
+                        onToggleTransformMode={() => setTransformMode(m => m === 'tonal' ? 'real' : 'tonal')}
+                        onMelodicTransform={applyMelodicTransform}
                         selectionCount={battute.length}
                         hasMarkAtSelection={segnoQui}
                         onPlaceLevel={(level) => { if (primo != null) metti({ kind: 'level', absBeat: primo, level }); }}
