@@ -1606,6 +1606,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *  modello LORO: non sono contesti d'analisi e non dichiarano nessuna tonalità —
      *  vedi TextAnnotation. */
     const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+    /** La scritta che si sta correggendo, col punto dello schermo dove aprire il campo.
+     *  Finora un testo si poteva spostare e togliere, ma non CAMBIARE: per correggere un
+     *  refuso bisognava cancellarlo, tornare alla tavolozza, riscriverlo e riposarlo al
+     *  punto giusto. Quattro gesti per una lettera. */
+    const [testoInModifica, setTestoInModifica] = useState<{ absBeat: number; label: string; x: number; y: number } | null>(null);
     const textAnnotationsRef = useRef(textAnnotations);
     textAnnotationsRef.current = textAnnotations;
 
@@ -15873,6 +15878,43 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 </div>
             )}
 
+            {/* CORREZIONE DI UNA SCRITTA — campo che si apre dove si è fatto doppio clic.
+                Sta in coordinate di FINESTRA (`position: fixed`, dal punto del clic) e non
+                dentro l'SVG del sistema: così non serve convertire fra le coordinate del
+                disegno e quelle dello schermo, che è il punto in cui questi ritocchi
+                sbagliano di qualche pixel e finiscono lontani dalla scritta.
+                Invio conferma, Esc lascia com'era, e un testo svuotato TOGLIE la scritta —
+                cancellare tutto è il modo naturale di dire «non serve più». */}
+            {testoInModifica && (
+                <input
+                    autoFocus
+                    defaultValue={testoInModifica.label}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onBlur={(e) => {
+                        const nuovo = e.currentTarget.value.trim();
+                        const punto = testoInModifica.absBeat;
+                        setTextAnnotations(prev => (nuovo
+                            ? (prev || []).map(t => (Math.abs(t.absBeat - punto) <= 1e-6 ? { ...t, label: nuovo } : t))
+                            : (prev || []).filter(t => Math.abs(t.absBeat - punto) > 1e-6)));
+                        setTestoInModifica(null);
+                    }}
+                    onKeyDown={(e) => {
+                        e.stopPropagation();   // le lettere non devono scrivere note
+                        if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                        else if (e.key === 'Escape') { e.preventDefault(); setTestoInModifica(null); }
+                    }}
+                    style={{
+                        position: 'fixed',
+                        left: Math.max(8, Math.min(window.innerWidth - 208, testoInModifica.x - 8)),
+                        top: Math.max(8, testoInModifica.y - 26),
+                        width: 200,
+                        zIndex: 10050,
+                    }}
+                    className="px-2 py-1 text-sm italic rounded-md border border-blue-500 bg-white text-gray-900 shadow-lg outline-none"
+                    aria-label="Correggi la scritta"
+                />
+            )}
+
             <ExportMusicXMLModal
                 open={exportXmlModalOpen}
                 onClose={() => setExportXmlModalOpen(false)}
@@ -17601,13 +17643,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 spostaDa: m.absBeat,
                                                                             }, ev);
                                                                         }}
+                                                                        onDoubleClick={(ev) => {
+                                                                            ev.preventDefault();
+                                                                            ev.stopPropagation();
+                                                                            setTestoInModifica({ absBeat: m.absBeat, label: m.label, x: ev.clientX, y: ev.clientY });
+                                                                        }}
                                                                         onContextMenu={(ev) => {
                                                                             ev.preventDefault();
                                                                             ev.stopPropagation();
                                                                             setTextAnnotations(prev => (prev || []).filter(t => Math.abs(t.absBeat - m.absBeat) > 1e-6));
                                                                         }}
                                                                     >
-                                                                        <title>Trascina per spostarla · tasto destro per toglierla</title>
+                                                                        <title>Doppio clic per correggerla · trascina per spostarla · tasto destro per toglierla</title>
                                                                         {m.label}
                                                                     </text>
                                                                 ))}
