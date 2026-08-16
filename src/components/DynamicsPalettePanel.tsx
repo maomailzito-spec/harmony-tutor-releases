@@ -96,12 +96,49 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
     const [tonalita, setTonalita] = useState<string>(currentKeyRoot || 'C');
     const [tonalitaMinore, setTonalitaMinore] = useState<boolean>(!!currentKeyIsMinor);
     /**
-     * Quale gruppo è aperto. UNO alla volta: la tavolozza resta corta e non serve
-     * scorrere. È un accordion e non un menù a tendina di proposito — una tendina si
-     * chiude al primo movimento del mouse, e qui il gesto principale è TRASCINARE il
-     * segno sulla partitura: si chiuderebbe sempre a metà strada.
+     * QUALI GRUPPI SONO APERTI — più d'uno, e la scelta si ricorda.
+     *
+     * Resta un accordion e non un menù a tendina, per la ragione di sempre: il gesto
+     * principale è TRASCINARE il segno sulla partitura, e una tendina si chiuderebbe al
+     * primo movimento del mouse. Ma l'esclusività — uno alla volta — serviva a tenere
+     * corta la tavolozza, e quel vincolo non c'è: la tavolozza GALLEGGIA, non è un
+     * popover appeso alla toolbar, quindi l'altezza non è imposta da nessuno. Chi usa
+     * sempre dinamica e articolazione se li tiene aperti e non riapre più niente.
      */
-    const [gruppoAperto, setGruppoAperto] = useState<'dinamica' | 'articolazione' | 'struttura' | null>('dinamica');
+    const [aperti, setAperti] = useState<Set<string>>(() => {
+        try {
+            const salvati = JSON.parse(localStorage.getItem('harmony-tutor.tavolozzaAperti.v1') || 'null');
+            if (Array.isArray(salvati)) return new Set(salvati.filter((x: any) => typeof x === 'string'));
+        } catch { /* niente di salvato: si parte dalle dinamiche */ }
+        return new Set(['dinamica']);
+    });
+    const alterna = useCallback((id: string) => {
+        setAperti(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            try { localStorage.setItem('harmony-tutor.tavolozzaAperti.v1', JSON.stringify([...next])); } catch { /* ignora */ }
+            return next;
+        });
+    }, []);
+
+    /**
+     * RICERCA. Non riorganizza niente: apre il gruppo che contiene quello che cerchi.
+     *
+     * È il pezzo che rende inoffensiva una tassonomia imperfetta, e nessuna tassonomia
+     * è perfetta — «rall.» può stare sotto espressione, agogica o tempo a seconda di chi
+     * la cerca. Scrivendo `rall` il gruppo giusto si apre da sé, e non serve indovinare
+     * la categoria mentale di chi usa il programma.
+     */
+    const [ricerca, setRicerca] = useState('');
+    const PAROLE: Record<string, string> = {
+        dinamica: 'dinamica dinamiche piano forte pianissimo fortissimo pp p mp mf f ff fff sf sfz rf fp accento accenti forcella forcelle crescendo diminuendo cresc dim livelli',
+        articolazione: 'articolazione articolazioni staccato staccatissimo tenuto marcato accento legatura legature portamento slur tempo rallentando accelerando rall accel curva testo scritta parole dolce fine cvii posizione',
+        struttura: 'struttura armatura tonalità chiave metro tempo misura misure battuta battute barra doppia ritornello ritornelli volta ottava 8va 8vb andamento metronomo bpm velocità corona fermata',
+    };
+    const q = ricerca.trim().toLowerCase();
+    const combacia = useCallback((id: string) => !q || (PAROLE[id] || '').includes(q), [q]);
+    /** Cercando, i gruppi che combaciano si aprono da soli; senza ricerca vale la scelta. */
+    const apertoOra = useCallback((id: string) => (q ? combacia(id) : aperti.has(id)), [q, combacia, aperti]);
     const dragRef = useRef<{ dx: number; dy: number } | null>(null);
 
     const onTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -151,15 +188,48 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
             </div>
 
             <div className="p-2">
+                {/* RICERCA — apre il gruppo che contiene quello che cerchi. Non filtra i
+                    singoli pulsanti: quelli si trascinano, e un elenco che si accorcia
+                    sotto il puntatore mentre stai per afferrare un segno è peggio del
+                    problema che risolve. */}
+                <div className="flex items-center gap-1.5 rounded-md bg-slate-900/70 border border-slate-600 px-2 py-1 mb-1">
+                    <span className="text-[11px] text-slate-500">⌕</span>
+                    <input
+                        value={ricerca}
+                        onChange={(e) => setRicerca(e.target.value)}
+                        onKeyDown={(e) => {
+                            e.stopPropagation();   // le lettere non devono scrivere note
+                            if (e.key === 'Escape') { e.preventDefault(); setRicerca(''); }
+                        }}
+                        placeholder="cerca un segno…"
+                        aria-label="Cerca un segno nella tavolozza"
+                        className="flex-1 min-w-0 bg-transparent text-[11px] text-slate-100 placeholder:text-slate-500 outline-none"
+                    />
+                    {ricerca && (
+                        <button
+                            onClick={() => setRicerca('')}
+                            title="Annulla la ricerca"
+                            className="text-[11px] text-slate-500 hover:text-slate-200"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
+                {q && !['dinamica', 'articolazione', 'struttura'].some(combacia) && (
+                    <div className="px-1 pb-1 text-[10px] text-amber-400">
+                        Nessun segno con «{ricerca}».
+                    </div>
+                )}
+
                 {/* ── Dinamiche ── */}
                 <button
-                    onClick={() => setGruppoAperto(g => (g === 'dinamica' ? null : 'dinamica'))}
+                    onClick={() => alterna('dinamica')}
                     className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
                     <span>Dinamiche</span>
-                    <span className="text-[10px] text-gray-400">{gruppoAperto === 'dinamica' ? '▾' : '▸'}</span>
+                    <span className="text-[10px] text-gray-400">{apertoOra('dinamica') ? '▾' : '▸'}</span>
                 </button>
-                {gruppoAperto === 'dinamica' && (
+                {apertoOra('dinamica') && (
                     <div className="px-0.5 pb-1">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Livelli</div>
                 <div className="grid grid-cols-4 gap-1">
@@ -226,13 +296,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 )}
                 {/* ── Articolazioni ed espressione ── */}
                 <button
-                    onClick={() => setGruppoAperto(g => (g === 'articolazione' ? null : 'articolazione'))}
+                    onClick={() => alterna('articolazione')}
                     className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
                     <span>Articolazioni ed espressione</span>
-                    <span className="text-[10px] text-gray-400">{gruppoAperto === 'articolazione' ? '▾' : '▸'}</span>
+                    <span className="text-[10px] text-gray-400">{apertoOra('articolazione') ? '▾' : '▸'}</span>
                 </button>
-                {gruppoAperto === 'articolazione' && (
+                {apertoOra('articolazione') && (
                     <div className="px-0.5 pb-1">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Articolazioni</div>
                 <div className="grid grid-cols-5 gap-1">
@@ -306,13 +376,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps> = ({
                 )}
                 {/* ── Struttura ── */}
                 <button
-                    onClick={() => setGruppoAperto(g => (g === 'struttura' ? null : 'struttura'))}
+                    onClick={() => alterna('struttura')}
                     className="w-full flex items-center justify-between rounded-md px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold text-gray-200 bg-slate-700/60 hover:bg-slate-700 transition-colors"
                 >
                     <span>Struttura</span>
-                    <span className="text-[10px] text-gray-400">{gruppoAperto === 'struttura' ? '▾' : '▸'}</span>
+                    <span className="text-[10px] text-gray-400">{apertoOra('struttura') ? '▾' : '▸'}</span>
                 </button>
-                {gruppoAperto === 'struttura' && (
+                {apertoOra('struttura') && (
                     <div className="px-0.5 pb-1">
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Armatura</div>
                 <div className="flex items-center gap-1">
