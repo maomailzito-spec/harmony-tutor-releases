@@ -697,7 +697,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                       {tp('staff_line_weight_title', 'Corpo delle righe del pentagramma')}
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
-                      {tp('staff_line_weight_hint', 'Chi legge a schermo e chi stampa su carta hanno bisogni opposti: una riga sottile in antialiasing perde densità e il pentagramma sembra grigio, mentre sulla carta la stessa riga è nitida.')}
+                      {tp('staff_line_weight_hint', 'Le righe erano grigie (#999999), non nere: è il valore predefinito di VexFlow. «Sottile» le lascia com\'erano; gli altri due scuriscono il tono più che ingrossare il tratto — il contrasto si legge meglio dei decimi di pixel, e una riga troppo grossa schiaccia le teste delle note.')}
                     </div>
                     <div className="mt-2 flex items-center gap-1">
                       {([

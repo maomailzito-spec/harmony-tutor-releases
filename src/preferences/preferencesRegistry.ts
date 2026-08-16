@@ -122,8 +122,8 @@ const parseNumber = (raw: string | null, fallback: number): number => {
 
 export type StaffSystemModePref = 'grandstaff' | 'treble_only' | 'satb_ancient';
 /** Corpo delle righe del pentagramma. Non è una scelta estetica soltanto: chi legge su
- *  un portatile e chi stampa su carta hanno esigenze opposte, e VexFlow disegna per
- *  difetto una riga da 1 px che in antialiasing perde densità. */
+ *  un portatile e chi stampa su carta hanno esigenze opposte, e la riga predefinita di
+ *  VexFlow è GRIGIA (#999999), non nera. */
 export type StaffLineWeightPref = 'sottile' | 'normale' | 'marcato';
 export type EngravingModePref = 'legacy' | 'enhanced';
 
@@ -157,7 +157,7 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     defaultValue: 'normale' as StaffLineWeightPref,
     kind: 'enum',
     options: [
-      { value: 'sottile', label: 'Sottile (come prima)', i18nKey: 'opt_line_thin' },
+      { value: 'sottile', label: 'Sottile (il grigio di prima)', i18nKey: 'opt_line_thin' },
       { value: 'normale', label: 'Normale', i18nKey: 'opt_line_normal' },
       { value: 'marcato', label: 'Marcato', i18nKey: 'opt_line_bold' },
     ],

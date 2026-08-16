@@ -966,8 +966,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const stavesForEndBarSuppression: Stave[] = [treble, bass, satbSoprano, satbAlto, satbTenor, satbBass,
       ...accBlocks.flatMap(b => [b.treble, b.bass])].filter(Boolean) as Stave[];
 
-    // CORPO DELLE RIGHE. VexFlow disegna per difetto una riga nera da 1 px: in
-    // antialiasing, a zoom ridotto, perde densità e il pentagramma sembra grigio.
+    // CORPO DELLE RIGHE. Per difetto VexFlow NON disegna righe nere: mette
+    // `stroke="#999999"` sul gruppo `.vf-stave`, cioè un GRIGIO MEDIO — verificato
+    // leggendo l'SVG che produce, non a memoria. È per questo che il pentagramma
+    // sembrava scolorito: non era l'antialiasing, era proprio grigio.
     // Si tocca qui, su TUTTI i righi in una volta — coro, chiavi antiche e tracce —
     // perché righe di peso diverso sulla stessa pagina si notano subito.
     //
@@ -975,10 +977,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // nera pesa troppo e schiaccia le teste delle note, che sono l'informazione. Più
     // corpo, tono appena più tenue: il pentagramma si legge senza gridare.
     {
+      // La scala parte dal grigio di VexFlow e scende di tono a spessore quasi uguale:
+      // il guadagno di leggibilità viene dal CONTRASTO più che dai decimi di pixel, e
+      // ingrossare troppo schiaccia le teste delle note, che sono l'informazione.
       const PESI: Record<string, { lineWidth: number; strokeStyle: string }> = {
-        sottile: { lineWidth: 1, strokeStyle: '#000000' },
-        normale: { lineWidth: 1.3, strokeStyle: '#1f2937' },
-        marcato: { lineWidth: 1.7, strokeStyle: '#374151' },
+        sottile: { lineWidth: 1, strokeStyle: '#999999' },   // il difetto di VexFlow
+        normale: { lineWidth: 1.1, strokeStyle: '#6b7280' },
+        marcato: { lineWidth: 1.3, strokeStyle: '#4b5563' },
       };
       const peso = PESI[staffLineWeight] ?? PESI.normale;
       for (const st of stavesForEndBarSuppression) {
