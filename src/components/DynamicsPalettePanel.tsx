@@ -310,7 +310,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 className={`flex items-center justify-between px-2 py-1 bg-slate-900 rounded-t-lg shrink-0 ${agganciata ? '' : 'cursor-move'}`}
             >
                 <span className="text-[11px] font-bold text-gray-300 tracking-wide truncate">
-                    {agganciata ? '𝆑 Segni' : '⠿ 𝆑 Segni'}
+                    {agganciata ? '𝆑 Tavolozza' : '⠿ 𝆑 Tavolozza'}
                 </span>
                 <div className="flex items-center gap-1 shrink-0">
                     {onToggleAggancio && (

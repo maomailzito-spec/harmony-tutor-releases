@@ -13477,6 +13477,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      */
     const mettiCambioArmatura = useCallback((measureIndex: number, root: string, isMinor: boolean) => {
         const mis = Math.max(0, Math.round(measureIndex));
+
+        // SULLA PRIMA MISURA NON È UN CAMBIO: è la tonalità del brano.
+        //
+        // Trascinandoci un'armatura si otteneva uno stato doppio — la tonalità
+        // d'impianto diceva una cosa, un «cambio» in battuta 1 ne diceva un'altra — e
+        // il selettore in barra restava indietro rispetto a ciò che si vedeva scritto.
+        // Un cambio ha senso da un punto IN POI; all'inizio quel punto è il brano.
+        if (mis === 0) {
+            setKeySignatureRoot(root);
+            setIsMinorMode(isMinor);
+            setKeySignatureChanges(prev => (prev || []).filter(c => c.measureIndex !== 0));
+            return;
+        }
         setKeySignatureChanges(prev => normalizeKeyChanges([
             ...(prev || []).filter(c => c.measureIndex !== mis),
             { measureIndex: mis, root, isMinor },
