@@ -1256,8 +1256,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 >
                     <span>{isAnalysisEnabled ? t('toolbar_analysis_on') : t('toolbar_analysis_off')}</span>
                 </button>
-                {isAnalysisEnabled && (
-                    <div className="flex items-center gap-1 ml-2 text-xs">
+                {/* LA BARRA NON SI MUOVE. Spegnendo l'analisi questi comandi sparivano, e
+                    tutto quello che stava a destra scivolava: chi cerca un pulsante lo
+                    trova dove l'ha lasciato solo se la barra sta ferma. Ora restano al
+                    loro posto, spenti — si vede che ci sono e che ora non servono, invece
+                    di far spostare tutto il resto.
+                    `pointer-events-none` e non `disabled` sui singoli: sono una dozzina di
+                    comandi, e uno solo dimenticato resterebbe cliccabile a analisi spenta. */}
+                <div
+                    className={`flex items-center gap-1 ml-2 text-xs transition-opacity ${isAnalysisEnabled ? '' : 'opacity-40 pointer-events-none'}`}
+                    aria-hidden={!isAnalysisEnabled}
+                >
                         <div className="flex items-center p-0.5 bg-gray-900/50 rounded-md">
                             <button
                                 onClick={() => setAnalysisSubject('satb')}
@@ -1282,10 +1291,12 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 {accTracksForAnalysis.map(tk => <option key={tk.id} value={tk.id}>{tk.name}</option>)}
                             </select>
                         )}
-                    </div>
-                )}
-                {isAnalysisEnabled && (
-                    <div className="flex items-center gap-1 p-0.5 bg-gray-900/50 rounded-md text-xs ml-2">
+                </div>
+                {/* Stesso principio per gli interruttori dell'analisi mostrata. */}
+                <div
+                    className={`flex items-center gap-1 p-0.5 bg-gray-900/50 rounded-md text-xs ml-2 transition-opacity ${isAnalysisEnabled ? '' : 'opacity-40 pointer-events-none'}`}
+                    aria-hidden={!isAnalysisEnabled}
+                >
                         <button
                             aria-label="Mostra i settimi di dominante"
                             onClick={() => setShowRomanAnalysis(prev => !prev)}
@@ -1312,8 +1323,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         >
                             G7
                         </button>
-                    </div>
-                )}
+                </div>
             </div>
         ),
         // MIDI: uscita esterna, tastiera in ingresso e formato di esportazione. Stava dentro
