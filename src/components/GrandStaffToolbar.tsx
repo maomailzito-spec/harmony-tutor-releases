@@ -1587,6 +1587,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     // scansare mentre si trascina.
     const visibleGroupIds = toolbarGroupOrder.filter(id => !hiddenToolbarGroups.includes(id));
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
+    /** Dove finirebbe mollando adesso. Serve a MOSTRARE la destinazione invece di
+     *  applicarla: riordinare a ogni movimento del mouse faceva saltare i gruppi da una
+     *  riga all'altra, perché ogni riordino sposta gli elementi sotto il puntatore e
+     *  quello scatena il riordino successivo — un'oscillazione, non un trascinamento. */
+    const [destinazioneToolbar, setDestinazioneToolbar] = useState<ToolbarGroupId | null>(null);
 
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
     const isToolbarVisible = forceToolbarVisible || !isToolbarHidden;
@@ -1716,18 +1721,31 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         {visibleGroupIds.map((id, idx) => (
                             <React.Fragment key={id}>
                                 <div
-                                    className={`relative ${draggingToolbarGroupId === id ? 'opacity-40' : ''}`}
+                                    className={`relative ${draggingToolbarGroupId === id ? 'opacity-40' : ''} ${
+                                        destinazioneToolbar === id && draggingToolbarGroupId && draggingToolbarGroupId !== id
+                                            ? 'before:content-[""] before:absolute before:-left-1 before:top-0 before:bottom-0 before:w-0.5 before:bg-sky-400 before:rounded'
+                                            : ''
+                                    }`}
+                                    /* Si SEGNA la destinazione, non si riordina: il riordino
+                                       avviene una volta sola, quando si molla. Riordinando a
+                                       ogni movimento, ogni passo spostava gli elementi sotto
+                                       il puntatore e il puntatore si trovava sopra un altro
+                                       gruppo, che faceva riordinare di nuovo. */
                                     onDragOver={(e) => {
                                         if (!isToolbarCustomizeOpen) return;
                                         if (!draggingToolbarGroupId) return;
                                         e.preventDefault();
                                         if (draggingToolbarGroupId === id) return;
-                                        reorderToolbarGroups(draggingToolbarGroupId, id);
+                                        if (destinazioneToolbar !== id) setDestinazioneToolbar(id);
                                     }}
                                     onDrop={(e) => {
                                         if (!isToolbarCustomizeOpen) return;
                                         e.preventDefault();
+                                        if (draggingToolbarGroupId && draggingToolbarGroupId !== id) {
+                                            reorderToolbarGroups(draggingToolbarGroupId, id);
+                                        }
                                         setDraggingToolbarGroupId(null);
+                                        setDestinazioneToolbar(null);
                                     }}
                                 >
                                     {isToolbarCustomizeOpen && (
@@ -1740,7 +1758,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                                     e.dataTransfer.setData('text/plain', id);
                                                 } catch (_) {}
                                             }}
-                                            onDragEnd={() => setDraggingToolbarGroupId(null)}
+                                            onDragEnd={() => { setDraggingToolbarGroupId(null); setDestinazioneToolbar(null); }}
                                             /* Prima era un ⋮⋮ di pochi pixel, mezzo fuori
                                                dal gruppo: prenderlo era il passaggio più
                                                difficile di tutta l'operazione. Ora è una
