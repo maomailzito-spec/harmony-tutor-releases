@@ -328,9 +328,9 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                     onClick={() => onSetDurata?.(d)}
                                     title={nome}
                                     aria-label={nome}
-                                    className={`${bottone} px-0 flex items-center justify-center ${durata?.duration === d ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                    className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.duration === d ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
                                 >
-                                    <Icona className="h-4 w-4" />
+                                    <Icona className="h-6 w-6" />
                                 </button>
                             ))}
                         </div>
@@ -342,14 +342,14 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 onClick={onTogglePausa}
                                 title={durata?.type === 'rest' ? 'Stai inserendo PAUSE — clicca per tornare alle note (R)' : 'Inserisci pause (R)'}
                                 aria-label="Alterna nota e pausa"
-                                className={`${bottone} px-0 flex items-center justify-center ${durata?.type === 'rest' ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                className={`${bottone} h-8 px-0 flex items-center justify-center ${durata?.type === 'rest' ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
                             >
-                                <QuarterRestIcon className="h-4 w-4" />
+                                <QuarterRestIcon className="h-6 w-6" />
                             </button>
                             <button
                                 onClick={onTogglePunto}
                                 title="Punto di valore (.)"
-                                className={`${bottone} ${durata?.isDotted ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
+                                className={`${bottone} h-8 ${durata?.isDotted ? 'bg-cyan-600 text-white border-cyan-500' : attivo}`}
                             >
                                 ♩.
                             </button>
