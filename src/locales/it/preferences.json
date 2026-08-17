@@ -12,6 +12,8 @@
   "pref_editor_select_only_current_voice": "Seleziona solo voce corrente (rettangolo)",
 
   "pref_editor_auto_save_interval": "Salvataggio automatico",
+  "pref_editor_snap_magnet_strength": "Forza della calamita sugli attacchi",
+  "pref_editor_snap_magnet_strength_desc": "Quanto un attacco già scritto attira la nota che stai inserendo, in frazione dello slot. 0,5 = mezzo slot (impilare accordi è facilissimo, staccarsi per la nota dopo è più difficile). 0 = calamita spenta, vale solo la griglia.",
   "opt_autosave_off": "Off",
   "opt_autosave_30s": "30 secondi",
   "opt_autosave_1m": "1 minuto",

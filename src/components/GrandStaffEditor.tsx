@@ -2986,6 +2986,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
+    // Forza della calamita sugli attacchi (vedi `agganciaAdAttaccoVicino`). Sta anche in un
+    // ref perché la calamita gira nel gesto del mouse, dove non si rilegge lo stato.
+    const [snapMagnetStrength] = usePreference<number>('editor.snapMagnetStrength');
+    const snapMagnetStrengthRef = useRef<number>(0.5);
+    useEffect(() => {
+        const v = Number(snapMagnetStrength);
+        snapMagnetStrengthRef.current = Number.isFinite(v) ? Math.min(0.5, Math.max(0, v)) : 0.5;
+    }, [snapMagnetStrength]);
     const [harmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
     const [useStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
     const [statisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
@@ -13303,10 +13311,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * sopra le altre e comparso più avanti, con due sigle invece di una.
      *
      * Qui, se in quella misura c'è già un attacco abbastanza vicino, si usa QUELLO. Vince
-     * sempre il più vicino, e solo entro mezzo slot: più in là si sta chiaramente
-     * mirando altrove, e sarebbe fastidioso vedersi calamitare la nota contro la
-     * volontà. Serve sia al fantasma sia al clic, così ciò che si vede è ciò che si
+     * sempre il più vicino, e solo entro la distanza stabilita: più in là si sta
+     * chiaramente mirando altrove, e sarebbe fastidioso vedersi calamitare la nota contro
+     * la volontà. Serve sia al fantasma sia al clic, così ciò che si vede è ciò che si
      * ottiene.
+     *
+     * LA FORZA È UNA PREFERENZA (`editor.snapMagnetStrength`, frazione dello slot, mezzo
+     * slot di partenza). Impilare e staccarsi sono lo stesso gesto visto dai due lati: la
+     * forza che rende facile mettere una nota SOPRA quella scritta rende difficile
+     * metterne una SUBITO DOPO. Dove stia il punto giusto dipende da come si scrive, e
+     * quindi lo decide chi scrive — a 0 la calamita è spenta e vale solo la griglia.
      */
     const agganciaAdAttaccoVicino = useCallback((
         measureIndex: number,
@@ -13314,7 +13328,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         snapGridTicks: number,
     ): number => {
         try {
-            const tolleranza = Math.max(1, snapGridTicks * 0.5);
+            const forza = snapMagnetStrengthRef.current;
+            if (!(forza > 0)) return startTickCandidato;
+            const tolleranza = Math.max(1, snapGridTicks * forza);
             let migliore: number | null = null;
             let distanzaMigliore = Infinity;
             const considera = (n: any) => {
