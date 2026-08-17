@@ -6802,7 +6802,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // resta della stessa larghezza complessiva.
         const SPACING_EXPONENT = 0.6;
         const QUARTER_PX = TICKS_PER_QUARTER * DEFAULT_PX_PER_TICK; // spazio di una semiminima
-        const MIN_ONSET_PX = 14; // una testa di nota più un minimo respiro
+        // Respiro minimo di un attacco: la testa di nota più lo spazio per MIRARE col
+        // puntatore. Con la sola testa (≈11 px) restano tre o quattro pixel liberi fra una
+        // nota e l'altra, e per prendere lo slot successivo bisogna puntare quasi sopra la
+        // nota appena scritta — impossibile da fare a occhio.
+        const MIN_ONSET_PX = 20;
+
+        // ── CHI CHIEDE SPAZIO: TUTTE LE RIGHE, NON SOLO IL CORO ────────────────────
+        // La larghezza di una misura la decide la riga più FITTA, e le tracce sono righe
+        // come le altre. Contando solo il coro, una misura di sedici semicrome su una
+        // traccia restava larga quanto una di crome, e gli attacchi finivano a pochi pixel
+        // l'uno dall'altro. Si guarda l'unione degli attacchi (per tick): due righe che
+        // suonano insieme non chiedono spazio due volte, due righe sfasate sì.
+        //
+        // Si raccoglie in UN SOLO passaggio: la domanda si chiede una misura per volta e
+        // riscorrere tutte le note ogni volta costa quanto misure × note.
+        const attacchiPerMisura = new Map<number, Map<number, number>>(); // misura → tick → durata più breve
+        const coperturaPerMisura = new Map<number, number>();             // misura → tick occupati
+        {
+            const conta = (n: any) => {
+                const m = n?.measureIndex ?? -1;
+                if (m < 0) return;
+                const t = Number(n.startTick);
+                if (!Number.isFinite(t)) return;
+                const d = Math.max(1, Number(n.durationTicks) || 1);
+                let perTick = attacchiPerMisura.get(m);
+                if (!perTick) { perTick = new Map<number, number>(); attacchiPerMisura.set(m, perTick); }
+                const prev = perTick.get(t);
+                if (prev == null || d < prev) perTick.set(t, d);
+                const fine = (t - (measureStartAbsBeat[m] ?? 0) * TICKS_PER_QUARTER) + d;
+                if (fine > (coperturaPerMisura.get(m) ?? 0)) coperturaPerMisura.set(m, fine);
+            };
+            for (const n of notesToLayout) conta(n);
+            for (const t of (accompanimentTracks || [])) {
+                if (!t || !t.visible) continue; // una riga nascosta non occupa spazio
+                for (const n of (t.notes || [])) conta(n);
+            }
+        }
+
         const measureDemandCache = new Map<number, number>();
         const measureDemand = (_mIdx: number): number => {
             const cached = measureDemandCache.get(_mIdx);
@@ -6812,15 +6849,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             let demand = byTime;
             if (contentAwareSpacing) {
                 // Attacchi distinti della misura, con la durata più breve che vi comincia.
-                const shortestByOnset = new Map<number, number>();
-                for (const n of notesToLayout) {
-                    if ((n.measureIndex ?? -1) !== _mIdx) continue;
-                    const t = Number((n as any).startTick);
-                    if (!Number.isFinite(t)) continue;
-                    const d = Math.max(1, Number(n.durationTicks) || 1);
-                    const prev = shortestByOnset.get(t);
-                    if (prev == null || d < prev) shortestByOnset.set(t, d);
-                }
+                const shortestByOnset = attacchiPerMisura.get(_mIdx) ?? new Map<number, number>();
                 if (shortestByOnset.size > 0) {
                     let sum = 0;
                     for (const d of shortestByOnset.values()) {
@@ -6841,15 +6870,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // accordo; una di semicrome si allarga perché la somma supera il
                     // metro; una di minime si restringe, perché la somma è minore e non
                     // c'è vuoto da compensare.
-                    let coperto = 0;
-                    for (const n of notesToLayout) {
-                        if ((n.measureIndex ?? -1) !== _mIdx) continue;
-                        const t = Number((n as any).startTick);
-                        if (!Number.isFinite(t)) continue;
-                        const d = Math.max(0, Number(n.durationTicks) || 0);
-                        const fine = (t - (measureStartAbsBeat[_mIdx] ?? 0) * TICKS_PER_QUARTER) + d;
-                        if (fine > coperto) coperto = fine;
-                    }
+                    const coperto = coperturaPerMisura.get(_mIdx) ?? 0;
                     const vuoto = Math.max(0, measureTicks - Math.min(measureTicks, coperto));
                     sum += vuoto * DEFAULT_PX_PER_TICK;
                     // Pavimento: una misura rada non scende sotto il 60% della sua larghezza
@@ -6857,6 +6878,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     demand = Math.max(sum, byTime * 0.6);
                 }
             }
+            // ── IL RESPIRO MINIMO NON È UN'OPZIONE ─────────────────────────────────
+            // «Spaziatura secondo il contenuto» è una scelta d'incisione: decide se la
+            // larghezza segue le figure o solo la durata. Ma quanto spazio ci vuole perché
+            // due attacchi siano DISTINGUIBILI — e mirabili col puntatore — non è una
+            // questione di gusto: spenta l'opzione, sedici semicrome restavano larghe
+            // quanto otto crome e finivano a una quindicina di pixel l'una dall'altra.
+            //
+            // Il pavimento vale quindi in entrambi i modi. Non tocca le misure rade (otto
+            // crome chiedono 160 px contro i 192 del metro: nulla cambia); morde solo dove
+            // gli attacchi sono davvero tanti, ed è lì che deve mordere. Con la spaziatura
+            // per tempo la misura non diventa più larga delle sue sorelle — sarebbe contro
+            // la scelta fatta — ma la riga si spezza prima, e tutte respirano.
+            //
+            // E il conto si fa sulla misura FINITA, non su quella a metà. Contando i soli
+            // attacchi già scritti, la misura cresce a ogni nota: si comincia a riempire la
+            // terza battuta, quella resta stretta nella riga proprio mentre servirebbe
+            // spazio per scrivere, e solo verso la fine sfonda e salta a capo. Si estende
+            // quindi la densità già stabilita al tempo ancora vuoto: chi scrive sedicesimi
+            // ha la larghezza definitiva dal PRIMO sedicesimo, e la battuta non si muove
+            // più. Una battuta piena non ha vuoto: per lei la previsione è il conto vero.
+            const attacchiScritti = attacchiPerMisura.get(_mIdx)?.size ?? 0;
+            if (attacchiScritti > 0) {
+                const coperto = Math.min(measureTicks, coperturaPerMisura.get(_mIdx) ?? measureTicks);
+                const attacchiPrevisti = coperto > 0 ? attacchiScritti * (measureTicks / coperto) : attacchiScritti;
+                demand = Math.max(demand, attacchiPrevisti * MIN_ONSET_PX);
+            }
+
             // ── LARGHEZZA A GRADINI ────────────────────────────────────────────────
             // La richiesta di spazio è una somma CONTINUA: ogni nota inserita la cambia
             // di una ventina di pixel, e siccome le misure di una riga si dividono lo
@@ -6953,20 +7001,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Allow increasing pxPerTick beyond the default when notes are very dense
             // so small subdivisions (biscrome etc.) remain legible.
             const minPxPerTick = (MIN_PX_PER_QUARTER / TICKS_PER_QUARTER);
-            const MIN_PIXEL_SPACING = 8; // px between adjacent onsets
+            // px fra due attacchi vicini. Resta basso di proposito: questo canale alza il
+            // px-per-tick del sistema, e un sistema più largo della pagina SFORA a destra
+            // invece di andare a capo. Il respiro vero si ottiene dalla domanda di spazio
+            // (vedi `measureDemand`), che spezza la riga.
+            const MIN_PIXEL_SPACING = 8;
 
-            // Compute the smallest tick delta between adjacent onsets inside the system.
-            // Include ACC notes so eighth-note triplets (and other short subdivisions) in
-            // accompaniment tracks force the system to reserve enough horizontal space.
-            // Without this, when SATB is sparse the system uses a low pxPerTick and the
-            // ACC notes/playhead end up visually overlapping.
+            // Distanza minima fra due attacchi vicini del sistema. Vale per TUTTE le righe
+            // (`attacchiPerMisura` comprende le tracce): quando il coro è rado ma una traccia
+            // ha terzine di crome, è la traccia a dire quanto spazio serve — altrimenti le
+            // sue note e la linea di lettura finiscono una sopra l'altra.
             let minDeltaTicks = Infinity;
             sys.measureIndices.forEach(m => {
-                const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
-                const ticks = measureNotes.map(n => (typeof (n as any).startTick === 'number')
-                    ? (n as any).startTick
-                    : Math.round((((measureStartAbsBeat[n.measureIndex ?? 0] ?? 0) + ((n.beat ?? 1) - 1))) * TICKS_PER_QUARTER));
-                ticks.sort((a, b) => a - b);
+                const ticks = [...(attacchiPerMisura.get(m)?.keys() ?? [])].sort((a, b) => a - b);
                 for (let i = 1; i < ticks.length; i++) {
                     const d = ticks[i] - ticks[i-1];
                     if (d > 0 && d < minDeltaTicks) minDeltaTicks = d;
