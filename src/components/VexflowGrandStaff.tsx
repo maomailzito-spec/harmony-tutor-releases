@@ -3490,7 +3490,30 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             groupVoice = `d${dir}`;
           }
 
-          const key = `${m}|${groupVoice}|${bucket(b)}`;
+          // OGNI TERZINA HA LA SUA TRAVATURA.
+          //
+          // Il raggruppamento guarda il MOVIMENTO: tutte le note che vi cadono dentro
+          // finiscono sotto un'unica traversa. Ma due terzine di sedicesimi stanno in un
+          // movimento solo, e travate insieme diventano sei note in fila — si leggono come
+          // una sestina, che è un'altra cosa. Il gruppo di tuplet spezza quindi la
+          // travatura: tre più tre, ciascuno col suo numero.
+          //
+          // L'indice del gruppo si ricava dall'attacco: le note di una terzina stanno tutte
+          // nella stessa fetta larga quanto il gruppo (tre volte la durata di una nota).
+          let chiaveTupla = '';
+          {
+            const sn: any = c.staffNote;
+            if (sn?.isTriplet || sn?.isDuplet) {
+              const durata = Math.max(0, Number(sn.durationTicks) || 0);
+              const attacco = Number(sn.startTick);
+              if (durata > 0 && Number.isFinite(attacco)) {
+                const ampiezzaGruppo = durata * (sn.isTriplet ? 3 : 2);
+                chiaveTupla = `|t${Math.floor(attacco / ampiezzaGruppo)}`;
+              }
+            }
+          }
+
+          const key = `${m}|${groupVoice}|${bucket(b)}${chiaveTupla}`;
           if (currentKey === null || key === currentKey) {
             currentKey = key;
             current.push(c);
