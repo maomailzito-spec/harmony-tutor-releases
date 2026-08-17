@@ -10841,7 +10841,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const snappedToNotehead = refinePlayheadXToRenderedNoteheads(basePos.systemIndex, absTicks, basePos.x);
         const hasNoteheadSnap = Number.isFinite(snappedToNotehead) && Math.abs(snappedToNotehead - basePos.x) > 0.5;
 
-        const offset = hasNoteheadSnap ? 0 : estimateNoteheadOffsetPxForSystem(basePos.systemIndex);
+        // LO SCOSTAMENTO NON PUÒ SUPERARE LO SLOT.
+        //
+        // Serve a puntare dove comparirà la TESTA della nota, ed è stimato in pixel dalle
+        // note già disegnate. Su valori lunghi è piccolo rispetto alla distanza fra due
+        // attacchi; sui SEDICESIMI quella distanza si accorcia di quattro volte e lo
+        // scostamento arriva a coprirla tutta — la linea finiva visivamente sulla nota
+        // appena scritta invece che sul posto della prossima, ed è il difetto segnalato
+        // inserendo sedicesimi su una traccia.
+        //
+        // Si limita quindi a un terzo dello slot corrente: indica ancora la testa, ma non
+        // può scavalcare il punto che deve indicare.
+        const offsetGrezzo = hasNoteheadSnap ? 0 : estimateNoteheadOffsetPxForSystem(basePos.systemIndex);
+        let offset = offsetGrezzo;
+        if (offsetGrezzo > 0) {
+            // `computeDurationTicks` vuole una NOTA, non i suoi pezzi: si costruisce
+            // quella che si sta per inserire.
+            const durTicks = computeDurationTicks({
+                duration: selectedInsertion.duration,
+                isDotted: !!selectedInsertion.isDotted,
+                isTriplet,
+                isDuplet,
+            } as any) || TICKS_PER_QUARTER;
+            const dopo = getPlayheadPosForAbsBeat((absBeat as number) + (durTicks / TICKS_PER_QUARTER));
+            const slot = (dopo && dopo.systemIndex === basePos.systemIndex) ? Math.abs(dopo.x - basePos.x) : Infinity;
+            if (Number.isFinite(slot)) offset = Math.min(offsetGrezzo, slot / 3);
+        }
         const targetX = (hasNoteheadSnap ? snappedToNotehead : (basePos.x + offset));
 
         const curPH = playheadPositionRef.current;
