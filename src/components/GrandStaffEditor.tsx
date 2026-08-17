@@ -177,9 +177,21 @@ const PLAYHEAD_Y_TOP = VF_TREBLE_Y + PLAYHEAD_Y_OFFSET_PX - 3;
 const PLAYHEAD_Y_BOTTOM = (VF_BASS_Y + (4 * VF_LINE_SPACING)) + PLAYHEAD_Y_OFFSET_PX;
 const PLAYHEAD_CONTEXT_HIT_PX = 10;
 
-const START_X = 50; 
+const START_X = 50;
 const STAFF_PADDING_X = 10;
 const MEASURE_PADDING_X = 20;
+
+/** Dalla x che diamo a una nota al CENTRO della testa che si vede sul rigo.
+ *
+ *  Non è una stima: è misurato nel disegno con `__htMisuraTeste()` (VexflowGrandStaff),
+ *  e vale lo stesso per ogni figura, ogni rigo e ogni battuta — 12 px di STAVEPADDING di
+ *  VexFlow fino al bordo sinistro del glifo, più 6 di mezza testa. Sono unità del disegno,
+ *  quindi lo zoom non le tocca.
+ *
+ *  Serve a chi deve INDICARE una nota che non c'è ancora — la linea di lettura e il caret
+ *  d'incolla. Non serve al fantasma né alle note: quelle le disegna VexFlow, che aggiunge
+ *  questo scostamento da sé. Confondere i due casi è costato tre correzioni sbagliate. */
+const PX_GRIGLIA_CENTRO_TESTA = 18;
 
 // Empirical calibration: on some setups the pointer->SVG Y reported to the editor
 // is offset relative to the rendered VexFlow stave by ~1 staff (≈40px).
@@ -10801,81 +10813,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setPlayheadPosition({ x, systemIndex });
     }, [layoutData, timeSignature]);
 
-    const refinePlayheadXToRenderedNoteheads = useCallback((systemIndex: number, absTicks: number, fallbackX: number): number => {
-        try {
-            const ld = layoutDataRef.current;
-            if (!ld?.systemsParams?.[systemIndex] || !Array.isArray(ld.positionedNotes)) return fallbackX;
-            const sys = ld.systemsParams[systemIndex];
-            const measureSet = new Set<number>(sys.measureIndices || []);
+    // QUI C'ERA L'APPARATO DI STIME DELLA LINEA DI LETTURA, e non c'è più.
+    //
+    // `accPositionedNotesForSystem`, `refinePlayheadXToRenderedNoteheads`,
+    // `estimateNoteheadOffsetPxForSystem`, `campioniTeste`, `xDalleTesteVicine`: servivano
+    // tutte a indovinare, dalle note già disegnate, quanto la testa stia a destra della
+    // nostra griglia. Ogni pezzo curava un caso e ne rompeva un altro, e la linea finiva
+    // per «andare un po' dove vuole».
+    //
+    // Quella distanza è COSTANTE e ora è misurata: `PX_GRIGLIA_CENTRO_TESTA` (18 px, vedi
+    // la sua definizione in cima al file e `__htMisuraTeste`). Se un giorno servisse di
+    // nuovo misurare invece di sapere, il posto giusto per farlo è quello strumento — non
+    // una stima diversa in ogni funzione che ne ha bisogno.
 
-            // Collect note IDs that start exactly at this tick within the current system.
-            const ids: string[] = [];
-            for (const n of (ld.positionedNotes as any[]) || []) {
-                if (!n || !n.id) continue;
-                if (!measureSet.has(n.measureIndex ?? -1)) continue;
-                const st = (n as any).startTick;
-                if (typeof st === 'number' && st === absTicks) ids.push(String(n.id));
-            }
-            if (!ids.length) return fallbackX;
 
-            const hitPoints = systemNoteHitPointsRef.current?.[systemIndex] || [];
-            if (!hitPoints.length) return fallbackX;
-            const byId = new Map(hitPoints.filter((p: any) => p && !p.isGhost && p.id).map((p: any) => [String(p.id), p]));
+    // TOLTE (17/08/2026): `scostamentoTesteVicino` e `xGrigliaDalMouse`, che riportavano la
+    // x del puntatore sulla griglia dei tick prima di calcolare il tempo. L'idea — chi
+    // scrive mira alla TESTA, non alla griglia — resta giusta, ma applicata al clic e al
+    // fantasma insieme sommava correzioni invece di annullarle, e il risultato in mano era
+    // peggiore del difetto di partenza. Se si riprova, si riprova UNA cosa per volta,
+    // partendo dai numeri di `__htMisuraTeste` (nostra xPosition → bordo testa +12 →
+    // centro testa +18) e non da deduzioni.
 
-            const xs: number[] = [];
-            for (const id of ids) {
-                const p: any = byId.get(id);
-                if (p && Number.isFinite(p.x)) xs.push(Number(p.x));
-            }
-            if (!xs.length) return fallbackX;
 
-            // Average (stable for chords with multiple voices).
-            const x = xs.reduce((s, v) => s + v, 0) / xs.length;
-            return Number.isFinite(x) ? x : fallbackX;
-        } catch {
-            return fallbackX;
-        }
-    }, []);
-
-    // NOTE: playhead refinement effect is declared later (needs getPlayheadPosForAbsBeat).
-
-    const estimateNoteheadOffsetPxForSystem = useCallback((systemIndex: number): number => {
-        try {
-            const ld = layoutDataRef.current;
-            if (!ld?.systemsParams?.[systemIndex] || !Array.isArray(ld.positionedNotes)) return 0;
-            const sys = ld.systemsParams[systemIndex];
-            const measureSet = new Set<number>(sys.measureIndices || []);
-
-            const hitPoints = systemNoteHitPointsRef.current?.[systemIndex] || [];
-            if (!hitPoints.length) return 0;
-            const byId = new Map(hitPoints.filter((p: any) => p && !p.isGhost && p.id).map((p: any) => [String(p.id), p]));
-
-            const offsets: number[] = [];
-            for (const n of (ld.positionedNotes as any[]) || []) {
-                if (!n || !n.id) continue;
-                if (!measureSet.has(n.measureIndex ?? -1)) continue;
-                const p: any = byId.get(String(n.id));
-                if (!p || !Number.isFinite(p.x) || !Number.isFinite(n.xPosition)) continue;
-                const dx = Number(p.x) - Number(n.xPosition);
-                if (!Number.isFinite(dx)) continue;
-                // Keep only plausible glyph offsets (avoid outliers / beams).
-                if (dx < -40 || dx > 40) continue;
-                offsets.push(dx);
-                if (offsets.length >= 40) break;
-            }
-            if (!offsets.length) return 0;
-            offsets.sort((a, b) => a - b);
-            const mid = offsets[Math.floor(offsets.length / 2)];
-            return Number.isFinite(mid) ? mid : 0;
-        } catch {
-            return 0;
-        }
-    }, []);
-
-    // After re-layout (or cursor moves), refine the playhead X:
-    // - if a note exists at that tick, snap exactly to the rendered notehead
-    // - otherwise, apply the system's typical notehead offset so the playhead indicates
-    //   where an inserted notehead will appear (prevents the ~12px jump after insertion)
+    // LA LINEA DI LETTURA STA DOVE STARÀ LA TESTA, E LO SA PER MISURA.
+    //
+    // Qui c'era un apparato di STIME: si cercava la nota già disegnata a quel tick, si
+    // campionavano le teste vicine, si calcolava uno scostamento mediano per sistema e lo
+    // si limitava a un terzo dello slot perché non scavalcasse il punto da indicare. Ogni
+    // pezzo curava il caso che aveva davanti e rompeva quello accanto, e il risultato era
+    // una linea che «va un po' dove vuole».
+    //
+    // Non serve stimare niente: la distanza fra la x che diamo a una nota e il centro
+    // della testa che si vede è COSTANTE, ed è misurata (`__htMisuraTeste`, VexflowGrandStaff):
+    // +12 px di STAVEPADDING fino al bordo del glifo, +6 di mezza testa. Diciotto pixel,
+    // sempre gli stessi, per ogni figura e ogni rigo — sono unità del disegno, quindi lo
+    // zoom non li tocca. La linea si posa dunque sulla x di griglia dell'attacco più
+    // questi diciotto, e cade esattamente sul centro della testa: sopra una nota che c'è
+    // già, e nel punto in cui comparirà quella che si sta per scrivere.
     useEffect(() => {
         if (isPlaying) return;
         if (!layoutData) return;
@@ -10892,37 +10867,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const basePos = getPlayheadPosForAbsBeat(absBeat as number);
         if (!basePos) return;
 
-        const absTicks = Math.round((absBeat as number) * TICKS_PER_QUARTER);
-        const snappedToNotehead = refinePlayheadXToRenderedNoteheads(basePos.systemIndex, absTicks, basePos.x);
-        const hasNoteheadSnap = Number.isFinite(snappedToNotehead) && Math.abs(snappedToNotehead - basePos.x) > 0.5;
-
-        // LO SCOSTAMENTO NON PUÒ SUPERARE LO SLOT.
-        //
-        // Serve a puntare dove comparirà la TESTA della nota, ed è stimato in pixel dalle
-        // note già disegnate. Su valori lunghi è piccolo rispetto alla distanza fra due
-        // attacchi; sui SEDICESIMI quella distanza si accorcia di quattro volte e lo
-        // scostamento arriva a coprirla tutta — la linea finiva visivamente sulla nota
-        // appena scritta invece che sul posto della prossima, ed è il difetto segnalato
-        // inserendo sedicesimi su una traccia.
-        //
-        // Si limita quindi a un terzo dello slot corrente: indica ancora la testa, ma non
-        // può scavalcare il punto che deve indicare.
-        const offsetGrezzo = hasNoteheadSnap ? 0 : estimateNoteheadOffsetPxForSystem(basePos.systemIndex);
-        let offset = offsetGrezzo;
-        if (offsetGrezzo > 0) {
-            // `computeDurationTicks` vuole una NOTA, non i suoi pezzi: si costruisce
-            // quella che si sta per inserire.
-            const durTicks = computeDurationTicks({
-                duration: selectedInsertion.duration,
-                isDotted: !!selectedInsertion.isDotted,
-                isTriplet,
-                isDuplet,
-            } as any) || TICKS_PER_QUARTER;
-            const dopo = getPlayheadPosForAbsBeat((absBeat as number) + (durTicks / TICKS_PER_QUARTER));
-            const slot = (dopo && dopo.systemIndex === basePos.systemIndex) ? Math.abs(dopo.x - basePos.x) : Infinity;
-            if (Number.isFinite(slot)) offset = Math.min(offsetGrezzo, slot / 3);
-        }
-        const targetX = (hasNoteheadSnap ? snappedToNotehead : (basePos.x + offset));
+        const targetX = basePos.x + PX_GRIGLIA_CENTRO_TESTA;
 
         const curPH = playheadPositionRef.current;
         if (!curPH || curPH.systemIndex !== basePos.systemIndex || Math.abs(curPH.x - targetX) > 0.5) {
@@ -10938,7 +10883,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!curPC || curPC.systemIndex !== basePos.systemIndex || Math.abs(curPC.x - targetX) > 0.5) {
             setPasteCaret({ x: targetX, systemIndex: basePos.systemIndex, measureIndex, beat });
         }
-    }, [estimateNoteheadOffsetPxForSystem, getPlayheadPosForAbsBeat, isPlaying, layoutData, refinePlayheadXToRenderedNoteheads, timeSignature]);
+    }, [getPlayheadPosForAbsBeat, isPlaying, layoutData, timeSignature]);
 
     const getCurrentAbsBeatForPlayhead = useCallback(() => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -11351,7 +11296,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
-        const hit = getSystemMeasureAtX(systemIndex, x);
+        // Come il clic d'inserimento: dai pixel al tempo si toglie lo scostamento.
+        const xMirata = x - PX_GRIGLIA_CENTRO_TESTA;
+        const hit = getSystemMeasureAtX(systemIndex, xMirata);
         if (!hit) return;
 
         const beatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure?.[hit.measureIndex]
@@ -11359,7 +11306,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
 
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
-        const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+        const relX = xMirata - (hit.measureStartX + MEASURE_PADDING_X);
 
         // Limita il click all'interno della misura visibile
         const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
@@ -11823,7 +11770,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const isPlainClick = !(e?.metaKey || e?.ctrlKey);
 
 
-        const hit = getSystemMeasureAtX(systemIndex, x);
+        // DAI PIXEL AL TEMPO: si toglie prima lo scostamento fino alla testa.
+        //
+        // La linea di lettura indica il CENTRO della testa (x di griglia + 18, vedi
+        // `PX_GRIGLIA_CENTRO_TESTA`); qui si fa il cammino inverso, altrimenti cliccare
+        // dove la linea indica cade 18 px più avanti — circa 250 tick, che con le
+        // semiminime non si nota e dentro una terzina di crome basta a far vincere il
+        // posto sbagliato. La costante è una sola e vale nei due sensi.
+        const xMirata = x - PX_GRIGLIA_CENTRO_TESTA;
+
+        const hit = getSystemMeasureAtX(systemIndex, xMirata);
         if (!hit) return;
 
         // --- SNAP 100% tick-based (no beat-float snap) ---
@@ -11841,7 +11797,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Pixel -> ticks mapping inside the visible measure content.
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
-        const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+        const relX = xMirata - (hit.measureStartX + MEASURE_PADDING_X);
         const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
 
         const rawPxPerTick = hit.pxPerTick;
@@ -13360,7 +13316,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *  (cerca "Snap grid" lì): se cambia una, va cambiata anche l'altra. */
     const ghostInsertTickRange = useCallback((systemIndex: number, x: number): { measureIndex: number; startTick: number; endTick: number; measureStartTick: number } | null => {
         try {
-            const hit = getSystemMeasureAtX(systemIndex, x);
+            // Stesso cammino inverso del clic: il fantasma deve leggere il tempo dal
+            // punto in cui si vedrà la testa, non dalla x grezza.
+            const xMirata = x - PX_GRIGLIA_CENTRO_TESTA;
+            const hit = getSystemMeasureAtX(systemIndex, xMirata);
             if (!hit) return null;
             const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex]
                 ?? (hit.measureIndex * (timeSignature.numerator * (4 / timeSignature.denominator)));
@@ -13370,7 +13329,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const measureStartTick = Math.round(measureStartAbsBeat * TICKS_PER_QUARTER);
 
             const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
-            const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+            const relX = xMirata - (hit.measureStartX + MEASURE_PADDING_X);
             const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
             const rawPxPerTick = hit.pxPerTick;
             const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
@@ -14081,6 +14040,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (!layoutData) return;
 
+        // IL FANTASMA SEGUE IL PUNTATORE, e non lo slot in cui la nota cadrà.
+        //
+        // La x da passare a VexFlow è però quella della GRIGLIA: lo scostamento fino alla
+        // testa lo aggiunge lui (`PX_GRIGLIA_CENTRO_TESTA`). Passando la x grezza del mouse
+        // il fantasma si disegnava mezzo glifo più a destra del puntatore; togliendo la
+        // costante, la testa del fantasma cade esattamente sotto la punta — che è anche il
+        // punto da cui il clic legge il tempo.
+        const xTestaFantasma = x - PX_GRIGLIA_CENTRO_TESTA;
+        //
+        // PROVATO E TOLTO (17/08/2026). Agganciarlo allo slot sembra più onesto — mostri
+        // dove la nota andrà davvero — ma con l'aggancio a SINISTRA il fantasma si posa
+        // all'inizio dello slot, e quell'inizio può stare fino a UNO SLOT INTERO a sinistra
+        // del puntatore: 24 px sui sedicesimi, 48 sulle crome. Il fantasma sembra staccato
+        // dal mouse e l'insieme diventa illeggibile. Le due cose stanno insieme solo se
+        // anche lo snap passa al più vicino, e quello è un cambio di gesto da valutare a
+        // parte: finché lo snap è a sinistra, il fantasma resta sotto il puntatore.
         // ── ACC area: show ACC ghost note (suppresses SATB ghost) ──
         // MODE-AWARE (vedi handler di inserimento): area ACC più in basso con le chiavi antiche.
         const ACC_TREBLE_TOP_Y_GHOST = (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100; // 310 grandstaff / 480 antico
@@ -14121,13 +14096,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         isTriplet,
                         isDuplet,
                         isDotted,
-                        xPosition: x,
+                        xPosition: xTestaFantasma,
                         clef: accGhostClef,
                         voice: accGhostVoice as any,
                         systemIndex,
                         _trackIdx: accGhostTrackIdx,
                     };
-                    if (prev && prev.isRest && prev.xPosition === x && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                    if (prev && prev.isRest && prev.xPosition === xTestaFantasma && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
                     return next as any;
                 });
                 return;
@@ -14169,13 +14144,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isTriplet,
                     isDuplet,
                     isDotted,
-                    xPosition: x,
+                    xPosition: xTestaFantasma,
                     clef: accGhostClef,
                     voice: accGhostVoice as any,
                     systemIndex,
                     _trackIdx: accGhostTrackIdx,
                 };
-                if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                if (prev && !prev.isRest && prev.xPosition === xTestaFantasma && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
                 return next as any;
             });
             return;
@@ -14260,12 +14235,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isTriplet,
                     isDuplet,
                     isDotted,
-                    xPosition: x,
+                    xPosition: xTestaFantasma,
                     clef: targetClef,
                     voice: ghostVoice,
                     systemIndex,
                 };
-                if (prev && prev.isRest && prev.xPosition === x && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+                if (prev && prev.isRest && prev.xPosition === xTestaFantasma && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
                 return next;
             });
             return;
@@ -14311,12 +14286,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isTriplet,
                 isDuplet,
                 isDotted,
-                xPosition: x,
+                xPosition: xTestaFantasma,
                 clef: targetClef,
                 voice: ghostVoice,
                 systemIndex,
             };
-            if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+            if (prev && !prev.isRest && prev.xPosition === xTestaFantasma && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
             return next;
         });
     }, [clearGhost, applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor, hasVisibleAccompaniment, effectiveAccStaffMode, ghostInsertTickRange]);

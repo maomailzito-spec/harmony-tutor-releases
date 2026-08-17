@@ -1458,6 +1458,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const satbBassNotes = staffMode === 'satb_ancient' ? allNotes.filter(n => n.clef === 'bass') : [];
 
       const hitPoints: Array<{ id: string; x: number; y: number; isGhost: boolean }> = [];
+
+      // ── MISURA DELLE TESTE (diagnostica, spenta) ─────────────────────────────
+      // Fra la x che diamo a una nota (`xPosition`) e la testa che si VEDE c'è di mezzo
+      // VexFlow, e quella differenza finora l'abbiamo dedotta invece che misurata —
+      // sbagliando più volte. Qui si registrano i due numeri che conosciamo; il terzo,
+      // la posizione reale del glifo sullo schermo, lo legge `__htMisuraTeste()` dal DOM.
+      //   localStorage._HT_MISURA_TESTE = '1' → ricarica → __htMisuraTeste() in console
+      const MISURA_TESTE = (() => {
+        try { return window.localStorage?.getItem('_HT_MISURA_TESTE') === '1'; } catch { return false; }
+      })();
+      const registroTeste: Map<string, { xPosition: number; xHit: number }> | null =
+        MISURA_TESTE ? new Map() : null;
       // Nota disegnata per ogni id, raccolta mentre si disegnano TUTTI i righi (coro e
       // tracce): le legature di portamento possono unire note di righi diversi, quindi
       // vanno disegnate dopo, quando si sa dove sono finite tutte.
@@ -3583,6 +3595,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
             // Prefer VexFlow's rendered X when available; this stays correct even when
             // noteheads are shifted due to multi-voice spacing / modifiers.
+            //
+            // NOTA GEOMETRICA, misurata e non dedotta (vedi `__htMisuraTeste`): dalla nostra
+            // `xPosition` questo punto sta a +12 (lo STAVEPADDING di VexFlow) ed è il bordo
+            // SINISTRO del glifo; il centro della testa che si vede sta a +18. Sono i «sei
+            // pixel» che si notano scrivendo. Chi consuma questi punti lo tenga presente:
+            // spostarli al centro è stato provato e ha peggiorato l'insieme, perché altre
+            // correzioni erano tarate su questo valore.
             const vfAbsX = (vfNote as any).getAbsoluteX?.();
             const xHit = (typeof vfAbsX === 'number' && Number.isFinite(vfAbsX))
               ? vfAbsX
@@ -3610,6 +3629,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 ? (ys.reduce((a, b) => a + b, 0) / ys.length)
                 : stave.getYForLine(2);
               hitPoints.push({ id: n.id, x: xHit, y: yHit, isGhost: n.id === '__ghost__' });
+            }
+            if (registroTeste) {
+              const nostra = Number(n.xPosition);
+              if (Number.isFinite(nostra)) registroTeste.set(String(n.id), { xPosition: nostra, xHit });
             }
           } catch {
             // ignore
@@ -4316,6 +4339,43 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
       noteHitPointsRef.current = hitPoints;
       onNoteHitPoints?.(hitPoints);
+
+      // Misura delle teste: i dati di questo sistema si aggiungono al registro globale, e
+      // `__htMisuraTeste()` li affianca alla posizione REALE del glifo letta dal DOM.
+      if (registroTeste) {
+        try {
+          const w = window as any;
+          const globale: Map<string, { xPosition: number; xHit: number }> = (w.__htTeste ||= new Map());
+          for (const [id, v] of registroTeste) globale.set(id, v);
+          if (typeof w.__htMisuraTeste !== 'function') {
+            w.__htMisuraTeste = () => {
+              const righe: Array<Record<string, unknown>> = [];
+              document.querySelectorAll('[data-note-id]').forEach((g) => {
+                const id = (g as SVGElement).getAttribute('data-note-id') || '';
+                const dati = (w.__htTeste as Map<string, { xPosition: number; xHit: number }>).get(id);
+                if (!dati) return;
+                // Il glifo della TESTA: il primo path del gruppo che non sia gambo o legatura.
+                const path = (g as SVGGElement).querySelector('path');
+                if (!path) return;
+                const bb = (path as SVGGraphicsElement).getBBox();
+                const centroTesta = bb.x + bb.width / 2;
+                righe.push({
+                  id: id.slice(0, 12),
+                  nostra_xPosition: Math.round(dati.xPosition * 10) / 10,
+                  hitPoint_x: Math.round(dati.xHit * 10) / 10,
+                  testa_disegnata: Math.round(centroTesta * 10) / 10,
+                  'hit-nostra': Math.round((dati.xHit - dati.xPosition) * 10) / 10,
+                  'testa-nostra': Math.round((centroTesta - dati.xPosition) * 10) / 10,
+                  'testa-hit': Math.round((centroTesta - dati.xHit) * 10) / 10,
+                });
+              });
+              // eslint-disable-next-line no-console
+              console.table(righe.slice(0, 40));
+              return righe.length;
+            };
+          }
+        } catch { /* diagnostica: non deve mai disturbare il disegno */ }
+      }
 
       // No per-note DOM wiring here: we handle clicks via the global SVG handler below
     } else {
