@@ -19417,6 +19417,27 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
 
             {contextMenu && (
                 <ModulationContextMenu
+                    /* Le letture alternative dell'etichetta che sta su questo movimento:
+                       si cercano fra quelle calcolate, per posizione. */
+                    letture={(() => {
+                        try {
+                            const tutte = (_harmonyLabelsRef.current || []).flat() as any[];
+                            const qui = tutte.find(l => Math.abs(Number(l?.absBeat) - contextMenu.absBeat) < 1e-6);
+                            return (qui?.alternatives ?? []) as any[];
+                        } catch { return []; }
+                    })()}
+                    onApplyAlternative={(alt, absBeat) => {
+                        const isHome = alt.impliedTonic === currentTonic && !!alt.isMinor === !!isMinorMode;
+                        if (isHome) handleApplyContext(absBeat, currentTonic, isMinorMode);
+                        else handleApplyTonicizationHint(absBeat, alt.impliedTonic, alt.isMinor);
+                    }}
+                    onSpiega={() => {
+                        try {
+                            const tutte = (_harmonyLabelsRef.current || []).flat() as any[];
+                            const qui = tutte.find(l => Math.abs(Number(l?.absBeat) - contextMenu.absBeat) < 1e-6);
+                            if (qui) openExplain(qui);
+                        } catch { /* niente etichetta, niente spiegazione */ }
+                    }}
                     menuData={contextMenu}
                     onClose={() => setContextMenu(null)}
                     onApply={handleApplyContext}

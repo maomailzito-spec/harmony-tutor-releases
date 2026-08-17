@@ -38,6 +38,12 @@ const ModulationContextMenu: React.FC<{
     /** Non più usata dal pannello: le scritte si posano dalla tavolozza. Resta nella
      *  firma perché la chiama ancora l'applicazione del contesto con etichetta. */
     onApplyTextMarker?: (absBeat: number, label?: string) => void;
+    /** LETTURE ALTERNATIVE — l'analisi propone un'altra lettura possibile, e applicarla
+     *  è un override in scrittura: sta qui, non nella finestra che spiega. */
+    letture?: Array<{ roman: string; figures?: string[]; symbol?: string; impliedTonic: string; impliedIsMinor?: boolean }>;
+    onApplyAlternative?: (alt: { impliedTonic: string; isMinor: boolean }, absBeat: number) => void;
+    /** Apre la spiegazione di questa etichetta (perché il motore ha letto così). */
+    onSpiega?: () => void;
     onRemove: (absBeat: number) => void;
     existingHarmonyOverride: HarmonyLabelOverride | null;
     onApplyHarmonyOverride: (absBeat: number, roman: string, figures: string[], symbol: string) => void;
@@ -59,7 +65,7 @@ const ModulationContextMenu: React.FC<{
     onMoveToTreble?: () => void;
     onMoveToBass?: () => void;
     onResetStaff?: () => void;
-}> = ({ menuData, onClose, onApply, onRemove, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff, existingTonicizationHint, onRemoveTonicizationHint, inferredTonicAtBeat, hasSuppressedInference, onSuppressInference, onUnsuppressInference }) => {
+}> = ({ menuData, onClose, onApply, onRemove, letture, onApplyAlternative, onSpiega, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff, existingTonicizationHint, onRemoveTonicizationHint, inferredTonicAtBeat, hasSuppressedInference, onSuppressInference, onUnsuppressInference }) => {
     const { t } = useTranslation('ui');
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
@@ -284,6 +290,51 @@ const ModulationContextMenu: React.FC<{
                     </button>
                 </div>
             )}
+            {/* LETTURE ALTERNATIVE, in cima. Quando il motore ha trovato un'altra lettura
+                plausibile è quasi sempre il motivo per cui si è aperto questo pannello:
+                applicarla è un override, quindi vive qui e non nella finestra che spiega. */}
+            {(letture ?? []).length > 0 && (
+                <div className="flex flex-col gap-1 rounded-md border border-blue-500/40 bg-blue-950/30 p-2">
+                    <div className="text-[11px] font-semibold text-blue-200">≈ Letture alternative</div>
+                    {(letture ?? []).map((alt, i) => (
+                        <div key={i} className="flex items-center gap-2 text-[12px]">
+                            <span className="font-bold text-slate-100">{alt.roman}</span>
+                            {alt.figures?.length ? <span className="font-mono text-slate-400">{alt.figures.join(' ')}</span> : null}
+                            {alt.symbol ? <span className="text-slate-300">{alt.symbol}</span> : null}
+                            <span className="text-slate-500 text-[11px]">in {alt.impliedTonic}</span>
+                            {onApplyAlternative && (
+                                <button
+                                    className="ml-auto px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-600/30 hover:bg-blue-600/60 text-blue-200 border border-blue-500/40 transition-colors"
+                                    title="Aggiunge una tonicizzazione locale da questo movimento. Si esaurisce da sé quando l'armonia non la sostiene più."
+                                    onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                        onApplyAlternative(
+                                            { impliedTonic: alt.impliedTonic, isMinor: alt.impliedIsMinor ?? /^[a-z]/.test(alt.roman) },
+                                            menuData.absBeat,
+                                        );
+                                        onClose();
+                                    }}
+                                >
+                                    ≈ Tonicizza
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Come si arriva alla spiegazione: un comando che non si vede è un comando
+                che non esiste, e ⌥+clic non lo indovina nessuno. */}
+            {onSpiega && (
+                <button
+                    onClick={onSpiega}
+                    className="self-start text-[11px] text-sky-300 hover:text-sky-100 underline underline-offset-2"
+                    title="Mostra perché l'analisi ha letto così questo accordo (anche con ⌥+clic sull'etichetta)"
+                >
+                    Perché questa lettura? <span className="text-slate-500">(⌥+clic)</span>
+                </button>
+            )}
+
             {/* IL TESTO NON STA PIÙ QUI. Le scritte hanno una casa sola: la tavolozza,
                 da cui si posano, e il doppio clic sulla scritta per correggerle. Averlo
                 anche qui significava due strade per la stessa cosa, e questo pannello
