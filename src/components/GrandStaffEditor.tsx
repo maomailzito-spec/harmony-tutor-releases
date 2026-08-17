@@ -83,6 +83,7 @@ import TempoCurveDialog from './TempoCurveDialog';
 import RomanProgressionEditor from './RomanProgressionEditor';
 import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
+import NoteContextMenu, { type NoteMenuData } from './NoteContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
 import MixerPanel from './MixerPanel';
 import CompressorWindow from './CompressorWindow';
@@ -2863,6 +2864,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const latestOrnamentOverrides = useRef<OrnamentOverride[]>([]);
     useEffect(() => { latestOrnamentOverrides.current = ornamentOverrides || []; }, [ornamentOverrides]);
     const [harmonyOverrideMenu, setHarmonyOverrideMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number } | null>(null);
+    /** Menù del tasto destro sulla nota. Il gesto voleva dire «togli le articolazioni»
+     *  e su una nota che non ne aveva sembrava non fare niente: ora apre le scelte, e
+     *  «togli» è una di loro. */
+    const [menuNota, setMenuNota] = useState<NoteMenuData | null>(null);
+
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number; inferredTonicAtBeat?: { tonic: string; isMinor: boolean } | null } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
     // Limited mode: force harmonic analysis OFF and prevent re-enabling it (gated setter).
@@ -17232,7 +17238,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     return { ...prev, [systemIndex]: capi };
                                 })}
                                 onSlurRightClick={(slurId) => togliLegatura(slurId)}
-                                onNoteRightClick={(noteId) => togliArticolazioniDaNota(noteId)}
+                                onNoteRightClick={(noteId, ev) => {
+                                    // La nota cliccata diventa anche la SELEZIONE: le voci del
+                                    // menù (ornamenti, corona, sposta di rigo) agiscono sulla
+                                    // selezione, e senza questo agirebbero su un'altra nota.
+                                    setSelectedNoteIds(prev => (prev.size === 1 && prev.has(noteId)) ? prev : new Set([noteId]));
+                                    const nota = (latestRawNotes.current || []).find(n => n.id === noteId) as any;
+                                    const conArt = !!(nota?.articulations?.length);
+                                    setMenuNota({ x: (ev as MouseEvent).clientX, y: (ev as MouseEvent).clientY, noteId, conArticolazioni: conArt });
+                                    return true;
+                                }}
                                 onBarlineRightClick={(barlineId) => {
                                     // Coerenza coi segni della tavolozza: il tasto destro TOGLIE.
                                     // Se su quella stanghetta non c'è né doppia barra né
@@ -19414,6 +19429,20 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     }
                 }}
             />
+
+            {menuNota && (
+                <NoteContextMenu
+                    data={menuNota}
+                    onClose={() => setMenuNota(null)}
+                    onOrnamento={(tipo) => handleApplyOrnamentOverride(tipo)}
+                    onTogliOrnamento={() => handleRemoveOrnamentOverride()}
+                    onCorona={alternaCorona}
+                    onTogliArticolazioni={() => togliArticolazioniDaNota(menuNota.noteId)}
+                    onSpostaSu={() => handleMoveToStaff('treble')}
+                    onSpostaGiu={() => handleMoveToStaff('bass')}
+                    onRigoPredefinito={() => handleMoveToStaff(null)}
+                />
+            )}
 
             {contextMenu && (
                 <ModulationContextMenu
