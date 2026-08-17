@@ -35,7 +35,9 @@ const ModulationContextMenu: React.FC<{
     menuData: { x: number; y: number; absBeat: number; measureIndex: number; beat: number };
     onClose: () => void;
     onApply: (absBeat: number, newTonic: string, newIsMinor: boolean, label?: string) => void;
-    onApplyTextMarker: (absBeat: number, label?: string) => void;
+    /** Non più usata dal pannello: le scritte si posano dalla tavolozza. Resta nella
+     *  firma perché la chiama ancora l'applicazione del contesto con etichetta. */
+    onApplyTextMarker?: (absBeat: number, label?: string) => void;
     onRemove: (absBeat: number) => void;
     existingHarmonyOverride: HarmonyLabelOverride | null;
     onApplyHarmonyOverride: (absBeat: number, roman: string, figures: string[], symbol: string) => void;
@@ -57,7 +59,7 @@ const ModulationContextMenu: React.FC<{
     onMoveToTreble?: () => void;
     onMoveToBass?: () => void;
     onResetStaff?: () => void;
-}> = ({ menuData, onClose, onApply, onApplyTextMarker, onRemove, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff, existingTonicizationHint, onRemoveTonicizationHint, inferredTonicAtBeat, hasSuppressedInference, onSuppressInference, onUnsuppressInference }) => {
+}> = ({ menuData, onClose, onApply, onRemove, existingHarmonyOverride, onApplyHarmonyOverride, onRemoveHarmonyOverride, initialKey, initialIsMinor, initialLabel, initialTimeSignature, selectedNoteCount, onApplyOrnamentOverride, onRemoveOrnamentOverride, hasExistingOrnamentOverride, onMoveToTreble, onMoveToBass, onResetStaff, existingTonicizationHint, onRemoveTonicizationHint, inferredTonicAtBeat, hasSuppressedInference, onSuppressInference, onUnsuppressInference }) => {
     const { t } = useTranslation('ui');
     const [tempKey, setTempKey] = useState(initialKey);
     const [tempIsMinor, setTempIsMinor] = useState(initialIsMinor);
@@ -201,9 +203,6 @@ const ModulationContextMenu: React.FC<{
         onApply(menuData.absBeat, tonicToApply, tempIsMinor, tempLabel);
     };
 
-    const handleInsertTextOnly = () => {
-        onApplyTextMarker(menuData.absBeat, tempLabel);
-    };
 
     const parseFigures = (raw: string): string[] => {
         const s = String(raw || '').trim();
@@ -257,14 +256,6 @@ const ModulationContextMenu: React.FC<{
             </div>
             <div className="flex gap-2">
                 <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">{t('menu_apply_context')}</button>
-                <button
-                    onClick={handleInsertTextOnly}
-                    className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors"
-                    title={t('menu_insert_text_tooltip')}
-                    disabled={!String(tempLabel || '').trim()}
-                >
-                    {t('menu_insert_text_btn')}
-                </button>
                 <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">{t('menu_remove')}</button>
             </div>
             {/* Soppressione inferenza — rimuovi senza aggiungere nulla */}
@@ -293,21 +284,10 @@ const ModulationContextMenu: React.FC<{
                     </button>
                 </div>
             )}
-            {/* Cancella misura, ritornelli e cambio di metro sono passati alla TAVOLOZZA
-                DEI SEGNI (pulsante "pf" in toolbar): si trascinano sul punto voluto e si
-                tolgono col tasto destro. Qui restano solo le cose che riguardano
-                l'ANALISI di questo punto — tonalità, testo, override — per non tenere
-                due strade separate da mantenere allineate. */}
-            <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-300">{t('menu_text_label')}</label>
-                <input
-                    value={tempLabel}
-                    onChange={e => setTempLabel(e.target.value)}
-                    className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
-                    placeholder={t('menu_text_label')}
-                />
-            </div>
-
+            {/* IL TESTO NON STA PIÙ QUI. Le scritte hanno una casa sola: la tavolozza,
+                da cui si posano, e il doppio clic sulla scritta per correggerle. Averlo
+                anche qui significava due strade per la stessa cosa, e questo pannello
+                si occupa di OVERRIDE — di ciò che corregge la lettura dell'analisi. */}
             <div className="h-px bg-slate-600/60" />
 
             <div className="flex flex-col gap-2">

@@ -462,7 +462,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         {/* MODIFICHE alla nota già scritta: legatura di valore, traversa,
                             verso del gambo. Si usano subito dopo aver inserito, guardando
                             lo stesso punto della partitura. */}
-                        <div className="grid grid-cols-6 gap-1 mt-1">
+                        <div className="grid grid-cols-7 gap-1 mt-1">
                             <button
                                 onClick={onToggleTie}
                                 title="Legatura di valore  ·  L"
@@ -512,6 +512,17 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 style={{ fontFamily: 'serif', fontSize: 10 }}
                             >
                                 rall.
+                            </button>
+                            {/* accel. sta con rall.: sono la stessa famiglia — l'agogica —
+                                e stavano in due gruppi diversi, con rall. per giunta
+                                DUPLICATO qui e sotto «Articolazioni ed espressione». */}
+                            <button
+                                onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'accel', label: 'accel.' }, e)}
+                                title="Accelerando: trascinalo dove comincia  ·  ⌥⇧R"
+                                className={`${bottone} px-0 italic ${nudo}`}
+                                style={{ fontFamily: 'serif', fontSize: 10 }}
+                            >
+                                accel.
                             </button>
                         </div>
                     </div>
@@ -695,27 +706,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     ))}
                 </div>
 
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Tempo</div>
-                <div className="grid grid-cols-2 gap-1">
-                    <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'rall', label: 'rall.' }, e)}
-                        title="Rallentando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
-                        className={`${bottone} ${attivo} italic`}
-                        style={{ fontFamily: 'serif' }}
-                    >
-                        rall.
-                    </button>
-                    <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'accel', label: 'accel.' }, e)}
-                        title="Accelerando: trascinalo dove comincia (copre due misure, poi si chiedono i valori)"
-                        className={`${bottone} ${attivo} italic`}
-                        style={{ fontFamily: 'serif' }}
-                    >
-                        accel.
-                    </button>
-                </div>
-
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">Testo</div>
+                
                 <div className="flex items-center gap-1">
                     <button
                         /* SI SCRIVE SULLA PAGINA. Il clic apre la casella dov'è il cursore

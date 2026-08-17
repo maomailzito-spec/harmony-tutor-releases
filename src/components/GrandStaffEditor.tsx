@@ -11400,6 +11400,42 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * troppa roba per lasciarla dietro una sola scorciatoia. Estratta qui perché la
      * chiamino sia il tasto T sia il pulsante in toolbar.
      */
+    /**
+     * IL CLIC SU UN'ETICHETTA APRE GLI OVERRIDE, non più la sola spiegazione.
+     *
+     * Cliccando un romano o una sigla si apriva una finestra che SPIEGA e basta; per
+     * intervenire bisognava cambiare pannello (tasto T). Ma chi clicca su un'etichetta
+     * che non lo convince vuole correggerla, non farsela raccontare — ed è il motivo per
+     * cui «Tonicizza» era finito dentro la finestra informativa: era l'unico ponte fra
+     * il leggere e l'agire.
+     *
+     * Ora il clic porta dove si agisce, sul punto dell'etichetta. La spiegazione resta
+     * raggiungibile da lì.
+     */
+    const apriOverrideSuEtichetta = useCallback((absBeat: number) => {
+        try {
+            const container = staffContainerRef.current;
+            const pos = playheadPositionRef.current;
+            let x = window.innerWidth / 2;
+            let y = 140;
+            if (container) {
+                const sysEl = pos ? container.querySelector(`[data-system-index="${pos.systemIndex}"]`) as HTMLElement | null : null;
+                const r = (sysEl ?? container).getBoundingClientRect();
+                x = r.left + Math.min(r.width - 340, Math.max(20, (pos?.x ?? r.width / 2)));
+                y = r.top + 16;
+            }
+            const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(absBeat);
+            const ctxs = [...(effectiveAnalysisContexts || [])]
+                .filter(c => analysisContextAbsBeat(c) <= absBeat + 1e-6)
+                .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a));
+            const attivo = ctxs[0];
+            const tonica = attivo ? attivo.newTonic : keySignatureRoot;
+            const minore = attivo ? !!attivo.newIsMinor : isMinorMode;
+            const cambiata = tonica !== keySignatureRoot || minore !== isMinorMode;
+            setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: cambiata ? { tonic: tonica, isMinor: minore } : null });
+        } catch { /* nel dubbio non si apre niente */ }
+    }, [getMeasureIndexAndBeatFromAbsBeat, effectiveAnalysisContexts, analysisContextAbsBeat, keySignatureRoot, isMinorMode]);
+
     const openMeasurePanelAtPlayhead = useCallback(() => {
         // Toggle: if the tonicization panel is already open, close it.
         if (contextMenu) {
@@ -18298,7 +18334,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                     fontWeight={700}
                                                                                     fill="black"
                                                                                     style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                                                                                    onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
+                                                                                    /* Clic: gli override, dove si corregge. ⌥+clic: la spiegazione, per chi
+                                                                       vuole sapere PERCHÉ prima di intervenire — resta
+                                                                       raggiungibile, ma non è più l'unica porta. */
+                                                                    onMouseDown={(e: any) => {
+                                                                        e.stopPropagation();
+                                                                        if (e.altKey) openExplain(lbl);
+                                                                        else apriOverrideSuEtichetta(Number((lbl as any).absBeat));
+                                                                    }}
                                                                                 >
                                                                                     {(lbl as any).symbol}
                                                                                 </text>
@@ -18455,7 +18498,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     fontWeight={700}
 fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                    onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
+                    /* Clic: gli override, dove si corregge. ⌥+clic: la spiegazione, per chi
+                                                                       vuole sapere PERCHÉ prima di intervenire — resta
+                                                                       raggiungibile, ma non è più l'unica porta. */
+                                                                    onMouseDown={(e: any) => {
+                                                                        e.stopPropagation();
+                                                                        if (e.altKey) openExplain(lbl);
+                                                                        else apriOverrideSuEtichetta(Number((lbl as any).absBeat));
+                                                                    }}
                 >
                     {romanBaseText}
                 </text>
@@ -18470,7 +18520,14 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         fontWeight={700}
                         fill="#60a5fa"
                         style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                        onMouseDown={(e: any) => { e.stopPropagation(); openExplain(lbl); }}
+                        /* Clic: gli override, dove si corregge. ⌥+clic: la spiegazione, per chi
+                                                                       vuole sapere PERCHÉ prima di intervenire — resta
+                                                                       raggiungibile, ma non è più l'unica porta. */
+                                                                    onMouseDown={(e: any) => {
+                                                                        e.stopPropagation();
+                                                                        if (e.altKey) openExplain(lbl);
+                                                                        else apriOverrideSuEtichetta(Number((lbl as any).absBeat));
+                                                                    }}
                     >≈</text>
                 ) : null}
 
