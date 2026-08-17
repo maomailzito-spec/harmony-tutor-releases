@@ -11339,7 +11339,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
 
-        let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        // Gli stessi posti dell'inserimento (vedi `attacchiDisponibili`): il cursore indica
+        // dove si scriverà, quindi non può posarsi dove una nota non potrebbe cominciare.
+        // Con SHIFT vale la griglia libera, come per il clic d'inserimento.
+        const postiDisponibili = e.shiftKey
+            ? []
+            : attacchiDisponibiliRef.current(hit.measureIndex, measureStartTick, ticksPerMeasure, timeSignature.denominator);
+        let snappedLocalTicks: number;
+        if (postiDisponibili.length > 0) {
+            const scelto = attaccoPiuVicinoRef.current(postiDisponibili, measureStartTick + localTicksRaw);
+            snappedLocalTicks = (scelto ?? measureStartTick) - measureStartTick;
+        } else {
+            snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        }
         const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
         if (snappedLocalTicks < 0) snappedLocalTicks = 0;
         if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
@@ -11833,8 +11845,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
 
-        // Quantize strictly in ticks (left-biased to avoid occasional snap-forward jitter).
-        let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        // I POSTI DOVE UNA NOTA PUÒ COMINCIARE LI DETTA CIÒ CHE È GIÀ SCRITTO
+        // (vedi `attacchiDisponibili`): i movimenti del metro, e gli inizi e le fini degli
+        // eventi che ci sono. Vince il più vicino — sono pochi e distanti, quindi non c'è
+        // da mirare. Con SHIFT si torna alla griglia libera e fine.
+        const postiDisponibili = e?.shiftKey
+            ? []
+            : attacchiDisponibiliRef.current(hit.measureIndex, measureStartTick, ticksPerMeasure, tsAtMeasureStart.denominator);
+        let snappedLocalTicks: number;
+        if (postiDisponibili.length > 0) {
+            const scelto = attaccoPiuVicinoRef.current(postiDisponibili, measureStartTick + localTicksRaw);
+            snappedLocalTicks = (scelto ?? measureStartTick) - measureStartTick;
+        } else {
+            snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        }
 
         // Clamp so onset is always within the measure and fits the duration.
         // If the raw click fell at or past the measure boundary, bail out rather
@@ -11847,7 +11871,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             snappedLocalTicks = maxLocalStart;
         }
 
-        // Stessa calamita del fantasma: quello che si vede è quello che si ottiene.
+        // La calamita resta per la griglia libera di SHIFT; col modello nuovo gli inizi
+        // degli eventi sono già fra i posti disponibili, quindi non ha nulla da spostare.
         const startTick = agganciaAdAttaccoVicinoRef.current(
             hit.measureIndex,
             measureStartTick + snappedLocalTicks,
@@ -13258,6 +13283,198 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [activeTab, tool, selectedVoice, marqueeSelectOnlyCurrentVoice]);
 
     /**
+     * DOVE PUÒ COMINCIARE UNA NOTA IN QUESTA BATTUTA.
+     *
+     * Non lo decide la figura che si ha in mano, ma **ciò che è già scritto**: la nota
+     * nuova comincia dove finisce quella di prima. Dopo una croma il mezzo movimento è un
+     * posto legittimo — ci si scrive una semiminima sul levare, che è una sincope — mentre
+     * dopo una semiminima quel punto non esiste, e cliccandoci si finiva a metà della nota
+     * già scritta: l'inserimento riusciva e CANCELLAVA le note che si sovrapponevano
+     * (l'inserimento sostituisce chi occupa quel tempo nella stessa voce). Un errore di
+     * mira di pochi pixel distruggeva due semiminime.
+     *
+     * I posti disponibili sono quindi:
+     *  · i MOVIMENTI del metro — una battuta vuota si scrive dai suoi movimenti;
+     *  · la FINE di ogni evento già scritto — è lì che comincia il seguito;
+     *  · l'INIZIO di ogni evento già scritto — per impilare un accordo.
+     *
+     * Il vantaggio non è solo la sicurezza: i posti sono POCHI e distanti, quindi vince il
+     * più vicino senza bisogno di mirare. Dopo una semiminima c'è un solo posto dove
+     * andare, e tutta la zona a destra della nota punta lì.
+     *
+     * Con SHIFT si torna alla griglia libera e fine (sedicesimo), per i casi che questo
+     * modello non prevede: un attacco che non nasce da ciò che c'è.
+     */
+    const attacchiDisponibili = useCallback((
+        measureIndex: number,
+        measureStartTick: number,
+        ticksPerMeasure: number,
+        denominatoreMetro: number,
+    ): number[] => {
+        const posti = new Set<number>();
+        try {
+            // `tupla` = quante note compongono il gruppo: 3 per la terzina, 2 per la duina,
+            // 0 se la nota non appartiene a un gruppo irregolare.
+            const eventi: Array<{ inizio: number; durata: number; voce: string; tupla: number }> = [];
+            const considera = (n: any, voce: string) => {
+                if (!n || (n.measureIndex ?? -1) !== measureIndex) return;
+                const inizio = Number(n.startTick);
+                if (!Number.isFinite(inizio)) return;
+                const durata = Math.max(0, Number(n.durationTicks) || 0);
+                eventi.push({ inizio, durata, voce, tupla: n.isTriplet ? 3 : (n.isDuplet ? 2 : 0) });
+                posti.add(inizio);                             // per impilare un accordo
+                if (durata > 0) posti.add(inizio + durata);    // dove comincia il seguito
+            };
+            for (const n of (latestRawNotes.current || [])) considera(n, `coro${n?.voice ?? ''}`);
+            for (const t of (latestAccompanimentTracks.current || [])) {
+                if (!t || !t.visible) continue;
+                for (const n of (t.notes || [])) considera(n, `acc${t.id}`);
+            }
+
+            // ── I MOVIMENTI NON VALGONO DENTRO UN GRUPPO IRREGOLARE ──────────────
+            // Una terzina di semiminime occupa 0→1920 con attacchi a 0, 640 e 1280: il
+            // movimento 960 cade nel MEZZO, e lì non può cominciare niente senza spezzare
+            // il gruppo. Contandolo fra i posti ordinari competeva con la continuazione
+            // della terzina — 640 e 960 distano 320 tick, una ventina di pixel — e bastava
+            // mirare appena oltre metà strada per infilarci la nota. La terzina si
+            // sparpagliava sui movimenti (0, 960, 1920) lasciando tre buchi da 320: la
+            // battuta risultava piena senza contenere ciò che si era scritto. Vale lo stesso
+            // per le DUINE, e in 6/8 anche di più: una duina di crome ha note da 720 tick
+            // mentre i posti ordinari cadono ogni 480, quindi i concorrenti stanno a 240 tick
+            // da entrambi i lati — più vicini della metà del passo del gruppo.
+            //
+            // L'estensione di un gruppo si ricava dalla prima nota in terzina: tre volte la
+            // sua durata. Finché il gruppo non è chiuso i movimenti interni sono esclusi;
+            // completato, tornano disponibili.
+            const estensioni: Array<{ da: number; a: number; note: number; attese: number }> = [];
+            const perVoce = new Map<string, Array<{ inizio: number; durata: number; tupla: number }>>();
+            for (const ev of eventi) {
+                if (ev.tupla <= 0 || ev.durata <= 0) continue;
+                if (!perVoce.has(ev.voce)) perVoce.set(ev.voce, []);
+                perVoce.get(ev.voce)!.push({ inizio: ev.inizio, durata: ev.durata, tupla: ev.tupla });
+            }
+            for (const gruppo of perVoce.values()) {
+                gruppo.sort((x, y) => x.inizio - y.inizio);
+                let i = 0;
+                while (i < gruppo.length) {
+                    const primo = gruppo[i];
+                    const fineGruppo = primo.inizio + primo.durata * primo.tupla;
+                    // Le note dello stesso gruppo: quelle che cadono dentro l'estensione.
+                    let j = i + 1;
+                    while (j < gruppo.length && gruppo[j].inizio < fineGruppo) j++;
+                    estensioni.push({ da: primo.inizio, a: fineGruppo, note: j - i, attese: primo.tupla });
+                    i = j;
+                }
+            }
+            // Dentro il gruppo non si comincia niente. E quando manca SOLO L'ULTIMA nota non
+            // si comincia niente nemmeno dove il gruppo finisce: quel movimento competerebbe
+            // con la terza nota della terzina — distano un terzo di movimento — e mirando
+            // appena a destra la nota uscirebbe dal gruppo, non travata e staccata dalle
+            // altre, lasciando la terzina monca.
+            //
+            // Con una nota sola invece il movimento resta: un gruppo appena cominciato si
+            // può ancora abbandonare, e sbarrare la strada vorrebbe dire che una terzina
+            // messa per sbaglio impedisce di scrivere il movimento dopo — è successo con i
+            // sedicesimi, dove una quarta nota apriva un secondo gruppo e faceva sparire il
+            // movimento 2. Chiuso il gruppo, tutto torna disponibile. (Per la DUINA «manca
+            // solo l'ultima» vuol dire una nota su due: il bordo si chiude subito, ed è
+            // giusto, perché è lì che la seconda nota deve andare.)
+            const dentroUnGruppo = (t: number) => estensioni.some(e => (
+                (t > e.da && t < e.a) || (e.note === e.attese - 1 && t === e.a)
+            ));
+
+            // Il movimento del metro: la semiminima in 4/4, la croma in 6/8.
+            const passo = Math.max(1, Math.round(TICKS_PER_QUARTER * (4 / Math.max(1, denominatoreMetro))));
+            for (let t = 0; t < ticksPerMeasure; t += passo) {
+                const assoluto = measureStartTick + t;
+                if (!dentroUnGruppo(assoluto)) posti.add(assoluto);
+            }
+        } catch {
+            // ignore
+        }
+        return [...posti]
+            .filter(t => t >= measureStartTick && t < measureStartTick + ticksPerMeasure)
+            .sort((a, b) => a - b);
+    }, []);
+    const attacchiDisponibiliRef = useRef(attacchiDisponibili);
+    attacchiDisponibiliRef.current = attacchiDisponibili;
+
+    /** Il posto disponibile più vicino al punto mirato. */
+    const attaccoPiuVicino = useCallback((posti: number[], tickMirato: number): number | null => {
+        let migliore: number | null = null;
+        let distanza = Infinity;
+        for (const t of posti) {
+            const d = Math.abs(t - tickMirato);
+            if (d < distanza) { distanza = d; migliore = t; }
+        }
+        return migliore;
+    }, []);
+    const attaccoPiuVicinoRef = useRef(attaccoPiuVicino);
+    attaccoPiuVicinoRef.current = attaccoPiuVicino;
+
+    // ── COSA C'È DAVVERO IN UNA BATTUTA (diagnostica) ─────────────────────────
+    // `__htBattuta(3)` in console elenca gli eventi della battuta 3 — voce, figura, inizio,
+    // durata e fine in tick, contando da inizio battuta — e i posti dove una nota può
+    // cominciare. Serve quando «i conti non tornano»: le terzine sono il caso in cui un
+    // attacco fuori posto si vede subito, perché i loro tick non stanno sulla griglia
+    // ordinaria (una terzina di semiminime cade a 0, 640, 1280 e non a 0, 480, 960).
+    useEffect(() => {
+        (window as any).__htBattuta = (indice: number) => {
+            try {
+                const mi = Math.max(0, Number(indice) || 0);
+                const ld: any = layoutDataRef.current;
+                const battute = timeSignature.numerator * (4 / timeSignature.denominator);
+                const beatsPerMeasure = ld?.measureBeatsPerMeasure?.[mi] ?? battute;
+                const startAbs = ld?.measureStartAbsBeat?.[mi] ?? (mi * beatsPerMeasure);
+                const measureStartTick = Math.round(startAbs * TICKS_PER_QUARTER);
+                const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
+
+                const righe: Array<Record<string, unknown>> = [];
+                const aggiungi = (n: any, dove: string) => {
+                    if (!n || (n.measureIndex ?? -1) !== mi) return;
+                    const inizio = Number(n.startTick) - measureStartTick;
+                    const durata = Math.max(0, Number(n.durationTicks) || 0);
+                    righe.push({
+                        dove,
+                        voce: n.voice ?? '',
+                        figura: `${n.duration ?? '?'}${n.isDotted ? '.' : ''}${n.isTriplet ? ' ⑶' : ''}${n.isDuplet ? ' ⑵' : ''}`,
+                        pausa: !!n.isRest,
+                        inizio,
+                        durata,
+                        fine: inizio + durata,
+                    });
+                };
+                for (const n of (latestRawNotes.current || [])) aggiungi(n, 'coro');
+                for (const t of (latestAccompanimentTracks.current || [])) {
+                    for (const n of (t?.notes || [])) aggiungi(n, t?.name || 'traccia');
+                }
+                righe.sort((a: any, b: any) => (a.inizio - b.inizio) || String(a.voce).localeCompare(String(b.voce)));
+                // eslint-disable-next-line no-console
+                console.table(righe);
+
+                const posti = attacchiDisponibiliRef.current(mi, measureStartTick, ticksPerMeasure, timeSignature.denominator)
+                    .map(t => t - measureStartTick);
+                const finePerVoce: Record<string, number> = {};
+                for (const r of righe as any[]) {
+                    const v = String(r.voce);
+                    finePerVoce[v] = Math.max(finePerVoce[v] ?? 0, r.fine);
+                }
+                // eslint-disable-next-line no-console
+                console.log(
+                    `battuta ${mi}: ${ticksPerMeasure} tick in tutto\n` +
+                    `posti dove una nota può cominciare: ${posti.join(', ')}\n` +
+                    `fine dell'ultimo evento per voce: ${JSON.stringify(finePerVoce)}`,
+                );
+                return righe.length;
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.error('__htBattuta:', e);
+                return 0;
+            }
+        };
+    }, [timeSignature]);
+
+    /**
      * CALAMITA SUGLI ATTACCHI ESISTENTI.
      *
      * Costruire un accordo vuol dire mettere una nota SOPRA un'altra: si mira alla
@@ -13348,7 +13565,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const snapCapTicks = Math.round(TICKS_PER_QUARTER / 2);
             const _gcd = (a: number, b: number): number => { let p = Math.abs(a); let q = Math.abs(b); while (q) { [p, q] = [q, p % q]; } return p || 1; };
             const snapGridTicks = Math.max(1, _gcd(Math.min(durationTicks, snapCapTicks), TICKS_PER_QUARTER));
-            let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+            // Stessi posti disponibili del clic (vedi `attacchiDisponibili`), altrimenti il
+            // fantasma mostrerebbe un attacco e la nota ne prenderebbe un altro. Qui non si
+            // conosce lo stato di Shift: il fantasma mostra sempre il modello normale.
+            const postiDisponibili = attacchiDisponibiliRef.current(
+                hit.measureIndex, measureStartTick, ticksPerMeasure, timeSignature.denominator,
+            );
+            let snappedLocalTicks: number;
+            if (postiDisponibili.length > 0) {
+                const scelto = attaccoPiuVicinoRef.current(postiDisponibili, measureStartTick + localTicksRaw);
+                snappedLocalTicks = (scelto ?? measureStartTick) - measureStartTick;
+            } else {
+                snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+            }
             const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
             if (snappedLocalTicks < 0) snappedLocalTicks = 0;
             if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
@@ -13358,6 +13587,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 measureStartTick + snappedLocalTicks,
                 snapGridTicks,
             );
+
             return { measureIndex: hit.measureIndex, startTick, endTick: startTick + durationTicks, measureStartTick };
         } catch {
             return null;
