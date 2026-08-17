@@ -519,14 +519,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         revoiceDispIdx,
         hasSelectedNotes,
         selectedNotesHave7th,
-        accPattern,
-        onSetAccPattern,
+
+
         activeStaffArea,
-        accLetRing,
-        onToggleAccLetRing,
-        transformMode,
-        onToggleTransformMode,
-        onMelodicTransform,
+
+
+
+
+
     } = props;
 
     // La modulazione cromatica si governa dalle PREFERENZE (analysis.chromaticModulation).
@@ -1911,96 +1911,17 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
 
                         Su una riga LORO la fila principale non si muove mai. E sta FUORI
                         dal ciclo dei gruppi — dentro si ripeteva per ognuno. */}
-                    {(activeStaffArea === 'accompaniment' || hasSelectedNotes) && (
-                        <div className="flex flex-row items-center flex-wrap gap-x-2 gap-y-1 mt-1 pt-1 border-t border-slate-700/60">
-                        {activeStaffArea === 'accompaniment' && (
-                            <>
-                                <div className="w-px h-5 bg-slate-600 mx-0.5" />
-                                {([
-                                    { id: 'block',         label: 'Bl',   title: 'Block Chords' },
-                                    { id: 'arpeggio_up',   label: 'Ar▲',  title: 'Arpeggio Up' },
-                                    { id: 'arpeggio_down', label: 'Ar▼',  title: 'Arpeggio Down' },
-                                    { id: 'broken',        label: 'Brk',  title: 'Broken (boom-chick)' },
-                                    { id: 'albertino',     label: 'Alb',  title: 'Basso Albertino (0-2-1-2)' },
-                                    { id: 'ondulato',      label: 'Ond',  title: 'Ondulato (su e giù)' },
-                                ] as const).map(p => (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => onSetAccPattern(p.id)}
-                                        title={p.title}
-                                        className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accPattern === p.id ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                                    >
-                                        {p.label}
-                                    </button>
-                                ))}
-                                <button
-                                    onClick={onToggleAccLetRing}
-                                    title="Ped — le note risuonano fino al prossimo attacco (pedale/let ring). Vale anche per le note inserite a mano."
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${accLetRing ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    Ped
-                                </button>
-                            </>
-                        )}
-                        {/* Trasformazioni melodiche sulla selezione (motivo): inserite DOPO l'originale */}
-                        {hasSelectedNotes && (
-                            <>
-                                <div className="w-px h-5 bg-slate-600 mx-0.5" />
-                                <button
-                                    onClick={onToggleTransformMode}
-                                    title={transformMode === 'tonal'
-                                        ? 'Trasformazioni TONALI (in chiave, per gradi). Clicca per passare a Reali (cromatiche).'
-                                        : 'Trasformazioni REALI (cromatiche, per semitoni). ⚠ Inversione e retro-inverso reali sono cromatici (escono dalla tonalità). Clicca per tornare a Tonali.'}
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'tonal' ? 'bg-cyan-600 text-white' : 'bg-amber-600 text-white'}`}
-                                >
-                                    {transformMode === 'tonal' ? 'Ton' : 'Real'}
-                                </button>
-                                <button
-                                    onClick={() => onMelodicTransform('transpose', { amount: 1 })}
-                                    title={transformMode === 'tonal' ? 'Trasponi su di un grado (in chiave)' : 'Trasponi su di un semitono'}
-                                    className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
-                                >
-                                    T▲
-                                </button>
-                                <button
-                                    onClick={() => onMelodicTransform('transpose', { amount: -1 })}
-                                    title={transformMode === 'tonal' ? 'Trasponi giù di un grado (in chiave)' : 'Trasponi giù di un semitono'}
-                                    className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
-                                >
-                                    T▼
-                                </button>
-                                <button
-                                    aria-label="Inverti la melodia (rovescia i movimenti)"
-                                    onClick={() => onMelodicTransform('invert')}
-                                    title={transformMode === 'real'
-                                        ? '⚠ Inversione REALE = cromatica: esce dalla tonalità (per contesti atonali/dodecafonici). Per un risultato in chiave passa a Ton.'
-                                        : "Inversione tonale (in chiave): ogni voce si specchia attorno alla propria prima nota. Inserita dopo l'originale."}
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    {transformMode === 'real' ? 'Inv⚠' : 'Inv'}
-                                </button>
-                                <button
-                                    aria-label="Retrogrado: rovescia l'ordine nel tempo"
-                                    onClick={() => onMelodicTransform('retrograde')}
-                                    title="Retrogrado: ordine temporale rovesciato (note e ritmo). Inserito dopo l'originale."
-                                    className="px-1.5 py-1 rounded-md transition-colors text-xs font-mono text-gray-300 hover:bg-gray-600"
-                                >
-                                    Retr
-                                </button>
-                                <button
-                                    aria-label="Retrogrado inverso"
-                                    onClick={() => onMelodicTransform('retrogradeInvert')}
-                                    title={transformMode === 'real'
-                                        ? "⚠ Retrogrado-inverso REALE: contiene l'inversione cromatica → esce dalla tonalità. Per un risultato in chiave passa a Ton."
-                                        : "Retrogrado-inverso tonale (in chiave). Inserito dopo l'originale."}
-                                    className={`px-1.5 py-1 rounded-md transition-colors text-xs font-mono ${transformMode === 'real' ? 'text-amber-300 hover:bg-amber-900/40' : 'text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    {transformMode === 'real' ? 'R+I⚠' : 'R+I'}
-                                </button>
-                            </>
-                        )}
-                        </div>
-                    )}
+                    {/* LA RIGA CONTESTUALE NON C'È PIÙ, ed è la correzione giusta invece di
+                        renderla più stabile: pattern e trasformazioni ORA VIVONO NELLA
+                        TAVOLOZZA, in due gruppi loro. Questa riga era il doppione rimasto,
+                        e comparendo al primo clic su una nota spingeva in basso tutta la
+                        pagina — il costo peggiore per la funzione meno usata.
+
+                        Nella tavolozza le stesse sezioni si accendono senza spostare
+                        niente, perché lì l'altezza è quella di un pannello che scorre e
+                        non quella della partitura. Se un giorno servissero anche in barra,
+                        la strada è farne due GRUPPI normali: si nascondono e si spostano
+                        come tutti gli altri, invece di apparire da sé. */}
                 </div>
             )}
 
