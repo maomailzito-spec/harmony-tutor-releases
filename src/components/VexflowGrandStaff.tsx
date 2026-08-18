@@ -834,6 +834,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         accompanimentTracks ?? null, localMotif, drumPalettes ?? null,
         timeSignature, timeSignatureChanges ?? null, keySignature, barlines ?? null,
         width, height, staffMode, engravingMode, showVoiceColors,
+        // Il CORPO DELLE RIGHE cambia il disegno dei righi: senza, premere i pulsanti
+        // nelle preferenze non faceva ridisegnare niente e la scelta sembrava ignorata
+        // finché non si toccava la partitura per un altro motivo.
+        staffLineWeight,
         showAccompanimentStaves, accompanimentStaffMode, satbName,
         // Le legature stanno in un elenco a parte: senza metterle nella firma, una
         // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo

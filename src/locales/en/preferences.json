@@ -89,5 +89,10 @@
   "pref_analysis_acc_hint": "Harmony hint from the accompaniment",
   "opt_line_thin": "Thin (the earlier grey)",
   "opt_line_normal": "Normal",
-  "opt_line_bold": "Bold"
+  "opt_line_bold": "Bold",
+  "staff_line_weight_title": "Staff line thickness",
+  "staff_line_weight_hint": "The staff lines start from a light grey: here they can be darkened, and thickened a little. It helps on very dense screens and in print. The gain comes from contrast rather than thickness: a line that is too thick crowds the noteheads.",
+  "staff_line_thin": "Thin",
+  "staff_line_normal": "Normal",
+  "staff_line_bold": "Bold"
 }

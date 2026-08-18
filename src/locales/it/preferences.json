@@ -89,5 +89,10 @@
   "pref_analysis_acc_hint": "Hint armonica dall'accompagnamento",
   "opt_line_thin": "Sottile (il grigio di prima)",
   "opt_line_normal": "Normale",
-  "opt_line_bold": "Marcato"
+  "opt_line_bold": "Marcato",
+  "staff_line_weight_title": "Corpo delle righe del pentagramma",
+  "staff_line_weight_hint": "Le righe del pentagramma partono da un grigio chiaro: qui si scuriscono, e si ingrossano appena. Serve sugli schermi molto densi e nella stampa. Il guadagno viene dal contrasto più che dallo spessore: una riga troppo grossa schiaccia le teste delle note.",
+  "staff_line_thin": "Sottile",
+  "staff_line_normal": "Normale",
+  "staff_line_bold": "Marcato"
 }
