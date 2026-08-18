@@ -5846,9 +5846,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
      * nella partitura, non quella dei conti.
      */
     const tempoMarkMarkersBySystem = useMemo(() => {
-        const vuoto = [] as Array<Array<{ x: number; label: string; measureIndex: number }>>;
+        const vuoto = [] as Array<Array<{ x: number; label: string; measureIndex: number; offsetY: number }>>;
         if (!layoutData || !(tempoMarks || []).length) return vuoto;
-        const markersBySystem = layoutData.systemsParams.map(() => [] as Array<{ x: number; label: string; measureIndex: number }>);
+        const markersBySystem = layoutData.systemsParams.map(() => [] as Array<{ x: number; label: string; measureIndex: number; offsetY: number }>);
         for (const m of normalizeTempoMarks(tempoMarks)) {
             const sysIndex = layoutData.systemsParams.findIndex((sp: any) => (sp.measureIndices || []).includes(m.measureIndex));
             if (sysIndex < 0) continue;
@@ -5859,6 +5859,9 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                 x: system.startMeasuresX[idx] + 2,
                 label: tempoMarkLabel(m),
                 measureIndex: m.measureIndex,
+                // Lo spostamento verticale deciso trascinandolo: il disegno lo somma
+                // all'altezza abituale (vedi `TempoMark.offsetY`).
+                offsetY: Number((m as any).offsetY) || 0,
             });
         }
         markersBySystem.forEach((ms: any[]) => ms.sort((a, b) => a.x - b.x));
