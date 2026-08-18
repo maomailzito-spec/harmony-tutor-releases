@@ -2,7 +2,7 @@
  * useEditorZoom — extracted from GrandStaffEditor.tsx (Phase 2)
  *
  * Manages pinch-to-zoom (trackpad), zoom-level persistence in localStorage,
- * scroll-anchor correction, auto-reset on background click, and base-size
+ * scroll-anchor correction, reset on background double-click, and base-size
  * measurement for the zoom spacer.
  */
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, type RefObject } from 'react';
@@ -15,7 +15,7 @@ const ZOOM_MAX = 2.5;
 export interface UseEditorZoomResult {
     editorZoom: number;
     resetEditorZoom: () => void;
-    handleScoreMouseDownCapture: (e: React.MouseEvent) => void;
+    handleScoreDoubleClick: (e: React.MouseEvent) => void;
     zoomSpacerRef: RefObject<HTMLDivElement | null>;
     zoomBaseSize: { w: number; h: number };
 }
@@ -116,39 +116,42 @@ export function useEditorZoom(
 
     const zoomSpacerRef = useRef<HTMLDivElement | null>(null);
 
-    const handleScoreMouseDownCapture = useCallback((e: React.MouseEvent) => {
-        // Capture-phase so it still runs even when inner SVG handlers stopPropagation.
-        // Only reset when clicking outside the actual score content (so we don't interfere with insert clicks).
+    /**
+     * DOPPIO CLIC SUL NULLA → torna al 100%.
+     *
+     * Prima bastava un clic singolo, e resettava o no a seconda che il punto cadesse
+     * dentro l'`<svg>` di un sistema oppure fuori. Ma l'SVG di un sistema è alto quanto il
+     * sistema: copre anche il bianco sopra e sotto i righi, cioè proprio quella che a occhio
+     * è «pagina vuota». Due clic a un centimetro di distanza si comportavano in modo
+     * opposto, e capitava di perdere lo zoom appoggiando il puntatore sulla pagina mentre
+     * si lavora — una regola invisibile, che è il peggior tipo di regola.
+     *
+     * Ora il gesto è deliberato (doppio clic) e la condizione è una sola, visibile a
+     * occhio: si resetta SOLO se sotto il puntatore non c'è niente di disegnato. Qualunque
+     * cosa — nota, legatura, segno, etichetta, righi, chiave — blocca il reset, perché il
+     * bersaglio dell'evento è quell'elemento e non il fondo. Restano il ⌘0 e il comando in
+     * barra per chi preferisce non mirare.
+     */
+    const handleScoreDoubleClick = useCallback((e: React.MouseEvent) => {
         if (e.button !== 0) return;
         if (Math.abs(editorZoom - 1) <= 1e-3) return;
         try {
-            const target = (e.target as any) as HTMLElement | null;
+            const target = (e.target as Element | null);
             if (!target) return;
-            // If click is inside a note/tie, never reset.
-            const inNoteOrTie = !!(target.closest?.('[data-note-id],[data-tie-from],[data-tie-to]'));
-            if (inNoteOrTie) return;
-            // Do not reset when interacting with UI controls.
-            const inControl = !!(target.closest?.('input,button,textarea,select,[role="button"],[contenteditable="true"]'));
-            if (inControl) return;
 
-            const inSvg = !!target.closest?.('svg');
-            const inScore = !!(staffContainerRef.current && staffContainerRef.current.contains(target));
+            // Il fondo è un contenitore (div) o l'SVG stesso: dentro l'SVG, il bersaglio è
+            // l'elemento `<svg>` solo quando il punto non tocca nessun glifo.
+            const tag = String((target as any).tagName ?? '').toLowerCase();
+            if (tag !== 'div' && tag !== 'svg') return;
 
-            const clickedSpacer = !!target.closest?.('[data-zoom-spacer="1"]');
-            const clickedOutsideScore = !!(staffContainerRef.current && !staffContainerRef.current.contains(target));
-            const clickedScrollBg = !!(scoreScrollRef.current && target === scoreScrollRef.current);
+            // Nemmeno sui comandi (titolo, campi, pulsanti).
+            if (target.closest?.('input,button,textarea,select,[role="button"],[contenteditable="true"]')) return;
 
-            // When zoomed-in, the scaled content can cover the spacer and most of the scroll area;
-            // clicks on "empty" margins often land on the score container div, not on the spacer.
-            const clickedScoreNonSvgBg = inScore && !inSvg;
-
-            if (clickedSpacer || clickedOutsideScore || clickedScrollBg || clickedScoreNonSvgBg) {
-                resetEditorZoom();
-            }
+            resetEditorZoom();
         } catch {
             // ignore
         }
-    }, [editorZoom, resetEditorZoom, scoreScrollRef, staffContainerRef]);
+    }, [editorZoom, resetEditorZoom]);
 
     // True zoom without affecting layout: measure the base (unscaled) size, then:
     // - create a spacer sized (base * zoom) to get scrollbars
@@ -192,7 +195,7 @@ export function useEditorZoom(
     return {
         editorZoom,
         resetEditorZoom,
-        handleScoreMouseDownCapture,
+        handleScoreDoubleClick,
         zoomSpacerRef,
         zoomBaseSize,
     };

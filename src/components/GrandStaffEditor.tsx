@@ -4869,7 +4869,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [normalizedRawNotes, timeSignature, timeSignatureChanges]);
 
     // Editor zoom (extracted to useEditorZoom hook)
-    const { editorZoom, resetEditorZoom, handleScoreMouseDownCapture, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
+    const { editorZoom, resetEditorZoom, handleScoreDoubleClick, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
     // Mirror in a ref so the imperative playback loop can read the current zoom
     // without taking it as a dependency (that would restart the rAF on every pinch).
     const editorZoomRef = useRef(editorZoom);
@@ -4891,8 +4891,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, []);
 
     // Click sulla CHIAVE di un rigo ACC (rettangolo invisibile [data-acc-clef-trackid] disegnato
-    // da VexflowGrandStaff) → apre il menù delle chiavi e blocca l'inserimento nota. Altrimenti
-    // delega allo zoom-capture. È la "manipolazione diretta sull'oggetto" (chiave = roba da score).
+    // da VexflowGrandStaff) → apre il menù delle chiavi e blocca l'inserimento nota. È la
+    // "manipolazione diretta sull'oggetto" (chiave = roba da score). Lo zoom non passa più di
+    // qui: si azzera col DOPPIO clic sul fondo (vedi `handleScoreDoubleClick`), perché un clic
+    // singolo lo faceva sparire mentre si lavorava.
     const handleScoreMouseDownWithClef = useCallback((e: React.MouseEvent) => {
         const el = (e.target as Element | null)?.closest?.('[data-acc-clef-trackid]') as Element | null;
         if (el) {
@@ -4901,11 +4903,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
                 setClefMenu({ x: e.clientX, y: e.clientY, trackId, name: el.getAttribute('data-acc-clef-name') || '' });
-                return;
             }
         }
-        handleScoreMouseDownCapture(e);
-    }, [handleScoreMouseDownCapture]);
+    }, []);
 
     // Applica la scelta di chiave/rigo alla traccia (stesso effetto del vecchio selettore mixer).
     const applyClefChoice = useCallback((trackId: string, opt: (typeof ACC_STAFF_OPTIONS)[number]) => {
@@ -17227,6 +17227,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
                     onMouseDownCapture={handleScoreMouseDownWithClef}
                     onClick={handleDeselectOnClickOutside}
+                    onDoubleClick={handleScoreDoubleClick}
                 >
                     <div style={{ position: 'relative' }}>
                         {/* Spacer: defines scrollable area (scaled size) */}
