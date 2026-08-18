@@ -427,5 +427,7 @@
   "ts_numerator": "Numeratore del metro",
   "ts_denominator": "Denominatore del metro",
   "np_satb_line": "Rigo",
-  "mod_why_shortcut": "(⌥+clic)"
+  "mod_why_shortcut": "(⌥+clic)",
+  "ed_title_placeholder": "Titolo",
+  "ed_composer_placeholder": "Autore"
 }

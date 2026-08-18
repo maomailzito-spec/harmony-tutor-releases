@@ -4957,7 +4957,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                     // Replace the editable title <input> with a print-friendly static title,
                     // or remove it entirely if exportIncludeTitle is OFF.
-                    const titleInput = clone.querySelector('input[placeholder="Titolo"]') as HTMLInputElement | null;
+                    const titleInput = clone.querySelector('input[data-ht-field="title"]') as HTMLInputElement | null;
                     if (titleInput) {
                         const wrapper = titleInput.closest('div');
                         const titleText = String(projectTitle || titleInput.value || '').trim();
@@ -4982,7 +4982,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // regola `input{display:none}` più sotto lo toglierebbe comunque), quindi
                     // va sostituito con la scritta vera. Segue l'interruttore del titolo:
                     // chi stampa senza intestazione non vuole nemmeno la firma.
-                    const composerInput = clone.querySelector('input[placeholder="Autore"]') as HTMLInputElement | null;
+                    const composerInput = clone.querySelector('input[data-ht-field="composer"]') as HTMLInputElement | null;
                     if (composerInput) {
                         const wrapper = composerInput.closest('div');
                         const composerText = String(projectComposer || composerInput.value || '').trim();
@@ -17313,7 +17313,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 onChange={(e) => setProjectTitle(e.target.value)}
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
-                                placeholder="Titolo"
+                                placeholder={tUI('ed_title_placeholder')}
+                                data-ht-field="title"
                                 aria-label={tUI('ed_title_aria')}
                                 className="w-full max-w-2xl bg-transparent text-center font-semibold text-slate-800 placeholder:text-slate-400 outline-none"
                                 style={{ fontSize: `${titleFontSize}px`, fontFamily: titleFontFamily }}
@@ -17328,7 +17329,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 onChange={(e) => setProjectComposer(e.target.value)}
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
-                                placeholder="Autore"
+                                placeholder={tUI('ed_composer_placeholder')}
+                                data-ht-field="composer"
                                 aria-label={tUI('ed_composer_aria')}
                                 className="w-full max-w-2xl bg-transparent text-right italic text-slate-600 placeholder:text-slate-400 outline-none"
                                 style={{ fontSize: `${Math.max(10, Math.round(titleFontSize * 0.7))}px`, fontFamily: titleFontFamily }}

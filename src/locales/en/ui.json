@@ -452,5 +452,7 @@
   "ts_numerator": "Time signature numerator",
   "ts_denominator": "Time signature denominator",
   "np_satb_line": "Staff",
-  "mod_why_shortcut": "(⌥+click)"
+  "mod_why_shortcut": "(⌥+click)",
+  "ed_title_placeholder": "Title",
+  "ed_composer_placeholder": "Composer"
 }
