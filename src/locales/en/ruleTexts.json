@@ -587,5 +587,18 @@
     "title": "Tritone false relation",
     "body": "The 4th degree of the scale in one part and the 7th (the leading tone) in another part, in the immediately following chord, form the tonal tritone split between two voices. Typical cases are V→IV, IV→V, IV→III and III→IV. This differs from the chromatic false relation (the same note altered in different voices) and from the melodic tritone leap, which happens within a single voice.\n\nIt is allowed when both parts move by semitone, because the diatonic resolution cancels the harshness of the interval, and when the succession forms a clear cadential formula. In descending motion the harshness is perceived as milder and the report is attenuated.\n\nThe danger concerns intonation above all in vocal music; in instrumental scoring it is milder, but the rule still holds for the coherence of strict counterpoint.",
     "suggestion": "Avoid having the 4th degree in one part and the leading tone in another follow one another in adjacent chords: let both parts move by semitone, or interpose a chord."
+  },
+  "EXC-R16-INV": {
+    "title": "Syncopation allowed (inversion changes)",
+    "body": "The \"barline rule\" discourages a chord that enters on a weak beat and carries over to the downbeat of the next measure: the metrical accent would fall on a harmony already heard, leaving the downbeat empty.\nWhen the chord returns on the downbeat in a different INVERSION — root position after an inversion, or the other way round — the bass moves and the harmony is renewed: the metrical accent meets a new event, and the syncopation is not perceived as such. The bass decides this, not the upper parts.\nThe typical case is a bass moving by step under a sustained harmony, very common in chorale writing.",
+    "suggestion": "No change needed: the bass movement renews the harmony on the downbeat."
+  },
+  "EXC-R16-PATTERN": {
+    "title": "Syncopation allowed (rhythmic pattern)",
+    "body": "An isolated harmonic syncopation is usually an oversight about accent: the harmony enters on a weak beat and the following downbeat is left empty.\nWhen the same anticipation returns on the SAME beat across consecutive measures, it is not an oversight but a rhythmic figure: the writer sought it, and the pattern becomes the character of the passage. Typical of styles with an ostinato rhythmic accompaniment and of compound metres, where the harmony regularly anticipates the downbeat.\nRecognition requires at least three measures in a row: with two, the repetition may be coincidental.",
+    "suggestion": "No change needed: the anticipation is systematic, therefore intentional."
+  },
+  "R-04-WHOLE": {
+    "suggestion": "With whole notes, a crossing is almost always a note entered in the wrong voice: a stemless figure does not show which part it belongs to. Check the voice of the flagged notes before rewriting the part-writing — if it was an input mistake, simply swap the two voices."
   }
 }
