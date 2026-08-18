@@ -647,7 +647,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         value={quantizeGrid}
                         onChange={e => setQuantizeGrid(e.target.value)}
                         className="bg-gray-700 text-gray-200 text-xs rounded px-1 py-0.5 border border-gray-600 cursor-pointer"
-                        title="Griglia di quantizzazione (binaria o di terzina)"
+                        title={t('tb_quantize_grid')}
                       >
                         <option value="sixteenth">1/16</option>
                         <option value="eighth">1/8</option>
@@ -1287,15 +1287,15 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         <div className="flex items-center p-0.5 bg-gray-900/50 rounded-md">
                             <button
                                 onClick={() => setAnalysisSubject('satb')}
-                                aria-label="Analizza il coro (SATB)"
+                                aria-label={t('tb_analyze_satb_aria')}
                                 className={`px-2 rounded-sm py-0.5 font-semibold transition-all ${analysisSubject === 'satb' ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
-                                title="Analizza il coro SATB"
+                                title={t('tb_analyze_satb')}
                             >SATB</button>
                             <button
                                 onClick={() => setAnalysisSubject('acc')}
-                                aria-label="Analizza la traccia d'accompagnamento"
+                                aria-label={t('tb_analyze_acc_aria')}
                                 className={`px-2 rounded-sm py-0.5 font-semibold transition-all ${analysisSubject === 'acc' ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
-                                title="Analizza una traccia di accompagnamento (piano/chitarra)"
+                                title={t('tb_analyze_acc')}
                             >ACC</button>
                         </div>
                         {analysisSubject === 'acc' && accTracksForAnalysis.length > 0 && (
@@ -1315,7 +1315,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     aria-hidden={!isAnalysisEnabled}
                 >
                         <button
-                            aria-label="Mostra i settimi di dominante"
+                            aria-label={t('tb_show_v7_aria')}
                             onClick={() => setShowRomanAnalysis(prev => !prev)}
                             className={`w-10 rounded-sm py-0.5 font-bold transition-all ${showRomanAnalysis ? 'bg-stone-200 text-gray-900' : 'text-gray-300 hover:bg-gray-600'}`}
                             title={showRomanAnalysis ? t('toolbar_hide_roman') : t('toolbar_show_roman')}
@@ -1581,9 +1581,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                 <button
                                     onClick={() => { onRestartAudio(); setIsMoreMenuOpen(false); }}
                                     className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
-                                    title="Se il suono non esce più — cuffie staccate, uscita cambiata, sistema audio non pronto all'avvio — questo rifà il motore senza chiudere il programma. Il lavoro non si tocca."
+                                    title={t('tb_restart_audio_tip')}
                                 >
-                                    <span>Riavvia il motore audio</span>
+                                    <span>{t('tb_restart_audio')}</span>
                                     <span className="text-[11px]">↻</span>
                                 </button>
                             </>
@@ -1945,7 +1945,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             presa e smetterebbe di rispondere al clic. */}
                         <div
                             onMouseDown={barraComandi.prendi}
-                            title="Trascina per spostare la barra"
+                            title={t('tb_drag_bar')}
                             className="px-1 self-stretch flex items-center cursor-move text-slate-500 hover:text-slate-300 select-none"
                         >
                             ⠿
