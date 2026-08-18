@@ -137,5 +137,8 @@
   "midi_type1_tooltip": "Una traccia per voce: lo leggono MuseScore, Finale, Sibelius",
   "midi_type0_tooltip": "Tutte le voci in una traccia sola: massima compatibilità",
   "customize_add_break": "Aggiungi un a capo",
-  "customize_add_break_hint": "Compare in fondo alla barra: trascinalo dove vuoi che cominci la riga nuova. Da lì l'ordine non dipende più dalla larghezza della finestra."
+  "customize_add_break_hint": "Compare in fondo alla barra: trascinalo dove vuoi che cominci la riga nuova. Da lì l'ordine non dipende più dalla larghezza della finestra.",
+  "mix_reverb_send": "Mandata riverbero (tipo e livello globale dal master)",
+  "mix_eq_channel": "EQ del canale — apri/chiudi",
+  "mix_comp_channel": "Compressore del canale — apri/chiudi"
 }

@@ -643,7 +643,7 @@ const ChannelStrip: React.FC<{
 
     {/* Reverb send del canale (sostituisce il vecchio placeholder FX) */}
     {onChangeReverbSend ? (
-      <SendBar value={reverbSend ?? 0} onChange={onChangeReverbSend} accent="#a78bfa" label="Rev" title="Mandata riverbero (tipo e livello globale dal master)" />
+      <SendBar value={reverbSend ?? 0} onChange={onChangeReverbSend} accent="#a78bfa" label="Rev" title={tT('mix_reverb_send')} />
     ) : (
       <button
         disabled
@@ -660,7 +660,7 @@ const ChannelStrip: React.FC<{
         {onOpenEq && (
           <button
             onClick={onOpenEq}
-            title="EQ del canale — apri/chiudi"
+            title={tT('mix_eq_channel')}
             className={`flex-1 rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${eqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'}`}
           >
             EQ{eqActive ? ' •' : ''}
@@ -669,7 +669,7 @@ const ChannelStrip: React.FC<{
         {onOpenComp && (
           <button
             onClick={onOpenComp}
-            title="Compressore del canale — apri/chiudi"
+            title={tT('mix_comp_channel')}
             className={`flex-1 rounded text-[9px] font-medium px-0.5 py-0.5 border transition-colors ${compActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-gray-300 border-slate-600 hover:bg-slate-700'}`}
           >
             Comp{compActive ? ' •' : ''}
@@ -739,6 +739,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   onClose,
 }) => {
   const { t: tT } = useTranslation('toolbar');
+  const { t: tUi } = useTranslation('ui');
 
   // --- Multi-selezione canali + operazioni batch (mute/solo/elimina/fader collegati) ---
   // Chiavi: 'v'+voce (1-4) per le voci SATB, 't'+id per le tracce ACC.
@@ -886,7 +887,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
         <span className="text-[11px] font-medium text-gray-300 tracking-wide">🎚 Mixer</span>
         <button
           onClick={onClose}
-          title="Chiudi mixer"
+          title={tUi('mix_close')}
           className="w-5 h-5 text-gray-500 hover:text-gray-200 flex items-center justify-center text-xs rounded transition-colors"
         >
           ✕
@@ -899,8 +900,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
           <span className="text-cyan-300 font-semibold">{selectedChannels.size} selezionati</span>
           <div className="flex-1" />
           <button onClick={batchMute} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-red-600/70 text-gray-200 transition-colors">Mute</button>
-          <button onClick={batchSolo} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-yellow-500/80 hover:text-black text-gray-200 transition-colors">Solo</button>
-          <button onClick={batchDelete} title="Elimina le track ACC selezionate (le voci SATB non si eliminano)" className="px-2 py-0.5 rounded bg-slate-700 hover:bg-red-700 text-gray-200 transition-colors">Elimina</button>
+          <button onClick={batchSolo} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-yellow-500/80 hover:text-black text-gray-200 transition-colors">{tUi('mix_solo')}</button>
+          <button onClick={batchDelete} title={tUi('mix_delete_tip')} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-red-700 text-gray-200 transition-colors">{tUi('mix_delete')}</button>
           <button onClick={clearSelection} className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-gray-300 transition-colors">Deseleziona</button>
         </div>
       )}
@@ -914,13 +915,13 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
               <input
                 value={satbName ?? ''}
                 onChange={(e) => onRenameSatb(e.target.value)}
-                placeholder="Voci (SATB)"
-                title="Rinomina il gruppo SATB"
+                placeholder={tUi('mix_satb_group')}
+                title={tUi('mix_rename_satb')}
                 aria-label="Nome SATB"
                 className="text-[9px] font-medium text-gray-300 uppercase tracking-wider w-24 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-cyan-500 focus:bg-slate-900/60 outline-none rounded-sm"
               />
             ) : (
-              <span className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">Voci (SATB)</span>
+              <span className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">{tUi('mix_satb_group')}</span>
             )}
             {onToggleSatbVisible && (
               <button
@@ -997,10 +998,10 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
               {(onOpenSatbEq || onOpenSatbComp) && (
                 <div className="flex gap-0.5 w-full">
                   {onOpenSatbEq && (
-                    <button onClick={onOpenSatbEq} title="EQ (gruppo SATB) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${satbEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>EQ{satbEqActive ? ' •' : ''}</button>
+                    <button onClick={onOpenSatbEq} title={tUi('mix_eq_satb')} className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${satbEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>EQ{satbEqActive ? ' •' : ''}</button>
                   )}
                   {onOpenSatbComp && (
-                    <button onClick={onOpenSatbComp} title="Compressore (gruppo SATB) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${satbCompActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>Comp{satbCompActive ? ' •' : ''}</button>
+                    <button onClick={onOpenSatbComp} title={tUi('mix_comp_satb')} className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${satbCompActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>Comp{satbCompActive ? ' •' : ''}</button>
                   )}
                 </div>
               )}
@@ -1019,7 +1020,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
             <div className="relative" ref={addMenuRef}>
               <button
                 onClick={() => setAddMenuOpen(o => !o)}
-                title="Aggiungi track"
+                title={tUi('mix_add_track')}
                 aria-haspopup="menu"
                 aria-expanded={addMenuOpen}
                 className={`w-5 h-5 flex items-center justify-center rounded text-white text-sm font-medium leading-none transition-colors ${addMenuOpen ? 'bg-cyan-600' : 'bg-cyan-700 hover:bg-cyan-600'}`}
@@ -1140,10 +1141,10 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
               {(onOpenAccEq || onOpenAccComp) && (
                 <div className="flex gap-0.5 w-full">
                   {onOpenAccEq && (
-                    <button onClick={onOpenAccEq} title="EQ (gruppo ACC) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${accEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>EQ{accEqActive ? ' •' : ''}</button>
+                    <button onClick={onOpenAccEq} title={tUi('mix_eq_acc')} className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${accEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>EQ{accEqActive ? ' •' : ''}</button>
                   )}
                   {onOpenAccComp && (
-                    <button onClick={onOpenAccComp} title="Compressore (gruppo ACC) — apri/chiudi" className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${accCompActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>Comp{accCompActive ? ' •' : ''}</button>
+                    <button onClick={onOpenAccComp} title={tUi('mix_comp_acc')} className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${accCompActive ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}>Comp{accCompActive ? ' •' : ''}</button>
                   )}
                 </div>
               )}
@@ -1172,14 +1173,14 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
               <div className="flex gap-0.5 w-full">
                 <button
                   onClick={onOpenMasterEq}
-                  title="EQ (master) — apri/chiudi"
+                  title={tUi('mix_eq_master')}
                   className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${masterEqActive ? 'bg-teal-600/25 text-teal-200 border-teal-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}
                 >
                   EQ{masterEqActive ? ' •' : ''}
                 </button>
                 <button
                   onClick={onOpenCompressor}
-                  title="Compressore (master) — apri/chiudi"
+                  title={tUi('mix_comp_master')}
                   className={`flex-1 h-5 rounded text-[9px] font-medium transition-colors border ${compEnabled ? 'bg-sky-600/25 text-sky-200 border-sky-500/60' : 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600'}`}
                 >
                   Comp{compEnabled ? ' •' : ''}
@@ -1192,8 +1193,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
               <select
                 value={reverbPreset}
                 onChange={(e) => onChangeReverbPreset?.(e.target.value as 'off' | 'room' | 'hall' | 'plate')}
-                title="Tipo di riverbero"
-                aria-label="Tipo di riverbero"
+                title={tUi('mix_reverb_type')}
+                aria-label={tUi('mix_reverb_type')}
                 className="w-full bg-slate-700 text-gray-200 text-[9px] rounded px-0.5 py-0.5 border border-slate-600 cursor-pointer mb-1"
               >
                 <option value="off">Off</option>
@@ -1226,15 +1227,15 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
           >
             {onMoveTrack && (
               <>
-                <button disabled={idx <= 0} onClick={() => { onMoveTrack(contextMenu.trackId, -1); setContextMenu(null); }} className={itemCls}>◀ Sposta a sinistra</button>
-                <button disabled={idx < 0 || idx >= accompanimentTracks.length - 1} onClick={() => { onMoveTrack(contextMenu.trackId, 1); setContextMenu(null); }} className={itemCls}>Sposta a destra ▶</button>
+                <button disabled={idx <= 0} onClick={() => { onMoveTrack(contextMenu.trackId, -1); setContextMenu(null); }} className={itemCls}>{tUi('mix_move_left')}</button>
+                <button disabled={idx < 0 || idx >= accompanimentTracks.length - 1} onClick={() => { onMoveTrack(contextMenu.trackId, 1); setContextMenu(null); }} className={itemCls}>{tUi('mix_move_right')}</button>
                 <div className="h-px bg-slate-600 my-1" />
               </>
             )}
-            <button onClick={() => track && copyTrackSettings(track)} className={itemCls}>Copia impostazioni (chiave + FX)</button>
-            <button disabled={!fxClip} onClick={() => { if (fxClip) onUpdateTrack(contextMenu.trackId, fxClip); setContextMenu(null); }} className={itemCls}>Incolla impostazioni</button>
+            <button onClick={() => track && copyTrackSettings(track)} className={itemCls}>{tUi('mix_copy_settings')}</button>
+            <button disabled={!fxClip} onClick={() => { if (fxClip) onUpdateTrack(contextMenu.trackId, fxClip); setContextMenu(null); }} className={itemCls}>{tUi('mix_paste_settings')}</button>
             <div className="h-px bg-slate-600 my-1" />
-            <button onClick={() => handleDelete(contextMenu.trackId)} className="w-full text-left px-3 py-1.5 text-[12px] text-red-400 hover:bg-slate-600 whitespace-nowrap">Elimina track</button>
+            <button onClick={() => handleDelete(contextMenu.trackId)} className="w-full text-left px-3 py-1.5 text-[12px] text-red-400 hover:bg-slate-600 whitespace-nowrap">{tUi('mix_delete_track')}</button>
           </div>
         );
       })()}

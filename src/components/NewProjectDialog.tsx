@@ -43,6 +43,7 @@ interface Props {
 
 const NewProjectDialog: React.FC<Props> = ({ open, onCancel, onCreate }) => {
   const { t: tT } = useTranslation('toolbar');
+  const { t: tUi } = useTranslation('ui');
   const instrName = useCallback((gm: number) => {
     const key = INSTRUMENTS.find(i => i.gm === gm)?.i18nKey;
     return key ? tT('instrument_' + key) : `GM ${gm}`;
@@ -115,18 +116,18 @@ const NewProjectDialog: React.FC<Props> = ({ open, onCancel, onCreate }) => {
       <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-5 text-sm text-gray-100">
         <div>
           <h2 className="text-lg font-semibold">Nuovo progetto</h2>
-          <p className="text-gray-400 text-xs mt-1">Scegli le tracce iniziali. Puoi sempre aggiungerne altre dopo dal mixer.</p>
+          <p className="text-gray-400 text-xs mt-1">{tUi('np_choose')}</p>
         </div>
 
         {/* SATB */}
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" checked={satb} onChange={e => setSatb(e.target.checked)} className="accent-cyan-500 w-4 h-4" />
-          <span>Rigo <strong>SATB</strong> (coro a 4 voci)</span>
+          <span>{tUi('np_satb_line')} <strong>SATB</strong> {tUi('np_choir')}</span>
         </label>
 
         {/* ACC / batteria builder */}
         <div className="flex flex-col gap-2">
-          <div className="text-gray-300 font-medium">Tracce di accompagnamento</div>
+          <div className="text-gray-300 font-medium">{tUi('np_acc_tracks')}</div>
           <div className="flex items-center gap-2">
             <select
               value={pickInstr}
@@ -140,7 +141,7 @@ const NewProjectDialog: React.FC<Props> = ({ open, onCancel, onCreate }) => {
             <button
               onClick={addAcc}
               className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white whitespace-nowrap"
-            >+ Strumento</button>
+            >{tUi('np_add_instrument')}</button>
             <button
               onClick={addDrums}
               className="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white whitespace-nowrap"
@@ -174,7 +175,7 @@ const NewProjectDialog: React.FC<Props> = ({ open, onCancel, onCreate }) => {
             <button
               onClick={handleSaveTemplate}
               className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white"
-            >Salva configurazione attuale…</button>
+            >{tUi('np_save_config')}</button>
           </div>
           {templates.length === 0 ? (
             <div className="text-xs text-gray-500">Nessun template salvato.</div>
@@ -185,7 +186,7 @@ const NewProjectDialog: React.FC<Props> = ({ open, onCancel, onCreate }) => {
                   <button
                     onClick={() => applyTemplate(tpl)}
                     className="text-left flex-1 hover:text-cyan-300"
-                    title="Carica questo template nella selezione"
+                    title={tUi('np_load_template')}
                   >
                     {tpl.name}
                     <span className="text-gray-500 text-xs ml-2">
@@ -196,7 +197,7 @@ const NewProjectDialog: React.FC<Props> = ({ open, onCancel, onCreate }) => {
                   <button
                     onClick={() => deleteTemplate(tpl.id)}
                     className="text-gray-400 hover:text-red-400 px-1"
-                    title="Elimina template"
+                    title={tUi('np_delete_template')}
                   >🗑</button>
                 </li>
               ))}
@@ -210,7 +211,7 @@ const NewProjectDialog: React.FC<Props> = ({ open, onCancel, onCreate }) => {
             {satb ? 'SATB' : 'nessun SATB'} · {accCount} strum. · {drumCount} batt.
           </span>
           <div className="flex gap-2">
-            <button onClick={onCancel} className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white">Annulla</button>
+            <button onClick={onCancel} className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white">{tUi('cancel')}</button>
             <button onClick={() => onCreate(currentConfig())} className="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-medium">Crea progetto</button>
           </div>
         </div>

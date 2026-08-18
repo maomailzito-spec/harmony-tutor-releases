@@ -679,11 +679,11 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         signs: onToggleDynamicsPanel ? (
             <button
                 onClick={onToggleDynamicsPanel}
-                title="Tavolozza: durate, alterazioni, dinamiche, articolazioni, struttura, pattern e trasformazioni (apri/chiudi)"
+                title={t('tb_palette_tip')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${isDynamicsPanelOpen ? 'bg-sky-600 text-white' : 'bg-slate-700 text-gray-100 border border-slate-600 hover:bg-slate-600'}`}
             >
                 <span style={{ fontFamily: 'serif', fontStyle: 'italic', fontWeight: 700, fontSize: 15, lineHeight: 1 }}>pf</span>
-                <span>Tavolozza</span>
+                <span>{t('tb_palette')}</span>
             </button>
         ) : null,
         measurePanel: onOpenMeasurePanel ? (
@@ -1000,7 +1000,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 {hasDrumTrack && onToggleDrumPanel && (
                     <button
                         onClick={onToggleDrumPanel}
-                        title="Modulo percussioni (apri/chiudi)"
+                        title={t('tb_drums_panel')}
                         className={`flex items-center gap-1 p-1 px-2 rounded-md text-xs font-semibold transition-colors ${isDrumPanelOpen ? 'bg-amber-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-gray-600'}`}
                     >
                         🥁
@@ -1848,7 +1848,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                                         <span className="text-[9px] uppercase tracking-wider text-sky-400">a capo</span>
                                         <button
                                             onClick={() => onRemoveToolbarBreak?.(toolbarGroupOrder.indexOf(id as any))}
-                                            title="Togli questo a capo"
+                                            title={t('tb_remove_break')}
                                             className="text-[10px] text-slate-400 hover:text-rose-400"
                                         >
                                             ✕

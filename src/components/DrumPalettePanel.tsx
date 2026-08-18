@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Floating, draggable percussion module (replaces the old inline "🥁 Mappa" bar).
@@ -26,6 +27,7 @@ interface DrumPalettePanelProps {
 const DrumPalettePanel: React.FC<DrumPalettePanelProps> = ({
   trackName, kit, onSetKit, pieces, onInsertPiece, onClose,
 }) => {
+    const { t } = useTranslation('ui');
   // --- Floating window position + drag (same pattern as MixerPanel) ---
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 160, y: 96 });
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
@@ -66,7 +68,7 @@ const DrumPalettePanel: React.FC<DrumPalettePanelProps> = ({
         </span>
         <button
           onClick={onClose}
-          title="Chiudi modulo percussioni"
+          title={t('drums_close')}
           className="w-5 h-5 text-gray-500 hover:text-gray-200 flex items-center justify-center text-xs rounded transition-colors"
         >
           ✕

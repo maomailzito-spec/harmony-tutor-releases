@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { DEFAULT_ANALYSIS_LOCK_OPTIONS } from '../storage/projectSchema';
 
@@ -31,6 +32,7 @@ const OPTION_LABELS: { key: keyof AnalysisLockOptions; label: string }[] = [
 export default function AnalysisLockModal({
   isOpen, onClose, analysisLocked, teacherPasswordHash, analysisLockOptions, onLock, onUnlock,
 }: AnalysisLockModalProps) {
+  const { t } = useTranslation('ui');
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
   const [unlockPw, setUnlockPw] = useState('');
@@ -102,7 +104,7 @@ export default function AnalysisLockModal({
               <p className="text-xs text-gray-400 mb-3">
                 Il lock viene salvato nel file <code className="text-cyan-400">.htp</code>. Lo studente vedrà lo spartito ma non gli elementi selezionati qui sotto. Per sbloccare serve la password.
               </p>
-              <p className="text-xs font-semibold text-gray-300 mb-2">Nascondi quando bloccato:</p>
+              <p className="text-xs font-semibold text-gray-300 mb-2">{t('lock_hide_when_locked')}</p>
               <div className="flex flex-col gap-1.5 mb-4">
                 {OPTION_LABELS.map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
@@ -137,7 +139,7 @@ export default function AnalysisLockModal({
             </div>
             {error && <p className="text-xs text-red-400">{error}</p>}
             <div className="flex gap-2 justify-end pt-2">
-              <button onClick={onClose} className="px-4 py-1.5 rounded text-xs text-gray-300 hover:bg-gray-700">Annulla</button>
+              <button onClick={onClose} className="px-4 py-1.5 rounded text-xs text-gray-300 hover:bg-gray-700">{t('cancel')}</button>
               <button
                 onClick={handleLock}
                 disabled={busy}
@@ -168,7 +170,7 @@ export default function AnalysisLockModal({
             />
             {error && <p className="text-xs text-red-400">{error}</p>}
             <div className="flex gap-2 justify-end pt-2 flex-wrap">
-              <button onClick={onClose} className="px-4 py-1.5 rounded text-xs text-gray-300 hover:bg-gray-700">Annulla</button>
+              <button onClick={onClose} className="px-4 py-1.5 rounded text-xs text-gray-300 hover:bg-gray-700">{t('cancel')}</button>
               <button
                 onClick={() => handleUnlock(false)}
                 disabled={busy}

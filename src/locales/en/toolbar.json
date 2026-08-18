@@ -142,5 +142,8 @@
   "customize_reset": "Reset",
   "customize_done": "Done",
   "customize_add_break": "Add a line break",
-  "customize_add_break_hint": "It appears at the end of the bar: drag it where you want the new row to start. From there the order no longer depends on the window width."
+  "customize_add_break_hint": "It appears at the end of the bar: drag it where you want the new row to start. From there the order no longer depends on the window width.",
+  "mix_reverb_send": "Reverb send (type and global level from the master)",
+  "mix_eq_channel": "Channel EQ — open/close",
+  "mix_comp_channel": "Channel compressor — open/close"
 }

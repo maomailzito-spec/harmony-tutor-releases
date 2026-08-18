@@ -11,7 +11,7 @@ declare global {
     }
 }
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
@@ -16169,7 +16169,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             : 'File bloccato dal docente — clicca per sbloccare')
                         : 'Blocca analisi per studenti'
                 }
-                aria-label="Blocca/Sblocca analisi"
+                aria-label={tUI('ed_lock_toggle_aria')}
                 className={`absolute right-2 top-2 z-20 w-8 h-8 flex items-center justify-center rounded-md text-base shadow-sm transition-colors ${
                     analysisLocked && !sessionUnlocked
                         ? 'bg-amber-500 hover:bg-amber-400 text-white'
@@ -16182,7 +16182,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             </button>
             {featuresLimited && (
                 <div className="w-full flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-500 text-amber-950 text-xs font-semibold shadow z-[55]">
-                    <span>⏳ Prova terminata — <b>analisi</b> e <b>realizzazione automatica</b> disabilitate. Editor, export, playback e stampa restano attivi.</span>
+                    <span><Trans i18nKey="ed_trial_over" t={tUI} components={{ 1: <b />, 3: <b /> }} /></span>
                     <button
                         type="button"
                         onClick={async () => {
@@ -16192,7 +16192,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             } catch { /* ignore */ }
                         }}
                         className="shrink-0 px-2.5 py-1 rounded-md bg-amber-900 text-amber-50 hover:bg-amber-800 transition-colors"
-                    >Attiva licenza</button>
+                    >{tUI('ed_activate_license')}</button>
                 </div>
             )}
             {/* VOCI INCROCIATE — l'avviso che parla quando l'errore si fa, non giorni dopo.
@@ -17314,7 +17314,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
                                 placeholder="Titolo"
-                                aria-label="Titolo del brano"
+                                aria-label={tUI('ed_title_aria')}
                                 className="w-full max-w-2xl bg-transparent text-center font-semibold text-slate-800 placeholder:text-slate-400 outline-none"
                                 style={{ fontSize: `${titleFontSize}px`, fontFamily: titleFontFamily }}
                             />
@@ -17329,7 +17329,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
                                 placeholder="Autore"
-                                aria-label="Autore del brano"
+                                aria-label={tUI('ed_composer_aria')}
                                 className="w-full max-w-2xl bg-transparent text-right italic text-slate-600 placeholder:text-slate-400 outline-none"
                                 style={{ fontSize: `${Math.max(10, Math.round(titleFontSize * 0.7))}px`, fontFamily: titleFontFamily }}
                             />
@@ -17879,7 +17879,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         <g key={`invalid-${systemIndex}-${i}`}
                                                                            style={{pointerEvents:'auto', cursor:'pointer'}}
                                                                            onClick={() => setShowIncompleteMeasureWarnings(false)}>
-                                                                            <title>Misura incompleta — clicca per nascondere</title>
+                                                                            <title>{tUI('ed_incomplete_measure')}</title>
                                                                             <rect
                                                                                 x={r.x}
                                                                                 y={yTop}
@@ -18487,7 +18487,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             setTextAnnotations(prev => (prev || []).filter(t => Math.abs(t.absBeat - m.absBeat) > 1e-6));
                                                                         }}
                                                                     >
-                                                                        <title>Doppio clic per correggerla · trascina per spostarla · tasto destro per toglierla</title>
+                                                                        <title>{tUI('ed_text_hint')}</title>
                                                                         {m.label}
                                                                     </text>
                                                                 ))}
@@ -18696,7 +18696,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                         sl.togli();
                                                     }}
                                                 >
-                                                    <title>Trascina per spostare il capo del segno; tasto destro per toglierlo</title>
+                                                    <title>{tUI('ed_slur_end_hint')}</title>
                                                     <circle cx={cx} cy={cy} r={9} fill="transparent" />
                                                     <circle className="ht-maniglia-punto" cx={cx} cy={cy} r={4} {...MANIGLIA_STILE} />
                                                 </g>
@@ -18759,7 +18759,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                         setDynamics(prev => (prev || []).filter((_, j) => j !== i));
                                                     }}
                                                 >
-                                                    <title>Trascina per allungare la forcella; tasto destro per toglierla</title>
+                                                    <title>{tUI('ed_hairpin_hint')}</title>
                                                     <circle cx={cx} cy={yForcella} r={9} fill="transparent" />
                                                     <circle className="ht-maniglia-punto" cx={cx} cy={yForcella} r={4} {...MANIGLIA_STILE} />
                                                 </g>
@@ -19909,8 +19909,8 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         {lockHides.violations ? (
                             <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-2 p-6">
                                 <span className="text-4xl">🔒</span>
-                                <p className="font-semibold text-sm">Analisi bloccata dal docente</p>
-                                <p className="text-xs">Sblocca tramite File → Sblocca analisi…</p>
+                                <p className="font-semibold text-sm">{tUI('ed_locked_title')}</p>
+                                <p className="text-xs">{tUI('ed_locked_hint')}</p>
                             </div>
                         ) : isAnalysisEnabled ? (
                             <HarmonyAnalysisPanel
@@ -19972,8 +19972,8 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         ) : (
                             <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto flex items-center justify-center text-center text-gray-400">
                                 <div>
-                                    <p className="font-semibold">L'analisi armonica è disattivata.</p>
-                                    <p className="text-sm mt-1">Attivala per vedere gli errori.</p>
+                                    <p className="font-semibold">{tUI('ed_analysis_off')}</p>
+                                    <p className="text-sm mt-1">{tUI('ed_analysis_off_hint')}</p>
                                 </div>
                             </div>
                         )}
@@ -20102,7 +20102,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
             {copyPasteError && (
                 <div style={{ position: 'fixed', bottom: 16, right: 16, background: '#c00', color: '#fff', padding: '8px 16px', borderRadius: 8, zIndex: 9999 }}>
                     {copyPasteError}
-                    <button style={{ marginLeft: 8 }} onClick={() => setCopyPasteError(null)}>Chiudi</button>
+                    <button style={{ marginLeft: 8 }} onClick={() => setCopyPasteError(null)}>{tUI('ed_close')}</button>
                 </div>
             )}
         </div>
