@@ -64,6 +64,13 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         /** Scritte libere: NON sono contesti d'analisi. */
         textAnnotations?: any[];
         toolbarGroupOrder?: any[];
+        /** IMPAGINAZIONE (vedi ProjectDataV1.layout): tetto di battute per riga, vista a
+         *  schermo (righe o nastro) e formato della carta. Seguono il file: riaprendo un
+         *  brano si deve rivedere la pagina com'era, non come l'ha lasciata l'ultimo file
+         *  aperto. */
+        measuresPerLine?: number;
+        viewMode?: 'page' | 'linear';
+        canvasFormat?: 'page' | 'landscape';
 	bpm: number;
 	isBpmActive: boolean;
 	isMetronomeOn: boolean;
@@ -123,6 +130,17 @@ export type BuildGrandStaffProjectSnapshotArgs = {
         accEq?: any;
         accComp?: any;
 };
+/** Valori di partenza dell'impaginazione, gli stessi degli stati nell'editor. Servono in
+ *  due punti: quando si salva senza saperli e quando si apre un file che non li porta. */
+const DEFAULT_LAYOUT = { measuresPerLine: 4, viewMode: 'page' as const, canvasFormat: 'landscape' as const };
+
+/** Il tetto di battute per riga è quello che si può scrivere in toolbar: da 1 a 12. */
+function clampMeasuresPerLine(raw: unknown): number {
+	const v = Math.trunc(Number(raw));
+	if (!Number.isFinite(v)) return DEFAULT_LAYOUT.measuresPerLine;
+	return Math.max(1, Math.min(12, v));
+}
+
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
 	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
 	const baseProject: any = {
@@ -172,6 +190,13 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		metronomeUnit: args.metronomeUnit,
 		isSwing: !!args.isSwing,
 		toolbarGroupOrder: args.toolbarGroupOrder,
+		// Impaginazione: scritta sempre, anche coi valori di default, per un round-trip
+		// pulito (i valori sono tre numeri: non pesano sul file).
+		layout: {
+			measuresPerLine: clampMeasuresPerLine(args.measuresPerLine),
+			viewMode: args.viewMode === 'linear' ? 'linear' : 'page',
+			canvasFormat: args.canvasFormat === 'page' ? 'page' : 'landscape',
+		},
 		analysisLocked: args.analysisLocked,
 		teacherPasswordHash: args.teacherPasswordHash,
 		analysisLockOptions: args.analysisLockOptions,
@@ -291,6 +316,7 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setHoveredViolationNotes: (next: any) => void;
 	setSelectedViolationIndex: (next: any) => void;
 	setViewMode: (next: any) => void;
+	setCanvasFormat?: (next: any) => void;
 	setContextMenu: (next: any) => void;
 	setShowRomanAnalysis: (next: any) => void;
 	setShowSymbolAnalysis: (next: any) => void;
@@ -367,8 +393,10 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setKeyChangeMode('none');
 		args.setModalTonicOverride('');
 		args.setAutoLeadingToneInMinor(true);
-		args.setMeasuresPerLine(4);
-		args.setMeasuresPerLineDraft('4');
+		args.setMeasuresPerLine(DEFAULT_LAYOUT.measuresPerLine);
+		args.setMeasuresPerLineDraft(String(DEFAULT_LAYOUT.measuresPerLine));
+		args.setViewMode(DEFAULT_LAYOUT.viewMode);
+		args.setCanvasFormat?.(DEFAULT_LAYOUT.canvasFormat);
 		args.setMinMeasureCount(4);
 		args.setMinMeasureCountDraft('4');
 		args.setBpm(120);
@@ -465,6 +493,13 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setIsBpmActive(false);
 	args.setIsMetronomeOn(false);
 	args.setMetronomeUnit('quarter');
+	// IMPAGINAZIONE ai valori di default: i file salvati prima non la portano, e senza
+	// questo azzeramento erediterebbero quella del file aperto prima — lo stesso inganno
+	// del mute per voce (silenzio fantasma sui file vecchi).
+	args.setMeasuresPerLine(DEFAULT_LAYOUT.measuresPerLine);
+	args.setMeasuresPerLineDraft(String(DEFAULT_LAYOUT.measuresPerLine));
+	args.setViewMode(DEFAULT_LAYOUT.viewMode);
+	args.setCanvasFormat?.(DEFAULT_LAYOUT.canvasFormat);
 
 	try {
 		const parsed: any = cmd.parsed;
@@ -566,6 +601,22 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				const cleanedOrder = loadedProject.toolbarGroupOrder.filter((id: any) => all.has(id));
 				const fullOrder: any[] = Array.from(new Set([...cleanedOrder, ...args.defaultToolbarGroupOrder]));
 				args.setToolbarGroupOrder(fullOrder);
+			}
+			// Impaginazione salvata nel file. Ogni campo è indipendente: un file che porta
+			// solo la vista non deve trascinarsi dietro un tetto di battute inventato.
+			const savedLayout = (loadedProject as any).layout;
+			if (savedLayout && typeof savedLayout === 'object') {
+				if (savedLayout.measuresPerLine != null) {
+					const mpl = clampMeasuresPerLine(savedLayout.measuresPerLine);
+					args.setMeasuresPerLine(mpl);
+					args.setMeasuresPerLineDraft(String(mpl));
+				}
+				if (savedLayout.viewMode === 'page' || savedLayout.viewMode === 'linear') {
+					args.setViewMode(savedLayout.viewMode);
+				}
+				if (savedLayout.canvasFormat === 'page' || savedLayout.canvasFormat === 'landscape') {
+					args.setCanvasFormat?.(savedLayout.canvasFormat);
+				}
 			}
 			if (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot) {
 				args.setKeySignatureRoot(loadedProject.keySignatureRoot);
@@ -839,7 +890,8 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setMeasureLengths?.([]);
 		args.apply.setTextAnnotations?.([]);
 		args.apply.setMinMeasureCount(4);
-		args.apply.setMeasuresPerLine(4);
+		args.apply.setMeasuresPerLine(DEFAULT_LAYOUT.measuresPerLine);
+		args.apply.setCanvasFormat?.(DEFAULT_LAYOUT.canvasFormat);
 		args.apply.setIsMinorMode(false);
 		args.apply.setKeyChangeMode('none');
 		args.apply.setModalTonicOverride('');
@@ -854,7 +906,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setAutoLeadingToneInMinor(true);
 		args.apply.setHoveredViolationNotes(null);
 		args.apply.setSelectedViolationIndex(null);
-		args.apply.setViewMode('page');
+		args.apply.setViewMode(DEFAULT_LAYOUT.viewMode);
 		args.apply.setPasteCaretImmediate(null);
 		args.apply.setAnalysisContexts([]);
 		args.apply.setHarmonyOverrides([]);

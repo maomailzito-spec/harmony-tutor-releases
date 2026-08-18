@@ -5622,6 +5622,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     octaveShifts,
                     keySignatureChanges,
                     toolbarGroupOrder,
+                    // Impaginazione: battute per riga, vista a schermo, formato della carta.
+                    measuresPerLine,
+                    viewMode,
+                    canvasFormat,
                     bpm,
                     isBpmActive,
                     isMetronomeOn,
@@ -5714,6 +5718,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setHoveredViolationNotes,
                     setSelectedViolationIndex,
                     setViewMode,
+                    setCanvasFormat,
                     setContextMenu,
                     setShowRomanAnalysis,
                     setShowSymbolAnalysis,
@@ -6125,6 +6130,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setIsMetronomeOn(!!p.isMetronomeOn);
                 setMetronomeUnit(p.metronomeUnit || 'quarter');
                 setIsSwing(!!(p as any).isSwing);
+                // Impaginazione salvata col backup, come nell'apertura da file.
+                const impaginazione = (p as any).layout;
+                if (impaginazione && typeof impaginazione === 'object') {
+                    const mpl = Math.trunc(Number(impaginazione.measuresPerLine));
+                    if (Number.isFinite(mpl)) setMeasuresPerLine(Math.max(1, Math.min(12, mpl)));
+                    if (impaginazione.viewMode === 'page' || impaginazione.viewMode === 'linear') setViewMode(impaginazione.viewMode);
+                    if (impaginazione.canvasFormat === 'page' || impaginazione.canvasFormat === 'landscape') setCanvasFormat(impaginazione.canvasFormat);
+                }
                 if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
                 if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
                 if (p.toolbarGroupOrder) {
