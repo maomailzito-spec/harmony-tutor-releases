@@ -40,6 +40,35 @@ const App: React.FC = () => {
         // Diagnostica del sincronismo, da console: `__htAudioLate()` mostra quante note
         // sono state consegnate in ritardo al motore audio (con `true` azzera il conto).
         try { (window as any).__htAudioLate = (reset?: boolean) => AudioService.readLateness(!!reset); } catch { /* ignore */ }
+        // ELENCO DEGLI STRUMENTI DI DIAGNOSI — `__htAiuto()` in console.
+        // Restano nella build pubblicata: costano zero finché non li si chiama (i due che
+        // raccolgono dati mentre l'app lavora si accendono da localStorage e di default
+        // sono spenti), e servono ai difetti che si vedono solo sulla macchina di chi li
+        // segnala, dove non c'è nessun ambiente di sviluppo da avviare. Chi non sa che
+        // esistono non li incontra mai; a noi bastano due righe dettate al telefono.
+        try {
+            (window as any).__htAiuto = () => {
+                const attivo = (nome: string) => (typeof (window as any)[nome] === 'function' ? 'pronto' : 'non ancora disponibile');
+                const righe = [
+                    { comando: '__htAudio()', stato: attivo('__htAudio'), cosa_dice: 'note consegnate in ritardo al motore audio + quanto è intervenuto il limitatore' },
+                    { comando: '__htAudioLate(azzera?)', stato: attivo('__htAudioLate'), cosa_dice: 'solo il conto dei ritardi; con true riparte da zero' },
+                    { comando: '__htBattuta(n)', stato: attivo('__htBattuta'), cosa_dice: 'cosa c\'è davvero nella battuta n: voce, figura, inizio/durata/fine in tick, e i posti dove una nota può cominciare' },
+                    { comando: '__htUltimiInserimenti()', stato: attivo('__htUltimiInserimenti'), cosa_dice: 'le ultime venti note scritte col mouse: dove si è cliccato, che tempo è stato letto, quale attacco ha vinto' },
+                    { comando: '__htMisuraTeste()', stato: attivo('__htMisuraTeste'), cosa_dice: 'scarto fra la x che diamo a una nota e la testa disegnata — da accendere prima: localStorage._HT_MISURA_TESTE = \'1\' e ricaricare' },
+                    { comando: '__htGhost', stato: (typeof (window as any).__htGhost === 'object' && (window as any).__htGhost) ? 'pronto' : 'non ancora disponibile', cosa_dice: 'lo stesso scarto per la nota fantasma; si legge DOPO aver mosso il mouse sul rigo (stesso interruttore di __htMisuraTeste)' },
+                ];
+                // eslint-disable-next-line no-console
+                console.table(righe);
+                // eslint-disable-next-line no-console
+                console.log(
+                    'Interruttori che non sono comandi:\n' +
+                    "  localStorage._HT_DEBUG_BEAT = '43'  → ricarica → in console il ragionamento delle etichette sul movimento 43 (con '-1' tutti)\n" +
+                    "  localStorage._HT_MISURA_TESTE = '1' → ricarica → accende la raccolta per __htMisuraTeste() e __htGhost\n" +
+                    '  per spegnerli: localStorage.removeItem(\'_HT_DEBUG_BEAT\')',
+                );
+                return 'Strumenti di diagnosi. "non ancora disponibile" = quella parte dell\'app non è ancora stata aperta, o l\'interruttore è spento.';
+            };
+        } catch { /* la diagnostica non deve mai disturbare l'avvio */ }
     }, []);
 
     // Native menu integration (Electron): allow switching app mode from "Vista".

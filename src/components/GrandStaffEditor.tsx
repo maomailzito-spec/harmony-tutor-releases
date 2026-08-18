@@ -11991,6 +11991,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         );
         snappedLocalTicks = startTick - measureStartTick;
 
+        registraInserimento({
+            battuta: hit.measureIndex,
+            figura: `${selectedInsertion.duration}${selectedInsertion.isDotted ? '.' : ''}${isTriplet ? ' ⑶' : ''}${isDuplet ? ' ⑵' : ''}`,
+            x_mouse: Math.round(x * 10) / 10,
+            x_letta: Math.round(xMirata * 10) / 10,
+            tick_mirato: Math.round(localTicksRaw),
+            posti: postiDisponibili.map(t => t - measureStartTick).join(' '),
+            scelto: snappedLocalTicks,
+            px_per_tick: Math.round(pxPerTick * 10000) / 10000,
+            shift: !!(e as any)?.shiftKey,
+        });
+
         // Derive beat only for compatibility (do not use it for snapping).
         const beatInMeasure = (snappedLocalTicks / TICKS_PER_QUARTER) + 1;
 
@@ -13523,6 +13535,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const attaccoPiuVicinoRef = useRef(attaccoPiuVicino);
     attaccoPiuVicinoRef.current = attaccoPiuVicino;
 
+    // ── REGISTRO DEGLI INSERIMENTI (diagnostica) ──────────────────────────────
+    // `__htUltimiInserimenti()` mostra le ultime venti note scritte col mouse: dove si è
+    // cliccato, quale tempo è stato letto da quel punto, quali posti erano disponibili e
+    // quale ha vinto. Serve ai difetti che NON si riproducono a comando — «a volte la nota
+    // salta allo slot successivo» — dove riprodurre il caso è più difficile che registrarlo.
+    const registroInserimenti = useRef<Array<Record<string, unknown>>>([]);
+    const registraInserimento = useCallback((riga: Record<string, unknown>) => {
+        try {
+            const reg = registroInserimenti.current;
+            reg.push({ quando: new Date().toLocaleTimeString(), ...riga });
+            if (reg.length > 20) reg.shift();
+        } catch { /* la diagnostica non deve mai disturbare la scrittura */ }
+    }, []);
+    useEffect(() => {
+        (window as any).__htUltimiInserimenti = () => {
+            // eslint-disable-next-line no-console
+            console.table(registroInserimenti.current);
+            return registroInserimenti.current.length;
+        };
+    }, []);
+
     // ── COSA C'È DAVVERO IN UNA BATTUTA (diagnostica) ─────────────────────────
     // `__htBattuta(3)` in console elenca gli eventi della battuta 3 — voce, figura, inizio,
     // durata e fine in tick, contando da inizio battuta — e i posti dove una nota può
@@ -14411,12 +14444,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // IL FANTASMA SEGUE IL PUNTATORE, e non lo slot in cui la nota cadrà.
         //
-        // La x da passare a VexFlow è però quella della GRIGLIA: lo scostamento fino alla
-        // testa lo aggiunge lui (`PX_GRIGLIA_CENTRO_TESTA`). Passando la x grezza del mouse
-        // il fantasma si disegnava mezzo glifo più a destra del puntatore; togliendo la
-        // costante, la testa del fantasma cade esattamente sotto la punta — che è anche il
-        // punto da cui il clic legge il tempo.
-        const xTestaFantasma = x - PX_GRIGLIA_CENTRO_TESTA;
+        // LA X È QUELLA DEL MOUSE, senza correzioni. Provato a sottrarre lo scostamento
+        // fino alla testa (`PX_GRIGLIA_CENTRO_TESTA`) ragionando che VexFlow lo aggiunge da
+        // sé: il fantasma è finito una quindicina di pixel a SINISTRA del puntatore. Il
+        // conto sulla carta tornava, in mano no — segno che fra la coordinata del mouse e
+        // la x che diamo alle note c'è già di mezzo qualcosa che quel conto non vedeva.
+        // Finché non è misurato (vedi `__htGhost`), qui non si tocca: il fantasma sotto la
+        // punta è il comportamento che l'utente riconosce.
+        const xTestaFantasma = x;
         //
         // PROVATO E TOLTO (17/08/2026). Agganciarlo allo slot sembra più onesto — mostri
         // dove la nota andrà davvero — ma con l'aggancio a SINISTRA il fantasma si posa

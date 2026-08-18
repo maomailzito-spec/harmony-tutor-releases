@@ -4363,6 +4363,60 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       noteHitPointsRef.current = hitPoints;
       onNoteHitPoints?.(hitPoints);
 
+      // LA TESTA È IL GLIFO PIÙ GROSSO DEL GRUPPO, non il primo path che si incontra.
+      // Un gruppo di nota contiene anche gambo (largo zero), travature, linee addizionali,
+      // punti: misurando il primo path si finisce a misurare il gambo, ed è successo.
+      const centroDellaTesta = (g: Element | null | undefined): { centro: number; w: number; h: number } | null => {
+        try {
+          if (!g) return null;
+          let centro = 0; let w = 0; let h = 0; let areaMax = 0;
+          g.querySelectorAll('path').forEach((el) => {
+            try {
+              const bb = (el as SVGGraphicsElement).getBBox();
+              // Una testa è larga e alta insieme: il gambo è una riga verticale (w≈0), le
+              // linee addizionali sono strisce basse (h≈1).
+              if (bb.width < 4 || bb.height < 4) return;
+              const area = bb.width * bb.height;
+              if (area > areaMax) { areaMax = area; centro = bb.x + bb.width / 2; w = bb.width; h = bb.height; }
+            } catch { /* ignore */ }
+          });
+          return areaMax > 0 ? { centro, w, h } : null;
+        } catch {
+          return null;
+        }
+      };
+
+      // IL FANTASMA, misurato a ogni disegno. Vive quanto dura il gesto del mouse, quindi
+      // non lo si può interrogare a mano: si registra qui e si legge dopo in `__htGhost`.
+      // Dice l'unica cosa che conta — di quanto la testa che si vede sta a destra della x
+      // che gli abbiamo dato — e serve a sapere se al fantasma tocca lo stesso scostamento
+      // delle note vere (+18) o un altro.
+      if (registroTeste) {
+        try {
+          const w = window as any;
+          const g = containerRef.current?.querySelector('[data-note-id="__ghost__"]');
+          const dati = registroTeste.get('__ghost__');
+          const testa = centroDellaTesta(g);
+          if (dati && testa) {
+            const inventario: string[] = [];
+            g?.querySelectorAll('path').forEach((el) => {
+              try {
+                const bb = (el as SVGGraphicsElement).getBBox();
+                inventario.push(`${Math.round(bb.width)}×${Math.round(bb.height)}@${Math.round(bb.x)}`);
+              } catch { /* ignore */ }
+            });
+            w.__htGhost = {
+              nostra_xPosition: Math.round(dati.xPosition * 10) / 10,
+              hitPoint_x: Math.round(dati.xHit * 10) / 10,
+              testa_disegnata: Math.round(testa.centro * 10) / 10,
+              'testa-nostra': Math.round((testa.centro - dati.xPosition) * 10) / 10,
+              glifo: `${Math.round(testa.w)}×${Math.round(testa.h)}`,
+              tutti_i_glifi: inventario.join('  '),
+            };
+          }
+        } catch { /* diagnostica */ }
+      }
+
       // Misura delle teste: i dati di questo sistema si aggiungono al registro globale, e
       // `__htMisuraTeste()` li affianca alla posizione REALE del glifo letta dal DOM.
       if (registroTeste) {
@@ -4377,11 +4431,19 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 const id = (g as SVGElement).getAttribute('data-note-id') || '';
                 const dati = (w.__htTeste as Map<string, { xPosition: number; xHit: number }>).get(id);
                 if (!dati) return;
-                // Il glifo della TESTA: il primo path del gruppo che non sia gambo o legatura.
-                const path = (g as SVGGElement).querySelector('path');
-                if (!path) return;
-                const bb = (path as SVGGraphicsElement).getBBox();
-                const centroTesta = bb.x + bb.width / 2;
+                // Il glifo della TESTA: il più grosso del gruppo (vedi `centroDellaTesta`) —
+                // il primo path può essere il gambo, largo zero.
+                let centroTesta: number | null = null;
+                let area = 0;
+                (g as SVGGElement).querySelectorAll('path').forEach((el) => {
+                  try {
+                    const bb = (el as SVGGraphicsElement).getBBox();
+                    if (bb.width < 4 || bb.height < 4) return;
+                    const a2 = bb.width * bb.height;
+                    if (a2 > area) { area = a2; centroTesta = bb.x + bb.width / 2; }
+                  } catch { /* ignore */ }
+                });
+                if (centroTesta == null) return;
                 righe.push({
                   id: id.slice(0, 12),
                   nostra_xPosition: Math.round(dati.xPosition * 10) / 10,
