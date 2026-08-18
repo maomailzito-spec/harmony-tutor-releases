@@ -1614,6 +1614,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [quantizeGrid, setQuantizeGrid] = useState<string>('sixteenth');
     const [measuresPerLineDraft, setMeasuresPerLineDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
+    /** A CAPO DI SISTEMA: dopo queste battute la riga finisce, punto.
+     *
+     *  Il numero di battute per riga è un TETTO buono per cominciare, ma dipende dallo
+     *  zoom e da quanto è fitta la musica, quindi la stessa riga cambia contenuto mentre
+     *  si lavora. Chi impagina non ragiona per tetti: decide che QUESTA riga finisce QUI —
+     *  perché lì finisce una frase, o perché la pagina viene meglio così. Una volta
+     *  deciso, non deve muoversi più, nemmeno aggiungendo battute altrove. */
+    const [systemBreaks, setSystemBreaks] = useState<number[]>([]);
     const [ornamentOverrides, setOrnamentOverrides] = useState<OrnamentOverride[]>([]);
     const [analysisLocked, setAnalysisLocked] = useState<boolean>(false);
     const [teacherPasswordHash, setTeacherPasswordHash] = useState<string | undefined>(undefined);
@@ -5602,6 +5610,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     tonicizationHints,
                     inferredContextSuppressions,
                     doubleBarlineMeasures,
+                    systemBreaks,
                     repeatBarlines,
                     voltaBrackets,
                     tempoCurves,
@@ -5997,8 +6006,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         latestRawNotes, latestHarmonyOverrides, latestAccHarmonyOverrides, latestOrnamentOverrides, projectExtrasRef,
         staffSystemMode, keySignatureRoot, projectTitle, projectComposer, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
-        keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
+        keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures, systemBreaks,
         repeatBarlines, voltaBrackets, tempoCurves, tempoMarks, measureLengths, textAnnotations, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        measuresPerLine, viewMode, canvasFormat,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -6098,6 +6108,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setTonicizationHints((p as any).tonicizationHints || []);
                 setInferredContextSuppressions((p as any).inferredContextSuppressions || []);
                 setDoubleBarlineMeasures(p.doubleBarlineMeasures || []);
+                setSystemBreaks(((p as any).systemBreaks || []) as number[]);
                 setRepeatBarlines(p.repeatBarlines || {});
                 setVoltaBrackets(p.voltaBrackets || []);
                 setTempoCurves((p as any).tempoCurves || []);
@@ -6974,6 +6985,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return content + (MEASURE_PADDING_X * 2) + extraLeft;
         };
 
+        // L'A CAPO DECISO A MANO COMANDA su tutto il resto: né il tetto di battute per
+        // riga né lo spazio disponibile possono spostarlo. È l'unico modo perché una riga
+        // impaginata a mano resti com'è quando si aggiungono battute altrove — che è
+        // esattamente ciò che il tetto non sa fare, dipendendo com'è dallo zoom e dalla
+        // densità della musica.
+        const aCapoDopo = new Set<number>((systemBreaks || []).map(n => Math.max(0, Math.round(Number(n)))).filter(n => Number.isFinite(n)));
+
         let accWidth = 0;
         for (let m = 0; m < targetTotalMeasures && !isRibbon; m++) {
             if (curSys.length >= desiredMeasuresPerLine) {
@@ -6991,6 +7009,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             } else {
                 curSys.push(m);
                 accWidth += mWidth;
+            }
+
+            // Se qui è stato messo un a capo, la riga finisce con questa battuta.
+            if (aCapoDopo.has(m) && curSys.length > 0) {
+                tentativeSystems.push({ measureIndices: curSys });
+                curSys = [];
+                accWidth = 0;
             }
         }
         if (isRibbon) {
@@ -7175,24 +7200,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
 
 
-        try {
-            const sample = finalNotes.slice(0, 12).map(n => ({ id: n.id, measureIndex: n.measureIndex, beat: n.beat, startTick: (n as any).startTick, x: n.xPosition }));
-            const firstMeasureIndex = 0;
-            const sampleMeasureWidth = measureFinalWidths.get(firstMeasureIndex) || 0;
-            const sampleBeats = measureBeatsPerMeasure[0] ?? baseBeatsPerMeasure;
-            const samplePxPerQuarter = sampleMeasureWidth > 0 ? ((sampleMeasureWidth - (MEASURE_PADDING_X * 2)) / Math.max(1, sampleBeats)) : 0;
-            // Per-system diagnostics: report pxPerTick estimate and first positioned note
-            systemsParams.forEach((sp, si) => {
-                const sysNotes = finalNotes.filter(n => sp.measureIndices.includes(n.measureIndex ?? -1));
-                const firstNote = sysNotes.length > 0 ? sysNotes[0] : null;
-                //
-            });
-            //
-        } catch (e) {
-            // ignore logging errors
-        }
+        // QUI c'era una diagnostica dell'impaginazione che non stampava più niente (le
+        // console.log erano state tolte lasciando il calcolo): per ogni sistema filtrava
+        // TUTTE le note del brano, a ogni ricalcolo del layout. Le diagnosi che teniamo
+        // sono quelle che si accendono a richiesta dalla console (vedi __htAiuto), non
+        // quelle che lavorano sempre e non dicono nulla.
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
-    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths]);
+    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths, systemBreaks]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA
@@ -14971,6 +14985,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
+            // ── A CAPO DI SISTEMA: ⌥ + Invio ──
+            // Agisce sulla battuta dove sta il cursore: la riga finisce lì. Ripetendolo si
+            // toglie. Il tetto «battute per riga» resta come punto di partenza per le righe
+            // che non sono state decise a mano.
+            if (!isMod && e.altKey && (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const ab = playbackCursorAbsBeatRef.current;
+                if (!Number.isFinite(ab as any)) return;
+                const bpmLocale = timeSignature.numerator * (4 / timeSignature.denominator);
+                const inizi = (layoutDataRef.current as any)?.measureStartAbsBeat as number[] | undefined;
+                let mis = Math.floor((ab as number) / bpmLocale);
+                if (inizi && inizi.length) {
+                    for (let m = inizi.length - 1; m >= 0; m--) {
+                        if ((ab as number) >= (inizi[m] ?? 0) - 1e-9) { mis = m; break; }
+                    }
+                }
+                alternaACapoDopoBattutaRef.current?.(mis);
+                return;
+            }
+
             // ── Rallentando / accelerando shortcut: Alt+Shift+R ──
             // With ≥2 notes selected: open inline modal to choose fromBpm/toBpm,
             //   then create a tempo curve from the first to the last selected note (by absBeat).
@@ -17595,7 +17630,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     setSelectedNoteIds(prev => (prev.size === 1 && prev.has(noteId)) ? prev : new Set([noteId]));
                                     const nota = (latestRawNotes.current || []).find(n => n.id === noteId) as any;
                                     const conArt = !!(nota?.articulations?.length);
-                                    setMenuNota({ x: (ev as MouseEvent).clientX, y: (ev as MouseEvent).clientY, noteId, conArticolazioni: conArt });
+                                    const misNota = Number(nota?.measureIndex);
+                                    setMenuNota({
+                                        x: (ev as MouseEvent).clientX,
+                                        y: (ev as MouseEvent).clientY,
+                                        noteId,
+                                        conArticolazioni: conArt,
+                                        measureIndex: Number.isFinite(misNota) ? misNota : undefined,
+                                        conACapo: Number.isFinite(misNota) && (systemBreaks || []).includes(misNota),
+                                    });
                                     return true;
                                 }}
                                 onBarlineRightClick={(barlineId) => {
@@ -19819,6 +19862,9 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     onSpostaSu={() => handleMoveToStaff('treble')}
                     onSpostaGiu={() => handleMoveToStaff('bass')}
                     onRigoPredefinito={() => handleMoveToStaff(null)}
+                    onACapo={typeof menuNota.measureIndex === 'number'
+                        ? () => alternaACapoDopoBattutaRef.current?.(menuNota.measureIndex as number)
+                        : undefined}
                 />
             )}
 

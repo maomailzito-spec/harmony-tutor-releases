@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * IL MENÙ DEL TASTO DESTRO SULLA NOTA.
@@ -18,16 +19,26 @@ import React, { useEffect, useRef } from 'react';
  * scritta accanto la insegna a chi userà l'applicazione a lungo.
  */
 
-export type NoteMenuData = { x: number; y: number; noteId: string; conArticolazioni: boolean };
+export type NoteMenuData = {
+    x: number; y: number; noteId: string; conArticolazioni: boolean;
+    /** Battuta della nota: serve alle voci che agiscono sulla BATTUTA e non sulla nota,
+     *  come l'a capo di sistema. Chi vuole spezzare la riga clicca lì dove sta guardando. */
+    measureIndex?: number;
+    /** Se quella battuta ha già un a capo: la voce dice «togli» invece di «vai a capo». */
+    conACapo?: boolean;
+};
 
-const ORNAMENTI: Array<[string, string, string]> = [
-    ['passing',      'Nota di passaggio',  '⌥P'],
-    ['neighbor',     'Nota di volta',      '⌥V'],
-    ['appoggiatura', 'Appoggiatura',       '⌥A'],
-    ['suspension',   'Ritardo',            '⌥R'],
-    ['escape',       'Nota di sfuggita',   '⌥S'],
-    ['cambiata',     'Cambiata',           '⌥C'],
-    ['anticipation', 'Anticipazione',      '⌥N'],
+/** [tipo, chiave di traduzione, testo italiano di ripiego, scorciatoia].
+ *  Il nome si traduce: questo menù si vede anche in inglese, e i termini dell'analisi
+ *  hanno un nome proprio nelle due lingue (nota di volta = neighbor tone). */
+const ORNAMENTI: Array<[string, string, string, string]> = [
+    ['passing',      'note_menu_nct_passing',      'Nota di passaggio',  '⌥P'],
+    ['neighbor',     'note_menu_nct_neighbor',     'Nota di volta',      '⌥V'],
+    ['appoggiatura', 'note_menu_nct_appoggiatura', 'Appoggiatura',       '⌥A'],
+    ['suspension',   'note_menu_nct_suspension',   'Ritardo',            '⌥R'],
+    ['escape',       'note_menu_nct_escape',       'Nota di sfuggita',   '⌥S'],
+    ['cambiata',     'note_menu_nct_cambiata',     'Cambiata',           '⌥C'],
+    ['anticipation', 'note_menu_nct_anticipation', 'Anticipazione',      '⌥N'],
 ];
 
 const NoteContextMenu: React.FC<{
@@ -40,11 +51,33 @@ const NoteContextMenu: React.FC<{
     onSpostaSu: () => void;
     onSpostaGiu: () => void;
     onRigoPredefinito: () => void;
+    onACapo?: () => void;
 }> = ({
     data, onClose, onOrnamento, onTogliOrnamento, onCorona,
-    onTogliArticolazioni, onSpostaSu, onSpostaGiu, onRigoPredefinito,
+    onTogliArticolazioni, onSpostaSu, onSpostaGiu, onRigoPredefinito, onACapo,
 }) => {
+    const { t } = useTranslation('ui');
     const ref = useRef<HTMLDivElement | null>(null);
+
+    /** DOVE STA IL MENÙ: si misura, non si indovina.
+     *
+     *  Prima si rientrava dai bordi con l'altezza scritta a mano (340 px). Basta
+     *  aggiungere una voce perché quel numero non sia più vero, ed è successo: col tasto
+     *  destro su una nota in fondo al pentagramma il menù finiva tagliato di sotto. Qui si
+     *  misura il menù DOPO averlo composto e prima di dipingerlo, e se non ci sta lo si
+     *  tira dentro. Se non ci sta nemmeno in altezza, scorre. */
+    const [posizione, setPosizione] = useState<{ left: number; top: number }>({ left: data.x, top: data.y });
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const MARGINE = 8;
+        const r = el.getBoundingClientRect();
+        let left = data.x;
+        let top = data.y;
+        if (left + r.width > window.innerWidth - MARGINE) left = window.innerWidth - r.width - MARGINE;
+        if (top + r.height > window.innerHeight - MARGINE) top = window.innerHeight - r.height - MARGINE;
+        setPosizione({ left: Math.max(MARGINE, left), top: Math.max(MARGINE, top) });
+    }, [data.x, data.y, data.conArticolazioni, data.measureIndex, data.conACapo]);
 
     // Si chiude cliccando fuori o con Esc: un menù contestuale che resta aperto diventa
     // un pannello, e copre la musica su cui si stava lavorando.
@@ -64,55 +97,73 @@ const NoteContextMenu: React.FC<{
     return (
         <div
             ref={ref}
-            // In coordinate di finestra, e rientrato dai bordi: un menù che esce dallo
-            // schermo è un menù con delle voci irraggiungibili.
+            // In coordinate di finestra; il rientro dai bordi lo calcola l'effetto qui
+            // sopra, sulla misura vera del menù.
             style={{
                 position: 'fixed',
-                left: Math.min(data.x, window.innerWidth - 236),
-                top: Math.min(data.y, window.innerHeight - 340),
+                left: posizione.left,
+                top: posizione.top,
                 width: 224,
                 zIndex: 10060,
+                // Su finestre basse il menù è più alto dello schermo: meglio scorrerlo che
+                // avere delle voci irraggiungibili.
+                maxHeight: 'calc(100vh - 16px)',
+                overflowY: 'auto',
             }}
             className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-1 select-none"
         >
-            <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Ornamento</div>
-            {ORNAMENTI.map(([tipo, nome, scorciatoia]) => (
+            <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('note_menu_nct_title', { defaultValue: 'Ornamento' })}</div>
+            {ORNAMENTI.map(([tipo, chiave, nome, scorciatoia]) => (
                 <button key={tipo} className={voce} onClick={() => { onOrnamento(tipo); onClose(); }}>
-                    <span>{nome}</span><span className={tasto}>{scorciatoia}</span>
+                    <span>{t(chiave, { defaultValue: nome })}</span><span className={tasto}>{scorciatoia}</span>
                 </button>
             ))}
             <button className={voce} onClick={() => { onOrnamento('structural'); onClose(); }}>
-                <span>Forza strutturale</span><span className={tasto}>⌥H</span>
+                <span>{t('note_menu_force_structural', { defaultValue: 'Forza strutturale' })}</span><span className={tasto}>⌥H</span>
             </button>
             <button className={voce} onClick={() => { onTogliOrnamento(); onClose(); }}>
-                <span className="text-slate-300">Togli l'ornamento</span>
+                <span className="text-slate-300">{t('note_menu_clear_nct', { defaultValue: "Togli l'ornamento" })}</span>
             </button>
 
             <div className="h-px bg-slate-600/60 my-1" />
 
             <button className={voce} onClick={() => { onCorona(); onClose(); }}>
-                <span>Corona</span><span className={tasto}>⌥F</span>
+                <span>{t('note_menu_fermata', { defaultValue: 'Corona' })}</span><span className={tasto}>⌥F</span>
             </button>
             {/* Solo se c'è qualcosa da togliere: una voce che non farebbe niente è
                 peggio di una voce assente — promette e non mantiene. */}
             {data.conArticolazioni && (
                 <button className={voce} onClick={() => { onTogliArticolazioni(); onClose(); }}>
-                    <span>Togli le articolazioni</span>
+                    <span>{t('note_menu_clear_artic', { defaultValue: 'Togli le articolazioni' })}</span>
                 </button>
             )}
 
             <div className="h-px bg-slate-600/60 my-1" />
 
-            <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Sposta di rigo</div>
+            <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('note_menu_move_staff', { defaultValue: 'Sposta di rigo' })}</div>
             <button className={voce} onClick={() => { onSpostaSu(); onClose(); }}>
-                <span>Al rigo superiore</span><span className={tasto}>⌥↑</span>
+                <span>{t('note_menu_staff_upper', { defaultValue: 'Al rigo superiore' })}</span><span className={tasto}>⌥↑</span>
             </button>
             <button className={voce} onClick={() => { onSpostaGiu(); onClose(); }}>
-                <span>Al rigo inferiore</span><span className={tasto}>⌥↓</span>
+                <span>{t('note_menu_staff_lower', { defaultValue: 'Al rigo inferiore' })}</span><span className={tasto}>⌥↓</span>
             </button>
             <button className={voce} onClick={() => { onRigoPredefinito(); onClose(); }}>
-                <span className="text-slate-300">Rigo della sua voce</span>
+                <span className="text-slate-300">{t('note_menu_staff_default', { defaultValue: 'Rigo della sua voce' })}</span>
             </button>
+
+            {/* IMPAGINAZIONE. Agisce sulla battuta, non sulla nota, ma è qui che si va a
+                cercarla: si guarda la musica e si decide che la riga finisce lì. */}
+            {onACapo && typeof data.measureIndex === 'number' && (
+                <>
+                    <div className="h-px bg-slate-600/60 my-1" />
+                    <button className={voce} onClick={() => { onACapo(); onClose(); }}>
+                        <span>{data.conACapo
+                            ? t('note_menu_break_remove', { defaultValue: "Togli l'a capo" })
+                            : t('note_menu_break_add', { defaultValue: 'Vai a capo dopo questa battuta' })}</span>
+                        <span className={tasto}>⌥⏎</span>
+                    </button>
+                </>
+            )}
         </div>
     );
 };

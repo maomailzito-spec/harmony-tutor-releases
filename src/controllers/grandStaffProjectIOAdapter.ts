@@ -46,6 +46,8 @@ export type BuildGrandStaffProjectSnapshotArgs = {
 	tonicizationHints?: any[];
 	inferredContextSuppressions?: any[];
 	doubleBarlineMeasures: any[];
+	/** Battute dopo cui la riga finisce, decise a mano (a capo di sistema). */
+	systemBreaks?: number[];
         repeatBarlines: Record<number, string>;
         voltaBrackets: any[];
         dynamics?: any[];
@@ -141,6 +143,7 @@ export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnaps
 		modalTonicOverride: args.modalTonicOverride,
 		analysisContexts: args.analysisContexts,				tonicizationHints: args.tonicizationHints || [],
 				inferredContextSuppressions: args.inferredContextSuppressions || [],		doubleBarlineMeasures: args.doubleBarlineMeasures,
+		systemBreaks: args.systemBreaks || [],
 		repeatBarlines: args.repeatBarlines,
 		voltaBrackets: args.voltaBrackets,
 		// Curve di tempo (rallentando/accelerando): salvate sempre, anche vuote, per
