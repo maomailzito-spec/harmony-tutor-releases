@@ -426,5 +426,6 @@
   "ts_meter_tip": "Metro — scrivi la cifra, o cambiala con la rotella e le frecce ↑↓",
   "ts_numerator": "Numeratore del metro",
   "ts_denominator": "Denominatore del metro",
-  "np_satb_line": "Rigo"
+  "np_satb_line": "Rigo",
+  "mod_why_shortcut": "(⌥+clic)"
 }

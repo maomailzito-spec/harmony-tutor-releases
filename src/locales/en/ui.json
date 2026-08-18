@@ -451,5 +451,6 @@
   "ts_meter_tip": "Time signature — type the number, or change it with the wheel and the ↑↓ arrows",
   "ts_numerator": "Time signature numerator",
   "ts_denominator": "Time signature denominator",
-  "np_satb_line": "Staff"
+  "np_satb_line": "Staff",
+  "mod_why_shortcut": "(⌥+click)"
 }

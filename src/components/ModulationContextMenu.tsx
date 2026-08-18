@@ -331,7 +331,7 @@ const ModulationContextMenu: React.FC<{
                     className="self-start text-[11px] text-sky-300 hover:text-sky-100 underline underline-offset-2"
                     title={t('mod_why_tip')}
                 >
-                    {t('mod_why')} <span className="text-slate-500">(⌥+clic)</span>
+                    {t('mod_why')} <span className="text-slate-500">{t('mod_why_shortcut')}</span>
                 </button>
             )}
 
