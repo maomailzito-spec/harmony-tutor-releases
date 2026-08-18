@@ -11218,6 +11218,19 @@ export function applyHarmonyRules(
             }
         } catch { /* ignore */ }
 
+        // UN INCROCIO FRA NOTE SENZA GAMBO quasi sempre non è una scelta di condotta.
+        //
+        // La semibreve è l'unica figura che non mostra a quale voce appartiene: senza gambo
+        // non c'è direzione da leggere, e la nota può essere finita nella parte sbagliata
+        // senza che si veda. È successo davvero, ed è arrivato come «l'ultimo accordo è
+        // sbagliato»: l'analisi diceva 6/4 perché il tenore stava sotto il basso.
+        //
+        // In quel caso il consiglio abituale — «riordina le altezze» — manda a ragionare
+        // sulla distribuzione dell'accordo, cioè nel posto sbagliato. Se ne dà un altro,
+        // che dice dove guardare per primo (vedi `suggestionRuleKey`).
+        const senzaGambo = (...noteCoinvolte: Array<StaffNote | null | undefined>): boolean =>
+            noteCoinvolte.every(n => !!n && String((n as any).duration) === 'whole');
+
         // R-04 / EXC-S02: voice crossing (spelling-first MIDI)
         if (v4 && v3 && Number.isFinite(effectiveMidi(v4 as any) as any) && Number.isFinite(effectiveMidi(v3 as any) as any)
             && (effectiveMidi(v4 as any) as number) > (effectiveMidi(v3 as any) as number)) {
@@ -11226,6 +11239,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Basso sopra Tenore)',
                 suggestion: 'Riordina le altezze: Basso deve restare sotto il Tenore.',
+                ...(senzaGambo(v4, v3) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v4.id, v3.id],
             });
         }
@@ -11248,6 +11262,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Alto sopra Soprano)',
                 suggestion: 'Riordina le altezze: Alto deve restare sotto il Soprano.',
+                ...(senzaGambo(v2, v1) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v2.id, v1.id],
             });
         }
@@ -11262,6 +11277,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Basso sopra Contralto)',
                 suggestion: 'Riordina le altezze: Basso deve restare sotto il Contralto.',
+                ...(senzaGambo(v4, v2) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v4.id, v2.id],
             });
         }
@@ -11272,6 +11288,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Basso sopra Soprano)',
                 suggestion: 'Riordina le altezze: Basso deve restare sotto il Soprano.',
+                ...(senzaGambo(v4, v1) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v4.id, v1.id],
             });
         }

@@ -531,6 +531,16 @@ export type RuleViolation = {
      * pannello si seleziona lei — non le innocenti che le stanno accanto.
      */
     primaryNoteId?: string;
+    /**
+     * Da dove prendere il CONSIGLIO, quando non è quello abituale della regola.
+     *
+     * Stessa violazione, situazione diversa: un incrocio fra semibrevi ha bisogno di un
+     * consiglio diverso da un incrocio fra note con gambo, perché quasi sempre non è una
+     * scelta di condotta ma una nota finita nella voce sbagliata. Mettere qui una chiave di
+     * `ruleTexts` invece del testo pronto serve a restare TRADOTTI: il motore non conosce
+     * la lingua, e ogni frase che scrive a mano esce in italiano anche in versione inglese.
+     */
+    suggestionRuleKey?: string;
 };
 
 export type AnalysisContext = {

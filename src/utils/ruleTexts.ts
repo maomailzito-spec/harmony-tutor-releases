@@ -754,7 +754,7 @@ export function getRuleText(ruleId: string): RuleText {
  * (l'analisi resta i18n-free → eseguibile in un Web Worker; e si ri-localizza al cambio lingua senza
  * rianalizzare). Logica identica a quella che prima era dentro applyHarmonyRules.
  */
-export function enrichViolationsWithText<T extends { ruleId: string; description: string; suggestion?: string }>(violations: T[]): T[] {
+export function enrichViolationsWithText<T extends { ruleId: string; description: string; suggestion?: string; suggestionRuleKey?: string }>(violations: T[]): T[] {
   if (!Array.isArray(violations)) return violations;
   return violations.map((v) => {
     let out = v;
@@ -762,7 +762,11 @@ export function enrichViolationsWithText<T extends { ruleId: string; description
     if (localizedTitle !== v.description) out = { ...out, description: localizedTitle };
     const rt = getRuleText(v.ruleId);
     if (rt.body && !out.description.includes('\n')) out = { ...out, description: out.description + '\n' + rt.body };
-    if (rt.suggestion && !out.suggestion) out = { ...out, suggestion: rt.suggestion };
+    // Consiglio alternativo per la situazione specifica (vedi `suggestionRuleKey`): vale
+    // anche se il motore ne aveva già scritto uno, perché è quello giusto per QUEL caso.
+    const alt = out.suggestionRuleKey ? getRuleText(out.suggestionRuleKey).suggestion : '';
+    if (alt) out = { ...out, suggestion: alt };
+    else if (rt.suggestion && !out.suggestion) out = { ...out, suggestion: rt.suggestion };
     return out;
   });
 }
