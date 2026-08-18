@@ -14,6 +14,8 @@
   "pref_editor_auto_save_interval": "Auto save",
   "pref_editor_snap_magnet_strength": "Onset magnet strength",
   "pref_editor_snap_magnet_strength_desc": "How strongly an existing onset pulls the note you are inserting, as a fraction of the slot. 0.5 = half a slot (stacking chords is easiest, breaking away for the next note is harder). 0 = magnet off, grid only.",
+  "pref_editor_avviso_incrocio_voci": "Warn when an inserted note crosses voices",
+  "pref_editor_avviso_incrocio_voci_desc": "Appears when inserting, not when opening a file: offers to swap the voices in one click.",
   "opt_autosave_off": "Off",
   "opt_autosave_30s": "30 seconds",
   "opt_autosave_1m": "1 minute",

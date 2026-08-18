@@ -21,6 +21,7 @@ import {
   ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY,
   AUTO_SAVE_INTERVAL_KEY,
   SNAP_MAGNET_STRENGTH_KEY,
+  AVVISO_INCROCIO_VOCI_KEY,
   ANALYSIS_STATISTICAL_CORRECTION_KEY,
   STATISTICAL_BIAS_THRESHOLD_KEY,
   ENABLE_LEARNED_ORNAMENTS_KEY,
@@ -46,6 +47,7 @@ export type PreferenceId =
   | 'editor.selectOnlyCurrentVoice'
   | 'editor.autoSaveInterval'
   | 'editor.snapMagnetStrength'
+  | 'editor.avvisoIncrocioVoci'
   | 'render.engravingMode'
   | 'analysis.showRomanAnalysis'
   | 'analysis.romanBassMode'
@@ -311,6 +313,29 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
       return Math.min(0.5, Math.max(0, v));
     },
     serialize: (value: number) => String(Number.isFinite(value) ? value : 0.5),
+  },
+
+  // L'AVVISO NEL MOMENTO IN CUI L'ERRORE SI FA.
+  //
+  // L'incrocio di voci è già segnalato dall'analisi (R-04), ma il pannello lo racconta
+  // come errore di CONDOTTA — dando per scontato che tu abbia voluto scrivere quelle note
+  // lì. Quando invece è una nota finita nella voce sbagliata (tipico con le semibrevi, che
+  // non hanno il gambo a dire di chi sono), quella segnalazione arriva nel posto giusto ma
+  // nel momento sbagliato: giorni dopo, e travestita da problema di armonia.
+  //
+  // Chi scrive contrappunto con incroci voluti lo spegne, ed è giusto che possa.
+  'editor.avvisoIncrocioVoci': {
+    id: 'editor.avvisoIncrocioVoci',
+    section: 'Editor',
+    label: 'Avvisa quando una nota inserita incrocia le voci',
+    i18nKey: 'pref_editor_avviso_incrocio_voci',
+    description: "Mostra un avviso, con la possibilità di scambiare le voci, quando la nota appena scritta finisce sotto (o sopra) la voce vicina.",
+    descriptionI18nKey: 'pref_editor_avviso_incrocio_voci_desc',
+    storageKey: AVVISO_INCROCIO_VOCI_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
   'render.engravingMode': {

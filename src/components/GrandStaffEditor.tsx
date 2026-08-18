@@ -6458,6 +6458,74 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         [analysisResult.violations, i18n.language]
     );
 
+    // ── L'AVVISO DELL'INCROCIO, NEL MOMENTO IN CUI SI FA ──────────────────────
+    //
+    // L'analisi lo segnala già (R-04), ma lo racconta come errore di CONDOTTA: dà per
+    // scontato che tu abbia voluto scrivere quelle note lì. Quando invece è una nota
+    // finita nella voce sbagliata — tipico con le semibrevi, che non hanno il gambo a dire
+    // di chi sono — quella segnalazione arriva giusta ma tardi, e travestita da problema
+    // d'armonia: è successo davvero, ed è arrivata come «l'ultimo accordo è sbagliato».
+    //
+    // Compare SOLO per la nota appena inserita. Se comparisse a ogni incrocio trovato
+    // dall'analisi, si vedrebbe aprendo qualunque corale di Bach — e un avviso che si
+    // impara a ignorare è peggio di nessun avviso.
+    const [avvisoIncrocio, setAvvisoIncrocio] = useState<{ idA: string; idB: string; testo: string } | null>(null);
+    const [avvisaIncrocioVoci, setAvvisaIncrocioVoci] = usePreference<boolean>('editor.avvisoIncrocioVoci');
+    /** Incroci già accettati con «va bene così»: non si ripropongono. */
+    const incrociAccettatiRef = useRef<Set<string>>(new Set());
+    const chiaveIncrocio = (a: string, b: string) => [a, b].sort().join('|');
+
+    useEffect(() => {
+        if (!avvisaIncrocioVoci) { setAvvisoIncrocio(null); return; }
+        // SOLO DOVE L'INFORMAZIONE MANCA DAVVERO.
+        //
+        // Coi COLORI DELLE VOCI accesi la parte si legge dalla nota stessa, e l'avviso non
+        // aggiunge niente. Su ogni figura che ha il GAMBO, la direzione dice a quale voce
+        // appartiene: il caso cieco è la SEMIBREVE, l'unica figura senza gambo — ed è
+        // esattamente quella dell'accordo finale che ha ingannato due persone. Fuori da
+        // questi due casi l'avviso sarebbe rumore su un'informazione già visibile.
+        if (showVoiceColors) { setAvvisoIncrocio(null); return; }
+        const appena = justInsertedNoteRef.current;
+        if (!appena) return;
+        const notaAppena = (latestRawNotes.current || []).find(n => n.id === appena);
+        if (!notaAppena || String((notaAppena as any).duration) !== 'whole') return;
+        const trovata = (violations as any[]).find(v => {
+            if (!v || v.ruleId !== 'R-04') return false;
+            const ids: string[] = Array.isArray(v.noteIds) ? v.noteIds : [];
+            return ids.length >= 2 && ids.includes(appena);
+        });
+        if (!trovata) return;
+        const [idA, idB] = trovata.noteIds as string[];
+        if (incrociAccettatiRef.current.has(chiaveIncrocio(idA, idB))) return;
+        // La descrizione dell'analisi dice già CHI sta sopra a chi («Incrocio di voci grave
+        // (Basso sopra Tenore)»): si riusa invece di riscriverla e rischiare che le due
+        // versioni divergano.
+        // Il titolo viene dall'analisi, che è già tradotta (`enrichViolationsWithText`);
+        // il ripiego no, quindi passa di qui.
+        const testo = String(trovata.title || trovata.description || tUI('voice_cross_fallback', { defaultValue: 'Voci incrociate' }));
+        setAvvisoIncrocio(prev => (prev && prev.idA === idA && prev.idB === idB) ? prev : { idA, idB, testo });
+    }, [violations, avvisaIncrocioVoci, showVoiceColors]);
+
+    /** Scambia la voce fra le due note dell'incrocio: è quasi sempre ciò che serve, perché
+     *  l'incrocio nasce da una nota entrata nella parte sbagliata. L'annulla la disfa come
+     *  qualsiasi altra modifica. */
+    const scambiaVociIncrocio = useCallback((idA: string, idB: string) => {
+        setRawNotes(prev => {
+            const a = (prev || []).find(n => n.id === idA);
+            const b = (prev || []).find(n => n.id === idB);
+            if (!a || !b) return prev;
+            const va = (a as any).voice;
+            const vb = (b as any).voice;
+            if (va == null || vb == null || va === vb) return prev;
+            return (prev || []).map(n => {
+                if (n.id === idA) return { ...n, voice: vb } as any;
+                if (n.id === idB) return { ...n, voice: va } as any;
+                return n;
+            });
+        });
+        setAvvisoIncrocio(null);
+    }, [setRawNotes]);
+
     // Precomputed lookup maps over analyzedNotes, built ONCE per analysis change. The overlay render
     // uses these for O(1) lookups instead of scanning all notes per label (was O(labels × notes) →
     // seconds of jank on large scores when moving a note). See usages below.
@@ -16077,6 +16145,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         }}
                         className="shrink-0 px-2.5 py-1 rounded-md bg-amber-900 text-amber-50 hover:bg-amber-800 transition-colors"
                     >Attiva licenza</button>
+                </div>
+            )}
+            {/* VOCI INCROCIATE — l'avviso che parla quando l'errore si fa, non giorni dopo.
+                Non è modale: la scrittura continua, e chi non ci bada lo ignora. Tre uscite,
+                perché sono i tre casi reali: l'ho sbagliato (scambia), l'ho voluto (va bene),
+                li voglio sempre (disattiva). */}
+            {avvisoIncrocio && (
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[101] px-3 py-2 rounded-md bg-slate-900/95 border border-amber-500/50 text-slate-100 text-xs shadow-xl flex items-center gap-3">
+                    <span>⚠︎ {avvisoIncrocio.testo}</span>
+                    <button
+                        className="px-2 py-1 rounded bg-sky-700 hover:bg-sky-600 text-white text-[11px] font-semibold"
+                        onClick={() => scambiaVociIncrocio(avvisoIncrocio.idA, avvisoIncrocio.idB)}
+                    >
+                        {tUI('voice_cross_swap', { defaultValue: 'Scambia le voci' })}
+                    </button>
+                    <button
+                        className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-[11px]"
+                        onClick={() => {
+                            incrociAccettatiRef.current.add(chiaveIncrocio(avvisoIncrocio.idA, avvisoIncrocio.idB));
+                            setAvvisoIncrocio(null);
+                        }}
+                    >
+                        {tUI('voice_cross_accept', { defaultValue: 'Va bene così' })}
+                    </button>
+                    <button
+                        className="px-2 py-1 rounded text-slate-400 hover:text-slate-200 text-[11px] underline"
+                        onClick={() => { setAvvisaIncrocioVoci(false); setAvvisoIncrocio(null); }}
+                        title={tUI('voice_cross_disable_hint', { defaultValue: 'Si riattiva da Preferenze → Editor' })}
+                    >
+                        {tUI('voice_cross_disable', { defaultValue: 'Disattiva queste segnalazioni' })}
+                    </button>
                 </div>
             )}
             {limitedToast && (

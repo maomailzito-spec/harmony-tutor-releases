@@ -26,6 +26,7 @@ export const SHOW_FIGURED_BASS_KEY = 'harmony-tutor.showFiguredBass.v1' as const
 export const TOOLBAR_HIDDEN_KEY = 'harmony-tutor.toolbarHidden.v1' as const;
 export const AUTO_SAVE_INTERVAL_KEY = 'harmony-tutor.editor.autoSaveInterval.v1' as const;
 export const SNAP_MAGNET_STRENGTH_KEY = 'harmony-tutor.editor.snapMagnetStrength.v1' as const;
+export const AVVISO_INCROCIO_VOCI_KEY = 'harmony-tutor.editor.avvisoIncrocioVoci.v1' as const;
 export const ANALYSIS_STATISTICAL_CORRECTION_KEY = 'harmony-tutor.analysis.statisticalCorrection.v1' as const;
 export const STATISTICAL_BIAS_THRESHOLD_KEY = 'harmony-tutor.analysis.statisticalBiasThreshold.v1' as const;
 export const ENABLE_LEARNED_ORNAMENTS_KEY = 'harmony-tutor.analysis.learnedOrnaments.v1' as const;
