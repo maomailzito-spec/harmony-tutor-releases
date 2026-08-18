@@ -187,6 +187,8 @@ export interface TextAnnotation {
   /** Punto del brano in semiminime dall'inizio, come le dinamiche. */
   absBeat: number;
   label: string;
+  /** Scostamento VERTICALE in pixel rispetto all'altezza abituale (vedi `TempoMark`). */
+  offsetY?: number;
 }
 
 /**
@@ -231,6 +233,11 @@ export interface TempoMark {
   beatUnit?: 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
   /** Unità col punto di valore (♩. = 80): moltiplica per 1,5. */
   dotted?: boolean;
+  /** Scostamento VERTICALE in pixel rispetto alla sua altezza abituale, negativo verso
+   *  l'alto. Serve a togliere il segno di mezzo quando finisce addosso a una sigla o a
+   *  un'altra scritta: l'incisione non ha una regola per ogni incontro possibile, e chi
+   *  scrive lo sposta di quel tanto che basta. Assente = dove cade da sé. */
+  offsetY?: number;
 }
 
 /**

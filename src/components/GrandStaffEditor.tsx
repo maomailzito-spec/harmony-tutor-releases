@@ -161,6 +161,27 @@ const VF_LINE_SPACING = 10;
 // SATB (chiavi antiche): soprano (C1), alto (C3), tenore (C4), basso (F4)
 // Must match values in VexflowGrandStaff.tsx
 const VF_SATB_SOPRANO_Y = 40;
+
+/** DOVE SI POSANO I SEGNI CHE STANNO SOPRA IL BRANO — metronomo e scritte.
+ *
+ *  Una funzione sola, usata dal DISEGNO e dal GESTO: il trascinamento misura di quanto
+ *  l'hai spostato rispetto a questa altezza e salva la differenza (`offsetY`). Se le due
+ *  formule vivessero in posti diversi, prendere un segno e riposarlo dov'era lo farebbe
+ *  saltare — è la stessa trappola della x del clic e della linea di lettura. */
+const yDelSegnoDiTempo = (satbVisibile: boolean, modo: string, scostamentoCoroNascosto: number): number =>
+    !satbVisibile ? (scostamentoCoroNascosto + 78)
+        : (modo === 'satb_ancient' ? (VF_SATB_SOPRANO_Y - 14) : (TOP_STAFF_TOP - 14));
+
+const yDellaScritta = (satbVisibile: boolean, modo: string, scostamentoCoroNascosto: number): number =>
+    !satbVisibile ? (scostamentoCoroNascosto + 96)
+        : (modo === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4));
+
+/** Quanto lontano si può portare un segno dalla sua altezza abituale. Largo abbastanza
+ *  per scavalcare sigle e analisi, non tanto da perderlo fuori dal sistema. */
+const SPOSTAMENTO_VERTICALE_MIN = -260;
+const SPOSTAMENTO_VERTICALE_MAX = 520;
+const limitaSpostamentoVerticale = (dy: number): number =>
+    Math.max(SPOSTAMENTO_VERTICALE_MIN, Math.min(SPOSTAMENTO_VERTICALE_MAX, Math.round(Number(dy) || 0)));
 const VF_SATB_ALTO_Y = 140;
 const VF_SATB_TENOR_Y = 240;
 const VF_SATB_BASS_Y = 340;
@@ -8104,13 +8125,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * dentro la battuta — ma su un elenco SEPARATO. È tutta la differenza: una scritta
      * non entra nell'analisi, quindi spostarla o toglierla non può cambiare una sigla.
      */
-    const testiPerSistema = useMemo<Array<Array<{ x: number; label: string; absBeat: number }>>>(() => {
-        const vuoto: Array<Array<{ x: number; label: string; absBeat: number }>> = [];
+    const testiPerSistema = useMemo<Array<Array<{ x: number; label: string; absBeat: number; offsetY: number }>>>(() => {
+        const vuoto: Array<Array<{ x: number; label: string; absBeat: number; offsetY: number }>> = [];
         if (!layoutData || !(textAnnotations || []).length) return vuoto;
         const sysParams = (layoutData as any).systemsParams || [];
         const inizi = (layoutData as any).measureStartAbsBeat as number[] | undefined;
         const battute = (layoutData as any).measureBeatsPerMeasure as number[] | undefined;
-        const out: Array<Array<{ x: number; label: string; absBeat: number }>> = sysParams.map(() => []);
+        const out: Array<Array<{ x: number; label: string; absBeat: number; offsetY: number }>> = sysParams.map(() => []);
         const misuraDi = (ab: number): number => {
             if (!inizi || !inizi.length) {
                 const bpm = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -8134,7 +8155,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const larghezza = Math.max(1, endX - startX);
                 const contenuto = Math.max(1, larghezza - (MEASURE_PADDING_X * 2));
                 const rel = Math.max(0, Math.min(1, dentro / bpm));
-                out[si].push({ x: startX + MEASURE_PADDING_X + (rel * contenuto) + 10, label: t.label, absBeat: ab });
+                out[si].push({
+                    x: startX + MEASURE_PADDING_X + (rel * contenuto) + 10,
+                    label: t.label,
+                    absBeat: ab,
+                    offsetY: Number((t as any).offsetY) || 0,
+                });
                 break;
             }
         }
@@ -13937,11 +13963,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * Non tocca il `bpm` del brano: quello resta l'andamento di partenza, e un segno
      * sulla PRIMA battuta è la stessa cosa detta due volte — chi suona parte da lì.
      */
-    const mettiSegnoTempo = useCallback((measureIndex: number, bpm: number, beatUnit?: TempoMark['beatUnit'], dotted?: boolean) => {
+    /** Mette o toglie l'a capo dopo una battuta. Il gesto è uno solo e fa entrambe le
+     *  cose, perché è così che si lavora impaginando: si prova, si guarda, si disfa. */
+    const alternaACapoDopoBattuta = useCallback((measureIndex: number) => {
+        const mis = Math.max(0, Math.round(Number(measureIndex)));
+        if (!Number.isFinite(mis)) return;
+        setSystemBreaks(prev => {
+            const attuali = new Set((prev || []).map(n => Math.round(Number(n))));
+            if (attuali.has(mis)) attuali.delete(mis);
+            else attuali.add(mis);
+            return Array.from(attuali).sort((a, b) => a - b);
+        });
+    }, []);
+    const alternaACapoDopoBattutaRef = useRef(alternaACapoDopoBattuta);
+    alternaACapoDopoBattutaRef.current = alternaACapoDopoBattuta;
+
+    const mettiSegnoTempo = useCallback((measureIndex: number, bpm: number, beatUnit?: TempoMark['beatUnit'], dotted?: boolean, offsetY?: number) => {
         const mis = Math.max(0, Math.round(measureIndex));
         setTempoMarks(prev => normalizeTempoMarks([
             ...(prev || []).filter(m => m.measureIndex !== mis),
-            { id: crypto.randomUUID(), measureIndex: mis, bpm, beatUnit, dotted },
+            { id: crypto.randomUUID(), measureIndex: mis, bpm, beatUnit, dotted, offsetY },
         ]));
     }, []);
     const mettiSegnoTempoRef = useRef(mettiSegnoTempo);
@@ -14103,13 +14144,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const scritta = String(payload.data || '').trim();
                 if (!scritta) return;
                 const punto = Math.max(0, Math.round(dove * 1e6) / 1e6);
+                // Come il metronomo: il gesto porta il punto nel tempo E l'altezza.
+                const dy = limitaSpostamentoVerticale(
+                    target.y - yDellaScritta(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX),
+                );
                 setTextAnnotations(prev => {
                     // Spostamento: si toglie quella di partenza. Posa nuova: `spostaDa`
                     // non c'è e non si toglie niente.
                     const senzaVecchia = typeof payload.spostaDa === 'number'
                         ? (prev || []).filter(t => Math.abs(t.absBeat - payload.spostaDa!) > 1e-6)
                         : (prev || []);
-                    return [...senzaVecchia, { id: crypto.randomUUID(), absBeat: punto, label: scritta }]
+                    return [...senzaVecchia, { id: crypto.randomUUID(), absBeat: punto, label: scritta, offsetY: dy || undefined }]
                         .sort((a, b) => a.absBeat - b.absBeat);
                 });
                 return;
@@ -14126,11 +14171,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 const bpm = Number(payload.data?.bpm);
                 if (Number.isFinite(bpm) && bpm > 0) {
+                    // ORIZZONTALE E VERTICALE, nello stesso gesto: la battuta la decide il
+                    // punto in cui si molla, l'altezza la differenza rispetto a dove il
+                    // segno cadrebbe da sé. Serve a togliersi di mezzo quando il segno
+                    // finisce addosso a una sigla — l'incisione non ha una regola per ogni
+                    // incontro, e chi scrive lo sposta di quel tanto che basta.
+                    const dy = limitaSpostamentoVerticale(
+                        target.y - yDelSegnoDiTempo(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX),
+                    );
                     mettiSegnoTempoRef.current?.(
                         rng.measureIndex,
                         bpm,
                         payload.data?.beatUnit as TempoMark['beatUnit'],
                         !!payload.data?.dotted,
+                        dy || undefined,
                     );
                 }
                 return;
@@ -14225,7 +14279,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 aggiungi({ kind: 'hairpin', fromAbsBeat: dove, toAbsBeat: dove + Math.min(2, bpmLoc), direction: payload.data });
             }
         } catch { /* rilascio non valido: si abbandona */ }
-    }, [timeSignature, bpm, absBeatOfNote]);
+    }, [timeSignature, bpm, absBeatOfNote, satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX]);
 
     const segnoTrascinato = useSignDrag(posaSegno);
 
@@ -18104,16 +18158,46 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             // sfumature che si sentivano.
                                                             const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || (testiPerSistema?.[systemIndex] || []).length > 0 || timeSignatureChanges.length > 0 || (dynamics?.length ?? 0) > 0 || (slurs?.length ?? 0) > 0 || (octaveShifts?.length ?? 0) > 0 || ((tempoMarkMarkersBySystem?.[systemIndex] || []).length > 0) || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                                                {/* L'A CAPO DECISO A MANO. Un segno che si vede, in fondo alla riga
+                                                                    che è stata fissata: senza, l'impaginazione diventa un elenco di
+                                                                    decisioni invisibili che non si sa più come disfare. Ci si clicca
+                                                                    sopra per toglierlo. */}
+                                                                {(() => {
+                                                                    const sysPar = (layoutData as any)?.systemsParams?.[systemIndex];
+                                                                    const misure = sysPar?.measureIndices || [];
+                                                                    const ultima = misure.length ? misure[misure.length - 1] : null;
+                                                                    if (ultima == null || !(systemBreaks || []).includes(Number(ultima))) return null;
+                                                                    const xSegno = Math.max(10, (Number(sysPar?.width) || 0) - START_X - 6);
+                                                                    const ySegno = yDelSegnoDiTempo(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX) - 2;
+                                                                    return (
+                                                                        <text
+                                                                            x={xSegno}
+                                                                            y={ySegno}
+                                                                            textAnchor="end"
+                                                                            fontSize={13}
+                                                                            fill="#64748b"
+                                                                            opacity={0.85}
+                                                                            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                                                                            onClick={(ev) => {
+                                                                                ev.preventDefault();
+                                                                                ev.stopPropagation();
+                                                                                alternaACapoDopoBattutaRef.current?.(Number(ultima));
+                                                                            }}
+                                                                        >
+                                                                            <title>{tUI('system_break_hint', { defaultValue: 'A capo fissato a mano — clicca per toglierlo (⌥Invio sulla battuta)' })}</title>
+                                                                            ⏎
+                                                                        </text>
+                                                                    );
+                                                                })()}
+
                                                                 {/* SEGNI DI METRONOMO («♩ = 60»). Stanno sopra tutto, all'inizio
                                                                     della battuta da cui valgono, come si scrivono in partitura.
                                                                     Tasto destro = togli, la regola di ogni altro segno. */}
-                                                                {(tempoMarkMarkersBySystem?.[systemIndex] || []).map((m: { x: number; label: string; measureIndex: number }, i: number) => (
+                                                                {(tempoMarkMarkersBySystem?.[systemIndex] || []).map((m: { x: number; label: string; measureIndex: number; offsetY?: number }, i: number) => (
                                                                     <text
                                                                         key={`tempo-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        y={!satbVisible
-                                                                            ? (SATB_HIDE_SHIFT_PX + 78)
-                                                                            : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y - 14) : (TOP_STAFF_TOP - 14))}
+                                                                        y={yDelSegnoDiTempo(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX) + (m.offsetY || 0)}
                                                                         textAnchor="start"
                                                                         fontSize={15}
                                                                         fontWeight={700}
@@ -18183,9 +18267,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     <text
                                                                         key={`txt-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        y={!satbVisible
-                                                                            ? (SATB_HIDE_SHIFT_PX + 96)
-                                                                            : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4))}
+                                                                        y={yDellaScritta(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX) + (m.offsetY || 0)}
                                                                         textAnchor="start"
                                                                         fontSize={13}
                                                                         fontStyle="italic"
