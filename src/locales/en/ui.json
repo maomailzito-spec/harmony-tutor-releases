@@ -371,5 +371,17 @@
   "tb_show_v7_aria": "Show dominant sevenths",
   "tb_restart_audio_tip": "If the sound stops coming out — headphones unplugged, output changed, audio system not ready at launch — this rebuilds the engine without closing the program. Your work is untouched.",
   "tb_restart_audio": "Restart the audio engine",
-  "tb_drag_bar": "Drag to move the bar"
+  "tb_drag_bar": "Drag to move the bar",
+  "pal_key_minor_abbr": "min",
+  "pal_key_major_abbr": "Maj",
+  "mod_suppress_tip": "Ignore this automatic inference without adding any manual context",
+  "mod_suppressed": "Inference suppressed at this beat",
+  "mod_alt_readings": "≈ Alternative readings",
+  "mod_tonicization_tip": "Adds a local tonicisation from this beat. It fades out by itself when the harmony no longer supports it.",
+  "mod_why_tip": "Shows why the analysis read this chord this way (also with ⌥+click on the label)",
+  "mod_why": "Why this reading?",
+  "mod_ph_roman": "e.g. I, V/vi, Ger+",
+  "mod_ph_figures": "e.g. 6/5",
+  "mod_ph_symbol": "e.g. D7/F#",
+  "mod_tonicization_active": "Local tonicisation active:"
 }

@@ -762,7 +762,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         title={tonalitaMinore ? t('pal_key_minor') : t('pal_key_major')}
                         className={`${bottone} ${attivo} px-1.5`}
                     >
-                        {tonalitaMinore ? 'min' : 'Mag'}
+                        {tonalitaMinore ? t('pal_key_minor_abbr') : t('pal_key_major_abbr')}
                     </button>
                     <button
                         onMouseDown={(e) => onStartDrag({ kind: 'key-sig', data: { root: tonalita, isMinor: tonalitaMinore }, label: tonalita + (tonalitaMinore ? 'm' : '') }, e)}

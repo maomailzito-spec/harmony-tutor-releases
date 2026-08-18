@@ -346,5 +346,17 @@
   "tb_show_v7_aria": "Mostra i settimi di dominante",
   "tb_restart_audio_tip": "Se il suono non esce più — cuffie staccate, uscita cambiata, sistema audio non pronto all'avvio — questo rifà il motore senza chiudere il programma. Il lavoro non si tocca.",
   "tb_restart_audio": "Riavvia il motore audio",
-  "tb_drag_bar": "Trascina per spostare la barra"
+  "tb_drag_bar": "Trascina per spostare la barra",
+  "pal_key_minor_abbr": "min",
+  "pal_key_major_abbr": "Mag",
+  "mod_suppress_tip": "Ignora questa inferenza automatica senza aggiungere nessun contesto manuale",
+  "mod_suppressed": "Inferenza soppressa a questo beat",
+  "mod_alt_readings": "≈ Letture alternative",
+  "mod_tonicization_tip": "Aggiunge una tonicizzazione locale da questo movimento. Si esaurisce da sé quando l'armonia non la sostiene più.",
+  "mod_why_tip": "Mostra perché l'analisi ha letto così questo accordo (anche con ⌥+clic sull'etichetta)",
+  "mod_why": "Perché questa lettura?",
+  "mod_ph_roman": "es. I, V/vi, Ger+",
+  "mod_ph_figures": "es. 6/5",
+  "mod_ph_symbol": "es. D7/F#",
+  "mod_tonicization_active": "Tonicizzazione locale attiva:"
 }

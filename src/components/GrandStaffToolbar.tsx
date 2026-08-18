@@ -1752,12 +1752,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             onClick={onAddToolbarBreak}
                             className="w-full text-[11px] px-2 py-1 rounded text-sky-300 hover:bg-sky-900/50 border border-dashed border-sky-700"
                         >
-                            ↵ Aggiungi un a capo
+                            ↵ {tT('customize_add_break', { defaultValue: 'Aggiungi un a capo' })}
                         </button>
                         <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                            Compare in fondo alla barra: trascinalo dove vuoi che cominci la
-                            riga nuova. Da lì l'ordine non dipende più dalla larghezza della
-                            finestra.
+                            {tT('customize_add_break_hint', { defaultValue: 'Compare in fondo alla barra: trascinalo dove vuoi che cominci la riga nuova. Da lì l\'ordine non dipende più dalla larghezza della finestra.' })}
                         </div>
                     </div>
 

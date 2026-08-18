@@ -86,5 +86,8 @@
   "rule_suggestions_placeholder": "(default suggestion — leave empty)",
   "pref_editor_staff_line_weight": "Staff line thickness",
   "pref_analysis_show_figured_bass": "Show figured bass",
-  "pref_analysis_acc_hint": "Harmony hint from the accompaniment"
+  "pref_analysis_acc_hint": "Harmony hint from the accompaniment",
+  "opt_line_thin": "Thin (the earlier grey)",
+  "opt_line_normal": "Normal",
+  "opt_line_bold": "Bold"
 }

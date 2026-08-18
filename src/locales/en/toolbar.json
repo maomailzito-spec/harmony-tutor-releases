@@ -140,5 +140,7 @@
   "customize_close": "Close",
   "customize_hint": "Uncheck to hide a group. Drag a group by its ⋮⋮ handle to reorder.",
   "customize_reset": "Reset",
-  "customize_done": "Done"
+  "customize_done": "Done",
+  "customize_add_break": "Add a line break",
+  "customize_add_break_hint": "It appears at the end of the bar: drag it where you want the new row to start. From there the order no longer depends on the window width."
 }

@@ -273,7 +273,7 @@ const ModulationContextMenu: React.FC<{
                     <button
                         onClick={() => { onSuppressInference(menuData.absBeat); onClose(); }}
                         className="px-2 py-1 text-[11px] rounded-md bg-orange-800 hover:bg-orange-700 font-semibold transition-colors"
-                        title="Ignora questa inferenza automatica senza aggiungere nessun contesto manuale"
+                        title={t('mod_suppress_tip')}
                     >
                         Rimuovi inferenza
                     </button>
@@ -281,7 +281,7 @@ const ModulationContextMenu: React.FC<{
             )}
             {hasSuppressedInference && onUnsuppressInference && (
                 <div className="border-t border-slate-600 pt-2 mt-1">
-                    <div className="text-[10px] text-slate-400 mb-1">Inferenza soppressa a questo beat</div>
+                    <div className="text-[10px] text-slate-400 mb-1">{t('mod_suppressed')}</div>
                     <button
                         onClick={() => { onUnsuppressInference(menuData.absBeat); onClose(); }}
                         className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors"
@@ -295,7 +295,7 @@ const ModulationContextMenu: React.FC<{
                 applicarla è un override, quindi vive qui e non nella finestra che spiega. */}
             {(letture ?? []).length > 0 && (
                 <div className="flex flex-col gap-1 rounded-md border border-blue-500/40 bg-blue-950/30 p-2">
-                    <div className="text-[11px] font-semibold text-blue-200">≈ Letture alternative</div>
+                    <div className="text-[11px] font-semibold text-blue-200">{t('mod_alt_readings')}</div>
                     {(letture ?? []).map((alt, i) => (
                         <div key={i} className="flex items-center gap-2 text-[12px]">
                             <span className="font-bold text-slate-100">{alt.roman}</span>
@@ -305,7 +305,7 @@ const ModulationContextMenu: React.FC<{
                             {onApplyAlternative && (
                                 <button
                                     className="ml-auto px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-600/30 hover:bg-blue-600/60 text-blue-200 border border-blue-500/40 transition-colors"
-                                    title="Aggiunge una tonicizzazione locale da questo movimento. Si esaurisce da sé quando l'armonia non la sostiene più."
+                                    title={t('mod_tonicization_tip')}
                                     onMouseDown={(e) => {
                                         e.stopPropagation();
                                         onApplyAlternative(
@@ -329,9 +329,9 @@ const ModulationContextMenu: React.FC<{
                 <button
                     onClick={onSpiega}
                     className="self-start text-[11px] text-sky-300 hover:text-sky-100 underline underline-offset-2"
-                    title="Mostra perché l'analisi ha letto così questo accordo (anche con ⌥+clic sull'etichetta)"
+                    title={t('mod_why_tip')}
                 >
-                    Perché questa lettura? <span className="text-slate-500">(⌥+clic)</span>
+                    {t('mod_why')} <span className="text-slate-500">(⌥+clic)</span>
                 </button>
             )}
 
@@ -352,7 +352,7 @@ const ModulationContextMenu: React.FC<{
                         value={roman}
                         onChange={e => setRoman(e.target.value)}
                         className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
-                        placeholder="es. I, V/vi, Ger+"
+                        placeholder={t('mod_ph_roman')}
                     />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -361,7 +361,7 @@ const ModulationContextMenu: React.FC<{
                         value={figuresRaw}
                         onChange={e => setFiguresRaw(e.target.value)}
                         className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
-                        placeholder="es. 6/5"
+                        placeholder={t('mod_ph_figures')}
                     />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -370,7 +370,7 @@ const ModulationContextMenu: React.FC<{
                         value={symbol}
                         onChange={e => setSymbol(e.target.value)}
                         className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
-                        placeholder="es. D7/F#"
+                        placeholder={t('mod_ph_symbol')}
                     />
                 </div>
                 <div className="flex gap-2">
@@ -394,7 +394,7 @@ const ModulationContextMenu: React.FC<{
             {/* ── Tonicization hint removal ── */}
             {existingTonicizationHint && onRemoveTonicizationHint && (
                 <div className="border-t border-slate-600 pt-2 mt-1">
-                    <div className="text-[10px] text-slate-400 mb-1">Tonicizzazione locale attiva: <span className="text-blue-300 font-semibold">{existingTonicizationHint.tonic} {existingTonicizationHint.isMinor ? 'min' : 'Maj'}</span></div>
+                    <div className="text-[10px] text-slate-400 mb-1">{t('mod_tonicization_active')} <span className="text-blue-300 font-semibold">{existingTonicizationHint.tonic} {existingTonicizationHint.isMinor ? 'min' : 'Maj'}</span></div>
                     <button
                         onClick={() => { onRemoveTonicizationHint(menuData.absBeat); }}
                         className="px-2 py-1 text-[11px] rounded-md bg-orange-700 hover:bg-orange-600 font-semibold transition-colors"
