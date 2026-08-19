@@ -84,7 +84,8 @@ export function etichetteDiUnFile(percorso: string): EtichettaPiatta[] {
     .sort((a: EtichettaPiatta, b: EtichettaPiatta) => a.absBeat - b.absBeat);
 }
 
-if (process.argv[2]) {
+// Solo quando lo si lancia da solo: importato da un altro script non deve fare niente.
+if (process.argv[2] && process.argv[2].endsWith('.htp')) {
   const et = etichetteDiUnFile(process.argv[2]);
   console.log(`${et.length} etichette`);
   for (const e of et.slice(0, 20)) console.log(`   b.${e.absBeat}  ${e.roman}  ${e.figures.join('/')}`);
