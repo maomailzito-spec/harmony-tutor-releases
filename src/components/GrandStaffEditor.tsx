@@ -92,6 +92,7 @@ import DrumPalettePanel from './DrumPalettePanel';
 import DynamicsPalettePanel from './DynamicsPalettePanel';
 import { useSignDrag, notaAlPunto, type SignDragPayload } from '../hooks/useSignDrag';
 import NewProjectDialog, { type NewProjectConfig } from './NewProjectDialog';
+import { SHARP_KEY_OPTIONS as sharpKeyOptions, FLAT_KEY_OPTIONS as flatKeyOptions } from '../utils/keySignatureOptions';
 
 interface GrandStaffEditorProps {
     isActive: boolean;
@@ -238,29 +239,7 @@ const relativeMinors: { [major: string]: string } = {
     'F': 'D', 'Bb': 'G', 'Eb': 'C', 'Ab': 'F', 'Db': 'Bb', 'Gb': 'Eb', 'Cb': 'Ab'
 };
 
-const keySignatureOptions = [
-  { value: 'C', label: 'C Mag / A min (0 ♯/♭)' },
-  { value: 'G', label: 'G Mag / E min (1 ♯)' },
-  { value: 'D', label: 'D Mag / B min (2 ♯)' },
-  { value: 'A', label: 'A Mag / F♯ min (3 ♯)' },
-  { value: 'E', label: 'E Mag / C♯ min (4 ♯)' },
-  { value: 'B', label: 'B Mag / G♯ min (5 ♯)' },
-  { value: 'F#', label: 'F♯ Mag / D♯ min (6 ♯)' },
-  { value: 'C#', label: 'C♯ Mag / A♯ min (7 ♯)' },
-  { value: 'F', label: 'F Mag / D min (1 ♭)' },
-  { value: 'Bb', label: 'B♭ Mag / G min (2 ♭)' },
-  { value: 'Eb', label: 'E♭ Mag / C min (3 ♭)' },
-  { value: 'Ab', label: 'A♭ Mag / F min (4 ♭)' },
-  { value: 'Db', label: 'D♭ Mag / B♭ min (5 ♭)' },
-  { value: 'Gb', label: 'G♭ Mag / E♭ min (6 ♭)' },
-  { value: 'Cb', label: 'C♭ Mag / A♭ min (7 ♭)' },
-];
 
-const sharpKeyValues = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
-const flatKeyValues = ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
-
-const sharpKeyOptions = keySignatureOptions.filter(k => sharpKeyValues.includes(k.value));
-const flatKeyOptions = keySignatureOptions.filter(k => flatKeyValues.includes(k.value));
 
 // Pezzi del kit per la MAPPA/aggancio. `line` = posizione sul rigo percussioni (deve combaciare
 // con DRUM_VEX_KEY in VexflowGrandStaff). Due kit: ORCHESTRALE (VSCO2) e ROCK (Salamander),

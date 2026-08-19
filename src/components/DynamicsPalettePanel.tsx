@@ -19,6 +19,7 @@ import type { SignDragPayload } from '../hooks/useSignDrag';
 import type { ArticulationMark } from '../types';
 import { ARTICULATIONS, ARTICULATION_UI } from '../utils/articulations';
 import { useHoverTip } from '../hooks/useHoverTip';
+import { KEY_SIGNATURE_OPTIONS, tonicName } from '../utils/keySignatureOptions';
 
 /**
  * FORCELLA — disegnata, non scritta.
@@ -96,8 +97,11 @@ interface DynamicsPalettePanelProps {
 
 const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff'];
 
-/** Le armature come si susseguono per quinte, dai bemolli ai diesis. */
-const TONALITA = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
+/** Le armature come si susseguono per quinte, dai bemolli ai diesis. Ognuna porta
+ *  con sé TUTT'E DUE le tonalità che la usano (vedi keySignatureOptions). */
+const TONALITA = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#']
+    .map(v => KEY_SIGNATURE_OPTIONS.find(k => k.value === v)!)
+    .filter(Boolean);
 
 /** Unità di battito di un segno di metronomo, col suo glifo. */
 type UnitaBattito = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
@@ -755,7 +759,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         title={t('pal_key_pick')}
                         className="h-7 flex-1 min-w-0 bg-slate-700 text-gray-100 text-[11px] rounded border border-slate-600 px-1"
                     >
-                        {TONALITA.map(t => <option key={t} value={t}>{t}</option>)}
+                        {TONALITA.map(k => <option key={k.value} value={k.value}>{k.labelShort}</option>)}
                     </select>
                     <button
                         onClick={() => setTonalitaMinore(v => !v)}
@@ -765,8 +769,8 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         {tonalitaMinore ? t('pal_key_minor_abbr') : t('pal_key_major_abbr')}
                     </button>
                     <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'key-sig', data: { root: tonalita, isMinor: tonalitaMinore }, label: tonalita + (tonalitaMinore ? 'm' : '') }, e)}
-                        title={t('pal_key_drag', { k: `${tonalita} ${tonalitaMinore ? t('pal_key_minor_word') : t('pal_key_major_word')}` })}
+                        onMouseDown={(e) => onStartDrag({ kind: 'key-sig', data: { root: tonalita, isMinor: tonalitaMinore }, label: tonicName(tonalita, tonalitaMinore) + (tonalitaMinore ? 'm' : '') }, e)}
+                        title={t('pal_key_drag', { k: `${tonicName(tonalita, tonalitaMinore)} ${tonalitaMinore ? t('pal_key_minor_word') : t('pal_key_major_word')}` })}
                         className={`${bottone} ${attivo} px-1.5`}
                         style={{ fontFamily: 'serif' }}
                     >

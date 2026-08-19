@@ -1,35 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TimeSignature, HarmonyLabelOverride } from '../types';
+import { SHARP_KEY_OPTIONS as sharpKeyOptions, FLAT_KEY_OPTIONS as flatKeyOptions, tonicName } from '../utils/keySignatureOptions';
 
-const relativeMinors: { [major: string]: string } = {
-    'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
-    'F': 'D', 'Bb': 'G', 'Eb': 'C', 'Ab': 'F', 'Db': 'Bb', 'Gb': 'Eb', 'Cb': 'Ab'
-};
 
-const keySignatureOptions = [
-  { value: 'C', label: 'C Mag / A min (0 ♯/♭)' },
-  { value: 'G', label: 'G Mag / E min (1 ♯)' },
-  { value: 'D', label: 'D Mag / B min (2 ♯)' },
-  { value: 'A', label: 'A Mag / F♯ min (3 ♯)' },
-  { value: 'E', label: 'E Mag / C♯ min (4 ♯)' },
-  { value: 'B', label: 'B Mag / G♯ min (5 ♯)' },
-  { value: 'F#', label: 'F♯ Mag / D♯ min (6 ♯)' },
-  { value: 'C#', label: 'C♯ Mag / A♯ min (7 ♯)' },
-  { value: 'F', label: 'F Mag / D min (1 ♭)' },
-  { value: 'Bb', label: 'B♭ Mag / G min (2 ♭)' },
-  { value: 'Eb', label: 'E♭ Mag / C min (3 ♭)' },
-  { value: 'Ab', label: 'A♭ Mag / F min (4 ♭)' },
-  { value: 'Db', label: 'D♭ Mag / B♭ min (5 ♭)' },
-  { value: 'Gb', label: 'G♭ Mag / E♭ min (6 ♭)' },
-  { value: 'Cb', label: 'C♭ Mag / A♭ min (7 ♭)' },
-];
-
-const sharpKeyValues = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
-const flatKeyValues = ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
-
-const sharpKeyOptions = keySignatureOptions.filter(k => sharpKeyValues.includes(k.value));
-const flatKeyOptions = keySignatureOptions.filter(k => flatKeyValues.includes(k.value));
 
 const ModulationContextMenu: React.FC<{
     menuData: { x: number; y: number; absBeat: number; measureIndex: number; beat: number };
@@ -205,7 +179,7 @@ const ModulationContextMenu: React.FC<{
     }, [onClose]);
 
     const handleApplyClick = () => {
-        const tonicToApply = tempIsMinor ? (relativeMinors[tempKey] || tempKey) : tempKey;
+        const tonicToApply = tonicName(tempKey, tempIsMinor);
         onApply(menuData.absBeat, tonicToApply, tempIsMinor, tempLabel);
     };
 
