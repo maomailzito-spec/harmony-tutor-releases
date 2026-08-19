@@ -1,47 +1,66 @@
-## Novità in v1.7.0
+## Novità nella versione 1.7.0
 
-### 🎹 Dove può cominciare una nota lo dice ciò che è già scritto
-- Il punto in cui la nota si posa non dipende più dalla figura che stai per scrivere, ma da **ciò che c'è già**: i movimenti del metro, la fine di ogni evento — è lì che comincia il seguito — e l'inizio di ogni evento, per impilare un accordo. Vince il posto più vicino al punto in cui hai cliccato.
-- Le pause contano come le note: se hai scritto una croma, il posto dopo è a distanza di croma, e lì ci puoi mettere una semiminima. **Con MAIUSCOLE** si torna alla griglia libera.
-- **I gruppi irregolari si scrivono di nuovo col mouse.** I loro attacchi non stanno sulla griglia ordinaria: la seconda nota di una terzina finiva dentro la prima, e l'autoselezione della voce la spostava nel contralto — il «salto di voce» era la conseguenza dell'attacco sbagliato.
-- Risolto anche un caso distruttivo: cliccando fra due semiminime la nota entrava sul levare **e cancellava tutte e due**. Un errore di mira di pochi pixel distruggeva note già scritte.
-- Quanto la nota si lasci attirare dagli attacchi vicini si regola in **Preferenze → Editor**: impilare un accordo e staccarsene sono lo stesso gesto letto dai due lati.
+### 🎹 Inserimento delle note
 
-### ✋ L'incrocio di voci si dice quando si scrive, non giorni dopo
-- Quando la nota appena scritta finisce sotto (o sopra) la voce vicina, compare un avviso che offre di **scambiare le due voci con un clic**. Non è modale: la scrittura continua.
-- Serve perché l'analisi l'incrocio lo segnala comunque, ma come errore di *condotta* — dando per scontato che quelle note tu le abbia volute lì. Quando invece è una nota finita nella voce sbagliata, quella segnalazione arriva travestita da problema di armonia.
-- Succede soprattutto con le **semibrevi**, l'unica figura senza gambo a dire di chi è. Su un incrocio fra note tutte senza gambo anche il consiglio dell'analisi cambia da sé: non parla più di condotta, dice di controllare in che voce sono finite le note.
-- Chi scrive contrappunto con incroci voluti spegne l'avviso dal pulsante stesso.
+La nota si aggancia alla posizione libera più vicina al punto in cui clicchi, tenendo conto di ciò che è già scritto: i movimenti del metro, la fine delle note precedenti e l'inizio di una nota già presente, per costruire un accordo.
 
-### 📐 L'impaginazione si decide, e resta
-- **⌥Invio manda a capo la riga** sulla battuta dove sta il cursore (o dal menù del tasto destro sulla nota). L'a capo deciso a mano comanda su tutto: né le battute per riga né lo spazio disponibile lo spostano. Si vede — un ⏎ in fondo alla riga — e ci si clicca sopra per toglierlo.
-- **Battute per riga, vista e formato della carta si salvano nel file.** Sono scelte sul brano, non sulla sessione di lavoro: un corale stretto e un pezzo per tastiera non si guardano nella stessa pagina.
-- Lo **zoom torna al 100% con un doppio clic** su una parte vuota della pagina. Prima bastava un clic singolo e capitava di perdere lo zoom appoggiando il puntatore mentre si lavorava.
+Le pause contano come le note. Tenendo premuto **Shift** l'aggancio si disattiva e si torna alla griglia libera.
 
-### 🖱 Il tasto destro sulla nota apre un menù
-- Ornamenti (passaggio, volta, appoggiatura, ritardo, sfuggita, cambiata, anticipazione), «forza strutturale», corona, articolazioni, spostamento di rigo e a capo di sistema: tutto ciò che riguarda quella nota, dove sta la nota.
-- Le **letture alternative** di un accordo compaiono accanto alla musica invece che in un elenco a parte, e **cliccando su un'etichetta** dell'analisi si va dove quella lettura si cambia.
+I gruppi irregolari (terzine, quintine) si scrivono di nuovo correttamente con il mouse.
 
-### 🎨 La tavolozza dei segni, rifatta
-- Agganciata al lato sinistro, con il corpo che scorre: **più gruppi aperti insieme** e un **campo di ricerca** che porta subito al segno che serve.
-- Dentro entrano anche durate, pattern di accompagnamento e trasformazioni melodiche; il gruppo «Note» raccoglie tutto ciò che riguarda la nota. Accanto all'armatura stanno trasporto, modo e sensibile automatica.
-- Le forcelle **si disegnano** trascinandole sulla musica invece di scriverle come testo, e le alterazioni sono icone vere.
-- **Metronomo e scritte si spostano anche in altezza**: lo stesso trascinamento porta il segno a un altro punto del tempo e a un'altra altezza, e lo scostamento resta nel file. Una scritta si corregge con un doppio clic.
+L'intensità dell'aggancio si regola in **Preferenze → Editor**.
 
-### 🛠 La barra dei comandi si personalizza
-- Si sceglie **quali gruppi tenere**, si riordinano trascinandoli, e un gruppo può essere mandato a capo e restarci. Spegnendo l'analisi i suoi comandi non spariscono: restano al loro posto, spenti — un pulsante che se ne va sposta tutti gli altri.
+### ✋ Avviso di incrocio delle voci
 
-### 🔍 Analisi: il metro giusto per ogni battuta
-- Ogni regola che parla di tempi forti e deboli guarda ora il metro **in vigore in quella battuta**, non più quello globale del brano. In un pezzo che passa da 3/4 a 4/4 il terzo movimento cambia natura, e prima il giudizio era sbagliato dove il metro cambiava.
-- Di conseguenza la «regola della stanghetta» torna a vedere le sincopi scritte nelle battute in tre, che **le sfuggivano tutte**.
-- Due eccezioni nuove, perché la regola puniva anche ciò che è scritto bene: quando sul battere **cambia il rivolto** (il basso si muove, l'armonia si rinnova) e quando la stessa anticipazione ritorna **per almeno tre battute di fila** — non è una svista ma una figura ritmica.
+Quando una nota appena scritta finisce sotto o sopra la voce adiacente, compare un avviso che propone di scambiare le due voci con un clic. Non blocca la scrittura.
+
+È utile soprattutto con le semibrevi: senza gambo non si vede a quale voce appartengono, e una nota finita nella voce sbagliata veniva segnalata dall'analisi come errore di condotta.
+
+Chi scrive contrappunto con incroci voluti può disattivare l'avviso dal pulsante stesso.
+
+### 📐 Impaginazione
+
+**⌥Invio** manda a capo la riga sulla battuta dove si trova il cursore, oppure dal menù col tasto destro. L'a capo manuale ha la precedenza su tutto: compare come ⏎ a fine riga e si toglie cliccandoci sopra.
+
+Battute per riga, vista e formato della carta ora si salvano nel file. Sono scelte che appartengono al brano, non alla sessione di lavoro.
+
+Lo zoom torna al 100% con un **doppio** clic su una parte vuota della pagina.
+
+### 🖱 Menù col tasto destro sulla nota
+
+Ornamenti (nota di passaggio, volta, appoggiatura, ritardo, sfuggita, cambiata, anticipazione), forza strutturale, corona, articolazioni, spostamento di rigo e a capo di sistema: tutto ciò che riguarda una nota si trova ora sulla nota stessa.
+
+Le letture alternative di un accordo compaiono accanto alla musica, e cliccando su un'etichetta dell'analisi si apre il punto in cui quella lettura si modifica.
+
+### 🎨 Tavolozza dei segni
+
+Ancorata al lato sinistro. Si possono tenere **più gruppi aperti insieme** e c'è un **campo di ricerca** per arrivare subito al segno che serve.
+
+Contiene anche durate, pattern di accompagnamento e trasformazioni melodiche. Accanto all'armatura si trovano trasporto, modo e sensibile automatica.
+
+Le forcelle si disegnano trascinandole sulla musica.
+
+Metronomo e scritte si spostano anche in verticale, e la posizione resta salvata nel file. Una scritta si corregge con un doppio clic.
+
+### 🛠 Barra dei comandi personalizzabile
+
+Si sceglie quali gruppi tenere e li si riordina trascinandoli; un gruppo può essere mandato a capo. Disattivando l'analisi i suoi comandi restano al loro posto, spenti, così gli altri pulsanti non si spostano.
+
+### 📊 Analisi
+
+Le regole sui tempi forti e deboli seguono ora il metro in vigore in ciascuna battuta, non più quello iniziale del brano. Nei brani con cambi di metro il giudizio era errato dal punto del cambio in poi.
+
+La regola della stanghetta riconosce di nuovo le sincopi nelle battute in tre.
+
+Due nuove eccezioni, per evitare segnalazioni su scritture corrette: quando sul battere cambia il rivolto, e quando la stessa anticipazione si ripete per almeno tre battute — in quel caso è una figura ritmica voluta.
 
 ### 🔧 Correzioni
-- **Sei sedicesimi di terzina** finivano sotto un'unica traversa e si leggevano come una sestina. Ora ogni gruppo irregolare ha la sua travatura.
-- **La linea di lettura** durante l'ascolto era ferma su cinque stime diverse: ora segue un numero misurato, non scavalca più lo slot che deve indicare, e finisce col rigo invece che con l'aria sotto.
-- **La larghezza delle battute** non balla più: la parte vuota vale il suo tempo, e una griglia che si muove faceva scivolare le note sotto il puntatore.
-- Sulle tracce **grand staff «a voci»** la voce si sceglie da dove clicchi, come nel corale, e una voce può reggere un accordo.
-- Le **righe del pentagramma** possono avere più corpo, per la stampa e per gli schermi molto densi.
+
+- Sei sedicesimi di terzina venivano travati come una sestina
+- La linea di lettura durante l'ascolto segue ora esattamente la posizione suonata
+- La larghezza delle battute non cambia più durante la scrittura
+- Sulle tracce grand staff "a voci" la voce si sceglie dalla posizione del clic, come nel corale, e può reggere un accordo
+- Le righe del pentagramma possono essere più spesse, per la stampa e per gli schermi molto densi
 
 ## Novità in v1.6.0
 

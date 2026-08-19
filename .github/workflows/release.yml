@@ -262,9 +262,9 @@ jobs:
       # import/export. Qui si prende dal primo titolo di versione fino al successivo.
       - name: Estrai le note della versione corrente
         run: |
-          awk '/^## Novità in v/{ n++ } n==1' RELEASE_NOTES.md > RELEASE_BODY.md
+          awk '/^## Novità (in v|nella versione )/{ n++ } n==1' RELEASE_NOTES.md > RELEASE_BODY.md
           if [ ! -s RELEASE_BODY.md ]; then
-            echo "::error::RELEASE_BODY.md vuoto — manca la sezione '## Novità in vX.Y.Z' in cima a RELEASE_NOTES.md"
+            echo "::error::RELEASE_BODY.md vuoto — manca la sezione '## Novità nella versione X.Y.Z' (o '## Novità in vX.Y.Z') in cima a RELEASE_NOTES.md"
             exit 1
           fi
           echo "── Corpo della release ($(wc -c < RELEASE_BODY.md) caratteri) ──"
