@@ -1,3 +1,37 @@
+## Novità nella versione 1.7.1
+
+### 🎼 Analisi
+
+Un passaggio come I → ii non viene più scambiato per una cadenza d'inganno in un'altra tonalità. Era il motivo per cui, in certi esercizi, il primo grado veniva letto come dominante e tutta la frase seguente risultava spostata di quarta.
+
+Le cadenze vengono riconosciute solo dove una frase finisce davvero, e il riconoscimento tiene ora conto della tonalità in vigore in quel punto del brano, non di quella iniziale. Nei brani che modulano la differenza si vede.
+
+### ♯ Sensibile automatica
+
+Funziona anche dopo un cambio di tonalità a metà brano. Prima si fermava alla tonalità con cui il pezzo cominciava: se il brano partiva in maggiore, dal punto del cambio in poi la sensibile non veniva più alzata.
+
+### 🎨 Tavolozza
+
+L'armatura si sceglie da un elenco che mostra **entrambe le tonalità** — «Mi♭ Mag / Do min» — come nella barra dei comandi. Prima compariva la sola nota, e per ottenere Do minore bisognava sapere di dover scegliere Mi♭ e poi «min».
+
+I segni che valgono su una battuta — armatura, metro, metronomo, stanghette, rallentando e accelerando — si posano anche con un **clic**, nel punto dove si trova la linea di lettura. Il trascinamento resta.
+
+### 💾 Quello che il file si ricorda
+
+Riaprendo un brano tornano l'a capo di sistema e la disposizione della barra dei comandi, che prima andavano persi. Dopo un ricaricamento tornano anche i cambi d'armatura, le legature di portamento e i segni d'ottava.
+
+Il contatore delle misure indica quante misure ci sono davvero, e il «+» ne aggiunge una a quelle esistenti. Prima, dopo aver aperto un file, poteva segnarne quattro su venti e il pulsante sembrava non funzionare.
+
+### 🌍 Versione inglese
+
+Tavolozza, mixer, dialogo del nuovo progetto, menù del tasto destro, pannello delle proprietà e barra dei comandi sono ora completamente in inglese.
+
+### 🔧 Correzioni
+
+- Il corpo delle righe del pentagramma compariva due volte nelle preferenze e la scelta non aveva effetto sulla pagina
+- Trascinando un'armatura, l'etichetta che segue il puntatore indicava l'armatura invece della tonalità (Mi♭m dove si intendeva Do minore)
+- Lo zoom torna al 100% col doppio clic su una parte vuota, senza più azzerarsi da solo
+
 ## Novità nella versione 1.7.0
 
 ### 🎹 Inserimento delle note
