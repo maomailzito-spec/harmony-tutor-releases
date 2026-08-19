@@ -608,6 +608,23 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                         if (m.deceptive) {
                             const _decTonic = pcToNoteName(m.targetTonicPc, { tonic: currentTonic, isMinor: isMinorMode });
                             const _decMinor = m.targetIsMinor;
+                            // UN I→ii NON È UNA CADENZA D'INGANNO.
+                            //
+                            // Il modello «V → vi» sono due soli accordi: maggiore, poi minore un
+                            // tono sopra. Ma quei due accordi, nella tonalità in cui si è già, sono
+                            // I → ii — la successione più ordinaria che esista. Il modello li
+                            // leggeva come inganno nella SOTTODOMINANTE, e con punteggio 100
+                            // ribaltava tutto il passaggio: in MI, un E → F♯m diventava V6 → vi di
+                            // LA, e il Si che segue — che è il V di casa, cioè una cadenza sospesa —
+                            // restava senza spiegazione.
+                            //
+                            // Si scarta il caso ambiguo: se il primo accordo del modello è la
+                            // TONICA di casa, quello che si vede è un I→ii. Un inganno vero
+                            // comincia dal V di casa o da un altro grado, non dalla tonica stessa.
+                            const _casa = _resolveHomeAt(m.startBeat);
+                            const _casaPc = ((noteNameToPc(_casa.tonic) % 12) + 12) % 12;
+                            const _primoAccordoPc = ((m.targetTonicPc + 7) % 12 + 12) % 12;
+                            if (Number.isFinite(_casaPc) && _primoAccordoPc === _casaPc) continue;
                             pushInferred({
                                 absBeat: m.startBeat,
                                 newTonic: _decTonic,
