@@ -7739,7 +7739,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // ADAPTER LAYER — harmony analysis overlay data (extracted to useHarmonyLabels hook)
     const { harmonyLabelsBySystemSequenced, progressionMarkersBySystem, sequenceMarkersBySystem, sequenceModelMarkersBySystem, contextMarkersBySystem, timeSignatureMarkersBySystem, keySignatureMarkersBySystem, tempoMarkMarkersBySystem, sequenceMatches, motifNoteStyles, motifBracketsBySystem, motifMatches } = useHarmonyLabels({
         layoutData, timeSignature, timeSignatureChanges, keySignatureChanges, keySignatureRoot, tempoMarks, measureLengths,
-        analysisContexts: effectiveAnalysisContexts, harmonyOverrides,
+        analysisContexts: effectiveAnalysisContexts, declaredAnalysisContexts: analysisContexts, harmonyOverrides,
         currentTonic, isMinorMode, isAnalysisEnabled, isSequencesEnabled, isMotifsEnabled,
         staffSystemMode, notes, analyzedNotes, analysisContextAbsBeat, timeSignatureChangeAbsBeat,
         harmonyLabelMinSpanBeats: Number(harmonyLabelMinSpanBeats) || 0,

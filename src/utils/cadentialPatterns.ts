@@ -388,7 +388,22 @@ export function evaluateCadentialPatterns(
   chordEvents: readonly ChordEvent[],
   currentTonicPc: number,
   currentIsMinor: boolean,
-  opts?: { minConfidence?: number },
+  opts?: {
+    minConfidence?: number;
+    /**
+     * LA TONALITÀ DI CASA IN QUEL PUNTO DEL BRANO.
+     *
+     * Senza, il riconoscitore riceve un valore solo — la tonalità d'IMPIANTO — e lo usa
+     * per tutto il pezzo. Dentro una modulazione dichiarata tutte le sue guardie
+     * ragionano allora contro la casa sbagliata: la principale rifiuta una tonicizzazione
+     * quando l'accordo d'arrivo è diatonico in casa, e con la casa sbagliata quel rifiuto
+     * non scatta. È così che in un passaggio in MI un ordinario I→ii si faceva leggere
+     * come cadenza d'inganno in LA.
+     *
+     * Assente = comportamento di prima.
+     */
+    homeAt?: (absBeat: number) => { tonicPc: number; isMinor: boolean };
+  },
 ): CadentialMatch[] {
   const minConf = opts?.minConfidence ?? 60;
   const matches: CadentialMatch[] = [];
@@ -408,11 +423,16 @@ export function evaluateCadentialPatterns(
         formula.targetMode === 'minor' ? [true]  :
         [false, true];
 
+      // La casa che conta è quella in vigore DOVE COMINCIA la finestra.
+      const _casa = opts?.homeAt ? opts.homeAt(window[0].absBeat) : null;
+      const homePc = _casa ? ((_casa.tonicPc % 12) + 12) % 12 : currentTonicPc;
+      const homeMinor = _casa ? !!_casa.isMinor : currentIsMinor;
+
       for (const isMinorTarget of modes) {
         for (let candidateTonic = 0; candidateTonic < 12; candidateTonic++) {
           // Skip if this IS the current home key — unless formula is deceptive
           // (deceptive cadences resolve in the SAME key, e.g. V → vi).
-          if (candidateTonic === currentTonicPc && isMinorTarget === currentIsMinor
+          if (candidateTonic === homePc && isMinorTarget === homeMinor
               && !(formula as any).deceptive) continue;
 
           // Check all slots
@@ -450,12 +470,12 @@ export function evaluateCadentialPatterns(
             // Exception: the relative major/minor shares the entire
             // diatonic collection, so tonicisations to III (from minor)
             // or vi (from major) are allowed even without chromatic evidence.
-            if (candidateTonic !== currentTonicPc) {
+            if (candidateTonic !== homePc) {
               const isRelativeKey = (
-                (currentIsMinor && !isMinorTarget && candidateTonic === mod12(currentTonicPc + 3)) ||
-                (!currentIsMinor && isMinorTarget && candidateTonic === mod12(currentTonicPc + 9))
+                (homeMinor && !isMinorTarget && candidateTonic === mod12(homePc + 3)) ||
+                (!homeMinor && isMinorTarget && candidateTonic === mod12(homePc + 9))
               );
-              const homeScale = new Set(getScalePcs(currentTonicPc, currentIsMinor));
+              const homeScale = new Set(getScalePcs(homePc, homeMinor));
               // Check only the arrival chord (last in window) — earlier
               // chromatic events (e.g. V/V) must not fool the guard.
               const arrival = window[window.length - 1];
