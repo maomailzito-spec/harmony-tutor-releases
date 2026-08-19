@@ -527,6 +527,36 @@ const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
     'more',
 ];
 
+/**
+ * FONDE UN ORDINE SALVATO CON QUELLO DI FABBRICA.
+ *
+ * Due cose che si sbagliano facilmente, e che infatti erano sbagliate in due dei tre
+ * punti che ricostruiscono la barra:
+ *
+ * · GLI A CAPO VANNO TENUTI. Non sono gruppi e non stanno nell'elenco di fabbrica:
+ *   filtrando «tengo solo ciò che conosco» sparivano tutti, e riaprendo un file la
+ *   barra tornava su una riga sola pur avendo i pulsanti giusti.
+ * · GLI A CAPO POSSONO ESSERE PIÙ D'UNO, quindi la deduplica vale per i gruppi (che
+ *   sono unici) ma non per loro: passarli in un Set ne lasciava uno solo.
+ *
+ * I gruppi non ancora conosciuti si aggiungono in coda: una versione nuova che porta un
+ * comando nuovo lo fa comparire, invece di nasconderlo a chi ha già personalizzato.
+ */
+export function fondiOrdineToolbar(salvato: unknown): ToolbarGroupId[] {
+    const noti = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
+    const elenco: any[] = Array.isArray(salvato) ? salvato : [];
+    const visti = new Set<string>();
+    const fuso: ToolbarGroupId[] = [];
+    for (const id of elenco) {
+        if ((id as string) === TOOLBAR_ACAPO) { fuso.push(id as ToolbarGroupId); continue; }
+        if (!noti.has(id) || visti.has(id)) continue;
+        visti.add(id);
+        fuso.push(id);
+    }
+    for (const id of DEFAULT_TOOLBAR_ORDER) if (!visti.has(id)) fuso.push(id);
+    return fuso;
+}
+
 class RenderErrorBoundary extends React.Component<
   { label: string; onReset?: () => void; children: React.ReactNode },
   { hasError: boolean; message?: string }
@@ -3079,24 +3109,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const parsed = JSON.parse(raw);
             const order: ToolbarGroupId[] = Array.isArray(parsed?.order) ? parsed.order : [];
 
-            const all = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
-            // Gli a capo si conservano e possono essere PIÙ D'UNO: la deduplica qui sotto
-            // vale per i gruppi, che sono unici, non per i segnaposto.
-            const cleanedOrder = order.filter((id: any) => all.has(id) || id === TOOLBAR_ACAPO);
-            // I gruppi non ancora conosciuti si aggiungono in coda: una versione nuova
-            // che porta un comando nuovo lo fa comparire, invece di nasconderlo a chi ha
-            // già personalizzato la barra. È anche il motivo per cui «nascosto» NON può
-            // essere «assente dall'ordine»: sarebbe rimesso qui dentro a ogni avvio.
-            const visti = new Set<string>();
-            const fullOrder: ToolbarGroupId[] = [];
-            for (const id of cleanedOrder) {
-                if ((id as string) === TOOLBAR_ACAPO) { fullOrder.push(id as ToolbarGroupId); continue; }
-                if (visti.has(id)) continue;
-                visti.add(id);
-                fullOrder.push(id);
-            }
-            for (const id of DEFAULT_TOOLBAR_ORDER) if (!visti.has(id)) fullOrder.push(id);
-            return fullOrder;
+            // Una fusione sola per i tre punti che ricostruiscono la barra: qui (le
+            // preferenze), l'apertura di un file e il recupero della bozza d'emergenza.
+            return fondiOrdineToolbar(order);
         } catch {
             return DEFAULT_TOOLBAR_ORDER;
         }
@@ -5664,6 +5679,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 apply: {
                     projectExtrasRef,
                     defaultToolbarGroupOrder: DEFAULT_TOOLBAR_ORDER,
+                    fondiOrdineToolbar,
                     setRawNotes,
                     setProjectTitle,
                     setProjectComposer,
@@ -6153,14 +6169,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
                 if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
-                if (p.toolbarGroupOrder) {
-                    // I gruppi NUOVI non stanno negli elenchi salvati prima: si aggiungono
-                    // in coda, altrimenti un pulsante appena introdotto sparirebbe
-                    // riaprendo un progetto vecchio. Stessa fusione del caricamento da file.
-                    const noti = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
-                    const puliti = (p.toolbarGroupOrder as any[]).filter((id: any): id is ToolbarGroupId => noti.has(id));
-                    setToolbarGroupOrder(Array.from(new Set([...puliti, ...DEFAULT_TOOLBAR_ORDER])));
-                }
+                if (p.toolbarGroupOrder) setToolbarGroupOrder(fondiOrdineToolbar(p.toolbarGroupOrder));
                 if (typeof p.analysisLocked === 'boolean') setAnalysisLocked(p.analysisLocked);
                 if (typeof p.teacherPasswordHash === 'string') setTeacherPasswordHash(p.teacherPasswordHash);
                 if (p.analysisLockOptions && typeof p.analysisLockOptions === 'object') setAnalysisLockOptions(p.analysisLockOptions);

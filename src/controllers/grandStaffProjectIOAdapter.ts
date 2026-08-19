@@ -260,6 +260,12 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	projectExtrasRef: { current: Record<string, unknown> };
 
 	defaultToolbarGroupOrder: any[];
+	/** Fonde l'ordine salvato con quello di fabbrica. Arriva dall'editor perché deve
+	 *  essere LA STESSA usata dalle preferenze e dal recupero della bozza: qui c'era una
+	 *  copia che buttava via gli a capo (non sono gruppi, quindi il filtro «tengo solo
+	 *  ciò che conosco» li cancellava) e ne avrebbe comunque lasciato uno solo, perché
+	 *  passava tutto in un Set. */
+	fondiOrdineToolbar?: (salvato: unknown) => any[];
 
 	setRawNotes: (next: any) => void;
 	setProjectTitle: (next: any) => void;
@@ -610,10 +616,9 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 
 			// Restore project-level settings when present.
 			if (Array.isArray(loadedProject.toolbarGroupOrder)) {
-				const all = new Set(args.defaultToolbarGroupOrder);
-				const cleanedOrder = loadedProject.toolbarGroupOrder.filter((id: any) => all.has(id));
-				const fullOrder: any[] = Array.from(new Set([...cleanedOrder, ...args.defaultToolbarGroupOrder]));
-				args.setToolbarGroupOrder(fullOrder);
+				args.setToolbarGroupOrder(args.fondiOrdineToolbar
+					? args.fondiOrdineToolbar(loadedProject.toolbarGroupOrder)
+					: Array.from(new Set([...loadedProject.toolbarGroupOrder, ...args.defaultToolbarGroupOrder])));
 			}
 			// A capo di sistema decisi a mano: sono impaginazione anche loro.
 			if (Array.isArray((loadedProject as any).systemBreaks)) {
