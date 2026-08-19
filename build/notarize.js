@@ -16,6 +16,16 @@ exports.default = async function notarizing(context) {
   // Only notarize on macOS
   if (electronPlatformName !== 'darwin') return;
 
+  // PACCHETTO DI PROVA IN LOCALE: con SKIP_NOTARIZE=1 si salta la notarizzazione.
+  // Serve a provare la build vera sulla propria macchina prima di mettere il tag, senza
+  // dipendere dalle credenziali Apple (che scadono, e il cui 401 non ha niente a che
+  // vedere col codice che si vuole provare). La CI non la imposta, quindi i pacchetti
+  // pubblicati restano notarizzati.
+  if (String(process.env.SKIP_NOTARIZE || '') === '1') {
+    console.log('⏭️  Notarizzazione saltata (SKIP_NOTARIZE=1) — pacchetto di sola prova.');
+    return;
+  }
+
   const appName = context.packager.appInfo.productFilename;
   const appPath = path.join(appOutDir, `${appName}.app`);
 
