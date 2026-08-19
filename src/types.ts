@@ -187,6 +187,8 @@ export interface TextAnnotation {
   /** Punto del brano in semiminime dall'inizio, come le dinamiche. */
   absBeat: number;
   label: string;
+  /** Scostamento VERTICALE in pixel rispetto all'altezza abituale (vedi `TempoMark`). */
+  offsetY?: number;
 }
 
 /**
@@ -231,6 +233,11 @@ export interface TempoMark {
   beatUnit?: 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
   /** Unità col punto di valore (♩. = 80): moltiplica per 1,5. */
   dotted?: boolean;
+  /** Scostamento VERTICALE in pixel rispetto alla sua altezza abituale, negativo verso
+   *  l'alto. Serve a togliere il segno di mezzo quando finisce addosso a una sigla o a
+   *  un'altra scritta: l'incisione non ha una regola per ogni incontro possibile, e chi
+   *  scrive lo sposta di quel tanto che basta. Assente = dove cade da sé. */
+  offsetY?: number;
 }
 
 /**
@@ -531,6 +538,16 @@ export type RuleViolation = {
      * pannello si seleziona lei — non le innocenti che le stanno accanto.
      */
     primaryNoteId?: string;
+    /**
+     * Da dove prendere il CONSIGLIO, quando non è quello abituale della regola.
+     *
+     * Stessa violazione, situazione diversa: un incrocio fra semibrevi ha bisogno di un
+     * consiglio diverso da un incrocio fra note con gambo, perché quasi sempre non è una
+     * scelta di condotta ma una nota finita nella voce sbagliata. Mettere qui una chiave di
+     * `ruleTexts` invece del testo pronto serve a restare TRADOTTI: il motore non conosce
+     * la lingua, e ogni frase che scrive a mano esce in italiano anche in versione inglese.
+     */
+    suggestionRuleKey?: string;
 };
 
 export type AnalysisContext = {

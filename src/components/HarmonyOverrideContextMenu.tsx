@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { HarmonyLabelOverride } from '../types';
 
 
@@ -9,6 +10,7 @@ const HarmonyOverrideContextMenu: React.FC<{
     onApply: (absBeat: number, roman: string, figures: string[], symbol: string) => void;
     onRemove: (absBeat: number) => void;
 }> = ({ menuData, existing, onClose, onApply, onRemove }) => {
+    const { t } = useTranslation('ui');
     const menuRef = useRef<HTMLDivElement>(null);
     const [roman, setRoman] = useState<string>(existing?.roman || '');
     const [symbol, setSymbol] = useState<string>(existing?.symbol || '');
@@ -73,7 +75,7 @@ const HarmonyOverrideContextMenu: React.FC<{
                     className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
                     placeholder="es. V/vi"
                 />
-                <label className="text-xs text-gray-300">Figure (separate da / o spazio)</label>
+                <label className="text-xs text-gray-300">{t('figures_sep')}</label>
                 <input
                     value={figuresRaw}
                     onChange={e => setFiguresRaw(e.target.value)}
@@ -87,12 +89,12 @@ const HarmonyOverrideContextMenu: React.FC<{
                     className="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
                     placeholder="es. G7(b9)/F"
                 />
-                <p className="text-[11px] text-gray-400">Suggerimento: apri questo menu con Option+click destro.</p>
+                <p className="text-[11px] text-gray-400">{t('override_hint')}</p>
             </div>
             <div className="flex gap-2 mt-2">
                 <button onClick={handleApply} className="flex-1 px-3 py-1 text-sm rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">Applica</button>
                 <button onClick={() => onRemove(menuData.absBeat)} className="px-3 py-1 text-sm rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">Rimuovi</button>
-                <button onClick={onClose} className="px-3 py-1 text-sm rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors">Annulla</button>
+                <button onClick={onClose} className="px-3 py-1 text-sm rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors">{t('cancel')}</button>
             </div>
         </div>
     );

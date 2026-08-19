@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { TimeSignature } from '../types';
 
 export const VALID_DENOMINATORS = [2, 4, 8, 16];
@@ -41,6 +42,7 @@ const CifraMetro: React.FC<{
     valida: (v: number) => boolean;
     etichetta: string;
 }> = ({ value, onChange, passo, valida, etichetta }) => {
+    const { t } = useTranslation('ui');
     const [bozza, setBozza] = useState<string | null>(null);
     const ref = useRef<HTMLInputElement>(null);
 
@@ -88,7 +90,7 @@ const CifraMetro: React.FC<{
                 else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setBozza(null); e.currentTarget.blur(); }
                 else e.stopPropagation();   // le lettere non devono arrivare all'editor
             }}
-            title="Scrivi, oppure usa la rotella o le frecce ↑↓"
+            title={t('ts_write_tip')}
             aria-label={etichetta}
             className="w-6 bg-transparent text-center outline-none focus:bg-slate-600 rounded-sm"
         />
@@ -107,17 +109,19 @@ const CifraMetro: React.FC<{
 const TimeSignatureControl: React.FC<{
     value: TimeSignature;
     onChange: (newValue: TimeSignature) => void;
-}> = ({ value, onChange }) => (
+}> = ({ value, onChange }) => {
+    const { t } = useTranslation('ui');
+    return (
     <div
         className="flex items-center h-[30px] px-1 bg-slate-700 border border-slate-600 rounded-md text-white font-serif text-sm"
-        title="Metro — scrivi la cifra, o cambiala con la rotella e le frecce ↑↓"
+        title={t('ts_meter_tip')}
     >
         <CifraMetro
             value={value.numerator}
             onChange={n => onChange({ ...value, numerator: n })}
             passo={(c, d) => Math.max(1, Math.min(16, c + (d === 'up' ? 1 : -1)))}
             valida={n => n >= 1 && n <= 16}
-            etichetta="Numeratore del metro"
+            etichetta={t('ts_numerator')}
         />
         <span className="text-slate-400 select-none">/</span>
         <CifraMetro
@@ -125,9 +129,10 @@ const TimeSignatureControl: React.FC<{
             onChange={n => onChange({ ...value, denominator: n })}
             passo={denominatorStepFn}
             valida={n => VALID_DENOMINATORS.includes(n)}
-            etichetta="Denominatore del metro"
+            etichetta={t('ts_denominator')}
         />
     </div>
-);
+    );
+};
 
 export default TimeSignatureControl;

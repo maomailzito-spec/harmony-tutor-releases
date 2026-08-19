@@ -205,7 +205,7 @@ const HarmonyLabelExplainModal: React.FC<{
                         <div className="rounded-lg border border-blue-500/40 bg-blue-950/20 p-3">
                             <div className="text-xs font-semibold text-blue-300 flex items-center gap-1">
                                 <span>≈</span>
-                                <span>Letture alternative</span>
+                                <span>{t('alt_readings')}</span>
                             </div>
                             <div className="mt-2 space-y-2">
                                 {(data.label.alternatives ?? []).map((alt, i) => (
@@ -223,7 +223,7 @@ const HarmonyLabelExplainModal: React.FC<{
                                         {onApplyAlternative ? (
                                             <button
                                                 className="ml-auto px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-600/30 hover:bg-blue-600/60 text-blue-200 border border-blue-500/40 transition-colors"
-                                                title="Aggiunge una tonicizzazione locale a partire da questo beat. Si esaurisce automaticamente quando il contesto armonico non la supporta più."
+                                                title={t('tonicization_add_tip')}
                                                 onMouseDown={(e) => {
                                                     e.stopPropagation();
                                                     onApplyAlternative(

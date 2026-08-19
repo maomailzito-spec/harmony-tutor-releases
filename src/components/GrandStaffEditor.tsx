@@ -11,7 +11,7 @@ declare global {
     }
 }
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
@@ -161,6 +161,27 @@ const VF_LINE_SPACING = 10;
 // SATB (chiavi antiche): soprano (C1), alto (C3), tenore (C4), basso (F4)
 // Must match values in VexflowGrandStaff.tsx
 const VF_SATB_SOPRANO_Y = 40;
+
+/** DOVE SI POSANO I SEGNI CHE STANNO SOPRA IL BRANO — metronomo e scritte.
+ *
+ *  Una funzione sola, usata dal DISEGNO e dal GESTO: il trascinamento misura di quanto
+ *  l'hai spostato rispetto a questa altezza e salva la differenza (`offsetY`). Se le due
+ *  formule vivessero in posti diversi, prendere un segno e riposarlo dov'era lo farebbe
+ *  saltare — è la stessa trappola della x del clic e della linea di lettura. */
+const yDelSegnoDiTempo = (satbVisibile: boolean, modo: string, scostamentoCoroNascosto: number): number =>
+    !satbVisibile ? (scostamentoCoroNascosto + 78)
+        : (modo === 'satb_ancient' ? (VF_SATB_SOPRANO_Y - 14) : (TOP_STAFF_TOP - 14));
+
+const yDellaScritta = (satbVisibile: boolean, modo: string, scostamentoCoroNascosto: number): number =>
+    !satbVisibile ? (scostamentoCoroNascosto + 96)
+        : (modo === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4));
+
+/** Quanto lontano si può portare un segno dalla sua altezza abituale. Largo abbastanza
+ *  per scavalcare sigle e analisi, non tanto da perderlo fuori dal sistema. */
+const SPOSTAMENTO_VERTICALE_MIN = -260;
+const SPOSTAMENTO_VERTICALE_MAX = 520;
+const limitaSpostamentoVerticale = (dy: number): number =>
+    Math.max(SPOSTAMENTO_VERTICALE_MIN, Math.min(SPOSTAMENTO_VERTICALE_MAX, Math.round(Number(dy) || 0)));
 const VF_SATB_ALTO_Y = 140;
 const VF_SATB_TENOR_Y = 240;
 const VF_SATB_BASS_Y = 340;
@@ -177,9 +198,21 @@ const PLAYHEAD_Y_TOP = VF_TREBLE_Y + PLAYHEAD_Y_OFFSET_PX - 3;
 const PLAYHEAD_Y_BOTTOM = (VF_BASS_Y + (4 * VF_LINE_SPACING)) + PLAYHEAD_Y_OFFSET_PX;
 const PLAYHEAD_CONTEXT_HIT_PX = 10;
 
-const START_X = 50; 
+const START_X = 50;
 const STAFF_PADDING_X = 10;
 const MEASURE_PADDING_X = 20;
+
+/** Dalla x che diamo a una nota al CENTRO della testa che si vede sul rigo.
+ *
+ *  Non è una stima: è misurato nel disegno con `__htMisuraTeste()` (VexflowGrandStaff),
+ *  e vale lo stesso per ogni figura, ogni rigo e ogni battuta — 12 px di STAVEPADDING di
+ *  VexFlow fino al bordo sinistro del glifo, più 6 di mezza testa. Sono unità del disegno,
+ *  quindi lo zoom non le tocca.
+ *
+ *  Serve a chi deve INDICARE una nota che non c'è ancora — la linea di lettura e il caret
+ *  d'incolla. Non serve al fantasma né alle note: quelle le disegna VexFlow, che aggiunge
+ *  questo scostamento da sé. Confondere i due casi è costato tre correzioni sbagliate. */
+const PX_GRIGLIA_CENTRO_TESTA = 18;
 
 // Empirical calibration: on some setups the pointer->SVG Y reported to the editor
 // is offset relative to the rendered VexFlow stave by ~1 staff (≈40px).
@@ -1581,6 +1614,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [quantizeGrid, setQuantizeGrid] = useState<string>('sixteenth');
     const [measuresPerLineDraft, setMeasuresPerLineDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
+    /** A CAPO DI SISTEMA: dopo queste battute la riga finisce, punto.
+     *
+     *  Il numero di battute per riga è un TETTO buono per cominciare, ma dipende dallo
+     *  zoom e da quanto è fitta la musica, quindi la stessa riga cambia contenuto mentre
+     *  si lavora. Chi impagina non ragiona per tetti: decide che QUESTA riga finisce QUI —
+     *  perché lì finisce una frase, o perché la pagina viene meglio così. Una volta
+     *  deciso, non deve muoversi più, nemmeno aggiungendo battute altrove. */
+    const [systemBreaks, setSystemBreaks] = useState<number[]>([]);
     const [ornamentOverrides, setOrnamentOverrides] = useState<OrnamentOverride[]>([]);
     const [analysisLocked, setAnalysisLocked] = useState<boolean>(false);
     const [teacherPasswordHash, setTeacherPasswordHash] = useState<string | undefined>(undefined);
@@ -2986,6 +3027,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [analysisFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
+    // Forza della calamita sugli attacchi (vedi `agganciaAdAttaccoVicino`). Sta anche in un
+    // ref perché la calamita gira nel gesto del mouse, dove non si rilegge lo stato.
+    const [snapMagnetStrength] = usePreference<number>('editor.snapMagnetStrength');
+    const snapMagnetStrengthRef = useRef<number>(0.5);
+    useEffect(() => {
+        const v = Number(snapMagnetStrength);
+        snapMagnetStrengthRef.current = Number.isFinite(v) ? Math.min(0.5, Math.max(0, v)) : 0.5;
+    }, [snapMagnetStrength]);
     const [harmonyLabelMinSpanBeats] = usePreference<number>('analysis.harmonyLabelMinSpanBeats');
     const [useStatisticalCorrection] = usePreference<boolean>('analysis.useStatisticalCorrection');
     const [statisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
@@ -4820,7 +4869,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [normalizedRawNotes, timeSignature, timeSignatureChanges]);
 
     // Editor zoom (extracted to useEditorZoom hook)
-    const { editorZoom, resetEditorZoom, handleScoreMouseDownCapture, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
+    const { editorZoom, resetEditorZoom, handleScoreDoubleClick, zoomSpacerRef, zoomBaseSize } = useEditorZoom(scoreScrollRef, staffContainerRef);
     // Mirror in a ref so the imperative playback loop can read the current zoom
     // without taking it as a dependency (that would restart the rAF on every pinch).
     const editorZoomRef = useRef(editorZoom);
@@ -4842,8 +4891,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, []);
 
     // Click sulla CHIAVE di un rigo ACC (rettangolo invisibile [data-acc-clef-trackid] disegnato
-    // da VexflowGrandStaff) → apre il menù delle chiavi e blocca l'inserimento nota. Altrimenti
-    // delega allo zoom-capture. È la "manipolazione diretta sull'oggetto" (chiave = roba da score).
+    // da VexflowGrandStaff) → apre il menù delle chiavi e blocca l'inserimento nota. È la
+    // "manipolazione diretta sull'oggetto" (chiave = roba da score). Lo zoom non passa più di
+    // qui: si azzera col DOPPIO clic sul fondo (vedi `handleScoreDoubleClick`), perché un clic
+    // singolo lo faceva sparire mentre si lavorava.
     const handleScoreMouseDownWithClef = useCallback((e: React.MouseEvent) => {
         const el = (e.target as Element | null)?.closest?.('[data-acc-clef-trackid]') as Element | null;
         if (el) {
@@ -4852,11 +4903,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
                 setClefMenu({ x: e.clientX, y: e.clientY, trackId, name: el.getAttribute('data-acc-clef-name') || '' });
-                return;
             }
         }
-        handleScoreMouseDownCapture(e);
-    }, [handleScoreMouseDownCapture]);
+    }, []);
 
     // Applica la scelta di chiave/rigo alla traccia (stesso effetto del vecchio selettore mixer).
     const applyClefChoice = useCallback((trackId: string, opt: (typeof ACC_STAFF_OPTIONS)[number]) => {
@@ -4908,7 +4957,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                     // Replace the editable title <input> with a print-friendly static title,
                     // or remove it entirely if exportIncludeTitle is OFF.
-                    const titleInput = clone.querySelector('input[placeholder="Titolo"]') as HTMLInputElement | null;
+                    const titleInput = clone.querySelector('input[data-ht-field="title"]') as HTMLInputElement | null;
                     if (titleInput) {
                         const wrapper = titleInput.closest('div');
                         const titleText = String(projectTitle || titleInput.value || '').trim();
@@ -4933,7 +4982,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // regola `input{display:none}` più sotto lo toglierebbe comunque), quindi
                     // va sostituito con la scritta vera. Segue l'interruttore del titolo:
                     // chi stampa senza intestazione non vuole nemmeno la firma.
-                    const composerInput = clone.querySelector('input[placeholder="Autore"]') as HTMLInputElement | null;
+                    const composerInput = clone.querySelector('input[data-ht-field="composer"]') as HTMLInputElement | null;
                     if (composerInput) {
                         const wrapper = composerInput.closest('div');
                         const composerText = String(projectComposer || composerInput.value || '').trim();
@@ -5561,6 +5610,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     tonicizationHints,
                     inferredContextSuppressions,
                     doubleBarlineMeasures,
+                    systemBreaks,
                     repeatBarlines,
                     voltaBrackets,
                     tempoCurves,
@@ -5572,6 +5622,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     octaveShifts,
                     keySignatureChanges,
                     toolbarGroupOrder,
+                    // Impaginazione: battute per riga, vista a schermo, formato della carta.
+                    measuresPerLine,
+                    viewMode,
+                    canvasFormat,
                     bpm,
                     isBpmActive,
                     isMetronomeOn,
@@ -5664,6 +5718,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setHoveredViolationNotes,
                     setSelectedViolationIndex,
                     setViewMode,
+                    setCanvasFormat,
                     setContextMenu,
                     setShowRomanAnalysis,
                     setShowSymbolAnalysis,
@@ -5956,8 +6011,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         latestRawNotes, latestHarmonyOverrides, latestAccHarmonyOverrides, latestOrnamentOverrides, projectExtrasRef,
         staffSystemMode, keySignatureRoot, projectTitle, projectComposer, titleFontSize, titleFontFamily,
         timeSignature, timeSignatureChanges, isMinorMode, autoLeadingToneInMinor,
-        keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures,
+        keyChangeMode, modalTonicOverride, analysisContexts, doubleBarlineMeasures, systemBreaks,
         repeatBarlines, voltaBrackets, tempoCurves, tempoMarks, measureLengths, textAnnotations, dynamics, slurs, octaveShifts, keySignatureChanges, toolbarGroupOrder, bpm, isBpmActive, isMetronomeOn, metronomeUnit,
+        measuresPerLine, viewMode, canvasFormat,
         analysisLocked, teacherPasswordHash, analysisLockOptions,
         // Campi che il salvataggio su file include e che la bozza deve preservare:
         // tracce di accompagnamento, mixer per-voce SATB e hint di tonicizzazione.
@@ -6057,6 +6113,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setTonicizationHints((p as any).tonicizationHints || []);
                 setInferredContextSuppressions((p as any).inferredContextSuppressions || []);
                 setDoubleBarlineMeasures(p.doubleBarlineMeasures || []);
+                setSystemBreaks(((p as any).systemBreaks || []) as number[]);
                 setRepeatBarlines(p.repeatBarlines || {});
                 setVoltaBrackets(p.voltaBrackets || []);
                 setTempoCurves((p as any).tempoCurves || []);
@@ -6073,6 +6130,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setIsMetronomeOn(!!p.isMetronomeOn);
                 setMetronomeUnit(p.metronomeUnit || 'quarter');
                 setIsSwing(!!(p as any).isSwing);
+                // Impaginazione salvata col backup, come nell'apertura da file.
+                const impaginazione = (p as any).layout;
+                if (impaginazione && typeof impaginazione === 'object') {
+                    const mpl = Math.trunc(Number(impaginazione.measuresPerLine));
+                    if (Number.isFinite(mpl)) setMeasuresPerLine(Math.max(1, Math.min(12, mpl)));
+                    if (impaginazione.viewMode === 'page' || impaginazione.viewMode === 'linear') setViewMode(impaginazione.viewMode);
+                    if (impaginazione.canvasFormat === 'page' || impaginazione.canvasFormat === 'landscape') setCanvasFormat(impaginazione.canvasFormat);
+                }
                 if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
                 if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
                 if (p.toolbarGroupOrder) {
@@ -6341,7 +6406,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!isAnalysisEnabled) { analysisSeqRef.current++; setAnalysisResult(empty); return; }
         const seq = ++analysisSeqRef.current; // invalidate any in-flight/late reply immediately
         if (isPlaying) return;                 // freeze: keep last labels; recompute when playback stops
-        const opts = { learnedOrnamentsEnabled: getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0', partCount };
+        // I CAMBI DI METRO servono alle regole che parlano di tempi forti e deboli: senza,
+        // il motore giudica tutto il brano col metro globale (vedi `timeSignatureChanges`
+        // in applyHarmonyRules).
+        const opts = { learnedOrnamentsEnabled: getString(ENABLE_LEARNED_ORNAMENTS_KEY) !== '0', partCount, timeSignatureChanges };
         const handle = window.setTimeout(() => {
             const w = analysisWorkerRef.current;
             if (w) {
@@ -6360,7 +6428,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         }, ANALYSIS_DEBOUNCE_MS);
         return () => window.clearTimeout(handle);
-    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, isPlaying, partCount]);
+    }, [deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, isAnalysisEnabled, timeSignature, timeSignatureChanges, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, isPlaying, partCount]);
 
     const effectiveAnalysisContexts = useMemo(() => {
         // Merge user-authored contexts with engine-inferred modulations.
@@ -6402,6 +6470,74 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         () => enrichViolationsWithText(analysisResult.violations),
         [analysisResult.violations, i18n.language]
     );
+
+    // ── L'AVVISO DELL'INCROCIO, NEL MOMENTO IN CUI SI FA ──────────────────────
+    //
+    // L'analisi lo segnala già (R-04), ma lo racconta come errore di CONDOTTA: dà per
+    // scontato che tu abbia voluto scrivere quelle note lì. Quando invece è una nota
+    // finita nella voce sbagliata — tipico con le semibrevi, che non hanno il gambo a dire
+    // di chi sono — quella segnalazione arriva giusta ma tardi, e travestita da problema
+    // d'armonia: è successo davvero, ed è arrivata come «l'ultimo accordo è sbagliato».
+    //
+    // Compare SOLO per la nota appena inserita. Se comparisse a ogni incrocio trovato
+    // dall'analisi, si vedrebbe aprendo qualunque corale di Bach — e un avviso che si
+    // impara a ignorare è peggio di nessun avviso.
+    const [avvisoIncrocio, setAvvisoIncrocio] = useState<{ idA: string; idB: string; testo: string } | null>(null);
+    const [avvisaIncrocioVoci, setAvvisaIncrocioVoci] = usePreference<boolean>('editor.avvisoIncrocioVoci');
+    /** Incroci già accettati con «va bene così»: non si ripropongono. */
+    const incrociAccettatiRef = useRef<Set<string>>(new Set());
+    const chiaveIncrocio = (a: string, b: string) => [a, b].sort().join('|');
+
+    useEffect(() => {
+        if (!avvisaIncrocioVoci) { setAvvisoIncrocio(null); return; }
+        // SOLO DOVE L'INFORMAZIONE MANCA DAVVERO.
+        //
+        // Coi COLORI DELLE VOCI accesi la parte si legge dalla nota stessa, e l'avviso non
+        // aggiunge niente. Su ogni figura che ha il GAMBO, la direzione dice a quale voce
+        // appartiene: il caso cieco è la SEMIBREVE, l'unica figura senza gambo — ed è
+        // esattamente quella dell'accordo finale che ha ingannato due persone. Fuori da
+        // questi due casi l'avviso sarebbe rumore su un'informazione già visibile.
+        if (showVoiceColors) { setAvvisoIncrocio(null); return; }
+        const appena = justInsertedNoteRef.current;
+        if (!appena) return;
+        const notaAppena = (latestRawNotes.current || []).find(n => n.id === appena);
+        if (!notaAppena || String((notaAppena as any).duration) !== 'whole') return;
+        const trovata = (violations as any[]).find(v => {
+            if (!v || v.ruleId !== 'R-04') return false;
+            const ids: string[] = Array.isArray(v.noteIds) ? v.noteIds : [];
+            return ids.length >= 2 && ids.includes(appena);
+        });
+        if (!trovata) return;
+        const [idA, idB] = trovata.noteIds as string[];
+        if (incrociAccettatiRef.current.has(chiaveIncrocio(idA, idB))) return;
+        // La descrizione dell'analisi dice già CHI sta sopra a chi («Incrocio di voci grave
+        // (Basso sopra Tenore)»): si riusa invece di riscriverla e rischiare che le due
+        // versioni divergano.
+        // Il titolo viene dall'analisi, che è già tradotta (`enrichViolationsWithText`);
+        // il ripiego no, quindi passa di qui.
+        const testo = String(trovata.title || trovata.description || tUI('voice_cross_fallback', { defaultValue: 'Voci incrociate' }));
+        setAvvisoIncrocio(prev => (prev && prev.idA === idA && prev.idB === idB) ? prev : { idA, idB, testo });
+    }, [violations, avvisaIncrocioVoci, showVoiceColors]);
+
+    /** Scambia la voce fra le due note dell'incrocio: è quasi sempre ciò che serve, perché
+     *  l'incrocio nasce da una nota entrata nella parte sbagliata. L'annulla la disfa come
+     *  qualsiasi altra modifica. */
+    const scambiaVociIncrocio = useCallback((idA: string, idB: string) => {
+        setRawNotes(prev => {
+            const a = (prev || []).find(n => n.id === idA);
+            const b = (prev || []).find(n => n.id === idB);
+            if (!a || !b) return prev;
+            const va = (a as any).voice;
+            const vb = (b as any).voice;
+            if (va == null || vb == null || va === vb) return prev;
+            return (prev || []).map(n => {
+                if (n.id === idA) return { ...n, voice: vb } as any;
+                if (n.id === idB) return { ...n, voice: va } as any;
+                return n;
+            });
+        });
+        setAvvisoIncrocio(null);
+    }, [setRawNotes]);
 
     // Precomputed lookup maps over analyzedNotes, built ONCE per analysis change. The overlay render
     // uses these for O(1) lookups instead of scanning all notes per label (was O(labels × notes) →
@@ -6802,7 +6938,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // resta della stessa larghezza complessiva.
         const SPACING_EXPONENT = 0.6;
         const QUARTER_PX = TICKS_PER_QUARTER * DEFAULT_PX_PER_TICK; // spazio di una semiminima
-        const MIN_ONSET_PX = 14; // una testa di nota più un minimo respiro
+        // Respiro minimo di un attacco: la testa di nota più lo spazio per MIRARE col
+        // puntatore. Con la sola testa (≈11 px) restano tre o quattro pixel liberi fra una
+        // nota e l'altra, e per prendere lo slot successivo bisogna puntare quasi sopra la
+        // nota appena scritta — impossibile da fare a occhio.
+        const MIN_ONSET_PX = 20;
+
+        // ── CHI CHIEDE SPAZIO: TUTTE LE RIGHE, NON SOLO IL CORO ────────────────────
+        // La larghezza di una misura la decide la riga più FITTA, e le tracce sono righe
+        // come le altre. Contando solo il coro, una misura di sedici semicrome su una
+        // traccia restava larga quanto una di crome, e gli attacchi finivano a pochi pixel
+        // l'uno dall'altro. Si guarda l'unione degli attacchi (per tick): due righe che
+        // suonano insieme non chiedono spazio due volte, due righe sfasate sì.
+        //
+        // Si raccoglie in UN SOLO passaggio: la domanda si chiede una misura per volta e
+        // riscorrere tutte le note ogni volta costa quanto misure × note.
+        const attacchiPerMisura = new Map<number, Map<number, number>>(); // misura → tick → durata più breve
+        const coperturaPerMisura = new Map<number, number>();             // misura → tick occupati
+        {
+            const conta = (n: any) => {
+                const m = n?.measureIndex ?? -1;
+                if (m < 0) return;
+                const t = Number(n.startTick);
+                if (!Number.isFinite(t)) return;
+                const d = Math.max(1, Number(n.durationTicks) || 1);
+                let perTick = attacchiPerMisura.get(m);
+                if (!perTick) { perTick = new Map<number, number>(); attacchiPerMisura.set(m, perTick); }
+                const prev = perTick.get(t);
+                if (prev == null || d < prev) perTick.set(t, d);
+                const fine = (t - (measureStartAbsBeat[m] ?? 0) * TICKS_PER_QUARTER) + d;
+                if (fine > (coperturaPerMisura.get(m) ?? 0)) coperturaPerMisura.set(m, fine);
+            };
+            for (const n of notesToLayout) conta(n);
+            for (const t of (accompanimentTracks || [])) {
+                if (!t || !t.visible) continue; // una riga nascosta non occupa spazio
+                for (const n of (t.notes || [])) conta(n);
+            }
+        }
+
         const measureDemandCache = new Map<number, number>();
         const measureDemand = (_mIdx: number): number => {
             const cached = measureDemandCache.get(_mIdx);
@@ -6812,15 +6985,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             let demand = byTime;
             if (contentAwareSpacing) {
                 // Attacchi distinti della misura, con la durata più breve che vi comincia.
-                const shortestByOnset = new Map<number, number>();
-                for (const n of notesToLayout) {
-                    if ((n.measureIndex ?? -1) !== _mIdx) continue;
-                    const t = Number((n as any).startTick);
-                    if (!Number.isFinite(t)) continue;
-                    const d = Math.max(1, Number(n.durationTicks) || 1);
-                    const prev = shortestByOnset.get(t);
-                    if (prev == null || d < prev) shortestByOnset.set(t, d);
-                }
+                const shortestByOnset = attacchiPerMisura.get(_mIdx) ?? new Map<number, number>();
                 if (shortestByOnset.size > 0) {
                     let sum = 0;
                     for (const d of shortestByOnset.values()) {
@@ -6841,15 +7006,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // accordo; una di semicrome si allarga perché la somma supera il
                     // metro; una di minime si restringe, perché la somma è minore e non
                     // c'è vuoto da compensare.
-                    let coperto = 0;
-                    for (const n of notesToLayout) {
-                        if ((n.measureIndex ?? -1) !== _mIdx) continue;
-                        const t = Number((n as any).startTick);
-                        if (!Number.isFinite(t)) continue;
-                        const d = Math.max(0, Number(n.durationTicks) || 0);
-                        const fine = (t - (measureStartAbsBeat[_mIdx] ?? 0) * TICKS_PER_QUARTER) + d;
-                        if (fine > coperto) coperto = fine;
-                    }
+                    const coperto = coperturaPerMisura.get(_mIdx) ?? 0;
                     const vuoto = Math.max(0, measureTicks - Math.min(measureTicks, coperto));
                     sum += vuoto * DEFAULT_PX_PER_TICK;
                     // Pavimento: una misura rada non scende sotto il 60% della sua larghezza
@@ -6857,6 +7014,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     demand = Math.max(sum, byTime * 0.6);
                 }
             }
+            // ── IL RESPIRO MINIMO NON È UN'OPZIONE ─────────────────────────────────
+            // «Spaziatura secondo il contenuto» è una scelta d'incisione: decide se la
+            // larghezza segue le figure o solo la durata. Ma quanto spazio ci vuole perché
+            // due attacchi siano DISTINGUIBILI — e mirabili col puntatore — non è una
+            // questione di gusto: spenta l'opzione, sedici semicrome restavano larghe
+            // quanto otto crome e finivano a una quindicina di pixel l'una dall'altra.
+            //
+            // Il pavimento vale quindi in entrambi i modi. Non tocca le misure rade (otto
+            // crome chiedono 160 px contro i 192 del metro: nulla cambia); morde solo dove
+            // gli attacchi sono davvero tanti, ed è lì che deve mordere. Con la spaziatura
+            // per tempo la misura non diventa più larga delle sue sorelle — sarebbe contro
+            // la scelta fatta — ma la riga si spezza prima, e tutte respirano.
+            //
+            // E il conto si fa sulla misura FINITA, non su quella a metà. Contando i soli
+            // attacchi già scritti, la misura cresce a ogni nota: si comincia a riempire la
+            // terza battuta, quella resta stretta nella riga proprio mentre servirebbe
+            // spazio per scrivere, e solo verso la fine sfonda e salta a capo. Si estende
+            // quindi la densità già stabilita al tempo ancora vuoto: chi scrive sedicesimi
+            // ha la larghezza definitiva dal PRIMO sedicesimo, e la battuta non si muove
+            // più. Una battuta piena non ha vuoto: per lei la previsione è il conto vero.
+            const attacchiScritti = attacchiPerMisura.get(_mIdx)?.size ?? 0;
+            if (attacchiScritti > 0) {
+                const coperto = Math.min(measureTicks, coperturaPerMisura.get(_mIdx) ?? measureTicks);
+                const attacchiPrevisti = coperto > 0 ? attacchiScritti * (measureTicks / coperto) : attacchiScritti;
+                demand = Math.max(demand, attacchiPrevisti * MIN_ONSET_PX);
+            }
+
             // ── LARGHEZZA A GRADINI ────────────────────────────────────────────────
             // La richiesta di spazio è una somma CONTINUA: ogni nota inserita la cambia
             // di una ventina di pixel, e siccome le misure di una riga si dividono lo
@@ -6882,6 +7066,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return content + (MEASURE_PADDING_X * 2) + extraLeft;
         };
 
+        // L'A CAPO DECISO A MANO COMANDA su tutto il resto: né il tetto di battute per
+        // riga né lo spazio disponibile possono spostarlo. È l'unico modo perché una riga
+        // impaginata a mano resti com'è quando si aggiungono battute altrove — che è
+        // esattamente ciò che il tetto non sa fare, dipendendo com'è dallo zoom e dalla
+        // densità della musica.
+        const aCapoDopo = new Set<number>((systemBreaks || []).map(n => Math.max(0, Math.round(Number(n)))).filter(n => Number.isFinite(n)));
+
         let accWidth = 0;
         for (let m = 0; m < targetTotalMeasures && !isRibbon; m++) {
             if (curSys.length >= desiredMeasuresPerLine) {
@@ -6899,6 +7090,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             } else {
                 curSys.push(m);
                 accWidth += mWidth;
+            }
+
+            // Se qui è stato messo un a capo, la riga finisce con questa battuta.
+            if (aCapoDopo.has(m) && curSys.length > 0) {
+                tentativeSystems.push({ measureIndices: curSys });
+                curSys = [];
+                accWidth = 0;
             }
         }
         if (isRibbon) {
@@ -6953,20 +7151,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Allow increasing pxPerTick beyond the default when notes are very dense
             // so small subdivisions (biscrome etc.) remain legible.
             const minPxPerTick = (MIN_PX_PER_QUARTER / TICKS_PER_QUARTER);
-            const MIN_PIXEL_SPACING = 8; // px between adjacent onsets
+            // px fra due attacchi vicini. Resta basso di proposito: questo canale alza il
+            // px-per-tick del sistema, e un sistema più largo della pagina SFORA a destra
+            // invece di andare a capo. Il respiro vero si ottiene dalla domanda di spazio
+            // (vedi `measureDemand`), che spezza la riga.
+            const MIN_PIXEL_SPACING = 8;
 
-            // Compute the smallest tick delta between adjacent onsets inside the system.
-            // Include ACC notes so eighth-note triplets (and other short subdivisions) in
-            // accompaniment tracks force the system to reserve enough horizontal space.
-            // Without this, when SATB is sparse the system uses a low pxPerTick and the
-            // ACC notes/playhead end up visually overlapping.
+            // Distanza minima fra due attacchi vicini del sistema. Vale per TUTTE le righe
+            // (`attacchiPerMisura` comprende le tracce): quando il coro è rado ma una traccia
+            // ha terzine di crome, è la traccia a dire quanto spazio serve — altrimenti le
+            // sue note e la linea di lettura finiscono una sopra l'altra.
             let minDeltaTicks = Infinity;
             sys.measureIndices.forEach(m => {
-                const measureNotes = notesToLayout.filter(n => n.measureIndex === m);
-                const ticks = measureNotes.map(n => (typeof (n as any).startTick === 'number')
-                    ? (n as any).startTick
-                    : Math.round((((measureStartAbsBeat[n.measureIndex ?? 0] ?? 0) + ((n.beat ?? 1) - 1))) * TICKS_PER_QUARTER));
-                ticks.sort((a, b) => a - b);
+                const ticks = [...(attacchiPerMisura.get(m)?.keys() ?? [])].sort((a, b) => a - b);
                 for (let i = 1; i < ticks.length; i++) {
                     const d = ticks[i] - ticks[i-1];
                     if (d > 0 && d < minDeltaTicks) minDeltaTicks = d;
@@ -7084,24 +7281,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
 
 
-        try {
-            const sample = finalNotes.slice(0, 12).map(n => ({ id: n.id, measureIndex: n.measureIndex, beat: n.beat, startTick: (n as any).startTick, x: n.xPosition }));
-            const firstMeasureIndex = 0;
-            const sampleMeasureWidth = measureFinalWidths.get(firstMeasureIndex) || 0;
-            const sampleBeats = measureBeatsPerMeasure[0] ?? baseBeatsPerMeasure;
-            const samplePxPerQuarter = sampleMeasureWidth > 0 ? ((sampleMeasureWidth - (MEASURE_PADDING_X * 2)) / Math.max(1, sampleBeats)) : 0;
-            // Per-system diagnostics: report pxPerTick estimate and first positioned note
-            systemsParams.forEach((sp, si) => {
-                const sysNotes = finalNotes.filter(n => sp.measureIndices.includes(n.measureIndex ?? -1));
-                const firstNote = sysNotes.length > 0 ? sysNotes[0] : null;
-                //
-            });
-            //
-        } catch (e) {
-            // ignore logging errors
-        }
+        // QUI c'era una diagnostica dell'impaginazione che non stampava più niente (le
+        // console.log erano state tolte lasciando il calcolo): per ogni sistema filtrava
+        // TUTTE le note del brano, a ogni ricalcolo del layout. Le diagnosi che teniamo
+        // sono quelle che si accendono a richiesta dalla console (vedi __htAiuto), non
+        // quelle che lavorano sempre e non dicono nulla.
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
-    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths]);
+    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths, systemBreaks]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA
@@ -8034,13 +8220,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * dentro la battuta — ma su un elenco SEPARATO. È tutta la differenza: una scritta
      * non entra nell'analisi, quindi spostarla o toglierla non può cambiare una sigla.
      */
-    const testiPerSistema = useMemo<Array<Array<{ x: number; label: string; absBeat: number }>>>(() => {
-        const vuoto: Array<Array<{ x: number; label: string; absBeat: number }>> = [];
+    const testiPerSistema = useMemo<Array<Array<{ x: number; label: string; absBeat: number; offsetY: number }>>>(() => {
+        const vuoto: Array<Array<{ x: number; label: string; absBeat: number; offsetY: number }>> = [];
         if (!layoutData || !(textAnnotations || []).length) return vuoto;
         const sysParams = (layoutData as any).systemsParams || [];
         const inizi = (layoutData as any).measureStartAbsBeat as number[] | undefined;
         const battute = (layoutData as any).measureBeatsPerMeasure as number[] | undefined;
-        const out: Array<Array<{ x: number; label: string; absBeat: number }>> = sysParams.map(() => []);
+        const out: Array<Array<{ x: number; label: string; absBeat: number; offsetY: number }>> = sysParams.map(() => []);
         const misuraDi = (ab: number): number => {
             if (!inizi || !inizi.length) {
                 const bpm = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -8064,7 +8250,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const larghezza = Math.max(1, endX - startX);
                 const contenuto = Math.max(1, larghezza - (MEASURE_PADDING_X * 2));
                 const rel = Math.max(0, Math.min(1, dentro / bpm));
-                out[si].push({ x: startX + MEASURE_PADDING_X + (rel * contenuto) + 10, label: t.label, absBeat: ab });
+                out[si].push({
+                    x: startX + MEASURE_PADDING_X + (rel * contenuto) + 10,
+                    label: t.label,
+                    absBeat: ab,
+                    offsetY: Number((t as any).offsetY) || 0,
+                });
                 break;
             }
         }
@@ -10746,81 +10937,44 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setPlayheadPosition({ x, systemIndex });
     }, [layoutData, timeSignature]);
 
-    const refinePlayheadXToRenderedNoteheads = useCallback((systemIndex: number, absTicks: number, fallbackX: number): number => {
-        try {
-            const ld = layoutDataRef.current;
-            if (!ld?.systemsParams?.[systemIndex] || !Array.isArray(ld.positionedNotes)) return fallbackX;
-            const sys = ld.systemsParams[systemIndex];
-            const measureSet = new Set<number>(sys.measureIndices || []);
+    // QUI C'ERA L'APPARATO DI STIME DELLA LINEA DI LETTURA, e non c'è più.
+    //
+    // `accPositionedNotesForSystem`, `refinePlayheadXToRenderedNoteheads`,
+    // `estimateNoteheadOffsetPxForSystem`, `campioniTeste`, `xDalleTesteVicine`: servivano
+    // tutte a indovinare, dalle note già disegnate, quanto la testa stia a destra della
+    // nostra griglia. Ogni pezzo curava un caso e ne rompeva un altro, e la linea finiva
+    // per «andare un po' dove vuole».
+    //
+    // Quella distanza è COSTANTE e ora è misurata: `PX_GRIGLIA_CENTRO_TESTA` (18 px, vedi
+    // la sua definizione in cima al file e `__htMisuraTeste`). Se un giorno servisse di
+    // nuovo misurare invece di sapere, il posto giusto per farlo è quello strumento — non
+    // una stima diversa in ogni funzione che ne ha bisogno.
 
-            // Collect note IDs that start exactly at this tick within the current system.
-            const ids: string[] = [];
-            for (const n of (ld.positionedNotes as any[]) || []) {
-                if (!n || !n.id) continue;
-                if (!measureSet.has(n.measureIndex ?? -1)) continue;
-                const st = (n as any).startTick;
-                if (typeof st === 'number' && st === absTicks) ids.push(String(n.id));
-            }
-            if (!ids.length) return fallbackX;
 
-            const hitPoints = systemNoteHitPointsRef.current?.[systemIndex] || [];
-            if (!hitPoints.length) return fallbackX;
-            const byId = new Map(hitPoints.filter((p: any) => p && !p.isGhost && p.id).map((p: any) => [String(p.id), p]));
+    // TOLTE (17/08/2026): `scostamentoTesteVicino` e `xGrigliaDalMouse`, che riportavano la
+    // x del puntatore sulla griglia dei tick prima di calcolare il tempo. L'idea — chi
+    // scrive mira alla TESTA, non alla griglia — resta giusta, ma applicata al clic e al
+    // fantasma insieme sommava correzioni invece di annullarle, e il risultato in mano era
+    // peggiore del difetto di partenza. Se si riprova, si riprova UNA cosa per volta,
+    // partendo dai numeri di `__htMisuraTeste` (nostra xPosition → bordo testa +12 →
+    // centro testa +18) e non da deduzioni.
 
-            const xs: number[] = [];
-            for (const id of ids) {
-                const p: any = byId.get(id);
-                if (p && Number.isFinite(p.x)) xs.push(Number(p.x));
-            }
-            if (!xs.length) return fallbackX;
 
-            // Average (stable for chords with multiple voices).
-            const x = xs.reduce((s, v) => s + v, 0) / xs.length;
-            return Number.isFinite(x) ? x : fallbackX;
-        } catch {
-            return fallbackX;
-        }
-    }, []);
-
-    // NOTE: playhead refinement effect is declared later (needs getPlayheadPosForAbsBeat).
-
-    const estimateNoteheadOffsetPxForSystem = useCallback((systemIndex: number): number => {
-        try {
-            const ld = layoutDataRef.current;
-            if (!ld?.systemsParams?.[systemIndex] || !Array.isArray(ld.positionedNotes)) return 0;
-            const sys = ld.systemsParams[systemIndex];
-            const measureSet = new Set<number>(sys.measureIndices || []);
-
-            const hitPoints = systemNoteHitPointsRef.current?.[systemIndex] || [];
-            if (!hitPoints.length) return 0;
-            const byId = new Map(hitPoints.filter((p: any) => p && !p.isGhost && p.id).map((p: any) => [String(p.id), p]));
-
-            const offsets: number[] = [];
-            for (const n of (ld.positionedNotes as any[]) || []) {
-                if (!n || !n.id) continue;
-                if (!measureSet.has(n.measureIndex ?? -1)) continue;
-                const p: any = byId.get(String(n.id));
-                if (!p || !Number.isFinite(p.x) || !Number.isFinite(n.xPosition)) continue;
-                const dx = Number(p.x) - Number(n.xPosition);
-                if (!Number.isFinite(dx)) continue;
-                // Keep only plausible glyph offsets (avoid outliers / beams).
-                if (dx < -40 || dx > 40) continue;
-                offsets.push(dx);
-                if (offsets.length >= 40) break;
-            }
-            if (!offsets.length) return 0;
-            offsets.sort((a, b) => a - b);
-            const mid = offsets[Math.floor(offsets.length / 2)];
-            return Number.isFinite(mid) ? mid : 0;
-        } catch {
-            return 0;
-        }
-    }, []);
-
-    // After re-layout (or cursor moves), refine the playhead X:
-    // - if a note exists at that tick, snap exactly to the rendered notehead
-    // - otherwise, apply the system's typical notehead offset so the playhead indicates
-    //   where an inserted notehead will appear (prevents the ~12px jump after insertion)
+    // LA LINEA DI LETTURA STA DOVE STARÀ LA TESTA, E LO SA PER MISURA.
+    //
+    // Qui c'era un apparato di STIME: si cercava la nota già disegnata a quel tick, si
+    // campionavano le teste vicine, si calcolava uno scostamento mediano per sistema e lo
+    // si limitava a un terzo dello slot perché non scavalcasse il punto da indicare. Ogni
+    // pezzo curava il caso che aveva davanti e rompeva quello accanto, e il risultato era
+    // una linea che «va un po' dove vuole».
+    //
+    // Non serve stimare niente: la distanza fra la x che diamo a una nota e il centro
+    // della testa che si vede è COSTANTE, ed è misurata (`__htMisuraTeste`, VexflowGrandStaff):
+    // +12 px di STAVEPADDING fino al bordo del glifo, +6 di mezza testa. Diciotto pixel,
+    // sempre gli stessi, per ogni figura e ogni rigo — sono unità del disegno, quindi lo
+    // zoom non li tocca. La linea si posa dunque sulla x di griglia dell'attacco più
+    // questi diciotto, e cade esattamente sul centro della testa: sopra una nota che c'è
+    // già, e nel punto in cui comparirà quella che si sta per scrivere.
     useEffect(() => {
         if (isPlaying) return;
         if (!layoutData) return;
@@ -10837,37 +10991,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const basePos = getPlayheadPosForAbsBeat(absBeat as number);
         if (!basePos) return;
 
-        const absTicks = Math.round((absBeat as number) * TICKS_PER_QUARTER);
-        const snappedToNotehead = refinePlayheadXToRenderedNoteheads(basePos.systemIndex, absTicks, basePos.x);
-        const hasNoteheadSnap = Number.isFinite(snappedToNotehead) && Math.abs(snappedToNotehead - basePos.x) > 0.5;
-
-        // LO SCOSTAMENTO NON PUÒ SUPERARE LO SLOT.
-        //
-        // Serve a puntare dove comparirà la TESTA della nota, ed è stimato in pixel dalle
-        // note già disegnate. Su valori lunghi è piccolo rispetto alla distanza fra due
-        // attacchi; sui SEDICESIMI quella distanza si accorcia di quattro volte e lo
-        // scostamento arriva a coprirla tutta — la linea finiva visivamente sulla nota
-        // appena scritta invece che sul posto della prossima, ed è il difetto segnalato
-        // inserendo sedicesimi su una traccia.
-        //
-        // Si limita quindi a un terzo dello slot corrente: indica ancora la testa, ma non
-        // può scavalcare il punto che deve indicare.
-        const offsetGrezzo = hasNoteheadSnap ? 0 : estimateNoteheadOffsetPxForSystem(basePos.systemIndex);
-        let offset = offsetGrezzo;
-        if (offsetGrezzo > 0) {
-            // `computeDurationTicks` vuole una NOTA, non i suoi pezzi: si costruisce
-            // quella che si sta per inserire.
-            const durTicks = computeDurationTicks({
-                duration: selectedInsertion.duration,
-                isDotted: !!selectedInsertion.isDotted,
-                isTriplet,
-                isDuplet,
-            } as any) || TICKS_PER_QUARTER;
-            const dopo = getPlayheadPosForAbsBeat((absBeat as number) + (durTicks / TICKS_PER_QUARTER));
-            const slot = (dopo && dopo.systemIndex === basePos.systemIndex) ? Math.abs(dopo.x - basePos.x) : Infinity;
-            if (Number.isFinite(slot)) offset = Math.min(offsetGrezzo, slot / 3);
-        }
-        const targetX = (hasNoteheadSnap ? snappedToNotehead : (basePos.x + offset));
+        const targetX = basePos.x + PX_GRIGLIA_CENTRO_TESTA;
 
         const curPH = playheadPositionRef.current;
         if (!curPH || curPH.systemIndex !== basePos.systemIndex || Math.abs(curPH.x - targetX) > 0.5) {
@@ -10883,7 +11007,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!curPC || curPC.systemIndex !== basePos.systemIndex || Math.abs(curPC.x - targetX) > 0.5) {
             setPasteCaret({ x: targetX, systemIndex: basePos.systemIndex, measureIndex, beat });
         }
-    }, [estimateNoteheadOffsetPxForSystem, getPlayheadPosForAbsBeat, isPlaying, layoutData, refinePlayheadXToRenderedNoteheads, timeSignature]);
+    }, [getPlayheadPosForAbsBeat, isPlaying, layoutData, timeSignature]);
 
     const getCurrentAbsBeatForPlayhead = useCallback(() => {
         const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
@@ -11296,7 +11420,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
-        const hit = getSystemMeasureAtX(systemIndex, x);
+        // Come il clic d'inserimento: dai pixel al tempo si toglie lo scostamento.
+        const xMirata = x - PX_GRIGLIA_CENTRO_TESTA;
+        const hit = getSystemMeasureAtX(systemIndex, xMirata);
         if (!hit) return;
 
         const beatsPerMeasure = (layoutData as any)?.measureBeatsPerMeasure?.[hit.measureIndex]
@@ -11304,7 +11430,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
 
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
-        const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+        const relX = xMirata - (hit.measureStartX + MEASURE_PADDING_X);
 
         // Limita il click all'interno della misura visibile
         const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
@@ -11337,7 +11463,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
 
-        let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        // Gli stessi posti dell'inserimento (vedi `attacchiDisponibili`): il cursore indica
+        // dove si scriverà, quindi non può posarsi dove una nota non potrebbe cominciare.
+        // Con SHIFT vale la griglia libera, come per il clic d'inserimento.
+        const postiDisponibili = e.shiftKey
+            ? []
+            : attacchiDisponibiliRef.current(hit.measureIndex, measureStartTick, ticksPerMeasure, timeSignature.denominator);
+        let snappedLocalTicks: number;
+        if (postiDisponibili.length > 0) {
+            const scelto = attaccoPiuVicinoRef.current(postiDisponibili, measureStartTick + localTicksRaw);
+            snappedLocalTicks = (scelto ?? measureStartTick) - measureStartTick;
+        } else {
+            snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        }
         const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
         if (snappedLocalTicks < 0) snappedLocalTicks = 0;
         if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
@@ -11768,7 +11906,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const isPlainClick = !(e?.metaKey || e?.ctrlKey);
 
 
-        const hit = getSystemMeasureAtX(systemIndex, x);
+        // DAI PIXEL AL TEMPO: si toglie prima lo scostamento fino alla testa.
+        //
+        // La linea di lettura indica il CENTRO della testa (x di griglia + 18, vedi
+        // `PX_GRIGLIA_CENTRO_TESTA`); qui si fa il cammino inverso, altrimenti cliccare
+        // dove la linea indica cade 18 px più avanti — circa 250 tick, che con le
+        // semiminime non si nota e dentro una terzina di crome basta a far vincere il
+        // posto sbagliato. La costante è una sola e vale nei due sensi.
+        const xMirata = x - PX_GRIGLIA_CENTRO_TESTA;
+
+        const hit = getSystemMeasureAtX(systemIndex, xMirata);
         if (!hit) return;
 
         // --- SNAP 100% tick-based (no beat-float snap) ---
@@ -11786,7 +11933,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         // Pixel -> ticks mapping inside the visible measure content.
         const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
-        const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+        const relX = xMirata - (hit.measureStartX + MEASURE_PADDING_X);
         const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
 
         const rawPxPerTick = hit.pxPerTick;
@@ -11822,8 +11969,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             ? Math.max(1, Math.floor(baseSnapGridTicks / 2))
             : baseSnapGridTicks;
 
-        // Quantize strictly in ticks (left-biased to avoid occasional snap-forward jitter).
-        let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        // I POSTI DOVE UNA NOTA PUÒ COMINCIARE LI DETTA CIÒ CHE È GIÀ SCRITTO
+        // (vedi `attacchiDisponibili`): i movimenti del metro, e gli inizi e le fini degli
+        // eventi che ci sono. Vince il più vicino — sono pochi e distanti, quindi non c'è
+        // da mirare. Con SHIFT si torna alla griglia libera e fine.
+        const postiDisponibili = e?.shiftKey
+            ? []
+            : attacchiDisponibiliRef.current(hit.measureIndex, measureStartTick, ticksPerMeasure, tsAtMeasureStart.denominator);
+        let snappedLocalTicks: number;
+        if (postiDisponibili.length > 0) {
+            const scelto = attaccoPiuVicinoRef.current(postiDisponibili, measureStartTick + localTicksRaw);
+            snappedLocalTicks = (scelto ?? measureStartTick) - measureStartTick;
+        } else {
+            snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+        }
 
         // Clamp so onset is always within the measure and fits the duration.
         // If the raw click fell at or past the measure boundary, bail out rather
@@ -11836,13 +11995,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             snappedLocalTicks = maxLocalStart;
         }
 
-        // Stessa calamita del fantasma: quello che si vede è quello che si ottiene.
+        // La calamita resta per la griglia libera di SHIFT; col modello nuovo gli inizi
+        // degli eventi sono già fra i posti disponibili, quindi non ha nulla da spostare.
         const startTick = agganciaAdAttaccoVicinoRef.current(
             hit.measureIndex,
             measureStartTick + snappedLocalTicks,
             snapGridTicks,
         );
         snappedLocalTicks = startTick - measureStartTick;
+
+        registraInserimento({
+            battuta: hit.measureIndex,
+            figura: `${selectedInsertion.duration}${selectedInsertion.isDotted ? '.' : ''}${isTriplet ? ' ⑶' : ''}${isDuplet ? ' ⑵' : ''}`,
+            x_mouse: Math.round(x * 10) / 10,
+            x_letta: Math.round(xMirata * 10) / 10,
+            tick_mirato: Math.round(localTicksRaw),
+            posti: postiDisponibili.map(t => t - measureStartTick).join(' '),
+            scelto: snappedLocalTicks,
+            px_per_tick: Math.round(pxPerTick * 10000) / 10000,
+            shift: !!(e as any)?.shiftKey,
+        });
 
         // Derive beat only for compatibility (do not use it for snapping).
         const beatInMeasure = (snappedLocalTicks / TICKS_PER_QUARTER) + 1;
@@ -13247,6 +13419,219 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [activeTab, tool, selectedVoice, marqueeSelectOnlyCurrentVoice]);
 
     /**
+     * DOVE PUÒ COMINCIARE UNA NOTA IN QUESTA BATTUTA.
+     *
+     * Non lo decide la figura che si ha in mano, ma **ciò che è già scritto**: la nota
+     * nuova comincia dove finisce quella di prima. Dopo una croma il mezzo movimento è un
+     * posto legittimo — ci si scrive una semiminima sul levare, che è una sincope — mentre
+     * dopo una semiminima quel punto non esiste, e cliccandoci si finiva a metà della nota
+     * già scritta: l'inserimento riusciva e CANCELLAVA le note che si sovrapponevano
+     * (l'inserimento sostituisce chi occupa quel tempo nella stessa voce). Un errore di
+     * mira di pochi pixel distruggeva due semiminime.
+     *
+     * I posti disponibili sono quindi:
+     *  · i MOVIMENTI del metro — una battuta vuota si scrive dai suoi movimenti;
+     *  · la FINE di ogni evento già scritto — è lì che comincia il seguito;
+     *  · l'INIZIO di ogni evento già scritto — per impilare un accordo.
+     *
+     * Il vantaggio non è solo la sicurezza: i posti sono POCHI e distanti, quindi vince il
+     * più vicino senza bisogno di mirare. Dopo una semiminima c'è un solo posto dove
+     * andare, e tutta la zona a destra della nota punta lì.
+     *
+     * Con SHIFT si torna alla griglia libera e fine (sedicesimo), per i casi che questo
+     * modello non prevede: un attacco che non nasce da ciò che c'è.
+     */
+    const attacchiDisponibili = useCallback((
+        measureIndex: number,
+        measureStartTick: number,
+        ticksPerMeasure: number,
+        denominatoreMetro: number,
+    ): number[] => {
+        const posti = new Set<number>();
+        try {
+            // `tupla` = quante note compongono il gruppo: 3 per la terzina, 2 per la duina,
+            // 0 se la nota non appartiene a un gruppo irregolare.
+            const eventi: Array<{ inizio: number; durata: number; voce: string; tupla: number }> = [];
+            const considera = (n: any, voce: string) => {
+                if (!n || (n.measureIndex ?? -1) !== measureIndex) return;
+                const inizio = Number(n.startTick);
+                if (!Number.isFinite(inizio)) return;
+                const durata = Math.max(0, Number(n.durationTicks) || 0);
+                eventi.push({ inizio, durata, voce, tupla: n.isTriplet ? 3 : (n.isDuplet ? 2 : 0) });
+                posti.add(inizio);                             // per impilare un accordo
+                if (durata > 0) posti.add(inizio + durata);    // dove comincia il seguito
+            };
+            for (const n of (latestRawNotes.current || [])) considera(n, `coro${n?.voice ?? ''}`);
+            for (const t of (latestAccompanimentTracks.current || [])) {
+                if (!t || !t.visible) continue;
+                for (const n of (t.notes || [])) considera(n, `acc${t.id}`);
+            }
+
+            // ── I MOVIMENTI NON VALGONO DENTRO UN GRUPPO IRREGOLARE ──────────────
+            // Una terzina di semiminime occupa 0→1920 con attacchi a 0, 640 e 1280: il
+            // movimento 960 cade nel MEZZO, e lì non può cominciare niente senza spezzare
+            // il gruppo. Contandolo fra i posti ordinari competeva con la continuazione
+            // della terzina — 640 e 960 distano 320 tick, una ventina di pixel — e bastava
+            // mirare appena oltre metà strada per infilarci la nota. La terzina si
+            // sparpagliava sui movimenti (0, 960, 1920) lasciando tre buchi da 320: la
+            // battuta risultava piena senza contenere ciò che si era scritto. Vale lo stesso
+            // per le DUINE, e in 6/8 anche di più: una duina di crome ha note da 720 tick
+            // mentre i posti ordinari cadono ogni 480, quindi i concorrenti stanno a 240 tick
+            // da entrambi i lati — più vicini della metà del passo del gruppo.
+            //
+            // L'estensione di un gruppo si ricava dalla prima nota in terzina: tre volte la
+            // sua durata. Finché il gruppo non è chiuso i movimenti interni sono esclusi;
+            // completato, tornano disponibili.
+            const estensioni: Array<{ da: number; a: number; note: number; attese: number }> = [];
+            const perVoce = new Map<string, Array<{ inizio: number; durata: number; tupla: number }>>();
+            for (const ev of eventi) {
+                if (ev.tupla <= 0 || ev.durata <= 0) continue;
+                if (!perVoce.has(ev.voce)) perVoce.set(ev.voce, []);
+                perVoce.get(ev.voce)!.push({ inizio: ev.inizio, durata: ev.durata, tupla: ev.tupla });
+            }
+            for (const gruppo of perVoce.values()) {
+                gruppo.sort((x, y) => x.inizio - y.inizio);
+                let i = 0;
+                while (i < gruppo.length) {
+                    const primo = gruppo[i];
+                    const fineGruppo = primo.inizio + primo.durata * primo.tupla;
+                    // Le note dello stesso gruppo: quelle che cadono dentro l'estensione.
+                    let j = i + 1;
+                    while (j < gruppo.length && gruppo[j].inizio < fineGruppo) j++;
+                    estensioni.push({ da: primo.inizio, a: fineGruppo, note: j - i, attese: primo.tupla });
+                    i = j;
+                }
+            }
+            // Dentro il gruppo non si comincia niente. E quando manca SOLO L'ULTIMA nota non
+            // si comincia niente nemmeno dove il gruppo finisce: quel movimento competerebbe
+            // con la terza nota della terzina — distano un terzo di movimento — e mirando
+            // appena a destra la nota uscirebbe dal gruppo, non travata e staccata dalle
+            // altre, lasciando la terzina monca.
+            //
+            // Con una nota sola invece il movimento resta: un gruppo appena cominciato si
+            // può ancora abbandonare, e sbarrare la strada vorrebbe dire che una terzina
+            // messa per sbaglio impedisce di scrivere il movimento dopo — è successo con i
+            // sedicesimi, dove una quarta nota apriva un secondo gruppo e faceva sparire il
+            // movimento 2. Chiuso il gruppo, tutto torna disponibile. (Per la DUINA «manca
+            // solo l'ultima» vuol dire una nota su due: il bordo si chiude subito, ed è
+            // giusto, perché è lì che la seconda nota deve andare.)
+            const dentroUnGruppo = (t: number) => estensioni.some(e => (
+                (t > e.da && t < e.a) || (e.note === e.attese - 1 && t === e.a)
+            ));
+
+            // Il movimento del metro: la semiminima in 4/4, la croma in 6/8.
+            const passo = Math.max(1, Math.round(TICKS_PER_QUARTER * (4 / Math.max(1, denominatoreMetro))));
+            for (let t = 0; t < ticksPerMeasure; t += passo) {
+                const assoluto = measureStartTick + t;
+                if (!dentroUnGruppo(assoluto)) posti.add(assoluto);
+            }
+        } catch {
+            // ignore
+        }
+        return [...posti]
+            .filter(t => t >= measureStartTick && t < measureStartTick + ticksPerMeasure)
+            .sort((a, b) => a - b);
+    }, []);
+    const attacchiDisponibiliRef = useRef(attacchiDisponibili);
+    attacchiDisponibiliRef.current = attacchiDisponibili;
+
+    /** Il posto disponibile più vicino al punto mirato. */
+    const attaccoPiuVicino = useCallback((posti: number[], tickMirato: number): number | null => {
+        let migliore: number | null = null;
+        let distanza = Infinity;
+        for (const t of posti) {
+            const d = Math.abs(t - tickMirato);
+            if (d < distanza) { distanza = d; migliore = t; }
+        }
+        return migliore;
+    }, []);
+    const attaccoPiuVicinoRef = useRef(attaccoPiuVicino);
+    attaccoPiuVicinoRef.current = attaccoPiuVicino;
+
+    // ── REGISTRO DEGLI INSERIMENTI (diagnostica) ──────────────────────────────
+    // `__htUltimiInserimenti()` mostra le ultime venti note scritte col mouse: dove si è
+    // cliccato, quale tempo è stato letto da quel punto, quali posti erano disponibili e
+    // quale ha vinto. Serve ai difetti che NON si riproducono a comando — «a volte la nota
+    // salta allo slot successivo» — dove riprodurre il caso è più difficile che registrarlo.
+    const registroInserimenti = useRef<Array<Record<string, unknown>>>([]);
+    const registraInserimento = useCallback((riga: Record<string, unknown>) => {
+        try {
+            const reg = registroInserimenti.current;
+            reg.push({ quando: new Date().toLocaleTimeString(), ...riga });
+            if (reg.length > 20) reg.shift();
+        } catch { /* la diagnostica non deve mai disturbare la scrittura */ }
+    }, []);
+    useEffect(() => {
+        (window as any).__htUltimiInserimenti = () => {
+            // eslint-disable-next-line no-console
+            console.table(registroInserimenti.current);
+            return registroInserimenti.current.length;
+        };
+    }, []);
+
+    // ── COSA C'È DAVVERO IN UNA BATTUTA (diagnostica) ─────────────────────────
+    // `__htBattuta(3)` in console elenca gli eventi della battuta 3 — voce, figura, inizio,
+    // durata e fine in tick, contando da inizio battuta — e i posti dove una nota può
+    // cominciare. Serve quando «i conti non tornano»: le terzine sono il caso in cui un
+    // attacco fuori posto si vede subito, perché i loro tick non stanno sulla griglia
+    // ordinaria (una terzina di semiminime cade a 0, 640, 1280 e non a 0, 480, 960).
+    useEffect(() => {
+        (window as any).__htBattuta = (indice: number) => {
+            try {
+                const mi = Math.max(0, Number(indice) || 0);
+                const ld: any = layoutDataRef.current;
+                const battute = timeSignature.numerator * (4 / timeSignature.denominator);
+                const beatsPerMeasure = ld?.measureBeatsPerMeasure?.[mi] ?? battute;
+                const startAbs = ld?.measureStartAbsBeat?.[mi] ?? (mi * beatsPerMeasure);
+                const measureStartTick = Math.round(startAbs * TICKS_PER_QUARTER);
+                const ticksPerMeasure = Math.round(beatsPerMeasure * TICKS_PER_QUARTER);
+
+                const righe: Array<Record<string, unknown>> = [];
+                const aggiungi = (n: any, dove: string) => {
+                    if (!n || (n.measureIndex ?? -1) !== mi) return;
+                    const inizio = Number(n.startTick) - measureStartTick;
+                    const durata = Math.max(0, Number(n.durationTicks) || 0);
+                    righe.push({
+                        dove,
+                        voce: n.voice ?? '',
+                        figura: `${n.duration ?? '?'}${n.isDotted ? '.' : ''}${n.isTriplet ? ' ⑶' : ''}${n.isDuplet ? ' ⑵' : ''}`,
+                        pausa: !!n.isRest,
+                        inizio,
+                        durata,
+                        fine: inizio + durata,
+                    });
+                };
+                for (const n of (latestRawNotes.current || [])) aggiungi(n, 'coro');
+                for (const t of (latestAccompanimentTracks.current || [])) {
+                    for (const n of (t?.notes || [])) aggiungi(n, t?.name || 'traccia');
+                }
+                righe.sort((a: any, b: any) => (a.inizio - b.inizio) || String(a.voce).localeCompare(String(b.voce)));
+                // eslint-disable-next-line no-console
+                console.table(righe);
+
+                const posti = attacchiDisponibiliRef.current(mi, measureStartTick, ticksPerMeasure, timeSignature.denominator)
+                    .map(t => t - measureStartTick);
+                const finePerVoce: Record<string, number> = {};
+                for (const r of righe as any[]) {
+                    const v = String(r.voce);
+                    finePerVoce[v] = Math.max(finePerVoce[v] ?? 0, r.fine);
+                }
+                // eslint-disable-next-line no-console
+                console.log(
+                    `battuta ${mi}: ${ticksPerMeasure} tick in tutto\n` +
+                    `posti dove una nota può cominciare: ${posti.join(', ')}\n` +
+                    `fine dell'ultimo evento per voce: ${JSON.stringify(finePerVoce)}`,
+                );
+                return righe.length;
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.error('__htBattuta:', e);
+                return 0;
+            }
+        };
+    }, [timeSignature]);
+
+    /**
      * CALAMITA SUGLI ATTACCHI ESISTENTI.
      *
      * Costruire un accordo vuol dire mettere una nota SOPRA un'altra: si mira alla
@@ -13256,10 +13641,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * sopra le altre e comparso più avanti, con due sigle invece di una.
      *
      * Qui, se in quella misura c'è già un attacco abbastanza vicino, si usa QUELLO. Vince
-     * sempre il più vicino, e solo entro mezzo slot: più in là si sta chiaramente
-     * mirando altrove, e sarebbe fastidioso vedersi calamitare la nota contro la
-     * volontà. Serve sia al fantasma sia al clic, così ciò che si vede è ciò che si
+     * sempre il più vicino, e solo entro la distanza stabilita: più in là si sta
+     * chiaramente mirando altrove, e sarebbe fastidioso vedersi calamitare la nota contro
+     * la volontà. Serve sia al fantasma sia al clic, così ciò che si vede è ciò che si
      * ottiene.
+     *
+     * LA FORZA È UNA PREFERENZA (`editor.snapMagnetStrength`, frazione dello slot, mezzo
+     * slot di partenza). Impilare e staccarsi sono lo stesso gesto visto dai due lati: la
+     * forza che rende facile mettere una nota SOPRA quella scritta rende difficile
+     * metterne una SUBITO DOPO. Dove stia il punto giusto dipende da come si scrive, e
+     * quindi lo decide chi scrive — a 0 la calamita è spenta e vale solo la griglia.
      */
     const agganciaAdAttaccoVicino = useCallback((
         measureIndex: number,
@@ -13267,7 +13658,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         snapGridTicks: number,
     ): number => {
         try {
-            const tolleranza = Math.max(1, snapGridTicks * 0.5);
+            const forza = snapMagnetStrengthRef.current;
+            if (!(forza > 0)) return startTickCandidato;
+            const tolleranza = Math.max(1, snapGridTicks * forza);
             let migliore: number | null = null;
             let distanzaMigliore = Infinity;
             const considera = (n: any) => {
@@ -13297,7 +13690,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      *  (cerca "Snap grid" lì): se cambia una, va cambiata anche l'altra. */
     const ghostInsertTickRange = useCallback((systemIndex: number, x: number): { measureIndex: number; startTick: number; endTick: number; measureStartTick: number } | null => {
         try {
-            const hit = getSystemMeasureAtX(systemIndex, x);
+            // Stesso cammino inverso del clic: il fantasma deve leggere il tempo dal
+            // punto in cui si vedrà la testa, non dalla x grezza.
+            const xMirata = x - PX_GRIGLIA_CENTRO_TESTA;
+            const hit = getSystemMeasureAtX(systemIndex, xMirata);
             if (!hit) return null;
             const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat?.[hit.measureIndex]
                 ?? (hit.measureIndex * (timeSignature.numerator * (4 / timeSignature.denominator)));
@@ -13307,7 +13703,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const measureStartTick = Math.round(measureStartAbsBeat * TICKS_PER_QUARTER);
 
             const contentWidth = Math.max(1, hit.measureWidth - (MEASURE_PADDING_X * 2));
-            const relX = x - (hit.measureStartX + MEASURE_PADDING_X);
+            const relX = xMirata - (hit.measureStartX + MEASURE_PADDING_X);
             const clampedRelX = Math.max(0, Math.min(contentWidth, relX));
             const rawPxPerTick = hit.pxPerTick;
             const pxPerTick = (typeof rawPxPerTick === 'number' && isFinite(rawPxPerTick) && rawPxPerTick > 0)
@@ -13326,7 +13722,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const snapCapTicks = Math.round(TICKS_PER_QUARTER / 2);
             const _gcd = (a: number, b: number): number => { let p = Math.abs(a); let q = Math.abs(b); while (q) { [p, q] = [q, p % q]; } return p || 1; };
             const snapGridTicks = Math.max(1, _gcd(Math.min(durationTicks, snapCapTicks), TICKS_PER_QUARTER));
-            let snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+            // Stessi posti disponibili del clic (vedi `attacchiDisponibili`), altrimenti il
+            // fantasma mostrerebbe un attacco e la nota ne prenderebbe un altro. Qui non si
+            // conosce lo stato di Shift: il fantasma mostra sempre il modello normale.
+            const postiDisponibili = attacchiDisponibiliRef.current(
+                hit.measureIndex, measureStartTick, ticksPerMeasure, timeSignature.denominator,
+            );
+            let snappedLocalTicks: number;
+            if (postiDisponibili.length > 0) {
+                const scelto = attaccoPiuVicinoRef.current(postiDisponibili, measureStartTick + localTicksRaw);
+                snappedLocalTicks = (scelto ?? measureStartTick) - measureStartTick;
+            } else {
+                snappedLocalTicks = Math.floor(localTicksRaw / snapGridTicks) * snapGridTicks;
+            }
             const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
             if (snappedLocalTicks < 0) snappedLocalTicks = 0;
             if (snappedLocalTicks > maxLocalStart) snappedLocalTicks = maxLocalStart;
@@ -13336,6 +13744,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 measureStartTick + snappedLocalTicks,
                 snapGridTicks,
             );
+
             return { measureIndex: hit.measureIndex, startTick, endTick: startTick + durationTicks, measureStartTick };
         } catch {
             return null;
@@ -13682,11 +14091,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * Non tocca il `bpm` del brano: quello resta l'andamento di partenza, e un segno
      * sulla PRIMA battuta è la stessa cosa detta due volte — chi suona parte da lì.
      */
-    const mettiSegnoTempo = useCallback((measureIndex: number, bpm: number, beatUnit?: TempoMark['beatUnit'], dotted?: boolean) => {
+    /** Mette o toglie l'a capo dopo una battuta. Il gesto è uno solo e fa entrambe le
+     *  cose, perché è così che si lavora impaginando: si prova, si guarda, si disfa. */
+    const alternaACapoDopoBattuta = useCallback((measureIndex: number) => {
+        const mis = Math.max(0, Math.round(Number(measureIndex)));
+        if (!Number.isFinite(mis)) return;
+        setSystemBreaks(prev => {
+            const attuali = new Set((prev || []).map(n => Math.round(Number(n))));
+            if (attuali.has(mis)) attuali.delete(mis);
+            else attuali.add(mis);
+            return Array.from(attuali).sort((a, b) => a - b);
+        });
+    }, []);
+    const alternaACapoDopoBattutaRef = useRef(alternaACapoDopoBattuta);
+    alternaACapoDopoBattutaRef.current = alternaACapoDopoBattuta;
+
+    const mettiSegnoTempo = useCallback((measureIndex: number, bpm: number, beatUnit?: TempoMark['beatUnit'], dotted?: boolean, offsetY?: number) => {
         const mis = Math.max(0, Math.round(measureIndex));
         setTempoMarks(prev => normalizeTempoMarks([
             ...(prev || []).filter(m => m.measureIndex !== mis),
-            { id: crypto.randomUUID(), measureIndex: mis, bpm, beatUnit, dotted },
+            { id: crypto.randomUUID(), measureIndex: mis, bpm, beatUnit, dotted, offsetY },
         ]));
     }, []);
     const mettiSegnoTempoRef = useRef(mettiSegnoTempo);
@@ -13848,13 +14272,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const scritta = String(payload.data || '').trim();
                 if (!scritta) return;
                 const punto = Math.max(0, Math.round(dove * 1e6) / 1e6);
+                // Come il metronomo: il gesto porta il punto nel tempo E l'altezza.
+                const dy = limitaSpostamentoVerticale(
+                    target.y - yDellaScritta(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX),
+                );
                 setTextAnnotations(prev => {
                     // Spostamento: si toglie quella di partenza. Posa nuova: `spostaDa`
                     // non c'è e non si toglie niente.
                     const senzaVecchia = typeof payload.spostaDa === 'number'
                         ? (prev || []).filter(t => Math.abs(t.absBeat - payload.spostaDa!) > 1e-6)
                         : (prev || []);
-                    return [...senzaVecchia, { id: crypto.randomUUID(), absBeat: punto, label: scritta }]
+                    return [...senzaVecchia, { id: crypto.randomUUID(), absBeat: punto, label: scritta, offsetY: dy || undefined }]
                         .sort((a, b) => a.absBeat - b.absBeat);
                 });
                 return;
@@ -13871,11 +14299,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 const bpm = Number(payload.data?.bpm);
                 if (Number.isFinite(bpm) && bpm > 0) {
+                    // ORIZZONTALE E VERTICALE, nello stesso gesto: la battuta la decide il
+                    // punto in cui si molla, l'altezza la differenza rispetto a dove il
+                    // segno cadrebbe da sé. Serve a togliersi di mezzo quando il segno
+                    // finisce addosso a una sigla — l'incisione non ha una regola per ogni
+                    // incontro, e chi scrive lo sposta di quel tanto che basta.
+                    const dy = limitaSpostamentoVerticale(
+                        target.y - yDelSegnoDiTempo(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX),
+                    );
                     mettiSegnoTempoRef.current?.(
                         rng.measureIndex,
                         bpm,
                         payload.data?.beatUnit as TempoMark['beatUnit'],
                         !!payload.data?.dotted,
+                        dy || undefined,
                     );
                 }
                 return;
@@ -13970,7 +14407,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 aggiungi({ kind: 'hairpin', fromAbsBeat: dove, toAbsBeat: dove + Math.min(2, bpmLoc), direction: payload.data });
             }
         } catch { /* rilascio non valido: si abbandona */ }
-    }, [timeSignature, bpm, absBeatOfNote]);
+    }, [timeSignature, bpm, absBeatOfNote, satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX]);
 
     const segnoTrascinato = useSignDrag(posaSegno);
 
@@ -14018,6 +14455,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (!layoutData) return;
 
+        // IL FANTASMA SEGUE IL PUNTATORE, e non lo slot in cui la nota cadrà.
+        //
+        // LA X È QUELLA DEL MOUSE, senza correzioni. Provato a sottrarre lo scostamento
+        // fino alla testa (`PX_GRIGLIA_CENTRO_TESTA`) ragionando che VexFlow lo aggiunge da
+        // sé: il fantasma è finito una quindicina di pixel a SINISTRA del puntatore. Il
+        // conto sulla carta tornava, in mano no — segno che fra la coordinata del mouse e
+        // la x che diamo alle note c'è già di mezzo qualcosa che quel conto non vedeva.
+        // Finché non è misurato (vedi `__htGhost`), qui non si tocca: il fantasma sotto la
+        // punta è il comportamento che l'utente riconosce.
+        const xTestaFantasma = x;
+        //
+        // PROVATO E TOLTO (17/08/2026). Agganciarlo allo slot sembra più onesto — mostri
+        // dove la nota andrà davvero — ma con l'aggancio a SINISTRA il fantasma si posa
+        // all'inizio dello slot, e quell'inizio può stare fino a UNO SLOT INTERO a sinistra
+        // del puntatore: 24 px sui sedicesimi, 48 sulle crome. Il fantasma sembra staccato
+        // dal mouse e l'insieme diventa illeggibile. Le due cose stanno insieme solo se
+        // anche lo snap passa al più vicino, e quello è un cambio di gesto da valutare a
+        // parte: finché lo snap è a sinistra, il fantasma resta sotto il puntatore.
         // ── ACC area: show ACC ghost note (suppresses SATB ghost) ──
         // MODE-AWARE (vedi handler di inserimento): area ACC più in basso con le chiavi antiche.
         const ACC_TREBLE_TOP_Y_GHOST = (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100; // 310 grandstaff / 480 antico
@@ -14058,13 +14513,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         isTriplet,
                         isDuplet,
                         isDotted,
-                        xPosition: x,
+                        xPosition: xTestaFantasma,
                         clef: accGhostClef,
                         voice: accGhostVoice as any,
                         systemIndex,
                         _trackIdx: accGhostTrackIdx,
                     };
-                    if (prev && prev.isRest && prev.xPosition === x && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                    if (prev && prev.isRest && prev.xPosition === xTestaFantasma && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
                     return next as any;
                 });
                 return;
@@ -14106,13 +14561,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isTriplet,
                     isDuplet,
                     isDotted,
-                    xPosition: x,
+                    xPosition: xTestaFantasma,
                     clef: accGhostClef,
                     voice: accGhostVoice as any,
                     systemIndex,
                     _trackIdx: accGhostTrackIdx,
                 };
-                if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
+                if (prev && !prev.isRest && prev.xPosition === xTestaFantasma && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === accGhostClef && prev.voice === accGhostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration && (prev as any)._trackIdx === accGhostTrackIdx) return prev;
                 return next as any;
             });
             return;
@@ -14197,12 +14652,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     isTriplet,
                     isDuplet,
                     isDotted,
-                    xPosition: x,
+                    xPosition: xTestaFantasma,
                     clef: targetClef,
                     voice: ghostVoice,
                     systemIndex,
                 };
-                if (prev && prev.isRest && prev.xPosition === x && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+                if (prev && prev.isRest && prev.xPosition === xTestaFantasma && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
                 return next;
             });
             return;
@@ -14248,12 +14703,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isTriplet,
                 isDuplet,
                 isDotted,
-                xPosition: x,
+                xPosition: xTestaFantasma,
                 clef: targetClef,
                 voice: ghostVoice,
                 systemIndex,
             };
-            if (prev && !prev.isRest && prev.xPosition === x && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
+            if (prev && !prev.isRest && prev.xPosition === xTestaFantasma && prev.position === next.position && prev.pitch === next.pitch && prev.octave === next.octave && prev.clef === targetClef && prev.voice === ghostVoice && prev.systemIndex === systemIndex && prev.duration === selectedInsertion.duration) return prev;
             return next;
         });
     }, [clearGhost, applyActiveAccidental, applyAutoLeadingToneInMinor, clefForVoice, diatonicPositionFromSvgY, getNotePropertiesFromDiatonicPosition, getSystemMeasureAtX, isDotted, isDuplet, isSvgYWithinClefStaff, isTriplet, keySignature, layoutData, selectedInsertion, selectedVoice, staffSystemMode, timeSignature, tupletFactor, hasVisibleAccompaniment, effectiveAccStaffMode, ghostInsertTickRange]);
@@ -14643,6 +15098,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         return { ...n, isFermata: !allHaveFermata } as StaffNote;
                     });
                 });
+                return;
+            }
+
+            // ── A CAPO DI SISTEMA: ⌥ + Invio ──
+            // Agisce sulla battuta dove sta il cursore: la riga finisce lì. Ripetendolo si
+            // toglie. Il tetto «battute per riga» resta come punto di partenza per le righe
+            // che non sono state decise a mano.
+            if (!isMod && e.altKey && (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const ab = playbackCursorAbsBeatRef.current;
+                if (!Number.isFinite(ab as any)) return;
+                const bpmLocale = timeSignature.numerator * (4 / timeSignature.denominator);
+                const inizi = (layoutDataRef.current as any)?.measureStartAbsBeat as number[] | undefined;
+                let mis = Math.floor((ab as number) / bpmLocale);
+                if (inizi && inizi.length) {
+                    for (let m = inizi.length - 1; m >= 0; m--) {
+                        if ((ab as number) >= (inizi[m] ?? 0) - 1e-9) { mis = m; break; }
+                    }
+                }
+                alternaACapoDopoBattutaRef.current?.(mis);
                 return;
             }
 
@@ -15693,7 +16169,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             : 'File bloccato dal docente — clicca per sbloccare')
                         : 'Blocca analisi per studenti'
                 }
-                aria-label="Blocca/Sblocca analisi"
+                aria-label={tUI('ed_lock_toggle_aria')}
                 className={`absolute right-2 top-2 z-20 w-8 h-8 flex items-center justify-center rounded-md text-base shadow-sm transition-colors ${
                     analysisLocked && !sessionUnlocked
                         ? 'bg-amber-500 hover:bg-amber-400 text-white'
@@ -15706,7 +16182,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             </button>
             {featuresLimited && (
                 <div className="w-full flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-500 text-amber-950 text-xs font-semibold shadow z-[55]">
-                    <span>⏳ Prova terminata — <b>analisi</b> e <b>realizzazione automatica</b> disabilitate. Editor, export, playback e stampa restano attivi.</span>
+                    <span><Trans i18nKey="ed_trial_over" t={tUI} components={{ 1: <b />, 3: <b /> }} /></span>
                     <button
                         type="button"
                         onClick={async () => {
@@ -15716,7 +16192,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             } catch { /* ignore */ }
                         }}
                         className="shrink-0 px-2.5 py-1 rounded-md bg-amber-900 text-amber-50 hover:bg-amber-800 transition-colors"
-                    >Attiva licenza</button>
+                    >{tUI('ed_activate_license')}</button>
+                </div>
+            )}
+            {/* VOCI INCROCIATE — l'avviso che parla quando l'errore si fa, non giorni dopo.
+                Non è modale: la scrittura continua, e chi non ci bada lo ignora. Tre uscite,
+                perché sono i tre casi reali: l'ho sbagliato (scambia), l'ho voluto (va bene),
+                li voglio sempre (disattiva). */}
+            {avvisoIncrocio && (
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[101] px-3 py-2 rounded-md bg-slate-900/95 border border-amber-500/50 text-slate-100 text-xs shadow-xl flex items-center gap-3">
+                    <span>⚠︎ {avvisoIncrocio.testo}</span>
+                    <button
+                        className="px-2 py-1 rounded bg-sky-700 hover:bg-sky-600 text-white text-[11px] font-semibold"
+                        onClick={() => scambiaVociIncrocio(avvisoIncrocio.idA, avvisoIncrocio.idB)}
+                    >
+                        {tUI('voice_cross_swap', { defaultValue: 'Scambia le voci' })}
+                    </button>
+                    <button
+                        className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-[11px]"
+                        onClick={() => {
+                            incrociAccettatiRef.current.add(chiaveIncrocio(avvisoIncrocio.idA, avvisoIncrocio.idB));
+                            setAvvisoIncrocio(null);
+                        }}
+                    >
+                        {tUI('voice_cross_accept', { defaultValue: 'Va bene così' })}
+                    </button>
+                    <button
+                        className="px-2 py-1 rounded text-slate-400 hover:text-slate-200 text-[11px] underline"
+                        onClick={() => { setAvvisaIncrocioVoci(false); setAvvisoIncrocio(null); }}
+                        title={tUI('voice_cross_disable_hint', { defaultValue: 'Si riattiva da Preferenze → Editor' })}
+                    >
+                        {tUI('voice_cross_disable', { defaultValue: 'Disattiva queste segnalazioni' })}
+                    </button>
                 </div>
             )}
             {limitedToast && (
@@ -16768,6 +17275,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     className={`flex-grow overflow-y-auto bg-stone-100 rounded-lg shadow-inner ${(viewMode === 'linear' || Math.abs(editorZoom - 1) > 1e-3) ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
                     onMouseDownCapture={handleScoreMouseDownWithClef}
                     onClick={handleDeselectOnClickOutside}
+                    onDoubleClick={handleScoreDoubleClick}
                 >
                     <div style={{ position: 'relative' }}>
                         {/* Spacer: defines scrollable area (scaled size) */}
@@ -16805,8 +17313,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 onChange={(e) => setProjectTitle(e.target.value)}
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
-                                placeholder="Titolo"
-                                aria-label="Titolo del brano"
+                                placeholder={tUI('ed_title_placeholder')}
+                                data-ht-field="title"
+                                aria-label={tUI('ed_title_aria')}
                                 className="w-full max-w-2xl bg-transparent text-center font-semibold text-slate-800 placeholder:text-slate-400 outline-none"
                                 style={{ fontSize: `${titleFontSize}px`, fontFamily: titleFontFamily }}
                             />
@@ -16820,8 +17329,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 onChange={(e) => setProjectComposer(e.target.value)}
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
-                                placeholder="Autore"
-                                aria-label="Autore del brano"
+                                placeholder={tUI('ed_composer_placeholder')}
+                                data-ht-field="composer"
+                                aria-label={tUI('ed_composer_aria')}
                                 className="w-full max-w-2xl bg-transparent text-right italic text-slate-600 placeholder:text-slate-400 outline-none"
                                 style={{ fontSize: `${Math.max(10, Math.round(titleFontSize * 0.7))}px`, fontFamily: titleFontFamily }}
                             />
@@ -17270,7 +17780,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                     setSelectedNoteIds(prev => (prev.size === 1 && prev.has(noteId)) ? prev : new Set([noteId]));
                                     const nota = (latestRawNotes.current || []).find(n => n.id === noteId) as any;
                                     const conArt = !!(nota?.articulations?.length);
-                                    setMenuNota({ x: (ev as MouseEvent).clientX, y: (ev as MouseEvent).clientY, noteId, conArticolazioni: conArt });
+                                    const misNota = Number(nota?.measureIndex);
+                                    setMenuNota({
+                                        x: (ev as MouseEvent).clientX,
+                                        y: (ev as MouseEvent).clientY,
+                                        noteId,
+                                        conArticolazioni: conArt,
+                                        measureIndex: Number.isFinite(misNota) ? misNota : undefined,
+                                        conACapo: Number.isFinite(misNota) && (systemBreaks || []).includes(misNota),
+                                    });
                                     return true;
                                 }}
                                 onBarlineRightClick={(barlineId) => {
@@ -17363,7 +17881,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         <g key={`invalid-${systemIndex}-${i}`}
                                                                            style={{pointerEvents:'auto', cursor:'pointer'}}
                                                                            onClick={() => setShowIncompleteMeasureWarnings(false)}>
-                                                                            <title>Misura incompleta — clicca per nascondere</title>
+                                                                            <title>{tUI('ed_incomplete_measure')}</title>
                                                                             <rect
                                                                                 x={r.x}
                                                                                 y={yTop}
@@ -17833,16 +18351,46 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                             // sfumature che si sentivano.
                                                             const _ovEl = ((isAnalysisEnabled || violationLevelByNoteId.size > 0 || analysisContexts.length > 0 || (testiPerSistema?.[systemIndex] || []).length > 0 || timeSignatureChanges.length > 0 || (dynamics?.length ?? 0) > 0 || (slurs?.length ?? 0) > 0 || (octaveShifts?.length ?? 0) > 0 || ((tempoMarkMarkersBySystem?.[systemIndex] || []).length > 0) || ((progressionMarkersBySystem?.[systemIndex] || []).length > 0) || ((sequenceMarkersBySystem?.[systemIndex] || []).length > 0) || (isMotifsEnabled && (motifBracketsBySystem?.[systemIndex] || []).length > 0))) && (
                               <svg className="absolute inset-0 pointer-events-none" width={actualSystemWidth} height={systemHeightPx}>
+                                                                {/* L'A CAPO DECISO A MANO. Un segno che si vede, in fondo alla riga
+                                                                    che è stata fissata: senza, l'impaginazione diventa un elenco di
+                                                                    decisioni invisibili che non si sa più come disfare. Ci si clicca
+                                                                    sopra per toglierlo. */}
+                                                                {(() => {
+                                                                    const sysPar = (layoutData as any)?.systemsParams?.[systemIndex];
+                                                                    const misure = sysPar?.measureIndices || [];
+                                                                    const ultima = misure.length ? misure[misure.length - 1] : null;
+                                                                    if (ultima == null || !(systemBreaks || []).includes(Number(ultima))) return null;
+                                                                    const xSegno = Math.max(10, (Number(sysPar?.width) || 0) - START_X - 6);
+                                                                    const ySegno = yDelSegnoDiTempo(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX) - 2;
+                                                                    return (
+                                                                        <text
+                                                                            x={xSegno}
+                                                                            y={ySegno}
+                                                                            textAnchor="end"
+                                                                            fontSize={13}
+                                                                            fill="#64748b"
+                                                                            opacity={0.85}
+                                                                            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                                                                            onClick={(ev) => {
+                                                                                ev.preventDefault();
+                                                                                ev.stopPropagation();
+                                                                                alternaACapoDopoBattutaRef.current?.(Number(ultima));
+                                                                            }}
+                                                                        >
+                                                                            <title>{tUI('system_break_hint', { defaultValue: 'A capo fissato a mano — clicca per toglierlo (⌥Invio sulla battuta)' })}</title>
+                                                                            ⏎
+                                                                        </text>
+                                                                    );
+                                                                })()}
+
                                                                 {/* SEGNI DI METRONOMO («♩ = 60»). Stanno sopra tutto, all'inizio
                                                                     della battuta da cui valgono, come si scrivono in partitura.
                                                                     Tasto destro = togli, la regola di ogni altro segno. */}
-                                                                {(tempoMarkMarkersBySystem?.[systemIndex] || []).map((m: { x: number; label: string; measureIndex: number }, i: number) => (
+                                                                {(tempoMarkMarkersBySystem?.[systemIndex] || []).map((m: { x: number; label: string; measureIndex: number; offsetY?: number }, i: number) => (
                                                                     <text
                                                                         key={`tempo-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        y={!satbVisible
-                                                                            ? (SATB_HIDE_SHIFT_PX + 78)
-                                                                            : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y - 14) : (TOP_STAFF_TOP - 14))}
+                                                                        y={yDelSegnoDiTempo(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX) + (m.offsetY || 0)}
                                                                         textAnchor="start"
                                                                         fontSize={15}
                                                                         fontWeight={700}
@@ -17912,9 +18460,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     <text
                                                                         key={`txt-${systemIndex}-${i}`}
                                                                         x={m.x}
-                                                                        y={!satbVisible
-                                                                            ? (SATB_HIDE_SHIFT_PX + 96)
-                                                                            : (staffSystemMode === 'satb_ancient' ? (VF_SATB_SOPRANO_Y + 4) : (TOP_STAFF_TOP + 4))}
+                                                                        y={yDellaScritta(satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX) + (m.offsetY || 0)}
                                                                         textAnchor="start"
                                                                         fontSize={13}
                                                                         fontStyle="italic"
@@ -17943,7 +18489,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             setTextAnnotations(prev => (prev || []).filter(t => Math.abs(t.absBeat - m.absBeat) > 1e-6));
                                                                         }}
                                                                     >
-                                                                        <title>Doppio clic per correggerla · trascina per spostarla · tasto destro per toglierla</title>
+                                                                        <title>{tUI('ed_text_hint')}</title>
                                                                         {m.label}
                                                                     </text>
                                                                 ))}
@@ -18152,7 +18698,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                         sl.togli();
                                                     }}
                                                 >
-                                                    <title>Trascina per spostare il capo del segno; tasto destro per toglierlo</title>
+                                                    <title>{tUI('ed_slur_end_hint')}</title>
                                                     <circle cx={cx} cy={cy} r={9} fill="transparent" />
                                                     <circle className="ht-maniglia-punto" cx={cx} cy={cy} r={4} {...MANIGLIA_STILE} />
                                                 </g>
@@ -18215,7 +18761,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                         setDynamics(prev => (prev || []).filter((_, j) => j !== i));
                                                     }}
                                                 >
-                                                    <title>Trascina per allungare la forcella; tasto destro per toglierla</title>
+                                                    <title>{tUI('ed_hairpin_hint')}</title>
                                                     <circle cx={cx} cy={yForcella} r={9} fill="transparent" />
                                                     <circle className="ht-maniglia-punto" cx={cx} cy={yForcella} r={4} {...MANIGLIA_STILE} />
                                                 </g>
@@ -19365,8 +19911,8 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         {lockHides.violations ? (
                             <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-2 p-6">
                                 <span className="text-4xl">🔒</span>
-                                <p className="font-semibold text-sm">Analisi bloccata dal docente</p>
-                                <p className="text-xs">Sblocca tramite File → Sblocca analisi…</p>
+                                <p className="font-semibold text-sm">{tUI('ed_locked_title')}</p>
+                                <p className="text-xs">{tUI('ed_locked_hint')}</p>
                             </div>
                         ) : isAnalysisEnabled ? (
                             <HarmonyAnalysisPanel
@@ -19428,8 +19974,8 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         ) : (
                             <div className="bg-gray-800/50 rounded-lg p-3 h-full min-h-0 overflow-y-auto flex items-center justify-center text-center text-gray-400">
                                 <div>
-                                    <p className="font-semibold">L'analisi armonica è disattivata.</p>
-                                    <p className="text-sm mt-1">Attivala per vedere gli errori.</p>
+                                    <p className="font-semibold">{tUI('ed_analysis_off')}</p>
+                                    <p className="text-sm mt-1">{tUI('ed_analysis_off_hint')}</p>
                                 </div>
                             </div>
                         )}
@@ -19466,6 +20012,9 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     onSpostaSu={() => handleMoveToStaff('treble')}
                     onSpostaGiu={() => handleMoveToStaff('bass')}
                     onRigoPredefinito={() => handleMoveToStaff(null)}
+                    onACapo={typeof menuNota.measureIndex === 'number'
+                        ? () => alternaACapoDopoBattutaRef.current?.(menuNota.measureIndex as number)
+                        : undefined}
                 />
             )}
 
@@ -19555,7 +20104,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
             {copyPasteError && (
                 <div style={{ position: 'fixed', bottom: 16, right: 16, background: '#c00', color: '#fff', padding: '8px 16px', borderRadius: 8, zIndex: 9999 }}>
                     {copyPasteError}
-                    <button style={{ marginLeft: 8 }} onClick={() => setCopyPasteError(null)}>Chiudi</button>
+                    <button style={{ marginLeft: 8 }} onClick={() => setCopyPasteError(null)}>{tUI('ed_close')}</button>
                 </div>
             )}
         </div>

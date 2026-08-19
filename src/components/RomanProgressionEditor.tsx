@@ -252,6 +252,7 @@ const DraggablePanel: React.FC<{
   title: string;
   children: React.ReactNode;
 }> = ({ onClose, title, children }) => {
+  const { t } = useTranslation('ui');
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -303,7 +304,7 @@ const DraggablePanel: React.FC<{
           onClick={onClose}
           onMouseDown={e => e.stopPropagation()}
           className="text-slate-400 hover:text-white text-xl leading-none px-2"
-          aria-label="Chiudi"
+          aria-label={t('close')}
         >×</button>
       </div>
       <div className="p-6 pt-4">
@@ -746,7 +747,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                       title={`${deg} (Shift/Alt+click → ${flipCase(deg)})`}>{deg}</button>
                   ))}
                   <div className={sepCls} />
-                  <button onClick={() => appendSuffix('7')} className={btnCls} title="Aggiungi 7ª">7</button>
+                  <button onClick={() => appendSuffix('7')} className={btnCls} title={t('rp_add_seventh')}>7</button>
                   <button onClick={() => appendSuffix('o')} className={btnCls} title="Diminuito (°)">°</button>
                   <button onClick={() => appendSuffix('+')} className={btnCls} title="Aumentato (+)">+</button>
                   <button onClick={() => appendSuffix('/')} className={btnCls + ' text-yellow-400'} title="Dominante secondaria (/ poi click grado)">/ →</button>
@@ -797,7 +798,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               if (suggestions.length === 0) return null;
               return (
                 <div className="mt-1 flex flex-wrap items-center gap-1">
-                  <span className="text-[10px] text-gray-500 mr-1" title="Suggerimenti basati sul corpus di composizioni analizzate">💡</span>
+                  <span className="text-[10px] text-gray-500 mr-1" title={t('rp_corpus_tip')}>💡</span>
                   {suggestions.map((s, i) => (
                     <button key={i}
                       onClick={() => {
@@ -865,7 +866,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 }}
                 className="flex-1 bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white"
               >
-                <option value="">Seleziona progressione…</option>
+                <option value="">{t('rp_pick_progression')}</option>
                 <optgroup label="Cadenze e progressioni">
                   {PRESETS.map((p, i) => (
                     <option key={`b-${i}`} value={`builtin:${i}`}>{p.labelKey.startsWith('chorale_') ? t(p.labelKey) : p.labelKey}</option>
@@ -884,7 +885,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 disabled={!progressionText.trim()}
                 className="px-2 py-2 text-xs rounded bg-emerald-700 hover:bg-emerald-600 text-white
                   disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Salva la progressione corrente nei preferiti"
+                title={t('rp_save_fav')}
               >💾</button>
               {customPresets.length > 0 && (
                 <button
@@ -895,7 +896,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                   disabled={!customPresets.some(p => p.chords === progressionText.trim())}
                   className="px-2 py-2 text-xs rounded bg-red-800 hover:bg-red-700 text-white
                     disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Elimina questa progressione dai preferiti"
+                  title={t('rp_del_fav')}
                 >🗑</button>
               )}
             </div>
@@ -1038,7 +1039,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                       onChange={e => { setHarmonicRhythmBeats(Number(e.target.value)); setGeneratedNotes(null); }}
                       className="bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-[10px] text-white"
                     >
-                      <option value={0}>Per nota</option>
+                      <option value={0}>{t('rp_per_note')}</option>
                       <option value={0.5}>♪ Croma</option>
                       <option value={1}>♩ Semiminima</option>
                       <option value={2}>𝅗𝅥 Minima</option>
@@ -1254,7 +1255,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                     setTimeout(() => setLearnFeedback(null), 3000);
                   }}
                   className="px-2 py-1 text-[10px] rounded bg-red-900/60 hover:bg-red-800/80 text-red-300 whitespace-nowrap"
-                  title="Cancella il profilo stilistico salvato"
+                  title={t('rp_clear_profile')}
                 >
                   {t('chorale_reset')}
                 </button>
@@ -1276,7 +1277,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                   }
                 }}
                 className="px-2 py-1 text-[10px] rounded bg-indigo-700 hover:bg-indigo-600 text-white font-semibold whitespace-nowrap"
-                title="Carica il profilo stilistico pre-calcolato da 46 brani di repertorio (Bach, Dubois, ecc.)"
+                title={t('rp_load_profile')}
               >
                 {t('chorale_load_repertoire', { count: (defaultStyleProfileData as any).filesAnalyzed })}
               </button>

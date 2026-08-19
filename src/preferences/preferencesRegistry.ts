@@ -20,6 +20,8 @@ import {
   EXPORT_INCLUDE_TITLE_KEY,
   ANALYSIS_ENABLE_INFERRED_CONTEXTS_KEY,
   AUTO_SAVE_INTERVAL_KEY,
+  SNAP_MAGNET_STRENGTH_KEY,
+  AVVISO_INCROCIO_VOCI_KEY,
   ANALYSIS_STATISTICAL_CORRECTION_KEY,
   STATISTICAL_BIAS_THRESHOLD_KEY,
   ENABLE_LEARNED_ORNAMENTS_KEY,
@@ -44,6 +46,8 @@ export type PreferenceId =
   | 'editor.showQuickInsertBar'
   | 'editor.selectOnlyCurrentVoice'
   | 'editor.autoSaveInterval'
+  | 'editor.snapMagnetStrength'
+  | 'editor.avvisoIncrocioVoci'
   | 'render.engravingMode'
   | 'analysis.showRomanAnalysis'
   | 'analysis.romanBassMode'
@@ -279,6 +283,59 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
       return [0, 30, 60, 120, 300].includes(v) ? v : 0;
     },
     serialize: (value: number) => String(value),
+  },
+
+  // FORZA DELLA CALAMITA SUGLI ATTACCHI.
+  //
+  // Scrivendo un accordo si mira alla verticale di ciò che c'è già, e l'aggancio alla
+  // griglia da solo non lo sa: la calamita fa vincere l'attacco esistente quando il punto
+  // mirato gli passa abbastanza vicino. Ma la stessa forza che rende facile IMPILARE rende
+  // difficile STACCARSI dalla nota appena scritta per metterne una nuova subito dopo —
+  // sono lo stesso gesto visto dai due lati, e quanto debba pesare l'uno o l'altro dipende
+  // da come si scrive. Il valore è la frazione dello slot entro cui la calamita agisce:
+  // 0 la spegne del tutto, 0,5 (mezzo slot) è il comportamento storico.
+  'editor.snapMagnetStrength': {
+    id: 'editor.snapMagnetStrength',
+    section: 'Editor',
+    label: 'Forza della calamita sugli attacchi',
+    i18nKey: 'pref_editor_snap_magnet_strength',
+    description: 'Quanto un attacco già scritto attira la nota che stai inserendo (frazione dello slot). 0 = spenta.',
+    descriptionI18nKey: 'pref_editor_snap_magnet_strength_desc',
+    storageKey: SNAP_MAGNET_STRENGTH_KEY,
+    defaultValue: 0.5 as number,
+    kind: 'number',
+    min: 0,
+    max: 0.5,
+    step: 0.05,
+    parse: (raw) => {
+      const v = parseNumber(raw, 0.5);
+      if (!Number.isFinite(v)) return 0.5;
+      return Math.min(0.5, Math.max(0, v));
+    },
+    serialize: (value: number) => String(Number.isFinite(value) ? value : 0.5),
+  },
+
+  // L'AVVISO NEL MOMENTO IN CUI L'ERRORE SI FA.
+  //
+  // L'incrocio di voci è già segnalato dall'analisi (R-04), ma il pannello lo racconta
+  // come errore di CONDOTTA — dando per scontato che tu abbia voluto scrivere quelle note
+  // lì. Quando invece è una nota finita nella voce sbagliata (tipico con le semibrevi, che
+  // non hanno il gambo a dire di chi sono), quella segnalazione arriva nel posto giusto ma
+  // nel momento sbagliato: giorni dopo, e travestita da problema di armonia.
+  //
+  // Chi scrive contrappunto con incroci voluti lo spegne, ed è giusto che possa.
+  'editor.avvisoIncrocioVoci': {
+    id: 'editor.avvisoIncrocioVoci',
+    section: 'Editor',
+    label: 'Avvisa quando una nota inserita incrocia le voci',
+    i18nKey: 'pref_editor_avviso_incrocio_voci',
+    description: "Mostra un avviso, con la possibilità di scambiare le voci, quando la nota appena scritta finisce sotto (o sopra) la voce vicina.",
+    descriptionI18nKey: 'pref_editor_avviso_incrocio_voci_desc',
+    storageKey: AVVISO_INCROCIO_VOCI_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
   'render.engravingMode': {

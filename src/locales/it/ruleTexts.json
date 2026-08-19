@@ -587,5 +587,18 @@
     "title": "Falsa relazione di tritono",
     "body": "Il 4º grado della scala in una parte e il 7º (la sensibile) in un'altra parte, nell'accordo immediatamente successivo, formano il tritono tonale spezzato fra due voci. È il caso tipico delle successioni V→IV, IV→V, IV→III e III→IV. Si distingue dalla falsa relazione cromatica (stessa nota alterata in voci diverse) e dal salto melodico di tritono, che avviene invece dentro una voce sola.\n\nÈ ammessa quando entrambe le parti procedono per semitono, perché la risoluzione diatonica annulla la durezza dell'intervallo, e quando la successione determina una chiara formula cadenzale. In senso discendente la durezza è percepita minore e la segnalazione è attenuata.\n\nIl pericolo riguarda soprattutto l'intonazione nella musica vocale; negli organici strumentali è attenuato, ma la regola resta valida per la coerenza del contrappunto rigoroso.",
     "suggestion": "Evita che il 4º grado di una parte e la sensibile di un'altra si susseguano in accordi contigui: falle procedere entrambe per semitono, oppure interponi un accordo."
+  },
+  "EXC-R16-INV": {
+    "title": "Sincope ammessa (cambio di rivolto)",
+    "body": "La \"regola della stanghetta\" scoraggia l'accordo che entra su un tempo debole e prosegue sul battere della misura successiva: l'accento metrico cadrebbe su un'armonia già sentita, e il battere resterebbe scarico.\nQuando però sul battere l'accordo si ripresenta in un RIVOLTO diverso — allo stato fondamentale dopo un rivolto, o viceversa — il basso si muove e l'armonia si rinnova: l'accento metrico trova un evento nuovo, e la sincope non si percepisce come tale. È il basso a determinarlo, non le parti superiori.\nIl caso tipico è il basso che sale o scende di grado sotto un'armonia tenuta, molto frequente nel corale.",
+    "suggestion": "Nessun intervento: il movimento del basso rinnova l'armonia sul battere."
+  },
+  "EXC-R16-PATTERN": {
+    "title": "Sincope ammessa (disegno ritmico)",
+    "body": "Una sincope armonica isolata è di norma una svista sull'accento: l'armonia entra su un tempo debole e il battere successivo resta scarico.\nQuando però la stessa anticipazione ritorna sullo STESSO movimento in più battute consecutive, non è una svista ma una figura ritmica: chi scrive l'ha cercata, e il disegno diventa il carattere del passaggio. Tipico dello stile con accompagnamento ritmico ostinato e dei tempi composti, dove l'armonia anticipa regolarmente il battere.\nIl riconoscimento richiede almeno tre battute di seguito: con due, la ripetizione può essere casuale.",
+    "suggestion": "Nessun intervento: l'anticipazione è sistematica, quindi voluta."
+  },
+  "R-04-WHOLE": {
+    "suggestion": "Su semibrevi, un incrocio è quasi sempre una nota finita nella voce sbagliata: la figura senza gambo non mostra a quale parte appartiene. Controlla in che voce sono le note segnalate prima di intervenire sulla condotta — se è un errore d'inserimento, basta scambiare le due voci."
   }
 }

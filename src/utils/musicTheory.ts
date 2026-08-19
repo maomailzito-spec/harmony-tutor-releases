@@ -5151,6 +5151,14 @@ export function applyHarmonyRules(
         /** Parti scritte: 4 = SATB, 3 = S-A-B, 2 = S-B. Serve alle regole che parlano
          *  della COMPLETEZZA dell'accordo, che a due parti non hanno oggetto. */
         partCount?: 2 | 3 | 4;
+        /** CAMBI DI METRO del brano. Il motore ha sempre conosciuto un metro solo, quello
+         *  globale, e ogni regola che parla di tempi FORTI e DEBOLI lo usava per tutte le
+         *  battute. In un brano che passa da 3/4 a 4/4 e viceversa quel giudizio è
+         *  sbagliato dove il metro cambia: in 4/4 il terzo movimento è forte, in 3/4 è
+         *  debole — e la «regola della stanghetta» (R-16) taceva su ogni sincope scritta
+         *  nelle battute in tre, perché credeva forte il movimento su cui entrava
+         *  l'accordo. */
+        timeSignatureChanges?: TimeSignatureChange[];
     }
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = (() => {
@@ -11210,6 +11218,19 @@ export function applyHarmonyRules(
             }
         } catch { /* ignore */ }
 
+        // UN INCROCIO FRA NOTE SENZA GAMBO quasi sempre non è una scelta di condotta.
+        //
+        // La semibreve è l'unica figura che non mostra a quale voce appartiene: senza gambo
+        // non c'è direzione da leggere, e la nota può essere finita nella parte sbagliata
+        // senza che si veda. È successo davvero, ed è arrivato come «l'ultimo accordo è
+        // sbagliato»: l'analisi diceva 6/4 perché il tenore stava sotto il basso.
+        //
+        // In quel caso il consiglio abituale — «riordina le altezze» — manda a ragionare
+        // sulla distribuzione dell'accordo, cioè nel posto sbagliato. Se ne dà un altro,
+        // che dice dove guardare per primo (vedi `suggestionRuleKey`).
+        const senzaGambo = (...noteCoinvolte: Array<StaffNote | null | undefined>): boolean =>
+            noteCoinvolte.every(n => !!n && String((n as any).duration) === 'whole');
+
         // R-04 / EXC-S02: voice crossing (spelling-first MIDI)
         if (v4 && v3 && Number.isFinite(effectiveMidi(v4 as any) as any) && Number.isFinite(effectiveMidi(v3 as any) as any)
             && (effectiveMidi(v4 as any) as number) > (effectiveMidi(v3 as any) as number)) {
@@ -11218,6 +11239,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Basso sopra Tenore)',
                 suggestion: 'Riordina le altezze: Basso deve restare sotto il Tenore.',
+                ...(senzaGambo(v4, v3) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v4.id, v3.id],
             });
         }
@@ -11240,6 +11262,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Alto sopra Soprano)',
                 suggestion: 'Riordina le altezze: Alto deve restare sotto il Soprano.',
+                ...(senzaGambo(v2, v1) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v2.id, v1.id],
             });
         }
@@ -11254,6 +11277,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Basso sopra Contralto)',
                 suggestion: 'Riordina le altezze: Basso deve restare sotto il Contralto.',
+                ...(senzaGambo(v4, v2) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v4.id, v2.id],
             });
         }
@@ -11264,6 +11288,7 @@ export function applyHarmonyRules(
                 severity: 'error',
                 description: 'Incrocio di voci grave (Basso sopra Soprano)',
                 suggestion: 'Riordina le altezze: Basso deve restare sotto il Soprano.',
+                ...(senzaGambo(v4, v1) ? { suggestionRuleKey: 'R-04-WHOLE' } : {}),
                 noteIds: [v4.id, v1.id],
             });
         }
@@ -13113,9 +13138,33 @@ export function applyHarmonyRules(
         return approxEq(b0, 0);
     };
 
+    /** Il metro in vigore in una battuta: i cambi valgono dalla loro battuta in poi.
+     *  Senza questo, «forte» e «debole» venivano giudicati col metro globale anche dove il
+     *  brano ne aveva un altro. */
+    const metroAllaBattuta = (m: number): TimeSignature => {
+        const cambi = (opts?.timeSignatureChanges || [])
+            .filter(c => c && Number.isFinite(Number(c.measureIndex)))
+            .sort((a2, b2) => Number(a2.measureIndex) - Number(b2.measureIndex));
+        let corrente = timeSignature as TimeSignature;
+        for (const c of cambi) {
+            if (Number(c.measureIndex) <= m) corrente = { numerator: Number(c.numerator), denominator: Number(c.denominator) } as TimeSignature;
+            else break;
+        }
+        return corrente;
+    };
+
+    /** Le sincopi trovate, in attesa di giudizio: una sola è un incidente, tre di fila
+     *  sullo stesso movimento sono un disegno ritmico. */
+    const candidatiSincope: Array<{
+        misura: number; movimento: number; noteIds: string[];
+        sopPrev?: StaffNote; sopNext?: StaffNote; basPrev?: StaffNote; basNext?: StaffNote;
+    }> = [];
+
     for (let m = 0; m < lastMeasureIndex; m++) {
         const barStartAbs = m * beatsPerMeas;
         const nextBarStartAbs = (m + 1) * beatsPerMeas;
+        // Il giudizio forte/debole va dato col metro DI QUESTA battuta.
+        const metroQui = metroAllaBattuta(m);
 
         // Find the harmony event at the next bar downbeat.
         const nextDownbeatEv = chordEvents.find(e => approxEq(e.absBeat, nextBarStartAbs))
@@ -13124,9 +13173,24 @@ export function applyHarmonyRules(
                 .sort((a, b) => a.absBeat - b.absBeat)[0];
         if (!nextDownbeatEv) continue;
 
-        // Find the last harmony event strictly before the barline within the previous bar.
+        // L'ultimo ACCORDO prima della stanghetta — e accordo vuol dire un punto in cui
+        // qualcosa ATTACCA, non un punto in cui qualcosa finisce.
+        //
+        // La timeline segna anche i rilasci. Finché la musica riempie la battuta l'ultimo
+        // rilascio cade sulla stanghetta e resta fuori da questo filtro; ma il motore conta
+        // le battute col metro GLOBALE, e dove il brano è in 3/4 la battuta «logica» è di
+        // quattro movimenti mentre la musica ne riempie tre. In quel buco cade un evento di
+        // solo rilascio, che diventava l'ultimo accordo della battuta: confrontato col
+        // battere successivo non corrispondeva mai, e ogni sincope scritta in 3/4 passava
+        // inosservata.
+        const iniziaQui = (e: { absBeat: number; notes: StaffNote[] }): boolean =>
+            (e.notes || []).some(n => {
+                const st = ((n.measureIndex ?? 0) * beatsPerMeas) + ((n.beat ?? 1) - 1);
+                return approxEq(st, e.absBeat);
+            });
         const prevEv = chordEvents
             .filter(e => e.absBeat >= barStartAbs - 1e-6 && e.absBeat < nextBarStartAbs - 1e-6)
+            .filter(iniziaQui)
             .sort((a, b) => b.absBeat - a.absBeat)[0];
         if (!prevEv) continue;
 
@@ -13134,18 +13198,51 @@ export function applyHarmonyRules(
         const idNext = chordIdentity(nextDownbeatEv.notes);
         if (!idPrev || !idNext || idPrev !== idNext) continue;
 
+
         // Only flag if the "carry-over" chord enters the barline from a weak position.
         const prevBeat = (prevEv.absBeat - barStartAbs) + 1;
-        if (isStrongBeatInMeasure(prevBeat, timeSignature)) continue;
+        if (isStrongBeatInMeasure(prevBeat, metroQui)) continue;
 
         // Exception: if the same chord already appeared on any strong beat in the previous bar, do not flag.
         const sameOnStrong = chordEvents
             .filter(e => e.absBeat >= barStartAbs - 1e-6 && e.absBeat < nextBarStartAbs - 1e-6)
             .some(e => {
                 const beat = (e.absBeat - barStartAbs) + 1;
-                return isStrongBeatInMeasure(beat, timeSignature) && chordIdentity(e.notes) === idPrev;
+                return isStrongBeatInMeasure(beat, metroQui) && chordIdentity(e.notes) === idPrev;
             });
         if (sameOnStrong) continue;
+
+        // ── ECCEZIONE: SE CAMBIA IL RIVOLTO, LA SINCOPE È AMMESSA ──────────────
+        // La «regola della stanghetta» punisce l'accordo che entra sul debole e si limita a
+        // PROSEGUIRE sul battere: l'accento metrico cade su un'armonia già sentita, e il
+        // battere resta scarico. Ma se sul battere l'accordo si presenta in un altro
+        // rivolto — il basso si muove — l'armonia si rinnova e l'accento c'è: allo stato
+        // fondamentale dopo un rivolto (o viceversa) la sincope non si sente come tale.
+        // Vale il BASSO, non le parti superiori: è lui a fare il rivolto.
+        const pcBasso = (chordNotes: StaffNote[]): number | null => {
+            const b2 = pickPreferredBassNote(chordNotes);
+            return b2 ? pitchClassOf(b2) : null;
+        };
+        const bassoPrima = pcBasso(prevEv.notes);
+        const bassoDopo = pcBasso(nextDownbeatEv.notes);
+        if (bassoPrima != null && bassoDopo != null && bassoPrima !== bassoDopo) {
+            const sopP = pickOuterVoice(prevEv.notes, 1);
+            const sopN = pickOuterVoice(nextDownbeatEv.notes, 1);
+            const basP = pickOuterVoice(prevEv.notes, 4);
+            const basN = pickOuterVoice(nextDownbeatEv.notes, 4);
+            const idsExc = [sopP?.id, sopN?.id, basP?.id, basN?.id].filter(Boolean) as string[];
+            if (idsExc.length >= 2) {
+                addViolation({
+                    ruleId: 'EXC-R16-INV',
+                    severity: 'exception',
+                    description: 'Sincope ammessa: il rivolto cambia sul battere',
+                    suggestion: 'Nessun intervento: il movimento del basso rinnova l’armonia, quindi il battere non resta scarico.',
+                    noteIds: idsExc,
+                });
+                if (basP && basN) connections.push({ type: 'horizontal', noteId1: basP.id, noteId2: basN.id, severity: 'exception', ruleId: 'EXC-R16-INV' });
+            }
+            continue;
+        }
 
         const sopPrev = pickOuterVoice(prevEv.notes, 1);
         const basPrev = pickOuterVoice(prevEv.notes, 4);
@@ -13155,17 +13252,61 @@ export function applyHarmonyRules(
         const noteIds = [sopPrev?.id, sopNext?.id, basPrev?.id, basNext?.id].filter(Boolean) as string[];
         if (noteIds.length < 2) continue;
 
+        // Non si giudica subito: il verdetto dipende da ciò che succede nelle battute
+        // VICINE (vedi il disegno ritmico, sotto), e quello si sa solo alla fine.
+        candidatiSincope.push({ misura: m, movimento: prevBeat, noteIds, sopPrev, sopNext, basPrev, basNext });
+    }
+
+    // ── UNA SINCOPE SOLA È UN INCIDENTE, RIPETUTA È UN DISEGNO ────────────────
+    //
+    // La stessa sincope che ricompare sullo STESSO movimento in battute CONSECUTIVE non è
+    // una svista sull'accento: è una figura ritmica — un'anticipazione sistematica — e chi
+    // scrive l'ha voluta. Segnalarla battuta per battuta trasforma una scelta di scrittura
+    // in una fila di errori, ed è il modo più rapido per far ignorare le segnalazioni.
+    //
+    // Ne bastano TRE di fila. Con due il rischio di prendere per disegno una coincidenza è
+    // alto: in un corale capita che due battute vicine cadano allo stesso modo senza che
+    // nessuno l'abbia cercato.
+    const RIPETIZIONI_PER_DISEGNO = 3;
+    const battutePerMovimento = new Map<string, Set<number>>();
+    for (const c of candidatiSincope) {
+        const k = String(c.movimento);
+        if (!battutePerMovimento.has(k)) battutePerMovimento.set(k, new Set<number>());
+        battutePerMovimento.get(k)!.add(c.misura);
+    }
+    const faParteDiUnDisegno = (c: { misura: number; movimento: number }): boolean => {
+        const misure = battutePerMovimento.get(String(c.movimento));
+        if (!misure) return false;
+        let lunghezza = 1;
+        for (let x = c.misura - 1; misure.has(x); x--) lunghezza++;
+        for (let x = c.misura + 1; misure.has(x); x++) lunghezza++;
+        return lunghezza >= RIPETIZIONI_PER_DISEGNO;
+    };
+
+    for (const c of candidatiSincope) {
+        if (faParteDiUnDisegno(c)) {
+            addViolation({
+                ruleId: 'EXC-R16-PATTERN',
+                severity: 'exception',
+                description: 'Sincope ammessa: disegno ritmico ripetuto',
+                suggestion: 'Nessun intervento: la stessa anticipazione torna sullo stesso movimento in più battute di seguito, quindi è una figura ritmica voluta.',
+                noteIds: c.noteIds,
+            });
+            if (c.sopPrev && c.sopNext) connections.push({ type: 'horizontal', noteId1: c.sopPrev.id, noteId2: c.sopNext.id, severity: 'exception', ruleId: 'EXC-R16-PATTERN' });
+            continue;
+        }
+
         addViolation({
             ruleId: 'R-16',
             severity: 'warning',
             description: 'Sincope armonica (accordo sul debole che “entra” sul battere successivo)',
             suggestion: 'Secondo la “regola della stanghetta” (regola classica), in stile corale/classico è preferibile che il cambio armonico cada sul 1°. Nota: in musica moderna/jazz può essere una scelta ritmica intenzionale e tollerata.',
-            noteIds,
+            noteIds: c.noteIds,
         });
 
         // Explicit connections so the editor shows orange dashed lines across the barline.
-        if (sopPrev && sopNext) connections.push({ type: 'horizontal', noteId1: sopPrev.id, noteId2: sopNext.id, severity: 'warning', ruleId: 'R-16' });
-        if (basPrev && basNext) connections.push({ type: 'horizontal', noteId1: basPrev.id, noteId2: basNext.id, severity: 'warning', ruleId: 'R-16' });
+        if (c.sopPrev && c.sopNext) connections.push({ type: 'horizontal', noteId1: c.sopPrev.id, noteId2: c.sopNext.id, severity: 'warning', ruleId: 'R-16' });
+        if (c.basPrev && c.basNext) connections.push({ type: 'horizontal', noteId1: c.basPrev.id, noteId2: c.basNext.id, severity: 'warning', ruleId: 'R-16' });
     }
 
     _pmark('12-harmonicRhythm');

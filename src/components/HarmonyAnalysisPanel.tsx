@@ -58,6 +58,7 @@ const MOTIF_TYPE_HUE: Record<string, string> = { invert: '#6d28d9', retrograde: 
 
 const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations, avvisoModale, posizioneViolazione, sequenceMatches, sequencesEnabled, onToggleSequences, motifsEnabled, onToggleMotifs, motifMatches, onHoverViolation, selectedViolationIndex, onSelectViolation }) => {
     const { t } = useTranslation('analysis');
+    const { t: tUi } = useTranslation('ui');
     const [filters, setFilters] = usePreference<HarmonyAnalysisFiltersPref>('analysis.filters');
     const [ruleSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
     const showError = !!filters?.showError;
@@ -314,7 +315,7 @@ const HarmonyAnalysisPanel: React.FC<HarmonyAnalysisPanelProps> = ({ violations,
                         <button
                             onClick={onToggleMotifs}
                             className={`px-2 py-0.5 text-[11px] font-semibold rounded-md border transition-colors ${motifsEnabled ? 'bg-violet-600 text-white border-violet-500' : 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600'}`}
-                            title="Rileva trasposizioni / inversioni / retrogradi di un motivo (dentro e tra le voci). Banda viola = modello, bracket = imitazione."
+                            title={tUi('motifs_tip')}
                         >
                             {motifsEnabled ? 'On' : 'Off'}
                         </button>

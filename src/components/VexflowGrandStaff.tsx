@@ -834,6 +834,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         accompanimentTracks ?? null, localMotif, drumPalettes ?? null,
         timeSignature, timeSignatureChanges ?? null, keySignature, barlines ?? null,
         width, height, staffMode, engravingMode, showVoiceColors,
+        // Il CORPO DELLE RIGHE cambia il disegno dei righi: senza, premere i pulsanti
+        // nelle preferenze non faceva ridisegnare niente e la scelta sembrava ignorata
+        // finché non si toccava la partitura per un altro motivo.
+        staffLineWeight,
         showAccompanimentStaves, accompanimentStaffMode, satbName,
         // Le legature stanno in un elenco a parte: senza metterle nella firma, una
         // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo
@@ -1458,6 +1462,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       const satbBassNotes = staffMode === 'satb_ancient' ? allNotes.filter(n => n.clef === 'bass') : [];
 
       const hitPoints: Array<{ id: string; x: number; y: number; isGhost: boolean }> = [];
+
+      // ── MISURA DELLE TESTE (diagnostica, spenta) ─────────────────────────────
+      // Fra la x che diamo a una nota (`xPosition`) e la testa che si VEDE c'è di mezzo
+      // VexFlow, e quella differenza finora l'abbiamo dedotta invece che misurata —
+      // sbagliando più volte. Qui si registrano i due numeri che conosciamo; il terzo,
+      // la posizione reale del glifo sullo schermo, lo legge `__htMisuraTeste()` dal DOM.
+      //   localStorage._HT_MISURA_TESTE = '1' → ricarica → __htMisuraTeste() in console
+      const MISURA_TESTE = (() => {
+        try { return window.localStorage?.getItem('_HT_MISURA_TESTE') === '1'; } catch { return false; }
+      })();
+      const registroTeste: Map<string, { xPosition: number; xHit: number }> | null =
+        MISURA_TESTE ? new Map() : null;
       // Nota disegnata per ogni id, raccolta mentre si disegnano TUTTI i righi (coro e
       // tracce): le legature di portamento possono unire note di righi diversi, quindi
       // vanno disegnate dopo, quando si sa dove sono finite tutte.
@@ -3478,7 +3494,30 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             groupVoice = `d${dir}`;
           }
 
-          const key = `${m}|${groupVoice}|${bucket(b)}`;
+          // OGNI TERZINA HA LA SUA TRAVATURA.
+          //
+          // Il raggruppamento guarda il MOVIMENTO: tutte le note che vi cadono dentro
+          // finiscono sotto un'unica traversa. Ma due terzine di sedicesimi stanno in un
+          // movimento solo, e travate insieme diventano sei note in fila — si leggono come
+          // una sestina, che è un'altra cosa. Il gruppo di tuplet spezza quindi la
+          // travatura: tre più tre, ciascuno col suo numero.
+          //
+          // L'indice del gruppo si ricava dall'attacco: le note di una terzina stanno tutte
+          // nella stessa fetta larga quanto il gruppo (tre volte la durata di una nota).
+          let chiaveTupla = '';
+          {
+            const sn: any = c.staffNote;
+            if (sn?.isTriplet || sn?.isDuplet) {
+              const durata = Math.max(0, Number(sn.durationTicks) || 0);
+              const attacco = Number(sn.startTick);
+              if (durata > 0 && Number.isFinite(attacco)) {
+                const ampiezzaGruppo = durata * (sn.isTriplet ? 3 : 2);
+                chiaveTupla = `|t${Math.floor(attacco / ampiezzaGruppo)}`;
+              }
+            }
+          }
+
+          const key = `${m}|${groupVoice}|${bucket(b)}${chiaveTupla}`;
           if (currentKey === null || key === currentKey) {
             currentKey = key;
             current.push(c);
@@ -3583,6 +3622,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
             // Prefer VexFlow's rendered X when available; this stays correct even when
             // noteheads are shifted due to multi-voice spacing / modifiers.
+            //
+            // NOTA GEOMETRICA, misurata e non dedotta (vedi `__htMisuraTeste`): dalla nostra
+            // `xPosition` questo punto sta a +12 (lo STAVEPADDING di VexFlow) ed è il bordo
+            // SINISTRO del glifo; il centro della testa che si vede sta a +18. Sono i «sei
+            // pixel» che si notano scrivendo. Chi consuma questi punti lo tenga presente:
+            // spostarli al centro è stato provato e ha peggiorato l'insieme, perché altre
+            // correzioni erano tarate su questo valore.
             const vfAbsX = (vfNote as any).getAbsoluteX?.();
             const xHit = (typeof vfAbsX === 'number' && Number.isFinite(vfAbsX))
               ? vfAbsX
@@ -3610,6 +3656,10 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
                 ? (ys.reduce((a, b) => a + b, 0) / ys.length)
                 : stave.getYForLine(2);
               hitPoints.push({ id: n.id, x: xHit, y: yHit, isGhost: n.id === '__ghost__' });
+            }
+            if (registroTeste) {
+              const nostra = Number(n.xPosition);
+              if (Number.isFinite(nostra)) registroTeste.set(String(n.id), { xPosition: nostra, xHit });
             }
           } catch {
             // ignore
@@ -4316,6 +4366,105 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
       noteHitPointsRef.current = hitPoints;
       onNoteHitPoints?.(hitPoints);
+
+      // LA TESTA È IL GLIFO PIÙ GROSSO DEL GRUPPO, non il primo path che si incontra.
+      // Un gruppo di nota contiene anche gambo (largo zero), travature, linee addizionali,
+      // punti: misurando il primo path si finisce a misurare il gambo, ed è successo.
+      const centroDellaTesta = (g: Element | null | undefined): { centro: number; w: number; h: number } | null => {
+        try {
+          if (!g) return null;
+          let centro = 0; let w = 0; let h = 0; let areaMax = 0;
+          g.querySelectorAll('path').forEach((el) => {
+            try {
+              const bb = (el as SVGGraphicsElement).getBBox();
+              // Una testa è larga e alta insieme: il gambo è una riga verticale (w≈0), le
+              // linee addizionali sono strisce basse (h≈1).
+              if (bb.width < 4 || bb.height < 4) return;
+              const area = bb.width * bb.height;
+              if (area > areaMax) { areaMax = area; centro = bb.x + bb.width / 2; w = bb.width; h = bb.height; }
+            } catch { /* ignore */ }
+          });
+          return areaMax > 0 ? { centro, w, h } : null;
+        } catch {
+          return null;
+        }
+      };
+
+      // IL FANTASMA, misurato a ogni disegno. Vive quanto dura il gesto del mouse, quindi
+      // non lo si può interrogare a mano: si registra qui e si legge dopo in `__htGhost`.
+      // Dice l'unica cosa che conta — di quanto la testa che si vede sta a destra della x
+      // che gli abbiamo dato — e serve a sapere se al fantasma tocca lo stesso scostamento
+      // delle note vere (+18) o un altro.
+      if (registroTeste) {
+        try {
+          const w = window as any;
+          const g = containerRef.current?.querySelector('[data-note-id="__ghost__"]');
+          const dati = registroTeste.get('__ghost__');
+          const testa = centroDellaTesta(g);
+          if (dati && testa) {
+            const inventario: string[] = [];
+            g?.querySelectorAll('path').forEach((el) => {
+              try {
+                const bb = (el as SVGGraphicsElement).getBBox();
+                inventario.push(`${Math.round(bb.width)}×${Math.round(bb.height)}@${Math.round(bb.x)}`);
+              } catch { /* ignore */ }
+            });
+            w.__htGhost = {
+              nostra_xPosition: Math.round(dati.xPosition * 10) / 10,
+              hitPoint_x: Math.round(dati.xHit * 10) / 10,
+              testa_disegnata: Math.round(testa.centro * 10) / 10,
+              'testa-nostra': Math.round((testa.centro - dati.xPosition) * 10) / 10,
+              glifo: `${Math.round(testa.w)}×${Math.round(testa.h)}`,
+              tutti_i_glifi: inventario.join('  '),
+            };
+          }
+        } catch { /* diagnostica */ }
+      }
+
+      // Misura delle teste: i dati di questo sistema si aggiungono al registro globale, e
+      // `__htMisuraTeste()` li affianca alla posizione REALE del glifo letta dal DOM.
+      if (registroTeste) {
+        try {
+          const w = window as any;
+          const globale: Map<string, { xPosition: number; xHit: number }> = (w.__htTeste ||= new Map());
+          for (const [id, v] of registroTeste) globale.set(id, v);
+          if (typeof w.__htMisuraTeste !== 'function') {
+            w.__htMisuraTeste = () => {
+              const righe: Array<Record<string, unknown>> = [];
+              document.querySelectorAll('[data-note-id]').forEach((g) => {
+                const id = (g as SVGElement).getAttribute('data-note-id') || '';
+                const dati = (w.__htTeste as Map<string, { xPosition: number; xHit: number }>).get(id);
+                if (!dati) return;
+                // Il glifo della TESTA: il più grosso del gruppo (vedi `centroDellaTesta`) —
+                // il primo path può essere il gambo, largo zero.
+                let centroTesta: number | null = null;
+                let area = 0;
+                (g as SVGGElement).querySelectorAll('path').forEach((el) => {
+                  try {
+                    const bb = (el as SVGGraphicsElement).getBBox();
+                    if (bb.width < 4 || bb.height < 4) return;
+                    const a2 = bb.width * bb.height;
+                    if (a2 > area) { area = a2; centroTesta = bb.x + bb.width / 2; }
+                  } catch { /* ignore */ }
+                });
+                if (centroTesta == null) return;
+                righe.push({
+                  id: id.slice(0, 12),
+                  nostra_xPosition: Math.round(dati.xPosition * 10) / 10,
+                  hitPoint_x: Math.round(dati.xHit * 10) / 10,
+                  testa_disegnata: Math.round(centroTesta * 10) / 10,
+                  'hit-nostra': Math.round((dati.xHit - dati.xPosition) * 10) / 10,
+                  'testa-nostra': Math.round((centroTesta - dati.xPosition) * 10) / 10,
+                  'testa-hit': Math.round((centroTesta - dati.xHit) * 10) / 10,
+                });
+              });
+              // eslint-disable-next-line no-console
+              console.table(righe.slice(0, 40));
+              return righe.length;
+            };
+          }
+        } catch { /* diagnostica: non deve mai disturbare il disegno */ }
+      }
 
       // No per-note DOM wiring here: we handle clicks via the global SVG handler below
     } else {

@@ -120,9 +120,13 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const currentLanguage = i18n.language === 'en' ? 'en' : 'it';
   const handleLanguageChange = (lng: 'en' | 'it') => { i18n.changeLanguage(lng); };
 
+  // Preferenze che hanno un riquadro TUTTO LORO più sopra: nell'elenco generico
+  // comparirebbero una seconda volta, con un altro aspetto e un'altra etichetta.
+  const CON_RIQUADRO_PROPRIO = new Set<string>(['editor.staffLineWeight']);
+
   const defsForTab = useMemo(() => {
     return PREFERENCE_DEFS
-      .filter((d) => d.section === activeTab)
+      .filter((d) => d.section === activeTab && !CON_RIQUADRO_PROPRIO.has(d.id))
       .slice()
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [activeTab]);
@@ -697,7 +701,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                       {tp('staff_line_weight_title', 'Corpo delle righe del pentagramma')}
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
-                      {tp('staff_line_weight_hint', 'Le righe erano grigie (#999999), non nere: è il valore predefinito di VexFlow. «Sottile» le lascia com\'erano; gli altri due scuriscono il tono più che ingrossare il tratto — il contrasto si legge meglio dei decimi di pixel, e una riga troppo grossa schiaccia le teste delle note.')}
+                      {tp('staff_line_weight_hint', 'Le righe del pentagramma partono da un grigio chiaro: qui si scuriscono, e si ingrossano appena. Serve sugli schermi molto densi e nella stampa. Il guadagno viene dal contrasto più che dallo spessore: una riga troppo grossa schiaccia le teste delle note.')}
                     </div>
                     <div className="mt-2 flex items-center gap-1">
                       {([

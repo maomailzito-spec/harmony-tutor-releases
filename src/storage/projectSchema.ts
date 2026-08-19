@@ -55,6 +55,8 @@ export const PROJECT_KNOWN_KEYS_V1 = [
   'accEq',
   'accComp',
   'voiceSoundBanks',
+  'systemBreaks',
+  'layout',
 ] as const;
 
 const KNOWN_KEY_SET: ReadonlySet<string> = new Set(PROJECT_KNOWN_KEYS_V1 as readonly string[]);
@@ -146,6 +148,22 @@ export type ProjectDataV1 = {
   accComp?: any;
   /** Banco timbrico per voce SATB (1-4): 'orchestral' (FLAC locali, default) o 'gm'. */
   voiceSoundBanks?: Record<number, 'orchestral' | 'gm'>;
+
+  /** Battute dopo cui la riga finisce, decise a mano (a capo di sistema). */
+  systemBreaks?: number[];
+
+  /** IMPAGINAZIONE — tre cose diverse, che si scambiano facilmente:
+   *  - `measuresPerLine`: il TETTO di battute per riga scelto in toolbar (1-12);
+   *  - `viewMode`: la vista a SCHERMO ('page' = righe, 'linear' = nastro continuo);
+   *  - `canvasFormat`: la CARTA ('page' = A4 verticale, 'landscape' = orizzontale),
+   *    che riguarda stampa e PDF e a schermo non cambia nulla.
+   *  Vanno col file perché sono del BRANO: un corale stretto e un pezzo per tastiera
+   *  non si guardano nella stessa pagina. Assente = valori di default. */
+  layout?: {
+    measuresPerLine?: number;
+    viewMode?: 'page' | 'linear';
+    canvasFormat?: 'page' | 'landscape';
+  };
 };
 
 export type AnalysisLockOptions = NonNullable<ProjectDataV1['analysisLockOptions']>;
