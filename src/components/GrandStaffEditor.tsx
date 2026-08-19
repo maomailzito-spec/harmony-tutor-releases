@@ -6126,6 +6126,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setMeasureLengths((p as any).measureLengths || []);
                 setTextAnnotations((p as any).textAnnotations || []);
                 setDynamics((p as any).dynamics || []);
+                // I SEGNI DISEGNATI, che il recupero dimenticava: il backup li salvava
+                // tutti e tre e non ne rimetteva nessuno. Il sintomo era ingannevole —
+                // dopo un ricaricamento restava l'INDICAZIONE di tonalità (che è analisi,
+                // e l'analisi veniva rimessa) e sparivano le ALTERAZIONI IN CHIAVE, che
+                // sono disegno. Legature di portamento e segni d'ottava sparivano zitti.
+                setKeySignatureChanges(Array.isArray((p as any).keySignatureChanges) ? (p as any).keySignatureChanges : []);
+                setSlurs(Array.isArray((p as any).slurs) ? (p as any).slurs : []);
+                setOctaveShifts(Array.isArray((p as any).octaveShifts) ? (p as any).octaveShifts : []);
                 setAutoLeadingToneInMinor(p.autoLeadingToneInMinor ?? true);
                 setKeyChangeMode(p.keyChangeMode || 'none');
                 setModalTonicOverride(p.modalTonicOverride || '');
