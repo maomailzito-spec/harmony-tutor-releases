@@ -73,6 +73,8 @@ export interface UseHarmonyLabelsParams {
     keySignatureChanges?: KeySignatureChange[];
     keySignatureRoot?: string;
     analysisContexts: AnalysisContext[];
+    /** I contesti scritti dall'utente, senza i dedotti (vedi HarmonyLabelsInput). */
+    declaredAnalysisContexts?: AnalysisContext[];
     /** Segni di metronomo a metà brano: servono solo a essere disegnati. */
     tempoMarks?: TempoMark[];
     /** Durate reali delle battute irregolari: l'analisi deve leggere il brano sulla
@@ -261,6 +263,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
             tonicizationHints,
             useStatisticalCorrection,
             autoHarmonyLabelOverrides: params.autoHarmonyLabelOverrides,
+            declaredAnalysisContexts: params.declaredAnalysisContexts,
         }), [_chromaticModulationEnabled, accHintEnabled, accompanimentTracks, analysisContextAbsBeat, analysisContexts, analyzedNotes, cadentialPatternsEnabled, compactTonicization, currentTonic, enableInferredContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, minSpanBeats, ornOverrideMap, ornOverrideRecord, timeSignature, tonicizationHints, inferredContextSuppressions, layoutSignature]);
 
     // Detect simple harmonic progressions (sequenze) where a 2-measure motif repeats.

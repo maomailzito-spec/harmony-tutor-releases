@@ -67,7 +67,7 @@ export function etichetteDiUnFile(percorso: string): EtichettaPiatta[] {
 
   const perSistema = computeHarmonyLabelsBySystemCore({
     analyzedNotes: analyzed, layoutData, timeSignature: ts, timeSignatureChanges: p.timeSignatureChanges || [],
-    measureLengths: p.measureLengths || [], analysisContexts: contestiEffettivi, analysisContextAbsBeat: absBeatDi,
+    measureLengths: p.measureLengths || [], analysisContexts: contestiEffettivi, declaredAnalysisContexts: contexts, analysisContextAbsBeat: absBeatDi,
     currentTonic: tonic, isMinorMode: isMinor, isAnalysisEnabled: true,
     harmonyOverrides: p.harmonyOverrides || [], autoHarmonyLabelOverrides: [],
     accompanimentTracks: p.accompanimentTracks || [], tonicizationHints: p.tonicizationHints || [],

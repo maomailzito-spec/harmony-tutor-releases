@@ -146,6 +146,11 @@ function getAccompanimentPcsForBeat(
 export interface HarmonyLabelsInput extends Pick<UseHarmonyLabelsParams,
 'accompanimentTracks' | 'analysisContextAbsBeat' | 'analysisContexts' | 'analyzedNotes' | 'autoHarmonyLabelOverrides' | 'cadentialPatternsEnabled' | 'currentTonic' | 'enableInferredContexts' | 'harmonyOverrides' | 'inferredContextSuppressions' | 'isAnalysisEnabled' | 'isMinorMode' | 'layoutData' | 'measureLengths' | 'styleProfile' | 'timeSignature' | 'timeSignatureChanges' | 'tonicizationHints' | 'useStatisticalCorrection'> {
     _chromaticModulationEnabled: any;
+    /** I contesti SCRITTI DALL'UTENTE, senza quelli dedotti. `analysisContexts` qui arriva
+     *  già fuso coi dedotti dal motore, e quelli non portano marchio: non si distinguono
+     *  più. Serve tenerli a parte per sapere in che tonalità l'utente ha DICHIARATO di
+     *  essere, senza che le deduzioni del programma influenzino le proprie guardie. */
+    declaredAnalysisContexts?: any[];
     accHintEnabled: any;
     compactTonicization: any;
     minSpanBeats: any;
@@ -174,6 +179,7 @@ export interface HarmonyLabelsInput extends Pick<UseHarmonyLabelsParams,
 export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[][] {
     const {
         _chromaticModulationEnabled,
+        declaredAnalysisContexts,
         accHintEnabled,
         accompanimentTracks,
         analysisContextAbsBeat,
@@ -495,7 +501,27 @@ export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[]
                     } catch { /* skip event */ }
                 }
                 const _cadMatchesRaw = evaluateCadentialPatterns(
-                    _chEvts, noteNameToPc(currentTonic), isMinorMode, { minConfidence: 70 },
+                    _chEvts, noteNameToPc(currentTonic), isMinorMode, {
+                        minConfidence: 70,
+                        // LA CASA È QUELLA DICHIARATA LÌ, non quella d'impianto del brano.
+                        // `_resolveHomeAt` legge i contesti scritti dall'utente (non quelli
+                        // dedotti) e dice in che tonalità si è a quel movimento. Senza, in un
+                        // brano che modula il riconoscitore giudicava tutto contro la tonalità
+                        // iniziale, e le sue guardie non scattavano più.
+                        homeAt: (ab: number) => {
+                            // Solo i contesti DICHIARATI: se usassimo anche i dedotti, le
+                            // deduzioni del programma deciderebbero le guardie che servono a
+                            // produrle — un cane che si morde la coda.
+                            const dich = (declaredAnalysisContexts || [])
+                                .map((c: any) => ({ ab: analysisContextAbsBeat(c), c }))
+                                .filter((x: any) => x.ab <= ab - 1e-6)
+                                .sort((a: any, b: any) => b.ab - a.ab);
+                            const top: any = dich.length ? dich[0].c : null;
+                            return top
+                                ? { tonicPc: noteNameToPc(top.newTonic), isMinor: !!top.newIsMinor }
+                                : { tonicPc: noteNameToPc(currentTonic), isMinor: !!isMinorMode };
+                        },
+                    },
                 );                // Post-filter: reject cadence matches whose "dominant" chord is
                 // actually a Major-7th sonority (maj7 ≠ dominant). The dominant
                 // slot is always the penultimate chord in the formula window.
