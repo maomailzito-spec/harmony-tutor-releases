@@ -5680,6 +5680,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     setInferredContextSuppressions,
                     setTimeSignatureChanges,
                     setDoubleBarlineMeasures,
+                    setSystemBreaks,
                     setRepeatBarlines,
                     setVoltaBrackets,
                     setTempoCurves,

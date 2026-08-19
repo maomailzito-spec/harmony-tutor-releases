@@ -276,6 +276,10 @@ export type ApplyGrandStaffProjectIOCommandArgs = {
 	setInferredContextSuppressions?: (next: any) => void;
 	setTimeSignatureChanges: (next: any) => void;
 	setDoubleBarlineMeasures: (next: any) => void;
+	/** A capo di sistema decisi a mano. Erano SCRITTI nel file e mai riletti: riaprendo
+	 *  un brano l'impaginazione decisa si perdeva, e sembrava conservata solo perché il
+	 *  valore restava in memoria finché non si chiudeva il programma. */
+	setSystemBreaks?: (next: any) => void;
 	setRepeatBarlines: (next: any) => void;
 	setVoltaBrackets: (next: any) => void;
 	setDynamics?: (next: any) => void;
@@ -383,6 +387,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 		args.setAnalysisContexts([]);
 		args.setTimeSignatureChanges([]);
 		args.setDoubleBarlineMeasures([]);
+		args.setSystemBreaks?.([]);
 		args.setRepeatBarlines({});
 		args.setVoltaBrackets([]);
 		args.setDynamics?.([]);
@@ -500,6 +505,7 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 	args.setMeasuresPerLineDraft(String(DEFAULT_LAYOUT.measuresPerLine));
 	args.setViewMode(DEFAULT_LAYOUT.viewMode);
 	args.setCanvasFormat?.(DEFAULT_LAYOUT.canvasFormat);
+	args.setSystemBreaks?.([]);
 
 	try {
 		const parsed: any = cmd.parsed;
@@ -608,6 +614,13 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				const cleanedOrder = loadedProject.toolbarGroupOrder.filter((id: any) => all.has(id));
 				const fullOrder: any[] = Array.from(new Set([...cleanedOrder, ...args.defaultToolbarGroupOrder]));
 				args.setToolbarGroupOrder(fullOrder);
+			}
+			// A capo di sistema decisi a mano: sono impaginazione anche loro.
+			if (Array.isArray((loadedProject as any).systemBreaks)) {
+				const aCapo = ((loadedProject as any).systemBreaks as any[])
+					.map(n => Math.round(Number(n)))
+					.filter(n => Number.isFinite(n) && n >= 0);
+				args.setSystemBreaks?.(Array.from(new Set(aCapo)).sort((a, b) => a - b));
 			}
 			// Impaginazione salvata nel file. Ogni campo è indipendente: un file che porta
 			// solo la vista non deve trascinarsi dietro un tetto di battute inventato.
@@ -890,6 +903,7 @@ export async function handleGrandStaffProjectIOMenuAction(args: HandleGrandStaff
 		args.apply.setSelectedNoteIds(new Set());
 		args.apply.setActiveTab('editor');
 		args.apply.setDoubleBarlineMeasures([]);
+		args.apply.setSystemBreaks?.([]);
 		args.apply.setRepeatBarlines({});
 		args.apply.setVoltaBrackets([]);
 		args.apply.setTempoCurves?.([]);
