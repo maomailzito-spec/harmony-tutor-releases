@@ -1720,6 +1720,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [keySignatureChanges, setKeySignatureChanges] = useState<KeySignatureChange[]>([]);
     const keySignatureChangesRef = useRef(keySignatureChanges);
     keySignatureChangesRef.current = keySignatureChanges;
+    const keySignatureRootRef = useRef(keySignatureRoot);
+    keySignatureRootRef.current = keySignatureRoot;
     /** Armatura d'impianto e cambi in QUINTE, per il meta-evento del file MIDI. */
     const midiKeySignatures = useMemo(() => {
         // Le quinte si ricavano dalla sola fondamentale: `keySignature` è derivata più
@@ -7307,6 +7309,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * La griglia costruita qui sopra è il numero vero: tiene già dentro le note del
      * coro, quelle delle tracce di accompagnamento e il minimo.
      */
+    // ── LE ARMATURE SCRITTE NEL BRANO (diagnostica) ───────────────────────────
+    // `__htArmature()` elenca i cambi d'armatura che il programma ha in questo momento,
+    // con la battuta da cui valgono. Si chiama PRIMA di salvare e DOPO aver riaperto:
+    // se prima ci sono e dopo no, la perdita è nel giro del file; se spariscono senza
+    // salvare, è qualcosa che li toglie mentre si lavora.
+    useEffect(() => {
+        (window as any).__htArmature = () => {
+            const righe = (keySignatureChangesRef.current || []).map((c: any) => ({
+                dalla_battuta: Number(c?.measureIndex) + 1,
+                armatura_di: c?.root,
+                modo: c?.isMinor ? 'minore' : 'maggiore',
+            }));
+            // eslint-disable-next-line no-console
+            console.table(righe);
+            // eslint-disable-next-line no-console
+            console.log(`${righe.length} cambi d'armatura · tonalità d'impianto: ${keySignatureRootRef.current}`);
+            return righe;
+        };
+    }, []);
+
     // ── QUANTE MISURE, E DA DOVE (diagnostica) ────────────────────────────────
     // `__htMisure()` in console dice i quattro numeri da cui esce il contatore: il
     // minimo, l'ultima misura toccata dal coro, l'ultima toccata dalle tracce, e il
