@@ -3521,6 +3521,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [misureTotali, setMisureTotali] = useState<number>(4);
     const misureTotaliRef = useRef<number>(4);
     misureTotaliRef.current = misureTotali;
+    const minMeasureCountRef = useRef<number>(4);
+    minMeasureCountRef.current = minMeasureCount;
 
     useEffect(() => {
         setMinMeasureCountDraft(String(misureTotali));
@@ -7304,6 +7306,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * La griglia costruita qui sopra è il numero vero: tiene già dentro le note del
      * coro, quelle delle tracce di accompagnamento e il minimo.
      */
+    // ── QUANTE MISURE, E DA DOVE (diagnostica) ────────────────────────────────
+    // `__htMisure()` in console dice i quattro numeri da cui esce il contatore: il
+    // minimo, l'ultima misura toccata dal coro, l'ultima toccata dalle tracce, e il
+    // totale che ne risulta. Quando il numero in barra non corrisponde a quello che
+    // si conta sulla pagina, è qui che si vede quale dei quattro sbaglia.
+    useEffect(() => {
+        (window as any).__htMisure = () => {
+            const ultima = (elenco: any[]) => elenco.reduce(
+                (mx, n) => Math.max(mx, Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : -1), -1);
+            const coro = ultima(latestRawNotes.current || []);
+            const tracce = ultima((latestAccompanimentTracks.current || []).flatMap((t: any) => t?.notes || []));
+            const griglia = (layoutDataRef.current as any)?.measureBeatsPerMeasure?.length ?? 0;
+            const r = {
+                minimo_in_memoria: minMeasureCountRef.current,
+                ultima_misura_col_coro: coro, misure_del_coro: coro + 1,
+                ultima_misura_con_tracce: tracce, misure_delle_tracce: tracce + 1,
+                misure_disegnate: griglia,
+                numero_mostrato_in_barra: misureTotaliRef.current,
+            };
+            // eslint-disable-next-line no-console
+            console.table(r);
+            return r;
+        };
+    }, []);
+
     useEffect(() => {
         const n = (layoutData as any)?.measureBeatsPerMeasure?.length;
         const vero = Math.max(1, Number.isFinite(n) && n > 0 ? Number(n) : minMeasureCount);
