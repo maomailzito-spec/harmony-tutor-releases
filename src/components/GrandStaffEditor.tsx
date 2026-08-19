@@ -3516,9 +3516,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [canUseDuplet, isDuplet]);
     // isBpmActiveRef sync now in usePlayback
 
+    /** Le misure che la pagina mostra davvero (vedi dove viene calcolato, più sotto):
+     *  è questo il numero che si legge e si muove in barra, non il minimo. */
+    const [misureTotali, setMisureTotali] = useState<number>(4);
+    const misureTotaliRef = useRef<number>(4);
+    misureTotaliRef.current = misureTotali;
+
     useEffect(() => {
-        setMinMeasureCountDraft(String(minMeasureCount));
-    }, [minMeasureCount]);
+        setMinMeasureCountDraft(String(misureTotali));
+    }, [misureTotali]);
 
     useEffect(() => {
         setMeasuresPerLineDraft(String(measuresPerLine));
@@ -3545,19 +3551,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, []);
 
+    /**
+     * QUANTE MISURE HA DAVVERO LA PAGINA.
+     *
+     * `minMeasureCount` non è il numero di misure: è un MINIMO. La pagina ne mostra
+     * `max(minimo, misure occupate)`, perché scrivendo si va avanti da sé e nessuno
+     * deve alzare un contatore per continuare a scrivere.
+     *
+     * Ma in barra quel minimo si legge come «numero di misure», e dopo aver aperto un
+     * file di diciannove misure il campo diceva 4: il «+» portava a 5, cioè ancora
+     * sotto il reale, e non compariva niente. Per aggiungere la ventesima bisognava
+     * portare il contatore a mano fino a diciannove — segnalato, ed è un difetto.
+     *
+     * La lunghezza della griglia costruita dall'impaginazione è il numero vero: tiene
+     * già dentro le note del coro, quelle delle tracce di accompagnamento e il minimo.
+     */
     const applyMinMeasureCountDraft = useCallback(() => {
         const v = Math.trunc(Number(minMeasureCountDraft));
         if (!Number.isFinite(v)) return;
         setMinMeasureCount(Math.max(1, v));
     }, [minMeasureCountDraft]);
 
+    /** Il «+» aggiunge una misura A QUELLE CHE CI SONO, non al minimo salvato. */
     const bumpMinMeasureCount = useCallback((delta: number) => {
-        const parsed = Math.trunc(Number(minMeasureCountDraft));
-        const base = Number.isFinite(parsed) ? parsed : minMeasureCount;
-        const next = Math.max(1, base + delta);
+        const next = Math.max(1, misureTotaliRef.current + delta);
         setMinMeasureCount(next);
         setMinMeasureCountDraft(String(next));
-    }, [minMeasureCount, minMeasureCountDraft]);
+    }, []);
 
     const applyMeasuresPerLineDraft = useCallback(() => {
         const v = Math.trunc(Number(measuresPerLineDraft));
@@ -7268,6 +7288,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // quelle che lavorano sempre e non dicono nulla.
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
     }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths, systemBreaks]);
+
+    /**
+     * QUANTE MISURE HA DAVVERO LA PAGINA — il numero che si legge in barra.
+     *
+     * `minMeasureCount` non è il numero di misure: è un MINIMO. La pagina ne mostra
+     * `max(minimo, misure occupate)`, perché scrivendo si va avanti da sé e nessuno
+     * deve alzare un contatore per continuare a scrivere.
+     *
+     * Ma in barra quel minimo si leggeva come «numero di misure», e dopo aver aperto
+     * un file di diciannove misure il campo diceva 4: il «+» portava a 5, cioè ancora
+     * sotto il reale, e non compariva niente. Per ottenere la ventesima bisognava
+     * alzare il contatore a mano fino a diciannove.
+     *
+     * La griglia costruita qui sopra è il numero vero: tiene già dentro le note del
+     * coro, quelle delle tracce di accompagnamento e il minimo.
+     */
+    useEffect(() => {
+        const n = (layoutData as any)?.measureBeatsPerMeasure?.length;
+        const vero = Math.max(1, Number.isFinite(n) && n > 0 ? Number(n) : minMeasureCount);
+        setMisureTotali(prev => (prev === vero ? prev : vero));
+    }, [layoutData, minMeasureCount]);
 
     // PERF NOTA: qui c'erano useDeferredValue su layoutData/analyzedNotes verso useHarmonyLabels.
     // RIMOSSI: con l'interazione continua (ghost) il rendering concorrente INTERROMPE e RIAVVIA

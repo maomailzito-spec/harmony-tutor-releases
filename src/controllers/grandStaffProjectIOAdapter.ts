@@ -582,7 +582,14 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 				});
 				args.setRawNotes(withTicks as any);
 				try {
-					const maxIdx2 = (withTicks as any[]).reduce((mx, n) => Math.max(mx, Number.isFinite(n.measureIndex) ? n.measureIndex : 0), -1);
+					// LE MISURE LE FANNO ANCHE LE TRACCE. Contando le sole note del coro, un
+					// file con la musica sulle tracce di accompagnamento apriva con quattro
+					// misure di minimo mentre la pagina ne mostrava settanta.
+					const noteDelleTracce = (Array.isArray((loadedProject as any).accompanimentTracks)
+						? (loadedProject as any).accompanimentTracks
+						: []).flatMap((t: any) => Array.isArray(t?.notes) ? t.notes : []);
+					const maxIdx2 = [...(withTicks as any[]), ...noteDelleTracce]
+						.reduce((mx, n) => Math.max(mx, Number.isFinite(n?.measureIndex) ? Number(n.measureIndex) : 0), -1);
 					const measuresCount = Math.max(1, maxIdx2 + 1);
 					args.setMinMeasureCount(measuresCount);
 					args.setMinMeasureCountDraft(String(measuresCount));
