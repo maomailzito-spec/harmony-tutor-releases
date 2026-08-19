@@ -54,6 +54,7 @@ const App: React.FC = () => {
                     { comando: '__htAudioLate(azzera?)', stato: attivo('__htAudioLate'), cosa_dice: 'solo il conto dei ritardi; con true riparte da zero' },
                     { comando: '__htBattuta(n)', stato: attivo('__htBattuta'), cosa_dice: 'cosa c\'è davvero nella battuta n: voce, figura, inizio/durata/fine in tick, e i posti dove una nota può cominciare' },
                     { comando: '__htUltimiInserimenti()', stato: attivo('__htUltimiInserimenti'), cosa_dice: 'le ultime venti note scritte col mouse: dove si è cliccato, che tempo è stato letto, quale attacco ha vinto' },
+                    { comando: '__htMisure()', stato: attivo('__htMisure'), cosa_dice: 'da dove esce il numero di misure in barra: il minimo, l\'ultima misura del coro, l\'ultima delle tracce, quante ne sono disegnate' },
                     { comando: '__htMisuraTeste()', stato: attivo('__htMisuraTeste'), cosa_dice: 'scarto fra la x che diamo a una nota e la testa disegnata — da accendere prima: localStorage._HT_MISURA_TESTE = \'1\' e ricaricare' },
                     { comando: '__htGhost', stato: (typeof (window as any).__htGhost === 'object' && (window as any).__htGhost) ? 'pronto' : 'non ancora disponibile', cosa_dice: 'lo stesso scarto per la nota fantasma; si legge DOPO aver mosso il mouse sul rigo (stesso interruttore di __htMisuraTeste)' },
                 ];
