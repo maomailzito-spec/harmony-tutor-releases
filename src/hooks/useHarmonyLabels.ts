@@ -486,7 +486,13 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
                             : (((Number((top.root as any)?.noteIndex ?? (top.root as any)?.midi ?? 0)) % 12) + 12) % 12;
                         const bassMidi = Math.min(...(notesForCad as any[]).map((n: any) => Number(n.midi)));
                         const bassPc = ((bassMidi % 12) + 12) % 12;
+                        // La MISURA e il MOVIMENTO viaggiano con l'accordo: senza, il riconoscitore
+                        // non può sapere se un modello finisce a FINE FRASE — la condizione che
+                        // distingue una cadenza d'inganno da un ordinario I→ii capitato a metà.
+                        const _evNote: any = (notesForCad as any[])[0];
                         const _newEv = { rootPc, quality: top.type || '', bassPc, absBeat: ev.absBeat,
+                            measureIndex: Number.isFinite(_evNote?.measureIndex) ? Number(_evNote.measureIndex) : undefined,
+                            beat: Number.isFinite(_evNote?.beat) ? Number(_evNote.beat) : undefined,
                             notePcs: [...new Set<number>((notesForCad as any[]).map((n: any) => ((Number(n.midi) % 12) + 12) % 12))] };
                         // Dedup: collapse consecutive events that don't represent a real harmonic change.
                         // The cadential pattern matcher slides a window over consecutive events; spurious

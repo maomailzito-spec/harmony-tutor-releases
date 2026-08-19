@@ -66,6 +66,11 @@ export interface ChordEvent {
   absBeat: number;
   /** All distinct note pitch-classes present in the chord (for chromatic-evidence check). */
   notePcs?: number[];
+  /** Misura in cui l'accordo cade, e movimento dentro la misura (1 = battere). Servono a
+   *  sapere se un modello finisce a FINE FRASE (vedi `atPhraseEnd`): assenti, il
+   *  controllo non si può fare e il modello passa come prima. */
+  measureIndex?: number;
+  beat?: number;
 }
 
 /** A successful cadential match. */
@@ -84,6 +89,10 @@ export interface CadentialMatch {
   endBeat: number;
   /** True for deceptive cadences — no tonal-context change. */
   deceptive?: boolean;
+  /** L'accordo d'arrivo cade sul battere della misura successiva a quella dell'accordo
+   *  che lo precede: la stessa definizione di fine frase che il motore usa per marcare
+   *  le sue cadenze. `undefined` = gli eventi non portavano la misura. */
+  atPhraseEnd?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +475,29 @@ export function evaluateCadentialPatterns(
               if (arrivalDiatonic && !isRelativeKey && !dominantHasChromaticEvidence) continue;
             }
 
+            // ── FINE FRASE ──────────────────────────────────────────────────
+            // Una cadenza È una fine di frase. Qui i modelli si cercavano ovunque
+            // nel flusso degli accordi, senza sapere dove le frasi finiscono: un
+            // I → ii a metà periodo agganciava «V → vi» e faceva dichiarare una
+            // cadenza d'inganno nella sottodominante.
+            //
+            // La definizione è la stessa che il motore usa già per marcare le sue
+            // cadenze (`isCadenceBoundary`): l'accordo d'arrivo sta sul BATTERE
+            // della misura successiva a quella dell'accordo che lo precede.
+            const arrivo = window[len - 1];
+            const penultimo = window[len - 2];
+            const atPhraseEnd = (arrivo?.measureIndex == null || penultimo?.measureIndex == null)
+              ? undefined
+              : (Math.abs((arrivo.beat ?? 1) - 1) <= 1e-3
+                 && arrivo.measureIndex === penultimo.measureIndex + 1);
+
+            // VALE SOLO PER L'INGANNO, e la ragione è musicale: un inganno è definito
+            // dal DELUDERE una fine di frase attesa. A metà frase non c'è niente da
+            // deludere — quel V→vi è solo una successione, e nella tonalità in cui si
+            // è già è spesso un ordinario I→ii. Le formule che RISOLVONO (V→I) restano
+            // valide anche a metà frase: lì non sono cadenze ma prove di tonicizzazione.
+            if ((formula as any).deceptive && atPhraseEnd === false) continue;
+
             matches.push({
               targetTonicPc: candidateTonic,
               targetIsMinor: isMinorTarget,
@@ -474,6 +506,7 @@ export function evaluateCadentialPatterns(
               startBeat:     window[0].absBeat,
               endBeat:       window[len - 1].absBeat,
               deceptive:     !!(formula as any).deceptive,
+              atPhraseEnd,
             });
           }
         }
