@@ -35,6 +35,7 @@ import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } fro
 import { articulationPlayback } from '../utils/articulations';
 import type { ArticulationMark, Slur, OctaveShift, KeySignatureChange } from '../types';
 import { normalizeKeyChanges, keyAtMeasure } from '../utils/keySignatureChanges';
+import { tonicName } from '../utils/keySignatureOptions';
 import type { TempoMark, MeasureLength, TextAnnotation } from '../types';
 import { measureLengthMap, beatsOfMeasure } from '../utils/measureLengths';
 import { normalizeTempoMarks, tempoMarkQuarterBpm } from '../utils/tempoMarks';
@@ -10144,7 +10145,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // -----------------------
     // Accidentals (apply on insertion)
     // -----------------------
-    const applyAutoLeadingToneInMinor = useCallback((baseProps: any) => {
+    const applyAutoLeadingToneInMinor = useCallback((baseProps: any, measureIndex?: number) => {
         // Auto “sensibile” (scala minore armonica): in tonalità minore alza il VII grado
         // di un semitono di default, senza selezionare manualmente l’accidentale.
         // Se l’utente ha già scelto un accidentale, non intervenire.
@@ -10154,11 +10155,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // modo sotto le mani di chi scrive — un misolidio diventerebbe ionico alla prima
         // nota. La sensibile ce l'hanno solo ionio e lidio.
         if (keyChangeMode === 'modal' && (modeInfo as any)?.haSensibile === false) return baseProps;
+        // LA TONALITÀ È QUELLA DI QUESTA BATTUTA, non quella d'impianto del brano.
+        //
+        // Con un cambio d'armatura a metà brano — da maggiore a minore — la sensibile
+        // non scattava: il controllo qui sotto guardava `isMinorMode`, che descrive
+        // l'INIZIO del pezzo, e usciva subito. Da fuori sembrava che il programma
+        // trattasse il cambio come una tonicizzazione passeggera invece che come un
+        // cambio di tonalità vero.
+        //
+        // Il calcolo dell'altezza, poco sopra, l'armatura della battuta la conosce già
+        // (`keySignatureAtMeasureRef`): mancava solo qui. Senza la battuta — chiamate
+        // che non sanno dove finirà la nota — resta il comportamento di prima.
+        const inVigore = (typeof measureIndex === 'number' && Number.isFinite(measureIndex))
+            ? keyAtMeasure({ root: keySignatureRoot, isMinor: isMinorMode }, keySignatureChanges, measureIndex)
+            : { root: keySignatureRoot, isMinor: isMinorMode, daMisura: 0 };
+        const minoreQui = keyChangeMode === 'modal' ? isMinorMode : !!inVigore.isMinor;
+        const tonicaQui = keyChangeMode === 'modal' ? currentTonic : tonicName(inVigore.root, !!inVigore.isMinor);
+        const armaturaQui = keyChangeMode === 'modal' ? keySignature : getKeySignature(inVigore.root, 'Major');
+
         // Fuori dal modo dichiarato resta la regola di prima: solo in minore.
-        if (keyChangeMode !== 'modal' && !isMinorMode) return baseProps;
+        if (keyChangeMode !== 'modal' && !minoreQui) return baseProps;
         if (activeAccidental) return baseProps;
 
-        const tonicLetter = (currentTonic || '').charAt(0);
+        const tonicLetter = (tonicaQui || '').charAt(0);
         if (!tonicLetter) return baseProps;
 
         const diatonic = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
@@ -10169,11 +10188,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const leadingLetter = diatonic[(tonicIdx + 6) % 7];
         if (baseProps.pitch !== leadingLetter) return baseProps;
 
-        const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, keySignature.type === 'sharp' ? keySignature.count : 0);
-        const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, keySignature.type === 'flat' ? keySignature.count : 0);
+        const sharpNotes = ['F', 'C', 'G', 'D', 'A', 'E', 'B'].slice(0, armaturaQui.type === 'sharp' ? armaturaQui.count : 0);
+        const flatNotes = ['B', 'E', 'A', 'D', 'G', 'C', 'F'].slice(0, armaturaQui.type === 'flat' ? armaturaQui.count : 0);
         const keyAlterationAmount =
-            (keySignature.type === 'sharp' && sharpNotes.includes(baseProps.pitch)) ? 1 :
-            (keySignature.type === 'flat' && flatNotes.includes(baseProps.pitch)) ? -1 : 0;
+            (armaturaQui.type === 'sharp' && sharpNotes.includes(baseProps.pitch)) ? 1 :
+            (armaturaQui.type === 'flat' && flatNotes.includes(baseProps.pitch)) ? -1 : 0;
 
         // baseProps.midi includes the key signature alteration for this diatonic pitch.
         const naturalMidi = baseProps.midi - keyAlterationAmount;
@@ -10192,7 +10211,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             explicitAccidental: autoAccidental,
             accidental: autoAccidental ?? undefined,
         };
-    }, [activeAccidental, autoLeadingToneInMinor, currentTonic, isMinorMode, keySignature]);
+    }, [activeAccidental, autoLeadingToneInMinor, currentTonic, isMinorMode, keySignature, keySignatureRoot, keySignatureChanges, keyChangeMode, modeInfo]);
 
     const applyActiveAccidental = useCallback((baseProps: any) => {
         if (!activeAccidental) return baseProps;
@@ -12216,7 +12235,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 drumVoiceClick = drumPieceVoice(element); // mani→1 (su), piedi→2 (giù)
             } else {
                 accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignatureAtMeasureRef.current(hit.measureIndex));
-                accProps = applyAutoLeadingToneInMinor(accProps);
+                accProps = applyAutoLeadingToneInMinor(accProps, hit.measureIndex);
                 accProps = applyActiveAccidental(accProps);
             }
 
@@ -12588,7 +12607,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // l'armatura d'inizio usciva un La naturale, e il disegno — che l'armatura nuova
         // la conosce — ci metteva il bequadro.
         let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasureRef.current(hit.measureIndex));
-        props = applyAutoLeadingToneInMinor(props);
+        props = applyAutoLeadingToneInMinor(props, hit.measureIndex);
         props = applyActiveAccidental(props);
 
         // Measure accidental carry (standard engraving rule):
@@ -13181,7 +13200,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Trascinando una nota di grado, la nuova altezza segue l'armatura della SUA
             // misura: in La bemolle, salendo di grado da Sol si arriva a La bemolle.
             let props: any = getNotePropertiesFromDiatonicPosition(pos + steps, clef, keySignatureAtMeasureRef.current(Number(n.measureIndex ?? 0)));
-            props = applyAutoLeadingToneInMinor(props);
+            props = applyAutoLeadingToneInMinor(props, Number(n.measureIndex ?? 0));
             props = applyMeasureAccidentalCarry(props, {
                 notes: siblings,
                 measureIndex: Number(n.measureIndex),
@@ -14527,7 +14546,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 accGhostProps = makeDrumNoteProps(element, palette, accGhostClef, keySignature);
             } else {
                 accGhostProps = getNotePropertiesFromDiatonicPosition(accGhostPos, accGhostClef, keySignatureAtMeasureRef.current(hitGhost?.measureIndex ?? 0));
-                accGhostProps = applyAutoLeadingToneInMinor(accGhostProps);
+                accGhostProps = applyAutoLeadingToneInMinor(accGhostProps, hitGhost?.measureIndex ?? 0);
                 accGhostProps = applyActiveAccidental(accGhostProps);
             }
 
@@ -14670,7 +14689,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Il fantasma deve mostrare la stessa nota che uscirà dal clic, armatura di
         // questa misura compresa.
         let props = getNotePropertiesFromDiatonicPosition(pos, targetClef, keySignatureAtMeasureRef.current(hit.measureIndex));
-        props = applyAutoLeadingToneInMinor(props);
+        props = applyAutoLeadingToneInMinor(props, hit.measureIndex);
         props = applyActiveAccidental(props);
 
         setGhostNote(prev => {
