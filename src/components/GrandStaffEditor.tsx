@@ -14407,6 +14407,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch { /* rilascio non valido: si abbandona */ }
     }, [timeSignature, bpm, absBeatOfNote, satbVisible, staffSystemMode, SATB_HIDE_SHIFT_PX]);
 
+    /**
+     * LO STESSO SEGNO, DUE GESTI.
+     *
+     * Trascinare è preciso ma chiede la mira; per i segni che valgono su una BATTUTA —
+     * armatura, metro, metronomo, stanghette, rall./accel. — spesso si sa già dove
+     * vanno, ed è dove sta la linea di lettura. Il clic li posa lì.
+     *
+     * Non serve una seconda strada per applicarli: la linea di lettura porta già le
+     * stesse due coordinate che produrrebbe un rilascio (il sistema e la x), quindi si
+     * chiama `posaSegno` esattamente come fa il trascinamento. Un solo posto decide che
+     * cosa vuol dire posare un segno, e i due gesti non possono divergere.
+     */
+    const posaSegnoAlCursore = useCallback((payload: SignDragPayload) => {
+        const pos = playheadPositionRef.current;
+        if (!pos) return;
+        posaSegno(payload, { systemIndex: pos.systemIndex, x: pos.x, y: 0 });
+    }, [posaSegno]);
+
     const segnoTrascinato = useSignDrag(posaSegno);
 
 
@@ -16546,6 +16564,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         ancoraggio={ancoraggioTavolozza}
                         onToggleAggancio={alternaAggancioTavolozza}
                         onScriviTestoAlCursore={scriviTestoAlCursore}
+                        onPosaAlCursore={posaSegnoAlCursore}
                         durata={selectedInsertion}
                         onSetDurata={(d) => setSelectedInsertion(prev => ({ ...prev, duration: d as any }))}
                         onTogglePausa={() => setSelectedInsertion(prev => ({ ...prev, type: prev.type === 'note' ? 'rest' : 'note' }))}

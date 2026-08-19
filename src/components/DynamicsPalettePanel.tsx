@@ -93,6 +93,10 @@ interface DynamicsPalettePanelProps {
     /** Prendi-e-posa: si afferra il pulsante e si molla il segno sulla partitura.
      *  Il clic semplice continua a funzionare (mette il segno sulla nota selezionata). */
     onStartDrag: (payload: SignDragPayload, e: React.MouseEvent) => void;
+    /** Lo STESSO segno, posato dove sta la linea di lettura. È l'alternativa al
+     *  trascinamento per i segni che valgono su una battuta e non su una nota: chi sa
+     *  già dove va il segno non deve mirare. */
+    onPosaAlCursore?: (payload: SignDragPayload) => void;
 }
 
 const LIVELLI: DynamicLevel[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff'];
@@ -160,7 +164,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     onToggleTie, onToggleBeam, onFlipStem, alterazione, onSetAlterazione, onToggleCorona,
     modoCambioTonalita, onSetModoCambioTonalita, sensibileAutomatica, onSetSensibileAutomatica,
     selectionCount, hasMarkAtSelection,
-    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
+    onPlaceLevel, onPlaceAccent, onPlaceFp, onPlaceHairpin, onPlaceArticulation, onPlaceSlur, onPlaceOctave, currentKeyRoot, currentKeyIsMinor, onRemoveKeySignatureAtPlayhead, onRemoveAtSelection, onClose, onStartDrag, onPosaAlCursore, onAddMeasure, onDeleteMeasureAtPlayhead, currentTimeSignature, onRemoveTimeSignatureAtPlayhead,
 }) => {
     const [pos, setPos] = useState<{ x: number; y: number }>({ x: 200, y: 120 });
     // Valori del metro da posare: partono da quello del brano e si regolano qui,
@@ -251,6 +255,13 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
             window.removeEventListener('mouseup', onUp);
         };
     }, []);
+
+    /** Un carico solo, DUE GESTI: si trascina dove serve, oppure si clicca e il segno
+     *  va dove sta la linea di lettura. Scritti insieme per non farli divergere. */
+    const gesti = useCallback((payload: SignDragPayload) => ({
+        onMouseDown: (e: React.MouseEvent) => onStartDrag(payload, e),
+        onClick: () => onPosaAlCursore?.(payload),
+    }), [onStartDrag, onPosaAlCursore]);
 
     const unaSola = selectionCount === 1;
     // I `title` nativi qui non compaiono: la toolbar si era già costruita il suo
@@ -512,7 +523,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 𝄐
                             </button>
                             <button
-                                onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'rall', label: 'rall.' }, e)}
+                                {...gesti({ kind: 'tempo-curve', data: 'rall', label: 'rall.' })}
                                 title={t('pal_rit')}
                                 className={`${bottone} px-0 italic ${nudo}`}
                                 style={{ fontFamily: 'serif', fontSize: 10 }}
@@ -523,7 +534,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 e stavano in due gruppi diversi, con rall. per giunta
                                 DUPLICATO qui e sotto «Articolazioni ed espressione». */}
                             <button
-                                onMouseDown={(e) => onStartDrag({ kind: 'tempo-curve', data: 'accel', label: 'accel.' }, e)}
+                                {...gesti({ kind: 'tempo-curve', data: 'accel', label: 'accel.' })}
                                 title={t('pal_accel')}
                                 className={`${bottone} px-0 italic ${nudo}`}
                                 style={{ fontFamily: 'serif', fontSize: 10 }}
@@ -632,7 +643,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             key={l}
                             onMouseDown={(e) => onStartDrag({ kind: 'dyn-level', data: l, label: l }, e)}
                             onClick={() => { if (unaSola) onPlaceLevel(l); }}
-                            title={`Trascina ${l} sulla partitura, oppure seleziona una nota e clicca`}
+                            title={t('pal_dyn_drag', { s: l })}
                             className={`${bottone} ${nudo} italic`}
                             style={{ fontFamily: 'serif' }}
                         >
@@ -644,7 +655,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             key={a}
                             onMouseDown={(e) => onStartDrag({ kind: 'dyn-accent', data: a, label: a }, e)}
                             onClick={() => { if (unaSola) onPlaceAccent(a); }}
-                            title={`Trascina ${a} sulla partitura, oppure seleziona una nota e clicca`}
+                            title={t('pal_dyn_drag', { s: a })}
                             className={`${bottone} ${nudo} italic`}
                             style={{ fontFamily: 'serif' }}
                         >
@@ -703,7 +714,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             key={a}
                             onMouseDown={(e) => onStartDrag({ kind: 'articulation', data: a, label: ARTICULATION_UI[a].simbolo }, e)}
                             onClick={() => { if (selectionCount > 0) onPlaceArticulation(a); }}
-                            title={`${ARTICULATION_UI[a].nome}: trascinalo su una nota, oppure seleziona le note e clicca. Rimettendolo si toglie.`}
+                            title={t('pal_artic_drag', { s: ARTICULATION_UI[a].nome })}
                             className={`${bottone} h-7 ${nudo} px-1`}
                             style={{ fontFamily: 'serif', lineHeight: 1, fontSize: 15 }}
                         >
@@ -769,7 +780,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         {tonalitaMinore ? t('pal_key_minor_abbr') : t('pal_key_major_abbr')}
                     </button>
                     <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'key-sig', data: { root: tonalita, isMinor: tonalitaMinore }, label: tonicName(tonalita, tonalitaMinore) + (tonalitaMinore ? 'm' : '') }, e)}
+                        {...gesti({ kind: 'key-sig', data: { root: tonalita, isMinor: tonalitaMinore }, label: tonicName(tonalita, tonalitaMinore) + (tonalitaMinore ? 'm' : '') })}
                         title={t('pal_key_drag', { k: `${tonicName(tonalita, tonalitaMinore)} ${tonalitaMinore ? t('pal_key_minor_word') : t('pal_key_major_word')}` })}
                         className={`${bottone} ${attivo} px-1.5`}
                         style={{ fontFamily: 'serif' }}
@@ -854,8 +865,8 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         </select>
                     </div>
                     <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'time-sig', data: { n: metroN, d: metroD }, label: `${metroN}/${metroD}` }, e)}
-                        title={`Cambio di metro ${metroN}/${metroD}: trascinalo sulla misura da cui vale`}
+                        {...gesti({ kind: 'time-sig', data: { n: metroN, d: metroD }, label: `${metroN}/${metroD}` })}
+                        title={t('pal_time_place', { s: `${metroN}/${metroD}` })}
                         className={`${bottone} ${attivo} flex-1`}
                         style={{ fontFamily: 'serif', fontSize: 13 }}
                     >
@@ -874,12 +885,12 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">{t('pal_tempo_label')}</div>
                 <div className="flex items-center gap-1">
                     <button
-                        onMouseDown={(e) => onStartDrag({
+                        {...gesti({
                             kind: 'tempo-mark',
                             data: { bpm: tempoBpm, beatUnit: tempoUnita, dotted: tempoPunto },
                             label: `${UNITA_GLIFO[tempoUnita]}${tempoPunto ? '.' : ''} = ${tempoBpm}`,
-                        }, e)}
-                        title={`Segno di metronomo: trascinalo sulla misura da cui vale. A differenza di un rallentando, dice il NUMERO — chi legge sa a che velocità andare.`}
+                        })}
+                        title={t('pal_tempo_place')}
                         className={`${bottone} ${attivo} px-2`}
                         style={{ fontFamily: 'serif', fontSize: 13 }}
                     >
@@ -925,28 +936,28 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1.5 mb-0.5">{t('pal_bars_label')}</div>
                 <div className="grid grid-cols-4 gap-1">
                     <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'bar-double', label: '𝄀𝄀' }, e)}
+                        {...gesti({ kind: 'bar-double', label: '𝄀𝄀' })}
                         title={t('pal_bar_double')}
                         className={`${bottone} ${attivo}`}
                     >
                         𝄀𝄀
                     </button>
                     <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-begin', label: '𝄆' }, e)}
+                        {...gesti({ kind: 'bar-repeat', data: 'repeat-begin', label: '𝄆' })}
                         title={t('pal_bar_repeat_start')}
                         className={`${bottone} ${nudo}`}
                     >
                         𝄆
                     </button>
                     <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-end', label: '𝄇' }, e)}
+                        {...gesti({ kind: 'bar-repeat', data: 'repeat-end', label: '𝄇' })}
                         title={t('pal_bar_repeat_end')}
                         className={`${bottone} ${nudo}`}
                     >
                         𝄇
                     </button>
                     <button
-                        onMouseDown={(e) => onStartDrag({ kind: 'bar-repeat', data: 'repeat-both', label: '𝄆𝄇' }, e)}
+                        {...gesti({ kind: 'bar-repeat', data: 'repeat-both', label: '𝄆𝄇' })}
                         title={t('pal_bar_repeat_both')}
                         className={`${bottone} ${nudo}`}
                     >
