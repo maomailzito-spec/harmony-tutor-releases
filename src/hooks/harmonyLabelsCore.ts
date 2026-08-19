@@ -413,6 +413,20 @@ export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[]
             }
             return { tonic: currentTonic, isMinor: isMinorMode };
         };
+        /** In che tonalità l'utente ha DICHIARATO di essere a questo movimento. Solo i
+         *  contesti suoi: se contassero anche quelli dedotti, le deduzioni del programma
+         *  deciderebbero le guardie che servono a produrle — un cane che si morde la coda. */
+        const _casaDichiarataA = (ab: number): { tonicPc: number; isMinor: boolean } => {
+            const dich = (declaredAnalysisContexts || [])
+                .map((c: any) => ({ ab: analysisContextAbsBeat(c), c }))
+                .filter((x: any) => x.ab <= ab - 1e-6)
+                .sort((a: any, b: any) => b.ab - a.ab);
+            const top: any = dich.length ? dich[0].c : null;
+            return top
+                ? { tonicPc: noteNameToPc(top.newTonic), isMinor: !!top.newIsMinor }
+                : { tonicPc: noteNameToPc(currentTonic), isMinor: !!isMinorMode };
+        };
+
         try {
             const _cadEnabled = _cadEnabled2;
             if (_cadEnabled && timelineForLabels.length >= 2) {
@@ -508,19 +522,7 @@ export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[]
                         // dedotti) e dice in che tonalità si è a quel movimento. Senza, in un
                         // brano che modula il riconoscitore giudicava tutto contro la tonalità
                         // iniziale, e le sue guardie non scattavano più.
-                        homeAt: (ab: number) => {
-                            // Solo i contesti DICHIARATI: se usassimo anche i dedotti, le
-                            // deduzioni del programma deciderebbero le guardie che servono a
-                            // produrle — un cane che si morde la coda.
-                            const dich = (declaredAnalysisContexts || [])
-                                .map((c: any) => ({ ab: analysisContextAbsBeat(c), c }))
-                                .filter((x: any) => x.ab <= ab - 1e-6)
-                                .sort((a: any, b: any) => b.ab - a.ab);
-                            const top: any = dich.length ? dich[0].c : null;
-                            return top
-                                ? { tonicPc: noteNameToPc(top.newTonic), isMinor: !!top.newIsMinor }
-                                : { tonicPc: noteNameToPc(currentTonic), isMinor: !!isMinorMode };
-                        },
+                        homeAt: _casaDichiarataA,
                     },
                 );                // Post-filter: reject cadence matches whose "dominant" chord is
                 // actually a Major-7th sonority (maj7 ≠ dominant). The dominant
@@ -599,6 +601,43 @@ export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[]
                         m.startBeat <= other.endBeat + 1e-6,
                     );
                     if (_isOverlapped) continue;
+
+                    // ── LA LETTURA SI CONFRONTA, NON SI IMPONE ────────────────────
+                    //
+                    // Un modello che aggancia produceva un contesto e basta: entrava
+                    // nell'elenco e vinceva per posizione, senza che nessuna lettura
+                    // alternativa avesse voce. Ma un modello guarda due o tre accordi; la
+                    // tonalità di un passaggio la decide anche ciò che viene DOPO.
+                    //
+                    // La prova a favore di RESTARE A CASA è strutturale, non statistica:
+                    // se poco dopo la frase si ferma sul V di casa — una cadenza sospesa —
+                    // quel V è il segno che casa non l'abbiamo mai lasciata. Provato prima
+                    // un confronto per «quanti suoni stanno nell'una o nell'altra scala»:
+                    // separava male, correggeva un corale e rovinava una cantata, perché
+                    // in un brano che modula davvero le due scale si somigliano troppo.
+                    //
+                    // Vale per l'INGANNO, che è la prova più debole: dichiara una tonalità
+                    // senza mai risolverci dentro, e per giunta con punteggio massimo. Le
+                    // formule che risolvono portano la loro prova con sé — l'accordo
+                    // d'arrivo — e non hanno bisogno d'essere confrontate.
+                    const _casaQui = _casaDichiarataA(m.startBeat);
+                    const _proponeAltro = !!m.deceptive && !(m.targetTonicPc === _casaQui.tonicPc
+                        && !!m.targetIsMinor === !!_casaQui.isMinor);
+                    if (_proponeAltro) {
+                        const _dominanteDiCasa = (((_casaQui.tonicPc + 7) % 12) + 12) % 12;
+                        const _dopo = _chEvts.filter(e => e.absBeat > m.endBeat + 1e-6).slice(0, 6);
+                        let _cadenzaSospesaACasa = false;
+                        for (let k = 0; k < _dopo.length; k++) {
+                            const ev = _dopo[k];
+                            if (ev.rootPc !== _dominanteDiCasa) continue;
+                            const prima = k > 0 ? _dopo[k - 1] : _chEvts[_chEvts.indexOf(ev) - 1];
+                            const aFineFrase = (ev.measureIndex != null && prima?.measureIndex != null)
+                                && Math.abs((ev.beat ?? 1) - 1) <= 1e-3
+                                && ev.measureIndex === prima.measureIndex + 1;
+                            if (aFineFrase) { _cadenzaSospesaACasa = true; break; }
+                        }
+                        if (_cadenzaSospesaACasa) continue;
+                    }
 
                     if (!_manualBeats.has(m.startBeat)) {
                         // Deceptive cadences confirm the *matched* key
