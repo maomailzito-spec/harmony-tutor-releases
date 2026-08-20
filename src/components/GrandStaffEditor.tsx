@@ -3577,10 +3577,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             w.__htBarra = () => {
                 const salvato = localStorage.getItem(TOOLBAR_PREFS_KEY);
+                let letto: any = null;
+                try { letto = salvato ? JSON.parse(salvato) : null; } catch { /* illeggibile */ }
                 const r = {
                     in_memoria_ordine: toolbarGroupOrderRef.current?.join(' ') ?? '(n.d.)',
                     in_memoria_spenti: hiddenToolbarGroupsRef.current?.join(' ') || '(nessuno)',
-                    salvato_in_preferenze: salvato ? salvato.slice(0, 200) : '(niente)',
+                    salvato_ordine: Array.isArray(letto?.order) ? letto.order.join(' ') : '(niente)',
+                    salvato_spenti: Array.isArray(letto?.hidden)
+                        ? (letto.hidden.join(' ') || '(elenco vuoto)')
+                        : '⚠️ IL CAMPO NON C\'È',
                 };
                 // eslint-disable-next-line no-console
                 console.table(r);
