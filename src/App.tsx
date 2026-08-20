@@ -54,6 +54,7 @@ const App: React.FC = () => {
                     { comando: '__htAudioLate(azzera?)', stato: attivo('__htAudioLate'), cosa_dice: 'solo il conto dei ritardi; con true riparte da zero' },
                     { comando: '__htBattuta(n)', stato: attivo('__htBattuta'), cosa_dice: 'cosa c\'è davvero nella battuta n: voce, figura, inizio/durata/fine in tick, e i posti dove una nota può cominciare' },
                     { comando: '__htUltimiInserimenti()', stato: attivo('__htUltimiInserimenti'), cosa_dice: 'le ultime venti note scritte col mouse: dove si è cliccato, che tempo è stato letto, quale attacco ha vinto' },
+                    { comando: '__htBarra()', stato: attivo('__htBarra'), cosa_dice: 'la disposizione della barra: quella in memoria e quella salvata nelle preferenze' },
                     { comando: '__htArmature()', stato: attivo('__htArmature'), cosa_dice: 'i cambi d\'armatura che il brano ha adesso, con la battuta da cui valgono' },
                     { comando: '__htMisure()', stato: attivo('__htMisure'), cosa_dice: 'da dove esce il numero di misure in barra: il minimo, l\'ultima misura del coro, l\'ultima delle tracce, quante ne sono disegnate' },
                     { comando: '__htMisuraTeste()', stato: attivo('__htMisuraTeste'), cosa_dice: 'scarto fra la x che diamo a una nota e la testa disegnata — da accendere prima: localStorage._HT_MISURA_TESTE = \'1\' e ricaricare' },

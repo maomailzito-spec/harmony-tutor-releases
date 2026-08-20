@@ -3137,6 +3137,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
     });
 
+    const toolbarGroupOrderRef = useRef<ToolbarGroupId[]>(toolbarGroupOrder);
+    toolbarGroupOrderRef.current = toolbarGroupOrder;
+    const hiddenToolbarGroupsRef = useRef<ToolbarGroupId[]>(hiddenToolbarGroups);
+    hiddenToolbarGroupsRef.current = hiddenToolbarGroups;
+
     const toggleToolbarGroup = useCallback((id: ToolbarGroupId) => {
         setHiddenToolbarGroups(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
     }, []);
@@ -3548,6 +3553,41 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => {
         setMeasuresPerLineDraft(String(measuresPerLine));
     }, [measuresPerLine]);
+
+    // ── CHI SCRIVE LE PREFERENZE DELLA BARRA (diagnostica) ────────────────────
+    // Nella memoria si trovava `{order}` senza mai `hidden`: qualcuno riscriveva la
+    // chiave a metà, cancellando i pulsanti spenti. Questa trappola dice CHI: registra
+    // ogni scrittura che arrivi senza `hidden` e stampa da dove viene.
+    // `__htBarra()` mostra lo stato in memoria e quello salvato.
+    useEffect(() => {
+        try {
+            const w = window as any;
+            if (!w.__htBarraTrappola) {
+                const originale = localStorage.setItem.bind(localStorage);
+                localStorage.setItem = ((chiave: string, valore: string) => {
+                    if (chiave === TOOLBAR_PREFS_KEY && !String(valore).includes('"hidden"')) {
+                        // eslint-disable-next-line no-console
+                        console.warn('[barra] scrittura SENZA i pulsanti spenti:', valore.slice(0, 120));
+                        // eslint-disable-next-line no-console
+                        console.trace('[barra] da qui');
+                    }
+                    return originale(chiave, valore);
+                }) as any;
+                w.__htBarraTrappola = true;
+            }
+            w.__htBarra = () => {
+                const salvato = localStorage.getItem(TOOLBAR_PREFS_KEY);
+                const r = {
+                    in_memoria_ordine: toolbarGroupOrderRef.current?.join(' ') ?? '(n.d.)',
+                    in_memoria_spenti: hiddenToolbarGroupsRef.current?.join(' ') || '(nessuno)',
+                    salvato_in_preferenze: salvato ? salvato.slice(0, 200) : '(niente)',
+                };
+                // eslint-disable-next-line no-console
+                console.table(r);
+                return r;
+            };
+        } catch { /* la diagnostica non deve disturbare */ }
+    }, []);
 
     useEffect(() => {
         try {
