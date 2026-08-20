@@ -6169,7 +6169,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
                 if (p.titleFontSize) setTitleFontSize(p.titleFontSize);
                 if (p.titleFontFamily) setTitleFontFamily(p.titleFontFamily);
-                if (p.toolbarGroupOrder) setToolbarGroupOrder(fondiOrdineToolbar(p.toolbarGroupOrder));
+                // La barra NON si tocca: è di chi lavora, non del brano, e dopo un
+                // ricaricamento la disposizione giusta è già stata letta dalle preferenze.
                 if (typeof p.analysisLocked === 'boolean') setAnalysisLocked(p.analysisLocked);
                 if (typeof p.teacherPasswordHash === 'string') setTeacherPasswordHash(p.teacherPasswordHash);
                 if (p.analysisLockOptions && typeof p.analysisLockOptions === 'object') setAnalysisLockOptions(p.analysisLockOptions);

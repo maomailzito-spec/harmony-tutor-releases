@@ -615,11 +615,18 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			}
 
 			// Restore project-level settings when present.
-			if (Array.isArray(loadedProject.toolbarGroupOrder)) {
-				args.setToolbarGroupOrder(args.fondiOrdineToolbar
-					? args.fondiOrdineToolbar(loadedProject.toolbarGroupOrder)
-					: Array.from(new Set([...loadedProject.toolbarGroupOrder, ...args.defaultToolbarGroupOrder])));
-			}
+			// LA BARRA DEI COMANDI È DI CHI LAVORA, NON DEL BRANO.
+			//
+			// Il file porta con sé la disposizione della barra di quando fu salvato, e
+			// aprendolo quella sostituiva la tua — poi l'effetto che salva le preferenze
+			// la riscriveva, e la personalizzazione era persa per sempre: bisognava
+			// rifarla dopo ogni apertura. La disposizione dei comandi è come la
+			// posizione delle finestre: appartiene a chi usa il programma, non al pezzo
+			// che sta aprendo.
+			//
+			// Il campo resta scritto nel file (altre versioni potrebbero leggerlo) ma
+			// non viene più applicato. La barra la governano le preferenze, in un posto
+			// solo (vedi `fondiOrdineToolbar`).
 			// A capo di sistema decisi a mano: sono impaginazione anche loro.
 			if (Array.isArray((loadedProject as any).systemBreaks)) {
 				const aCapo = ((loadedProject as any).systemBreaks as any[])
