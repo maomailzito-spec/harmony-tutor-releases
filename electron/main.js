@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, screen, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -2280,6 +2280,31 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+/**
+ * SCRIVI LE PREFERENZE SU DISCO PRIMA DI MORIRE.
+ *
+ * Le impostazioni dell'applicazione — disposizione della barra, opzioni dell'analisi,
+ * lingua — stanno in `localStorage`, e Chromium lo tiene in MEMORIA: sul disco ci arriva
+ * solo quando l'applicazione si chiude per bene, o quando lo si chiede.
+ *
+ * In sviluppo l'avvio manda SIGTERM a tutto il gruppo di processi per fermare Electron e
+ * il server insieme: il processo muore prima di aver scritto, e alla riapertura tutte le
+ * impostazioni della sessione sembrano non essere mai esistite. È il difetto per cui la
+ * barra personalizzata «si azzerava» a ogni riavvio — e non era la barra: era tutto.
+ *
+ * Qui si forza la scrittura all'uscita, e ogni minuto: così anche una chiusura brutale
+ * (o un blocco) costa al massimo l'ultimo minuto di impostazioni, non l'intera sessione.
+ */
+const scriviPreferenzeSuDisco = () => {
+  try { session.defaultSession.flushStorageData(); } catch { /* niente sessione, niente da scrivere */ }
+};
+app.on('before-quit', scriviPreferenzeSuDisco);
+app.on('window-all-closed', scriviPreferenzeSuDisco);
+for (const segnale of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+  process.on(segnale, () => { scriviPreferenzeSuDisco(); app.quit(); });
+}
+app.whenReady().then(() => { setInterval(scriviPreferenzeSuDisco, 60_000); });
 
 app.on('window-all-closed', function () {
   // While the activation dialog runs BEFORE createWindow() (trial-expired path
