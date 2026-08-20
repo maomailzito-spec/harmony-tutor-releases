@@ -1,3 +1,4 @@
+import type { SectionChoice } from './utils/instrumentSections';
 
 export type ScaleType = string;
 
@@ -399,6 +400,13 @@ export type AccompanimentTrack = {
    *  distinti. Assente = traccia analizzata da sola. Assegnato dall'import "righi separati"
    *  e modificabile col toggle nel menu della chiave. */
   groupId?: string;
+  /** Sezione d'orchestra (legni, ottoni, archi…): righi CONSECUTIVI della stessa sezione
+   *  vengono chiusi a sinistra da una parentesi quadra e le loro stanghette di misura si
+   *  saldano, come in partitura. È un asse DIVERSO da `groupId`: quello dice chi concorre
+   *  all'analisi armonica, questo dice chi appartiene alla stessa famiglia di strumenti.
+   *  Assente = dedotta dallo strumento (vedi `sezioneDaStrumento`); 'none' = fuori da ogni
+   *  famiglia, nessuna parentesi. */
+  section?: SectionChoice;
   /** Colore personalizzato della traccia (hex, es. "#38bdf8"). Mostrato come banda
    *  verticale a fianco del rigo e usato per colorare le note in modalità colore. */
   color?: string;

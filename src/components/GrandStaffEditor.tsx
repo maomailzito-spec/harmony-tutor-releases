@@ -12,6 +12,7 @@ declare global {
 }
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
+import { SECTION_ORDER, SECTION_I18N_KEY, SECTION_LABEL_IT, sezioneDaStrumento, sezioneEffettiva, type SectionId, type SectionChoice } from '../utils/instrumentSections';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
@@ -1540,6 +1541,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             refreshAudibilityGains(); refreshPans(); refreshReverbSends(); refreshTrackComps(); refreshTrackEqs();
             return next;
         }, { undoable: false });
+    }, [refreshAudibilityGains, refreshPans, refreshReverbSends, refreshTrackComps, refreshTrackEqs]);
+
+    // ORDINE DI PARTITURA. Le parentesi di famiglia possono chiudere solo righi CONSECUTIVI:
+    // legni, ottone, legni di nuovo non fa due gruppi, fa tre righi slegati. Chi orchestra
+    // però aggiunge le tracce nell'ordine in cui gli vengono in mente, non in quello del
+    // trattato. Questo comando le rimette in fila — legni, ottoni, percussioni, tastiere,
+    // corde pizzicate, voci, archi — lasciando in fondo, nell'ordine in cui stanno, i righi
+    // senza famiglia. Dentro ogni famiglia l'ordine scelto dall'utente non si tocca: lì
+    // dentro decide lui (flauto 1 sopra flauto 2, non il contrario).
+    const handleSortTracksBySection = useCallback(() => {
+        setAccompanimentTracks(prev => {
+            const posto = (t: AccompanimentTrack) => {
+                const sez = sezioneEffettiva(t as any);
+                const i = sez ? SECTION_ORDER.indexOf(sez) : -1;
+                return i < 0 ? SECTION_ORDER.length : i;
+            };
+            const next = (prev || [])
+                .map((t, i) => ({ t, i }))
+                .sort((a, b) => (posto(a.t) - posto(b.t)) || (a.i - b.i))
+                .map(x => x.t);
+            if (next.every((t, i) => t === prev[i])) return prev;
+            latestAccompanimentTracks.current = next;
+            refreshAudibilityGains(); refreshPans(); refreshReverbSends(); refreshTrackComps(); refreshTrackEqs();
+            return next;
+        });
     }, [refreshAudibilityGains, refreshPans, refreshReverbSends, refreshTrackComps, refreshTrackEqs]);
 
     const handleAddEmptyTrack = useCallback(() => {
@@ -3111,6 +3137,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
     // Forza della calamita sugli attacchi (vedi `agganciaAdAttaccoVicino`). Sta anche in un
     // ref perché la calamita gira nel gesto del mouse, dove non si rilegge lo stato.
+    // Parentesi di partitura (famiglie di strumenti + linea unica di sistema).
+    const [orchestralGrouping] = usePreference<boolean>('editor.orchestralGrouping');
     const [snapMagnetStrength] = usePreference<number>('editor.snapMagnetStrength');
     const snapMagnetStrengthRef = useRef<number>(0.5);
     useEffect(() => {
@@ -17517,6 +17545,52 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 </>
                             );
                         })()}
+                        {/* SEZIONE D'ORCHESTRA. La famiglia si deduce dallo strumento, quindi
+                            di norma qui non si tocca niente: serve quando la deduzione non ha
+                            senso musicale (un pianoforte che fa da celesta dentro i legni) o
+                            quando un rigo va tenuto fuori da ogni parentesi. */}
+                        {accompanimentTracks.length >= 2 && (() => {
+                            const track = accompanimentTracks.find(t => t.id === clefMenu.trackId);
+                            if (!track) return null;
+                            const auto = sezioneDaStrumento(track.instrumentId, track.isDrum);
+                            const nomeSezione = (id: SectionId) => tUI(SECTION_I18N_KEY[id], { defaultValue: SECTION_LABEL_IT[id] });
+                            return (
+                                <>
+                                    <div className="my-1 border-t border-slate-700" />
+                                    <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 select-none">
+                                        {tUI('acc_section_label', { defaultValue: 'Sezione d’orchestra' })}
+                                    </div>
+                                    <div className="px-3 pb-2 pt-0.5">
+                                        <select
+                                            value={track.section ?? 'auto'}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                handleUpdateTrack(clefMenu.trackId, {
+                                                    section: v === 'auto' ? undefined : (v as SectionChoice),
+                                                } as Partial<AccompanimentTrack>);
+                                            }}
+                                            className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-[12px] text-gray-100"
+                                        >
+                                            <option value="auto">
+                                                {auto
+                                                    ? tUI('acc_section_auto_named', { name: nomeSezione(auto), defaultValue: `Automatica (${nomeSezione(auto)})` })
+                                                    : tUI('acc_section_auto', { defaultValue: 'Automatica' })}
+                                            </option>
+                                            {SECTION_ORDER.map(id => (
+                                                <option key={id} value={id}>{nomeSezione(id)}</option>
+                                            ))}
+                                            <option value="none">{tUI('acc_section_none', { defaultValue: 'Nessuna (fuori dalle parentesi)' })}</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        onClick={() => { handleSortTracksBySection(); setClefMenu(null); }}
+                                        className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"
+                                    >
+                                        {tUI('acc_section_sort', { defaultValue: 'Ordina i righi per sezione' })}
+                                    </button>
+                                </>
+                            );
+                        })()}
                     </div>
                 </>
             )}
@@ -18096,6 +18170,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 showAccompanimentStaves={hasVisibleAccompaniment}
                                                                 accompanimentStaffMode={effectiveAccStaffMode}
                                                                 accompanimentTracks={visibleAccompanimentTracks}
+                                                                orchestralGrouping={orchestralGrouping !== false}
+                                                                satbHidden={!satbVisible}
                                                                 onDrumStavesLayout={handleDrumStavesLayout}
                                                                 drumPalettes={{ orchestral: DRUM_PALETTE_ORCH, rock: DRUM_PALETTE_ROCK }}
                                                                 satbName={satbVisible ? satbName : ''}

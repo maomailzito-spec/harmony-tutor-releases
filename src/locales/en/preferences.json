@@ -94,5 +94,7 @@
   "staff_line_weight_hint": "The staff lines start from a light grey: here they can be darkened, and thickened a little. It helps on very dense screens and in print. The gain comes from contrast rather than thickness: a line that is too thick crowds the noteheads.",
   "staff_line_thin": "Thin",
   "staff_line_normal": "Normal",
-  "staff_line_bold": "Bold"
+  "staff_line_bold": "Bold",
+  "pref_editor_orchestral_grouping": "Group staves like a score",
+  "pref_editor_orchestral_grouping_desc": "Draws a square bracket around consecutive staves of the same instrument family (woodwinds, brass, strings…), joins their barlines, and ties choir and tracks together with a single line on the left. The family is inferred from the track’s instrument and can be overridden by clicking the staff’s clef."
 }

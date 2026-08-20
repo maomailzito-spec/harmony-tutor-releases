@@ -4,6 +4,7 @@ import { ARTICULATION_VF_CODE } from '../utils/articulations';
 import { keySignatureToVexflowString } from '../utils/keySignatureChanges';
 import type { AccidentalType, Barline, ClefType, KeySignature, StaffNote, TimeSignature } from '../types';
 import { TICKS_PER_QUARTER } from '../constants';
+import { sezioneEffettiva, type SectionId } from '../utils/instrumentSections';
 
 interface VexflowGrandStaffProps {
   notes: StaffNote[];
@@ -77,7 +78,13 @@ interface VexflowGrandStaffProps {
   /** Tracce di accompagnamento VISIBILI, in ordine. Ogni traccia disegna il proprio
    *  blocco di pentagramma (grandstaff oppure rigo singolo con la sua chiave); le note
    *  vengono instradate alla traccia tramite `_trackIdx` (indice in QUESTA lista). */
-  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean; octaveTranspose?: number; groupId?: string }>;
+  accompanimentTracks?: Array<{ name: string; visible?: boolean; staffMode?: 'grandstaff' | 'treble_only'; clef?: ClefType; color?: string; voiced?: boolean; octaveTranspose?: number; groupId?: string; instrumentId?: number; isDrum?: boolean; section?: string }>;
+  /** Parentesi di partitura: raggruppa i righi consecutivi della stessa famiglia di
+   *  strumenti e unisce coro e tracce in un sistema solo (preferenza `editor.orchestralGrouping`). */
+  orchestralGrouping?: boolean;
+  /** Il coro è nascosto (righi SATB ritagliati fuori dalla vista): la linea di sistema
+   *  deve fermarsi alle sole tracce, altrimenti sporge in alto nel vuoto. */
+  satbHidden?: boolean;
   /** Geometria REALE dei righi batteria (per agganciare il click del mouse alle righe
    *  effettivamente renderizzate → coincidenza click/nota). `trackIdx` = indice nella lista
    *  tracce VISIBILI (== visIdx lato click). Emesso ad ogni layout. */
@@ -643,6 +650,8 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   showAccompanimentStaves = false,
   accompanimentStaffMode = 'grandstaff',
   accompanimentTracks,
+  orchestralGrouping = true,
+  satbHidden = false,
   satbName,
   onDrumStavesLayout,
   drumPalettes,
@@ -838,7 +847,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // nelle preferenze non faceva ridisegnare niente e la scelta sembrava ignorata
         // finché non si toccava la partitura per un altro motivo.
         staffLineWeight,
-        showAccompanimentStaves, accompanimentStaffMode, satbName,
+        showAccompanimentStaves, accompanimentStaffMode, satbName, orchestralGrouping, satbHidden,
         // Le legature stanno in un elenco a parte: senza metterle nella firma, una
         // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo
         // al primo tocco successivo alla partitura.
@@ -933,6 +942,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       /** Gruppo d'analisi: righi consecutivi con lo stesso groupId vengono uniti da un
        *  bracket + barline (le parti di un brano importato multi-traccia). */
       groupId?: string;
+      /** Famiglia d'orchestra (dedotta dallo strumento, o forzata sulla traccia): righi
+       *  consecutivi della stessa famiglia vengono chiusi da una parentesi quadra. */
+      section?: SectionId;
     };
     let accVisibleTracks = showAccompanimentStaves ? (accompanimentTracks ?? []) : [];
     // Robustness: if asked to show acc staves but no track metadata arrived, draw one
@@ -961,7 +973,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         (mode === 'treble_only' && !isDrum)
           ? (octT === -1 ? '8vb' : octT === 1 ? '8va' : undefined)
           : undefined;
-      return { trackIdx: i, trackId: (t as any).id, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation, groupId: (t as any).groupId as string | undefined };
+      return { trackIdx: i, trackId: (t as any).id, mode, clef, name: t.name, treble, bass, trebleY, color: t.color, voiced: t.voiced, isDrum, drumKit, clefOctaveAnnotation, groupId: (t as any).groupId as string | undefined, section: orchestralGrouping ? sezioneEffettiva(t as any) : undefined };
     });
 
     // We draw the end-of-system barline ourselves as a single connecting line,
@@ -1124,7 +1136,9 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
           ? block.trebleY + ACCOMPANIMENT_GS_SPAN + STAVE_LINES_HEIGHT
           : block.trebleY + STAVE_LINES_HEIGHT) + ACC_BAND_Y_OFFSET;
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', String(STAFF_MARGIN - 9));
+        // Sta più a sinistra di quanto stesse: da STAFF_MARGIN-9 la banda finiva sotto la
+        // parentesi quadra di famiglia (che occupa gli 8 px attaccati al rigo).
+        rect.setAttribute('x', String(STAFF_MARGIN - 14));
         rect.setAttribute('y', String(top));
         rect.setAttribute('width', '4');
         rect.setAttribute('height', String(Math.max(0, bottom - top)));
@@ -1160,31 +1174,112 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       }
     }
 
-    // ── Bracket + barline iniziale di GRUPPO (analisi d'insieme) ──
-    // Righi ACC consecutivi con lo stesso groupId (le parti di un brano importato
-    // multi-traccia) vengono uniti da un BRACKET a sinistra + linea iniziale, come un
-    // sistema unico — standard di notazione e colpo d'occhio d'insieme. Le barline di
-    // misura del gruppo sono unite più sotto (ranges).
+    // ── PARENTESI A SINISTRA: due divisioni diverse, due segni diversi ──
+    //
+    // Sulla stessa colonna a sinistra dei righi convivono due informazioni che NON sono la
+    // stessa cosa e che possono perfino tagliarsi a vicenda:
+    //
+    //  • la FAMIGLIA D'ORCHESTRA (legni, ottoni, archi…), dedotta dallo strumento della
+    //    traccia. È notazione vera e propria: prende la parentesi quadra di sempre, nera,
+    //    attaccata al rigo, quella che qualunque partitura stampata ha.
+    //  • il GRUPPO D'ANALISI (`groupId`), cioè quali righi l'analisi armonica legge insieme.
+    //    Non è notazione, è un'annotazione NOSTRA: prende un segno più magro, squadrato e
+    //    COLORATO, e sta più all'esterno per non farsi confondere con la parentesi vera.
+    //
+    // Prima esisteva solo il secondo, disegnato con la parentesi quadra: chi voleva le
+    // parentesi d'orchestra era costretto a dichiarare i righi «in analisi d'insieme» per
+    // ottenerle, cioè a cambiare l'ANALISI per aggiustare la GRAFIA. Ora sono indipendenti.
+    const X_PARENTESI_ANALISI = STAFF_MARGIN - 22;
+    const COLORE_PARENTESI_ANALISI = '#2563eb';
     {
-      let gi = 0;
-      while (gi < accBlocks.length) {
-        const gid = accBlocks[gi].groupId;
-        if (!gid) { gi++; continue; }
-        let gj = gi;
-        while (gj + 1 < accBlocks.length && accBlocks[gj + 1].groupId === gid) gj++;
-        if (gj > gi) {
-          const topStave = accBlocks[gi].treble;
-          const bottomStave = accBlocks[gj].bass ?? accBlocks[gj].treble;
-          try {
-            const bracket = new StaveConnector(topStave, bottomStave);
-            bracket.setType(StaveConnector.type.BRACKET);
-            bracket.setContext(context).draw();
-            const startLine = new StaveConnector(topStave, bottomStave);
-            startLine.setType(StaveConnector.type.SINGLE_LEFT);
-            startLine.setContext(context).draw();
-          } catch { /* VexFlow: non far crashare il rendering */ }
+      const ctxAny = context as any;
+
+      /** Parentesi squadrata disegnata a mano: verticale + due risvolti verso il rigo. */
+      const parentesiQuadra = (x: number, yTop: number, yBot: number, colore: string) => {
+        const sporgenza = 6;
+        ctxAny.save?.();
+        ctxAny.setStrokeStyle?.(colore);
+        ctxAny.setLineWidth?.(2);
+        ctxAny.beginPath?.();
+        ctxAny.moveTo?.(x + sporgenza, yTop);
+        ctxAny.lineTo?.(x, yTop);
+        ctxAny.lineTo?.(x, yBot);
+        ctxAny.lineTo?.(x + sporgenza, yBot);
+        ctxAny.stroke?.();
+        ctxAny.restore?.();
+      };
+
+      /** Corse di righi CONSECUTIVI che condividono la stessa chiave (famiglia o gruppo). */
+      const corse = (chiave: (b: typeof accBlocks[number]) => string | undefined) => {
+        const out: Array<{ da: number; a: number }> = [];
+        let i = 0;
+        while (i < accBlocks.length) {
+          const k = chiave(accBlocks[i]);
+          if (!k) { i++; continue; }
+          let j = i;
+          while (j + 1 < accBlocks.length && chiave(accBlocks[j + 1]) === k) j++;
+          if (j > i) out.push({ da: i, a: j });
+          i = j + 1;
         }
-        gi = gj + 1;
+        return out;
+      };
+
+      // 1) Famiglie d'orchestra → parentesi quadra VexFlow + linea iniziale, come un sistema.
+      for (const { da, a } of corse(b => b.section)) {
+        const topStave = accBlocks[da].treble;
+        const bottomStave = accBlocks[a].bass ?? accBlocks[a].treble;
+        try {
+          const bracket = new StaveConnector(topStave, bottomStave);
+          bracket.setType(StaveConnector.type.BRACKET);
+          bracket.setContext(context).draw();
+          const startLine = new StaveConnector(topStave, bottomStave);
+          startLine.setType(StaveConnector.type.SINGLE_LEFT);
+          startLine.setContext(context).draw();
+        } catch { /* VexFlow: non far crashare il rendering */ }
+      }
+
+      // 2) Gruppo d'analisi → segno colorato più esterno.
+      for (const { da, a } of corse(b => b.groupId)) {
+        const topStave = accBlocks[da].treble;
+        const bottomStave = accBlocks[a].bass ?? accBlocks[a].treble;
+        try {
+          parentesiQuadra(
+            X_PARENTESI_ANALISI,
+            topStave.getYForLine(0) - 4,
+            bottomStave.getYForLine(4) + 4,
+            COLORE_PARENTESI_ANALISI,
+          );
+          // La linea iniziale che univa il gruppo c'era già prima ed è indipendente dalle
+          // parentesi di partitura: senza, spegnendo la preferenza i righi «in analisi
+          // d'insieme» tornerebbero staccati anche a sinistra.
+          const startLine = new StaveConnector(topStave, bottomStave);
+          startLine.setType(StaveConnector.type.SINGLE_LEFT);
+          startLine.setContext(context).draw();
+        } catch { /* ignora */ }
+      }
+
+      // 3) UNITÀ DELLA PAGINA. In partitura una sola linea verticale a sinistra tiene insieme
+      //    TUTTI i righi del sistema, coro compreso: è quella a dire «questa è una pagina di
+      //    musica», non una pila di pentagrammi che condividono il foglio per caso. Senza,
+      //    ogni rigo restava un'isola chiusa in sé.
+      if (orchestralGrouping && accBlocks.length > 0) {
+        const righiDelCoro = satbHidden ? [] : [treble, bass, satbSoprano, satbAlto, satbTenor, satbBass];
+        const tuttiIRighi = ([...righiDelCoro,
+          ...accBlocks.flatMap(b => [b.treble, b.bass])].filter(Boolean) as Stave[])
+          .slice()
+          .sort((x, y) => x.getYForLine(0) - y.getYForLine(0));
+        if (tuttiIRighi.length >= 2) {
+          try {
+            ctxAny.save?.();
+            ctxAny.setStrokeStyle?.('#000000');
+            ctxAny.setLineWidth?.(1);
+            ctxAny.beginPath?.();
+            ctxAny.moveTo?.(STAFF_MARGIN, tuttiIRighi[0].getYForLine(0));
+            ctxAny.lineTo?.(STAFF_MARGIN, tuttiIRighi[tuttiIRighi.length - 1].getYForLine(4));
+            ctxAny.stroke?.();
+            ctxAny.restore?.();
+          } catch { /* ignora */ }
+        }
       }
     }
 
@@ -1297,12 +1392,18 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // One bridged barline range per accompaniment block (single staff → top===bottom),
       // MA i blocchi consecutivi dello stesso gruppo condividono un'unica range: così le
       // barline di misura collegano verticalmente tutte le parti del brano.
+      // La saldatura vale per ENTRAMBE le divisioni: le parti di un brano importato
+      // (`groupId`) e i righi della stessa famiglia d'orchestra (`section`). Una parentesi
+      // che raccoglie tre legni ma li lascia con le stanghette spezzate non fa una sezione:
+      // in partitura il gruppo si legge proprio perché la stanghetta lo attraversa intero.
+      const chiaveSaldatura = (b: typeof accBlocks[number]) =>
+        b.groupId ?? (b.section ? `sez:${b.section}` : undefined);
       {
         let bi = 0;
         while (bi < accBlocks.length) {
-          const gid = accBlocks[bi].groupId;
+          const k = chiaveSaldatura(accBlocks[bi]);
           let bj = bi;
-          if (gid) { while (bj + 1 < accBlocks.length && accBlocks[bj + 1].groupId === gid) bj++; }
+          if (k) { while (bj + 1 < accBlocks.length && chiaveSaldatura(accBlocks[bj + 1]) === k) bj++; }
           ranges.push({ top: accBlocks[bi].treble, bottom: accBlocks[bj].bass ?? accBlocks[bj].treble });
           bi = bj + 1;
         }

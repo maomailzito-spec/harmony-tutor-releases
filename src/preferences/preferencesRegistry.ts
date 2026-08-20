@@ -11,6 +11,7 @@ import {
   SHOW_QUICK_INSERT_BAR_KEY,
   SHOW_SYMBOL_ANALYSIS_KEY,
   SHOW_FIGURED_BASS_KEY,
+  ORCHESTRAL_GROUPING_KEY,
   SHOW_VOICE_COLORS_KEY,
   TOOLBAR_HIDDEN_KEY,
   HARMONY_ANALYSIS_PROFILE_CUSTOMIZED_KEY,
@@ -43,6 +44,7 @@ export type PreferenceId =
   | 'editor.toolbarPrefs'
   | 'editor.showMeasureNumbers'
   | 'editor.showVoiceColors'
+  | 'editor.orchestralGrouping'
   | 'editor.showQuickInsertBar'
   | 'editor.selectOnlyCurrentVoice'
   | 'editor.autoSaveInterval'
@@ -229,6 +231,26 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     label: 'Numeri misure',
     i18nKey: 'pref_editor_show_measure_numbers',
     storageKey: SHOW_MEASURE_NUMBERS_KEY,
+    defaultValue: true,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  // PARENTESI DI PARTITURA. Righi consecutivi della stessa famiglia (legni, ottoni, archi…)
+  // vengono chiusi da una parentesi quadra e le loro stanghette si saldano, e un'unica linea
+  // a sinistra tiene insieme coro e tracce: è ciò che fa leggere la pagina come UNA partitura
+  // invece che come una pila di pentagrammi slegati. La famiglia si deduce dallo strumento
+  // della traccia, quindi il segno compare da solo; chi scrive parti staccate o non vuole il
+  // segno lo spegne qui.
+  'editor.orchestralGrouping': {
+    id: 'editor.orchestralGrouping',
+    section: 'Editor',
+    label: 'Raggruppa i righi come in partitura',
+    i18nKey: 'pref_editor_orchestral_grouping',
+    description: 'Parentesi quadra sulle tracce consecutive della stessa famiglia di strumenti, stanghette saldate e linea unica a sinistra.',
+    descriptionI18nKey: 'pref_editor_orchestral_grouping_desc',
+    storageKey: ORCHESTRAL_GROUPING_KEY,
     defaultValue: true,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, true),

@@ -94,5 +94,7 @@
   "staff_line_weight_hint": "Le righe del pentagramma partono da un grigio chiaro: qui si scuriscono, e si ingrossano appena. Serve sugli schermi molto densi e nella stampa. Il guadagno viene dal contrasto più che dallo spessore: una riga troppo grossa schiaccia le teste delle note.",
   "staff_line_thin": "Sottile",
   "staff_line_normal": "Normale",
-  "staff_line_bold": "Marcato"
+  "staff_line_bold": "Marcato",
+  "pref_editor_orchestral_grouping": "Raggruppa i righi come in partitura",
+  "pref_editor_orchestral_grouping_desc": "Chiude con una parentesi quadra i righi consecutivi della stessa famiglia di strumenti (legni, ottoni, archi…), ne salda le stanghette di misura e unisce coro e tracce con un’unica linea a sinistra. La famiglia si deduce dallo strumento della traccia e si può forzare cliccando la chiave del rigo."
 }

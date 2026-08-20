@@ -435,5 +435,17 @@
   "pal_time_place": "Cambio di metro {{s}}: trascinalo sulla misura da cui vale (clic: al cursore)",
   "pal_tempo_place": "Segno di metronomo: trascinalo sulla misura da cui vale (clic: al cursore). A differenza di un rallentando dice il NUMERO, così chi legge sa a che velocità andare.",
   "mix_meter_mono": "Mostra un misuratore solo (somma)",
-  "mix_meter_stereo": "Mostra i livelli separati di destra e sinistra"
+  "mix_meter_stereo": "Mostra i livelli separati di destra e sinistra",
+  "sect_woodwinds": "Legni",
+  "sect_brass": "Ottoni",
+  "sect_percussion": "Percussioni",
+  "sect_strings": "Archi",
+  "sect_keyboards": "Tastiere",
+  "sect_plucked": "Corde pizzicate",
+  "sect_voices": "Voci",
+  "acc_section_label": "Sezione d’orchestra",
+  "acc_section_auto": "Automatica",
+  "acc_section_auto_named": "Automatica ({{name}})",
+  "acc_section_none": "Nessuna (fuori dalle parentesi)",
+  "acc_section_sort": "Ordina i righi per sezione"
 }

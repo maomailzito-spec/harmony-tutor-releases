@@ -460,5 +460,17 @@
   "pal_time_place": "Time-signature change {{s}}: drag it onto the measure it starts from (click: at the caret)",
   "pal_tempo_place": "Metronome mark: drag it onto the measure it starts from (click: at the caret). Unlike a rallentando it gives the NUMBER, so the reader knows the speed.",
   "mix_meter_mono": "Show a single meter (sum)",
-  "mix_meter_stereo": "Show separate left and right levels"
+  "mix_meter_stereo": "Show separate left and right levels",
+  "sect_woodwinds": "Woodwinds",
+  "sect_brass": "Brass",
+  "sect_percussion": "Percussion",
+  "sect_strings": "Strings",
+  "sect_keyboards": "Keyboards",
+  "sect_plucked": "Plucked strings",
+  "sect_voices": "Voices",
+  "acc_section_label": "Orchestral section",
+  "acc_section_auto": "Automatic",
+  "acc_section_auto_named": "Automatic ({{name}})",
+  "acc_section_none": "None (outside the brackets)",
+  "acc_section_sort": "Sort staves by section"
 }
