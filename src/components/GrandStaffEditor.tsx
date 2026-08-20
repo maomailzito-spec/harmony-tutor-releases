@@ -13117,7 +13117,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             playbackCursorAbsBeatRef.current = safeAbs;
             const pos = getPlayheadPosForAbsBeat(safeAbs);
             if (pos) {
-                setPlayheadPosition(pos);
+                // LO SCOSTAMENTO FINO ALLA TESTA vale anche qui.
+                //
+                // `getPlayheadPosForAbsBeat` dà la x della GRIGLIA; la testa della nota si
+                // disegna `PX_GRIGLIA_CENTRO_TESTA` più a destra. Chi aggiorna la linea di
+                // lettura dopo aver scritto quel pezzo lo sommava; le FRECCE no, e la linea
+                // cadeva diciotto pixel a sinistra delle note — scrivendo andava a posto,
+                // spostandosi con le frecce no.
+                setPlayheadPosition({ ...pos, x: pos.x + PX_GRIGLIA_CENTRO_TESTA });
                 const measureIndex = Math.floor(safeAbs / beatsPerMeasure);
                 const beat = Math.round((((safeAbs - (measureIndex * beatsPerMeasure)) + 1)) * 1e6) / 1e6;
                 setPasteCaret({ x: pos.x, systemIndex: pos.systemIndex, measureIndex, beat });
@@ -15447,7 +15454,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                 playbackCursorAbsBeatRef.current = 0;
                 const pos = getPlayheadPosForAbsBeat(0);
-                if (pos) setPlayheadPosition(pos);
+                if (pos) setPlayheadPosition({ ...pos, x: pos.x + PX_GRIGLIA_CENTRO_TESTA });
                 return;
             }
 
