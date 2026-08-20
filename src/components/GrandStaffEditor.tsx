@@ -952,6 +952,56 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const busAccCompNodeRef = useRef<DynamicsCompressorNode | null>(null);
     const busAccMakeupRef = useRef<GainNode | null>(null);
     const [voicePans, setVoicePans] = useState<Record<number, number>>({});
+    /**
+     * LE PRESE PER VEDERE IL SUONO — spettro prima e dopo l'equalizzatore.
+     *
+     * La catena di ogni canale è sempre la stessa: sorgente → EQ → compressore → uscita.
+     * Basta quindi attaccare due `AnalyserNode`: uno alla SORGENTE (cosa entra) e uno
+     * all'ultima banda dell'EQ (cosa esce). Si creano solo quando una finestra d'effetto
+     * si apre, e restano attaccati: costano una FFT per fotogramma mentre la si guarda.
+     *
+     * `fftSize` 2048 dà 1024 punti fino a metà frequenza di campionamento — abbastanza
+     * per leggere i bassi, dove si lavora, senza far tremolare il disegno.
+     */
+    const preseSpettroRef = useRef<Map<string, { pre: AnalyserNode; post: AnalyserNode }>>(new Map());
+    const preseSpettro = useCallback((chiave: string, sorgente?: AudioNode | null, uscitaEq?: AudioNode | null) => {
+        const ctx = audioService.audioContext;
+        if (!ctx || !sorgente || !uscitaEq) return null;
+        let p = preseSpettroRef.current.get(chiave);
+        if (!p) {
+            const pre = ctx.createAnalyser(); pre.fftSize = 2048; pre.smoothingTimeConstant = 0.75;
+            const post = ctx.createAnalyser(); post.fftSize = 2048; post.smoothingTimeConstant = 0.75;
+            try { sorgente.connect(pre); uscitaEq.connect(post); } catch { return null; }
+            p = { pre, post };
+            preseSpettroRef.current.set(chiave, p);
+        }
+        return p;
+    }, [audioService]);
+
+    /** Le prese dell'effetto aperto: dipendono da quale canale si sta regolando. */
+    const preseDelBersaglio = useCallback((b: { kind: string; trackId?: string; voice?: number }) => {
+        const tracce = latestAccompanimentTracks.current || [];
+        switch (b.kind) {
+            case 'voice': {
+                const v = Number(b.voice);
+                return preseSpettro(`voce-${v}`, voiceGainsRef.current.get(v), voiceEqRef.current.get(v)?.high);
+            }
+            case 'track': {
+                const idx = tracce.findIndex(t => t.id === b.trackId);
+                if (idx < 0) return null;
+                return preseSpettro(`traccia-${idx}`, accTrackGainsRef.current.get(idx), accEqRef.current.get(idx)?.high);
+            }
+            case 'satbMaster':
+                return preseSpettro('bus-satb', satbMasterGainRef.current, busSatbEqNodesRef.current?.high);
+            case 'accMaster':
+                return preseSpettro('bus-acc', accMasterGainRef.current, busAccEqNodesRef.current?.high);
+            case 'master':
+                return preseSpettro('master', mixerMasterGainRef.current, masterEqNodesRef.current?.high);
+            default: return null;
+        }
+    }, [preseSpettro]);
+
+
     const voicePansRef = useRef<Record<number, number>>({});
     const meterScratchRef = useRef<Uint8Array>(new Uint8Array(256));
     // Instantaneous output peak (0..1) of an analyser, from its time-domain data.
@@ -17268,6 +17318,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const e = (track as any).eq || {};
                 return (
                     <EqWindow
+                        analisi={preseDelBersaglio({ kind: 'track', trackId: eqWindow.trackId })}
                         target={track.name || 'Traccia'}
                         enabled={!!e.enabled}
                         low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
@@ -17285,6 +17336,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const vName = ({ 1: 'Soprano', 2: 'Contralto', 3: 'Tenore', 4: 'Basso' } as Record<number, string>)[v] || `Voce ${v}`;
                 return (
                     <EqWindow
+                        analisi={preseDelBersaglio({ kind: 'voice', voice: v })}
                         target={vName}
                         enabled={!!e.enabled}
                         low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
@@ -17301,6 +17353,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const upd = (patch: any) => setMasterEq(prev => mergeEq(prev, patch));
                 return (
                     <EqWindow
+                        analisi={preseDelBersaglio({ kind: 'master' })}
                         target="Master"
                         enabled={!!e.enabled}
                         low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
@@ -17364,6 +17417,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const upd = (patch: any) => setSatbEq(prev => mergeEq(prev, patch));
                 return (
                     <EqWindow
+                        analisi={preseDelBersaglio({ kind: 'satbMaster' })}
                         target="SATB (gruppo)"
                         enabled={!!e.enabled}
                         low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}
@@ -17380,6 +17434,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const upd = (patch: any) => setAccEq(prev => mergeEq(prev, patch));
                 return (
                     <EqWindow
+                        analisi={preseDelBersaglio({ kind: 'accMaster' })}
                         target="ACC (gruppo)"
                         enabled={!!e.enabled}
                         low={{ freq: e.low?.freq ?? 120, gain: e.low?.gain ?? 0 }}

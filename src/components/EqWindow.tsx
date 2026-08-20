@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import FxWindow from './fx/FxWindow';
 import Knob from './fx/Knob';
 
@@ -16,6 +16,9 @@ const FMIN = 20, FMAX = 20000, GMAX = 18;
 type Band = { freq: number; gain: number; q?: number };
 type EqProps = {
   enabled: boolean;
+  /** Le due prese del canale: cosa ENTRA nell'equalizzatore e cosa ne ESCE. Assenti =
+   *  si disegna solo la curva, come prima. */
+  analisi?: { pre: AnalyserNode; post: AnalyserNode } | null;
   low: Band; mid: Band; high: Band;
   target?: string;
   onToggle: () => void;
@@ -52,7 +55,7 @@ const bandMagDb = (type: 'low' | 'mid' | 'high', f0: number, gainDb: number, q: 
     (A + 1) - (A - 1) * cw + ap, 2 * ((A - 1) - (A + 1) * cw), (A + 1) - (A - 1) * cw - ap, w);
 };
 
-const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w: number; h: number; onChange: EqProps['onChange'] }> = ({ low, mid, high, enabled, w, h, onChange }) => {
+const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w: number; h: number; onChange: EqProps['onChange']; analisi?: { pre: AnalyserNode; post: AnalyserNode } | null }> = ({ low, mid, high, enabled, w, h, onChange, analisi }) => {
   const ref = useRef<SVGSVGElement>(null);
   const mL = 20, mB = 13, mT = 6, mR = 6;
   const x0 = mL, x1 = w - mR, y0 = mT, y1 = h - mB;
@@ -69,6 +72,49 @@ const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w:
   const fGrid = [100, 1000, 10000];
   const gGrid = [-12, 0, 12];
   const bands: Array<{ key: 'low' | 'mid' | 'high'; b: Band }> = [{ key: 'low', b: low }, { key: 'mid', b: mid }, { key: 'high', b: high }];
+
+  /**
+   * LO SPETTRO DI CIÒ CHE PASSA — due tracce: prima e dopo l'equalizzatore.
+   *
+   * La differenza fra le due È il lavoro che l'EQ sta facendo: si vede dove si taglia e
+   * dove si alza, invece di doverlo dedurre dalla curva teorica.
+   *
+   * Si legge a ogni fotogramma solo mentre la finestra è aperta, e si campionano ~140
+   * punti invece dei 1024 dell'analisi: sullo schermo non se ne distinguono di più, e
+   * costruire una stringa da mille punti sessanta volte al secondo si sente.
+   *
+   * L'analizzatore vede solo ciò che STA SUONANDO: a brano fermo il disegno è piatto.
+   */
+  const [tracce, setTracce] = useState<{ pre: string; post: string }>({ pre: '', post: '' });
+  useEffect(() => {
+    if (!analisi) { setTracce({ pre: '', post: '' }); return; }
+    const nPunti = 140;
+    const datiPre = new Uint8Array(analisi.pre.frequencyBinCount);
+    const datiPost = new Uint8Array(analisi.post.frequencyBinCount);
+    const sr = (analisi.pre.context as AudioContext).sampleRate || 44100;
+    const binDi = (f: number) => Math.round((f / (sr / 2)) * (datiPre.length - 1));
+    let vivo = true;
+    let id = 0;
+    const percorso = (dati: Uint8Array): string => {
+      const punti: string[] = [];
+      for (let i = 0; i <= nPunti; i++) {
+        const f = FMIN * Math.pow(10, (i / nPunti) * logspan);
+        const b = Math.max(0, Math.min(dati.length - 1, binDi(f)));
+        const v = dati[b] / 255;
+        punti.push(`${fToX(f).toFixed(1)},${(y1 - v * (y1 - y0)).toFixed(1)}`);
+      }
+      return `M ${punti.join(' L ')} L ${x1.toFixed(1)},${y1.toFixed(1)} L ${x0.toFixed(1)},${y1.toFixed(1)} Z`;
+    };
+    const giro = () => {
+      if (!vivo) return;
+      analisi.pre.getByteFrequencyData(datiPre);
+      analisi.post.getByteFrequencyData(datiPost);
+      setTracce({ pre: percorso(datiPre), post: percorso(datiPost) });
+      id = requestAnimationFrame(giro);
+    };
+    id = requestAnimationFrame(giro);
+    return () => { vivo = false; cancelAnimationFrame(id); };
+  }, [analisi, w, h]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drag = useRef<'low' | 'mid' | 'high' | null>(null);
   const setFromEvent = useCallback((clientX: number, clientY: number) => {
@@ -94,6 +140,9 @@ const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w:
       <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} rx="5" fill="url(#eqbg)" stroke="#1e293b" />
       {fGrid.map(f => (<g key={'f' + f}><line x1={fToX(f)} y1={y0} x2={fToX(f)} y2={y1} stroke="#16223a" /><text x={fToX(f)} y={h - 3.5} textAnchor="middle" fontSize="6.5" fill="#5b6b86">{f >= 1000 ? `${f / 1000}k` : f}</text></g>))}
       {gGrid.map(g => (<g key={'g' + g}><line x1={x0} y1={gToY(g)} x2={x1} y2={gToY(g)} stroke={g === 0 ? '#243049' : '#16223a'} /><text x={x0 - 3} y={gToY(g) + 2.2} textAnchor="end" fontSize="6.5" fill="#5b6b86">{g > 0 ? `+${g}` : g}</text></g>))}
+      {/* Lo spettro sta SOTTO la curva: è il materiale, non la decisione. */}
+      {tracce.pre && <path d={tracce.pre} fill="#38bdf8" fillOpacity="0.13" />}
+      {tracce.post && <path d={tracce.post} fill="#f59e0b" fillOpacity="0.20" stroke="#f59e0b" strokeOpacity="0.5" strokeWidth="0.7" />}
       <path d={area} fill="url(#eqfill)" />
       <polyline points={pts.join(' ')} fill="none" stroke="#dbeafe" strokeWidth="1" strokeLinejoin="round" />
       {bands.map(({ key, b }) => (
@@ -114,7 +163,7 @@ const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w:
   );
 };
 
-const EqWindow: React.FC<EqProps> = ({ enabled, low, mid, high, target, onToggle, onChange, onClose }) => {
+const EqWindow: React.FC<EqProps> = ({ enabled, low, mid, high, target, onToggle, onChange, onClose, analisi }) => {
   const dis = !enabled;
   return (
     <FxWindow
@@ -127,7 +176,7 @@ const EqWindow: React.FC<EqProps> = ({ enabled, low, mid, high, target, onToggle
         </button>
       }
     >
-      <div className="mb-3"><EqCurve low={low} mid={mid} high={high} enabled={enabled} w={448} h={210} onChange={onChange} /></div>
+      <div className="mb-3"><EqCurve low={low} mid={mid} high={high} enabled={enabled} w={448} h={210} onChange={onChange} analisi={analisi} /></div>
       <div className="flex justify-around items-start">
         <Knob label="Low" display={`${low.gain > 0 ? '+' : ''}${low.gain}dB`} value={low.gain} min={-GMAX} max={GMAX} onChange={(v) => onChange({ low: { gain: Math.round(v) } })} accent={BAND_COLORS.low} size={48} disabled={dis} defaultValue={0} wheelStep={1} />
         <Knob label="Mid" display={`${mid.gain > 0 ? '+' : ''}${mid.gain}dB`} value={mid.gain} min={-GMAX} max={GMAX} onChange={(v) => onChange({ mid: { gain: Math.round(v) } })} accent={BAND_COLORS.mid} size={48} disabled={dis} defaultValue={0} wheelStep={1} />
