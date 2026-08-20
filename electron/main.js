@@ -2301,10 +2301,26 @@ const scriviPreferenzeSuDisco = () => {
 };
 app.on('before-quit', scriviPreferenzeSuDisco);
 app.on('window-all-closed', scriviPreferenzeSuDisco);
+
+// SUI SEGNALI SI ASPETTA UN ISTANTE PRIMA DI USCIRE.
+//
+// `flushStorageData()` non scrive: METTE IN CODA la scrittura. Chiamarla e uscire subito
+// non serve a niente — ed è esattamente ciò che succedeva, perché in sviluppo l'avvio
+// ferma tutto con SIGTERM. Trecento millisecondi bastano a far atterrare il dato.
 for (const segnale of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
-  process.on(segnale, () => { scriviPreferenzeSuDisco(); app.quit(); });
+  process.on(segnale, () => {
+    scriviPreferenzeSuDisco();
+    setTimeout(() => app.quit(), 300);
+  });
 }
-app.whenReady().then(() => { setInterval(scriviPreferenzeSuDisco, 60_000); });
+
+// E NON SI CONTA SULL'ULTIMO ISTANTE.
+//
+// Un'uscita ordinata non è garantita: in sviluppo il processo viene ucciso, e
+// un'applicazione può sempre bloccarsi. Le impostazioni sono poche decine di byte:
+// scriverle ogni cinque secondi non costa nulla e toglie di mezzo tutta la categoria di
+// difetti «ho cambiato una cosa, ho riavviato, era sparita».
+app.whenReady().then(() => { setInterval(scriviPreferenzeSuDisco, 5_000); });
 
 app.on('window-all-closed', function () {
   // While the activation dialog runs BEFORE createWindow() (trial-expired path
