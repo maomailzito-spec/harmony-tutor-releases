@@ -141,8 +141,10 @@ const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w:
       {fGrid.map(f => (<g key={'f' + f}><line x1={fToX(f)} y1={y0} x2={fToX(f)} y2={y1} stroke="#16223a" /><text x={fToX(f)} y={h - 3.5} textAnchor="middle" fontSize="6.5" fill="#5b6b86">{f >= 1000 ? `${f / 1000}k` : f}</text></g>))}
       {gGrid.map(g => (<g key={'g' + g}><line x1={x0} y1={gToY(g)} x2={x1} y2={gToY(g)} stroke={g === 0 ? '#243049' : '#16223a'} /><text x={x0 - 3} y={gToY(g) + 2.2} textAnchor="end" fontSize="6.5" fill="#5b6b86">{g > 0 ? `+${g}` : g}</text></g>))}
       {/* Lo spettro sta SOTTO la curva: è il materiale, non la decisione. */}
-      {tracce.pre && <path d={tracce.pre} fill="#38bdf8" fillOpacity="0.13" />}
-      {tracce.post && <path d={tracce.post} fill="#f59e0b" fillOpacity="0.20" stroke="#f59e0b" strokeOpacity="0.5" strokeWidth="0.7" />}
+      {/* Il PRE resta un fondo: è il materiale di partenza, non deve competere.
+          Il POST ha il profilo marcato — è quello che si sta ascoltando. */}
+      {tracce.pre && <path d={tracce.pre} fill="#38bdf8" fillOpacity="0.10" />}
+      {tracce.post && <path d={tracce.post} fill="#fbbf24" fillOpacity="0.30" stroke="#fde047" strokeOpacity="0.95" strokeWidth="1.3" strokeLinejoin="round" />}
       <path d={area} fill="url(#eqfill)" />
       <polyline points={pts.join(' ')} fill="none" stroke="#dbeafe" strokeWidth="1" strokeLinejoin="round" />
       {bands.map(({ key, b }) => (
