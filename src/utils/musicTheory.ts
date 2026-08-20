@@ -413,6 +413,20 @@ export function getKeySignature(rootNote: string, quality: 'Major' | 'Minor'): K
         return { type: 'flat', count: FLAT_KEY_COUNTS[keyForSignature] };
     }
 
+    // LA SCRITTURA CHIESTA VIENE PRIMA DELL'ENARMONIA.
+    //
+    // Sotto c'è un ripiego che, per una tonalità che non conosce, cerca fra le scritture
+    // enarmoniche e preferisce quella bemollizzata. Ma stava PRIMA del controllo sulle
+    // armature in diesis, e quindi lo intercettava: chiedendo SI maggiore (cinque diesis)
+    // usciva Do♭ maggiore (sette bemolli), che è lo stesso suono e un'altra scrittura.
+    // Stessa cosa per FA♯ (usciva Sol♭) e DO♯ (usciva Re♭).
+    //
+    // Il ripiego serve ancora, ma solo per le scritture che nessuna delle due tabelle
+    // conosce — un Re♯, per esempio.
+    if (SHARP_KEY_COUNTS.hasOwnProperty(keyForSignature)) {
+        return { type: 'sharp', count: SHARP_KEY_COUNTS[keyForSignature] };
+    }
+
     // Handle enharmonic spellings not explicitly present in the maps (e.g. D# vs Eb).
     // Pick the closest known spelling for signature purposes.
     try {
