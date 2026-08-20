@@ -458,5 +458,7 @@
   "pal_dyn_drag": "Drag {{s}} onto the score, or select a note and click",
   "pal_artic_drag": "{{s}}: drag it onto a note, or select the notes and click. Putting it back removes it.",
   "pal_time_place": "Time-signature change {{s}}: drag it onto the measure it starts from (click: at the caret)",
-  "pal_tempo_place": "Metronome mark: drag it onto the measure it starts from (click: at the caret). Unlike a rallentando it gives the NUMBER, so the reader knows the speed."
+  "pal_tempo_place": "Metronome mark: drag it onto the measure it starts from (click: at the caret). Unlike a rallentando it gives the NUMBER, so the reader knows the speed.",
+  "mix_meter_mono": "Show a single meter (sum)",
+  "mix_meter_stereo": "Show separate left and right levels"
 }

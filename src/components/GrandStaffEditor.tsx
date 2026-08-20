@@ -885,6 +885,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const satbMasterAnalyserRef = useRef<AnalyserNode | null>(null);
     const accMasterAnalyserRef = useRef<AnalyserNode | null>(null);
     const mixerMasterAnalyserRef = useRef<AnalyserNode | null>(null);
+    /** Master in STEREO: un analizzatore da solo somma i canali e dà un numero solo.
+     *  Per vedere quanto va a destra e quanto a sinistra serve uno splitter e due prese. */
+    const masterAnalyserLRef = useRef<AnalyserNode | null>(null);
+    const masterAnalyserRRef = useRef<AnalyserNode | null>(null);
     // Riverbero globale (bus a convoluzione): i master SATB/ACC mandano al convolver,
     // il "return" (livello wet) rientra nel mixer master. Preset = IR; wet = quantità.
     const reverbConvolverRef = useRef<ConvolverNode | null>(null);
@@ -1058,6 +1062,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             m.connect(lim);
             masterLimiterRef.current = lim;
             const an = ctx.createAnalyser(); an.fftSize = 256; m.connect(an); // meter = USCITA (post-comp+fader)
+            // Le due prese stereo, sulla stessa uscita: lo splitter separa i canali, che
+            // un analizzatore da solo somma in un valore unico.
+            try {
+                const sp = ctx.createChannelSplitter(2);
+                const anL = ctx.createAnalyser(); anL.fftSize = 256;
+                const anR = ctx.createAnalyser(); anR.fftSize = 256;
+                m.connect(sp);
+                sp.connect(anL, 0);
+                sp.connect(anR, 1);
+                masterAnalyserLRef.current = anL;
+                masterAnalyserRRef.current = anR;
+            } catch { /* senza stereo il misuratore resta mono */ }
             mixerMasterAnalyserRef.current = an;
             mixerMasterGainRef.current = m;
             // Makeup gain dopo il compressore (compensa il livello perso in compressione).
@@ -1093,7 +1109,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             s.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(comp); comp.connect(mk); mk.connect(dest);
             busSatbEqNodesRef.current = { low: eqLow, mid: eqMid, high: eqHigh };
             busSatbCompNodeRef.current = comp; busSatbMakeupRef.current = mk;
-            const an = ctx.createAnalyser(); an.fftSize = 256; s.connect(an);
+            const an = ctx.createAnalyser(); an.fftSize = 256; mk.connect(an); // uscita del bus
             satbMasterAnalyserRef.current = an;
             satbMasterGainRef.current = s;
         }
@@ -1109,7 +1125,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             a.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(comp); comp.connect(mk); mk.connect(dest);
             busAccEqNodesRef.current = { low: eqLow, mid: eqMid, high: eqHigh };
             busAccCompNodeRef.current = comp; busAccMakeupRef.current = mk;
-            const an = ctx.createAnalyser(); an.fftSize = 256; a.connect(an);
+            const an = ctx.createAnalyser(); an.fftSize = 256; mk.connect(an); // uscita del bus
             accMasterAnalyserRef.current = an;
             accMasterGainRef.current = a;
         }
@@ -1159,6 +1175,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             satbMasterAnalyserRef.current = null;
             accMasterAnalyserRef.current = null;
             mixerMasterAnalyserRef.current = null;
+            masterAnalyserLRef.current = null;
+            masterAnalyserRRef.current = null;
             masterEqNodesRef.current = null;
             compressorRef.current = null;
             compMakeupGainRef.current = null;
@@ -1406,6 +1424,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const getSatbMasterLevel = useCallback(() => readAnalyserPeak(satbMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
     const getAccMasterLevel = useCallback(() => readAnalyserPeak(accMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
     const getMixerMasterLevel = useCallback(() => readAnalyserPeak(mixerMasterAnalyserRef.current ?? undefined), [readAnalyserPeak]);
+    const getMasterLevelL = useCallback(() => readAnalyserPeak(masterAnalyserLRef.current ?? undefined), [readAnalyserPeak]);
+    const getMasterLevelR = useCallback(() => readAnalyserPeak(masterAnalyserRRef.current ?? undefined), [readAnalyserPeak]);
     // Gain reduction corrente del compressore (dB positivi); 0 se off. Per il meter GR.
     const getCompReduction = useCallback(() => (compEnabledRef.current && compressorRef.current) ? Math.abs(compressorRef.current.reduction) : 0, []);
 
@@ -8161,9 +8181,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             g = audioService.audioContext.createGain();
             wireVoiceWithPan(v, g);
             voiceGainsRef.current.set(v, g);
+            // LA PRESA STA IN FONDO ALLA CATENA, non all'inizio.
+            //
+            // Attaccata al gain, il LED mostrava il segnale PRIMA di equalizzatore,
+            // compressore e pan: comprimendo di dieci decibel non si muoveva di un
+            // pixel, e portando il pan tutto a destra restava identico. Un misuratore
+            // che non misura ciò che si sente serve solo a rassicurare.
             const an = audioService.audioContext.createAnalyser();
             an.fftSize = 256;
-            g.connect(an); // presa per i LED del mixer
+            const uscitaVoce = voicePannersRef.current.get(v) ?? g;
+            uscitaVoce.connect(an);
             voiceAnalysersRef.current.set(v, an);
         }
         g.gain.value = isVoiceAudible(v) ? (voiceVolumesRef.current[v] ?? 1) : 0;
@@ -8185,7 +8212,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             accTrackGainsRef.current.set(idx, g);
             const an = audioService.audioContext.createAnalyser();
             an.fftSize = 256;
-            g.connect(an);
+            const uscitaTraccia = accPannersRef.current.get(idx) ?? g;
+            uscitaTraccia.connect(an); // in fondo alla catena: vedi la nota sulle voci
             accTrackAnalysersRef.current.set(idx, an);
         }
         // Stessa regola dell'esecuzione: il SOLO su un altro canale zittisce questo.
@@ -17212,6 +17240,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     getSatbMasterLevel={getSatbMasterLevel}
                     getAccMasterLevel={getAccMasterLevel}
                     getMixerMasterLevel={getMixerMasterLevel}
+                    getMasterLevelL={getMasterLevelL}
+                    getMasterLevelR={getMasterLevelR}
                     reverbPreset={reverbPreset}
                     reverbWet={reverbWet}
                     onChangeReverbPreset={setReverbPreset}

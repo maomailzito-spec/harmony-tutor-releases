@@ -57,6 +57,9 @@ interface MixerPanelProps {
   getSatbMasterLevel?: () => number;
   getAccMasterLevel?: () => number;
   getMixerMasterLevel?: () => number;
+  /** Livelli separati del master: accendono il misuratore stereo. */
+  getMasterLevelL?: () => number;
+  getMasterLevelR?: () => number;
   // Riverbero globale (bus a convoluzione): preset IR + quantità wet (0..1).
   reverbPreset?: 'off' | 'room' | 'hall' | 'plate';
   reverbWet?: number;
@@ -211,6 +214,20 @@ const LedMeter: React.FC<{ getLevel?: () => number }> = ({ getLevel }) => {
   return <div style={{ display: 'flex', flexDirection: 'column-reverse', width: 7, height: FADER_H }}>{segs}</div>;
 };
 
+/**
+ * MISURATORE STEREO — due colonne affiancate, sinistra e destra.
+ *
+ * Un `AnalyserNode` da solo somma i canali: per sapere quanto va a destra e quanto a
+ * sinistra servono due prese separate (splitter a monte). Con suoni mono e pan al
+ * centro le due colonne sono identiche — ed è giusto così: è il pan a farle divergere.
+ */
+const LedMeterStereo: React.FC<{ getL?: () => number; getR?: () => number }> = ({ getL, getR }) => (
+  <div style={{ display: 'flex', gap: 2 }}>
+    <LedMeter getLevel={getL} />
+    <LedMeter getLevel={getR} />
+  </div>
+);
+
 /** Console-style vertical fader: incised groove, accent fill, metal cap with an
  *  accent center line, a dB scale on the left and the LED meter on the right. */
 const ConsoleFader: React.FC<{
@@ -218,9 +235,12 @@ const ConsoleFader: React.FC<{
   onChange: (gain: number) => void;
   accent: string;
   getLevel?: () => number;
+  /** Se presenti, il misuratore diventa STEREO (due colonne). */
+  getLevelL?: () => number;
+  getLevelR?: () => number;
   onDragStart?: () => void;
   onDragEnd?: () => void;
-}> = ({ value, onChange, accent, getLevel, onDragStart, onDragEnd }) => {
+}> = ({ value, onChange, accent, getLevel, getLevelL, getLevelR, onDragStart, onDragEnd }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const pos = gainToPos(value);
 
@@ -298,7 +318,9 @@ const ConsoleFader: React.FC<{
 
       {/* signal LEDs */}
       <div style={{ display: 'flex', alignItems: 'center' }}>
-        <LedMeter getLevel={getLevel} />
+        {(getLevelL && getLevelR)
+          ? <LedMeterStereo getL={getLevelL} getR={getLevelR} />
+          : <LedMeter getLevel={getLevel} />}
       </div>
     </div>
   );
@@ -702,7 +724,10 @@ const MasterStrip: React.FC<{
   volume: number;
   onChangeVolume: (v: number) => void;
   getLevel?: () => number;
-}> = ({ label, accent, volume, onChangeVolume, getLevel }) => (
+  /** Se presenti, il misuratore del master diventa stereo (L/R). */
+  getLevelL?: () => number;
+  getLevelR?: () => number;
+}> = ({ label, accent, volume, onChangeVolume, getLevel, getLevelL, getLevelR }) => (
   <div
     className="flex flex-col items-center px-1.5 py-2 rounded bg-slate-900/60 border border-slate-700"
     style={{ width: 66 }}
@@ -713,7 +738,9 @@ const MasterStrip: React.FC<{
     {/* Spacer so the fader bottom aligns with the channel-strip faders */}
     <div className="flex-1" style={{ minHeight: 8 }} />
     <div className="flex flex-col items-center gap-0.5">
-      <ConsoleFader value={volume} onChange={onChangeVolume} accent={accent} getLevel={getLevel} />
+      <ConsoleFader value={volume} onChange={onChangeVolume} accent={accent} getLevel={getLevel}       getLevelL={getLevelL}
+      getLevelR={getLevelR}
+    />
       <span className="text-[8px] text-gray-300 font-mono leading-none tabular-nums">
         {gainToDb(volume) <= DB_FLOOR + 0.1 ? '−∞' : `${gainToDb(volume) > 0 ? '+' : ''}${gainToDb(volume).toFixed(1)}`} dB
       </span>
@@ -729,7 +756,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   getVoiceLevel, getTrackLevel,
   satbMasterVolume = 1, accMasterVolume = 1, mixerMasterVolume = 1,
   onChangeSatbMasterVolume, onChangeAccMasterVolume, onChangeMixerMasterVolume,
-  getSatbMasterLevel, getAccMasterLevel, getMixerMasterLevel,
+  getSatbMasterLevel, getAccMasterLevel, getMixerMasterLevel, getMasterLevelL, getMasterLevelR,
   reverbPreset = 'off', reverbWet = 0, onChangeReverbPreset, onChangeReverbWet,
   voiceReverbSends, onChangeVoiceReverb, voicePans, onChangeVoicePan,
   compEnabled = false, onOpenCompressor, onOpenTrackComp, onOpenVoiceComp, voiceComps,
@@ -739,6 +766,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   onClose,
 }) => {
   const { t: tT } = useTranslation('toolbar');
+  /** Misuratore del master: due colonne (L/R) oppure una sola somma. */
+  const [stereoMaster, setStereoMaster] = useState(true);
   const { t: tUi } = useTranslation('ui');
 
   // --- Multi-selezione canali + operazioni batch (mute/solo/elimina/fader collegati) ---
@@ -1157,8 +1186,21 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
 
         {/* MASTER section (global mixer out) */}
         <section className="flex flex-col">
-          <div className="flex items-center mb-1 px-1">
+          <div className="flex items-center justify-between mb-1 px-1">
             <span className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">Master</span>
+            {/* Con suoni al centro le due colonne sono identiche: chi non usa il pan
+                preferisce una barra sola, e la scelta resta sua. */}
+            {(getMasterLevelL && getMasterLevelR) && (
+              <button
+                onClick={() => setStereoMaster(v => !v)}
+                title={stereoMaster ? tUi('mix_meter_mono') : tUi('mix_meter_stereo')}
+                className={`text-[8px] px-1 rounded border ${stereoMaster
+                  ? 'bg-sky-600/25 text-sky-200 border-sky-700'
+                  : 'text-slate-400 border-slate-700 hover:bg-slate-700'}`}
+              >
+                {stereoMaster ? 'L R' : 'M'}
+              </button>
+            )}
           </div>
           <div className="flex gap-1 items-stretch">
             <div className="flex flex-col items-center gap-1">
@@ -1168,6 +1210,8 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
                 volume={mixerMasterVolume}
                 onChangeVolume={(v) => onChangeMixerMasterVolume?.(v)}
                 getLevel={getMixerMasterLevel}
+                getLevelL={stereoMaster ? getMasterLevelL : undefined}
+                getLevelR={stereoMaster ? getMasterLevelR : undefined}
               />
               {/* FX sul master, in linea col master: EQ + Comp (aprono/chiudono le finestre) */}
               <div className="flex gap-0.5 w-full">

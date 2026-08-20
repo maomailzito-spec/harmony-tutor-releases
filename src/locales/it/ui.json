@@ -433,5 +433,7 @@
   "pal_dyn_drag": "Trascina {{s}} sulla partitura, oppure seleziona una nota e clicca",
   "pal_artic_drag": "{{s}}: trascinalo su una nota, oppure seleziona le note e clicca. Rimettendolo si toglie.",
   "pal_time_place": "Cambio di metro {{s}}: trascinalo sulla misura da cui vale (clic: al cursore)",
-  "pal_tempo_place": "Segno di metronomo: trascinalo sulla misura da cui vale (clic: al cursore). A differenza di un rallentando dice il NUMERO, così chi legge sa a che velocità andare."
+  "pal_tempo_place": "Segno di metronomo: trascinalo sulla misura da cui vale (clic: al cursore). A differenza di un rallentando dice il NUMERO, così chi legge sa a che velocità andare.",
+  "mix_meter_mono": "Mostra un misuratore solo (somma)",
+  "mix_meter_stereo": "Mostra i livelli separati di destra e sinistra"
 }
