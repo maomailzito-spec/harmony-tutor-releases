@@ -390,7 +390,7 @@
   "mix_comp_channel": "Compressore del canale — apri/chiudi",
   "mix_close": "Chiudi mixer",
   "mix_solo": "Solo",
-  "mix_delete_tip": "Elimina le track ACC selezionate (le voci SATB non si eliminano)",
+  "mix_delete_tip": "Elimina le track ACC selezionate — anche col tasto Canc (le voci SATB non si eliminano)",
   "mix_delete": "Elimina",
   "mix_satb_group": "Voci (SATB)",
   "mix_rename_satb": "Rinomina il gruppo SATB",
@@ -447,5 +447,7 @@
   "acc_section_auto": "Automatica",
   "acc_section_auto_named": "Automatica ({{name}})",
   "acc_section_none": "Nessuna (fuori dalle parentesi)",
-  "acc_section_sort": "Ordina i righi per sezione"
+  "acc_section_sort": "Ordina i righi per sezione",
+  "mix_delete_confirm_many": "Eliminare {{n}} track selezionate?",
+  "mix_delete_confirm_one": "Eliminare la track «{{name}}»?"
 }

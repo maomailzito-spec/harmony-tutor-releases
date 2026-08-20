@@ -822,7 +822,7 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
   const isChSolo = (key: string) => key[0] === 'v' ? soloVoices.has(parseInt(key.slice(1), 10)) : !!accompanimentTracks.find(t => t.id === key.slice(1))?.solo;
   const batchMute = () => { const target = !selKeys.every(isChMuted); selKeys.forEach(k => { if (k[0] === 'v') onUpdateVoice(parseInt(k.slice(1), 10), { muted: target }); else onUpdateTrack(k.slice(1), { muted: target }); }); };
   const batchSolo = () => { const target = !selKeys.every(isChSolo); selKeys.forEach(k => { if (k[0] === 'v') { const v = parseInt(k.slice(1), 10); if (soloVoices.has(v) !== target) onToggleSolo(v); } else onUpdateTrack(k.slice(1), { solo: target }); }); };
-  const batchDelete = () => { const tk = selKeys.filter(k => k[0] === 't'); if (tk.length === 0) return; if (window.confirm(`Eliminare ${tk.length} track selezionate?`)) { tk.forEach(k => onDeleteTrack(k.slice(1))); clearSelection(); } };
+  const batchDelete = () => { const tk = selKeys.filter(k => k[0] === 't'); if (tk.length === 0) return; if (window.confirm(tUi('mix_delete_confirm_many', { n: tk.length, defaultValue: `Eliminare ${tk.length} track selezionate?` }))) { tk.forEach(k => onDeleteTrack(k.slice(1))); clearSelection(); } };
 
   // --- Floating window position + drag (standard mousemove/mouseup pattern) ---
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 120, y: 120 });
@@ -897,16 +897,38 @@ const MixerPanel: React.FC<MixerPanelProps> = ({
     };
   }, [contextMenu]);
 
+  // TASTO CANC SULLA SELEZIONE. Cancellare sei tracce voleva dire sei tasti destro e sei
+  // conferme: la multi-selezione c'era già, mancava il gesto che tutti provano per primo.
+  //
+  // L'ascolto sta SUL PANNELLO, non sul documento, ed è una scelta, non una scorciatoia
+  // implementativa: se stesse sul documento, chi seleziona due canali qui, torna sullo
+  // spartito e preme Canc per togliere una nota si ritroverebbe cancellate le tracce. Così
+  // il tasto vale solo mentre il fuoco è dentro il mixer — e ci finisce da solo, perché per
+  // selezionare un canale si preme il suo pallino. Su Mac il tasto ⌫ arriva come
+  // 'Backspace', quindi valgono entrambi i nomi.
+  const onPanelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    const el = e.target as HTMLElement | null;
+    const tag = el?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+    if (![...selectedChannels].some(k => k[0] === 't')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    batchDelete();
+  };
+
   const handleDelete = (trackId: string) => {
     const track = accompanimentTracks.find(t => t.id === trackId);
-    if (window.confirm(`Eliminare la track '${track?.name ?? ''}'?`)) onDeleteTrack(trackId);
+    if (window.confirm(tUi('mix_delete_confirm_one', { name: track?.name ?? '', defaultValue: `Eliminare la track '${track?.name ?? ''}'?` }))) onDeleteTrack(trackId);
     setContextMenu(null);
   };
 
   return (
     <div
-      style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000 }}
+      style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, outline: 'none' }}
       className="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 select-none"
+      tabIndex={-1}
+      onKeyDown={onPanelKeyDown}
     >
       {/* Title bar (drag handle) */}
       <div
