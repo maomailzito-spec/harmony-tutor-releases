@@ -58,13 +58,32 @@ function killTree(child) {
 
 async function main() {
   const start = desiredPort();
-  const port = await findFreePort(start, 30);
+
+  // LA PORTA NON PUÒ CAMBIARE DA SOLA.
+  //
+  // Le preferenze dell'applicazione (disposizione della barra, opzioni dell'analisi,
+  // lingua…) stanno in `localStorage`, che il browser lega all'INDIRIZZO. Per lui
+  // 127.0.0.1:5173 e 127.0.0.1:5174 sono due siti diversi, con due memorie diverse.
+  //
+  // Prima, se la porta era occupata — quasi sempre da un server di sviluppo rimasto
+  // acceso — si scivolava sulla successiva con un avviso in mezzo a cento righe di log.
+  // L'applicazione ripartiva su un altro indirizzo e sembrava aver perso tutte le
+  // impostazioni: si riapriva la barra com'era di fabbrica e si dava la colpa al codice.
+  //
+  // Meglio fermarsi e dirlo. Chi vuole davvero un'altra porta la chiede con VITE_PORT,
+  // sapendo che è un'altra memoria.
+  const libera = await canListen(start);
+  if (!libera) {
+    console.error(`\n  La porta ${start} è occupata — quasi sempre da un altro server di sviluppo rimasto acceso.\n`);
+    console.error('  Non ne uso un\'altra di mia iniziativa: le preferenze (barra dei comandi, opzioni,');
+    console.error(`  lingua) stanno nella memoria del browser, che è legata all'INDIRIZZO. Su una porta`);
+    console.error('  diversa l\'applicazione riparte senza nulla, e sembra che le impostazioni si siano perse.\n');
+    console.error('  Chiudi l\'altro server e rilancia. Se vuoi davvero un\'altra porta:  VITE_PORT=5180 npm run dev:grandstaff\n');
+    process.exit(1);
+  }
+  const port = start;
   const url = `http://127.0.0.1:${port}`;
   const resource = `http-get://127.0.0.1:${port}`;
-
-  if (port !== start) {
-    console.warn(`[electron:dev] Port ${start} in use; using ${port}`);
-  }
 
   // Start Vite dev server.
   const vite = spawn(
