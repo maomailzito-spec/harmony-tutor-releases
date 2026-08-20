@@ -100,6 +100,8 @@ export type HarmonyAnalysisFiltersPref = {
 
 export type ToolbarPrefs = {
   order: string[];
+  /** I gruppi SPENTI. Li scrive l'editor; qui vanno conservati, non buttati via. */
+  hidden?: string[];
 };
 
 const parseBool = (raw: string | null, fallback: boolean): boolean => {
@@ -192,12 +194,20 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     storageKey: TOOLBAR_PREFS_KEY,
     defaultValue: { order: [] } as ToolbarPrefs,
     kind: 'json',
+    // ATTENZIONE: QUESTA CHIAVE HA DUE PADRONI.
+    //
+    // La scrive anche l'editor, che ci mette `{ order, hidden }` — l'ordine dei gruppi E
+    // quali sono spenti. Qui invece si leggeva e riscriveva `{ order }` soltanto: bastava
+    // aprire le Preferenze perché il campo `hidden` sparisse, e alla riapertura tornavano
+    // tutti i pulsanti che l'utente aveva tolto. Chi legge deve conservare ciò che non
+    // capisce, non riscriverlo a metà.
     parse: (raw) => {
       try {
         if (!raw) return { order: [] };
         const parsed = JSON.parse(String(raw));
         const order = Array.isArray(parsed?.order) ? parsed.order.filter((x: any) => typeof x === 'string') : [];
-        return { order };
+        const hidden = Array.isArray(parsed?.hidden) ? parsed.hidden.filter((x: any) => typeof x === 'string') : undefined;
+        return hidden ? { order, hidden } as ToolbarPrefs : { order };
       } catch {
         return { order: [] };
       }
@@ -205,7 +215,8 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     serialize: (value: ToolbarPrefs) => {
       try {
         const order = Array.isArray(value?.order) ? value.order : [];
-        return JSON.stringify({ order });
+        const hidden = Array.isArray((value as any)?.hidden) ? (value as any).hidden : undefined;
+        return JSON.stringify(hidden ? { order, hidden } : { order });
       } catch {
         return JSON.stringify({ order: [] });
       }

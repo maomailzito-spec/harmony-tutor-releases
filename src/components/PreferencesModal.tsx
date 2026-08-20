@@ -120,9 +120,13 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const currentLanguage = i18n.language === 'en' ? 'en' : 'it';
   const handleLanguageChange = (lng: 'en' | 'it') => { i18n.changeLanguage(lng); };
 
-  // Preferenze che hanno un riquadro TUTTO LORO più sopra: nell'elenco generico
-  // comparirebbero una seconda volta, con un altro aspetto e un'altra etichetta.
-  const CON_RIQUADRO_PROPRIO = new Set<string>(['editor.staffLineWeight']);
+  // Preferenze che NON vanno nell'elenco generico, per due ragioni diverse:
+  // · hanno un riquadro tutto loro più sopra (comparirebbero due volte, con un altro
+  //   aspetto e un'altra etichetta);
+  // · non sono impostazioni ma STATO INTERNO — la disposizione della barra si cambia
+  //   trascinando i gruppi nella barra stessa, non da qui, e mostrarla come «Toolbar
+  //   prefs (ordine)» invita solo a romperla.
+  const CON_RIQUADRO_PROPRIO = new Set<string>(['editor.staffLineWeight', 'editor.toolbarPrefs']);
 
   const defsForTab = useMemo(() => {
     return PREFERENCE_DEFS
