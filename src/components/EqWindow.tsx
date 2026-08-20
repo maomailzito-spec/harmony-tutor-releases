@@ -143,7 +143,7 @@ const EqCurve: React.FC<{ low: Band; mid: Band; high: Band; enabled: boolean; w:
       {/* Lo spettro sta SOTTO la curva: è il materiale, non la decisione. */}
       {/* Il PRE resta un fondo: è il materiale di partenza, non deve competere.
           Il POST ha il profilo marcato — è quello che si sta ascoltando. */}
-      {tracce.pre && <path d={tracce.pre} fill="#38bdf8" fillOpacity="0.10" />}
+      {tracce.pre && <path d={tracce.pre} fill="#38bdf8" fillOpacity="0.20" stroke="#7dd3fc" strokeOpacity="0.55" strokeWidth="0.9" strokeLinejoin="round" />}
       {tracce.post && <path d={tracce.post} fill="#fbbf24" fillOpacity="0.30" stroke="#fde047" strokeOpacity="0.95" strokeWidth="1.3" strokeLinejoin="round" />}
       <path d={area} fill="url(#eqfill)" />
       <polyline points={pts.join(' ')} fill="none" stroke="#dbeafe" strokeWidth="1" strokeLinejoin="round" />
