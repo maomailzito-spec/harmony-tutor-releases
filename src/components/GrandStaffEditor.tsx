@@ -11989,8 +11989,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [setSelectedNoteIds]);
 
     // ── INVERSIONE DELLA SELEZIONE (diagnostica) ──
-    // `__htInverti()` esegue l'inversione e racconta ogni passaggio; `__htUltimoOptI`
-    // dice se il tasto era arrivato fin qui.
+    // `__htInverti()` esegue l'inversione (la stessa di ⌥I) e racconta ogni passaggio:
+    // l'ARCO calcolato è la parte non ovvia del comando, e vederlo scritto spiega in un
+    // colpo perché ha preso quelle note e non altre.
     useEffect(() => {
         try {
             const w = window as any;
@@ -11998,8 +11999,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const r = invertiSelezione();
                 // eslint-disable-next-line no-console
                 console.table(r);
-                // eslint-disable-next-line no-console
-                console.log('ultimo ⌥I visto dalla tastiera:', w.__htUltimoOptI ?? '(mai)');
                 return r;
             };
         } catch { /* la diagnostica non deve disturbare */ }
@@ -15314,22 +15313,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         const onKeyDown = (e: KeyboardEvent) => {
-            // SONDA per `__htInverti()`: registra l'ultimo ⌥I visto dalla tastiera, ANCHE
-            // quando una guardia più sotto lo scarta o quando non arriva affatto. Serve a
-            // distinguere «la scorciatoia non arriva» (se l'ha mangiata l'accelerator del
-            // menù di sistema, o il fuoco era in un campo di testo) da «arriva e non fa
-            // nulla» — due guasti diversi che dalla poltrona si somigliano.
-            if (e.altKey && (e.code === 'KeyI' || (e.key || '').toLowerCase() === 'i')) {
-                try {
-                    (window as any).__htUltimoOptI = {
-                        quando: new Date().toLocaleTimeString(),
-                        code: e.code,
-                        key: e.key,
-                        fuoco: (document.activeElement as HTMLElement | null)?.tagName ?? '(nessuno)',
-                        selezionate: latestSelectedNoteIds.current?.size ?? 0,
-                    };
-                } catch { /* la sonda non deve disturbare */ }
-            }
             // Important: this listener runs in capture phase.
             // NB: in chord-insert mode we no longer block everything here — the
             // isTypingTarget() check below already defers to the chord input while

@@ -57,6 +57,7 @@ const App: React.FC = () => {
                     { comando: '__htBarra()', stato: attivo('__htBarra'), cosa_dice: 'la disposizione della barra: quella in memoria e quella salvata nelle preferenze' },
                     { comando: '__htArmature()', stato: attivo('__htArmature'), cosa_dice: 'i cambi d\'armatura che il brano ha adesso, con la battuta da cui valgono' },
                     { comando: '__htMisure()', stato: attivo('__htMisure'), cosa_dice: 'da dove esce il numero di misure in barra: il minimo, l\'ultima misura del coro, l\'ultima delle tracce, quante ne sono disegnate' },
+                    { comando: '__htInverti()', stato: attivo('__htInverti'), cosa_dice: 'inverte la selezione (come ⌥I) e mostra l\'ARCO su cui ha lavorato: da che battuta a che battuta, quante candidate, quante prese' },
                     { comando: '__htMisuraTeste()', stato: attivo('__htMisuraTeste'), cosa_dice: 'scarto fra la x che diamo a una nota e la testa disegnata — da accendere prima: localStorage._HT_MISURA_TESTE = \'1\' e ricaricare' },
                     { comando: '__htGhost', stato: (typeof (window as any).__htGhost === 'object' && (window as any).__htGhost) ? 'pronto' : 'non ancora disponibile', cosa_dice: 'lo stesso scarto per la nota fantasma; si legge DOPO aver mosso il mouse sul rigo (stesso interruttore di __htMisuraTeste)' },
                 ];
