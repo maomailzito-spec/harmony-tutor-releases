@@ -4236,7 +4236,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         chordGroupId: existingGroupId,
                     }));
 
-                    const daPattern = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, accPatternRef.current, accLetRingRef.current);
+                    // `compact: false` — ED E' IL PUNTO DI TUTTO IL CICLO.
+                    //
+                    // Con la compattazione (il difetto di prima) `applyAccPattern` ripiega
+                    // ogni nota entro un'ottava dalla piu' grave. Ma le disposizioni del
+                    // ciclo cambiano la nota IN CIMA, non il basso: dopo la compattazione un
+                    // accordo di tre note sopra lo stesso basso e' sempre lo stesso accordo,
+                    // e S:R, S:3 e S:5 danno altezze identiche. `nextRevoicing` scarta i
+                    // candidati uguali all'attuale, quindi dalla seconda pressione in poi non
+                    // ne restava nemmeno uno: cambiava una volta e si piantava.
+                    //
+                    // La disposizione E' la distanza fra le note. Schiacciarla in un'ottava e
+                    // poi chiedersi perche' non si distinguono non e' un dettaglio di resa:
+                    // e' cancellare proprio cio' che il pulsante deve far vedere. Il ramo
+                    // che applica i pattern a mano passa `false` per la stessa ragione.
+                    const daPattern = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, accPatternRef.current, accLetRingRef.current, false);
                     if (anteprima.length === 0) anteprima = daPattern;
                     nuoveNote.push(...daPattern);
                     for (const n of gruppo) replaceIds.add(n.id);
