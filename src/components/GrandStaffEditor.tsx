@@ -649,6 +649,19 @@ function riassegnaVociAllAttacco(note: StaffNote[], riferimento: StaffNote, part
 
     const esito = vociDallAccordo(elementi, partCount);
     if (esito.voci.size === 0) return note;
+    // SE NON E' CERTO, NON SI TOCCA NIENTE.
+    //
+    // Su un accordo incompleto la regola ripiega sulle voci ESTREME, e come lettura va
+    // bene: due note sole si leggono soprano e basso. Ma applicarla MENTRE si scrive fa
+    // danni, perche' il rigo su cui una nota si disegna lo deriva `clefForVoice` DALLA VOCE.
+    // Scrivendo prima il basso e poi il tenore, la seconda nota e' la piu' acuta delle due,
+    // diventava soprano e SALTAVA sul rigo di violino; e all'arrivo del soprano vero il
+    // filtro delle sovrapposizioni la cancellava, perche' occupava la voce 1.
+    //
+    // Quindi la lettura verticale interviene solo quando l'accordo la determina davvero.
+    // Finche' non lo fa, comanda la voce dell'inserimento e le note stanno dove le hai
+    // scritte - disegnate neutre, che e' appunto il modo di dire «non ho ancora deciso».
+    if (!esito.certo) return note;
 
     return note.map(n => {
         const v = esito.voci.get(n.id);
