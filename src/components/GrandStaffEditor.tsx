@@ -4362,38 +4362,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const selNotes = expandAccChordSelection(accNotes, selectedNoteIds);
         if (selNotes.length === 0) return;
 
-        // Altezze ESATTE dell'utente: dedup per midi, ordine grave→acuto, ottave intatte.
-        const byMidi = new Map<number, any>();
-        for (const n of selNotes) {
-            const m = Number(n.midi ?? 0);
-            if (!byMidi.has(m)) byMidi.set(m, n);
-        }
-        const sortedPitches = [...byMidi.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n);
-        if (sortedPitches.length === 0) return;
-
-        const chordStartTick = Math.min(...selNotes.map((n: any) => Number(n.startTick ?? 0)));
-        const chordEndTick   = Math.max(...selNotes.map((n: any) => Number(n.startTick ?? 0) + Number(n.durationTicks ?? 0)));
-        const totalDurTicks  = chordEndTick - chordStartTick;
-        const measureIndex   = Number(selNotes[0].measureIndex ?? 0);
-        const chordBeat      = Number(selNotes[0].beat ?? 1);
-        const existingGroupId = (selNotes[0] as any).chordGroupId || crypto.randomUUID();
-
-        // Block-base coi pitch esatti dell'utente (voice 0). Niente revoice: ogni nota
-        // conserva midi/ottava/grafia; ricalcoliamo solo la chiave e azzeriamo l'eventuale
-        // coda "let ring" ereditata.
-        const blockBase: StaffNote[] = sortedPitches.map((p: any) => ({
-            ...p,
-            id: crypto.randomUUID(),
-            voice: 0 as any,
-            clef: (staffMode === 'treble_only' ? 'treble' : (Number(p.midi) >= 60 ? 'treble' : 'bass')) as 'treble' | 'bass',
-            startTick: chordStartTick,
-            durationTicks: totalDurTicks,
-            measureIndex,
-            beat: chordBeat,
-            chordGroupId: existingGroupId,
-            playbackDurationTicks: undefined,
-        }));
-
         const subdivTicks = ({
             'sixteenth': TICKS_PER_QUARTER / 4,
             'eighth':    TICKS_PER_QUARTER / 2,
@@ -4401,21 +4369,87 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             'half':      TICKS_PER_QUARTER * 2,
         } as Record<string, number>)[quantizeGrid] ?? (TICKS_PER_QUARTER / 2);
 
-        // compact === false → le altezze restano quelle scelte dall'utente.
-        const newAccNotes = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, pattern, accLetRingRef.current, false);
+        // ── UN ACCORDO PER VOLTA ──
+        // Prima tutta la selezione veniva trattata come UN accordo solo: le altezze di
+        // tutti gli accordi finivano in un unico insieme dedotto per midi, l'inizio era il
+        // primo attacco e la fine l'ultima fine. Selezionando quattro accordi di una
+        // battuta ne restava uno, largo quanto la battuta, con un miscuglio di note: da
+        // fuori sembrava che il pattern ne cancellasse tre a caso. Per applicare lo stesso
+        // pattern a piu' accordi bisognava percio' farli uno alla volta.
+        //
+        // Il raggruppamento passa dal `chordGroupId` quando c'e', e solo in mancanza
+        // dall'attacco. L'ordine conta: un accordo GIA' arpeggiato ha note ad attacchi
+        // DIVERSI ma un unico chordGroupId, e raggruppandolo per attacco si spezzerebbe in
+        // tanti finti accordi da una nota - cioe' riapplicare un pattern lo distruggerebbe.
+        const gruppi = new Map<string, any[]>();
+        for (const n of selNotes) {
+            const chiave = (n as any).chordGroupId
+                ? `g:${(n as any).chordGroupId}`
+                : `t:${Math.round(Number(n.startTick ?? 0))}`;
+            const arr = gruppi.get(chiave);
+            if (arr) arr.push(n); else gruppi.set(chiave, [n]);
+        }
 
-        const replaceIds = new Set(selNotes.map((n: any) => n.id));
+        const nuoveNote: StaffNote[] = [];
+        const replaceIds = new Set<string>();
+        let anteprima: StaffNote[] = [];
+
+        for (const gruppo of gruppi.values()) {
+            // Altezze ESATTE dell'utente: dedup per midi, ordine grave→acuto, ottave intatte.
+            const byMidi = new Map<number, any>();
+            for (const n of gruppo) {
+                const m = Number(n.midi ?? 0);
+                if (!byMidi.has(m)) byMidi.set(m, n);
+            }
+            const sortedPitches = [...byMidi.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n);
+            if (sortedPitches.length === 0) continue;
+
+            const chordStartTick = Math.min(...gruppo.map((n: any) => Number(n.startTick ?? 0)));
+            const chordEndTick   = Math.max(...gruppo.map((n: any) => Number(n.startTick ?? 0) + Number(n.durationTicks ?? 0)));
+            const totalDurTicks  = chordEndTick - chordStartTick;
+            if (!(totalDurTicks > 0)) continue;
+            const measureIndex   = Number(gruppo[0].measureIndex ?? 0);
+            const chordBeat      = Number(gruppo[0].beat ?? 1);
+            const existingGroupId = (gruppo[0] as any).chordGroupId || crypto.randomUUID();
+
+            // Block-base coi pitch esatti dell'utente (voice 0). Niente revoice: ogni nota
+            // conserva midi/ottava/grafia; ricalcoliamo solo la chiave e azzeriamo l'eventuale
+            // coda "let ring" ereditata.
+            const blockBase: StaffNote[] = sortedPitches.map((p: any) => ({
+                ...p,
+                id: crypto.randomUUID(),
+                voice: 0 as any,
+                clef: (staffMode === 'treble_only' ? 'treble' : (Number(p.midi) >= 60 ? 'treble' : 'bass')) as 'treble' | 'bass',
+                startTick: chordStartTick,
+                durationTicks: totalDurTicks,
+                measureIndex,
+                beat: chordBeat,
+                chordGroupId: existingGroupId,
+                playbackDurationTicks: undefined,
+            }));
+
+            // compact === false → le altezze restano quelle scelte dall'utente.
+            const daPattern = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, pattern, accLetRingRef.current, false);
+            if (anteprima.length === 0) anteprima = daPattern;
+            nuoveNote.push(...daPattern);
+            for (const n of gruppo) replaceIds.add(n.id);
+        }
+
+        if (nuoveNote.length === 0) return;
+
         setAccompanimentTracks(prev => prev.map((track, i) => {
             if (i !== trackIdx) return track;
             const kept = track.notes.filter((n: any) => !replaceIds.has(n.id));
-            return { ...track, notes: [...kept, ...newAccNotes].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
+            return { ...track, notes: [...kept, ...nuoveNote].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
         }));
-        setSelectedNoteIds(new Set(newAccNotes.map((n: any) => n.id)));
+        setSelectedNoteIds(new Set(nuoveNote.map((n: any) => n.id)));
 
         const accTrk = latestAccompanimentTracks.current?.[trackIdx];
         const accInstr = accTrk?.isDrum ? drumSoundfont(accTrk) : gmToSoundfont(accTrk?.instrumentId);
         const accCh = accTrk ? accMidiChannel(accTrk, trackIdx) : undefined;
-        newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstr, accCh, accTransposeSemitones(accTrk), accTrk?.id); });
+        // Si fa sentire SOLO il primo accordo: quattro accordi tutti insieme, ognuno con le
+        // sue note lanciate a tempo zero, non sarebbe un'anteprima ma un grappolo.
+        anteprima.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstr, accCh, accTransposeSemitones(accTrk), accTrk?.id); })
     }, [selectedNoteIds, quantizeGrid, applyAccPattern, setAccompanimentTracks, setSelectedNoteIds]);
 
     /**
