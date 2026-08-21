@@ -4048,9 +4048,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (pattern === 'ondulato') {
             const n = sorted.length;
             if (n <= 1) return generateFromIndexPattern([0]);
-            if (n === 2) return generateFromIndexPattern([0, 1]);
-            const up = Array.from({ length: n }, (_, i) => i);
-            const down = Array.from({ length: n - 2 }, (_, i) => n - 2 - i);
+            // L'ONDA DEVE GIRARE ANCHE NEGLI SPAZI STRETTI.
+            //
+            // La salita fino alla nota piu' acuta costa n posti, e i posti li detta la
+            // DURATA dell'accordo divisa per la griglia, non l'accordo. Con quattro note su
+            // una semiminima e griglia di semicrome i posti sono quattro: usciva 0-1-2-3,
+            // cioe' un arpeggio ascendente identico a quello apposito. Il pattern si chiama
+            // «ondulato» e non ondulava, ed era il caso piu' facile da scrivere.
+            //
+            // Quando i posti bastano a girare (piu' di n) resta l'onda intera di prima, che
+            // tocca la nota piu' acuta. Quando non bastano si sceglie il VERTICE piu' alto
+            // che ci sta: un'onda piccola invece di una salita, al prezzo di fermarsi sotto
+            // la cima dell'accordo. Fra un'onda che non arriva in cima e una salita che non
+            // e' un'onda, la prima e' quella che fa quel che dice.
+            const posti = Math.max(1, Math.floor(durationTicks / slot));
+            const vertice = (posti > n)
+                ? n - 1
+                : Math.max(1, Math.min(n - 1, Math.floor(posti / 2)));
+            const up = Array.from({ length: vertice + 1 }, (_, i) => i);
+            const down = Array.from({ length: Math.max(0, vertice - 1) }, (_, i) => vertice - 1 - i);
             return generateFromIndexPattern([...up, ...down]);
         }
 
