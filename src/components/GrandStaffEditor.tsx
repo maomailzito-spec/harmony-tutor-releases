@@ -12439,13 +12439,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             snappedLocalTicks = maxLocalStart;
         }
 
-        // La calamita resta per la griglia libera di SHIFT; col modello nuovo gli inizi
-        // degli eventi sono già fra i posti disponibili, quindi non ha nulla da spostare.
-        const startTick = agganciaAdAttaccoVicinoRef.current(
-            hit.measureIndex,
-            measureStartTick + snappedLocalTicks,
-            snapGridTicks,
-        );
+        // LA CALAMITA VALE SOLO SULLA GRIGLIA LIBERA DI SHIFT.
+        //
+        // Il commento qui sopra diceva gia' la cosa giusta - «gli inizi degli eventi sono
+        // gia' fra i posti disponibili, quindi non ha nulla da spostare» - ma la calamita
+        // veniva chiamata lo stesso, e da spostare aveva eccome: RIDECIDEVA sopra una scelta
+        // gia' fatta bene, e la peggiorava.
+        //
+        // `attacchiDisponibili` propone gli inizi E LE FINI degli eventi scritti, e
+        // `attaccoPiuVicino` prende il posto piu' vicino al punto mirato. La calamita poi
+        // riagganciava al solo ATTACCO piu' vicino entro mezzo slot, che puo' essere un
+        // posto DIVERSO e piu' lontano. Caso segnalato: semiminima puntata, croma, quattro
+        // semicrome; l'ultima semiminima cade giusta a 1440 (fine dell'ultima semicroma),
+        // ma l'attacco della semicroma sta a 1320, cioe' 120 tick contro una tolleranza di
+        // 240. La nota tornava indietro, trovava il soprano occupato, e l'autoselezione la
+        // passava al contralto - cambiando anche la voce attiva in barra.
+        //
+        // Impilare un accordo continua a funzionare senza calamita: l'attacco della nota
+        // gia' scritta e' fra i posti disponibili, quindi ci si arriva col solo aggancio.
+        const startTick = (postiDisponibili.length > 0)
+            ? (measureStartTick + snappedLocalTicks)
+            : agganciaAdAttaccoVicinoRef.current(
+                hit.measureIndex,
+                measureStartTick + snappedLocalTicks,
+                snapGridTicks,
+            );
         snappedLocalTicks = startTick - measureStartTick;
 
         registraInserimento({
