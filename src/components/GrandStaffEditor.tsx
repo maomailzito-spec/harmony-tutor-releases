@@ -4048,25 +4048,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (pattern === 'ondulato') {
             const n = sorted.length;
             if (n <= 1) return generateFromIndexPattern([0]);
-            // L'ONDA DEVE GIRARE ANCHE NEGLI SPAZI STRETTI.
+            if (n === 2) return generateFromIndexPattern([0, 1]);
+            // PERCHE' L'ONDA NON SI ADATTA AGLI SPAZI STRETTI.
             //
             // La salita fino alla nota piu' acuta costa n posti, e i posti li detta la
-            // DURATA dell'accordo divisa per la griglia, non l'accordo. Con quattro note su
-            // una semiminima e griglia di semicrome i posti sono quattro: usciva 0-1-2-3,
-            // cioe' un arpeggio ascendente identico a quello apposito. Il pattern si chiama
-            // «ondulato» e non ondulava, ed era il caso piu' facile da scrivere.
+            // durata dell'accordo diviso la griglia: quattro note su una semiminima con
+            // griglia di semicrome fanno quattro posti, e ne esce 0-1-2-3, cioe' una
+            // salita. Fastidioso, e la tentazione e' far girare l'onda prima (0-1-2-1).
             //
-            // Quando i posti bastano a girare (piu' di n) resta l'onda intera di prima, che
-            // tocca la nota piu' acuta. Quando non bastano si sceglie il VERTICE piu' alto
-            // che ci sta: un'onda piccola invece di una salita, al prezzo di fermarsi sotto
-            // la cima dell'accordo. Fra un'onda che non arriva in cima e una salita che non
-            // e' un'onda, la prima e' quella che fa quel che dice.
-            const posti = Math.max(1, Math.floor(durationTicks / slot));
-            const vertice = (posti > n)
-                ? n - 1
-                : Math.max(1, Math.min(n - 1, Math.floor(posti / 2)));
-            const up = Array.from({ length: vertice + 1 }, (_, i) => i);
-            const down = Array.from({ length: Math.max(0, vertice - 1) }, (_, i) => vertice - 1 - i);
+            // Non si puo', ed e' aritmetica: dentro n posti si possono toccare n note
+            // OPPURE girare, mai tutt'e due, perche' girare vuol dire ripetere una nota.
+            // E il pattern non e' un effetto sopra un accordo conservato altrove: le note
+            // scritte SONO l'accordo, e il pattern successivo lo ricostruisce da quelle.
+            // Un'onda che scarta la nota piu' acuta la cancella per sempre - e tornando
+            // all'arpeggio ascendente restano tre note su quattro posti, che risalgono e
+            // ricascano: sembra ancora un'onda, e in discendente sembra un'onda inversa.
+            // Provato: 48 52 55 60 → 48 52 55 52 → l'accordo diventa 48 52 55.
+            //
+            // Fra un pattern che degenera in salita e un pattern che ti mangia una nota,
+            // il primo e' un limite, il secondo e' una perdita. Per avere l'onda servono
+            // piu' posti: accordo piu' lungo o griglia piu' fitta.
+            const up = Array.from({ length: n }, (_, i) => i);
+            const down = Array.from({ length: n - 2 }, (_, i) => n - 2 - i);
             return generateFromIndexPattern([...up, ...down]);
         }
 
