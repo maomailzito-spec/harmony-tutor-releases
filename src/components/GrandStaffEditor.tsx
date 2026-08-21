@@ -12,6 +12,7 @@ declare global {
 }
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
+import { vociDallAccordo } from '../utils/voiceFromChord';
 import { SECTION_ORDER, SECTION_I18N_KEY, SECTION_LABEL_IT, sezioneDaStrumento, sezioneEffettiva, type SectionId, type SectionChoice } from '../utils/instrumentSections';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
@@ -595,6 +596,100 @@ class RenderErrorBoundary extends React.Component<
       </div>
     );
   }
+}
+
+/**
+ * VOCE DALL'ACCORDO — rimette in ordine le voci di UN attacco dopo che vi è entrata una nota.
+ *
+ * Serve al modo «carta e matita»: la voce con cui la nota è appena stata inserita era solo
+ * un posteggio (l'autoselezione doveva darle UNA voce libera, se no il filtro delle
+ * sovrapposizioni le avrebbe cancellato le sorelle). La lettura vera si fa qui, guardando
+ * l'accordo com'è adesso.
+ *
+ * CHI RIVENDICA E CHI VIENE COLLOCATO. Si riassegnano solo le note che ATTACCANO in questo
+ * punto. Tutto il resto che sta occupando quel tick — una pausa posata lì, ma anche una nota
+ * o una pausa cominciata PRIMA e ancora in corso — si tiene la sua voce e la toglie dal
+ * giro. Senza questo, una minima di pausa al tenore cominciata sul primo movimento non
+ * conterebbe sul secondo, e il tenore verrebbe riassegnato a una nota mentre sta tacendo.
+ *
+ * SI CAMBIA SOLO LA VOCE, MAI IL RIGO. Il rigo è dove l'hai scritta la nota: in posizione
+ * stretta il tenore sta su quello di violino, ed è una scelta di scrittura, non un errore
+ * da correggere. Toccare `clef` qui farebbe SALTARE le note da un pentagramma all'altro
+ * sotto le mani.
+ */
+const TICK_EPS_ATTACCO = 2;
+const inizioTick = (n: StaffNote) => Number((n as any).startTick ?? 0);
+const fineTick = (n: StaffNote) => inizioTick(n) + Math.max(1, Number((n as any).durationTicks ?? 0));
+
+/** Chi c'è su un attacco: le note che ATTACCANO lì (da collocare) e tutto ciò che sta
+ *  occupando quel tick senza attaccarvi (pause posate lì, note e pause cominciate PRIMA e
+ *  ancora in corso), che si tiene la propria voce e la toglie dal giro. */
+function elementiDellAttacco(note: StaffNote[], measureIndex: number, attacco: number) {
+    const quiDentro = (n: StaffNote) =>
+        n.measureIndex === measureIndex
+        && inizioTick(n) <= attacco + TICK_EPS_ATTACCO
+        && fineTick(n) > attacco + TICK_EPS_ATTACCO;
+    const attaccaQui = (n: StaffNote) => !n.isRest && Math.abs(inizioTick(n) - attacco) < TICK_EPS_ATTACCO;
+    const elementi: Array<{ id: string; midi?: number | null; isRest?: boolean; voice?: number | null }> = [];
+    for (const n of note) {
+        if (!quiDentro(n)) continue;
+        elementi.push(attaccaQui(n)
+            ? { id: n.id, midi: n.midi }
+            : { id: n.id, isRest: true, voice: n.voice as any });
+    }
+    return { elementi, quiDentro, attaccaQui };
+}
+
+function riassegnaVociAllAttacco(note: StaffNote[], riferimento: StaffNote, partCount: number): StaffNote[] {
+    const mi = Number(riferimento.measureIndex ?? -1);
+    if (mi < 0) return note;
+    const attacco = inizioTick(riferimento);
+    const { elementi, quiDentro, attaccaQui } = elementiDellAttacco(note, mi, attacco);
+    if (elementi.filter(e => !e.isRest).length < 2) return note;
+
+    const esito = vociDallAccordo(elementi, partCount);
+    if (esito.voci.size === 0) return note;
+
+    return note.map(n => {
+        const v = esito.voci.get(n.id);
+        if (!v || Number(n.voice) === Number(v)) return n;
+        // Solo le note che attaccano qui: le rivendicanti tornano già con la loro voce.
+        if (!quiDentro(n) || !attaccaQui(n)) return n;
+        return { ...n, voice: v as Voice };
+    });
+}
+
+/**
+ * Le note la cui voce NON è determinata da ciò che è scritto.
+ *
+ * Un accordo con due note e nessuna pausa è ambiguo — soprano e basso? soprano e tenore? —
+ * e lo è anche per un lettore. In quel caso la regola tiene le voci estreme, che è una
+ * CONVENZIONE, non una lettura, e queste note vengono disegnate NEUTRE: gambo secondo
+ * l'altezza, nessun colore di voce. Così mentre costruisci un accordo non vedi lampeggiare
+ * etichette sbagliate che poi saltano — vedi qualcosa che non ha ancora deciso, e si vede
+ * che non ha deciso. Appena l'accordo si completa (o scrivi le pause che dicono chi tace)
+ * le note prendono la loro voce e il disegno lo mostra.
+ */
+function vociNonDeterminate(note: StaffNote[], partCount: number): Set<string> {
+    const fuori = new Set<string>();
+    const perMisura = new Map<number, StaffNote[]>();
+    for (const n of note) {
+        const mi = Number(n.measureIndex ?? -1);
+        if (mi < 0) continue;
+        const arr = perMisura.get(mi);
+        if (arr) arr.push(n); else perMisura.set(mi, [n]);
+    }
+    for (const [mi, dentro] of perMisura) {
+        const attacchi = new Set<number>();
+        for (const n of dentro) if (!n.isRest) attacchi.add(inizioTick(n));
+        for (const attacco of attacchi) {
+            const { elementi, attaccaQui } = elementiDellAttacco(dentro, mi, attacco);
+            if (elementi.filter(e => !e.isRest).length < 1) continue;
+            if (vociDallAccordo(elementi, partCount).certo) continue;
+            for (const n of dentro) if (attaccaQui(n)) fuori.add(n.id);
+        }
+    }
+    return fuori;
 }
 
 function isAccompanimentNote(noteId: string, accompanimentTracks: AccompanimentTrack[]): boolean {
@@ -3137,6 +3232,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [autoSaveInterval] = usePreference<number>('editor.autoSaveInterval');
     // Forza della calamita sugli attacchi (vedi `agganciaAdAttaccoVicino`). Sta anche in un
     // ref perché la calamita gira nel gesto del mouse, dove non si rilegge lo stato.
+    // Modo «carta e matita»: la voce non si dichiara, la deduce l'ordine verticale.
+    const [voiceFromChord] = usePreference<boolean>('editor.voiceFromChord');
+    const voiceFromChordRef = useRef(false);
+    useEffect(() => { voiceFromChordRef.current = voiceFromChord === true; }, [voiceFromChord]);
+
     // Parentesi di partitura (famiglie di strumenti + linea unica di sistema).
     const [orchestralGrouping] = usePreference<boolean>('editor.orchestralGrouping');
     const [snapMagnetStrength] = usePreference<number>('editor.snapMagnetStrength');
@@ -7812,6 +7912,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // rispetto all'interazione: layoutData (cambia solo su edit), clefForVoice (layout mode),
     // tiedFromPrevNoteIds (rawNotes), keyAccidentals (armatura). Su ghost/selezione questi non
     // cambiano → il calcolo NON rigira. La map legge systemRenderDataBySystem[systemIndex].
+    // Note la cui voce non è ancora determinata da ciò che è scritto (modo «carta e
+    // matita»): si disegnano neutre finché l'accordo non si completa.
+    const noteSenzaVoceDecisa = useMemo(
+        () => (voiceFromChord ? vociNonDeterminate(rawNotes || [], partCount) : new Set<string>()),
+        [voiceFromChord, rawNotes, partCount],
+    );
+
     const systemRenderDataBySystem = useMemo(() => {
         if (!layoutData?.systemsParams) return [] as Array<{ systemNotes: StaffNote[]; systemNotesForRender: StaffNote[] }>;
         return layoutData.systemsParams.map((system) => {
@@ -7820,19 +7927,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const systemNotesForRender = systemNotes.map((n) => {
                 const mappedClef: ClefType = clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat);
                 if (n.isRest) return { ...n, clef: mappedClef };
+                const voceNonDecisa = noteSenzaVoceDecisa.has(n.id) || undefined;
                 const tieFromPrev = tiedFromPrevNoteIds.has(n.id);
-                if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
+                if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev, voceNonDecisa };
                 try {
                     const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
                     const nextExplicit = calculateAccidental(noteName, keyAccidentalsAtMeasure(n.measureIndex ?? 0));
-                    return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
+                    return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev, voceNonDecisa };
                 } catch {
-                    return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
+                    return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev, voceNonDecisa };
                 }
             });
             return { systemNotes, systemNotesForRender };
         });
-    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentalsAtMeasure]);
+    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentalsAtMeasure, noteSenzaVoceDecisa]);
 
     // Larghezza reale del contenuto: di norma quella d'impaginazione, ma nel nastro
     // continuo è quella del sistema, che la eccede e si percorre scorrendo.
@@ -13048,11 +13156,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             });
 
             // Inserisci la nuova nota (con startTick!) e ordina per measureIndex, beat, voice
-            const next = [...filtered, newNote].sort((a, b) => {
+            const inserite = [...filtered, newNote].sort((a, b) => {
                 if (a.measureIndex !== b.measureIndex) return a.measureIndex - b.measureIndex;
                 if ((a.beat ?? 1) !== (b.beat ?? 1)) return (a.beat ?? 1) - (b.beat ?? 1);
                 return (a.voice ?? 1) - (b.voice ?? 1);
             });
+            // Modo «carta e matita»: la voce dell'inserimento era un posteggio, la lettura
+            // vera è l'ordine verticale dell'accordo. Si rifà a ogni nota che entra, così
+            // non esiste un momento in cui l'accordo è «da chiudere»: è sempre già letto.
+            const next = voiceFromChordRef.current
+                ? riassegnaVociAllAttacco(inserite, newNote, partCount)
+                : inserite;
             try {
                 const collectSnapshot = (minMeasure: number, maxMeasure: number) => {
                     const notes = (layoutDataRef.current?.positionedNotes ?? [])

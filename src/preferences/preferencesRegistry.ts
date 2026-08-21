@@ -11,6 +11,7 @@ import {
   SHOW_QUICK_INSERT_BAR_KEY,
   SHOW_SYMBOL_ANALYSIS_KEY,
   SHOW_FIGURED_BASS_KEY,
+  VOICE_FROM_CHORD_KEY,
   ORCHESTRAL_GROUPING_KEY,
   SHOW_VOICE_COLORS_KEY,
   TOOLBAR_HIDDEN_KEY,
@@ -44,6 +45,7 @@ export type PreferenceId =
   | 'editor.toolbarPrefs'
   | 'editor.showMeasureNumbers'
   | 'editor.showVoiceColors'
+  | 'editor.voiceFromChord'
   | 'editor.orchestralGrouping'
   | 'editor.showQuickInsertBar'
   | 'editor.selectOnlyCurrentVoice'
@@ -234,6 +236,24 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
     defaultValue: true,
     kind: 'boolean',
     parse: (raw) => parseBool(raw, true),
+    serialize: (value: boolean) => (value ? '1' : '0'),
+  },
+
+  // SCRIVERE SENZA DICHIARARE LA VOCE. Acceso, la voce non si sceglie più: la decide
+  // l'ordine verticale dentro l'accordo, come si legge su una pagina stampata. La più
+  // acuta è il soprano, la più grave il basso, e le pause si tengono la voce di dove le
+  // posi. L'ordine in cui scrivi non conta. In prova: di norma spento.
+  'editor.voiceFromChord': {
+    id: 'editor.voiceFromChord',
+    section: 'Editor',
+    label: 'Voce dedotta dall’accordo (in prova)',
+    i18nKey: 'pref_editor_voice_from_chord',
+    description: 'Scrivi le note senza scegliere la voce: la decide l’ordine verticale dentro l’accordo. Le pause si prendono la voce di dove le posi.',
+    descriptionI18nKey: 'pref_editor_voice_from_chord_desc',
+    storageKey: VOICE_FROM_CHORD_KEY,
+    defaultValue: false,
+    kind: 'boolean',
+    parse: (raw) => parseBool(raw, false),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 

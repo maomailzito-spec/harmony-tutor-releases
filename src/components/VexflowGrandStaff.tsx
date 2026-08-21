@@ -403,9 +403,14 @@ const makeVfNote = (
   // - stemOverride is an automatic layout hint (used to avoid collisions in close spacing)
   // - otherwise default by voice: S(1)↑ A(2)↓ T(3)↑ B(4)↓
   if (!n.isRest) {
+    // `voceNonDecisa`: nel modo «carta e matita» l'accordo non basta ancora a dire quale
+    // voce sia questa nota, e allora NON si finge di saperlo. Niente gambo per voce: lo
+    // decide l'altezza, come farebbe VexFlow da solo. Vedere una direzione sbagliata che
+    // poi salta è peggio che vedere qualcosa che non ha ancora deciso.
+    const vocePosata = !(n as any).voceNonDecisa;
     const desiredStem = n.manualStemDirection
       ?? stemOverride
-      ?? (n.voice ? ((Number(n.voice) === 1 || Number(n.voice) === 3) ? 'up' : 'down') : undefined);
+      ?? ((n.voice && vocePosata) ? ((Number(n.voice) === 1 || Number(n.voice) === 3) ? 'up' : 'down') : undefined);
     if (desiredStem) {
       try {
         note.setStemDirection(desiredStem === 'up' ? 1 : -1);
@@ -710,6 +715,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
 
     if (staffNote.isRest) return;
     if (!showVoiceColors) return;
+    if ((staffNote as any).voceNonDecisa) return;
     if (selectedNoteIds.includes(staffNote.id)) return;
     if ((staffNote as any).errorType) return;
     // If this is a merged chord note, avoid coloring the shared stem.
@@ -2939,7 +2945,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             const accTrackColor = (Number(n.voice) === 0)
               ? accBlocks[((n as any)._trackIdx ?? 0)]?.color
               : undefined;
-            const vc = showVoiceColors
+            const vc = (showVoiceColors && !(n as any).voceNonDecisa)
               ? (accTrackColor ? { fill: accTrackColor, stroke: accTrackColor } : voiceColor(voiceForColor))
               : null;
             if (vc && n.id !== '__ghost__' && !selectedNoteIds.includes(n.id) && !(n as any).errorType) {

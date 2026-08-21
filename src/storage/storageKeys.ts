@@ -17,6 +17,7 @@ export const HARMONY_LABEL_MIN_SPAN_BEATS_KEY = 'harmony.analysis.labelMinSpanBe
 // GrandStaff editor/view toggles (persisted preferences)
 export const SHOW_MEASURE_NUMBERS_KEY = 'harmony-tutor.showMeasureNumbers.v1' as const;
 export const SHOW_VOICE_COLORS_KEY = 'harmony-tutor.showVoiceColors.v1' as const;
+export const VOICE_FROM_CHORD_KEY = 'harmony-tutor.voiceFromChord.v1' as const;
 export const ORCHESTRAL_GROUPING_KEY = 'harmony-tutor.orchestralGrouping.v1' as const;
 export const SHOW_QUICK_INSERT_BAR_KEY = 'harmony-tutor.showQuickInsertBar.v1' as const;
 export const SHOW_HARMONY_DEBUG_KEY = 'harmony-tutor.showHarmonyDebug.v1' as const;
@@ -64,6 +65,7 @@ export const STORAGE_KEYS = {
 	HARMONY_LABEL_MIN_SPAN_BEATS_KEY,
 	SHOW_MEASURE_NUMBERS_KEY,
 	SHOW_VOICE_COLORS_KEY,
+	VOICE_FROM_CHORD_KEY,
 	ORCHESTRAL_GROUPING_KEY,
 	SHOW_QUICK_INSERT_BAR_KEY,
 	SHOW_HARMONY_DEBUG_KEY,
