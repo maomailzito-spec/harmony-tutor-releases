@@ -4142,85 +4142,120 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // but the current pattern is not 'block' — so switching back from block
             // to an arpeggio pattern correctly re-expands the chord.
             if (uniqueTicks.size > 1 || accPatternRef.current !== 'block') {
-                // Anche qui l'accordo e' quello INTERO, non solo cio' che suona: una figura
-                // che non tocca tutte le note ne mette da parte qualcuna (vedi
-                // utils/chordMemory.ts), e ridisporre un accordo senza la sua nota piu'
-                // acuta ridispone un accordo che l'utente non ha scritto.
-                const sortedPitches = accordoConLeNoteRecuperate(selNotes);
-
-                if (sortedPitches.length < 2) return;
-
-                const chordStartTick = Math.min(...selNotes.map((n: any) => Number(n.startTick ?? 0)));
-                const chordEndTick   = Math.max(...selNotes.map((n: any) => Number(n.startTick ?? 0) + Number(n.durationTicks ?? 0)));
-                const totalDurTicks  = chordEndTick - chordStartTick;
-                const measureIndex   = Number(selNotes[0].measureIndex ?? 0);
-                const chordBeat      = Number(selNotes[0].beat ?? 1);
-                const existingGroupId = (selNotes[0] as any).chordGroupId || crypto.randomUUID();
-
-                // Fake-voiced block — SAME assignment as the single-tick (Block-SATB) path.
-                const fakeVoices: (1|2|3|4)[] = [4, 3, 2, 1];
-                const fakeNotes = sortedPitches.map((p: any, i: number) => ({
-                    ...p,
-                    voice: fakeVoices[Math.min(i, fakeVoices.length - 1)],
-                    startTick: chordStartTick,
-                    durationTicks: totalDurTicks,
-                    measureIndex,
-                    beat: chordBeat,
-                }));
-
-                // Cicla solo sulle posizioni DISTINTE (per-tipo) che cambiano davvero
-                // il voicing — unica fonte di verità in nextRevoicing (niente più
-                // slot duplicati né pressioni "a vuoto").
-                const measureActiveAcc = buildMeasureAccidentals(accNotes as any, measureIndex, chordStartTick);
-                const probe = nextRevoicing(fakeNotes as any, chordStartTick, revoiceDispIdx, keySignature, null, measureActiveAcc);
-                // `nextRevoicing` torna null quando NESSUNA posizione del ciclo produce
-                // altezze diverse da quelle attuali: il ciclo ha fatto il giro a vuoto.
-                // Finora usciva in silenzio, e il pulsante sembrava non rispondere piu'.
-                // Il numero di note distinte e' l'informazione che spiega il perche':
-                // meno note ci sono, meno disposizioni esistono.
-                if (!probe) {
-                    setCopyPasteError(tUI('revoice_nessuna_altra', {
-                        n: sortedPitches.length,
-                        defaultValue: `Nessun'altra disposizione per questo accordo (${sortedPitches.length} note distinte).`,
-                    }));
-                    return;
+                // ── UN ACCORDO PER VOLTA ──
+                // Stessa correzione gia' fatta per i pattern: qui la selezione veniva
+                // trattata come UN accordo solo — altezze di tutti gli accordi in un
+                // insieme unico, inizio al primo attacco e fine all'ultima fine. Con
+                // quattro accordi selezionati ne restava uno largo quanto la battuta, e
+                // gli altri sparivano. Il ramo degli accordi in blocco, qui sotto, cicla
+                // gia' per attacco: era solo questo a non farlo.
+                const gruppi = new Map<string, any[]>();
+                for (const n of selNotes) {
+                    const chiave = (n as any).chordGroupId
+                        ? `g:${(n as any).chordGroupId}`
+                        : `t:${Math.round(Number(n.startTick ?? 0))}`;
+                    const arr = gruppi.get(chiave);
+                    if (arr) arr.push(n); else gruppi.set(chiave, [n]);
                 }
-                setRevoiceDispIdx(probe.idx);
-                const foundNotes: StaffNote[] = probe.notes;
-
-                // Map SATB-voiced result to voice=0 block notes for the pattern engine.
-                const blockBase: StaffNote[] = foundNotes.map((n: any) => ({
-                    ...n,
-                    id: crypto.randomUUID(),
-                    voice: 0 as any,
-                    clef: (staffMode === 'treble_only' ? 'treble' : (Number(n.midi) >= 60 ? 'treble' : 'bass')) as 'treble' | 'bass',
-                    startTick: chordStartTick,
-                    durationTicks: totalDurTicks,
-                    measureIndex,
-                    beat: chordBeat,
-                    chordGroupId: existingGroupId,
-                }));
 
                 const subdivTicks = ({
                     'sixteenth': TICKS_PER_QUARTER / 4,
                     'eighth':    TICKS_PER_QUARTER / 2,
                     'quarter':   TICKS_PER_QUARTER,
                     'half':      TICKS_PER_QUARTER * 2,
-                } as Record<string, number>)[quantizeGrid] ?? (TICKS_PER_QUARTER / 2);
+                } as Record<string, number>)[quantizeGrid] ?? 0;
+                if (!(subdivTicks > 0)) {
+                    setCopyPasteError(tUI('pattern_niente_terzine', { defaultValue: 'I pattern non sanno ancora scrivere terzine: scegli una griglia 1/16, 1/8, 1/4 o 1/2.' }));
+                    return;
+                }
 
-                const newAccNotes = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, accPatternRef.current, accLetRingRef.current);
+                // La DISPOSIZIONE si decide una volta sola, sul primo accordo, e vale per
+                // tutti: premendo il pulsante con quattro accordi selezionati ci si aspetta
+                // che vadano nella stessa posizione, non ognuno per conto proprio. E' lo
+                // stesso criterio del ramo in blocco (`blockProbe` qui sotto).
+                let disposizione: Parameters<typeof revoiceChordAtTick>[2] | null = null;
+                const nuoveNote: StaffNote[] = [];
+                const replaceIds = new Set<string>();
+                let anteprima: StaffNote[] = [];
 
-                const replaceIds = new Set(selNotes.map((n: any) => n.id));
+                for (const gruppo of gruppi.values()) {
+                    // L'accordo INTERO, comprese le note che una figura piu' corta aveva
+                    // messo da parte (utils/chordMemory.ts): ridisporre un accordo senza la
+                    // sua nota piu' acuta ridispone un accordo che l'utente non ha scritto,
+                    // e con meno note esistono meno disposizioni distinte — cioe' un ciclo
+                    // che si pianta dopo un passo.
+                    const pitches = accordoConLeNoteRecuperate(gruppo);
+                    if (pitches.length < 2) continue;
+
+                    const chordStartTick = Math.min(...gruppo.map((n: any) => Number(n.startTick ?? 0)));
+                    const chordEndTick   = Math.max(...gruppo.map((n: any) => Number(n.startTick ?? 0) + Number(n.durationTicks ?? 0)));
+                    const totalDurTicks  = chordEndTick - chordStartTick;
+                    if (!(totalDurTicks > 0)) continue;
+                    const measureIndex   = Number(gruppo[0].measureIndex ?? 0);
+                    const chordBeat      = Number(gruppo[0].beat ?? 1);
+                    const existingGroupId = (gruppo[0] as any).chordGroupId || crypto.randomUUID();
+
+                    const fakeVoices: (1|2|3|4)[] = [4, 3, 2, 1];
+                    const fakeNotes = pitches.map((p: any, i: number) => ({
+                        ...p,
+                        voice: fakeVoices[Math.min(i, fakeVoices.length - 1)],
+                        startTick: chordStartTick,
+                        durationTicks: totalDurTicks,
+                        measureIndex,
+                        beat: chordBeat,
+                    }));
+                    const measureActiveAcc = buildMeasureAccidentals(accNotes as any, measureIndex, chordStartTick);
+
+                    let foundNotes: StaffNote[] | null = null;
+                    if (disposizione === null) {
+                        const probe = nextRevoicing(fakeNotes as any, chordStartTick, revoiceDispIdx, keySignature, null, measureActiveAcc);
+                        if (!probe) {
+                            setCopyPasteError(tUI('revoice_nessuna_altra', {
+                                n: pitches.length,
+                                defaultValue: `Nessun'altra disposizione per questo accordo (${pitches.length} note distinte).`,
+                            }));
+                            return;
+                        }
+                        setRevoiceDispIdx(probe.idx);
+                        disposizione = probe.disposition;
+                        foundNotes = probe.notes;
+                    } else {
+                        foundNotes = revoiceChordAtTick(fakeNotes as any, chordStartTick, disposizione, keySignature, null, measureActiveAcc);
+                    }
+                    if (!foundNotes || foundNotes.length === 0) continue;
+
+                    const blockBase: StaffNote[] = foundNotes.map((n: any) => ({
+                        ...n,
+                        id: crypto.randomUUID(),
+                        voice: 0 as any,
+                        clef: (staffMode === 'treble_only' ? 'treble' : (Number(n.midi) >= 60 ? 'treble' : 'bass')) as 'treble' | 'bass',
+                        startTick: chordStartTick,
+                        durationTicks: totalDurTicks,
+                        measureIndex,
+                        beat: chordBeat,
+                        chordGroupId: existingGroupId,
+                    }));
+
+                    const daPattern = applyAccPattern(blockBase, chordStartTick, totalDurTicks, subdivTicks, accPatternRef.current, accLetRingRef.current);
+                    if (anteprima.length === 0) anteprima = daPattern;
+                    nuoveNote.push(...daPattern);
+                    for (const n of gruppo) replaceIds.add(n.id);
+                }
+
+                if (nuoveNote.length === 0) return;
+
                 setAccompanimentTracks(prev => prev.map((track, i) => {
                     if (i !== trackIdx) return track;
                     const kept = track.notes.filter((n: any) => !replaceIds.has(n.id));
-                    return { ...track, notes: [...kept, ...newAccNotes].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
+                    return { ...track, notes: [...kept, ...nuoveNote].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
                 }));
-                setSelectedNoteIds(new Set(newAccNotes.map((n: any) => n.id)));
+                setSelectedNoteIds(new Set(nuoveNote.map((n: any) => n.id)));
                 const accTrkBlk = latestAccompanimentTracks.current?.[trackIdx];
                 const accInstrBlk = accTrkBlk?.isDrum ? drumSoundfont(accTrkBlk) : gmToSoundfont(accTrkBlk?.instrumentId);
                 const accChBlk = accTrkBlk ? accMidiChannel(accTrkBlk, trackIdx) : undefined;
-                newAccNotes.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk, accChBlk, accTransposeSemitones(accTrkBlk), accTrkBlk?.id); });
+                // Solo il primo accordo, come per i pattern: quattro accordi tutti insieme
+                // non sarebbero un'anteprima ma un grappolo.
+                anteprima.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstrBlk, accChBlk, accTransposeSemitones(accTrkBlk), accTrkBlk?.id); });
                 return;
             }
 
