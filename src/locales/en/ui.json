@@ -477,5 +477,6 @@
   "mix_delete_confirm_one": "Delete the track “{{name}}”?",
   "pattern_serve_selezione": "Select a chord on a track first: the pattern applies to that.",
   "pattern_solo_tracce": "Patterns apply to accompaniment tracks only, not to the choir: in the choir the four voices are four lines, and an arpeggio would have to decide how they move.",
-  "pattern_niente_terzine": "Patterns cannot write triplets yet: choose a 1/16, 1/8, 1/4 or 1/2 grid."
+  "pattern_niente_terzine": "Patterns cannot write triplets yet: choose a 1/16, 1/8, 1/4 or 1/2 grid.",
+  "revoice_nessuna_altra": "No other voicing for this chord ({{n}} distinct notes)."
 }

@@ -4142,14 +4142,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // but the current pattern is not 'block' — so switching back from block
             // to an arpeggio pattern correctly re-expands the chord.
             if (uniqueTicks.size > 1 || accPatternRef.current !== 'block') {
-                const byMidi = new Map<number, any>();
-                for (const n of selNotes) {
-                    const m = Number(n.midi ?? 0);
-                    if (!byMidi.has(m)) byMidi.set(m, n);
-                }
-                const sortedPitches = [...byMidi.entries()]
-                    .sort((a, b) => a[0] - b[0])
-                    .map(([, n]) => n);
+                // Anche qui l'accordo e' quello INTERO, non solo cio' che suona: una figura
+                // che non tocca tutte le note ne mette da parte qualcuna (vedi
+                // utils/chordMemory.ts), e ridisporre un accordo senza la sua nota piu'
+                // acuta ridispone un accordo che l'utente non ha scritto.
+                const sortedPitches = accordoConLeNoteRecuperate(selNotes);
 
                 if (sortedPitches.length < 2) return;
 
@@ -4176,7 +4173,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // slot duplicati né pressioni "a vuoto").
                 const measureActiveAcc = buildMeasureAccidentals(accNotes as any, measureIndex, chordStartTick);
                 const probe = nextRevoicing(fakeNotes as any, chordStartTick, revoiceDispIdx, keySignature, null, measureActiveAcc);
-                if (!probe) return;
+                // `nextRevoicing` torna null quando NESSUNA posizione del ciclo produce
+                // altezze diverse da quelle attuali: il ciclo ha fatto il giro a vuoto.
+                // Finora usciva in silenzio, e il pulsante sembrava non rispondere piu'.
+                // Il numero di note distinte e' l'informazione che spiega il perche':
+                // meno note ci sono, meno disposizioni esistono.
+                if (!probe) {
+                    setCopyPasteError(tUI('revoice_nessuna_altra', {
+                        n: sortedPitches.length,
+                        defaultValue: `Nessun'altra disposizione per questo accordo (${sortedPitches.length} note distinte).`,
+                    }));
+                    return;
+                }
                 setRevoiceDispIdx(probe.idx);
                 const foundNotes: StaffNote[] = probe.notes;
 
