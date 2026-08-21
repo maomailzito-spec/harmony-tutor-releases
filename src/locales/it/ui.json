@@ -449,5 +449,7 @@
   "acc_section_none": "Nessuna (fuori dalle parentesi)",
   "acc_section_sort": "Ordina i righi per sezione",
   "mix_delete_confirm_many": "Eliminare {{n}} track selezionate?",
-  "mix_delete_confirm_one": "Eliminare la track «{{name}}»?"
+  "mix_delete_confirm_one": "Eliminare la track «{{name}}»?",
+  "pattern_serve_selezione": "Scegli prima un accordo su una traccia: il pattern si applica a quello.",
+  "pattern_solo_tracce": "I pattern valgono solo sulle tracce di accompagnamento, non sul coro: nel coro le quattro voci sono quattro linee, e l’arpeggio dovrebbe deciderne la condotta."
 }

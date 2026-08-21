@@ -474,5 +474,7 @@
   "acc_section_none": "None (outside the brackets)",
   "acc_section_sort": "Sort staves by section",
   "mix_delete_confirm_many": "Delete {{n}} selected tracks?",
-  "mix_delete_confirm_one": "Delete the track “{{name}}”?"
+  "mix_delete_confirm_one": "Delete the track “{{name}}”?",
+  "pattern_serve_selezione": "Select a chord on a track first: the pattern applies to that.",
+  "pattern_solo_tracce": "Patterns apply to accompaniment tracks only, not to the choir: in the choir the four voices are four lines, and an arpeggio would have to decide how they move."
 }

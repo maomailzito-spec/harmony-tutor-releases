@@ -4335,9 +4335,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * sono state disposte. No-op se la selezione non è sull'accompagnamento.
      */
     const applyPatternToSelectionAsIs = useCallback((pattern: AccompanimentPattern) => {
-        if (selectedNoteIds.size === 0) return;
+        if (selectedNoteIds.size === 0) {
+            setCopyPasteError(tUI('pattern_serve_selezione', { defaultValue: 'Scegli prima un accordo su una traccia: il pattern si applica a quello.' }));
+            return;
+        }
         const firstSelId = [...selectedNoteIds][0];
-        if (!isAccompanimentNote(firstSelId, latestAccompanimentTracks.current)) return;
+        // I pattern lavorano SOLO sulle tracce di accompagnamento, e c'e' una ragione
+        // musicale: nel coro le quattro voci sono quattro linee, e sgranare un accordo in
+        // arpeggio significherebbe decidere quale voce si muove e quale tace: cioe'
+        // riscrivere la condotta delle parti. Finora pero' il rifiuto era MUTO, e premere
+        // il pattern su un accordo del coro sembrava un guasto.
+        if (!isAccompanimentNote(firstSelId, latestAccompanimentTracks.current)) {
+            setCopyPasteError(tUI('pattern_solo_tracce', { defaultValue: 'I pattern valgono solo sulle tracce di accompagnamento, non sul coro: nel coro le quattro voci sono quattro linee, e l’arpeggio dovrebbe deciderne la condotta.' }));
+            return;
+        }
         const accInfo = findAccTrackForNote(firstSelId, latestAccompanimentTracks.current);
         if (!accInfo) return;
         const trackIdx = accInfo.trackIndex;
