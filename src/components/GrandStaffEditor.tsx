@@ -4050,28 +4050,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (pattern === 'ondulato') {
             const n = sorted.length;
             if (n <= 1) return generateFromIndexPattern([0]);
-            if (n === 2) return generateFromIndexPattern([0, 1]);
-            // PERCHE' L'ONDA NON SI ADATTA AGLI SPAZI STRETTI.
+            // L'ONDA GIRA ANCHE NEGLI SPAZI STRETTI.
             //
             // La salita fino alla nota piu' acuta costa n posti, e i posti li detta la
-            // durata dell'accordo diviso la griglia: quattro note su una semiminima con
-            // griglia di semicrome fanno quattro posti, e ne esce 0-1-2-3, cioe' una
-            // salita. Fastidioso, e la tentazione e' far girare l'onda prima (0-1-2-1).
+            // DURATA dell'accordo divisa per la griglia, non l'accordo: quattro note su una
+            // semiminima con griglia di semicrome fanno quattro posti, e usciva 0-1-2-3,
+            // cioe' l'arpeggio ascendente che ha gia' il suo pulsante.
             //
-            // Non si puo', ed e' aritmetica: dentro n posti si possono toccare n note
-            // OPPURE girare, mai tutt'e due, perche' girare vuol dire ripetere una nota.
-            // E il pattern non e' un effetto sopra un accordo conservato altrove: le note
-            // scritte SONO l'accordo, e il pattern successivo lo ricostruisce da quelle.
-            // Un'onda che scarta la nota piu' acuta la cancella per sempre - e tornando
-            // all'arpeggio ascendente restano tre note su quattro posti, che risalgono e
-            // ricascano: sembra ancora un'onda, e in discendente sembra un'onda inversa.
-            // Provato: 48 52 55 60 → 48 52 55 52 → l'accordo diventa 48 52 55.
-            //
-            // Fra un pattern che degenera in salita e un pattern che ti mangia una nota,
-            // il primo e' un limite, il secondo e' una perdita. Per avere l'onda servono
-            // piu' posti: accordo piu' lungo o griglia piu' fitta.
-            const up = Array.from({ length: n }, (_, i) => i);
-            const down = Array.from({ length: n - 2 }, (_, i) => n - 2 - i);
+            // Dentro n posti si possono toccare n note OPPURE girare, mai tutt'e due:
+            // girare vuol dire ripetere una nota. Quindi l'onda stretta lascia fuori la
+            // cima dell'accordo — e questo si poteva fare solo DOPO la memoria
+            // dell'accordo (utils/chordMemory.ts), perche' prima quella nota spariva per
+            // sempre e tornando all'arpeggio restavano tre note. Ora la nota non suona ma
+            // resta nell'accordo, e la figura dopo se la ritrova.
+            const posti = Math.max(1, Math.floor(durationTicks / slot));
+            const vertice = (posti > n)
+                ? n - 1
+                : Math.max(1, Math.min(n - 1, Math.floor(posti / 2)));
+            const up = Array.from({ length: vertice + 1 }, (_, i) => i);
+            const down = Array.from({ length: Math.max(0, vertice - 1) }, (_, i) => vertice - 1 - i);
             return generateFromIndexPattern([...up, ...down]);
         }
 
