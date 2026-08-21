@@ -13,6 +13,7 @@ declare global {
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { vociDeterminate, vociInUso, type VoiceNum } from '../utils/voiceFromChord';
+import { conMemoriaDellAccordo, accordoConLeNoteRecuperate } from '../utils/chordMemory';
 import { SECTION_ORDER, SECTION_I18N_KEY, SECTION_LABEL_IT, sezioneDaStrumento, sezioneEffettiva, type SectionId, type SectionChoice } from '../utils/instrumentSections';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
@@ -3973,7 +3974,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         letRing: boolean,
         compact: boolean = true,
     ): StaffNote[] => {
-        if (pattern === 'block' || baseNotes.length === 0) return baseNotes;
+        // Cio' che il pattern non suona viaggia con le note (vedi utils/chordMemory.ts).
+        if (pattern === 'block' || baseNotes.length === 0) return conMemoriaDellAccordo(baseNotes as any[], baseNotes as any[]) as StaffNote[];
 
         // Compact to close position: the SATB engine may spread notes over 2
         // octaves (e.g. C3–G3–E4–C5). For arpeggio patterns every note should
@@ -4029,7 +4031,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (letRing) note.playbackDurationTicks = endTick - s;
                 out.push(note as StaffNote);
             }
-            return out;
+            return conMemoriaDellAccordo(out as any[], sorted as any[]) as StaffNote[];
         };
 
         if (pattern === 'arpeggio_up') {
@@ -4109,7 +4111,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 out.push(chickNote as StaffNote);
             }
         }
-        return out;
+        return conMemoriaDellAccordo(out as any[], sorted as any[]) as StaffNote[];
     }, [ticksToDurationInfo]);
 
     /** Ricalcola il voicing delle note SATB selezionate con la prossima disposizione nel ciclo. */
@@ -4415,12 +4417,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         for (const gruppo of gruppi.values()) {
             // Altezze ESATTE dell'utente: dedup per midi, ordine grave→acuto, ottave intatte.
-            const byMidi = new Map<number, any>();
-            for (const n of gruppo) {
-                const m = Number(n.midi ?? 0);
-                if (!byMidi.has(m)) byMidi.set(m, n);
-            }
-            const sortedPitches = [...byMidi.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n);
+            // Rimette anche le note che un pattern precedente non suonava: senza, ogni
+            // figura piu' corta dell'accordo lo consumerebbe (vedi utils/chordMemory.ts).
+            const sortedPitches = accordoConLeNoteRecuperate(gruppo);
             if (sortedPitches.length === 0) continue;
 
             const chordStartTick = Math.min(...gruppo.map((n: any) => Number(n.startTick ?? 0)));
