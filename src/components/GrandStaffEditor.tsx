@@ -3692,6 +3692,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch { /* la diagnostica non deve disturbare */ }
     }, []);
 
+
     useEffect(() => {
         try {
             localStorage.setItem(TOOLBAR_PREFS_KEY, JSON.stringify({ order: toolbarGroupOrder, hidden: hiddenToolbarGroups }));
@@ -11930,12 +11931,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // L'ambito segue la selezione: se tocca il coro si inverte nel coro, se tocca le tracce
     // si inverte fra le tracce visibili, se tocca entrambi si invertono entrambi. Le tracce
     // nascoste restano fuori: non si seleziona quello che non si vede.
-    const invertiSelezione = useCallback(() => {
+    const invertiSelezione = useCallback((): Record<string, unknown> => {
         // Dal ref e non dalla closure: questa funzione la chiamano sia la tastiera sia il
         // menù Modifica, e il secondo si registra una volta sola — con la closure avrebbe
         // invertito la selezione di quando l'app è partita.
         const sel = latestSelectedNoteIds.current;
-        if (!sel || sel.size === 0) return;
+        if (!sel || sel.size === 0) return { esito: 'niente selezionato' };
 
         const coro = latestRawNotes.current || [];
         const tracce = latestAccompanimentTracks.current || [];
@@ -11959,7 +11960,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (b < da) da = b;
             if (b > a) a = b;
         }
-        if (!Number.isFinite(da) || !Number.isFinite(a)) return;
+        if (!Number.isFinite(da) || !Number.isFinite(a)) {
+            return { esito: 'arco non calcolabile', selezionate: sel.size, nel_coro: selNelCoro, nelle_tracce: selNelleTracce, candidate: candidate.length };
+        }
 
         // Le posizioni arrivano da somme di frazioni di battuta: il confronto secco
         // scarterebbe le note che cadono ESATTAMENTE sui due capi dell'arco.
@@ -11973,7 +11976,34 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             nuova.add(n.id);
         }
         setSelectedNoteIds(nuova);
+        return {
+            esito: nuova.size > 0 ? 'invertita' : 'nessuna nota fuori dalla selezione, nell’arco',
+            selezionate_prima: sel.size,
+            nel_coro: selNelCoro,
+            nelle_tracce: selNelleTracce,
+            candidate_esaminate: candidate.length,
+            arco_da_battuta: da,
+            arco_a_battuta: a,
+            selezionate_dopo: nuova.size,
+        };
     }, [setSelectedNoteIds]);
+
+    // ── INVERSIONE DELLA SELEZIONE (diagnostica) ──
+    // `__htInverti()` esegue l'inversione e racconta ogni passaggio; `__htUltimoOptI`
+    // dice se il tasto era arrivato fin qui.
+    useEffect(() => {
+        try {
+            const w = window as any;
+            w.__htInverti = () => {
+                const r = invertiSelezione();
+                // eslint-disable-next-line no-console
+                console.table(r);
+                // eslint-disable-next-line no-console
+                console.log('ultimo ⌥I visto dalla tastiera:', w.__htUltimoOptI ?? '(mai)');
+                return r;
+            };
+        } catch { /* la diagnostica non deve disturbare */ }
+    }, [invertiSelezione]);
 
     const markSelectionAsChordAtPlayhead = useCallback(() => {
         const ids = selectedNoteIds;
@@ -15284,6 +15314,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
 
         const onKeyDown = (e: KeyboardEvent) => {
+            // SONDA per `__htInverti()`: registra l'ultimo ⌥I visto dalla tastiera, ANCHE
+            // quando una guardia più sotto lo scarta o quando non arriva affatto. Serve a
+            // distinguere «la scorciatoia non arriva» (se l'ha mangiata l'accelerator del
+            // menù di sistema, o il fuoco era in un campo di testo) da «arriva e non fa
+            // nulla» — due guasti diversi che dalla poltrona si somigliano.
+            if (e.altKey && (e.code === 'KeyI' || (e.key || '').toLowerCase() === 'i')) {
+                try {
+                    (window as any).__htUltimoOptI = {
+                        quando: new Date().toLocaleTimeString(),
+                        code: e.code,
+                        key: e.key,
+                        fuoco: (document.activeElement as HTMLElement | null)?.tagName ?? '(nessuno)',
+                        selezionate: latestSelectedNoteIds.current?.size ?? 0,
+                    };
+                } catch { /* la sonda non deve disturbare */ }
+            }
             // Important: this listener runs in capture phase.
             // NB: in chord-insert mode we no longer block everything here — the
             // isTypingTarget() check below already defers to the chord input while
