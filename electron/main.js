@@ -439,6 +439,7 @@ function createMenu() {
       print: 'Stampa', save: 'Salva', saveAs: 'Salva con nome...',
       closeProject: 'Chiudi progetto', undo: 'Annulla', redo: 'Ripeti',
       cut: 'Taglia', copy: 'Copia', paste: 'Incolla', selectAll: 'Seleziona tutto',
+      invertSelection: 'Inverti selezione',
       selectVoice: 'Seleziona solo voce corrente (rettangolo)',
       titleFont: 'Titolo', serif: 'Serif', sansSerif: 'Sans-serif', mono: 'Monospace',
       titleIncrease: 'Aumenta dimensione titolo', titleDecrease: 'Diminuisci dimensione titolo',
@@ -467,6 +468,7 @@ function createMenu() {
       print: 'Print', save: 'Save', saveAs: 'Save As...',
       closeProject: 'Close project', undo: 'Undo', redo: 'Redo',
       cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
+      invertSelection: 'Invert Selection',
       selectVoice: 'Select only current voice (marquee)',
       titleFont: 'Title', serif: 'Serif', sansSerif: 'Sans-serif', mono: 'Monospace',
       titleIncrease: 'Increase title size', titleDecrease: 'Decrease title size',
@@ -1020,6 +1022,11 @@ function createMenu() {
           label: mt('selectAll'),
           accelerator: 'CmdOrCtrl+A',
           click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'selectAll' }); }
+        },
+        {
+          label: mt('invertSelection'),
+          accelerator: 'Alt+I',
+          click: () => { sendAction(MENU_ACTIONS.EDIT_COMMAND, { command: 'invertSelection' }); }
         },
         { type: 'separator' },
         {

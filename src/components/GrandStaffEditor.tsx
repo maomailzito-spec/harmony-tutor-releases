@@ -5529,6 +5529,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 try { redoNotes && redoNotes(); } catch (e) { /* Removed debug log */ }
                 return;
             }
+            if (command === 'invertSelection') {
+                invertiSelezione();
+                return;
+            }
             if (command === 'selectAll') {
                 // Usa latestRawNotes.current per garantire che siano le note aggiornate
                 const allNotes = latestRawNotes.current || [];
@@ -11910,6 +11914,67 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: _hasInferredChange ? { tonic: _activeTonic, isMinor: _activeIsMinor } : null });
     }, [contextMenu, playheadPosition, selectedNoteIds, timeSignature, getCurrentAbsBeatForPlayhead, getMeasureIndexAndBeatFromAbsBeat, effectiveAnalysisContexts, keySignatureRoot, isMinorMode, setContextMenu]);
 
+    // ── INVERTI LA SELEZIONE (⌥I) ──
+    //
+    // «Seleziona il soprano, poi prendi le altre tre voci»: senza inversione bisogna
+    // rifare a mano una selezione che si è appena finita di fare, al contrario.
+    //
+    // LA SCELTA CHE CONTA È DOVE SI FERMA. Invertire su TUTTO il brano sarebbe la lettura
+    // letterale (tutto ciò che non è selezionato), ma su una partitura di quaranta battute
+    // basterebbe selezionare due note per ritrovarsi con qualche migliaio di note prese:
+    // corretto e inservibile. L'inversione lavora quindi dentro l'ARCO della selezione,
+    // dalla prima all'ultima nota selezionata. Se la selezione è tutto il soprano, l'arco è
+    // il brano e si prendono le altre tre voci intere — il caso dell'esempio; se è mezza
+    // battuta, si prendono le altre voci in quella mezza battuta.
+    //
+    // L'ambito segue la selezione: se tocca il coro si inverte nel coro, se tocca le tracce
+    // si inverte fra le tracce visibili, se tocca entrambi si invertono entrambi. Le tracce
+    // nascoste restano fuori: non si seleziona quello che non si vede.
+    const invertiSelezione = useCallback(() => {
+        // Dal ref e non dalla closure: questa funzione la chiamano sia la tastiera sia il
+        // menù Modifica, e il secondo si registra una volta sola — con la closure avrebbe
+        // invertito la selezione di quando l'app è partita.
+        const sel = latestSelectedNoteIds.current;
+        if (!sel || sel.size === 0) return;
+
+        const coro = latestRawNotes.current || [];
+        const tracce = latestAccompanimentTracks.current || [];
+        const abs = absBeatOfNoteRef.current;
+
+        const idsCoro = new Set(coro.map(n => n.id));
+        const selNelCoro = [...sel].some(id => idsCoro.has(id));
+        const selNelleTracce = [...sel].some(id => isAccompanimentNote(id, tracce));
+
+        const candidate: any[] = [
+            ...(selNelCoro ? coro : []),
+            ...(selNelleTracce ? tracce.filter(t => t.visible).flatMap(t => t.notes || []) : []),
+        ];
+
+        let da = Infinity;
+        let a = -Infinity;
+        for (const n of candidate) {
+            if (!sel.has(n.id)) continue;
+            const b = abs(n as StaffNote);
+            if (b === null || !Number.isFinite(b)) continue;
+            if (b < da) da = b;
+            if (b > a) a = b;
+        }
+        if (!Number.isFinite(da) || !Number.isFinite(a)) return;
+
+        // Le posizioni arrivano da somme di frazioni di battuta: il confronto secco
+        // scarterebbe le note che cadono ESATTAMENTE sui due capi dell'arco.
+        const EPS = 1e-6;
+        const nuova = new Set<string>();
+        for (const n of candidate) {
+            if (sel.has(n.id)) continue;
+            const b = abs(n as StaffNote);
+            if (b === null || !Number.isFinite(b)) continue;
+            if (b < da - EPS || b > a + EPS) continue;
+            nuova.add(n.id);
+        }
+        setSelectedNoteIds(nuova);
+    }, [setSelectedNoteIds]);
+
     const markSelectionAsChordAtPlayhead = useCallback(() => {
         const ids = selectedNoteIds;
         if (ids.size < 2) return;
@@ -15329,6 +15394,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     })));
                 }
             };
+
+            // ── ⌥I — inverti la selezione dentro l'arco selezionato ──
+            // Su macOS ⌥+i è un tasto morto (accento circonflesso): `e.key` non arriva mai
+            // come 'i', quindi comanda `e.code`, che è il tasto FISICO.
+            if (!isMod && e.altKey && !e.shiftKey && (e.code === 'KeyI' || key === 'i') && selectedNoteIds.size > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                invertiSelezione();
+                return;
+            }
 
             // ── Opt+Shift+H — collapse scattered selection into one chord at the playhead ──
             // Marks the selected notes (even across different beats, e.g. an arpeggio) as a
