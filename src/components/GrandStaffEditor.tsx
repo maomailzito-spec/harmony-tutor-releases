@@ -12,7 +12,7 @@ declare global {
 }
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, startTransition, useDeferredValue } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { vociDallAccordo } from '../utils/voiceFromChord';
+import { vociDeterminate, vociInUso, type VoiceNum } from '../utils/voiceFromChord';
 import { SECTION_ORDER, SECTION_I18N_KEY, SECTION_LABEL_IT, sezioneDaStrumento, sezioneEffettiva, type SectionId, type SectionChoice } from '../utils/instrumentSections';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
@@ -624,66 +624,82 @@ const fineTick = (n: StaffNote) => inizioTick(n) + Math.max(1, Number((n as any)
 /** Chi c'è su un attacco: le note che ATTACCANO lì (da collocare) e tutto ciò che sta
  *  occupando quel tick senza attaccarvi (pause posate lì, note e pause cominciate PRIMA e
  *  ancora in corso), che si tiene la propria voce e la toglie dal giro. */
-function elementiDellAttacco(note: StaffNote[], measureIndex: number, attacco: number) {
+function elementiDellAttacco(
+    note: StaffNote[],
+    measureIndex: number,
+    attacco: number,
+    /** Il rigo su cui una nota e' DISEGNATA: e' li' che l'utente l'ha scritta. */
+    rigoDi: (n: StaffNote) => string,
+) {
     const quiDentro = (n: StaffNote) =>
         n.measureIndex === measureIndex
         && inizioTick(n) <= attacco + TICK_EPS_ATTACCO
         && fineTick(n) > attacco + TICK_EPS_ATTACCO;
     const attaccaQui = (n: StaffNote) => !n.isRest && Math.abs(inizioTick(n) - attacco) < TICK_EPS_ATTACCO;
-    const elementi: Array<{ id: string; midi?: number | null; isRest?: boolean; voice?: number | null }> = [];
+    const elementi: Array<{ id: string; midi?: number | null; isRest?: boolean; voice?: number | null; rigo: string }> = [];
     for (const n of note) {
         if (!quiDentro(n)) continue;
         elementi.push(attaccaQui(n)
-            ? { id: n.id, midi: n.midi }
-            : { id: n.id, isRest: true, voice: n.voice as any });
+            ? { id: n.id, midi: n.midi, rigo: rigoDi(n) }
+            : { id: n.id, isRest: true, voice: n.voice as any, rigo: rigoDi(n) });
     }
     return { elementi, quiDentro, attaccaQui };
 }
 
-function riassegnaVociAllAttacco(note: StaffNote[], riferimento: StaffNote, partCount: number): StaffNote[] {
+/** rigo → voci che quel rigo ospita, dall'acuto al grave. Dipende dal modo d'impaginazione
+ *  (in parti strette il rigo alto ne ospita tre), quindi si ricava da `clefForVoice`. */
+function vociOspitatePerRigo(partCount: number, rigoDellaVoce: (v: VoiceNum) => string): Map<string, VoiceNum[]> {
+    const m = new Map<string, VoiceNum[]>();
+    for (const v of vociInUso(partCount)) {
+        const r = rigoDellaVoce(v);
+        const arr = m.get(r);
+        if (arr) arr.push(v); else m.set(r, [v]);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a - b); // 1 = piu' acuta
+    return m;
+}
+
+function riassegnaVociAllAttacco(
+    note: StaffNote[],
+    riferimento: StaffNote,
+    partCount: number,
+    rigoDi: (n: StaffNote) => string,
+    rigoDellaVoce: (v: VoiceNum, measureIndex: number) => string,
+): StaffNote[] {
     const mi = Number(riferimento.measureIndex ?? -1);
     if (mi < 0) return note;
     const attacco = inizioTick(riferimento);
-    const { elementi, quiDentro, attaccaQui } = elementiDellAttacco(note, mi, attacco);
-    if (elementi.filter(e => !e.isRest).length < 2) return note;
+    const { elementi, quiDentro, attaccaQui } = elementiDellAttacco(note, mi, attacco, rigoDi);
+    if (elementi.filter(e => !e.isRest).length < 1) return note;
 
-    const esito = vociDallAccordo(elementi, partCount);
+    const esito = vociDeterminate(elementi, vociOspitatePerRigo(partCount, (v) => rigoDellaVoce(v, mi)));
     if (esito.voci.size === 0) return note;
-    // SE NON E' CERTO, NON SI TOCCA NIENTE.
-    //
-    // Su un accordo incompleto la regola ripiega sulle voci ESTREME, e come lettura va
-    // bene: due note sole si leggono soprano e basso. Ma applicarla MENTRE si scrive fa
-    // danni, perche' il rigo su cui una nota si disegna lo deriva `clefForVoice` DALLA VOCE.
-    // Scrivendo prima il basso e poi il tenore, la seconda nota e' la piu' acuta delle due,
-    // diventava soprano e SALTAVA sul rigo di violino; e all'arrivo del soprano vero il
-    // filtro delle sovrapposizioni la cancellava, perche' occupava la voce 1.
-    //
-    // Quindi la lettura verticale interviene solo quando l'accordo la determina davvero.
-    // Finche' non lo fa, comanda la voce dell'inserimento e le note stanno dove le hai
-    // scritte - disegnate neutre, che e' appunto il modo di dire «non ho ancora deciso».
-    if (!esito.certo) return note;
 
     return note.map(n => {
         const v = esito.voci.get(n.id);
         if (!v || Number(n.voice) === Number(v)) return n;
-        // Solo le note che attaccano qui: le rivendicanti tornano già con la loro voce.
+        // Solo le note che attaccano qui: le rivendicanti tornano gia' con la loro voce.
         if (!quiDentro(n) || !attaccaQui(n)) return n;
         return { ...n, voice: v as Voice };
     });
 }
 
 /**
- * Le note la cui voce NON è determinata da ciò che è scritto.
+ * Le note la cui voce NON e' determinata da cio' che e' scritto.
  *
- * Un accordo con due note e nessuna pausa è ambiguo — soprano e basso? soprano e tenore? —
- * e lo è anche per un lettore. In quel caso la regola tiene le voci estreme, che è una
- * CONVENZIONE, non una lettura, e queste note vengono disegnate NEUTRE: gambo secondo
- * l'altezza, nessun colore di voce. Così mentre costruisci un accordo non vedi lampeggiare
- * etichette sbagliate che poi saltano — vedi qualcosa che non ha ancora deciso, e si vede
- * che non ha deciso. Appena l'accordo si completa (o scrivi le pause che dicono chi tace)
- * le note prendono la loro voce e il disegno lo mostra.
+ * Una nota sola sul rigo di basso puo' essere il tenore o il basso, e nessuna regola
+ * verticale puo' saperlo finche' non arriva la seconda (o la pausa che dice chi tace).
+ * Queste note si disegnano NEUTRE: gambo secondo l'altezza, nessun colore di voce. Cosi'
+ * mentre costruisci un accordo non vedi lampeggiare etichette che poi saltano — vedi
+ * qualcosa che non ha ancora deciso, e si vede che non ha deciso. Appena il rigo si
+ * completa, le note prendono la loro voce e il disegno lo mostra.
  */
-function vociNonDeterminate(note: StaffNote[], partCount: number): Set<string> {
+function vociNonDeterminate(
+    note: StaffNote[],
+    partCount: number,
+    rigoDi: (n: StaffNote) => string,
+    rigoDellaVoce: (v: VoiceNum, measureIndex: number) => string,
+): Set<string> {
     const fuori = new Set<string>();
     const perMisura = new Map<number, StaffNote[]>();
     for (const n of note) {
@@ -696,10 +712,11 @@ function vociNonDeterminate(note: StaffNote[], partCount: number): Set<string> {
         const attacchi = new Set<number>();
         for (const n of dentro) if (!n.isRest) attacchi.add(inizioTick(n));
         for (const attacco of attacchi) {
-            const { elementi, attaccaQui } = elementiDellAttacco(dentro, mi, attacco);
-            if (elementi.filter(e => !e.isRest).length < 1) continue;
-            if (vociDallAccordo(elementi, partCount).certo) continue;
-            for (const n of dentro) if (attaccaQui(n)) fuori.add(n.id);
+            const { elementi, attaccaQui } = elementiDellAttacco(dentro, mi, attacco, rigoDi);
+            // Le voci che un rigo ospita dipendono dal modo d'impaginazione, che puo'
+            // cambiare a meta' brano: si chiedono per MISURA.
+            const decise = vociDeterminate(elementi, vociOspitatePerRigo(partCount, (v) => rigoDellaVoce(v, mi))).voci;
+            for (const n of dentro) if (attaccaQui(n) && !decise.has(n.id)) fuori.add(n.id);
         }
     }
     return fuori;
@@ -7928,8 +7945,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Note la cui voce non è ancora determinata da ciò che è scritto (modo «carta e
     // matita»): si disegnano neutre finché l'accordo non si completa.
     const noteSenzaVoceDecisa = useMemo(
-        () => (voiceFromChord ? vociNonDeterminate(rawNotes || [], partCount) : new Set<string>()),
-        [voiceFromChord, rawNotes, partCount],
+        () => (voiceFromChord
+            ? vociNonDeterminate(
+                rawNotes || [], partCount,
+                (n) => clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat),
+                (v, mi) => clefForVoice(v as any, undefined, mi),
+              )
+            : new Set<string>()),
+        [voiceFromChord, rawNotes, partCount, clefForVoice],
     );
 
     const systemRenderDataBySystem = useMemo(() => {
@@ -13178,7 +13201,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // vera è l'ordine verticale dell'accordo. Si rifà a ogni nota che entra, così
             // non esiste un momento in cui l'accordo è «da chiudere»: è sempre già letto.
             const next = voiceFromChordRef.current
-                ? riassegnaVociAllAttacco(inserite, newNote, partCount)
+                ? riassegnaVociAllAttacco(
+                    inserite, newNote, partCount,
+                    (n) => clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat),
+                    (v, mi) => clefForVoice(v as any, undefined, mi),
+                  )
                 : inserite;
             try {
                 const collectSnapshot = (minMeasure: number, maxMeasure: number) => {

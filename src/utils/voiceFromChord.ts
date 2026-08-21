@@ -40,80 +40,73 @@ export interface NotaDaCollocare {
 	/** Altezza in semitoni. Le pause non ne hanno. */
 	midi?: number | null;
 	isRest?: boolean;
-	/** Voce già scritta sulla nota: per le PAUSE è quella posata dall'utente e comanda. */
+	/** Voce gia' scritta: per le PAUSE (e per le note tenute da prima) e' quella che
+	 *  rivendicano, e comanda. */
 	voice?: number | null;
+	/** Il rigo su cui l'elemento e' scritto ('treble', 'bass', o le chiavi antiche). */
+	rigo: string;
 }
 
 export interface EsitoCollocazione {
-	/** id della nota → voce assegnata. Contiene solo ciò che va cambiato o confermato. */
+	/** id → voce, SOLO per cio' che e' determinato. Chi non c'e' resta com'e': la sua voce
+	 *  e' un'ipotesi, non una lettura, e si disegna neutra. */
 	voci: Map<string, VoiceNum>;
-	/** false quando l'accordo non basta a determinare le voci e si è usata la convenzione
-	 *  delle voci estreme (accordo incompleto senza pause che dicano chi tace). */
-	certo: boolean;
-	/** Note che non hanno trovato posto: più note che voci libere. Restano come stanno. */
-	avanzate: string[];
 }
 
 /**
- * Assegna le voci alle note di UN SOLO accordo (un attacco).
+ * LA CERTEZZA E' PER RIGO, non per accordo.
  *
- * @param elementi note e pause che attaccano in quel punto
- * @param partCount numero di parti della scrittura (4, 3, 2)
+ * Dentro un pentagramma le voci che lo abitano sono note in partenza (nel grand staff
+ * normale: soprano e contralto sopra, tenore e basso sotto; in parti strette il rigo alto
+ * ne ospita tre). Quindi appena su un rigo ci sono tante note quante sono le sue voci
+ * libere, l'ordine verticale le determina TUTTE — e lo fa subito, senza aspettare che
+ * l'accordo sia completo.
+ *
+ * E' anche l'unica riassegnazione sicura da fare mentre si scrive: due voci dello stesso
+ * rigo si disegnano sullo stesso rigo, quindi correggerne l'ordine non fa MAI saltare una
+ * nota da un pentagramma all'altro sotto le mani.
+ *
+ * Cio' che non e' determinato non viene toccato: una nota sola su un rigo puo' essere il
+ * tenore o il basso, e nessuna regola verticale puo' saperlo finche' non arriva la seconda
+ * (o la pausa che dice chi tace).
  */
-export function vociDallAccordo(elementi: NotaDaCollocare[], partCount: number): EsitoCollocazione {
+export function vociDeterminate(
+	elementi: NotaDaCollocare[],
+	/** rigo → voci che quel rigo ospita, ORDINATE dall'acuto al grave. */
+	vociDelRigo: Map<string, VoiceNum[]>,
+): EsitoCollocazione {
 	const voci = new Map<string, VoiceNum>();
-	const inUso = vociInUso(partCount);
 
-	// 1) Le pause si prendono la loro voce e la tolgono dal giro.
-	const occupate = new Set<VoiceNum>();
+	const perRigo = new Map<string, NotaDaCollocare[]>();
 	for (const el of elementi) {
-		if (!el.isRest) continue;
-		const v = Number(el.voice);
-		if (inUso.includes(v as VoiceNum)) {
-			occupate.add(v as VoiceNum);
-			voci.set(el.id, v as VoiceNum);
-		}
+		const arr = perRigo.get(el.rigo);
+		if (arr) arr.push(el); else perRigo.set(el.rigo, [el]);
 	}
 
-	// 2) Le note si ordinano dall'acuto al grave e prendono le voci rimaste nello stesso
-	//    ordine: la più acuta la voce più alta fra quelle libere.
-	const note = elementi
-		.filter(el => !el.isRest && Number.isFinite(Number(el.midi)))
-		.sort((a, b) => Number(b.midi) - Number(a.midi));
+	for (const [rigo, dentro] of perRigo) {
+		const ospitate = vociDelRigo.get(rigo);
+		if (!ospitate || ospitate.length === 0) continue;
 
-	const libere = inUso.filter(v => !occupate.has(v));
-
-	// L'accordo determina le voci solo se riempie tutte le parti: note + pause = parti.
-	const certo = note.length + occupate.size >= inUso.length;
-
-	// 3) Accoppiamento DALL'ESTERNO VERSO IL CENTRO: la nota più acuta con la voce libera
-	//    più alta, la più grave con la più bassa, poi si stringe. Un solo giro di regola che
-	//    copre tutti i casi:
-	//     · accordo pieno → assegnazione completa e determinata;
-	//     · accordo incompleto → restano prese le voci ESTREME, che è la convenzione della
-	//       scrittura ridotta (due note diventano soprano e basso);
-	//     · note di troppo → ad avanzare è una voce INTERNA, non il basso. Partendo dall'alto
-	//       avanzava la nota più grave, cioè si perdeva proprio quella che regge l'armonia.
-	const avanzate: string[] = [];
-	const scelte: Array<VoiceNum | undefined> = new Array(note.length);
-	{
-		let i = 0;
-		let j = note.length - 1;
-		let alta = 0;
-		let bassa = libere.length - 1;
-		while (i <= j && alta <= bassa) {
-			scelte[i] = libere[alta];
-			i++; alta++;
-			if (i > j || alta > bassa) break;
-			scelte[j] = libere[bassa];
-			j--; bassa--;
+		// 1) Chi rivendica (pause posate li', note e pause tenute da prima) si tiene la sua
+		//    voce e la toglie dal giro.
+		const occupate = new Set<VoiceNum>();
+		for (const el of dentro) {
+			if (!el.isRest) continue;
+			const v = Number(el.voice) as VoiceNum;
+			if (ospitate.includes(v)) occupate.add(v);
 		}
-	}
-	note.forEach((n, k) => {
-		const v = scelte[k];
-		if (v) voci.set(n.id, v);
-		else avanzate.push(n.id);
-	});
+		const libere = ospitate.filter(v => !occupate.has(v));
 
-	return { voci, certo, avanzate };
+		// 2) Le note del rigo, dall'acuto al grave.
+		const note = dentro
+			.filter(el => !el.isRest && Number.isFinite(Number(el.midi)))
+			.sort((a, b) => Number(b.midi) - Number(a.midi));
+
+		// 3) Determinato solo quando le note riempiono le voci libere di QUESTO rigo.
+		//    Meno note che voci: non si sa quale sia quale, e non si tocca.
+		if (note.length !== libere.length) continue;
+		note.forEach((n, i) => voci.set(n.id, libere[i]));
+	}
+
+	return { voci };
 }
