@@ -4380,12 +4380,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const selNotes = expandAccChordSelection(accNotes, selectedNoteIds);
         if (selNotes.length === 0) return;
 
+        // La griglia in barra offre anche 1/8 T e 1/4 T, ma i pattern non sanno scrivere
+        // terzine: la suddivisione irregolare non ha una figura standard, e la tabella
+        // durata→figura sceglierebbe la piu' vicina — note disegnate come semicrome che
+        // durano un terzo di movimento. Finora la scelta veniva semplicemente IGNORATA e si
+        // suonava in ottavi: meglio dirlo che fingere di aver capito.
         const subdivTicks = ({
             'sixteenth': TICKS_PER_QUARTER / 4,
             'eighth':    TICKS_PER_QUARTER / 2,
             'quarter':   TICKS_PER_QUARTER,
             'half':      TICKS_PER_QUARTER * 2,
-        } as Record<string, number>)[quantizeGrid] ?? (TICKS_PER_QUARTER / 2);
+        } as Record<string, number>)[quantizeGrid] ?? 0;
+        if (!(subdivTicks > 0)) {
+            setCopyPasteError(tUI('pattern_niente_terzine', { defaultValue: 'I pattern non sanno ancora scrivere terzine: scegli una griglia 1/16, 1/8, 1/4 o 1/2.' }));
+            return;
+        }
 
         // ── UN ACCORDO PER VOLTA ──
         // Prima tutta la selezione veniva trattata come UN accordo solo: le altezze di

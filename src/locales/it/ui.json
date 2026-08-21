@@ -451,5 +451,6 @@
   "mix_delete_confirm_many": "Eliminare {{n}} track selezionate?",
   "mix_delete_confirm_one": "Eliminare la track «{{name}}»?",
   "pattern_serve_selezione": "Scegli prima un accordo su una traccia: il pattern si applica a quello.",
-  "pattern_solo_tracce": "I pattern valgono solo sulle tracce di accompagnamento, non sul coro: nel coro le quattro voci sono quattro linee, e l’arpeggio dovrebbe deciderne la condotta."
+  "pattern_solo_tracce": "I pattern valgono solo sulle tracce di accompagnamento, non sul coro: nel coro le quattro voci sono quattro linee, e l’arpeggio dovrebbe deciderne la condotta.",
+  "pattern_niente_terzine": "I pattern non sanno ancora scrivere terzine: scegli una griglia 1/16, 1/8, 1/4 o 1/2."
 }
