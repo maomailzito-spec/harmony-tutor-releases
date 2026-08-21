@@ -17,7 +17,7 @@ const n = (id: string, midi: number, rigo: string) => ({ id, midi, rigo });
 const p = (id: string, voice: number, rigo: string) => ({ id, isRest: true, voice, rigo });
 
 const casi: Array<[string, any[], Map<string, VoiceNum[]>]> = [
-    ['SOLO IL TENORE sul rigo di basso (una nota: indecidibile)', [n('t', 52, 'bass')], RIGHI(false)],
+    ['SOLO IL TENORE sul rigo di basso (una nota: la voce resta quella con cui l hai scritta)', [n('t', 52, 'bass')], RIGHI(false)],
     ['tenore + basso, scritti in quest ordine', [n('t', 52, 'bass'), n('b', 41, 'bass')], RIGHI(false)],
     ['basso + tenore, ordine inverso', [n('b', 41, 'bass'), n('t', 52, 'bass')], RIGHI(false)],
     ['tenore basso sul rigo giu, soprano solo su quello su', [n('t', 52, 'bass'), n('b', 41, 'bass'), n('s', 72, 'treble')], RIGHI(false)],
@@ -32,7 +32,7 @@ for (const [titolo, els, righi] of casi) {
     const r = vociDeterminate(els, righi);
     const riga = els.filter((e: any) => !e.isRest)
         .sort((a: any, b: any) => b.midi - a.midi)
-        .map((e: any) => `${e.id}(${e.midi},${e.rigo})→${r.voci.has(e.id) ? NOME[r.voci.get(e.id)!] : 'neutra'}`)
+        .map((e: any) => `${e.id}(${e.midi},${e.rigo})→${r.voci.has(e.id) ? NOME[r.voci.get(e.id)!] : 'non toccata'}`)
         .join('  ');
     const pause = els.filter((e: any) => e.isRest).map((e: any) => `${e.id}→${NOME[e.voice]}`).join(' ');
     console.log(`${titolo}\n   ${riga}${pause ? '   [pause: ' + pause + ']' : ''}\n`);

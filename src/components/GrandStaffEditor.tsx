@@ -684,44 +684,6 @@ function riassegnaVociAllAttacco(
     });
 }
 
-/**
- * Le note la cui voce NON e' determinata da cio' che e' scritto.
- *
- * Una nota sola sul rigo di basso puo' essere il tenore o il basso, e nessuna regola
- * verticale puo' saperlo finche' non arriva la seconda (o la pausa che dice chi tace).
- * Queste note si disegnano NEUTRE: gambo secondo l'altezza, nessun colore di voce. Cosi'
- * mentre costruisci un accordo non vedi lampeggiare etichette che poi saltano — vedi
- * qualcosa che non ha ancora deciso, e si vede che non ha deciso. Appena il rigo si
- * completa, le note prendono la loro voce e il disegno lo mostra.
- */
-function vociNonDeterminate(
-    note: StaffNote[],
-    partCount: number,
-    rigoDi: (n: StaffNote) => string,
-    rigoDellaVoce: (v: VoiceNum, measureIndex: number) => string,
-): Set<string> {
-    const fuori = new Set<string>();
-    const perMisura = new Map<number, StaffNote[]>();
-    for (const n of note) {
-        const mi = Number(n.measureIndex ?? -1);
-        if (mi < 0) continue;
-        const arr = perMisura.get(mi);
-        if (arr) arr.push(n); else perMisura.set(mi, [n]);
-    }
-    for (const [mi, dentro] of perMisura) {
-        const attacchi = new Set<number>();
-        for (const n of dentro) if (!n.isRest) attacchi.add(inizioTick(n));
-        for (const attacco of attacchi) {
-            const { elementi, attaccaQui } = elementiDellAttacco(dentro, mi, attacco, rigoDi);
-            // Le voci che un rigo ospita dipendono dal modo d'impaginazione, che puo'
-            // cambiare a meta' brano: si chiedono per MISURA.
-            const decise = vociDeterminate(elementi, vociOspitatePerRigo(partCount, (v) => rigoDellaVoce(v, mi))).voci;
-            for (const n of dentro) if (attaccaQui(n) && !decise.has(n.id)) fuori.add(n.id);
-        }
-    }
-    return fuori;
-}
-
 function isAccompanimentNote(noteId: string, accompanimentTracks: AccompanimentTrack[]): boolean {
     return accompanimentTracks.some(track => track.notes.some(note => note.id === noteId));
 }
@@ -7942,19 +7904,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // rispetto all'interazione: layoutData (cambia solo su edit), clefForVoice (layout mode),
     // tiedFromPrevNoteIds (rawNotes), keyAccidentals (armatura). Su ghost/selezione questi non
     // cambiano → il calcolo NON rigira. La map legge systemRenderDataBySystem[systemIndex].
-    // Note la cui voce non è ancora determinata da ciò che è scritto (modo «carta e
-    // matita»): si disegnano neutre finché l'accordo non si completa.
-    const noteSenzaVoceDecisa = useMemo(
-        () => (voiceFromChord
-            ? vociNonDeterminate(
-                rawNotes || [], partCount,
-                (n) => clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat),
-                (v, mi) => clefForVoice(v as any, undefined, mi),
-              )
-            : new Set<string>()),
-        [voiceFromChord, rawNotes, partCount, clefForVoice],
-    );
-
     const systemRenderDataBySystem = useMemo(() => {
         if (!layoutData?.systemsParams) return [] as Array<{ systemNotes: StaffNote[]; systemNotesForRender: StaffNote[] }>;
         return layoutData.systemsParams.map((system) => {
@@ -7963,20 +7912,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const systemNotesForRender = systemNotes.map((n) => {
                 const mappedClef: ClefType = clefForVoice(n.voice, (n as any).clefOverride, n.measureIndex, n.beat);
                 if (n.isRest) return { ...n, clef: mappedClef };
-                const voceNonDecisa = noteSenzaVoceDecisa.has(n.id) || undefined;
                 const tieFromPrev = tiedFromPrevNoteIds.has(n.id);
-                if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev, voceNonDecisa };
+                if ((n as any).userAccidental) return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
                 try {
                     const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
                     const nextExplicit = calculateAccidental(noteName, keyAccidentalsAtMeasure(n.measureIndex ?? 0));
-                    return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev, voceNonDecisa };
+                    return { ...n, clef: mappedClef, explicitAccidental: nextExplicit, isTiedFromPrev: tieFromPrev };
                 } catch {
-                    return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev, voceNonDecisa };
+                    return { ...n, clef: mappedClef, isTiedFromPrev: tieFromPrev };
                 }
             });
             return { systemNotes, systemNotesForRender };
         });
-    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentalsAtMeasure, noteSenzaVoceDecisa]);
+    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentalsAtMeasure]);
 
     // Larghezza reale del contenuto: di norma quella d'impaginazione, ma nel nastro
     // continuo è quella del sistema, che la eccede e si percorre scorrendo.
