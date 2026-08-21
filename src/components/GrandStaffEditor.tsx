@@ -12435,7 +12435,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const maxLocalStart = Math.max(0, ticksPerMeasure - durationTicks);
         if (snappedLocalTicks < 0) snappedLocalTicks = 0;
         if (snappedLocalTicks > maxLocalStart) {
-            if (localTicksRaw >= ticksPerMeasure - snapGridTicks * 0.4) return;
+            if (localTicksRaw >= ticksPerMeasure - snapGridTicks * 0.4) {
+                registraInserimento({
+                    battuta: hit.measureIndex,
+                    figura: `${selectedInsertion.duration}${selectedInsertion.isDotted ? '.' : ''}`,
+                    esito: 'RIFIUTATO: la figura non ci sta prima della stanghetta',
+                    tick_mirato: Math.round(localTicksRaw),
+                    ultimo_inizio_utile: maxLocalStart,
+                });
+                return;
+            }
             snappedLocalTicks = maxLocalStart;
         }
 
@@ -12469,6 +12478,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         registraInserimento({
             battuta: hit.measureIndex,
             figura: `${selectedInsertion.duration}${selectedInsertion.isDotted ? '.' : ''}${isTriplet ? ' ⑶' : ''}${isDuplet ? ' ⑵' : ''}`,
+            esito: 'posto scelto (l\'inserimento puo\' essere ancora rifiutato piu\' sotto)',
             x_mouse: Math.round(x * 10) / 10,
             x_letta: Math.round(xMirata * 10) / 10,
             tick_mirato: Math.round(localTicksRaw),
@@ -12784,7 +12794,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         setActiveStaffArea('satb');
         // In chord insert mode, clicking SATB only repositions the caret — no single-note insertion.
-        if (chordInsertModeRef.current) return;
+        if (chordInsertModeRef.current) {
+            registraInserimento({
+                battuta: hit.measureIndex,
+                esito: 'RIFIUTATO: modo inserimento accordi attivo — il clic sposta solo il cursore',
+            });
+            return;
+        }
         // Plain click: pick SATB as the paste destination (caret already positioned by the
         // snap block above) and deselect — never insert.
         if (isPlainClick) {
@@ -12857,7 +12873,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const targetClef: ClefType = clefForVoice(voiceForInsert);
 
         if (staffSystemMode === 'satb_ancient') {
-            if (!isSvgYWithinClefStaff(y, targetClef)) return;
+            if (!isSvgYWithinClefStaff(y, targetClef)) {
+                registraInserimento({
+                    battuta: hit.measureIndex,
+                    esito: `RIFIUTATO: la voce ${voiceForInsert} scrive in chiave ${targetClef}, il clic e' fuori da quel rigo`,
+                });
+                return;
+            }
         } else {
             // IMPORTANT: apply the same treble Y calibration used for pitch mapping,
             // otherwise the treble/bass gating will cut off low notes for S/A.
@@ -12865,7 +12887,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const isBassArea = (staffSystemMode === 'treble_only')
                 ? false
                 : (yForArea > (TOP_STAFF_HEIGHT + CONNECTOR_HEIGHT / 2));
-            if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) return;
+            if ((targetClef === 'bass' && !isBassArea) || (targetClef === 'treble' && isBassArea)) {
+                registraInserimento({
+                    battuta: hit.measureIndex,
+                    esito: `RIFIUTATO: la voce ${voiceForInsert} scrive in chiave ${targetClef}, il clic e' sull'altro rigo`,
+                });
+                return;
+            }
         }
 
         // Option/Alt+Click: selection-only gesture (no insertion).
