@@ -97,6 +97,6 @@
   "staff_line_bold": "Bold",
   "pref_editor_orchestral_grouping": "Group staves like a score",
   "pref_editor_orchestral_grouping_desc": "Draws a square bracket around consecutive staves of the same instrument family (woodwinds, brass, strings…), joins their barlines, and ties choir and tracks together with a single line on the left. The family is inferred from the track’s instrument and can be overridden by clicking the staff’s clef.",
-  "pref_editor_voice_from_chord": "Voice inferred from the chord (trial)",
-  "pref_editor_voice_from_chord_desc": "Write notes without picking a voice: vertical order within the chord decides, the way a printed page reads — highest is soprano, lowest is bass. The order you write in does not matter, and neither does the staff (in close position the tenor sits on the treble staff). Rests keep the voice of wherever you place them, and say who is silent."
+  "pref_editor_voice_from_chord": "Voice inferred from the chord",
+  "pref_editor_voice_from_chord_desc": "Write notes without picking a voice: vertical order within the staff decides, the way a printed page reads. The order you write in does not matter. It corrects voice crossings as you write: if you meant the crossing, set the voice by hand and it stays. Rests keep the voice of wherever you place them, and say who is silent."
 }

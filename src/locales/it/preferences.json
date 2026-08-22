@@ -97,6 +97,6 @@
   "staff_line_bold": "Marcato",
   "pref_editor_orchestral_grouping": "Raggruppa i righi come in partitura",
   "pref_editor_orchestral_grouping_desc": "Chiude con una parentesi quadra i righi consecutivi della stessa famiglia di strumenti (legni, ottoni, archi…), ne salda le stanghette di misura e unisce coro e tracce con un’unica linea a sinistra. La famiglia si deduce dallo strumento della traccia e si può forzare cliccando la chiave del rigo.",
-  "pref_editor_voice_from_chord": "Voce dedotta dall’accordo (in prova)",
-  "pref_editor_voice_from_chord_desc": "Scrivi le note senza scegliere la voce: la decide l’ordine verticale dentro l’accordo, come si legge su una pagina stampata — la più acuta è il soprano, la più grave il basso. L’ordine in cui scrivi non conta, e il rigo nemmeno (in posizione stretta il tenore sta su quello di violino). Le pause si prendono la voce di dove le posi, e dicono chi tace."
+  "pref_editor_voice_from_chord": "Voce dedotta dall’accordo",
+  "pref_editor_voice_from_chord_desc": "Scrivi le note senza scegliere la voce: la decide l’ordine verticale dentro il rigo, come si legge su una pagina stampata. L’ordine in cui scrivi non conta. Corregge da sé gli incroci di voce mentre scrivi: se un incrocio lo volevi, rimetti la voce a mano e resta com’è. Le pause si prendono la voce di dove le posi, e dicono chi tace."
 }

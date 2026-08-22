@@ -246,14 +246,14 @@ export const PREFERENCES: Record<PreferenceId, PreferenceDef<any>> = {
   'editor.voiceFromChord': {
     id: 'editor.voiceFromChord',
     section: 'Editor',
-    label: 'Voce dedotta dall’accordo (in prova)',
+    label: 'Voce dedotta dall’accordo',
     i18nKey: 'pref_editor_voice_from_chord',
     description: 'Scrivi le note senza scegliere la voce: la decide l’ordine verticale dentro l’accordo. Le pause si prendono la voce di dove le posi.',
     descriptionI18nKey: 'pref_editor_voice_from_chord_desc',
     storageKey: VOICE_FROM_CHORD_KEY,
-    defaultValue: false,
+    defaultValue: true,
     kind: 'boolean',
-    parse: (raw) => parseBool(raw, false),
+    parse: (raw) => parseBool(raw, true),
     serialize: (value: boolean) => (value ? '1' : '0'),
   },
 
