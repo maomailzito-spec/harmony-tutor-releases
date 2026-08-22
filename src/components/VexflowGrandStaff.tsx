@@ -908,6 +908,40 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     const staffWidth = width - 2 * STAFF_MARGIN;
 
     const keyString = keySignatureToVexflowString(keySignature);
+
+    // ── I SEGNI DI TEMPO SI INCOLONNANO ──
+    //
+    // Con gli strumenti traspositori i righi non hanno piu' la stessa armatura: in Do
+    // maggiore il coro non ha alterazioni, il corno in Fa ne ha una, la tromba in Si♭ due.
+    // VexFlow posa il segno di tempo subito dopo l'armatura di CIASCUN rigo, quindi i 4/4
+    // finivano a tre altezze diverse e quello del rigo piu' carico cadeva sopra le prime
+    // note degli altri. Riservare piu' spazio nell'impaginazione non bastava: sposta le
+    // note, non i segni.
+    //
+    // Si allineano dando ai righi meno carichi un po' d'aria PRIMA del segno di tempo. La
+    // misura non e' stimata: chiedendo a VexFlow dove fa cominciare le note, un'armatura
+    // costa 0 senza alterazioni, poi 21, 32, 43… cioe' dieci fissi piu' undici per
+    // alterazione. E il padding del segno di tempo sposta l'inizio uno a uno rispetto al
+    // suo valore di difetto, che e' 15.
+    const CONTO_DA_CHIAVE: Record<string, number> = {
+      C: 0, G: 1, D: 2, A: 3, E: 4, B: 5, 'F#': 6, 'C#': 7,
+      F: 1, Bb: 2, Eb: 3, Ab: 4, Db: 5, Gb: 6, Cb: 7,
+    };
+    const larghezzaArmatura = (n: number) => (n <= 0 ? 0 : 10 + n * 11);
+    const larghezzaDi = (chiave: string) => larghezzaArmatura(CONTO_DA_CHIAVE[chiave] ?? 0);
+    const massimoArmatura = Math.max(
+      larghezzaDi(keyString),
+      ...(accKeyStrings ?? []).map(k => larghezzaDi(k ?? keyString)),
+    );
+    const PADDING_TEMPO_DI_DIFETTO = 15;
+    const allineaTempo = (st: Stave, chiave: string) => {
+      const sua = larghezzaDi(chiave);
+      if (sua >= massimoArmatura) return;
+      try {
+        const m = (st as any).getModifiers?.().find((x: any) => x.getCategory?.() === 'TimeSignature');
+        if (m && typeof m.setPadding === 'function') m.setPadding(PADDING_TEMPO_DI_DIFETTO + (massimoArmatura - sua));
+      } catch { /* l'allineamento non deve far saltare il disegno */ }
+    };
     /** L'armatura in vigore all'inizio di una misura: quella d'impianto finché non
      *  arriva un cambio, poi l'ultimo cambio avvenuto fino a lì. */
     const armaturaAllaMisura = (measureIndex: number): KeySignature => {
@@ -1023,12 +1057,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     if (treble) {
       treble.addClef('treble').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       treble.addKeySignature(keyString);
+      allineaTempo(treble, keyString);
       treble.setContext(context).draw();
     }
 
     if (bass && treble) {
       bass.addClef('bass').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       bass.addKeySignature(keyString);
+      allineaTempo(bass, keyString);
       bass.setContext(context).draw();
 
       const brace = new StaveConnector(treble, bass);
@@ -1043,18 +1079,22 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     if (satbSoprano && satbAlto && satbTenor && satbBass) {
       satbSoprano.addClef('soprano' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       satbSoprano.addKeySignature(keyString);
+      allineaTempo(satbSoprano, keyString);
       satbSoprano.setContext(context).draw();
 
       satbAlto.addClef('alto' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       satbAlto.addKeySignature(keyString);
+      allineaTempo(satbAlto, keyString);
       satbAlto.setContext(context).draw();
 
       satbTenor.addClef('tenor' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       satbTenor.addKeySignature(keyString);
+      allineaTempo(satbTenor, keyString);
       satbTenor.setContext(context).draw();
 
       satbBass.addClef('bass' as any).addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       satbBass.addKeySignature(keyString);
+      allineaTempo(satbBass, keyString);
       satbBass.setContext(context).draw();
 
       const brace = new StaveConnector(satbSoprano, satbBass);
@@ -1099,11 +1139,13 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // trasponessero solo le note, ognuna si porterebbe dietro la sua alterazione.
       const keyStringDelRigo = accKeyStrings?.[block.trackIdx] ?? keyString;
       if (!block.isDrum) block.treble.addKeySignature(keyStringDelRigo); // la batteria non ha armatura
+      allineaTempo(block.treble, block.isDrum ? 'C' : keyStringDelRigo);
       block.treble.setContext(context).draw();
 
       if (block.bass) {
         block.bass.addClef('bass').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
         block.bass.addKeySignature(keyStringDelRigo);
+        allineaTempo(block.bass, keyStringDelRigo);
         block.bass.setContext(context).draw();
 
         const accBrace = new StaveConnector(block.treble, block.bass);
