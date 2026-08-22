@@ -18037,7 +18037,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     <div className="fixed inset-0 z-[1100]" onMouseDown={() => setClefMenu(null)} />
                     <div
                         className="fixed z-[1101] bg-slate-800 border border-slate-600 rounded-lg shadow-2xl py-1"
-                        style={{ left: Math.min(clefMenu.x, window.innerWidth - 210), top: Math.min(clefMenu.y, Math.max(8, window.innerHeight - 380)), maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
+                        /* L'altezza del menu non e' piu' una costante da indovinare. Prima
+                           il bordo alto veniva tirato su di 380px fissi, misura giusta per il
+                           menu di allora; aggiungendo sezione d'orchestra e strumento
+                           traspositore il fondo finiva sotto lo schermo e le ultime voci non
+                           si raggiungevano. Ora si fissa PRIMA quanto alto puo' essere
+                           (`altezzaMax`, che non supera lo schermo) e poi si posa il bordo
+                           alto in modo che ci stia tutto: quello che avanza scorre dentro il
+                           menu invece di finire fuori dalla finestra. */
+                        style={(() => {
+                            const margine = 12;
+                            const altezzaMax = Math.min(560, window.innerHeight - 2 * margine);
+                            return {
+                                left: Math.min(clefMenu.x, window.innerWidth - 230),
+                                top: Math.max(margine, Math.min(clefMenu.y, window.innerHeight - altezzaMax - margine)),
+                                maxHeight: altezzaMax,
+                                overflowY: 'auto' as const,
+                            };
+                        })()}
                         onMouseDown={(e) => e.stopPropagation()}
                     >
                         <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 border-b border-slate-700 mb-1 select-none">
