@@ -2932,7 +2932,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const accExtraPx = hasVisibleAccompaniment
         ? accompanimentExtraPxForTracks(visibleAccompanimentTracks)
         : 0;
-    const systemHeightPx = (staffSystemMode === 'satb_ancient' ? VF_SATB_SYSTEM_HEIGHT : TOTAL_SYSTEM_HEIGHT)
+    // A RIGO SINGOLO il sistema e' piu' basso di tutto il pentagramma di basso che non
+    // c'e': senza toglierlo resterebbe in fondo la stessa aria che prima stava in mezzo.
+    // Il valore e' lo stesso salto che separa i due righi del grande rigo.
+    const ALTEZZA_RIGO_DI_BASSO = VF_BASS_Y - VF_TREBLE_Y;
+    const systemHeightPx = (staffSystemMode === 'satb_ancient'
+        ? VF_SATB_SYSTEM_HEIGHT
+        : staffSystemMode === 'treble_only'
+            ? TOTAL_SYSTEM_HEIGHT - ALTEZZA_RIGO_DI_BASSO
+            : TOTAL_SYSTEM_HEIGHT)
         + accExtraPx;
     // Traslazione verso l'alto quando il SATB è NASCOSTO: deve coprire TUTTA l'altezza del
     // blocco SATB. MODE-AWARE: in chiavi antiche il blocco è 4 righi (fino a ~380) → shift ~440;

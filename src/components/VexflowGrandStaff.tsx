@@ -137,6 +137,12 @@ const STAVE_LINES_HEIGHT = 40;
 const ACC_TREBLE_Y_GRANDSTAFF = BASS_Y + STAVE_LINES_HEIGHT + ACCOMPANIMENT_STAFF_GAP; // 300
 // Y of accompaniment treble in satb_ancient mode: bottom of SATB bass + gap.
 const ACC_TREBLE_Y_SATB_ANCIENT = SATB_BASS_Y + STAVE_LINES_HEIGHT + ACCOMPANIMENT_STAFF_GAP; // 470
+// Y dei righi ACC A RIGO SINGOLO: sotto il rigo di violino, che li' e' l'unico che c'e'.
+// Mancava, e `treble_only` ricadeva nel caso del grande rigo: i righi di accompagnamento
+// partivano da dove starebbe il pentagramma di BASSO che non esiste, lasciando 130 px di
+// vuoto sopra di loro — e la linea di lettura, che invece il conto giusto ce l'ha, finiva
+// a mezz'aria prima di raggiungerli.
+const ACC_TREBLE_Y_TREBLE_ONLY = TREBLE_Y + STAVE_LINES_HEIGHT + ACCOMPANIMENT_STAFF_GAP; // 220
 // Total vertical footprint added when accompaniment is shown:
 // gap + treble lines + treble->bass span + bass lines.
 // (Used by parent to grow systemHeightPx; mirrored constant in GrandStaffEditor.tsx.)
@@ -963,7 +969,11 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
     // Accompaniment staves: one block per visible track, stacked BELOW the SATB.
     // Each block is a grand staff (treble+bass+brace) or a single staff with the
     // track's clef. Same X/width as the SATB staves so barlines align horizontally.
-    const accTrebleY = staffMode === 'satb_ancient' ? ACC_TREBLE_Y_SATB_ANCIENT : ACC_TREBLE_Y_GRANDSTAFF;
+    const accTrebleY = staffMode === 'satb_ancient'
+      ? ACC_TREBLE_Y_SATB_ANCIENT
+      : staffMode === 'treble_only'
+        ? ACC_TREBLE_Y_TREBLE_ONLY
+        : ACC_TREBLE_Y_GRANDSTAFF;
     type AccBlock = {
       trackIdx: number;
       trackId?: string;
