@@ -10,6 +10,7 @@ const keys: Key[] = [
   'showMeasureNumbersEnabled',
   'showHarmonyDebugEnabled',
   'showVoiceColorsEnabled',
+  'concertPitchEnabled',
   'showQuickInsertBarEnabled',
   'showRomanEnabled',
   'showSymbolsEnabled',

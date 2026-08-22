@@ -5,6 +5,7 @@ export type MenuState = Partial<{
   showMeasureNumbersEnabled: boolean;
   showHarmonyDebugEnabled: boolean;
   showVoiceColorsEnabled: boolean;
+  concertPitchEnabled: boolean;
   showQuickInsertBarEnabled: boolean;
   showRomanEnabled: boolean;
   showSymbolsEnabled: boolean;

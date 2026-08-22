@@ -1375,6 +1375,11 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
     if (typeof state.showVoiceColorsEnabled === 'boolean') {
       showVoiceColorsEnabled = state.showVoiceColorsEnabled;
     }
+    // Senza questa riga la spunta in barra e quella nel menu divergono: due comandi
+    // per lo stesso interruttore che si contraddicono a vista.
+    if (typeof state.concertPitchEnabled === 'boolean') {
+      concertPitchEnabled = state.concertPitchEnabled;
+    }
     if (typeof state.showQuickInsertBarEnabled === 'boolean') {
       showQuickInsertBarEnabled = state.showQuickInsertBarEnabled;
     }

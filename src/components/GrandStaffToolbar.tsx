@@ -113,6 +113,11 @@ type GrandStaffToolbarProps = {
     canRecord?: boolean;
     onToggleRecording?: () => void;
     quantizeGrid?: string;
+    /** Vista «suoni reali»: compare solo se c'è almeno uno strumento traspositore, se no
+     *  sarebbe un interruttore che non commuta niente. */
+    concertPitch?: boolean;
+    onToggleConcertPitch?: () => void;
+    hasTransposingTracks?: boolean;
     setQuantizeGrid?: (value: string) => void;
     onQuantizeAccTrack?: () => void;
 
@@ -349,6 +354,9 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         canRecord = false,
         onToggleRecording,
         quantizeGrid = 'eighth',
+        concertPitch,
+        onToggleConcertPitch,
+        hasTransposingTracks,
         setQuantizeGrid,
         onQuantizeAccTrack,
         bpm,
@@ -760,6 +768,21 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     <button onClick={() => setIsMinorMode(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_major')}</button>
                     <button onClick={() => setIsMinorMode(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${isMinorMode ? 'text-gray-900' : 'text-gray-300'}`}>{tT('key_minor')}</button>
                 </div>
+
+                {hasTransposingTracks && (
+                    <label
+                        className="flex items-center gap-2 text-xs text-gray-300 select-none"
+                        title={t('tb_concert_pitch_tip')}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={concertPitch !== false}
+                            onChange={() => onToggleConcertPitch?.()}
+                            className="accent-cyan-500"
+                        />
+                        {t('tb_concert_pitch')}
+                    </label>
+                )}
 
                 <label className="flex items-center gap-2 text-xs text-gray-300 select-none">
                     <input

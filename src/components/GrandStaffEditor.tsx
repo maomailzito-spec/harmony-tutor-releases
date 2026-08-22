@@ -5448,6 +5448,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         showMeasureNumbersEnabled: showMeasureNumbers,
         showHarmonyDebugEnabled: showHarmonyDebug,
         showVoiceColorsEnabled: showVoiceColors,
+        concertPitchEnabled: concertPitch,
         showQuickInsertBarEnabled: showQuickInsertBar,
         // …e lo stato dei tre strati e dei righi, perché le spunte del menù dicano il
         // vero: una spunta che mente è peggio di una voce mancante, soprattutto per chi
@@ -17190,6 +17191,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 canRecord={accompanimentTracks.length > 0}
                 onToggleRecording={toggleRecording}
                 quantizeGrid={quantizeGrid}
+                concertPitch={concertPitch}
+                onToggleConcertPitch={() => setConcertPitch(v => !v)}
+                hasTransposingTracks={visibleAccompanimentTracks.some(t => {
+                    const tr = trasposizioneDaId((t as any).transposeId);
+                    return tr.semitoni !== 0 || tr.gradi !== 0;
+                })}
                 setQuantizeGrid={setQuantizeGrid}
                 onQuantizeAccTrack={accompanimentTracks.some(t => t.visible) ? onQuantizeAccTrack : undefined}
                 bpm={bpm}

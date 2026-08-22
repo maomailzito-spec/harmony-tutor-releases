@@ -40,6 +40,11 @@ function normalizeMenuState(state) {
   } else if (s.showVoiceColorsEnabled != null) {
     out.showVoiceColorsEnabled = toBoolean(s.showVoiceColorsEnabled);
   }
+  if (typeof s.concertPitchEnabled === 'boolean') {
+    out.concertPitchEnabled = s.concertPitchEnabled;
+  } else if (s.concertPitchEnabled != null) {
+    out.concertPitchEnabled = toBoolean(s.concertPitchEnabled);
+  }
 
   if (typeof s.showQuickInsertBarEnabled === 'boolean') {
     out.showQuickInsertBarEnabled = s.showQuickInsertBarEnabled;

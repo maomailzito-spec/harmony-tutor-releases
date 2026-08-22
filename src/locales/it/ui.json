@@ -466,5 +466,7 @@
   "transp_f": "in Fa — corno, corno inglese",
   "transp_bb_tenor": "in Si♭ 9ª — sax tenore, clarinetto basso",
   "transp_eb_bari": "in Mi♭ 13ª — sax baritono",
-  "transp_eb_above": "in Mi♭ acuto — tromba piccola"
+  "transp_eb_above": "in Mi♭ acuto — tromba piccola",
+  "tb_concert_pitch": "Suoni reali",
+  "tb_concert_pitch_tip": "Mostra le parti in suoni reali (partitura in Do). Togliendo la spunta ogni strumento traspositore si legge nella sua scrittura, armatura compresa. Le note nel file non cambiano: cambia solo come si vedono."
 }
