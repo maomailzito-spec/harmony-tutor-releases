@@ -4229,6 +4229,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
     }, [keySignature, revoiceDispIdx]);
 
+    // ── INTESTAZIONE DEI RIGHI (diagnostica) ──
+    // `__htIntestazione()` stampa i numeri veri: quante alterazioni ha l'armatura del brano,
+    // quante il rigo piu' carico, quanto spazio si riserva e dove finisce per cadere la
+    // prima nota. Serve quando «i segni sono allineati ma la griglia no»: il segno di tempo
+    // lo posa VexFlow dopo l'armatura del rigo, la griglia la posa l'impaginazione, e se i
+    // due conti non partono dallo stesso massimo si vede subito da qui.
+    useEffect(() => {
+        (window as any).__htIntestazione = () => {
+            const d = (window as any).__htIntestazioneDati;
+            if (!d) { /* eslint-disable-next-line no-console */ console.log('nessun dato: apri un brano'); return null; }
+            // eslint-disable-next-line no-console
+            console.table({
+                'armatura del brano (alterazioni)': d.armatura_del_brano,
+                'rigo piu carico (alterazioni)': d.alterazioni_massime,
+                'vista suoni reali': d.suoni_reali,
+                'spazio riservato all armatura': d.spazio_armatura,
+                'spazio riservato al tempo': d.spazio_tempo,
+                'x della prima nota': d.prima_nota_x,
+                'x dove VexFlow mette le note del rigo piu carico': 65 + (d.alterazioni_massime > 0 ? 10 + d.alterazioni_massime * 11 : 0),
+            });
+            // eslint-disable-next-line no-console
+            console.table(d.tracce);
+            return d;
+        };
+    }, []);
+
     const handleRevoice = useCallback(() => {
         if (selectedNoteIds.size === 0) return;
 
@@ -7377,6 +7403,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const extraArmatura = (m: number) => keyChangeExtraByMeasure[m] ?? 0;
         const timeSigWidthWithPadding = timeSignature ? 55 : 0;
         const startOffset = START_X + keySigWidth + timeSigWidthWithPadding;
+        // Sonda per `__htIntestazione()`: i numeri veri dell'intestazione, invece di dedurli.
+        try {
+            (window as any).__htIntestazioneDati = {
+                armatura_del_brano: keySignature.count,
+                alterazioni_massime: alterazioniMassime,
+                suoni_reali: concertPitch,
+                spazio_armatura: keySigWidth,
+                spazio_tempo: timeSigWidthWithPadding,
+                prima_nota_x: startOffset,
+                tracce: visibleAccompanimentTracks.map(t => ({
+                    nome: t.name,
+                    traspositore: (t as any).transposeId ?? '—',
+                    armatura_scritta: (() => {
+                        const tr = trasposizioneDaId((t as any).transposeId);
+                        if (concertPitch || (tr.semitoni === 0 && tr.gradi === 0)) return keySignature.count;
+                        try { return getKeySignature(radiceScritta(keySignatureRoot, tr), 'Major').count; } catch { return -1; }
+                    })(),
+                })),
+            };
+        } catch { /* la sonda non deve disturbare */ }
         const systemRightX = layoutWidth - START_X;
         const baseBeatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
         const normalizedTimeSigChanges = (timeSignatureChanges || [])
