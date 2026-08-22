@@ -4247,7 +4247,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 'spazio riservato all armatura': d.spazio_armatura,
                 'spazio riservato al tempo': d.spazio_tempo,
                 'x della prima nota': d.prima_nota_x,
-                'x dove VexFlow mette le note del rigo piu carico': 65 + (d.alterazioni_massime > 0 ? 10 + d.alterazioni_massime * 11 : 0),
+                'x dove VexFlow mette le note del rigo piu carico': 50 + 65 + (d.alterazioni_massime > 0 ? 10 + d.alterazioni_massime * 11 : 0),
             });
             // eslint-disable-next-line no-console
             console.table(d.tracce);
@@ -7360,6 +7360,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Esatto sui diesis; sui bemolli riserva qualche pixel in piu', che e' il verso
         // giusto in cui sbagliare.
         const larghezzaArmatura = (alterazioni: number) => (alterazioni <= 0 ? 0 : 10 + alterazioni * 11);
+        // ARIA DOPO L'INTESTAZIONE.
+        //
+        // La misura di VexFlow (0 → 65, poi +21, +32…) era presa su un rigo che comincia a
+        // x=0; i righi veri cominciano a START_X, cioe' 50 piu' in la'. Sommando, la fine
+        // dell'intestazione cade a 115 + armatura, mentre l'impaginazione riservava
+        // 105 + armatura: dieci pixel di meno del dovuto, da sempre, e la prima nota
+        // finiva addosso al segno di tempo. Con i traspositori il segno si sposta ancora
+        // piu' a destra e lo scarto diventa visibile — il primo quarto sopra il 4/4.
+        //
+        // Si aggiungono quindi i dieci mancanti piu' dieci d'aria. E' l'errore che mi ha
+        // fatto girare in tondo due volte: avevo misurato la cosa giusta nel posto sbagliato.
+        const ARIA_INTESTAZIONE = 20;
         const alterazioniMassime = (() => {
             let massimo = keySignature.count;
             if (!concertPitch) {
@@ -7374,7 +7386,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return massimo;
         })();
-        const keySigWidth = larghezzaArmatura(alterazioniMassime);
+        const keySigWidth = larghezzaArmatura(alterazioniMassime) + ARIA_INTESTAZIONE;
 
         // ── Spazio da riservare a un CAMBIO D'ARMATURA in mezzo al sistema ──
         // Senza, l'armatura nuova veniva disegnata sopra le prime note della misura.
