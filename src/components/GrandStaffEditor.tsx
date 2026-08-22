@@ -31,7 +31,7 @@ import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
 import { useNoteEditor } from '../hooks/useNoteEditor';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, calculateAccidentalWithMeasureContext, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, leadingTonePcInMinor, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
-import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing } from '../utils/parseChordSymbol';
+import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing, TRIAD_REVOICE_CYCLE, TRIAD_REVOICE_LABELS, SEVENTH_REVOICE_CYCLE, SEVENTH_REVOICE_LABELS, chordAtTickHas7th } from '../utils/parseChordSymbol';
 import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody, spelledNoteName, keyAccidentalNotes, type TransformMode } from '../utils/melodicTransforms';
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
 import { velocityAtAbsBeat, velocityToGain, dynamicLabel, type DynamicMark } from '../utils/dynamics';
@@ -4112,6 +4112,73 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [ticksToDurationInfo]);
 
     /** Ricalcola il voicing delle note SATB selezionate con la prossima disposizione nel ciclo. */
+    // ── IL CICLO DELLE DISPOSIZIONI (diagnostica) ──
+    // `__htRevoice()` non cambia niente: legge l'accordo selezionato ESATTAMENTE come lo
+    // legge il pulsante, e stampa cosa produrrebbe ogni posizione del ciclo e quali sono
+    // considerate uguali all'attuale (quelle vengono saltate). Serve quando il pulsante
+    // «cambia una volta e si ferma»: la domanda vera e' sempre «quante posizioni DISTINTE
+    // vede», e la risposta dipende da quante note ha in mano.
+    useEffect(() => {
+        (window as any).__htRevoice = () => {
+            try {
+                const tracce = latestAccompanimentTracks.current || [];
+                const sel = latestSelectedNoteIds.current;
+                const primo = sel ? [...sel][0] : undefined;
+                if (!primo || !isAccompanimentNote(primo, tracce)) {
+                    // eslint-disable-next-line no-console
+                    console.log('Seleziona prima un accordo su una traccia di accompagnamento.');
+                    return null;
+                }
+                const info = findAccTrackForNote(primo, tracce);
+                if (!info) return null;
+                const accNotes = tracce[info.trackIndex].notes as any[];
+                const selNotes = expandAccChordSelection(accNotes, sel!);
+                const gruppi = new Map<string, any[]>();
+                for (const n of selNotes) {
+                    const chiave = n.chordGroupId ? `g:${n.chordGroupId}` : `t:${Math.round(Number(n.startTick ?? 0))}`;
+                    const arr = gruppi.get(chiave);
+                    if (arr) arr.push(n); else gruppi.set(chiave, [n]);
+                }
+                const gruppo = [...gruppi.values()][0] ?? [];
+                const pitches = accordoConLeNoteRecuperate(gruppo);
+                const attacco = Math.min(...gruppo.map((n: any) => Number(n.startTick ?? 0)));
+                const fine = Math.max(...gruppo.map((n: any) => Number(n.startTick ?? 0) + Number(n.durationTicks ?? 0)));
+                const mi = Number(gruppo[0]?.measureIndex ?? 0);
+                const voci: (1|2|3|4)[] = [4, 3, 2, 1];
+                const fakeNotes = pitches.map((p: any, i: number) => ({
+                    ...p, voice: voci[Math.min(i, 3)], startTick: attacco, durationTicks: fine - attacco, measureIndex: mi,
+                }));
+                const acc = buildMeasureAccidentals(accNotes as any, mi, attacco);
+                const settima = chordAtTickHas7th(fakeNotes as any, attacco);
+                const cycle = settima ? SEVENTH_REVOICE_CYCLE : TRIAD_REVOICE_CYCLE;
+                const etich = settima ? SEVENTH_REVOICE_LABELS : TRIAD_REVOICE_LABELS;
+                const attuale = fakeNotes.map((n: any) => Number(n.midi)).sort((a: number, b: number) => a - b).join(',');
+                const righe = cycle.map((d, i) => {
+                    const cand = revoiceChordAtTick(fakeNotes as any, attacco, d, keySignature, null, acc);
+                    const midis = cand ? cand.map((n: any) => Number(n.midi)).sort((a: number, b: number) => a - b).join(' ') : '(niente)';
+                    return {
+                        posizione: etich[i],
+                        indice: i,
+                        altezze: midis,
+                        scartata_perche_uguale: cand ? (midis.split(' ').join(',') === attuale) : false,
+                    };
+                });
+                // eslint-disable-next-line no-console
+                console.log(`accordo letto: ${pitches.map((n: any) => n.midi).join(' ')}  (${pitches.length} note distinte)`,
+                    `\nmesse da parte: ${[...new Set((gruppo.flatMap((n: any) => n.chordDropped ?? [])).map((d: any) => d.midi))].join(' ') || '—'}`,
+                    `\nletto come: ${settima ? 'accordo di settima' : 'triade'}   indice attuale: ${revoiceDispIdx} (${etich[revoiceDispIdx % etich.length]})`,
+                    `\nnote scritte nel gruppo: ${gruppo.length}   posti nell'accordo: ${gruppo.length}`);
+                // eslint-disable-next-line no-console
+                console.table(righe);
+                return righe;
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.log('__htRevoice:', e);
+                return null;
+            }
+        };
+    }, [keySignature, revoiceDispIdx]);
+
     const handleRevoice = useCallback(() => {
         if (selectedNoteIds.size === 0) return;
 
