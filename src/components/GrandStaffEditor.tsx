@@ -7323,6 +7323,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // c'e' posto anche per il rigo piu' carico, e sugli altri resta un po' d'aria - che
         // e' il verso giusto in cui sbagliare, perche' l'aria si vede e la sovrapposizione
         // si legge male.
+        // LARGHEZZA VERA DI UN'ARMATURA, chiesta a VexFlow invece che stimata.
+        //
+        // Il conto di prima era `alterazioni × 14`, e per una e due alterazioni stava SOTTO
+        // il vero — cioe' proprio nei casi dei traspositori (tromba in Si♭: due diesis;
+        // corno in Fa: uno). Misurato costruendo un rigo con chiave, armatura e tempo e
+        // leggendo dove VexFlow fa cominciare le note: 0 → 0, 1 → 21, 2 → 32, 3 → 43, e da
+        // li' undici per alterazione. C'e' quindi un costo FISSO per il solo fatto di avere
+        // un'armatura, che la moltiplicazione secca non poteva rappresentare.
+        // Esatto sui diesis; sui bemolli riserva qualche pixel in piu', che e' il verso
+        // giusto in cui sbagliare.
+        const larghezzaArmatura = (alterazioni: number) => (alterazioni <= 0 ? 0 : 10 + alterazioni * 11);
         const alterazioniMassime = (() => {
             let massimo = keySignature.count;
             if (!concertPitch) {
@@ -7337,7 +7348,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return massimo;
         })();
-        const keySigWidth = alterazioniMassime * 14;
+        const keySigWidth = larghezzaArmatura(alterazioniMassime);
 
         // ── Spazio da riservare a un CAMBIO D'ARMATURA in mezzo al sistema ──
         // Senza, l'armatura nuova veniva disegnata sopra le prime note della misura.
