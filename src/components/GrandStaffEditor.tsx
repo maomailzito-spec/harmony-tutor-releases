@@ -7311,7 +7311,33 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Use immediate `notes` (not deferred analyzedNotes) so the layout
         // updates instantly when a note is inserted.
         const notesToLayout = notes;
-        const keySigWidth = keySignature.count * 14;
+        // LO SPAZIO DELL'ARMATURA LO DETTA IL RIGO CHE NE HA DI PIU'.
+        //
+        // Era il conto della sola armatura del BRANO, e andava bene finche' tutti i righi ne
+        // portavano una uguale. Con gli strumenti traspositori non e' piu' vero: in Do
+        // maggiore una tromba in Si♭ ne ha due, un corno in Fa uno, il coro nessuna. Con lo
+        // spazio calcolato su zero alterazioni, i righi trasposti spingevano il segno di
+        // tempo in avanti fin sopra le prime note.
+        //
+        // Si riserva quindi il massimo fra tutti i righi visibili: le note cominciano dove
+        // c'e' posto anche per il rigo piu' carico, e sugli altri resta un po' d'aria - che
+        // e' il verso giusto in cui sbagliare, perche' l'aria si vede e la sovrapposizione
+        // si legge male.
+        const alterazioniMassime = (() => {
+            let massimo = keySignature.count;
+            if (!concertPitch) {
+                for (const t of visibleAccompanimentTracks) {
+                    if ((t as any).isDrum) continue;
+                    const tr = trasposizioneDaId((t as any).transposeId);
+                    if (tr.semitoni === 0 && tr.gradi === 0) continue;
+                    try {
+                        massimo = Math.max(massimo, getKeySignature(radiceScritta(keySignatureRoot, tr), 'Major').count);
+                    } catch { /* nel dubbio resta quella del brano */ }
+                }
+            }
+            return massimo;
+        })();
+        const keySigWidth = alterazioniMassime * 14;
 
         // ── Spazio da riservare a un CAMBIO D'ARMATURA in mezzo al sistema ──
         // Senza, l'armatura nuova veniva disegnata sopra le prime note della misura.
@@ -7796,7 +7822,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // sono quelle che si accendono a richiesta dalla console (vedi __htAiuto), non
         // quelle che lavorano sempre e non dicono nulla.
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
-    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths, systemBreaks]);
+    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths, systemBreaks, concertPitch, visibleAccompanimentTracks]);
 
     /**
      * QUANTE MISURE HA DAVVERO LA PAGINA — il numero che si legge in barra.
