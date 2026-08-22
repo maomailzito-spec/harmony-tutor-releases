@@ -18071,6 +18071,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 </>
                             );
                         })()}
+                        {/* STRUMENTO TRASPOSITORE. Sta in un blocco suo e non in quello della
+                            sezione d'orchestra: quello compare da due tracce in su, perche' una
+                            parentesi con un rigo solo non raggruppa niente, ma una tromba in Si♭
+                            e' una tromba in Si♭ anche da sola. */}
+                        {(() => {
+                            const track = accompanimentTracks.find(t => t.id === clefMenu.trackId);
+                            if (!track || track.isDrum) return null;
+                            return (
+                                <>
+                                    <div className="my-1 border-t border-slate-700" />
+                                    <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 select-none">
+                                        {tUI('transp_label', { defaultValue: 'Strumento traspositore' })}
+                                    </div>
+                                    <div className="px-3 pb-2 pt-0.5">
+                                        <select
+                                            value={track.transposeId ?? 'none'}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                handleUpdateTrack(clefMenu.trackId, {
+                                                    transposeId: v === 'none' ? undefined : v,
+                                                } as Partial<AccompanimentTrack>);
+                                            }}
+                                            className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-[12px] text-gray-100"
+                                        >
+                                            {STRUMENTI_TRASPOSITORI.map(st => (
+                                                <option key={st.id} value={st.id}>{tUI(st.i18nKey, { defaultValue: st.sigla })}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </>
+                            );
+                        })()}
                         {/* SEZIONE D'ORCHESTRA. La famiglia si deduce dallo strumento, quindi
                             di norma qui non si tocca niente: serve quando la deduzione non ha
                             senso musicale (un pianoforte che fa da celesta dentro i legni) o
@@ -18106,26 +18138,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                 <option key={id} value={id}>{nomeSezione(id)}</option>
                                             ))}
                                             <option value="none">{tUI('acc_section_none', { defaultValue: 'Nessuna (fuori dalle parentesi)' })}</option>
-                                        </select>
-                                    </div>
-                                    <div className="my-1 border-t border-slate-700" />
-                                    <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 select-none">
-                                        {tUI('transp_label', { defaultValue: 'Strumento traspositore' })}
-                                    </div>
-                                    <div className="px-3 pb-2 pt-0.5">
-                                        <select
-                                            value={track.transposeId ?? 'none'}
-                                            onChange={(e) => {
-                                                const v = e.target.value;
-                                                handleUpdateTrack(clefMenu.trackId, {
-                                                    transposeId: v === 'none' ? undefined : v,
-                                                } as Partial<AccompanimentTrack>);
-                                            }}
-                                            className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-[12px] text-gray-100"
-                                        >
-                                            {STRUMENTI_TRASPOSITORI.map(st => (
-                                                <option key={st.id} value={st.id}>{tUI(st.i18nKey, { defaultValue: st.sigla })}</option>
-                                            ))}
                                         </select>
                                     </div>
                                     <button
