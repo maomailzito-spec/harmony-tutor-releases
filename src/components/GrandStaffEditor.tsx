@@ -3926,12 +3926,25 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [revoiceDispIdx, setRevoiceDispIdx] = useState(0);
     // Reset del ciclo quando la selezione cambia (nuovo accordo selezionato → riparte da 'auto')
     const prevSelectedNoteIdsRef = useRef<Set<string>>(new Set());
+    /** Il revoice ha appena riselezionato le note che ha prodotto lui: la selezione e'
+     *  cambiata, ma non perche' l'utente abbia scelto un altro accordo. */
+    const saltaResetDisposizioneRef = useRef(false);
     useEffect(() => {
+        // L'INDICE DEL CICLO SI AZZERA QUANDO CAMBI ACCORDO, NON QUANDO CAMBI POSIZIONE.
+        //
+        // Il revoice non modifica le note: le SOSTITUISCE, con id nuovi, e riseleziona il
+        // risultato. Per questo effetto era indistinguibile da «l'utente ha selezionato
+        // qualcos'altro», quindi l'indice tornava a 0 a ogni pressione: il pulsante restava
+        // fermo su «auto» e il ciclo ripartiva sempre da capo, alternando fra due sole
+        // posizioni — quella attuale veniva scartata perche' uguale, e si prendeva la
+        // prima diversa. Le altre due non si raggiungevano mai.
+        const salta = saltaResetDisposizioneRef.current;
+        saltaResetDisposizioneRef.current = false;
         const prev = prevSelectedNoteIdsRef.current;
         const curr = selectedNoteIds;
         const same = prev.size === curr.size && [...curr].every(id => prev.has(id));
         if (!same) {
-            setRevoiceDispIdx(0);
+            if (!salta) setRevoiceDispIdx(0);
             prevSelectedNoteIdsRef.current = new Set(curr);
         }
     }, [selectedNoteIds]);
@@ -4330,6 +4343,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const kept = track.notes.filter((n: any) => !replaceIds.has(n.id));
                     return { ...track, notes: [...kept, ...nuoveNote].sort((a: any, b: any) => (a.startTick ?? 0) - (b.startTick ?? 0)) };
                 }));
+                saltaResetDisposizioneRef.current = true;
                 setSelectedNoteIds(new Set(nuoveNote.map((n: any) => n.id)));
                 const accTrkBlk = latestAccompanimentTracks.current?.[trackIdx];
                 const accInstrBlk = accTrkBlk?.isDrum ? drumSoundfont(accTrkBlk) : gmToSoundfont(accTrkBlk?.instrumentId);
