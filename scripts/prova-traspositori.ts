@@ -1,4 +1,4 @@
-import { comeSiScrive, comeSuona, armaturaScritta, trasposizioneDaId } from '../src/utils/transposingInstruments';
+import { comeSiScrive, comeSuona, radiceScritta, trasposizioneDaId } from '../src/utils/transposingInstruments';
 
 const SIGLA = (c: { lettera: string; alterazione: number; octave: number }) =>
     c.lettera + (c.alterazione > 0 ? '#'.repeat(c.alterazione) : c.alterazione < 0 ? 'b'.repeat(-c.alterazione) : '') + c.octave;
@@ -34,8 +34,7 @@ console.log('ARMATURE (quella che legge lo strumento)');
 for (const [id, nome] of [['bb', 'Si♭'], ['f', 'Fa'], ['eb_alto', 'Mi♭']] as Array<[string, string]>) {
     const t = trasposizioneDaId(id);
     const righe = ['C', 'F', 'Bb', 'Eb', 'D'].map(r => {
-        const scritta = armaturaScritta({ root: r, mode: 'Major' } as any, t) as any;
-        return `${r} → ${scritta.root}`;
+        return `${r} → ${radiceScritta(r, t)}`;
     });
     console.log(`   strumento in ${nome}:  ${righe.join('   ')}`);
 }

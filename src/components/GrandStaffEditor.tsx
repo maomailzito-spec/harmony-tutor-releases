@@ -14,7 +14,7 @@ import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useR
 import { useTranslation, Trans } from 'react-i18next';
 import { vociDeterminate, vociInUso, type VoiceNum } from '../utils/voiceFromChord';
 import { conMemoriaDellAccordo, accordoConLeNoteRecuperate } from '../utils/chordMemory';
-import { STRUMENTI_TRASPOSITORI, trasposizioneDaId, comeSiScrive, comeSuona, armaturaScritta } from '../utils/transposingInstruments';
+import { STRUMENTI_TRASPOSITORI, trasposizioneDaId, comeSiScrive, comeSuona, radiceScritta } from '../utils/transposingInstruments';
 import { keySignatureToVexflowString } from '../utils/keySignatureChanges';
 import { SECTION_ORDER, SECTION_I18N_KEY, SECTION_LABEL_IT, sezioneDaStrumento, sezioneEffettiva, type SectionId, type SectionChoice } from '../utils/instrumentSections';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
@@ -3906,8 +3906,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const accKeyStrings = useMemo(() => visibleAccompanimentTracks.map(t => {
         const trasp = trasposizioneDaId((t as any).transposeId);
         if (concertPitch || (trasp.semitoni === 0 && trasp.gradi === 0)) return undefined;
-        try { return keySignatureToVexflowString(armaturaScritta(keySignature, trasp)); } catch { return undefined; }
-    }), [visibleAccompanimentTracks, concertPitch, keySignature]);
+        try { return keySignatureToVexflowString(getKeySignature(radiceScritta(keySignatureRoot, trasp), 'Major')); } catch { return undefined; }
+    }), [visibleAccompanimentTracks, concertPitch, keySignatureRoot]);
     keySignatureForRecRef.current = keySignature;
 
     const {
@@ -12967,7 +12967,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const scriveTrasposto = !concertPitchRef.current
                     && (traspScrittura.semitoni !== 0 || traspScrittura.gradi !== 0);
                 const armaturaDiLettura = scriveTrasposto
-                    ? armaturaScritta(keySignatureAtMeasureRef.current(hit.measureIndex), traspScrittura)
+                    ? getKeySignature(radiceScritta(
+                        keyAtMeasure({ root: keySignatureRoot, isMinor: isMinorMode }, keySignatureChanges, hit.measureIndex).root,
+                        traspScrittura,
+                      ), 'Major')
                     : keySignatureAtMeasureRef.current(hit.measureIndex);
                 accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, armaturaDiLettura);
                 accProps = applyAutoLeadingToneInMinor(accProps, hit.measureIndex);
@@ -18637,7 +18640,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                         // riproduzione ed export continuano a vedere il suono vero.
                                                                         const trasp = trasposizioneDaId((track as any).transposeId);
                                                                         const traspone = !concertPitch && (trasp.semitoni !== 0 || trasp.gradi !== 0);
-                                                                        const armaturaDelRigo = traspone ? armaturaScritta(keySignature, trasp) : keySignature;
+                                                                        const armaturaDelRigo = traspone
+                                                                            ? getKeySignature(radiceScritta(keySignatureRoot, trasp), 'Major')
+                                                                            : keySignature;
                                                                         for (const n0 of (track.notes || [])) {
                                                                             const n = (traspone && !n0.isRest && Number.isFinite(Number(n0.midi)))
                                                                                 ? (() => {

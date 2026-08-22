@@ -17,8 +17,6 @@
  * diatonico, ed e' la coppia a produrre l'alterazione giusta in chiave e sul rigo.
  */
 
-import type { KeySignature } from '../types';
-
 const LETTERE = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 const INDICE_LETTERA: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
 const PC_LETTERA: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -98,18 +96,23 @@ export function comeSuona(nota: { lettera: string; octave: number; midi: number 
 }
 
 /**
- * L'armatura che LEGGE lo strumento. Un brano in Do maggiore su una tromba in Si♭ si
- * scrive in Re maggiore: l'armatura si sposta dello stesso intervallo delle note, se no
- * ogni nota porterebbe la sua alterazione e la parte sarebbe illeggibile.
+ * La TONICA che legge lo strumento. Un brano in Do maggiore su una tromba in Si♭ si scrive
+ * in Re maggiore: l'armatura si sposta dello stesso intervallo delle note, se no ogni nota
+ * porterebbe la sua alterazione e la parte sarebbe illeggibile.
+ *
+ * Si lavora sul NOME della fondamentale e non su un `KeySignature`, perche' quel tipo qui
+ * dentro e' solo `{ type, count }` — non sa quale tonalita' rappresenti. Chi chiama ricava
+ * l'armatura vera con `getKeySignature(radice, 'Major')`: passare da li' e' cio' che fa
+ * comparire i due diesis, invece di una tonica cambiata sopra un conteggio rimasto fermo.
  */
-export function armaturaScritta(concert: KeySignature, di: Trasposizione): KeySignature {
-	const root = String((concert as any).root ?? 'C');
+export function radiceScritta(radiceConcert: string, di: Trasposizione): string {
+	const root = String(radiceConcert || 'C');
 	const lettera = root[0].toUpperCase();
-	const alt = root.slice(1).replace(/♯/g, '#').replace(/♭/g, 'b');
-	const alterazione = (alt.match(/#/g)?.length ?? 0) - (alt.match(/b/g)?.length ?? 0);
+	const coda = root.slice(1).replace(/♯/g, '#').replace(/♭/g, 'b');
+	const alterazione = (coda.match(/#/g)?.length ?? 0) - (coda.match(/b/g)?.length ?? 0);
 	const midi = 60 + PC_LETTERA[lettera] + alterazione;
 	const spostata = comeSiScrive({ lettera, octave: 4, midi }, di);
 	const suffisso = spostata.alterazione > 0 ? '#'.repeat(spostata.alterazione)
 		: spostata.alterazione < 0 ? 'b'.repeat(-spostata.alterazione) : '';
-	return { ...(concert as any), root: spostata.lettera + suffisso } as KeySignature;
+	return spostata.lettera + suffisso;
 }
