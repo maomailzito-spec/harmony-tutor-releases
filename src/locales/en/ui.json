@@ -480,7 +480,7 @@
   "pattern_niente_terzine": "Patterns cannot write triplets yet: choose a 1/16, 1/8, 1/4 or 1/2 grid.",
   "revoice_nessuna_altra": "No other voicing for this chord ({{n}} distinct notes).",
   "pal_arp_voicing": "Voicing",
-  "pal_arp_voicing_tip": "Re-voices the selected chord: each press moves to the next position in the cycle, and a full turn brings you back where you started.",
+  "pal_arp_voicing_tip": "Changes the voicing of the selected chord: each press moves to the next position, and a full turn brings you back where you started. S:3 = third on top, S:5 = fifth, S:R = root, S:7 = seventh; “auto” is the voicing the engine chooses.",
   "pal_arp_subdiv": "Subdivision",
   "pal_arp_subdiv_tip": "How long each note of the arpeggio lasts. Separate from the quantize grid in the toolbar, which serves the Q button on recorded or imported notes."
 }

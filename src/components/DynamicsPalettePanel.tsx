@@ -580,19 +580,24 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                             <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
                                 {/* La DISPOSIZIONE dice come è distanziato l'accordo; vale
                                     per qualunque accordo selezionato, anche nel coro. */}
-                                <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[10px] text-sky-300/80 select-none">{t('pal_arp_voicing', { defaultValue: 'Disposizione' })}</span>
-                                    <button
-                                        onClick={onRevoiceChord}
-                                        disabled={!hasSelectedNotes}
-                                        title={t('pal_arp_voicing_tip', { defaultValue: 'Ricalcola la disposizione dell’accordo selezionato — a ogni pressione la posizione successiva' })}
-                                        className={`${bottone} font-mono ${nudo} min-w-[3.2rem]`}
-                                    >
-                                        {(selectedNotesHave7th
+                                {/* Un COMANDO, non uno stato. Prima il pulsante mostrava solo
+                                    «auto», che dice come sta l'accordo e non cosa succede a
+                                    premere: sembrava un modo acceso, non un giro da fare.
+                                    Ora dice il mestiere a sinistra e la posizione attuale a
+                                    destra, come il pedale qui sopra. */}
+                                <button
+                                    onClick={onRevoiceChord}
+                                    disabled={!hasSelectedNotes}
+                                    title={t('pal_arp_voicing_tip', { defaultValue: 'Cambia la disposizione dell’accordo selezionato: a ogni pressione la posizione successiva. S:3 = terza al soprano, S:5 = quinta, S:R = fondamentale; «auto» è la disposizione decisa dal motore.' })}
+                                    className={`${bottone} w-full flex items-center justify-between ${nudo}`}
+                                >
+                                    <span>{t('pal_arp_voicing', { defaultValue: 'Disposizione' })}</span>
+                                    <span className="font-mono opacity-80">
+                                        ⟳ {(selectedNotesHave7th
                                             ? ['auto', 'S:7', 'S:3', 'S:5', 'S:R']
                                             : ['auto', 'S:R', 'S:3', 'S:5'])[(revoiceDispIdx ?? 0) % (selectedNotesHave7th ? 5 : 4)]}
-                                    </button>
-                                </div>
+                                    </span>
+                                </button>
                                 {suTracciaAcc && (<>
                                 <div className="grid grid-cols-3 gap-1 mt-1">
                                     {([

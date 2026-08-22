@@ -455,7 +455,7 @@
   "pattern_niente_terzine": "I pattern non sanno ancora scrivere terzine: scegli una griglia 1/16, 1/8, 1/4 o 1/2.",
   "revoice_nessuna_altra": "Nessun’altra disposizione per questo accordo ({{n}} note distinte).",
   "pal_arp_voicing": "Disposizione",
-  "pal_arp_voicing_tip": "Ricalcola la disposizione dell’accordo selezionato: a ogni pressione la posizione successiva del ciclo, e al giro completo si torna da dove si era partiti.",
+  "pal_arp_voicing_tip": "Cambia la disposizione dell’accordo selezionato: a ogni pressione la posizione successiva, e al giro completo si torna da dove si era partiti. S:3 = terza al soprano, S:5 = quinta, S:R = fondamentale, S:7 = settima; «auto» è la disposizione decisa dal motore.",
   "pal_arp_subdiv": "Suddivisione",
   "pal_arp_subdiv_tip": "Quanto dura ogni nota dell’arpeggio. È separata dalla griglia di quantizzazione in barra, che serve al tasto Q su ciò che è registrato o importato."
 }
