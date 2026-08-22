@@ -7413,6 +7413,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
         }
         const extraArmatura = (m: number) => keyChangeExtraByMeasure[m] ?? 0;
+
+        /** Quante alterazioni ha, a questa misura, il rigo che ne porta di piu'. Con gli
+         *  strumenti traspositori non e' piu' quella del brano: in Do maggiore il coro non
+         *  ne ha, il corno in Fa una, la tromba in Si♭ due — e lo spazio dell'intestazione
+         *  lo detta la piu' carica, se no le altre le finiscono addosso. */
+        const alterazioniMassimeAlla = (m: number) => {
+            let massimo = armaturaDiMisuraLayout(m).count;
+            if (concertPitch) return massimo;
+            const radiceQui = (keySignatureChanges && keySignatureChanges.length > 0)
+                ? keyAtMeasure({ root: keySignatureRoot, isMinor: isMinorMode }, keySignatureChanges, m).root
+                : keySignatureRoot;
+            for (const t of visibleAccompanimentTracks) {
+                if ((t as any).isDrum) continue;
+                const tr = trasposizioneDaId((t as any).transposeId);
+                if (tr.semitoni === 0 && tr.gradi === 0) continue;
+                try {
+                    massimo = Math.max(massimo, getKeySignature(radiceScritta(radiceQui, tr), 'Major').count);
+                } catch { /* nel dubbio resta quella del brano */ }
+            }
+            return massimo;
+        };
         const timeSigWidthWithPadding = timeSignature ? 55 : 0;
         const startOffset = START_X + keySigWidth + timeSigWidthWithPadding;
         // Sonda per `__htIntestazione()`: i numeri veri dell'intestazione, invece di dedurli.
@@ -7423,7 +7444,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 suoni_reali: concertPitch,
                 spazio_armatura: keySigWidth,
                 spazio_tempo: timeSigWidthWithPadding,
-                prima_nota_x: startOffset,
+                prima_nota_x: START_X + larghezzaArmatura(alterazioniMassimeAlla(0)) + timeSigWidthWithPadding + ARIA_INTESTAZIONE + MEASURE_PADDING_X,
+                inizio_prima_misura: START_X + larghezzaArmatura(alterazioniMassimeAlla(0)) + timeSigWidthWithPadding + ARIA_INTESTAZIONE,
                 tracce: visibleAccompanimentTracks.map(t => ({
                     nome: t.name,
                     traspositore: (t as any).transposeId ?? '—',
@@ -7811,8 +7833,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // If this is the first measure in the system, reserve space for key/time glyphs
                 // so notes don't overlap the clef/time.
                 const isFirstMeasureInSystem = idx === 0;
+                // ── QUI NASCE LA GRIGLIA ──
+                //
+                // E' questo il conto che decide dove comincia la prima misura, non
+                // `startOffset`: quello serve alla larghezza utile della pagina. Ed era il
+                // conto dell'armatura DEL BRANO — giusto finche' tutti i righi ne portavano
+                // una uguale, cieco appena uno strumento traspositore ne porta di piu'. Con
+                // la tromba in Si♭ in Do maggiore, la griglia partiva contando zero
+                // alterazioni mentre il rigo della tromba ne disegnava due: il segno di
+                // tempo finiva sopra il primo quarto e tutto sembrava indietro di una
+                // semiminima.
+                //
+                // Ora si conta il rigo PIU' CARICO alla misura, e la larghezza e' quella
+                // vera di VexFlow (dieci fissi piu' undici per alterazione) invece di
+                // undici per quattordici.
                 const extraLeft = isFirstMeasureInSystem
-                    ? (armaturaDiMisuraLayout(m).count * LARGHEZZA_ALTERAZIONE + timeSigWidthWithPadding)
+                    ? (larghezzaArmatura(alterazioniMassimeAlla(m)) + timeSigWidthWithPadding + ARIA_INTESTAZIONE)
                     : extraArmatura(m);
                 const measureWidth = contentWidthForMeasure + (MEASURE_PADDING_X * 2) + extraLeft;
                 measureFinalWidths.set(m, measureWidth);
