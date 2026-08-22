@@ -407,6 +407,11 @@ export type AccompanimentTrack = {
    *  Assente = dedotta dallo strumento (vedi `sezioneDaStrumento`); 'none' = fuori da ogni
    *  famiglia, nessuna parentesi. */
   section?: SectionChoice;
+  /** STRUMENTO TRASPOSITORE (id da `STRUMENTI_TRASPOSITORI`): come si SCRIVE questa parte.
+   *  Le note nel file restano in SUONI REALI — analisi, riproduzione ed export leggono
+   *  quelle — e la scrittura si ricava quando la vista non e' «suoni reali». Diverso da
+   *  `octaveTranspose`, che e' la chiave con l'8: li' la scrittura non cambia mai. */
+  transposeId?: string;
   /** Colore personalizzato della traccia (hex, es. "#38bdf8"). Mostrato come banda
    *  verticale a fianco del rigo e usato per colorare le note in modalità colore. */
   color?: string;

@@ -30,6 +30,7 @@ export const MENU_ACTIONS = {
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers',
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug',
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors',
+  SET_CONCERT_PITCH: 'set-concert-pitch',
   SET_ENGRAVING_MODE: 'set-engraving-mode',
   RUN_OVERLAP_AUDIT: 'run-overlap-audit',
 
@@ -100,6 +101,7 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
     case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
     case MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG:
     case MENU_ACTIONS.SET_SHOW_VOICE_COLORS:
+    case MENU_ACTIONS.SET_CONCERT_PITCH:
     case MENU_ACTIONS.SET_SELECT_ONLY_VOICE:
     case MENU_ACTIONS.SET_SHOW_ROMAN:
     case MENU_ACTIONS.SET_SHOW_SYMBOLS:

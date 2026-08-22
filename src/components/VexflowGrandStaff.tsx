@@ -82,6 +82,10 @@ interface VexflowGrandStaffProps {
   /** Parentesi di partitura: raggruppa i righi consecutivi della stessa famiglia di
    *  strumenti e unisce coro e tracce in un sistema solo (preferenza `editor.orchestralGrouping`). */
   orchestralGrouping?: boolean;
+  /** Armatura da disegnare sul rigo di una traccia, quando lo strumento e' traspositore e
+   *  la vista non e' «suoni reali»: la parte si legge nella SUA tonalita'. Indicizzata come
+   *  `accompanimentTracks`. Assente = quella del brano. */
+  accKeyStrings?: Array<string | undefined>;
   /** Il coro è nascosto (righi SATB ritagliati fuori dalla vista): la linea di sistema
    *  deve fermarsi alle sole tracce, altrimenti sporge in alto nel vuoto. */
   satbHidden?: boolean;
@@ -651,6 +655,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   accompanimentStaffMode = 'grandstaff',
   accompanimentTracks,
   orchestralGrouping = true,
+  accKeyStrings,
   satbHidden = false,
   satbName,
   onDrumStavesLayout,
@@ -848,6 +853,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // finché non si toccava la partitura per un altro motivo.
         staffLineWeight,
         showAccompanimentStaves, accompanimentStaffMode, satbName, orchestralGrouping, satbHidden,
+        (accKeyStrings ?? []).join('|'),
         // Le legature stanno in un elenco a parte: senza metterle nella firma, una
         // legatura nuova non avrebbe fatto ridisegnare niente e sarebbe comparsa solo
         // al primo tocco successivo alla partitura.
@@ -1089,12 +1095,15 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       block.treble
         .addClef(block.clef as any, undefined, block.clefOctaveAnnotation)
         .addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
-      if (!block.isDrum) block.treble.addKeySignature(keyString); // la batteria non ha armatura
+      // Armatura della PARTE: un brano in Do su una tromba in Si♭ si legge in Re. Se si
+      // trasponessero solo le note, ognuna si porterebbe dietro la sua alterazione.
+      const keyStringDelRigo = accKeyStrings?.[block.trackIdx] ?? keyString;
+      if (!block.isDrum) block.treble.addKeySignature(keyStringDelRigo); // la batteria non ha armatura
       block.treble.setContext(context).draw();
 
       if (block.bass) {
         block.bass.addClef('bass').addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
-        block.bass.addKeySignature(keyString);
+        block.bass.addKeySignature(keyStringDelRigo);
         block.bass.setContext(context).draw();
 
         const accBrace = new StaveConnector(block.treble, block.bass);

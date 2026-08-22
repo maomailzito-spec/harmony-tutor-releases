@@ -39,7 +39,12 @@ export interface StrumentoTraspositore extends Trasposizione {
 	i18nKey: string;
 }
 
-/** I tagli piu' comuni. L'ordine e' quello di partitura: legni, ottoni, poi le ottave. */
+/** I tagli piu' comuni.
+ *
+ * NIENTE OTTAVE, di proposito: chitarra, basso e contrabbasso hanno gia' `octaveTranspose`,
+ * che e' un'altra cosa — la chiave con l'8 sotto, dove la nota resta scritta dov'e' e scende
+ * solo il suono. Mettere l'ottava anche qui darebbe due meccanismi per lo stesso mestiere, e
+ * chi ne accendesse due si troverebbe la parte due ottave fuori. */
 export const STRUMENTI_TRASPOSITORI: StrumentoTraspositore[] = [
 	{ id: 'none',       sigla: 'in Do',   i18nKey: 'transp_none',       semitoni: 0,   gradi: 0 },
 	{ id: 'bb',         sigla: 'in Si♭',  i18nKey: 'transp_bb',         semitoni: -2,  gradi: -1 },
@@ -49,8 +54,6 @@ export const STRUMENTI_TRASPOSITORI: StrumentoTraspositore[] = [
 	{ id: 'bb_tenore',  sigla: 'in Si♭ (9ª)', i18nKey: 'transp_bb_tenor', semitoni: -14, gradi: -8 },
 	{ id: 'eb_baritono',sigla: 'in Mi♭ (13ª)', i18nKey: 'transp_eb_bari', semitoni: -21, gradi: -12 },
 	{ id: 'eb_sopra',   sigla: 'in Mi♭ (3ª sopra)', i18nKey: 'transp_eb_above', semitoni: 3, gradi: 2 },
-	{ id: 'ottava_giu', sigla: '8ª sotto', i18nKey: 'transp_8vb',       semitoni: -12, gradi: -7 },
-	{ id: 'ottava_su',  sigla: '8ª sopra', i18nKey: 'transp_8va',       semitoni: 12,  gradi: 7 },
 ];
 
 export function trasposizioneDaId(id?: string | null): Trasposizione {

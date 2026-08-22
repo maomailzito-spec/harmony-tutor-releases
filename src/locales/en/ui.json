@@ -482,5 +482,14 @@
   "pal_arp_voicing": "Voicing",
   "pal_arp_voicing_tip": "Changes the voicing of the selected chord: each press moves to the next position, and a full turn brings you back where you started. S:3 = third on top, S:5 = fifth, S:R = root, S:7 = seventh; “auto” is the voicing the engine chooses.",
   "pal_arp_subdiv": "Subdivision",
-  "pal_arp_subdiv_tip": "How long each note of the arpeggio lasts. Separate from the quantize grid in the toolbar, which serves the Q button on recorded or imported notes."
+  "pal_arp_subdiv_tip": "How long each note of the arpeggio lasts. Separate from the quantize grid in the toolbar, which serves the Q button on recorded or imported notes.",
+  "transp_label": "Transposing instrument",
+  "transp_none": "in C (non-transposing)",
+  "transp_bb": "in B♭ — trumpet, clarinet, soprano sax",
+  "transp_a": "in A — clarinet",
+  "transp_eb_alto": "in E♭ — alto sax, E♭ clarinet",
+  "transp_f": "in F — horn, English horn",
+  "transp_bb_tenor": "in B♭ 9th — tenor sax, bass clarinet",
+  "transp_eb_bari": "in E♭ 13th — baritone sax",
+  "transp_eb_above": "in E♭ high — piccolo trumpet"
 }

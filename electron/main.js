@@ -89,6 +89,7 @@ let recentFiles = [];
 let selectOnlyCurrentVoiceEnabled = false;
 let showMeasureNumbersEnabled = true;
 let showHarmonyDebugEnabled = false;
+let concertPitchEnabled = true;
 let showVoiceColorsEnabled = false;
 // I TRE STRATI D'ANALISI E I RIGHI, rispecchiati qui perché il menù possa mostrare la
 // spunta giusta. Il renderer li manda con SET_MENU_STATE a ogni cambiamento: senza,
@@ -448,6 +449,7 @@ function createMenu() {
       reorderToolbar: 'Personalizza la barra…', transport: 'Barra comandi a toolbar nascosta (⌥T per nasconderla)',
       measureNumbers: 'Numeri misure', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Colori voci (BTAS)',
+      concertPitch: 'Suoni reali (partitura in Do)',
       analysisLayers: 'Analisi mostrata', showRoman: 'Numeri romani',
       showSymbols: 'Sigle accordi', showFiguredBass: 'Cifratura del basso',
       staves: 'Righi da mostrare ed esportare', staffChoir: 'Coro (SATB)',
@@ -477,6 +479,7 @@ function createMenu() {
       reorderToolbar: 'Customize the toolbar…', transport: 'Command bar when the toolbar is hidden (⌥T to hide it)',
       measureNumbers: 'Measure numbers', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Voice colors (BTAS)',
+      concertPitch: 'Concert pitch (score in C)',
       analysisLayers: 'Analysis shown', showRoman: 'Roman numerals',
       showSymbols: 'Chord symbols', showFiguredBass: 'Figured bass',
       staves: 'Staves shown and exported', staffChoir: 'Choir (SATB)',
@@ -1254,6 +1257,17 @@ function createMenu() {
             click: (menuItem) => {
               showVoiceColorsEnabled = !!menuItem.checked;
               sendAction(MENU_ACTIONS.SET_SHOW_VOICE_COLORS, { enabled: showVoiceColorsEnabled });
+            }
+          },
+          {
+            // Suoni reali ↔ scrittura dello strumento. Le note nel file sono SEMPRE in
+            // suoni reali: questo commuta solo il disegno delle parti traspositrici.
+            label: mt('concertPitch'),
+            type: 'checkbox',
+            checked: concertPitchEnabled,
+            click: (menuItem) => {
+              concertPitchEnabled = !!menuItem.checked;
+              sendAction(MENU_ACTIONS.SET_CONCERT_PITCH, { enabled: concertPitchEnabled });
             }
           },
         ] : []),

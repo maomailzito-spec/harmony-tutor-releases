@@ -14,6 +14,8 @@ import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useR
 import { useTranslation, Trans } from 'react-i18next';
 import { vociDeterminate, vociInUso, type VoiceNum } from '../utils/voiceFromChord';
 import { conMemoriaDellAccordo, accordoConLeNoteRecuperate } from '../utils/chordMemory';
+import { STRUMENTI_TRASPOSITORI, trasposizioneDaId, comeSiScrive, comeSuona, armaturaScritta } from '../utils/transposingInstruments';
+import { keySignatureToVexflowString } from '../utils/keySignatureChanges';
 import { SECTION_ORDER, SECTION_I18N_KEY, SECTION_LABEL_IT, sezioneDaStrumento, sezioneEffettiva, type SectionId, type SectionChoice } from '../utils/instrumentSections';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
@@ -2910,6 +2912,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const visibleAccompanimentTracks = (accompanimentTracks || []).filter(t => t && t.visible);
     const hasVisibleAccompaniment = visibleAccompanimentTracks.length > 0;
 
+
     /** La selezione contiene un accordo di SETTIMA? Decide quante posizioni ha il ciclo
      *  delle disposizioni (cinque invece di quattro) e quindi l'etichetta del pulsante.
      *  Guarda anche le tracce: prima leggeva solo il coro, e sugli accordi ACC — che sono
@@ -3292,6 +3295,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [contentAwareSpacing]);
 
     const [showVoiceColors, setShowVoiceColors] = useState(false);
+    // SUONI REALI ↔ SCRITTURA DELLO STRUMENTO. Nel file le altezze sono SEMPRE in suoni
+    // reali: questo commuta soltanto il disegno delle parti traspositrici (e la loro
+    // armatura). Di norma acceso, cioè com'era prima che i traspositori esistessero.
+    const [concertPitch, setConcertPitch] = useState(true);
+    const concertPitchRef = useRef(true);
+    useEffect(() => { concertPitchRef.current = concertPitch; }, [concertPitch]);
     const [showIncompleteMeasureWarnings, setShowIncompleteMeasureWarnings] = useState(true);
     /** Quante misure incomplete ci sono NEL BRANO, indipendentemente dal fatto che i
      *  rettangoli rossi siano mostrati. Spegnerli è legittimo — sono d'intralcio mentre
@@ -3891,6 +3900,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const justDraggedRef = useRef(false);
 
     const keySignature = useMemo(() => getKeySignature(keySignatureRoot, 'Major'), [keySignatureRoot]);
+    /** Armatura da disegnare su ciascun rigo di traccia. Coincide con quella del brano,
+     *  tranne per gli strumenti traspositori quando la vista NON e' «suoni reali»: li' la
+     *  parte si legge nella sua tonalita' (Do → Re per una tromba in Si♭). */
+    const accKeyStrings = useMemo(() => visibleAccompanimentTracks.map(t => {
+        const trasp = trasposizioneDaId((t as any).transposeId);
+        if (concertPitch || (trasp.semitoni === 0 && trasp.gradi === 0)) return undefined;
+        try { return keySignatureToVexflowString(armaturaScritta(keySignature, trasp)); } catch { return undefined; }
+    }), [visibleAccompanimentTracks, concertPitch, keySignature]);
     keySignatureForRecRef.current = keySignature;
 
     const {
@@ -6462,6 +6479,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setIsPreferencesOpen(true);
         } else if (action === 'set-show-voice-colors') {
             setShowVoiceColors(!!payload?.enabled);
+        } else if (action === 'set-concert-pitch') {
+            setConcertPitch(!!payload?.enabled);
         } else if (action === 'set-engraving-mode') {
             const m = String(payload?.mode || '').trim();
             if (m === 'legacy' || m === 'enhanced') setEngravingMode(m);
@@ -12935,9 +12954,43 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 accProps = makeDrumNoteProps(element, palette, accClef, keySignature);
                 drumVoiceClick = drumPieceVoice(element); // mani→1 (su), piedi→2 (giù)
             } else {
-                accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, keySignatureAtMeasureRef.current(hit.measureIndex));
+                // SCRIVERE SU UNO STRUMENTO TRASPOSITORE.
+                //
+                // Il rigo che si sta guardando e' quello dello strumento, quindi il punto
+                // cliccato dice l'altezza SCRITTA e va letto con l'armatura della parte
+                // (Do maggiore su una tromba in Si♭ e' Re maggiore: senza, il clic sul
+                // secondo spazio darebbe un Do naturale invece del Do diesis d'armatura).
+                // Nel file pero' va il SUONO, che e' la convenzione che tiene in piedi
+                // analisi, riproduzione ed export: quindi si legge scritto e si scrive
+                // suonato. In vista «suoni reali» non cambia niente: i due coincidono.
+                const traspScrittura = trasposizioneDaId((accTrackObj as any)?.transposeId);
+                const scriveTrasposto = !concertPitchRef.current
+                    && (traspScrittura.semitoni !== 0 || traspScrittura.gradi !== 0);
+                const armaturaDiLettura = scriveTrasposto
+                    ? armaturaScritta(keySignatureAtMeasureRef.current(hit.measureIndex), traspScrittura)
+                    : keySignatureAtMeasureRef.current(hit.measureIndex);
+                accProps = getNotePropertiesFromDiatonicPosition(pos, accClef, armaturaDiLettura);
                 accProps = applyAutoLeadingToneInMinor(accProps, hit.measureIndex);
                 accProps = applyActiveAccidental(accProps);
+                if (scriveTrasposto) {
+                    const c = comeSuona(
+                        { lettera: String((accProps as any).pitch || 'C'), octave: Number((accProps as any).octave ?? 4), midi: Number((accProps as any).midi) },
+                        traspScrittura,
+                    );
+                    const suffisso = c.alterazione > 0 ? '#'.repeat(c.alterazione) : c.alterazione < 0 ? 'b'.repeat(-c.alterazione) : '';
+                    accProps = {
+                        ...accProps,
+                        pitch: c.lettera as any,
+                        octave: c.octave,
+                        midi: c.midi,
+                        noteIndex: ((c.midi % 12) + 12) % 12,
+                        position: ({ C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 } as any)[c.lettera] + (c.octave - 4) * 7,
+                        explicitAccidental: calculateAccidental(c.lettera + suffisso, keyAccidentalsAtMeasure(hit.measureIndex)),
+                        // La grafia utente valeva sull'altezza SCRITTA: sul suono non ha piu'
+                        // significato, e il disegno la ricalcola dall'intervallo.
+                        userAccidental: undefined,
+                    } as any;
+                }
             }
 
             const accNote: StaffNote = {
@@ -18055,6 +18108,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                             <option value="none">{tUI('acc_section_none', { defaultValue: 'Nessuna (fuori dalle parentesi)' })}</option>
                                         </select>
                                     </div>
+                                    <div className="my-1 border-t border-slate-700" />
+                                    <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 select-none">
+                                        {tUI('transp_label', { defaultValue: 'Strumento traspositore' })}
+                                    </div>
+                                    <div className="px-3 pb-2 pt-0.5">
+                                        <select
+                                            value={track.transposeId ?? 'none'}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                handleUpdateTrack(clefMenu.trackId, {
+                                                    transposeId: v === 'none' ? undefined : v,
+                                                } as Partial<AccompanimentTrack>);
+                                            }}
+                                            className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-[12px] text-gray-100"
+                                        >
+                                            {STRUMENTI_TRASPOSITORI.map(st => (
+                                                <option key={st.id} value={st.id}>{tUI(st.i18nKey, { defaultValue: st.sigla })}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                     <button
                                         onClick={() => { handleSortTracksBySection(); setClefMenu(null); }}
                                         className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"
@@ -18528,7 +18601,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     // visible-track index (_trackIdx) so the renderer can route it to
                                                                     // the matching staff block (same ordering as visibleAccompanimentTracks).
                                                                     visibleAccompanimentTracks.forEach((track, visIdx) => {
-                                                                        for (const n of (track.notes || [])) {
+                                                                        // SCRITTURA DELLO STRUMENTO. Nel file l'altezza e' quella
+                                                                        // che SUONA; qui, se la vista non e' «suoni reali», si
+                                                                        // disegna quella che lo strumento LEGGE. Si tocca solo il
+                                                                        // disegno: le note non si muovono, quindi analisi,
+                                                                        // riproduzione ed export continuano a vedere il suono vero.
+                                                                        const trasp = trasposizioneDaId((track as any).transposeId);
+                                                                        const traspone = !concertPitch && (trasp.semitoni !== 0 || trasp.gradi !== 0);
+                                                                        const armaturaDelRigo = traspone ? armaturaScritta(keySignature, trasp) : keySignature;
+                                                                        for (const n0 of (track.notes || [])) {
+                                                                            const n = (traspone && !n0.isRest && Number.isFinite(Number(n0.midi)))
+                                                                                ? (() => {
+                                                                                    const c = comeSiScrive({ lettera: String(n0.pitch || 'C'), octave: Number(n0.octave ?? 4), midi: Number(n0.midi) }, trasp);
+                                                                                    const suffisso = c.alterazione > 0 ? '#'.repeat(c.alterazione) : c.alterazione < 0 ? 'b'.repeat(-c.alterazione) : '';
+                                                                                    return {
+                                                                                        ...n0,
+                                                                                        pitch: c.lettera,
+                                                                                        octave: c.octave,
+                                                                                        midi: c.midi,
+                                                                                        noteIndex: ((c.midi % 12) + 12) % 12,
+                                                                                        position: ({ C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 } as any)[c.lettera] + (c.octave - 4) * 7,
+                                                                                        // La grafia la detta l'intervallo, non la scelta fatta
+                                                                                        // sul suono reale: un La♭ scritto per la tromba in Si♭
+                                                                                        // e' un Si♭, e tenere il vecchio «bemolle voluto»
+                                                                                        // stamperebbe un'alterazione che non c'entra.
+                                                                                        userAccidental: undefined,
+                                                                                        explicitAccidental: calculateAccidental(c.lettera + suffisso, keyAccidentalNotes(armaturaDelRigo)),
+                                                                                    } as StaffNote;
+                                                                                })()
+                                                                                : n0;
                                                                             const mi = n.measureIndex ?? -1;
                                                                             const idxInSys = measureToIdx.get(mi);
                                                                             if (idxInSys === undefined) continue;
@@ -18545,7 +18646,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                             // mostrare in modo incostante le alterazioni. Si preserva l'accidentale
                                                                             // ESPLICITO dell'utente (userAccidental), che ha priorità.
                                                                             let accForRender = n;
-                                                                            if (!n.isRest && !(n as any).userAccidental) {
+                                                                            if (!traspone && !n.isRest && !(n as any).userAccidental) {
                                                                                 try {
                                                                                     const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
                                                                                     accForRender = { ...n, explicitAccidental: calculateAccidental(noteName, keyAccidentalsAtMeasure(n.measureIndex ?? 0)) };
@@ -18644,6 +18745,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 accompanimentStaffMode={effectiveAccStaffMode}
                                                                 accompanimentTracks={visibleAccompanimentTracks}
                                                                 orchestralGrouping={orchestralGrouping !== false}
+                                                                accKeyStrings={accKeyStrings}
                                                                 satbHidden={!satbVisible}
                                                                 onDrumStavesLayout={handleDrumStavesLayout}
                                                                 drumPalettes={{ orchestral: DRUM_PALETTE_ORCH, rock: DRUM_PALETTE_ROCK }}

@@ -23,6 +23,7 @@ export const MENU_ACTIONS: Readonly<{
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers';
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug';
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors';
+  SET_CONCERT_PITCH: 'set-concert-pitch';
   SET_ENGRAVING_MODE: 'set-engraving-mode';
   RUN_OVERLAP_AUDIT: 'run-overlap-audit';
 
@@ -70,6 +71,7 @@ export type MenuActionPayloadMap = {
   'set-show-measure-numbers': { enabled: boolean };
   'set-show-harmony-debug': { enabled: boolean };
   'set-show-voice-colors': { enabled: boolean };
+  'set-concert-pitch': { enabled: boolean };
   'set-engraving-mode': { mode: 'legacy' | 'enhanced' };
   'run-overlap-audit': { mode: 'legacy' | 'enhanced' };
 

@@ -457,5 +457,14 @@
   "pal_arp_voicing": "Disposizione",
   "pal_arp_voicing_tip": "Cambia la disposizione dell’accordo selezionato: a ogni pressione la posizione successiva, e al giro completo si torna da dove si era partiti. S:3 = terza al soprano, S:5 = quinta, S:R = fondamentale, S:7 = settima; «auto» è la disposizione decisa dal motore.",
   "pal_arp_subdiv": "Suddivisione",
-  "pal_arp_subdiv_tip": "Quanto dura ogni nota dell’arpeggio. È separata dalla griglia di quantizzazione in barra, che serve al tasto Q su ciò che è registrato o importato."
+  "pal_arp_subdiv_tip": "Quanto dura ogni nota dell’arpeggio. È separata dalla griglia di quantizzazione in barra, che serve al tasto Q su ciò che è registrato o importato.",
+  "transp_label": "Strumento traspositore",
+  "transp_none": "in Do (non traspositore)",
+  "transp_bb": "in Si♭ — tromba, clarinetto, sax soprano",
+  "transp_a": "in La — clarinetto",
+  "transp_eb_alto": "in Mi♭ — sax contralto, clarinetto piccolo",
+  "transp_f": "in Fa — corno, corno inglese",
+  "transp_bb_tenor": "in Si♭ 9ª — sax tenore, clarinetto basso",
+  "transp_eb_bari": "in Mi♭ 13ª — sax baritono",
+  "transp_eb_above": "in Mi♭ acuto — tromba piccola"
 }
