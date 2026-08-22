@@ -138,6 +138,17 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     onSetAccPattern?: (id: any) => void;
     accLetRing?: boolean;
     onToggleAccLetRing?: () => void;
+    /** Suddivisione dell'arpeggio: quanto dura ogni nota della figura. È SEPARATA dalla
+     *  griglia di quantizzazione in barra, che serve al tasto Q su ciò che è registrato o
+     *  importato: si può voler arpeggiare in sedicesimi e quantizzare in ottavi. Niente
+     *  terzine, che i pattern non sanno ancora scrivere. */
+    arpeggioGrid?: string;
+    onSetArpeggioGrid?: (g: string) => void;
+    /** Disposizione del voicing: il ciclo auto → S:R → S:3 → S:5 sull'accordo selezionato. */
+    onRevoiceChord?: () => void;
+    revoiceDispIdx?: number;
+    hasSelectedNotes?: boolean;
+    selectedNotesHave7th?: boolean;
     suTracciaAcc?: boolean;
     /** Trasformazioni melodiche: agiscono sulla selezione. */
     transformMode?: 'tonal' | 'real';
@@ -160,6 +171,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     agganciata: agganciataProp, ancoraggio, onToggleAggancio, onScriviTestoAlCursore,
     durata, onSetDurata, onTogglePausa, onTogglePunto,
     accPattern, onSetAccPattern, accLetRing, onToggleAccLetRing, suTracciaAcc,
+    arpeggioGrid, onSetArpeggioGrid, onRevoiceChord, revoiceDispIdx, hasSelectedNotes, selectedNotesHave7th,
     transformMode, onToggleTransformMode, onMelodicTransform,
     onToggleTie, onToggleBeam, onFlipStem, alterazione, onSetAlterazione, onToggleCorona,
     modoCambioTonalita, onSetModoCambioTonalita, sensibileAutomatica, onSetSensibileAutomatica,
@@ -545,11 +557,20 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                     </div>
                 )}
 
-                {/* ── Pattern ── contestuale: senza tracce ACC non ha nulla su cui agire. */}
-                {suTracciaAcc && (
-                    <>
-                        <button
-                            onClick={() => alterna('pattern')}
+                {/* ── ARPEGGIATORE ──
+                    Le quattro decisioni sull'arpeggio stavano in quattro posti diversi
+                    (figura nella tavolozza, suddivisione nella griglia in barra,
+                    disposizione in barra) e sono aspetti di UNA decisione sola: qui stanno
+                    insieme, e i controlli sono SPOSTATI, non duplicati — due posti che
+                    dicono la stessa cosa sono il prossimo disaccordo.
+
+                    Il gruppo non e' tutto contestuale: le FIGURE hanno senso solo su una
+                    traccia, ma la DISPOSIZIONE vale per qualunque accordo selezionato,
+                    coro compreso. Nascondendo tutto senza tracce ACC si sarebbe perso il
+                    ciclo delle disposizioni su un corale. */}
+                <>
+                    <button
+                        onClick={() => alterna('pattern')}
                             className={`w-full flex items-center justify-between px-2 py-1 mt-1 first:mt-0 text-left text-[11px] font-bold transition-colors ${apertoOra('pattern') ? 'bg-sky-800 text-sky-50 border border-sky-600 border-b-0 rounded-t-md' : 'bg-slate-700/60 text-gray-200 hover:bg-slate-700 rounded-md'}`}
                         >
                             <span>{t('pal_group_patterns')}</span>
@@ -557,6 +578,22 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                         </button>
                         {apertoOra('pattern') && (
                             <div className="px-1.5 pt-1 pb-1.5 bg-sky-950/60 border border-sky-600 border-t-0 rounded-b-md">
+                                {/* La DISPOSIZIONE dice come è distanziato l'accordo; vale
+                                    per qualunque accordo selezionato, anche nel coro. */}
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[10px] text-sky-300/80 select-none">{t('pal_arp_voicing', { defaultValue: 'Disposizione' })}</span>
+                                    <button
+                                        onClick={onRevoiceChord}
+                                        disabled={!hasSelectedNotes}
+                                        title={t('pal_arp_voicing_tip', { defaultValue: 'Ricalcola la disposizione dell’accordo selezionato — a ogni pressione la posizione successiva' })}
+                                        className={`${bottone} font-mono ${nudo} min-w-[3.2rem]`}
+                                    >
+                                        {(selectedNotesHave7th
+                                            ? ['auto', 'S:7', 'S:3', 'S:5', 'S:R']
+                                            : ['auto', 'S:R', 'S:3', 'S:5'])[(revoiceDispIdx ?? 0) % (selectedNotesHave7th ? 5 : 4)]}
+                                    </button>
+                                </div>
+                                {suTracciaAcc && (<>
                                 <div className="grid grid-cols-3 gap-1 mt-1">
                                     {([
                                         ['block', 'Bl', t('pal_pat_block')],
@@ -583,10 +620,25 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 >
                                     Ped
                                 </button>
+
+                                <div className="flex items-center justify-between gap-1 mt-1">
+                                    <span className="text-[10px] text-sky-300/80 select-none">{t('pal_arp_subdiv', { defaultValue: 'Suddivisione' })}</span>
+                                    <select
+                                        value={arpeggioGrid ?? 'sixteenth'}
+                                        onChange={(e) => onSetArpeggioGrid?.(e.target.value)}
+                                        title={t('pal_arp_subdiv_tip', { defaultValue: 'Quanto dura ogni nota dell’arpeggio. È separata dalla griglia di quantizzazione in barra.' })}
+                                        className="h-6 bg-slate-800 text-gray-200 text-[11px] rounded px-1 border border-slate-600 cursor-pointer"
+                                    >
+                                        <option value="sixteenth">1/16</option>
+                                        <option value="eighth">1/8</option>
+                                        <option value="quarter">1/4</option>
+                                        <option value="half">1/2</option>
+                                    </select>
+                                </div>
+                                </>)}
                             </div>
                         )}
-                    </>
-                )}
+                </>
 
                 {/* ── Trasformazioni ── agiscono sulla SELEZIONE, non sul cursore. */}
                 <button

@@ -1806,6 +1806,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [minMeasureCountDraft, setMinMeasureCountDraft] = useState<string>('4');
     // Griglia di quantizzazione: chiave di QUANTIZE_GRID_MAP (binaria o di terzina).
     const [quantizeGrid, setQuantizeGrid] = useState<string>('sixteenth');
+    // SUDDIVISIONE DELL'ARPEGGIO, separata dalla griglia di quantizzazione.
+    //
+    // Erano lo stesso valore, e facevano due mestieri diversi: quella in barra serve al
+    // pulsante Q, che quantizza cio' che e' stato registrato o importato; questa dice in
+    // che figure si sgrana un accordo. Non c'e' ragione perche' coincidano — si puo' voler
+    // arpeggiare in sedicesimi e quantizzare in ottavi — e finche' erano un valore solo
+    // cambiarne uno cambiava l'altro di nascosto. Niente terzine: i pattern non sanno
+    // ancora scriverle, e la tendina qui non le offre invece di rifiutarle dopo.
+    const [arpeggioGrid, setArpeggioGrid] = useState<string>('sixteenth');
     const [measuresPerLineDraft, setMeasuresPerLineDraft] = useState<string>('4');
     const [doubleBarlineMeasures, setDoubleBarlineMeasures] = useState<number[]>([]);
     /** A CAPO DI SISTEMA: dopo queste battute la riga finisce, punto.
@@ -2900,6 +2909,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // computed by the shared helper so it stays in sync with the renderer.
     const visibleAccompanimentTracks = (accompanimentTracks || []).filter(t => t && t.visible);
     const hasVisibleAccompaniment = visibleAccompanimentTracks.length > 0;
+
+    /** La selezione contiene un accordo di SETTIMA? Decide quante posizioni ha il ciclo
+     *  delle disposizioni (cinque invece di quattro) e quindi l'etichetta del pulsante.
+     *  Guarda anche le tracce: prima leggeva solo il coro, e sugli accordi ACC — che sono
+     *  poi quelli che si arpeggiano — mostrava sempre le etichette della triade. */
+    const selectedNotesHave7th = useMemo(() => {
+        if (selectedNoteIds.size === 0) return false;
+        const coro = (latestRawNotes.current as any[]) || [];
+        const tracce = (latestAccompanimentTracks.current || []).flatMap(t => (t.notes || [])) as any[];
+        return [...coro, ...tracce].some(n => selectedNoteIds.has(n.id) && Array.isArray(n.chordPcs) && n.chordPcs.length >= 4);
+    }, [selectedNoteIds]);
     const anyVisibleGrandstaff = visibleAccompanimentTracks.some(
         t => (t.staffMode ?? 'grandstaff') === 'grandstaff'
     );
@@ -4243,7 +4263,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     'eighth':    TICKS_PER_QUARTER / 2,
                     'quarter':   TICKS_PER_QUARTER,
                     'half':      TICKS_PER_QUARTER * 2,
-                } as Record<string, number>)[quantizeGrid] ?? 0;
+                } as Record<string, number>)[arpeggioGrid] ?? 0;
                 if (!(subdivTicks > 0)) {
                     setCopyPasteError(tUI('pattern_niente_terzine', { defaultValue: 'I pattern non sanno ancora scrivere terzine: scegli una griglia 1/16, 1/8, 1/4 o 1/2.' }));
                     return;
@@ -4482,7 +4502,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         if (replacements.size === 0) return;
         setRawNotes(prev => (prev || []).map(n => replacements.get((n as any).id) ?? n));
-    }, [selectedNoteIds, revoiceDispIdx, keySignature, quantizeGrid, applyAccPattern, setRawNotes, setAccompanimentTracks, setSelectedNoteIds]);
+    }, [selectedNoteIds, revoiceDispIdx, keySignature, arpeggioGrid, applyAccPattern, setRawNotes, setAccompanimentTracks, setSelectedNoteIds]);
 
     /**
      * Applica un pattern di accompagnamento alla selezione ACC PRESERVANDO il voicing
@@ -4528,7 +4548,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             'eighth':    TICKS_PER_QUARTER / 2,
             'quarter':   TICKS_PER_QUARTER,
             'half':      TICKS_PER_QUARTER * 2,
-        } as Record<string, number>)[quantizeGrid] ?? 0;
+        } as Record<string, number>)[arpeggioGrid] ?? 0;
         if (!(subdivTicks > 0)) {
             setCopyPasteError(tUI('pattern_niente_terzine', { defaultValue: 'I pattern non sanno ancora scrivere terzine: scegli una griglia 1/16, 1/8, 1/4 o 1/2.' }));
             return;
@@ -4612,7 +4632,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Si fa sentire SOLO il primo accordo: quattro accordi tutti insieme, ognuno con le
         // sue note lanciate a tempo zero, non sarebbe un'anteprima ma un grappolo.
         anteprima.forEach((n: any) => { void playNoteRef.current?.(n, 0.8, accInstr, accCh, accTransposeSemitones(accTrk), accTrk?.id); })
-    }, [selectedNoteIds, quantizeGrid, applyAccPattern, setAccompanimentTracks, setSelectedNoteIds]);
+    }, [selectedNoteIds, arpeggioGrid, applyAccPattern, setAccompanimentTracks, setSelectedNoteIds]);
 
     /**
      * Click su un pulsante pattern in toolbar: lo imposta come default per i prossimi
@@ -4697,7 +4717,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 'eighth':    TICKS_PER_QUARTER / 2,
                 'quarter':   TICKS_PER_QUARTER,
                 'half':      TICKS_PER_QUARTER * 2,
-            } as Record<string, number>)[quantizeGrid] ?? TICKS_PER_QUARTER;
+            } as Record<string, number>)[arpeggioGrid] ?? TICKS_PER_QUARTER;
             const accNotes = applyAccPattern(blockAccNotes, startTick, durTicks, subdivisionTicks, accPatternRef.current, accLetRingRef.current);
 
             // Overwrite any pre-existing notes that fall inside the chord's time window.
@@ -4761,7 +4781,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         notes.forEach(n => { void playNoteRef.current?.(n as any, 0.8); });
 
         return { startTick, durTicks };
-    }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, quantizeGrid, setRawNotes, setAccompanimentTracks, setSelectedNoteIds, applyAccPattern]);
+    }, [timeSignature, selectedInsertion, isTriplet, isDuplet, computeDurationTicks, keySignature, arpeggioGrid, setRawNotes, setAccompanimentTracks, setSelectedNoteIds, applyAccPattern]);
 
     const mod12Local = useCallback((n: number) => ((n % 12) + 12) % 12, []);
 
@@ -17192,19 +17212,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 showHarmonyDebug={showHarmonyDebug}
                 chordInsertMode={chordInsertMode}
                 onToggleChordInsertMode={() => setChordInsertMode(v => !v)}
-                onRevoiceChord={handleRevoice}
-                revoiceDispIdx={revoiceDispIdx}
-                hasSelectedNotes={selectedNoteIds.size > 0}
-                selectedNotesHave7th={(() => {
-                    if (selectedNoteIds.size === 0) return false;
-                    const selNotes = (latestRawNotes.current as any[]).filter(n => selectedNoteIds.has(n.id));
-                    return selNotes.some(n => Array.isArray(n.chordPcs) && n.chordPcs.length >= 4);
-                })()}
-                accPattern={accPattern}
-                onSetAccPattern={handleSelectAccPattern}
                 activeStaffArea={activeStaffArea}
-                accLetRing={accSelectionHeld}
-                onToggleAccLetRing={handleToggleAccHold}
                 transformMode={transformMode}
                 onToggleTransformMode={() => setTransformMode(m => m === 'tonal' ? 'real' : 'tonal')}
                 onMelodicTransform={applyMelodicTransform}
@@ -17299,6 +17307,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         onSetAccPattern={handleSelectAccPattern}
                         accLetRing={accSelectionHeld}
                         onToggleAccLetRing={handleToggleAccHold}
+                        arpeggioGrid={arpeggioGrid}
+                        onSetArpeggioGrid={setArpeggioGrid}
+                        onRevoiceChord={handleRevoice}
+                        revoiceDispIdx={revoiceDispIdx}
+                        hasSelectedNotes={selectedNoteIds.size > 0}
+                        selectedNotesHave7th={selectedNotesHave7th}
                         suTracciaAcc={activeStaffArea === 'accompaniment' || hasVisibleAccompaniment}
                         transformMode={transformMode}
                         onToggleTransformMode={() => setTransformMode(m => m === 'tonal' ? 'real' : 'tonal')}

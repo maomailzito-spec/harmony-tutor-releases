@@ -307,15 +307,7 @@ type GrandStaffToolbarProps = {
     showHarmonyDebug: boolean;
     chordInsertMode: boolean;
     onToggleChordInsertMode: () => void;
-    onRevoiceChord: () => void;
-    revoiceDispIdx: number;
-    hasSelectedNotes: boolean;
-    selectedNotesHave7th: boolean;
-    accPattern: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken' | 'albertino' | 'ondulato';
-    onSetAccPattern: (p: 'block' | 'arpeggio_up' | 'arpeggio_down' | 'broken' | 'albertino' | 'ondulato') => void;
     activeStaffArea: 'satb' | 'accompaniment';
-    accLetRing: boolean;
-    onToggleAccLetRing: () => void;
     transformMode: 'tonal' | 'real';
     onToggleTransformMode: () => void;
     onMelodicTransform: (kind: 'transpose' | 'invert' | 'retrograde' | 'retrogradeInvert', opts?: { amount?: number }) => void;
@@ -515,10 +507,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         showHarmonyDebug,
         chordInsertMode,
         onToggleChordInsertMode,
-        onRevoiceChord,
-        revoiceDispIdx,
-        hasSelectedNotes,
-        selectedNotesHave7th,
 
 
         activeStaffArea,
@@ -1187,16 +1175,6 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     title={chordInsertMode ? 'Esci inserimento accordo (Esc)' : 'Inserisci accordo dalla sigla — es. Cmaj7, Dm7/F'}
                 >
                     A&#9833;
-                </button>
-                <button
-                    onClick={onRevoiceChord}
-                    disabled={!hasSelectedNotes}
-                    className="px-2 py-1 rounded-md transition-colors text-sm font-mono text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-gray-600"
-                    title={`Re-voice: ricalcola il voicing delle note selezionate (ciclo disposizioni)`}
-                >
-                    {selectedNotesHave7th
-                        ? ['auto','S:7','S:3','S:5','S:R'][revoiceDispIdx % 5]
-                        : ['auto','S:R','S:3','S:5'][revoiceDispIdx % 4]}
                 </button>
             </div>
         ),

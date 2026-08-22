@@ -266,7 +266,7 @@
   "pal_search_clear": "Clear the search",
   "pal_search_none": "No sign matches “{{q}}”.",
   "pal_group_notes": "Notes",
-  "pal_group_patterns": "Patterns",
+  "pal_group_patterns": "Arpeggiator",
   "pal_group_transforms": "Transformations",
   "pal_group_dynamics": "Dynamics",
   "pal_group_articulations": "Articulations and expression",
@@ -478,5 +478,9 @@
   "pattern_serve_selezione": "Select a chord on a track first: the pattern applies to that.",
   "pattern_solo_tracce": "Patterns apply to accompaniment tracks only, not to the choir: in the choir the four voices are four lines, and an arpeggio would have to decide how they move.",
   "pattern_niente_terzine": "Patterns cannot write triplets yet: choose a 1/16, 1/8, 1/4 or 1/2 grid.",
-  "revoice_nessuna_altra": "No other voicing for this chord ({{n}} distinct notes)."
+  "revoice_nessuna_altra": "No other voicing for this chord ({{n}} distinct notes).",
+  "pal_arp_voicing": "Voicing",
+  "pal_arp_voicing_tip": "Re-voices the selected chord: each press moves to the next position in the cycle, and a full turn brings you back where you started.",
+  "pal_arp_subdiv": "Subdivision",
+  "pal_arp_subdiv_tip": "How long each note of the arpeggio lasts. Separate from the quantize grid in the toolbar, which serves the Q button on recorded or imported notes."
 }

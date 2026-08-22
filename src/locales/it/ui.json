@@ -241,7 +241,7 @@
   "pal_search_clear": "Annulla la ricerca",
   "pal_search_none": "Nessun segno con «{{q}}».",
   "pal_group_notes": "Note",
-  "pal_group_patterns": "Pattern",
+  "pal_group_patterns": "Arpeggiatore",
   "pal_group_transforms": "Trasformazioni",
   "pal_group_dynamics": "Dinamiche",
   "pal_group_articulations": "Articolazioni ed espressione",
@@ -453,5 +453,9 @@
   "pattern_serve_selezione": "Scegli prima un accordo su una traccia: il pattern si applica a quello.",
   "pattern_solo_tracce": "I pattern valgono solo sulle tracce di accompagnamento, non sul coro: nel coro le quattro voci sono quattro linee, e l’arpeggio dovrebbe deciderne la condotta.",
   "pattern_niente_terzine": "I pattern non sanno ancora scrivere terzine: scegli una griglia 1/16, 1/8, 1/4 o 1/2.",
-  "revoice_nessuna_altra": "Nessun’altra disposizione per questo accordo ({{n}} note distinte)."
+  "revoice_nessuna_altra": "Nessun’altra disposizione per questo accordo ({{n}} note distinte).",
+  "pal_arp_voicing": "Disposizione",
+  "pal_arp_voicing_tip": "Ricalcola la disposizione dell’accordo selezionato: a ogni pressione la posizione successiva del ciclo, e al giro completo si torna da dove si era partiti.",
+  "pal_arp_subdiv": "Suddivisione",
+  "pal_arp_subdiv_tip": "Quanto dura ogni nota dell’arpeggio. È separata dalla griglia di quantizzazione in barra, che serve al tasto Q su ciò che è registrato o importato."
 }
