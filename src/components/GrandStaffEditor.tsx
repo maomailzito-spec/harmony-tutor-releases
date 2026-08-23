@@ -6799,6 +6799,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     filePath: currentProjectFilePathRef.current,
                     timestamp: Date.now(),
                 }));
+                // Una SCHEDA leggera accanto alla bozza: nome, data e quante note. Serve a
+                // decidere se proporre il recupero SENZA leggere e analizzare l'intero brano
+                // — che e' l'unica ragione per cui all'avvio si stava fermi un secondo e mezzo.
+                localStorage.setItem(DRAFT_KEY + '.scheda', JSON.stringify({
+                    filePath: currentProjectFilePathRef.current,
+                    timestamp: Date.now(),
+                    note: (snapshot as any)?.notes?.length ?? 0,
+                }));
             } catch { /* ignore quota / serialization errors */ }
         };
         const timer = setInterval(writeDraft, 30_000);
@@ -6816,27 +6824,43 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const DRAFT_KEY = 'harmony-tutor.draftBackup.v1';
         const id = setTimeout(() => {
             try {
+                // SI DECIDE SULLA SCHEDA, non sulla bozza.
+                //
+                // Qui si leggeva e si ANALIZZAVA l'intero brano da `localStorage` solo per
+                // sapere se valeva la pena proporre il recupero — e su una partitura
+                // d'orchestra Chromium l'ha misurato in 1497 ms di thread fermo, a ogni
+                // avvio. Ora la domanda («c'e' qualcosa? di quando? di che file?») trova
+                // risposta in una scheda di tre campi, e il brano si apre solo dopo un si'.
+                // Chi risponde di no non paga niente.
+                const rawScheda = localStorage.getItem(DRAFT_KEY + '.scheda');
+                const scheda = rawScheda ? JSON.parse(rawScheda) : null;
                 const raw = localStorage.getItem(DRAFT_KEY);
-                if (!raw) return;
-                const draft = JSON.parse(raw);
-                if (!draft?.snapshot?.notes?.length) {
+                if (!raw) { localStorage.removeItem(DRAFT_KEY + '.scheda'); return; }
+                // Senza scheda (bozze scritte da una versione precedente) si ricade sul
+                // vecchio cammino: e' un caso solo, la prima volta dopo l'aggiornamento.
+                const meta = scheda ?? (() => { const d = JSON.parse(raw); return { filePath: d?.filePath, timestamp: d?.timestamp, note: d?.snapshot?.notes?.length ?? 0 }; })();
+                if (!meta?.note) {
                     localStorage.removeItem(DRAFT_KEY);
+                    localStorage.removeItem(DRAFT_KEY + '.scheda');
                     return;
                 }
-                if (Date.now() - (draft.timestamp || 0) > 48 * 3600_000) {
+                if (Date.now() - (meta.timestamp || 0) > 48 * 3600_000) {
                     localStorage.removeItem(DRAFT_KEY);
+                    localStorage.removeItem(DRAFT_KEY + '.scheda');
                     return;
                 }
-                const name = draft.filePath
-                    ? String(draft.filePath).split('/').pop()
+                const name = meta.filePath
+                    ? String(meta.filePath).split('/').pop()
                     : 'senza nome';
-                const when = new Date(draft.timestamp).toLocaleString();
+                const when = new Date(meta.timestamp).toLocaleString();
                 if (!window.confirm(
                     `Trovato un backup non salvato di "${name}" (${when}).\nVuoi ripristinarlo?`
                 )) {
                     localStorage.removeItem(DRAFT_KEY);
+                    localStorage.removeItem(DRAFT_KEY + '.scheda');
                     return;
                 }
+                const draft = JSON.parse(raw);
                 const p = draft.snapshot;
                 setRawNotes(p.notes || []);
                 setKeySignatureRoot(p.keySignatureRoot || 'C');
