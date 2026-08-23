@@ -6764,7 +6764,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Also flushes on beforeunload so Cmd-R never loses more than a few seconds.
     useEffect(() => {
         const DRAFT_KEY = 'harmony-tutor.draftBackup.v1';
-        const writeDraft = () => {
+        const writeDraft = (forzato = false) => {
+            // ── LA BOZZA NON SI SCRIVE MENTRE SUONA ──
+            //
+            // Serializzare tutto il brano e infilarlo in `localStorage` e' lavoro
+            // SINCRONO sul thread principale: su una partitura d'orchestra Chromium l'ha
+            // misurato in 1244 ms dentro un solo `setTimeout`. Un secondo e mezzo in cui
+            // niente si muove — e l'audio, che ha bisogno di essere rifornito, tace.
+            // Cadendo ogni trenta secondi, e' esattamente il «ogni tanto si pianta».
+            //
+            // Durante la riproduzione si salta e basta: il giro dopo arriva fra trenta
+            // secondi, e alla chiusura della finestra si scrive comunque (`forzato`), che
+            // e' il momento in cui la bozza serve davvero. Non si perde niente che non si
+            // fosse gia' disposti a perdere trenta secondi prima.
+            if (!forzato && isPlayingRef.current) return;
             try {
                 const args = draftArgsRef.current;
                 if (!args) return;
@@ -6789,10 +6802,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             } catch { /* ignore quota / serialization errors */ }
         };
         const timer = setInterval(writeDraft, 30_000);
-        window.addEventListener('beforeunload', writeDraft);
+        const scriviSubito = () => writeDraft(true);
+        window.addEventListener('beforeunload', scriviSubito);
         return () => {
             clearInterval(timer);
-            window.removeEventListener('beforeunload', writeDraft);
+            window.removeEventListener('beforeunload', scriviSubito);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
