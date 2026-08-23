@@ -11265,6 +11265,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             ];
             // eslint-disable-next-line no-console
             console.table(righe);
+            // LA GEOMETRIA DEI PRIMI GRUPPI. Sapere che la parentesi sta a 814 non dice
+            // niente finche' non si sa dove sta il rigo: il numero che conta e' la
+            // DISTANZA fra la parentesi e la riga superiore del proprio pentagramma, e
+            // quanto rigo la separa da quello di sopra.
+            try {
+                const accVisD = (accompanimentTracks || []).filter(t => t && t.visible);
+                const offD = accompanimentTrackTrebleOffsets(accVisD);
+                const primi: any[] = [];
+                for (const sis of (accTupletGroupsBySystem as any[]) || []) {
+                    for (const g of [...(sis?.triplets ?? []), ...(sis?.duplets ?? [])]) {
+                        if (primi.length >= 6) break;
+                        primi.push(g);
+                    }
+                    if (primi.length >= 6) break;
+                }
+                const cime = accVisD.map((t, i) => ({
+                    traccia: t.name,
+                    cima_del_rigo: Math.round(((staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100) + (offD[i] ?? 0)),
+                }));
+                // eslint-disable-next-line no-console
+                console.log('dove comincia ciascun rigo di traccia:');
+                // eslint-disable-next-line no-console
+                console.table(cime);
+                // eslint-disable-next-line no-console
+                console.log('primi gruppi (parentesi):', primi.map(g => Math.round(g.bracketY)).join('  '));
+            } catch (e) { /* eslint-disable-next-line no-console */ console.log('geometria non disponibile:', e); }
             // eslint-disable-next-line no-console
             console.log('quello con gruppi > 0 e\' il ramo che stai guardando; la quota minima dice quanto sale.');
             return righe;
