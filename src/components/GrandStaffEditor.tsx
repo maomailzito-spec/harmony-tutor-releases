@@ -4338,7 +4338,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     : peggiore > 250 ? 'pochi render ma MOLTO costosi: guardare il piu lento'
                     : 'normale',
             });
-            return { in1s, in5s, massimo, media, peggiore };
+            const cambiati = ((window as any).__htCambiati ?? {}) as Record<string, number>;
+            const classifica = Object.entries(cambiati).sort((a, b) => b[1] - a[1]);
+            if (classifica.length) {
+                // eslint-disable-next-line no-console
+                console.log('quante volte ciascun valore e\' cambiato (dall\'avvio):');
+                // eslint-disable-next-line no-console
+                console.table(Object.fromEntries(classifica));
+            }
+            return { in1s, in5s, massimo, media, peggiore, cambiati };
         };
     }, []);
 
@@ -4372,6 +4380,36 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return d;
         };
     }, []);
+
+    // ── CHI FA RIDISEGNARE (diagnostica) ──
+    // La raffica c'e' ed e' misurata: quaranta ridisegni al secondo, seicento millisecondi
+    // di lavoro. Manca il nome del colpevole, e senza quello si tira a indovinare — cosa
+    // che in questa caccia e' gia' costata tre piste sbagliate. Qui si guarda, a ogni
+    // render, QUALI valori sono cambiati rispetto al giro prima: il tabellino di
+    // `__htRender()` dice quante volte ciascuno ha mosso il ridisegno.
+    const _precedenti = useRef<Record<string, unknown>>({});
+    useLayoutEffect(() => {
+        try {
+            const w = window as any;
+            const conteggi: Record<string, number> = (w.__htCambiati ||= {});
+            const ora: Record<string, unknown> = {
+                playingNoteIds,
+                selectedNoteIds,
+                notes,
+                rawNotes,
+                accompanimentTracks,
+                layoutData,
+                analysisResult,
+                accStavesLayout,
+                ancoraggioTavolozza,
+                isPlaying,
+            };
+            for (const k of Object.keys(ora)) {
+                if (_precedenti.current[k] !== ora[k]) conteggi[k] = (conteggi[k] ?? 0) + 1;
+            }
+            _precedenti.current = ora;
+        } catch { /* la diagnostica non deve disturbare */ }
+    });
 
     const handleRevoice = useCallback(() => {
         if (selectedNoteIds.size === 0) return;
