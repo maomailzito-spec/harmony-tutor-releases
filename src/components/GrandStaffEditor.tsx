@@ -778,12 +778,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // segna l'istante di ogni render dell'editor; `__htRender()` li conta.
     // Costa una push in un anello di 600: si tiene accesa perche' il guasto che serve a
     // trovare e' proprio quello che non lascia altre tracce.
-    try {
-        const w = window as any;
-        const anello: number[] = (w.__htRenderTimes ||= []);
-        anello.push(performance.now());
-        if (anello.length > 600) anello.shift();
-    } catch { /* la diagnostica non deve disturbare */ }
+    const _inizioRender = (() => {
+        try {
+            const w = window as any;
+            const anello: number[] = (w.__htRenderTimes ||= []);
+            const ora = performance.now();
+            anello.push(ora);
+            if (anello.length > 600) anello.shift();
+            return ora;
+        } catch { return 0; }
+    })();
+    // QUANTO COSTA un render, non solo quanti ce ne sono. Sedici al secondo non sono un
+    // ciclo, ma se ognuno impegna mezzo secondo il thread non respira lo stesso — e la
+    // riproduzione si ferma senza che niente si lamenti. Il tempo si chiude in
+    // `useLayoutEffect`, che React esegue a commit avvenuto: e' li' che il lavoro e' finito.
+    useLayoutEffect(() => {
+        try {
+            const w = window as any;
+            const durate: number[] = (w.__htRenderDurate ||= []);
+            durate.push(performance.now() - _inizioRender);
+            if (durate.length > 600) durate.shift();
+        } catch { /* la diagnostica non deve disturbare */ }
+    });
 
     const measureGridStepRef = useRef<Map<number, number>>(new Map());
 
@@ -4283,15 +4299,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 while (j < t.length && t[j] - t[i] <= 1000) j++;
                 massimo = Math.max(massimo, j - i);
             }
+            const d = (((window as any).__htRenderDurate ?? []) as number[]);
+            const ultimi = d.slice(-40);
+            const media = ultimi.length ? ultimi.reduce((a, b) => a + b, 0) / ultimi.length : 0;
+            const peggiore = d.length ? Math.max(...d) : 0;
+            // Quanto del secondo se n'e' andato in ridisegni: sopra il 50% il thread non ha
+            // piu' spazio per il resto, e l'audio se ne accorge prima di chiunque altro.
+            const finestra = t.filter(x => ora - x <= 1000);
+            const speso = finestra.length * media;
             // eslint-disable-next-line no-console
             console.table({
                 'render nell ultimo secondo': in1s,
                 'render negli ultimi 5 secondi': in5s,
                 'ritmo massimo (render/s)': massimo,
-                'campioni tenuti': t.length,
-                'giudizio': in1s > 30 ? 'CICLO: si sta rirenderizzando in continuazione' : in1s > 8 ? 'molto attivo' : 'normale',
+                'costo medio di un render (ms)': Math.round(media * 10) / 10,
+                'render piu lento mai visto (ms)': Math.round(peggiore),
+                'quanto dell ultimo secondo speso a ridisegnare (%)': Math.round(speso / 10),
+                'giudizio': speso > 500 ? 'IL THREAD E OCCUPATO A RIDISEGNARE: l audio non ha spazio'
+                    : in1s > 30 ? 'CICLO: si sta rirenderizzando in continuazione'
+                    : peggiore > 250 ? 'pochi render ma MOLTO costosi: guardare il piu lento'
+                    : 'normale',
             });
-            return { in1s, in5s, massimo };
+            return { in1s, in5s, massimo, media, peggiore };
         };
     }, []);
 
