@@ -10936,6 +10936,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (clef === 'treble') {
                     const symbolsBottom = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 18 + 6 + 4;
                     if (bracketY < symbolsBottom) bracketY = symbolsBottom;
+                } else {
+                    // ── E ANCHE IL RIGO DI BASSO HA UN SOFFITTO ──
+                    // Il fermo c'era solo per il rigo di violino, dove sopra ci sono le
+                    // sigle. Ma sopra il rigo di BASSO c'e' un altro pentagramma, che e' un
+                    // vicino piu' ingombrante di una sigla: con le note alte la parentesi ci
+                    // finiva dentro, e si leggeva come un segno di quella parte. Il soffitto
+                    // e' la riga superiore del proprio rigo, con pochi pixel di sporgenza —
+                    // gli stessi che il ramo di violino si concede.
+                    // Posizione diatonica della RIGA SUPERIORE per ciascuna chiave (Do4 = 0):
+                    // violino Fa5, basso La3, e le tre antiche. Senza la tabella si finisce
+                    // per usare Do4 per tutte, che sul rigo di basso e' un taglio addizionale
+                    // sopra il pentagramma — cioe' un soffitto messo troppo in alto.
+                    const RIGA_ALTA: Record<string, number> = { treble: 10, bass: -2, alto: 4, tenor: 2, soprano: 8 };
+                    const cimaDelRigo = getNoteY(RIGA_ALTA[clef] ?? 10, staffTop, clef) + yOffset;
+                    const SPORGENZA = 8;
+                    if (bracketY < cimaDelRigo - SPORGENZA) bracketY = cimaDelRigo - SPORGENZA;
                 }
                 const textY = bracketY + 14;
 
@@ -11040,6 +11056,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (clef === 'treble') {
                     const symbolsBottom = (staffSystemMode === 'satb_ancient' ? VF_SATB_SOPRANO_Y : TOP_STAFF_TOP) - 18 + 6 + 4;
                     if (bracketY < symbolsBottom) bracketY = symbolsBottom;
+                } else {
+                    // ── E ANCHE IL RIGO DI BASSO HA UN SOFFITTO ──
+                    // Il fermo c'era solo per il rigo di violino, dove sopra ci sono le
+                    // sigle. Ma sopra il rigo di BASSO c'e' un altro pentagramma, che e' un
+                    // vicino piu' ingombrante di una sigla: con le note alte la parentesi ci
+                    // finiva dentro, e si leggeva come un segno di quella parte. Il soffitto
+                    // e' la riga superiore del proprio rigo, con pochi pixel di sporgenza —
+                    // gli stessi che il ramo di violino si concede.
+                    // Posizione diatonica della RIGA SUPERIORE per ciascuna chiave (Do4 = 0):
+                    // violino Fa5, basso La3, e le tre antiche. Senza la tabella si finisce
+                    // per usare Do4 per tutte, che sul rigo di basso e' un taglio addizionale
+                    // sopra il pentagramma — cioe' un soffitto messo troppo in alto.
+                    const RIGA_ALTA: Record<string, number> = { treble: 10, bass: -2, alto: 4, tenor: 2, soprano: 8 };
+                    const cimaDelRigo = getNoteY(RIGA_ALTA[clef] ?? 10, staffTop, clef) + yOffset;
+                    const SPORGENZA = 8;
+                    if (bracketY < cimaDelRigo - SPORGENZA) bracketY = cimaDelRigo - SPORGENZA;
                 }
                 const textY = bracketY + 14;
 
