@@ -4414,7 +4414,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             console.table({
                 bpm_in_uso: d.bpm_in_uso,
                 eventi_totali: d.eventi_totali,
-                accodati: d.accodati,
+                accodati_finora: d.accodati_finora,
                 scartati: d.scartati_tempo_non_finito,
                 'inizio delle prime 8 battute (in movimenti)': (d.inizio_battute_in_beat ?? []).join('  '),
             });
@@ -10556,7 +10556,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // `playNoteForInstrument` con un tempo non finito, tutte quelle dopo non vengono mai
         // accodate — si sente la prima e poi piu' niente, senza che niente si lamenti.
         const _accodate = { messe: 0, scartate: 0, primeScartate: [] as any[] };
-        eventsToPlay.forEach((ev) => {
+        const accodaEvento = (ev: typeof eventsToPlay[number]) => {
             const tEv = beatToTime(ev.absBeat) - t0Anchor;
             const delayMs = tEv * 1000;
             const when = audioStartTime + tEv;
@@ -10728,7 +10728,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }, Math.max(0, (startMs - performance.now()) + delayMs));
 
             playbackTimeoutsRef.current.push(t);
-        });
+        };
+
+        // ── SI ACCODA A FINESTRE, NON TUTTO IN UNA VOLTA ──
+        //
+        // Qui si accodavano TUTTE le note del brano al primo istante: su una partitura
+        // d'orchestra sono tremila sorgenti audio create insieme, piu' altrettanti timer,
+        // e restano tutte in piedi finche' non tocca a loro. E' il motivo per cui partendo
+        // dalla FINE del brano non si piantava e dall'inizio si': non cambiava cio' che
+        // si stava facendo, cambiava quanta roba c'era in coda.
+        //
+        // Ora si accoda solo cio' che parte entro pochi secondi, e ci si ripassa. La
+        // catena di rinvii finisce nello stesso elenco dei timer della riproduzione,
+        // quindi lo stop la interrompe senza bisogno di ricordarsene.
+        const FINESTRA_SEC = 4;
+        const RIPASSO_MS = 700;
+        let prossimoEvento = 0;
+        const accodaFinestra = () => {
+            const ctx = audioService.audioContext;
+            const limite = (ctx ? ctx.currentTime : (performance.now() / 1000)) + FINESTRA_SEC;
+            while (prossimoEvento < eventsToPlay.length) {
+                const ev = eventsToPlay[prossimoEvento];
+                const quando = audioStartTime + (beatToTime(ev.absBeat) - t0Anchor);
+                if (Number.isFinite(quando) && quando > limite) break;
+                accodaEvento(ev);
+                prossimoEvento++;
+            }
+            if (prossimoEvento < eventsToPlay.length) {
+                playbackTimeoutsRef.current.push(window.setTimeout(accodaFinestra, RIPASSO_MS));
+            }
+        };
+        accodaFinestra();
+
         try {
             (window as any).__htRiproduzioneDati = {
                 // LA GRIGLIA DEL TEMPO, che e' l'altra meta' della storia. Se la linea di
@@ -10738,7 +10769,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 inizio_battute_in_beat: Array.from({ length: 8 }, (_, i) => Math.round(measureStartBeat(i) * 1000) / 1000),
                 eccezioni_durata_battuta: [...(_eccezioniDurataPlayback?.entries?.() ?? [])].slice(0, 12).map(([m, b]) => ({ battuta: m, beat: b })),
                 eventi_totali: eventsToPlay.length,
-                accodati: _accodate.messe,
+                accodati_finora: _accodate.messe,
                 scartati_tempo_non_finito: _accodate.scartate,
                 primi_scartati: _accodate.primeScartate,
             };
