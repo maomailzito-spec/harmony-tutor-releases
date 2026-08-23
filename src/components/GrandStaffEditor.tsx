@@ -10228,8 +10228,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         const bucket = `${instr}|${gm ? 'gm' : 'orch'}`;
                         if (!neededByInstrument.has(bucket)) neededByInstrument.set(bucket, { instr, gm, notes: new Map() });
                         const name = midiToName(midi);
-                        const vel = (n as any).velocity as number | undefined;
-                        neededByInstrument.get(bucket)!.notes.set(`${name}|${vel ?? ''}`, { name, velocity: vel });
+                        // ── LA VELOCITY CHE SERVIRA' DAVVERO, NON QUELLA SCRITTA ──
+                        //
+                        // Sugli strumenti a strati (il pianoforte Salamander) il campione
+                        // dipende da nota E velocity. Qui si precaricava la velocity SCRITTA
+                        // sulla nota, ma al momento di suonare quel numero passa prima dalle
+                        // DINAMICHE (una forcella lo cambia lungo la frase) e poi dalle
+                        // ARTICOLAZIONI (un accento lo rinforza): lo strato richiesto puo'
+                        // essere un altro, e quell'altro non era in cache. Si scaricava
+                        // allora, in corsa, e la nota arrivava dopo il suo istante — cioe'
+                        // non si sentiva. Da fuori: «sembra che debba ricaricare le
+                        // informazioni, aspetto un attimo e riparte».
+                        //
+                        // Si precaricano quindi ENTRAMBI gli strati, quello scritto e quello
+                        // effettivo: al piu' un campione in piu' per nota, contro una nota
+                        // muta.
+                        const velScritta = (n as any).velocity as number | undefined;
+                        const velDin = (dynamicsRef.current && dynamicsRef.current.length > 0)
+                            ? velocityAtAbsBeat(dynamicsRef.current, it.absStartBeat)
+                            : velScritta;
+                        const delta = articulationPlayback((n as any).articulations).velocityDelta;
+                        const velVera = (velDin != null && Number.isFinite(velDin))
+                            ? Math.max(1, Math.min(127, Math.round(velDin + delta)))
+                            : velDin;
+                        for (const vel of [velScritta, velVera]) {
+                            neededByInstrument.get(bucket)!.notes.set(`${name}|${vel ?? ''}`, { name, velocity: vel ?? undefined });
+                        }
                     }
                 }
                 for (const [, need] of neededByInstrument) {
