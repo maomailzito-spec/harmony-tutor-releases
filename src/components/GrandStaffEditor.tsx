@@ -2150,18 +2150,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const rigaSpartitoRef = useRef<HTMLDivElement | null>(null);
     const [ancoraggioTavolozza, setAncoraggioTavolozza] = useState<{ left: number; top: number; height: number } | null>(null);
     useEffect(() => {
+        // QUESTA MISURA COSTAVA UN RIRENDERIZZO A OGNI FRAME DI SCORRIMENTO.
+        //
+        // L'ascoltatore stava su `window` in CATTURA, quindi prendeva lo scorrimento di
+        // qualunque contenitore, e a ogni evento chiamava `setState` con un OGGETTO NUOVO:
+        // React non ha modo di vedere che i tre numeri sono gli stessi, e rifaceva tutto
+        // l'editor — centoquaranta sistemi — sessanta volte al secondo. Scorrendo la
+        // pagina durante l'esecuzione, il thread principale non aveva piu' un momento
+        // libero e la riproduzione si fermava; ripartiva premendo di nuovo play perche'
+        // fermarsi e ricominciare rimette in coda tutto da capo.
+        //
+        // Tre freni, ognuno per uno spreco diverso:
+        //  1. si misura SOLO a tavolozza agganciata — l'ancoraggio serve unicamente li',
+        //     e prima si misurava sempre, anche a tavolozza chiusa;
+        //  2. si scrive solo se i numeri sono CAMBIATI davvero: scorrere in orizzontale, o
+        //     dentro un pannello, non muove la riga dello spartito;
+        //  3. gli eventi di un frame si fondono in una sola misura (rAF), invece di
+        //     produrne una per ogni tacca della rotellina.
+        if (!tavolozzaAgganciata) { setAncoraggioTavolozza(null); return; }
         const el = rigaSpartitoRef.current;
         if (!el) return;
-        const misura = () => {
+        let inCoda = 0;
+        let ultimo: { left: number; top: number; height: number } | null = null;
+        const misuraOra = () => {
+            inCoda = 0;
             const r = el.getBoundingClientRect();
-            setAncoraggioTavolozza({ left: r.left, top: r.top, height: r.height });
+            if (ultimo && Math.abs(ultimo.left - r.left) < 0.5 && Math.abs(ultimo.top - r.top) < 0.5 && Math.abs(ultimo.height - r.height) < 0.5) return;
+            ultimo = { left: r.left, top: r.top, height: r.height };
+            setAncoraggioTavolozza(ultimo);
         };
-        misura();
+        const misura = () => {
+            if (inCoda) return;
+            inCoda = requestAnimationFrame(misuraOra);
+        };
+        misuraOra();
         const ro = new ResizeObserver(misura);
         ro.observe(el);
         window.addEventListener('resize', misura);
         window.addEventListener('scroll', misura, true);
-        return () => { ro.disconnect(); window.removeEventListener('resize', misura); window.removeEventListener('scroll', misura, true); };
+        return () => {
+            if (inCoda) cancelAnimationFrame(inCoda);
+            ro.disconnect();
+            window.removeEventListener('resize', misura);
+            window.removeEventListener('scroll', misura, true);
+        };
     }, [tavolozzaAgganciata]);
     const systemElementByIndexRef = useRef<Map<number, HTMLDivElement>>(new Map());
     const measureToSystemIndexRef = useRef<Map<number, number>>(new Map());
