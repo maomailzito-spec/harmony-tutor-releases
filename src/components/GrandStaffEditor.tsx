@@ -11181,17 +11181,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // nota e' cosi' acuta da non lasciare spazio, la parentesi le si avvicina
                 // invece di scavalcare il rigo vicino — meglio stretta che nel posto
                 // sbagliato.
-                // La cima del rigo si prende DIRETTAMENTE, non passando da `noteYForAcc`:
-                // quella funzione, sui righi singoli, ignora la chiave che le si passa e usa
-                // quella della traccia — quindi chiedendole «dove sta la riga alta del
-                // violino» su un rigo in chiave di basso rispondeva un'altra quota, e il
-                // fermo si piazzava troppo in su. Qui il valore e' quello vero: l'inizio del
-                // rigo di questa traccia, piu' i 130 px del rigo basso se il gruppo sta li'.
-                const idxTraccia = Number((first as any)._trackIdx ?? 0);
-                const modoTraccia = accVis[idxTraccia]?.staffMode ?? 'grandstaff';
-                const suRigoBasso = modoTraccia === 'grandstaff' && ((first.clef || 'treble') as ClefType) === 'bass';
-                const cimaDelRigo = ACC_TREBLE_TOP_Y_LOCAL + (accOffsets[idxTraccia] ?? 0) + (suRigoBasso ? 130 : 0);
-                const ARIA_SOPRA_IL_RIGO = 10;
+                const cimaDelRigo = noteYForAcc(
+                    ACC_TOP_LINE_POS.treble ?? 10,
+                    'treble' as ClefType,
+                    Number((first as any)._trackIdx ?? 0),
+                );
+                const ARIA_SOPRA_IL_RIGO = 14;
                 const ARIA_SOPRA_LA_NOTA = 12;
                 let bracketY = highestY - 34;
                 if (bracketY < cimaDelRigo - ARIA_SOPRA_IL_RIGO) bracketY = cimaDelRigo - ARIA_SOPRA_IL_RIGO;
