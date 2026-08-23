@@ -11168,7 +11168,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 const x2 = (last.xPosition ?? 0) + 26;
                 if (x1 > x2 - 12) x1 = x2 - 12;
                 const midX = (x1 + x2) / 2;
-                const bracketY = highestY - 34;
+                // ── LA PARENTESI NON ESCE DALLA FASCIA DELLA SUA TRACCIA ──
+                //
+                // Stava trentaquattro pixel sopra la nota piu' acuta del gruppo, e basta:
+                // senza un fermo, su una nota alta finiva dentro il pentagramma della
+                // traccia SOPRA, dove non c'entra niente e si legge come un segno di
+                // quell'altra parte. Il ramo del coro un fermo ce l'aveva gia'
+                // (`symbolsBottom`); questo no.
+                //
+                // Il limite e' la riga superiore del PROPRIO rigo: la parentesi puo' salire
+                // fin poco sopra, dentro l'aria che separa i due righi, non oltre. Se la
+                // nota e' cosi' acuta da non lasciare spazio, la parentesi le si avvicina
+                // invece di scavalcare il rigo vicino — meglio stretta che nel posto
+                // sbagliato.
+                const cimaDelRigo = noteYForAcc(
+                    ACC_TOP_LINE_POS.treble ?? 10,
+                    'treble' as ClefType,
+                    Number((first as any)._trackIdx ?? 0),
+                );
+                const ARIA_SOPRA_IL_RIGO = 14;
+                const ARIA_SOPRA_LA_NOTA = 12;
+                let bracketY = highestY - 34;
+                if (bracketY < cimaDelRigo - ARIA_SOPRA_IL_RIGO) bracketY = cimaDelRigo - ARIA_SOPRA_IL_RIGO;
+                if (bracketY > highestY - ARIA_SOPRA_LA_NOTA) bracketY = highestY - ARIA_SOPRA_LA_NOTA;
                 const textY = bracketY + 14;
 
                 return {
