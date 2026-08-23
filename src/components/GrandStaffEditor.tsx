@@ -2909,7 +2909,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // Each visible track now draws its OWN staff block (grandstaff or single staff),
     // stacked below the SATB. Total extra height = sum of per-track footprints,
     // computed by the shared helper so it stays in sync with the renderer.
-    const visibleAccompanimentTracks = (accompanimentTracks || []).filter(t => t && t.visible);
+    // MEMOIZZATO, e non e' un dettaglio di prestazioni.
+    //
+    // `filter` costruisce un array NUOVO a ogni render. Finche' questa lista serviva solo
+    // al disegno non faceva danno, ma da quando compare fra le dipendenze di `layoutData`
+    // e delle armature dei righi, un'identita' nuova a ogni giro significa ricalcolare
+    // l'impaginazione a ogni giro — e da li' «Maximum update depth exceeded», cioe' il
+    // render che si rincorre da solo. Sintomo visto dall'utente: la linea di lettura che
+    // avanza pianissimo e la coda audio che non si riempie, perche' il thread non ha piu'
+    // un momento libero. Il contenuto dipende solo dalle tracce: l'identita' anche.
+    const visibleAccompanimentTracks = useMemo(
+        () => (accompanimentTracks || []).filter(t => t && t.visible),
+        [accompanimentTracks],
+    );
     const hasVisibleAccompaniment = visibleAccompanimentTracks.length > 0;
 
 
