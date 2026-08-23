@@ -4263,6 +4263,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
     }, []);
 
+    // ── RIPRODUZIONE (diagnostica) ──
+    // `__htRiproduzione()` dice quanti eventi sono stati accodati all'ultimo avvio e quanti
+    // scartati perche' il loro istante non era un numero. Serve al caso «sento la prima
+    // nota e poi piu' niente»: se il tempo di una nota non e' finito, il ciclo che accoda
+    // salta, e tutte quelle dopo non vengono mai messe in coda — in silenzio.
+    useEffect(() => {
+        (window as any).__htRiproduzione = () => {
+            const d = (window as any).__htRiproduzioneDati;
+            if (!d) { /* eslint-disable-next-line no-console */ console.log('nessun dato: fai partire il brano una volta'); return null; }
+            // eslint-disable-next-line no-console
+            console.table({ eventi_totali: d.eventi_totali, accodati: d.accodati, scartati: d.scartati_tempo_non_finito });
+            if (d.primi_scartati?.length) { /* eslint-disable-next-line no-console */ console.table(d.primi_scartati); }
+            return d;
+        };
+    }, []);
+
     const handleRevoice = useCallback(() => {
         if (selectedNoteIds.size === 0) return;
 
@@ -10287,10 +10303,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             playbackTimeoutsRef.current.push(firstTid);
         }
 
+        // Quante note sono state accodate e quante scartate perche' il loro istante non era
+        // un numero. Il ciclo che accoda e' UNO per tutto il brano: se una nota fa saltare
+        // `playNoteForInstrument` con un tempo non finito, tutte quelle dopo non vengono mai
+        // accodate — si sente la prima e poi piu' niente, senza che niente si lamenti.
+        const _accodate = { messe: 0, scartate: 0, primeScartate: [] as any[] };
         eventsToPlay.forEach((ev) => {
             const tEv = beatToTime(ev.absBeat) - t0Anchor;
             const delayMs = tEv * 1000;
             const when = audioStartTime + tEv;
+            if (!Number.isFinite(when) || !Number.isFinite(ev.absBeat)) {
+                _accodate.scartate++;
+                if (_accodate.primeScartate.length < 8) {
+                    _accodate.primeScartate.push({
+                        battuta: (ev.items?.[0]?.note as any)?.measureIndex,
+                        movimento: (ev.items?.[0]?.note as any)?.beat,
+                        traccia: ev.items?.[0]?.accTrackIdx,
+                        absBeat: ev.absBeat,
+                        when,
+                    });
+                }
+                return;
+            }
+            _accodate.messe++;
             // DEBUG: log first 4 events inside curve range
             try {
                 if (curveSegs.length > 0) {
@@ -10431,6 +10466,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             playbackTimeoutsRef.current.push(t);
         });
+        try {
+            (window as any).__htRiproduzioneDati = {
+                eventi_totali: eventsToPlay.length,
+                accodati: _accodate.messe,
+                scartati_tempo_non_finito: _accodate.scartate,
+                primi_scartati: _accodate.primeScartate,
+            };
+            if (_accodate.scartate > 0) {
+                // eslint-disable-next-line no-console
+                console.warn(`[riproduzione] ${_accodate.scartate} eventi su ${eventsToPlay.length} avevano un istante non calcolabile e sono stati saltati. __htRiproduzione() per il dettaglio.`);
+            }
+        } catch { /* la diagnostica non deve disturbare */ }
 
         const endMs = (beatToTime(maxEndAbsBeat) - t0Anchor) * 1000;
         playbackTimeoutsRef.current.push(window.setTimeout(() => { playbackBeatToVisualBeatRef.current = null; playbackTimeToBeatRef.current = null; stopPlayback(); }, Math.max(0, (startMs - performance.now()) + endMs + 200)));
