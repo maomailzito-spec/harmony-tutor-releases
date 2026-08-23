@@ -2187,12 +2187,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const ro = new ResizeObserver(misura);
         ro.observe(el);
         window.addEventListener('resize', misura);
-        window.addEventListener('scroll', misura, true);
+        // NIENTE CATTURA, ed e' il punto.
+        //
+        // Con `true` questo ascoltatore prendeva lo scorrimento di QUALUNQUE contenitore,
+        // compreso quello dello spartito. Ma lo spartito che scorre dentro il suo riquadro
+        // NON muove la riga: la riga sta ferma, cambia solo cio' che ci si vede dentro. Si
+        // misurava quindi per niente — e misurare vuol dire `getBoundingClientRect`, cioe'
+        // costringere il browser a ricalcolare la disposizione della pagina: Chromium l'ha
+        // segnalato, «Forced reflow took 63ms».
+        //
+        // A NASTRO diventa un guasto: la riproduzione fa scorrere in continuazione un unico
+        // sistema largo quanto tutto il brano, quindi sessanta reflow al secondo su un
+        // disegno enorme. A pagina lo scorrimento e' raro e non si notava — che e'
+        // esattamente la differenza osservata fra le due viste.
+        //
+        // Senza cattura restano gli scorrimenti della FINESTRA, che sono gli unici che
+        // spostano davvero la riga; i cambi di dimensione li vede gia' il ResizeObserver.
+        window.addEventListener('scroll', misura);
         return () => {
             if (inCoda) cancelAnimationFrame(inCoda);
             ro.disconnect();
             window.removeEventListener('resize', misura);
-            window.removeEventListener('scroll', misura, true);
+            window.removeEventListener('scroll', misura);
         };
     }, [tavolozzaAgganciata]);
     const systemElementByIndexRef = useRef<Map<number, HTMLDivElement>>(new Map());
