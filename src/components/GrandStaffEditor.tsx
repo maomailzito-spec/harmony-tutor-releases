@@ -3131,6 +3131,38 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [setClipboard, setCopyPasteError]);
 
     /**
+     * SELEZIONARE UNA VOCE INTERA / UNA TRACCIA INTERA.
+     *
+     * Senza, per trasportare d'ottava una voce bisognava prenderla col rettangolo sistema
+     * per sistema. Le operazioni che servono ci sono gia' tutte e lavorano sulla selezione
+     * (⇧↑/⇧↓ per l'ottava, le trasformazioni melodiche, il trasporto per intervallo):
+     * mancava il gesto per dire «tutta questa».
+     */
+    const selezionaInteraVoce = useCallback((voice: number) => {
+        const tutte = (latestRawNotes.current || []).filter(n => Number((n as any).voice ?? 1) === voice);
+        if (tutte.length === 0) {
+            setCopyPasteError(tUI('sel_voce_vuota', { voce: (['', 'S', 'A', 'T', 'B'][voice] ?? String(voice)), defaultValue: `La voce ${(['', 'S', 'A', 'T', 'B'][voice] ?? voice)} è vuota.` }));
+            return;
+        }
+        activeStaffAreaRef.current = 'satb';
+        setActiveStaffArea('satb');
+        setSelectedVoice(voice as Voice);
+        setSelectedNoteIds(new Set(tutte.map(n => n.id)));
+    }, [setSelectedNoteIds, setCopyPasteError, tUI]);
+
+    const selezionaInteraTraccia = useCallback((trackId: string) => {
+        const traccia = (latestAccompanimentTracks.current || []).find(t => t.id === trackId);
+        if (!traccia || (traccia.notes || []).length === 0) {
+            setCopyPasteError(tUI('sel_traccia_vuota', { nome: traccia?.name ?? '', defaultValue: `La traccia «${traccia?.name ?? ''}» è vuota.` }));
+            return;
+        }
+        activeStaffAreaRef.current = 'accompaniment';
+        setActiveStaffArea('accompaniment');
+        setActiveAccTrack(trackId);
+        setSelectedNoteIds(new Set((traccia.notes || []).map(n => n.id)));
+    }, [setSelectedNoteIds, setCopyPasteError, tUI]);
+
+    /**
      * L'INVERSO DELLA COPIA DI UNA VOCE: tutta una traccia negli appunti.
      *
      * Da una voce del coro a una traccia si poteva gia' (tasto destro sul pulsante della
@@ -17356,6 +17388,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 soloVoices={soloVoices}
                 onToggleSolo={handleToggleVoiceSolo}
                 onCopyVoice={(voice) => copyEntireVoiceToClipboard(voice)}
+                onSelectVoice={(voice) => selezionaInteraVoce(voice)}
                 voiceInstruments={voiceInstruments}
                 onChangeVoiceInstrument={(voice: number, instrument: string) => {
                     // Multi-selezione: se ci sono note selezionate appartenenti a più voci
@@ -18334,6 +18367,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             );
                         })()}
                         <div className="my-1 border-t border-slate-700" />
+                        <button
+                            onClick={() => { selezionaInteraTraccia(clefMenu.trackId); setClefMenu(null); }}
+                            className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"
+                        >
+                            {tUI('sel_traccia', { defaultValue: 'Seleziona tutta la traccia' })}
+                        </button>
                         <button
                             onClick={() => { copiaInteraTracciaNegliAppunti(clefMenu.trackId); setClefMenu(null); }}
                             className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"

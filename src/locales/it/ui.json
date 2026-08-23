@@ -471,5 +471,10 @@
   "tb_concert_pitch_tip": "Mostra le parti in suoni reali (partitura in Do). Togliendo la spunta ogni strumento traspositore si legge nella sua scrittura, armatura compresa. Le note nel file non cambiano: cambia solo come si vedono.",
   "copia_traccia": "Copia tutta la traccia",
   "copia_traccia_vuota": "La traccia «{{nome}}» è vuota: niente da copiare.",
-  "copia_traccia_fatta": "Copiate {{n}} note da «{{nome}}». Clicca dove vuoi incollarle: nel coro finiscono nella voce selezionata."
+  "copia_traccia_fatta": "Copiate {{n}} note da «{{nome}}». Clicca dove vuoi incollarle: nel coro finiscono nella voce selezionata.",
+  "sel_traccia": "Seleziona tutta la traccia",
+  "sel_traccia_vuota": "La traccia «{{nome}}» è vuota.",
+  "sel_voce": "Seleziona intera voce {{voce}}",
+  "copia_voce": "Copia intera voce {{voce}}",
+  "sel_voce_vuota": "La voce {{voce}} è vuota."
 }

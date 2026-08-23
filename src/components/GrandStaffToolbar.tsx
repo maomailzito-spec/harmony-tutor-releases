@@ -186,6 +186,7 @@ type GrandStaffToolbarProps = {
     /** Copia l'INTERA voce SATB (tutte le note nel brano). Esposto via tasto destro
      *  sui pulsanti S/A/T/B (oltre alla scorciatoia ⇧⌘C). */
     onCopyVoice?: (voice: Voice) => void;
+    onSelectVoice?: (voice: Voice) => void;
     voiceInstruments?: Record<number, string>;
     onChangeVoiceInstrument?: (voice: number, instrument: string) => void;
     /** Traccia ACC attiva (quando activeStaffArea === 'accompaniment'): il selettore
@@ -412,6 +413,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         soloVoices,
         onToggleSolo,
         onCopyVoice,
+        onSelectVoice,
         voiceInstruments,
         onChangeVoiceInstrument,
         activeAccTrack,
@@ -1979,11 +1981,19 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     className="bg-slate-700 border border-slate-600 rounded shadow-lg py-1"
                     onMouseDown={(e) => e.stopPropagation()}
                 >
+                    {onSelectVoice && (
+                        <button
+                            onClick={() => { onSelectVoice(voiceCopyMenu.voice); setVoiceCopyMenu(null); }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
+                        >
+                            {t('sel_voce', { voce: voiceName(voiceCopyMenu.voice), defaultValue: `Seleziona intera voce ${voiceName(voiceCopyMenu.voice)}` })}
+                        </button>
+                    )}
                     <button
                         onClick={() => { onCopyVoice(voiceCopyMenu.voice); setVoiceCopyMenu(null); }}
                         className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
                     >
-                        Copia intera voce {voiceName(voiceCopyMenu.voice)}
+                        {t('copia_voce', { voce: voiceName(voiceCopyMenu.voice), defaultValue: `Copia intera voce ${voiceName(voiceCopyMenu.voice)}` })}
                     </button>
                 </div>
             )}

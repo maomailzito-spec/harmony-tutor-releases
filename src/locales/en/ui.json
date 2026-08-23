@@ -496,5 +496,10 @@
   "tb_concert_pitch_tip": "Shows the parts at concert pitch (score in C). Unchecked, every transposing instrument reads in its own notation, key signature included. The notes in the file do not change: only how they are drawn.",
   "copia_traccia": "Copy the whole track",
   "copia_traccia_vuota": "The track “{{nome}}” is empty: nothing to copy.",
-  "copia_traccia_fatta": "Copied {{n}} notes from “{{nome}}”. Click where you want them: in the choir they land in the selected voice."
+  "copia_traccia_fatta": "Copied {{n}} notes from “{{nome}}”. Click where you want them: in the choir they land in the selected voice.",
+  "sel_traccia": "Select the whole track",
+  "sel_traccia_vuota": "The track “{{nome}}” is empty.",
+  "sel_voce": "Select the whole {{voce}} voice",
+  "copia_voce": "Copy the whole {{voce}} voice",
+  "sel_voce_vuota": "The {{voce}} voice is empty."
 }
