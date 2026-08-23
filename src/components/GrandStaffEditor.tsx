@@ -6980,9 +6980,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 setSatbVisible((p as any).satbVisible !== false);
                 setPartCount(normalizePartCount((p as any).partCount));
                 setCurrentProjectFilePath(draft.filePath || null);
+                // La scheda se ne va con la bozza: sopravvivendole proporrebbe il recupero
+                // di qualcosa che non c'e' piu'.
                 localStorage.removeItem(DRAFT_KEY);
+                localStorage.removeItem(DRAFT_KEY + '.scheda');
             } catch {
-                try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+                try { localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(DRAFT_KEY + '.scheda'); } catch { /* ignore */ }
             }
         }, 500);
         return () => clearTimeout(id);
