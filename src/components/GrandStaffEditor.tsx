@@ -859,6 +859,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     pendingMenuAction,
     onConsumePendingMenuAction,
 }) => {
+    // ── QUANTE VOLTE SI RIDISEGNA (diagnostica) ──
+    // Quando la riproduzione si interrompe e la linea di lettura si trascina SENZA errori
+    // in console, la domanda giusta non e' «cosa e' rotto» ma «chi sta rirenderizzando»:
+    // un ciclo di render affama il thread e l'audio si ferma senza lamentarsi. Qui si
+    // segna l'istante di ogni render dell'editor; `__htRender()` li conta.
+    // Costa una push in un anello di 600: si tiene accesa perche' il guasto che serve a
+    // trovare e' proprio quello che non lascia altre tracce.
+    try {
+        const w = window as any;
+        const anello: number[] = (w.__htRenderTimes ||= []);
+        anello.push(performance.now());
+        if (anello.length > 600) anello.shift();
+    } catch { /* la diagnostica non deve disturbare */ }
 
     const measureGridStepRef = useRef<Map<number, number>>(new Map());
 
@@ -4373,6 +4386,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // eslint-disable-next-line no-console
             console.table(d.tracce);
             return d;
+        };
+    }, []);
+
+    // ── RENDER (diagnostica) ──
+    useEffect(() => {
+        (window as any).__htRender = () => {
+            const t = ((window as any).__htRenderTimes ?? []) as number[];
+            const ora = performance.now();
+            const in1s = t.filter(x => ora - x <= 1000).length;
+            const in5s = t.filter(x => ora - x <= 5000).length;
+            // Il ritmo massimo su una finestra di un secondo, scorrendo l'anello.
+            let massimo = 0;
+            for (let i = 0; i < t.length; i++) {
+                let j = i;
+                while (j < t.length && t[j] - t[i] <= 1000) j++;
+                massimo = Math.max(massimo, j - i);
+            }
+            // eslint-disable-next-line no-console
+            console.table({
+                'render nell ultimo secondo': in1s,
+                'render negli ultimi 5 secondi': in5s,
+                'ritmo massimo (render/s)': massimo,
+                'campioni tenuti': t.length,
+                'giudizio': in1s > 30 ? 'CICLO: si sta rirenderizzando in continuazione' : in1s > 8 ? 'molto attivo' : 'normale',
+            });
+            return { in1s, in5s, massimo };
         };
     }, []);
 
