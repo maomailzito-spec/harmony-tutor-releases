@@ -293,6 +293,23 @@ export class AudioService {
             try {
                 this.audioContext.addEventListener('statechange', () => {
                     const st = this.audioContext?.state;
+                    // SI ANNOTA E SI DICE. Risvegliare il contesto non riporta indietro le
+                    // note gia' accodate: avevano un istante, l'istante e' passato mentre il
+                    // contesto dormiva, e sono perdute. Da fuori si vede «suona la prima nota
+                    // e poi piu' niente», e ripremendo play riparte — perche' fermarsi e
+                    // ricominciare rimette in coda tutto da capo. Finche' non e' scritto da
+                    // nessuna parte, quel guasto e' indistinguibile da un difetto del disegno
+                    // o del tempo: e infatti li ho cercati entrambi, a lungo.
+                    try {
+                        const w = window as any;
+                        const registro: any[] = (w.__htAudioStati ||= []);
+                        registro.push({ quando: new Date().toLocaleTimeString(), stato: st });
+                        if (registro.length > 50) registro.shift();
+                        if (st !== 'running') {
+                            // eslint-disable-next-line no-console
+                            console.warn(`[audio] il contesto e' passato a «${st}». Le note gia' accodate sono perdute: se stava suonando, da qui in poi e' silenzio finche' non si rifa' play.`);
+                        }
+                    } catch { /* la diagnostica non deve disturbare */ }
                     if (st === 'suspended' || (st as string) === 'interrupted') {
                         this.audioContext?.resume().catch(() => { /* riproverà al prossimo suono */ });
                     }

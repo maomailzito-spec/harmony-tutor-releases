@@ -4359,6 +4359,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 scartati: d.scartati_tempo_non_finito,
                 'inizio delle prime 8 battute (in movimenti)': (d.inizio_battute_in_beat ?? []).join('  '),
             });
+            const stati = ((window as any).__htAudioStati ?? []) as any[];
+            // eslint-disable-next-line no-console
+            console.log('stato del contesto audio ORA:', audioService.audioContext?.state ?? '(nessun contesto)');
+            if (stati.length) { /* eslint-disable-next-line no-console */ console.table(stati.slice(-10)); }
             if (d.eccezioni_durata_battuta?.length) {
                 // eslint-disable-next-line no-console
                 console.log('battute con durata FUORI dal metro:'); // eslint-disable-next-line no-console
