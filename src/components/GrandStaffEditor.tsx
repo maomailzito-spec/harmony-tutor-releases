@@ -798,6 +798,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const durate: number[] = (w.__htRenderDurate ||= []);
             durate.push(performance.now() - _inizioRender);
             if (durate.length > 600) durate.shift();
+
+            // ── LA RAFFICA SI DENUNCIA DA SOLA ──
+            // Chiedere all'utente di cogliere il momento non funziona: quando riesce a
+            // scrivere in console la raffica e' gia' passata, e infatti si leggeva
+            // «nell'ultimo secondo: 0» accanto a un massimo di 98. Qui il conto si fa a
+            // ogni render, e quando supera la soglia lo dice — una volta ogni tre secondi,
+            // che basta a vederlo e non riempie la console.
+            const tempi: number[] = w.__htRenderTimes ?? [];
+            const ora = performance.now();
+            let quanti = 0;
+            for (let i = tempi.length - 1; i >= 0 && ora - tempi[i] <= 1000; i--) quanti++;
+            if (quanti >= 40 && (ora - (w.__htUltimoAvvisoRaffica ?? -1e9)) > 3000) {
+                w.__htUltimoAvvisoRaffica = ora;
+                const ultimi = durate.slice(-quanti);
+                const speso = Math.round(ultimi.reduce((a, b) => a + b, 0));
+                // eslint-disable-next-line no-console
+                console.warn(`[render] RAFFICA: ${quanti} ridisegni nell'ultimo secondo, ${speso} ms di lavoro. Il thread non ha spazio per l'audio. __htRender() per il dettaglio.`);
+            }
         } catch { /* la diagnostica non deve disturbare */ }
     });
 
