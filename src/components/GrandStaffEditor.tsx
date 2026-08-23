@@ -3130,6 +3130,43 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return copied;
     }, [setClipboard, setCopyPasteError]);
 
+    /**
+     * L'INVERSO DELLA COPIA DI UNA VOCE: tutta una traccia negli appunti.
+     *
+     * Da una voce del coro a una traccia si poteva gia' (tasto destro sul pulsante della
+     * voce); al contrario no, e non perche' mancasse il meccanismo — l'incolla sa gia'
+     * fare la conversione: le note di traccia hanno voce 0, e incollate nel coro prendono
+     * la voce SELEZIONATA. Mancava solo il gesto per prenderle tutte.
+     *
+     * L'area attiva diventa quella della traccia, come fa la copia di voce con il coro:
+     * cosi' l'incolla sa da dove viene la roba. La destinazione la sceglie poi il clic.
+     */
+    const copiaInteraTracciaNegliAppunti = useCallback((trackId: string): StaffNote[] => {
+        const traccia = (latestAccompanimentTracks.current || []).find(t => t.id === trackId);
+        if (!traccia) return [];
+        const tutte = traccia.notes || [];
+        if (tutte.length === 0) {
+            setCopyPasteError(tUI('copia_traccia_vuota', { nome: traccia.name, defaultValue: `La traccia «${traccia.name}» è vuota: niente da copiare.` }));
+            return [];
+        }
+        const copiate = tutte
+            .slice()
+            .sort((a: any, b: any) => ((a.startTick ?? 0) - (b.startTick ?? 0)) || ((a.midi ?? 0) - (b.midi ?? 0)))
+            .map(n => { const { xPosition, ...resto } = n as any; return resto as StaffNote; });
+        activeStaffAreaRef.current = 'accompaniment';
+        setActiveStaffArea('accompaniment');
+        setClipboard(copiate);
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(JSON.stringify(copiate)).catch(() => setCopyPasteError('Copia negli appunti di sistema fallita.'));
+        }
+        setCopyPasteError(tUI('copia_traccia_fatta', {
+            n: copiate.length,
+            nome: traccia.name,
+            defaultValue: `Copiate ${copiate.length} note da «${traccia.name}». Clicca dove vuoi incollarle: nel coro finiscono nella voce selezionata.`,
+        }));
+        return copiate;
+    }, [setClipboard, setCopyPasteError, tUI]);
+
     const [analysisContexts, setAnalysisContexts] = useState<AnalysisContext[]>([]);
     const [harmonyOverrides, setHarmonyOverrides] = useState<HarmonyLabelOverride[]>([]);
     const [tonicizationHints, setTonicizationHints] = useState<TonicizationHint[]>([]);
@@ -18296,6 +18333,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 </>
                             );
                         })()}
+                        <div className="my-1 border-t border-slate-700" />
+                        <button
+                            onClick={() => { copiaInteraTracciaNegliAppunti(clefMenu.trackId); setClefMenu(null); }}
+                            className="w-full text-left px-3 py-1.5 text-[12px] text-gray-200 hover:bg-slate-700 whitespace-nowrap transition-colors"
+                        >
+                            {tUI('copia_traccia', { defaultValue: 'Copia tutta la traccia' })}
+                        </button>
                         {/* STRUMENTO TRASPOSITORE. Sta in un blocco suo e non in quello della
                             sezione d'orchestra: quello compare da due tracce in su, perche' una
                             parentesi con un rigo solo non raggruppa niente, ma una tromba in Si♭

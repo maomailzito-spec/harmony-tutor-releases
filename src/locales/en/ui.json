@@ -493,5 +493,8 @@
   "transp_eb_bari": "in E♭ 13th — baritone sax",
   "transp_eb_above": "in E♭ high — piccolo trumpet",
   "tb_concert_pitch": "Concert pitch",
-  "tb_concert_pitch_tip": "Shows the parts at concert pitch (score in C). Unchecked, every transposing instrument reads in its own notation, key signature included. The notes in the file do not change: only how they are drawn."
+  "tb_concert_pitch_tip": "Shows the parts at concert pitch (score in C). Unchecked, every transposing instrument reads in its own notation, key signature included. The notes in the file do not change: only how they are drawn.",
+  "copia_traccia": "Copy the whole track",
+  "copia_traccia_vuota": "The track “{{nome}}” is empty: nothing to copy.",
+  "copia_traccia_fatta": "Copied {{n}} notes from “{{nome}}”. Click where you want them: in the choir they land in the selected voice."
 }
