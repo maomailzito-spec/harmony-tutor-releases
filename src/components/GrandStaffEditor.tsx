@@ -4425,7 +4425,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const d = (window as any).__htRiproduzioneDati;
             if (!d) { /* eslint-disable-next-line no-console */ console.log('nessun dato: fai partire il brano una volta'); return null; }
             // eslint-disable-next-line no-console
-            console.table({ eventi_totali: d.eventi_totali, accodati: d.accodati, scartati: d.scartati_tempo_non_finito });
+            console.table({
+                bpm_in_uso: d.bpm_in_uso,
+                eventi_totali: d.eventi_totali,
+                accodati: d.accodati,
+                scartati: d.scartati_tempo_non_finito,
+                'inizio delle prime 8 battute (in movimenti)': (d.inizio_battute_in_beat ?? []).join('  '),
+            });
+            if (d.eccezioni_durata_battuta?.length) {
+                // eslint-disable-next-line no-console
+                console.log('battute con durata FUORI dal metro:'); // eslint-disable-next-line no-console
+                console.table(d.eccezioni_durata_battuta);
+            }
             if (d.primi_scartati?.length) { /* eslint-disable-next-line no-console */ console.table(d.primi_scartati); }
             return d;
         };
@@ -10620,6 +10631,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
         try {
             (window as any).__htRiproduzioneDati = {
+                // LA GRIGLIA DEL TEMPO, che e' l'altra meta' della storia. Se la linea di
+                // lettura striscia e la seconda nota non arriva mai, o il tempo e' bassissimo
+                // o le battute sono lunghissime: qui si vedono i due numeri accanto.
+                bpm_in_uso: safeBpm,
+                inizio_battute_in_beat: Array.from({ length: 8 }, (_, i) => Math.round(measureStartBeat(i) * 1000) / 1000),
+                eccezioni_durata_battuta: [...(_eccezioniDurataPlayback?.entries?.() ?? [])].slice(0, 12).map(([m, b]) => ({ battuta: m, beat: b })),
                 eventi_totali: eventsToPlay.length,
                 accodati: _accodate.messe,
                 scartati_tempo_non_finito: _accodate.scartate,
