@@ -97,7 +97,7 @@ type StaffLayoutMode = 'parti_late' | 'parti_strette';
 type CanvasFormat = 'page' | 'landscape';
 type MetronomeUnit = 'quarter' | 'eighth' | 'dotted-quarter';
 type SelectedNotesBeamState = 'unbeamable' | 'beamed' | 'mixed' | 'unbeamed';
-import type { ToolbarGroupId } from './GrandStaffEditor';
+import { TOOLBAR_ACAPO, type ToolbarGroupId } from './toolbarGroups';
 import { usePreference } from '../preferences/usePreference';
 import { useTranslation } from 'react-i18next';
 
@@ -1605,7 +1605,10 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     // quello. E tenerli visibili aveva due costi reali, segnalati usandola: non si
     // capiva come sarebbe cambiato lo spazio, e c'erano il doppio degli elementi da
     // scansare mentre si trascina.
-    const ACAPO = '__acapo__';
+    // La stessa costante del resto del programma, invece di riscriverne il valore qui:
+    // due letterali uguali si scollano al primo che cambia, e TypeScript non poteva
+    // nemmeno accorgersene perche' il tipo li dichiarava incompatibili.
+    const ACAPO = TOOLBAR_ACAPO;
     const visibleGroupIds = toolbarGroupOrder.filter(id => id === ACAPO || !hiddenToolbarGroups.includes(id));
     const [draggingToolbarGroupId, setDraggingToolbarGroupId] = useState<ToolbarGroupId | null>(null);
     /** Dove finirebbe mollando adesso. Serve a MOSTRARE la destinazione invece di

@@ -16,6 +16,12 @@ import { vociDeterminate, vociInUso, type VoiceNum } from '../utils/voiceFromCho
 import { conMemoriaDellAccordo, accordoConLeNoteRecuperate } from '../utils/chordMemory';
 import { STRUMENTI_TRASPOSITORI, trasposizioneDaId, comeSiScrive, comeSuona, radiceScritta } from '../utils/transposingInstruments';
 import { keySignatureToVexflowString } from '../utils/keySignatureChanges';
+import { TOOLBAR_ACAPO, DEFAULT_TOOLBAR_ORDER, fondiOrdineToolbar, type ToolbarGroupId } from './toolbarGroups';
+
+const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
+const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
+const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
+const CONTENT_SPACING_KEY = 'harmony-tutor.contentAwareSpacing.v1';
 import { SECTION_ORDER, SECTION_I18N_KEY, SECTION_LABEL_IT, sezioneDaStrumento, sezioneEffettiva, type SectionId, type SectionChoice } from '../utils/instrumentSections';
 import { StaffNote, KeySignature, NoteDuration, TimeSignature, Barline, ClefType, Voice, HarmonyAnalysisResult, ErrorConnection, AccidentalType, AnalysisContext, HarmonyLabelOverride, TimeSignatureChange, VoltaBracket, OrnamentOverride, OrnamentType, TonicizationHint, TempoCurve, AccompanimentTrack } from '../types';
 import type { ImportSummary } from '../types';
@@ -467,100 +473,6 @@ const DRAG_THRESHOLD_CLIENT_PX = 6;
 
 const ENABLE_MARQUEE_SELECTION = true;
 
-type ToolbarGroupId =
-    | 'playback'
-    | 'measurePanel'
-    | 'bpm'
-    | 'key'
-    | 'time'
-    | 'measures'
-    | 'voices'
-    | 'voiceInstrument'
-    | 'mixer'
-    | 'signs'
-    | 'insert'
-    | 'chordInsert'
-    | 'accidentals'
-    | 'notations'
-    | 'analysis'
-    | 'incompleteMeasures'
-    | 'midi'
-    | 'more';
-
-/**
- * A CAPO FISSATO A MANO.
- *
- * La barra è una fila sola che va a capo da sé quando finisce lo spazio: le righe non
- * esistono nel modello, sono il risultato dell'impaginazione. Per questo «metti questo
- * gruppo all'inizio della seconda riga» non era esprimibile — spostandolo, quello prima
- * scivolava in fondo alla prima, e non c'era modo di impedirlo.
- *
- * Questo segnaposto occupa tutta la larghezza rimasta e forza l'a capo dove lo si mette.
- * Da lì in poi l'ordine è quello scelto, e non dipende più dalla larghezza della finestra.
- */
-const TOOLBAR_ACAPO = '__acapo__';
-
-const TOOLBAR_PREFS_KEY = 'harmony-tutor.toolbarPrefs.v1';
-const STAFF_SYSTEM_MODE_KEY = 'harmony-tutor.staffSystemMode.v1';
-const ENGRAVING_MODE_KEY = 'harmony-tutor.engravingMode.v1';
-const CONTENT_SPACING_KEY = 'harmony-tutor.contentAwareSpacing.v1';
-const DEFAULT_TOOLBAR_ORDER: ToolbarGroupId[] = [
-    'playback',
-    // Le PROPRIETÀ del luogo in cui si trova il cursore (metro, tonalità, stanghette, testo,
-    // modulazioni, override): interventi al volo sulla partitura, non impostazioni di pagina —
-    // per questo sta accanto ai comandi del cursore e non fra le misure, dove si confondeva
-    // con "misure per riga" e "numero di misure".
-    'measurePanel',
-    'signs',
-    'bpm',
-    'key',
-    'time',
-    'measures',
-    'voices',
-    'voiceInstrument',
-    'mixer',
-    'insert',
-    'chordInsert',
-    'accidentals',
-    'notations',
-    'analysis',
-    // L'avviso delle misure incomplete: era un pulsante FISSO appiccicato in alto a
-    // destra, l'unico comando che non si poteva spostare. Ora è un gruppo come gli
-    // altri — si mette dove serve e la posizione si salva.
-    'incompleteMeasures',
-    'midi',
-    'more',
-];
-
-/**
- * FONDE UN ORDINE SALVATO CON QUELLO DI FABBRICA.
- *
- * Due cose che si sbagliano facilmente, e che infatti erano sbagliate in due dei tre
- * punti che ricostruiscono la barra:
- *
- * · GLI A CAPO VANNO TENUTI. Non sono gruppi e non stanno nell'elenco di fabbrica:
- *   filtrando «tengo solo ciò che conosco» sparivano tutti, e riaprendo un file la
- *   barra tornava su una riga sola pur avendo i pulsanti giusti.
- * · GLI A CAPO POSSONO ESSERE PIÙ D'UNO, quindi la deduplica vale per i gruppi (che
- *   sono unici) ma non per loro: passarli in un Set ne lasciava uno solo.
- *
- * I gruppi non ancora conosciuti si aggiungono in coda: una versione nuova che porta un
- * comando nuovo lo fa comparire, invece di nasconderlo a chi ha già personalizzato.
- */
-export function fondiOrdineToolbar(salvato: unknown): ToolbarGroupId[] {
-    const noti = new Set<ToolbarGroupId>(DEFAULT_TOOLBAR_ORDER);
-    const elenco: any[] = Array.isArray(salvato) ? salvato : [];
-    const visti = new Set<string>();
-    const fuso: ToolbarGroupId[] = [];
-    for (const id of elenco) {
-        if ((id as string) === TOOLBAR_ACAPO) { fuso.push(id as ToolbarGroupId); continue; }
-        if (!noti.has(id) || visti.has(id)) continue;
-        visti.add(id);
-        fuso.push(id);
-    }
-    for (const id of DEFAULT_TOOLBAR_ORDER) if (!visti.has(id)) fuso.push(id);
-    return fuso;
-}
 
 class RenderErrorBoundary extends React.Component<
   { label: string; onReset?: () => void; children: React.ReactNode },
