@@ -2173,7 +2173,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const {
         isPlaying, setIsPlaying, bpm, setBpm,
         isBpmActive, setIsBpmActive, isBpmActiveRef,
-        playingNoteIds, setPlayingNoteIds,
+        playingNoteIds,
         playheadPosition, setPlayheadPosition,
         playbackCursorAbsBeatRef, playbackTimeoutsRef,
         playbackStartBeatRef, audioPlaybackStartTimeRef,
@@ -3266,6 +3266,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }
     }, [rawNotes, accompanimentTracks, analysisSubject]);
     type AccStaffLayout = { trackIdx: number; trackId?: string; topLineY: number; bottomLineY: number; lineSpacing: number; isDrum?: boolean };
+    /** Le note che stanno suonando in questo istante. In un RIFERIMENTO e non in uno stato:
+     *  nessuno le disegna, e tenerle in uno stato costava un ridisegno per ogni attacco. */
+    const noteCheSuonanoOraRef = useRef<string[]>([]);
     const [accStavesLayout, setAccStavesLayout] = useState<AccStaffLayout[]>([]);
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
     const [romanBassMode] = usePreference<boolean>('analysis.romanBassMode');
@@ -10586,14 +10589,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 });
             }
 
-            // Visual cursor highlighting via setTimeout (timing less critical than audio/MIDI).
+            // ── L'EVIDENZIAZIONE DELLE NOTE CHE SUONANO NON RIDISEGNA PIU' NIENTE ──
+            //
+            // Qui c'era un `setPlayingNoteIds` per ogni attacco, e quello stato non lo legge
+            // NESSUNO in questo editor: `playingNoteIds` serve a `Staff.tsx`, che e' un altro
+            // editor, e in tutto il programma non c'e' un solo punto che lo passi come
+            // proprieta'. Era quindi uno stato scritto e mai letto — ma ogni scrittura faceva
+            // ridisegnare ventimila righe di componente.
+            //
+            // Misurato, non supposto: quaranta ridisegni al secondo, seicento millisecondi di
+            // lavoro dentro ogni secondo, e il tabellino con `playingNoteIds` a 262
+            // cambiamenti contro tutto il resto a una cifra. Il thread non aveva spazio, e la
+            // riproduzione si fermava senza un errore.
+            //
+            // Il valore si conserva in un riferimento: costa niente e resta a portata di mano
+            // il giorno in cui l'evidenziazione si vorra' davvero — ma allora andra' fatta
+            // come il cursore, toccando il disegno e non lo stato.
             const t = window.setTimeout(() => {
                 const playable = ev.items
                     .filter(it => it.accTrackIdx === undefined)
                     .map(it => it.note)
                     .filter(n => !n.isRest && (n.midi ?? 0) > 0 && (soloVoicesRef.current.size === 0 || soloVoicesRef.current.has((n.voice ?? 1) as number)));
 
-                setPlayingNoteIds(playable.map(n => n.id));
+                noteCheSuonanoOraRef.current = playable.map(n => n.id);
             }, Math.max(0, (startMs - performance.now()) + delayMs));
 
             playbackTimeoutsRef.current.push(t);
