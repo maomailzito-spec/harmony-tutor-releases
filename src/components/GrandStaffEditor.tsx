@@ -11294,6 +11294,42 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // -----------------------
     // Accidentals (apply on insertion)
     // -----------------------
+    // ── LE PARENTESI DELLE TERZINE (diagnostica) ──
+    // Tre rami disegnano gruppi irregolari — terzine del coro, duine del coro, gruppi
+    // delle tracce — e hanno tre conti separati per la quota della parentesi. Correggendone
+    // uno alla cieca si sposta quello che non si sta guardando: e' successo due volte di
+    // fila. `__htTerzine()` dice QUANTI gruppi produce ciascun ramo e a che altezza, cosi'
+    // si corregge quello vivo invece di indovinare.
+    useEffect(() => {
+        (window as any).__htTerzine = () => {
+            const riassumi = (nome: string, perSistema: any[]) => {
+                const tutti: any[] = [];
+                for (const sis of (perSistema || [])) {
+                    if (!sis) continue;
+                    if (Array.isArray(sis)) tutti.push(...sis);
+                    else tutti.push(...(sis.triplets ?? []), ...(sis.duplets ?? []));
+                }
+                const ys = tutti.map(g => Math.round(g.bracketY));
+                return {
+                    ramo: nome,
+                    gruppi: tutti.length,
+                    quota_minima: ys.length ? Math.min(...ys) : '—',
+                    quota_massima: ys.length ? Math.max(...ys) : '—',
+                };
+            };
+            const righe = [
+                riassumi('coro · terzine', tripletGroupsBySystem as any[]),
+                riassumi('coro · duine', dupletGroupsBySystem as any[]),
+                riassumi('tracce ACC', accTupletGroupsBySystem as any[]),
+            ];
+            // eslint-disable-next-line no-console
+            console.table(righe);
+            // eslint-disable-next-line no-console
+            console.log('quello con gruppi > 0 e\' il ramo che stai guardando; la quota minima dice quanto sale.');
+            return righe;
+        };
+    }, [tripletGroupsBySystem, dupletGroupsBySystem, accTupletGroupsBySystem]);
+
     const applyAutoLeadingToneInMinor = useCallback((baseProps: any, measureIndex?: number) => {
         // Auto “sensibile” (scala minore armonica): in tonalità minore alza il VII grado
         // di un semitono di default, senza selezionare manualmente l’accidentale.
