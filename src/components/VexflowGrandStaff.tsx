@@ -1,4 +1,6 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
+import { misuraCosto, segnaCosto } from '../utils/htCosti';
+import { rimandaDisegno, debitoSaldato, segnaRecuperoInPausa } from '../utils/disegnoDifferito';
 import { Renderer, Stave, StaveConnector, StaveNote, Accidental, TickContext, Beam, StaveTie, Barline as VFBarline, TimeSignature as VFTimeSignature, Articulation, Curve, TextBracket, KeySignature as VFKeySignature } from 'vexflow';
 import { ARTICULATION_VF_CODE } from '../utils/articulations';
 import { keySignatureToVexflowString } from '../utils/keySignatureChanges';
@@ -832,16 +834,62 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
   // the effect ran every render. Big per-note maps (selection, motif) are localized
   // to THIS system's note ids so a change elsewhere doesn't redraw here, and to keep
   // the per-system cost O(system notes) rather than O(all notes).
-  const drawSignature = (() => {
+
+  // ── LA PARTE CARA DELLA FIRMA SI RIFA' SOLO QUANDO CAMBIA LA MUSICA ──
+  //
+  // La firma nasceva a ogni render, e serializzava le note disegnate in questo sistema.
+  // Sommata sui centoquaranta sistemi, e' la partitura INTERA serializzata ogni volta —
+  // e «ogni volta» comprende ogni singolo movimento del mouse, perche' il fantasma sta
+  // nello stato dell'editor e muoverlo fa rendere tutti i sistemi. E' questa la ragione
+  // per cui il fantasma si trascinava dietro il puntatore: fra un fotogramma e l'altro
+  // ci si infilava la serializzazione dell'intero brano.
+  //
+  // Le note del sistema arrivano gia' memoizzate dall'editor, quindi il loro pezzo di
+  // firma si puo' fissare: finche' quegli elenchi sono gli STESSI, la stringa e' la
+  // stessa — non ricalcolata e nemmeno riconfrontata, perche' React vede lo stesso
+  // oggetto. Muovere il fantasma non fa piu' toccare una sola nota.
+  //
+  // Le due meta' restano DUE dipendenze separate invece di una stringa sola: unirle
+  // vorrebbe dire ricostruire il pezzo grosso a ogni render per poi confrontarlo carattere
+  // per carattere, cioe' rifare in confronto il lavoro appena risparmiato in calcolo.
+  const firmaDellaMusica = useMemo(() => misuraCosto('firma della musica (serializzazione)', () => {
     try {
-      const idSet = new Set(notes.map(n => n.id));
-      // Le note di ACCOMPAGNAMENTO sono disegnate da questo stesso effetto e la
-      // selezione le colora leggendo `selectedNoteIds` — quindi devono entrare nella
-      // firma esattamente come quelle del SATB. Restringendo la selezione ai soli id
-      // del SATB, selezionare una nota ACC non cambiava la firma: nessun ridisegno,
-      // la nota non si evidenziava e la traccia sembrava non selezionabile.
-      const accIdSet = new Set((accompanimentNotes ?? []).map(n => n.id));
-      const localSelected = (selectedNoteIds || []).filter(id => idSet.has(id) || accIdSet.has(id));
+      return JSON.stringify([notes, accompanimentNotes ?? null]);
+    } catch {
+      // Serializzazione fallita → si forza il ridisegno (sicuro: non disegna MAI di meno).
+      return 'musica-' + Math.random();
+    }
+  }), [notes, accompanimentNotes]);
+
+  /** Gli id disegnati in QUESTO sistema, coro e tracce insieme. Servono a restringere
+   *  selezione e motivi al sistema — senza, un cambio altrove farebbe ridisegnare qui —
+   *  e si rifanno solo quando cambiano le note.
+   *
+   *  Le note di ACCOMPAGNAMENTO stanno dentro insieme a quelle del coro: le disegna lo
+   *  stesso effetto e la selezione le colora leggendo `selectedNoteIds`. Restringendo la
+   *  selezione ai soli id del coro, selezionare una nota ACC non cambiava la firma:
+   *  nessun ridisegno, la nota non si evidenziava, e la traccia sembrava non selezionabile. */
+  const idsDisegnatiQui = useMemo(() => {
+    const insieme = new Set<string>();
+    for (const n of notes) insieme.add(n.id);
+    for (const n of (accompanimentNotes ?? [])) insieme.add(n.id);
+    return insieme;
+  }, [notes, accompanimentNotes]);
+
+  // Anche questa copia esce dal giro: le tracce arrivano gia' memoizzate dall'editor,
+  // e rifarla a ogni movimento del mouse per tutti i sistemi era migliaia di copie di
+  // campi al secondo per un elenco che non era cambiato.
+  const traccePerIntestazione = useMemo(
+    () => (accompanimentTracks ?? []).map((t) => {
+      const { notes: _noteDellaTraccia, ...restoDellaTraccia } = (t as any);
+      return restoDellaTraccia;
+    }),
+    [accompanimentTracks],
+  );
+
+  const firmaDelContorno = misuraCosto('firma del contorno (ogni render)', () => {
+    try {
+      const localSelected = (selectedNoteIds || []).filter(id => idsDisegnatiQui.has(id));
       const localMotif: Record<string, { fill: string; stroke: string }> = {};
       if (motifStyleById) {
         for (const n of notes) { const s = motifStyleById[n.id]; if (s) localMotif[n.id] = s; }
@@ -849,9 +897,34 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // quando il soggetto dell'analisi è una traccia.
         for (const n of (accompanimentNotes ?? [])) { const s = motifStyleById[n.id]; if (s) localMotif[n.id] = s; }
       }
+      // LE TRACCE SENZA LE LORO NOTE (la copia sta qui sopra, memoizzata).
+      //
+      // `accompanimentTracks` serve al disegno per l'INTESTAZIONE dei righi — nome,
+      // chiave, colore, famiglia, grande rigo o rigo singolo — e il tipo dichiarato piu'
+      // sopra elenca esattamente quei campi. Ma l'oggetto che arriva a tempo d'esecuzione
+      // e' la traccia INTERA, con dentro tutte le sue note: TypeScript non toglie i campi
+      // in piu', li ignora soltanto. Il disegno non li guardava; `JSON.stringify` si'.
+      //
+      // Cosi' la firma di ogni sistema serializzava l'intero accompagnamento del brano —
+      // con tredici tracce importate da un MIDI, decine di migliaia di note — e lo faceva
+      // per TUTTI i sistemi a ogni ridisegno, solo per stabilire che non era cambiato
+      // niente. Il controllo costava piu' del lavoro che doveva evitare, e il conto
+      // cresceva col numero di tracce.
+      //
+      // Le note del sistema stanno nella firma per conto loro (`firmaDellaMusica`). Qui
+      // servono le tracce, non la musica. Si tolgono le note e si tiene TUTTO il resto:
+      // elencare i campi buoni a mano sarebbe piu' rapido e prima o poi ne dimenticherebbe
+      // uno nuovo — e un campo fuori dalla firma e' un ridisegno che non avviene, cioe' una
+      // modifica che non si vede (gia' successo con la selezione delle note ACC).
       return JSON.stringify([
-        notes, localSelected, ghostNote ?? null, accompanimentNotes ?? null,
-        accompanimentTracks ?? null, localMotif, drumPalettes ?? null,
+        localSelected,
+        // IL FANTASMA NON STA PIU' QUI, ed e' il punto. Finche' c'era, spostare il puntatore
+        // cambiava la firma e faceva REINCIDERE tutto il sistema — quindici pentagrammi per
+        // muovere una testa di nota, ~190 ms a colpo: e' questa la ragione per cui la nota
+        // fantasma seguiva il puntatore in ritardo. Ora se ne occupa un effetto suo, che
+        // ridisegna LEI SOLA dentro l'SVG gia' fatto (vedi `disegnaFantasmaRef`).
+
+        traccePerIntestazione, localMotif, drumPalettes ?? null,
         timeSignature, timeSignatureChanges ?? null, keySignature, barlines ?? null,
         width, height, staffMode, engravingMode, showVoiceColors,
         // Il CORPO DELLE RIGHE cambia il disegno dei righi: senza, premere i pulsanti
@@ -870,9 +943,53 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       // Serialization failed → force a redraw (safe: never UNDER-draws).
       return 'sig-' + Math.random();
     }
-  })();
+  });
+
+  // ── SI DISEGNA QUELLO CHE SI VEDE ──
+  //
+  // Incidere questo sistema costa ~190 ms su un brano a tredici tracce, e il 72% se ne va
+  // nelle note delle parti: e' lavoro vero, non spreco, quindi non c'e' niente da
+  // alleggerire. Ma di sistemi se ne vedono due o tre per volta, e disegnarli tutti a ogni
+  // nota scritta faceva pagare mezzo secondo abbondante per ogni tasto — con un conto che
+  // cresceva col numero di pagine.
+  //
+  // Il margine e' largo di proposito: si disegna anche quello che sta poco fuori dallo
+  // schermo, cosi' scorrendo si trova gia' pronto invece di vederlo comparire.
+  //
+  // Chi resta indietro NON viene dimenticato: si iscrive all'elenco dei debiti
+  // (`disegnoDifferito`), che stampa/PDF/PNG saldano prima di clonare il DOM, e che si
+  // salda anche da solo nei momenti di pausa (vedi piu' sotto).
+  /** Disegna il solo fantasma dentro l'SVG gia' disegnato. La riempie l'effetto di
+   *  disegno, che e' l'unico posto dove esistono il contesto e i righi veri. */
+  const disegnaFantasmaRef = useRef<null | ((g: StaffNote | null) => void)>(null);
+  const chiaveDelSistema = useRef<symbol>(Symbol('sistema'));
+  const [dentroLoSchermo, setDentroLoSchermo] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const osservatore = new IntersectionObserver(
+      (voci) => { for (const v of voci) setDentroLoSchermo(v.isIntersecting); },
+      { root: null, rootMargin: '900px 0px', threshold: 0 },
+    );
+    osservatore.observe(el);
+    return () => osservatore.disconnect();
+  }, []);
+
+  // Il debito muore col sistema: un componente smontato non deve restare nell'elenco, o
+  // la stampa proverebbe a disegnare su un contenitore che non c'e' piu'.
+  useEffect(() => {
+    const chiave = chiaveDelSistema.current;
+    return () => debitoSaldato(chiave);
+  }, []);
 
   useEffect(() => {
+    // Il DISEGNO di questo sistema, dal foglio bianco alle misure sul DOM. E' il pezzo che
+    // Chromium denuncia come «forced reflow»: si rifa' l'SVG e poi lo si RIMISURA
+    // (`getBBox`, riquadri delle teste), e misurare subito dopo aver scritto costringe il
+    // browser a ricalcolare la disposizione della pagina prima di rispondere.
+    const disegnaOra = () => {
+    const _inizioDisegno = performance.now();
+    try {
     if (!containerRef.current) return;
     containerRef.current.innerHTML = '';
     const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
@@ -1658,7 +1775,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         // `allNotes`, che contiene le note del SATB e non quelle della traccia, e su un
         // rigo ACC prenderebbero decisioni basate su note che stanno su un ALTRO rigo.
         isAccompaniment: boolean = false,
-      ) => {
+      ) => misuraCosto(isAccompaniment ? 'disegno · un rigo di TRACCIA' : 'disegno · un rigo del CORO', () => {
         const prepared: Array<{
           staffNote: StaffNote;
           vfNote: StaveNote;
@@ -4303,7 +4420,14 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
         } catch {
           // ignore
         }
-      };
+      });
+
+      // Fin qui e' l'IMPIANTO: righi, chiavi, armature, stanghette, parentesi. Da qui in
+      // poi sono le NOTE. Il taglio serve a sapere se i centosessanta millesimi di un
+      // sistema se ne vanno nel disegnare la musica — e allora la cura e' disegnare meno
+      // sistemi — o nel preparare i righi, che sarebbe uno spreco e si toglie.
+      segnaCosto('disegno · impianto (righi, chiavi, stanghette)', performance.now() - _inizioDisegno);
+      const _inizioNote = performance.now();
 
       // Draw (and collect hit points) for the active system.
       if (staffMode === 'satb_ancient' && satbSoprano && satbAlto && satbTenor && satbBass) {
@@ -4366,6 +4490,7 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
             drawNotesAtX(single, block.treble, block.clef, false, true);
           }
         }
+        segnaCosto('disegno · tutte le note del sistema', performance.now() - _inizioNote);
         // ACC hit-points are preserved to enable click and marquee selection.
       }
 
@@ -4633,8 +4758,164 @@ const VexflowGrandStaff: React.FC<VexflowGrandStaffProps> = ({
       noteHitPointsRef.current = [];
       onNoteHitPoints?.([]);
     }
+
+    // ── IL FANTASMA SI RIDISEGNA DA SOLO ──
+    //
+    // Qui si conserva l'occorrente per disegnare LUI SOLO dentro l'SVG appena fatto: il
+    // contesto e il rigo giusto. La ricetta e' identica a quella del disegno normale —
+    // stesso `makeVfNote`, stesso TickContext, stesso stile, stessi scostamenti per
+    // l'alterazione — e non e' un vezzo: il fantasma deve cadere ESATTAMENTE dove poi
+    // nascera' la nota, se no promette un posto e ne mantiene un altro.
+    disegnaFantasmaRef.current = (g: StaffNote | null) => {
+      // Via il vecchio, sempre — anche quando non ce n'e' uno nuovo da mettere.
+      try {
+        containerRef.current?.querySelectorAll('[data-note-id="__ghost__"]').forEach(el => el.remove());
+      } catch { /* ignore */ }
+      if (!g) return;
+      try {
+        let rigo: Stave | null = null;
+        let chiave: ClefType = (g.clef || 'treble') as ClefType;
+        if ((g as any)._trackIdx != null) {
+          const i = Math.min(accBlocks.length - 1, Math.max(0, Number((g as any)._trackIdx) || 0));
+          const blocco = accBlocks[i];
+          if (!blocco) return;
+          if (blocco.bass && chiave === 'bass') {
+            rigo = blocco.bass;
+          } else {
+            rigo = blocco.treble;
+            chiave = blocco.mode === 'grandstaff' ? 'treble' : blocco.clef;
+          }
+        } else if (staffMode === 'satb_ancient') {
+          rigo = chiave === 'soprano' ? satbSoprano
+            : chiave === 'alto' ? satbAlto
+            : chiave === 'tenor' ? satbTenor
+            : satbBass;
+        } else {
+          rigo = chiave === 'bass' ? bass : treble;
+        }
+        if (!rigo) return;
+
+        const nota = makeVfNote({ ...g, id: '__ghost__' } as StaffNote, chiave);
+        nota.setStave(rigo);
+        nota.setContext(context);
+
+        const gvc = voiceColor(g.voice);
+        nota.setStyle(gvc
+          ? { fillStyle: hexToRgba(gvc.fill, 0.55), strokeStyle: hexToRgba(gvc.stroke, 0.95), shadowColor: gvc.stroke, shadowBlur: 8 }
+          : { fillStyle: 'rgba(56,189,248,0.85)', strokeStyle: 'rgba(14,165,233,1)', shadowColor: '#0ea5e9', shadowBlur: 8 });
+
+        // Stessi scostamenti del disegno normale: con l'alterazione il fantasma si sposta
+        // meno a sinistra, e l'alterazione stessa si allontana dalla testa.
+        const accidentaleDaMostrare: AccidentalType | null =
+          normalizeAccidentalType((g as any).userAccidental)
+          ?? (g.explicitAccidental != null ? g.explicitAccidental : null)
+          ?? (g.accidental ?? null);
+        const conAlterazione = !!accidentalTypeToVexflow(accidentaleDaMostrare);
+        nota.setXShift(conAlterazione ? -6 : -18);
+        if (conAlterazione) {
+          try {
+            const mods: any[] = (nota as any).getModifiers?.() ?? (nota as any).modifiers ?? [];
+            for (const m of mods) {
+              const isAcc = (m && typeof m.getCategory === 'function' && m.getCategory() === 'accidentals')
+                || (m instanceof (Accidental as any));
+              if (!isAcc) continue;
+              const cur = typeof m.getXShift === 'function' ? (m.getXShift() ?? 0) : 0;
+              if (typeof m.setXShift === 'function') m.setXShift(cur + 10);
+            }
+          } catch { /* ignore */ }
+        }
+
+        const assoluta = typeof g.xPosition === 'number' ? g.xPosition : (rigo.getNoteStartX() + 10);
+        const x = Math.max(0, assoluta - rigo.getNoteStartX());
+        const tc = new TickContext();
+        tc.addTickable(nota);
+        tc.preFormat();
+        tc.setX(x);
+        nota.setTickContext(tc);
+        (nota as any).preFormat?.();
+        (nota as any).postFormat?.();
+
+        const gruppo = (context as any).openGroup?.() as SVGGElement | undefined;
+        if (gruppo) {
+          gruppo.setAttribute('data-note-id', '__ghost__');
+          gruppo.setAttribute('data-is-ghost', '1');
+        }
+        nota.draw();
+        try { (context as any).closeGroup?.(); } catch { /* ignore */ }
+      } catch {
+        // Un fantasma che non si disegna e' un fastidio; un'eccezione qui fermerebbe il resto.
+      }
+    };
+    } finally {
+      segnaCosto('disegno di UN sistema (VexFlow + misure)', performance.now() - _inizioDisegno);
+    }
+    };
+
+    const chiave = chiaveDelSistema.current;
+    if (dentroLoSchermo) {
+      debitoSaldato(chiave);
+      disegnaOra();
+      return;
+    }
+
+    // Fuori schermo: si rimanda. `disegnaOra` e' chiusa sui valori DI QUESTO render, e
+    // l'effetto rigira a ogni cambio di firma: il debito iscritto e' sempre quello con la
+    // musica aggiornata, mai una versione vecchia.
+    let disegnato = false;
+    const salda = () => {
+      if (disegnato) return;
+      disegnato = true;
+      debitoSaldato(chiave);
+      disegnaOra();
+    };
+    rimandaDisegno(chiave, salda);
+
+    // E NEI MOMENTI DI PAUSA CI SI METTE IN PARI DA SOLI.
+    //
+    // Senza questo, chi scrive un'ora di seguito e poi stampa paga tutto insieme
+    // all'ultimo momento. `requestIdleCallback` SENZA `timeout` e' la chiave: si fa vivo
+    // soltanto quando il thread non ha altro da fare, quindi non ruba mai un fotogramma a
+    // chi sta scrivendo. Se non arriva mai, non e' un guasto — e' il caso previsto, e a
+    // coprirlo c'e' la guardia della stampa.
+    // INTERRUTTORE PER COLLAUDARE LA STAMPA.
+    //
+    // Senza, il caso rischioso non si riesce a cogliere: dopo un paio di secondi i sistemi
+    // in arretrato si sono gia' disegnati da soli, e la verifica trova zero debiti — uno
+    // zero che sembra una promessa mantenuta e invece vuol dire soltanto «non c'era niente
+    // da guardare». Con `localStorage._HT_NO_RECUPERO = '1'` il recupero in pausa non parte,
+    // gli arretrati restano tali, e allora la guardia della stampa la si mette alla prova
+    // sul serio — con la carta, non con un'intenzione.
+    let recuperoSpento = false;
+    try { recuperoSpento = localStorage.getItem('_HT_NO_RECUPERO') === '1'; } catch { /* ignore */ }
+    if (recuperoSpento) return;
+
+    // Ma «pausa» vuol dire pausa VERA, non il respiro fra due tasti. Senza l'attesa, ogni
+    // modifica rimetterebbe in coda venti sistemi che al tasto dopo sarebbero gia' da
+    // rifare: lavoro sprecato, e batteria. Un secondo e mezzo di silenzio prima ancora di
+    // chiedere del tempo libero — e se il silenzio non arriva, la coda non parte proprio.
+    const w = window as any;
+    const ATTESA_PRIMA_DI_METTERSI_IN_PARI_MS = 1500;
+    let sospeso: number | null = null;
+    const attesa = window.setTimeout(() => {
+      const recupera = () => { segnaRecuperoInPausa(); salda(); };
+      if (typeof w.requestIdleCallback === 'function') sospeso = w.requestIdleCallback(recupera);
+      else recupera();
+    }, ATTESA_PRIMA_DI_METTERSI_IN_PARI_MS);
+    return () => {
+      window.clearTimeout(attesa);
+      if (sospeso != null) { try { w.cancelIdleCallback?.(sospeso); } catch { /* ignore */ } }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawSignature]);
+  }, [firmaDellaMusica, firmaDelContorno, dentroLoSchermo]);
+
+  // ── SPOSTARE IL FANTASMA COSTA UN FANTASMA, NON UN SISTEMA ──
+  //
+  // Dichiarato DOPO l'effetto di disegno di proposito: React esegue gli effetti nell'ordine
+  // in cui stanno scritti, e quando una modifica e un movimento del puntatore arrivano
+  // insieme il fantasma deve posarsi sul disegno nuovo, non su quello di prima.
+  useEffect(() => {
+    disegnaFantasmaRef.current?.(ghostNote ?? null);
+  }, [ghostNote]);
 
   // Attach pointer handlers ONCE to the persistent container. The SVG is frequently
   // re-created (ghost note updates), so attaching listeners to the SVG would

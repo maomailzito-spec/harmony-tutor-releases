@@ -28,6 +28,8 @@ import type { ImportSummary } from '../types';
 import { AudioService, type SustainHandle } from '../services/AudioService';
 import { gmToSoundfont, soundfontToGm, INSTRUMENTS } from '../constants/instruments';
 import { DRUM_PALETTE_ORCH, DRUM_PALETTE_ROCK, type DrumPiece } from '../constants/drumKits';
+import { misuraCosto, segnaCosto } from '../utils/htCosti';
+import { disegnaTuttoOra, quantiInArretrato, conti as contiDelDisegno } from '../utils/disegnoDifferito';
 import { CycleIcon } from './icons/CycleIcon';
 import { useUndoableState } from '../hooks/useUndoableState';
 import { useFeatureGate } from '../hooks/useFeatureGate';
@@ -280,6 +282,11 @@ const satbVoiceMidiChannel = (channels: Record<number, number> | undefined, v: n
   return Math.max(0, Math.min(15, v - 1));
 };
 const drumPaletteFor = (t: any): DrumPiece[] => (t?.drumKit === 'rock' ? DRUM_PALETTE_ROCK : DRUM_PALETTE_ORCH);
+/** Le due tavolozze di batteria, in un oggetto SOLO. Scritte a mano nel JSX diventavano un
+ *  oggetto nuovo per ogni sistema a ogni render, e finivano nella firma di ridisegno: due
+ *  elenchi costanti riserializzati centinaia di volte al secondo per dire che non erano
+ *  cambiati. */
+const DRUM_PALETTES = { orchestral: DRUM_PALETTE_ORCH, rock: DRUM_PALETTE_ROCK };
 // Chiavi/tipo-rigo per traccia ACC — selezionabili cliccando la chiave SUL pentagramma
 // (manipolazione diretta). Etichette chiave-centriche (non nomi di strumento).
 const ACC_STAFF_OPTIONS: Array<{ value: string; label: string; staffMode: 'grandstaff' | 'treble_only'; clef?: ClefType; voiced?: boolean; octaveTranspose?: number }> = [
@@ -796,7 +803,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         try {
             const w = window as any;
             const durate: number[] = (w.__htRenderDurate ||= []);
-            durate.push(performance.now() - _inizioRender);
+            const costoDelRender = performance.now() - _inizioRender;
+            durate.push(costoDelRender);
+            // Lo stesso numero entra anche nella tabella di `__htCosti()`, cosi' il render
+            // si legge ACCANTO ai calcoli che lo preparano invece che in un'altra tabella:
+            // e' l'unico modo per vedere se il tempo se ne va prima del disegno o dentro.
+            segnaCosto('render dell\'editor (fino al commit)', costoDelRender);
             if (durate.length > 600) durate.shift();
 
             // ── LA RAFFICA SI DENUNCIA DA SOLA ──
@@ -4354,6 +4366,54 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
     }, []);
 
+    // ── LA STAMPA SAREBBE COMPLETA? (diagnostica) ──
+    //
+    // Da quando i sistemi lontani rimandano il proprio disegno, «stampa completa» dipende
+    // da una guardia (`disegnaTuttoOra()` in cima a `buildExportHtml`). Una garanzia che si
+    // puo' solo credere non e' una garanzia: qui si CONTROLLA, senza stampare e senza
+    // sprecare carta. Si contano i sistemi che in pagina non hanno ancora un disegno, si
+    // fa scattare la guardia, si ricontano. Il numero che conta e' l'ultimo, e deve essere
+    // zero: se non lo e', la stampa uscirebbe con dei righi bianchi.
+    useEffect(() => {
+        (window as any).__htVerificaStampa = () => {
+            const c = staffContainerRef.current;
+            if (!c) { /* eslint-disable-next-line no-console */ console.log('spartito non ancora in pagina'); return null; }
+            const conta = () => {
+                const sistemi = Array.from(c.querySelectorAll('[data-system-index]'));
+                let senzaDisegno = 0;
+                for (const el of sistemi) { if (!el.querySelector('svg path')) senzaDisegno++; }
+                return { sistemi: sistemi.length, senzaDisegno };
+            };
+            const prima = conta();
+            const inCoda = quantiInArretrato();
+            const saldati = disegnaTuttoOra();
+            const dopo = conta();
+            // I CONTATORI DI VITA distinguono i due zeri. «Debiti in coda: 0» da solo non
+            // dice se il differimento ha funzionato o se non e' mai entrato in gioco:
+            // qualche secondo dopo l'apertura gli arretrati si sono gia' riassorbiti da
+            // soli, e la verifica trova una pagina pulita senza aver provato niente.
+            // «Differiti da quando e' aperto» invece resta scritto.
+            const mai = contiDelDisegno.differiti === 0;
+            const esito = {
+                'sistemi in pagina': dopo.sistemi,
+                'senza disegno PRIMA': prima.senzaDisegno,
+                'debiti in coda ADESSO': inCoda,
+                'saldati dalla guardia ORA': saldati,
+                'senza disegno DOPO (deve essere 0)': dopo.senzaDisegno,
+                'differiti da quando e\' aperto': contiDelDisegno.differiti,
+                'recuperati nelle pause': contiDelDisegno.recuperatiInPausa,
+                'saldati dalla guardia in tutto': contiDelDisegno.saldatiDallaGuardia,
+                'esito': dopo.senzaDisegno !== 0 ? 'ATTENZIONE: uscirebbero righi BIANCHI'
+                    : mai ? 'completa, ma il differimento non e\' MAI entrato in gioco: prova che non prova niente'
+                    : (inCoda > 0 || saldati > 0) ? 'PROVA VALIDA: c\'erano arretrati e la guardia li ha saldati'
+                    : 'completa; gli arretrati c\'erano ma si erano gia\' riassorbiti — per la prova vera: localStorage._HT_NO_RECUPERO = \'1\' e ricarica',
+            };
+            // eslint-disable-next-line no-console
+            console.table(esito);
+            return esito;
+        };
+    }, []);
+
     // ── RENDER (diagnostica) ──
     useEffect(() => {
         (window as any).__htRender = () => {
@@ -5678,6 +5738,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // Funzione robusta per gestire tutte le azioni del menu di Electron
     const buildExportHtml = useCallback((): string | null => {
+        // ── PRIMA DI CLONARE, SI SALDANO I DEBITI ──
+        //
+        // Questa funzione non ridisegna niente: CLONA il disegno vivo, ed e' l'unico punto
+        // del programma che lo fa (stampa, PDF, PNG passano tutti di qui). Da quando i
+        // sistemi lontani dallo schermo rimandano il proprio disegno, «vivo» non vuol piu'
+        // dire «completo»: un sistema mai disegnato uscirebbe BIANCO sulla carta.
+        //
+        // La riga qui sotto e' la garanzia, e sta in cima di proposito — prima di ogni
+        // altra cosa, perche' qualunque uscita anticipata piu' sotto la salterebbe. E'
+        // sincrona: quando ritorna, sulla pagina c'e' tutto, e il clone parte a conti
+        // chiusi senza dipendere dall'ordine con cui React esegue i suoi effetti.
+        //
+        // Su un brano lungo mai scorso puo' costare qualche secondo: e' lo stesso lavoro
+        // che prima si pagava a ogni nota scritta, qui pagato una volta sola e nel momento
+        // in cui si sta gia' aspettando la stampante.
+        disegnaTuttoOra();
+
         const container = staffContainerRef.current;
         if (!container) return null;
         try {
@@ -8530,7 +8607,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // rispetto all'interazione: layoutData (cambia solo su edit), clefForVoice (layout mode),
     // tiedFromPrevNoteIds (rawNotes), keyAccidentals (armatura). Su ghost/selezione questi non
     // cambiano → il calcolo NON rigira. La map legge systemRenderDataBySystem[systemIndex].
-    const systemRenderDataBySystem = useMemo(() => {
+    const systemRenderDataBySystem = useMemo(() => misuraCosto('note del coro per sistema', () => {
         if (!layoutData?.systemsParams) return [] as Array<{ systemNotes: StaffNote[]; systemNotesForRender: StaffNote[] }>;
         return layoutData.systemsParams.map((system) => {
             const measureSet = new Set(system.measureIndices);
@@ -8550,7 +8627,107 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             });
             return { systemNotes, systemNotesForRender };
         });
-    }, [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentalsAtMeasure]);
+    }), [layoutData, clefForVoice, tiedFromPrevNoteIds, keyAccidentalsAtMeasure]);
+
+    // PERF — ASSALTO AL MONOLITE, stadio 2: LE NOTE DELLE TRACCE.
+    //
+    // Lo stadio 1 ha tolto dalla map dei sistemi il calcolo delle note del CORO. Quello
+    // delle TRACCE era rimasto dentro, e con tredici tracce importate da un MIDI e' di
+    // gran lunga il piu' caro dei due: per OGNI sistema si riscorrevano TUTTE le note di
+    // TUTTE le tracce per tenere quelle poche che cadevano li'. Centoquaranta sistemi per
+    // diecimila note fanno un milione e mezzo di giri — a ogni ridisegno, e un ridisegno
+    // lo fa anche solo muovere il fantasma o cambiare selezione. Su un corale a quattro
+    // voci non si notava: il costo cresce col NUMERO DI TRACCE, ed e' per questo che il
+    // rallentamento e' comparso adesso.
+    //
+    // Due cose insieme, e la seconda conta piu' della prima:
+    //  · il calcolo esce dalla map e si memoizza, come lo stadio 1 (su fantasma e
+    //    selezione le chiavi non cambiano → non rigira);
+    //  · e soprattutto il giro si ROVESCIA. Non piu' «per ogni sistema, cerca fra tutte le
+    //    note quali sono sue», ma «per ogni nota, guarda in che sistema cade»: la misura
+    //    dice il sistema, e la si chiede a una mappa preparata una volta sola. Da sistemi
+    //    per note a note, e basta. Senza il rovesciamento, memoizzare avrebbe soltanto
+    //    spostato il milione di giri dal ridisegno alla battuta di tasto.
+    const accRenderNotesBySystem = useMemo<StaffNote[][]>(() => misuraCosto('note delle tracce per sistema', () => {
+        const perSistema: StaffNote[][] = [];
+        if (!layoutData?.systemsParams) return perSistema;
+        for (let i = 0; i < layoutData.systemsParams.length; i++) perSistema.push([]);
+        if (!hasVisibleAccompaniment) return perSistema;
+
+        // Misura → in che sistema cade e in che POSTO dentro quel sistema. Preparata una
+        // volta: e' questa mappa a togliere il giro esterno sui sistemi.
+        const doveCadeLaMisura = new Map<number, { sys: number; posto: number }>();
+        layoutData.systemsParams.forEach((sp: any, si: number) => {
+            const misure: number[] = Array.isArray(sp?.measureIndices) ? sp.measureIndices : [];
+            misure.forEach((m, posto) => { if (!doveCadeLaMisura.has(m)) doveCadeLaMisura.set(m, { sys: si, posto }); });
+        });
+        const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
+
+        visibleAccompanimentTracks.forEach((track, visIdx) => {
+            // SCRITTURA DELLO STRUMENTO. Nel file l'altezza e' quella che SUONA; qui, se la
+            // vista non e' «suoni reali», si disegna quella che lo strumento LEGGE. Si tocca
+            // solo il disegno: le note non si muovono, quindi analisi, riproduzione ed export
+            // continuano a vedere il suono vero.
+            const trasp = trasposizioneDaId((track as any).transposeId);
+            const traspone = !concertPitch && (trasp.semitoni !== 0 || trasp.gradi !== 0);
+            const armaturaDelRigo = traspone
+                ? getKeySignature(radiceScritta(keySignatureRoot, trasp), 'Major')
+                : keySignature;
+
+            for (const n0 of (track.notes || [])) {
+                // Prima si scarta, poi si lavora: la nota fuori sistema non merita ne' la
+                // riscrittura per lo strumento traspositore ne' il conto dell'alterazione.
+                const mi = n0.measureIndex ?? -1;
+                const dove = doveCadeLaMisura.get(mi);
+                if (!dove) continue;
+                const startTick = (n0 as any).startTick;
+                if (typeof startTick !== 'number') continue;
+                const sysParams: any = layoutData.systemsParams[dove.sys];
+                if (!sysParams) continue;
+
+                const n = (traspone && !n0.isRest && Number.isFinite(Number(n0.midi)))
+                    ? (() => {
+                        const c = comeSiScrive({ lettera: String(n0.pitch || 'C'), octave: Number(n0.octave ?? 4), midi: Number(n0.midi) }, trasp);
+                        const suffisso = c.alterazione > 0 ? '#'.repeat(c.alterazione) : c.alterazione < 0 ? 'b'.repeat(-c.alterazione) : '';
+                        return {
+                            ...n0,
+                            pitch: c.lettera,
+                            octave: c.octave,
+                            midi: c.midi,
+                            noteIndex: ((c.midi % 12) + 12) % 12,
+                            position: ({ C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 } as any)[c.lettera] + (c.octave - 4) * 7,
+                            // La grafia la detta l'intervallo, non la scelta fatta sul suono
+                            // reale: un La♭ scritto per la tromba in Si♭ e' un Si♭, e tenere il
+                            // vecchio «bemolle voluto» stamperebbe un'alterazione che non c'entra.
+                            userAccidental: undefined,
+                            explicitAccidental: calculateAccidental(c.lettera + suffisso, keyAccidentalNotes(armaturaDelRigo)),
+                        } as StaffNote;
+                    })()
+                    : n0;
+
+                const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
+                const measureStartTick = beatsToTicks(msAbsBeat);
+                const relativeTicks = Math.max(0, startTick - measureStartTick);
+                const relativeX = relativeTicks * pxPerTickOfMeasure(sysParams, dove.posto);
+                const baseX = sysParams.startMeasuresX?.[dove.posto] ?? 0;
+                const localX = baseX + MEASURE_PADDING_X + relativeX;
+
+                // Ricalcola explicitAccidental come per il SATB (vedi systemNotesForRender):
+                // le note ACC altrimenti conservano un valore stale che può sopprimere o
+                // mostrare in modo incostante le alterazioni. Si preserva l'accidentale
+                // ESPLICITO dell'utente (userAccidental), che ha priorità.
+                let accForRender = n;
+                if (!traspone && !n.isRest && !(n as any).userAccidental) {
+                    try {
+                        const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
+                        accForRender = { ...n, explicitAccidental: calculateAccidental(noteName, keyAccidentalsAtMeasure(mi)) };
+                    } catch { /* mantieni n */ }
+                }
+                perSistema[dove.sys].push({ ...accForRender, xPosition: localX, _trackIdx: visIdx } as StaffNote);
+            }
+        });
+        return perSistema;
+    }), [layoutData, hasVisibleAccompaniment, visibleAccompanimentTracks, concertPitch, keySignature, keySignatureRoot, keyAccidentalsAtMeasure]);
 
     // Larghezza reale del contenuto: di norma quella d'impaginazione, ma nel nastro
     // continuo è quella del sistema, che la eccede e si percorre scorrendo.
@@ -16292,7 +16469,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return tag === 'input' || tag === 'textarea' || tag === 'select' || node.isContentEditable;
         };
 
-        const onKeyDown = (e: KeyboardEvent) => {
+        const onKeyDown = (eventoDiTasto: KeyboardEvent) => {
+            // La battuta di tasto si cronometra INTERA (vedi `__htCosti()`). Chromium
+            // segnalava «keydown handler took 182ms» senza dire di che cosa: qui il numero
+            // si affianca a quello dei calcoli, e la differenza fra il tasto e la somma dei
+            // calcoli e' il tempo speso ALTROVE — dentro React, o in una misura del disegno.
+            const _inizioTasto = performance.now();
+            try {
+                onKeyDownCorpo(eventoDiTasto);
+            } finally {
+                segnaCosto('UN TASTO, tutto compreso', performance.now() - _inizioTasto);
+            }
+        };
+        const onKeyDownCorpo = (e: KeyboardEvent) => {
             // Important: this listener runs in capture phase.
             // NB: in chord-insert mode we no longer block everything here — the
             // isTypingTarget() check below already defers to the chord input while
@@ -19190,76 +19379,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 // Accompaniment notes for THIS system: merge visible tracks, filter by
                                                                 // measures of the system, and bake xPosition using the same per-tick
                                                                 // pixel grid used for SATB so barlines/beats align automatically.
-                                                                const accompanimentNotesForSystem: StaffNote[] = (() => {
-                                                                    if (!hasVisibleAccompaniment) return [];
-                                                                    const sysParams = layoutData?.systemsParams?.[systemIndex];
-                                                                    if (!sysParams) return [];
-                                                                    const measureToIdx = new Map<number, number>();
-                                                                    sysParams.measureIndices.forEach((m, i) => measureToIdx.set(m, i));
-                                                                    const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
-                                                                    const out: StaffNote[] = [];
-                                                                    // Iterate VISIBLE tracks in order and tag each note with its
-                                                                    // visible-track index (_trackIdx) so the renderer can route it to
-                                                                    // the matching staff block (same ordering as visibleAccompanimentTracks).
-                                                                    visibleAccompanimentTracks.forEach((track, visIdx) => {
-                                                                        // SCRITTURA DELLO STRUMENTO. Nel file l'altezza e' quella
-                                                                        // che SUONA; qui, se la vista non e' «suoni reali», si
-                                                                        // disegna quella che lo strumento LEGGE. Si tocca solo il
-                                                                        // disegno: le note non si muovono, quindi analisi,
-                                                                        // riproduzione ed export continuano a vedere il suono vero.
-                                                                        const trasp = trasposizioneDaId((track as any).transposeId);
-                                                                        const traspone = !concertPitch && (trasp.semitoni !== 0 || trasp.gradi !== 0);
-                                                                        const armaturaDelRigo = traspone
-                                                                            ? getKeySignature(radiceScritta(keySignatureRoot, trasp), 'Major')
-                                                                            : keySignature;
-                                                                        for (const n0 of (track.notes || [])) {
-                                                                            const n = (traspone && !n0.isRest && Number.isFinite(Number(n0.midi)))
-                                                                                ? (() => {
-                                                                                    const c = comeSiScrive({ lettera: String(n0.pitch || 'C'), octave: Number(n0.octave ?? 4), midi: Number(n0.midi) }, trasp);
-                                                                                    const suffisso = c.alterazione > 0 ? '#'.repeat(c.alterazione) : c.alterazione < 0 ? 'b'.repeat(-c.alterazione) : '';
-                                                                                    return {
-                                                                                        ...n0,
-                                                                                        pitch: c.lettera,
-                                                                                        octave: c.octave,
-                                                                                        midi: c.midi,
-                                                                                        noteIndex: ((c.midi % 12) + 12) % 12,
-                                                                                        position: ({ C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 } as any)[c.lettera] + (c.octave - 4) * 7,
-                                                                                        // La grafia la detta l'intervallo, non la scelta fatta
-                                                                                        // sul suono reale: un La♭ scritto per la tromba in Si♭
-                                                                                        // e' un Si♭, e tenere il vecchio «bemolle voluto»
-                                                                                        // stamperebbe un'alterazione che non c'entra.
-                                                                                        userAccidental: undefined,
-                                                                                        explicitAccidental: calculateAccidental(c.lettera + suffisso, keyAccidentalNotes(armaturaDelRigo)),
-                                                                                    } as StaffNote;
-                                                                                })()
-                                                                                : n0;
-                                                                            const mi = n.measureIndex ?? -1;
-                                                                            const idxInSys = measureToIdx.get(mi);
-                                                                            if (idxInSys === undefined) continue;
-                                                                            const startTick = (n as any).startTick;
-                                                                            if (typeof startTick !== 'number') continue;
-                                                                            const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
-                                                                            const measureStartTick = beatsToTicks(msAbsBeat);
-                                                                            const relativeTicks = Math.max(0, startTick - measureStartTick);
-                                                                            const relativeX = relativeTicks * pxPerTickOfMeasure(sysParams, idxInSys);
-                                                                            const baseX = sysParams.startMeasuresX[idxInSys] ?? 0;
-                                                                            const localX = baseX + MEASURE_PADDING_X + relativeX;
-                                                                            // Ricalcola explicitAccidental come per il SATB (vedi systemNotesForRender):
-                                                                            // le note ACC altrimenti conservano un valore stale che può sopprimere o
-                                                                            // mostrare in modo incostante le alterazioni. Si preserva l'accidentale
-                                                                            // ESPLICITO dell'utente (userAccidental), che ha priorità.
-                                                                            let accForRender = n;
-                                                                            if (!traspone && !n.isRest && !(n as any).userAccidental) {
-                                                                                try {
-                                                                                    const noteName = makeNoteNameFromPitchAndMidi(n.pitch, n.midi);
-                                                                                    accForRender = { ...n, explicitAccidental: calculateAccidental(noteName, keyAccidentalsAtMeasure(n.measureIndex ?? 0)) };
-                                                                                } catch { /* mantieni n */ }
-                                                                            }
-                                                                            out.push({ ...accForRender, xPosition: localX, _trackIdx: visIdx } as StaffNote);
-                                                                        }
-                                                                    });
-                                                                    return out;
-                                                                })();
+                                                                // PERF (stadio 2): le note delle tracce per questo sistema sono
+                                                                // gia' pronte in `accRenderNotesBySystem`. Qui vivevano inline, e
+                                                                // riscorrevano tutte le note di tutte le tracce a ogni ridisegno.
+                                                                const accompanimentNotesForSystem: StaffNote[] = accRenderNotesBySystem[systemIndex] || [];
                                                                 return (
                                                             <VexflowGrandStaff
                                 key={`vf-${systemIndex}-${vexflowNonce}`}
@@ -19351,7 +19474,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                 accKeyStrings={accKeyStrings}
                                                                 satbHidden={!satbVisible}
                                                                 onDrumStavesLayout={handleDrumStavesLayout}
-                                                                drumPalettes={{ orchestral: DRUM_PALETTE_ORCH, rock: DRUM_PALETTE_ROCK }}
+                                                                drumPalettes={DRUM_PALETTES}
                                                                 satbName={satbVisible ? satbName : ''}
                               />
                                                                                                                                 );

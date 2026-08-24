@@ -11,6 +11,7 @@ import { MENU_ACTIONS } from './contracts/menuActionRuntime';
 import { getMenuActionTarget } from './contracts/menuActionTargets';
 import { electronBridge } from './services/electronBridge';
 import type { MenuAction, MenuActionPayloadMap } from '../shared/menuActionRegistry';
+import { registraComandoCosti } from './utils/htCosti';
 
 type AppMode = 'scales' | 'chords' | 'intervals' | 'editor' | 'grandStaff';
 
@@ -40,6 +41,8 @@ const App: React.FC = () => {
         // Diagnostica del sincronismo, da console: `__htAudioLate()` mostra quante note
         // sono state consegnate in ritardo al motore audio (con `true` azzera il conto).
         try { (window as any).__htAudioLate = (reset?: boolean) => AudioService.readLateness(!!reset); } catch { /* ignore */ }
+        // Dove se ne va il tempo, calcolo per calcolo: `__htCosti()`.
+        registraComandoCosti();
         // ELENCO DEGLI STRUMENTI DI DIAGNOSI — `__htAiuto()` in console.
         // Restano nella build pubblicata: costano zero finché non li si chiama (i due che
         // raccolgono dati mentre l'app lavora si accendono da localStorage e di default
@@ -58,6 +61,9 @@ const App: React.FC = () => {
                     { comando: '__htArmature()', stato: attivo('__htArmature'), cosa_dice: 'i cambi d\'armatura che il brano ha adesso, con la battuta da cui valgono' },
                     { comando: '__htMisure()', stato: attivo('__htMisure'), cosa_dice: 'da dove esce il numero di misure in barra: il minimo, l\'ultima misura del coro, l\'ultima delle tracce, quante ne sono disegnate' },
                     { comando: '__htTerzine()', stato: attivo('__htTerzine'), cosa_dice: 'quale dei tre rami disegna i gruppi irregolari (terzine/duine del coro, gruppi delle tracce) e a che altezza mette la parentesi' },
+                    { comando: '__htDichiarazioni()', stato: attivo('__htDichiarazioni'), cosa_dice: 'le etichette d\'analisi appuntate a mano: quali sono DICHIARAZIONI (ricordano le note e si rileggono quando cambiano) e quali solo TESTO. Le etichette create prima della 1.7.1 sono testo' },
+                    { comando: '__htVerificaStampa()', stato: attivo('__htVerificaStampa'), cosa_dice: 'se la stampa uscirebbe COMPLETA: conta i sistemi non ancora disegnati, fa scattare la guardia e li riconta. L\'ultima colonna deve essere 0' },
+                    { comando: '__htCosti(azzera?)', stato: attivo('__htCosti'), cosa_dice: 'quanto costa CIASCUN calcolo che prepara il disegno, dal piu\' caro: impaginazione, note per sistema, firma di ridisegno, disegno di un sistema, e la battuta di tasto intera. Si legge quando __htRender() dice «normale» ma premere un tasto resta faticoso' },
                     { comando: '__htRender()', stato: attivo('__htRender'), cosa_dice: 'quante volte l\'editor si e\' ridisegnato nell\'ultimo secondo — sopra 30 e\' un ciclo di render, ed e\' quello che ferma l\'audio senza lasciare errori' },
                     { comando: '__htRiproduzione()', stato: attivo('__htRiproduzione'), cosa_dice: 'quanti eventi sono stati accodati all\'ultimo avvio e quanti scartati perche\' il loro istante non era un numero — il caso «sento la prima nota e poi piu\' niente»' },
                     { comando: '__htIntestazione()', stato: attivo('__htIntestazione'), cosa_dice: 'i numeri dell\'intestazione dei righi: alterazioni del brano e del rigo piu\' carico, spazio riservato, dove cade la prima nota e dove VexFlow mette le sue' },
@@ -73,6 +79,7 @@ const App: React.FC = () => {
                     'Interruttori che non sono comandi:\n' +
                     "  localStorage._HT_DEBUG_BEAT = '43'  → ricarica → in console il ragionamento delle etichette sul movimento 43 (con '-1' tutti)\n" +
                     "  localStorage._HT_MISURA_TESTE = '1' → ricarica → accende la raccolta per __htMisuraTeste() e __htGhost\n" +
+                    "  localStorage._HT_NO_RECUPERO = '1'   → ricarica → i sistemi fuori schermo NON si mettono in pari da soli: serve a collaudare sul serio la guardia della stampa (__htVerificaStampa)\n" +
                     '  per spegnerli: localStorage.removeItem(\'_HT_DEBUG_BEAT\')',
                 );
                 return 'Strumenti di diagnosi. "non ancora disponibile" = quella parte dell\'app non è ancora stata aperta, o l\'interruttore è spento.';
