@@ -644,6 +644,24 @@ export type HarmonyLabelOverride = {
   // If true, this override is used only to force a label at this absBeat
   // (i.e. prevent suppression), without overriding roman/figures/symbol.
   force?: boolean;
+  /** LE NOTE CHE HANNO PRODOTTO QUESTA ETICHETTA (comando «collassa in accordo», ⌥⇧H).
+   *
+   *  Senza, l'etichetta è solo del testo appuntato su un movimento: nasce da un accordo
+   *  letto una volta e poi non guarda più niente: cancellando una delle note che l'avevano
+   *  generata restava lì a dire una cosa non più vera. Ma annettere una nota
+   *  dell'accompagnamento all'analisi del coro non è scrivere un'etichetta a mano — è
+   *  DICHIARARE quali suoni formano l'accordo, e una dichiarazione deve poter essere
+   *  riletta quando le note cambiano.
+   *
+   *  Ricordando gli id, l'etichetta si rifà da sé sulle note superstiti, e sparisce quando
+   *  ne restano meno di due. Assente = etichetta scritta a mano, che resta com'è: è la
+   *  differenza fra «ho deciso che qui c'è scritto questo» e «ho deciso che queste note
+   *  suonano insieme». */
+  noteIds?: string[];
+  /** Le etichette nate dallo STESSO comando portano lo stesso segno: l'ancora con la sigla
+   *  e le etichette svuotate degli altri attacchi. Servono a togliersi insieme — mezza
+   *  operazione annullata sarebbe peggio di nessuna. */
+  gruppo?: string;
 };
 export interface SpelledPitch {
   letter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G';

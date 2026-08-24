@@ -13069,7 +13069,45 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         return (harmonyOverrides || []).find(o => qAbsForOverrides(o.absBeat) === a) || null;
     }, [harmonyOverrideMenu, harmonyOverrides, qAbsForOverrides]);
 
-    const applyHarmonyOverride = useCallback((absBeat: number, roman: string, figures: string[], symbol: string) => {
+    /** LE TRE ETICHETTE DI UN GRUPPO DI NOTE — romano, sigla, basso figurato.
+     *
+     *  Sta in una funzione sola perche' serve in DUE momenti: quando dichiari l'accordo
+     *  (⌥⇧H) e ogni volta che le note dichiarate cambiano. Se i due conti vivessero in posti
+     *  diversi, cancellare una nota potrebbe dare un'etichetta diversa da quella che avresti
+     *  ottenuto dichiarando da capo le stesse note — ed e' il genere di incoerenza che non si
+     *  scopre mai, perche' nessuno rifa' due volte la stessa operazione per confrontarla. */
+    const etichettaPerAccordo = useCallback((note: any[]): { roman: string; symbol: string; figures: string[] } => {
+        // Voce e chiave azzerate: cosi' il suono PIU' GRAVE in assoluto conta come basso, ed
+        // e' il basso a decidere il rivolto. Annettere una nota sotto il basso del coro
+        // cambia quindi anche la cifra del romano — ed e' giusto: l'accordo che hai
+        // dichiarato ha un altro basso.
+        const forAnalysis = note.map(n => ({ ...n, voice: 1, clef: 'treble' }));
+        const candidates = identifyChordCandidates(forAnalysis as any);
+        const chordInfo = candidates && candidates.length ? candidates[0] : null;
+        const tonicRoot = (currentTonic || keySignatureRoot || (keySignature as any).root || 'C') as string;
+        // Il romano si chiede alla STESSA funzione che scrive tutte le altre etichette.
+        // `calculateRomanFromChordInfo` lavora sul solo accordo, fuori contesto, e legge una
+        // triade maggiore sulla tonica come dominante del IV: una triade di Do in Do maggiore
+        // usciva V/IV invece di I. (Con la settima — Do7 — V/IV è giusto, e infatti le due
+        // strade concordano.) Resta come ripiego se l'analisi non riconosce nulla.
+        const romanFromAnalysis = (() => {
+            try { return getRomanAnalysis(forAnalysis as any, tonicRoot, isMinorMode)?.roman || ''; } catch { return ''; }
+        })();
+        const roman = romanFromAnalysis
+            || (chordInfo ? (calculateRomanFromChordInfo(chordInfo as any, tonicRoot, isMinorMode) || '') : '');
+        const symbol = getChordSymbol(forAnalysis as any, keySignature, tonicRoot) || '';
+        let figures: string[] = [];
+        try { figures = computeFiguredBassFromNotes(forAnalysis as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: getKeySignature(tonicRoot, isMinorMode ? 'Minor' : 'Major') }).figures || []; } catch { figures = []; }
+        return { roman, symbol, figures };
+    }, [currentTonic, keySignatureRoot, keySignature, isMinorMode]);
+
+    const applyHarmonyOverride = useCallback((absBeat: number, roman: string, figures: string[], symbol: string,
+        // Da quali note nasce, e con quali altre etichette fa gruppo. Assente di proposito
+        // per chi scrive un'etichetta A MANO (menu T): quella e' testo e deve restare testo.
+        // Passandoli sempre, anche vuoti, si CANCELLA la memoria di un'annessione precedente
+        // sullo stesso movimento — ed e' giusto: riscrivendola a mano l'hai fatta diventare
+        // un'altra cosa.
+        provenienza?: { noteIds?: string[]; gruppo?: string }) => {
         const a = qAbsForOverrides(absBeat);
         setHarmonyOverrides(prev => {
             const arr = (prev || []).slice();
@@ -13082,12 +13120,106 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 roman: cleanedRoman,
                 symbol: cleanedSymbol,
                 figures: cleanedFigures,
+                noteIds: provenienza?.noteIds,
+                gruppo: provenienza?.gruppo,
             };
             if (idx >= 0) arr[idx] = { ...arr[idx], ...next };
             else arr.push(next);
             return arr.sort((x, y) => qAbsForOverrides(x.absBeat) - qAbsForOverrides(y.absBeat));
         });
     }, [qAbsForOverrides]);
+
+    // ── LE ETICHETTE D'ANALISI: TESTO O DICHIARAZIONE? (diagnostica) ──
+    // Le due si vedono uguali sullo schermo e si comportano in modo opposto quando le note
+    // cambiano: una dichiarazione si rilegge, un testo resta. Chi prova la cosa non ha modo
+    // di sapere quale delle due sta guardando — e un'etichetta nata prima di questa funzione
+    // e' testo per forza, quindi sembra che la rilettura non funzioni quando invece non le e'
+    // stato chiesto niente. `__htDichiarazioni()` lo dice.
+    useEffect(() => {
+        (window as any).__htDichiarazioni = () => {
+            // Solo le note che SUONANO: cancellare non toglie la nota, la fa diventare
+            // pausa con lo stesso id, e contarla come presente e' il difetto che questa
+            // sonda serviva a scoprire (e per un po' ha nascosto, chiedendo dell'id).
+            const perId = new Map<string, any>();
+            const suona = (n: any) => n && !n.isRest && Number.isFinite(Number(n.midi));
+            for (const n of (latestRawNotes.current || [])) if (suona(n)) perId.set(n.id, n);
+            for (const t of (latestAccompanimentTracks.current || [])) for (const n of (t.notes || [])) if (suona(n)) perId.set(n.id, n);
+            const righe = (latestHarmonyOverrides.current || []).map(o => {
+                const ids = Array.isArray(o.noteIds) ? o.noteIds : null;
+                return {
+                    movimento: o.absBeat,
+                    scritto: [o.roman, o.symbol].filter(Boolean).join('  ') || '(vuota)',
+                    tipo: ids ? 'DICHIARAZIONE (si rilegge)' : 'testo (resta com e)',
+                    note_dichiarate: ids ? ids.length : '—',
+                    note_che_suonano_ancora: ids ? ids.filter(id => perId.has(id)).length : '—',
+                    gruppo: o.gruppo || '—',
+                };
+            });
+            // eslint-disable-next-line no-console
+            console.table(righe);
+            // eslint-disable-next-line no-console
+            console.log('Le etichette create PRIMA di questa versione sono «testo»: non hanno memoria delle note, e cancellarne una non le fa cambiare. Ridichiarale con Opt+Shift+H per renderle rileggibili.');
+            return righe;
+        };
+    }, []);
+
+    // ── UN ACCORDO DICHIARATO SI RILEGGE QUANDO LE SUE NOTE CAMBIANO ──
+    //
+    // Annettere una nota dell'accompagnamento all'analisi del coro (⌥⇧H) non e' scrivere
+    // un'etichetta: e' DICHIARARE quali suoni formano l'accordo. Ma l'etichetta veniva
+    // calcolata una volta e appuntata come testo, e da quel momento non guardava piu' niente:
+    // si cancellava il Si e restava scritto Cmaj7 su un accordo che era tornato Do.
+    //
+    // Ora l'appunto ricorda le note dichiarate, e questo effetto le ricontrolla:
+    //  · qualcuna e' sparita ma ne restano almeno due → l'etichetta si RIFA' sulle superstiti
+    //    (cancelli il Si e torna «C»), e il raggruppamento che avevi deciso resta;
+    //  · ne restano meno di due → l'accordo dichiarato non esiste piu': via l'etichetta e via
+    //    le compagne svuotate, cosi' torna l'analisi automatica. Si tolgono INSIEME, per
+    //    gruppo: lasciarne indietro una svuotata vorrebbe dire un buco muto nell'analisi.
+    //
+    // Il conto lo fa `etichettaPerAccordo`, la stessa funzione del comando: rileggere non
+    // deve poter dare un risultato diverso dal dichiarare.
+    useEffect(() => {
+        const overrides = harmonyOverrides || [];
+        if (!overrides.some(o => Array.isArray(o.noteIds) && o.noteIds.length > 0)) return;
+
+        // ── «ESISTE ANCORA» NON E' LA DOMANDA GIUSTA: LA DOMANDA E' «SUONA ANCORA» ──
+        //
+        // In questo editor cancellare una nota non la toglie dall'elenco: la trasforma in
+        // PAUSA, e la pausa conserva lo stesso id (vedi il tasto Backspace). Cercando l'id
+        // si trovava sempre, anche dopo la cancellazione, e l'accordo dichiarato sembrava
+        // intatto: si cancellava il Si e restava scritto Cmaj7.
+        //
+        // Nella mappa entrano quindi solo le note che SUONANO — niente pause, niente
+        // altezze non valide — che sono le stesse condizioni con cui il comando le aveva
+        // raccolte al momento della dichiarazione. Le due domande devono coincidere: se
+        // dichiarare guarda i suoni e rileggere guarda gli id, il conto non torna mai.
+        const perId = new Map<string, any>();
+        const suona = (n: any) => n && !n.isRest && Number.isFinite(Number(n.midi));
+        for (const n of (rawNotes || [])) if (suona(n)) perId.set(n.id, n);
+        for (const t of (accompanimentTracks || [])) for (const n of (t.notes || [])) if (suona(n)) perId.set(n.id, n);
+
+        const gruppiDaTogliere = new Set<string>();
+        const daTogliereSenzaGruppo = new Set<HarmonyLabelOverride>();
+        const rifatte = new Map<HarmonyLabelOverride, HarmonyLabelOverride>();
+
+        for (const o of overrides) {
+            if (!Array.isArray(o.noteIds) || o.noteIds.length === 0) continue;
+            const superstiti = o.noteIds.filter(id => perId.has(id));
+            if (superstiti.length === o.noteIds.length) continue; // niente e' cambiato
+            if (superstiti.length < 2) {
+                if (o.gruppo) gruppiDaTogliere.add(o.gruppo); else daTogliereSenzaGruppo.add(o);
+                continue;
+            }
+            const { roman, symbol, figures } = etichettaPerAccordo(superstiti.map(id => perId.get(id)));
+            rifatte.set(o, { ...o, roman, symbol, figures, noteIds: superstiti });
+        }
+
+        if (gruppiDaTogliere.size === 0 && daTogliereSenzaGruppo.size === 0 && rifatte.size === 0) return;
+        setHarmonyOverrides(prev => (prev || [])
+            .filter(o => !(o.gruppo && gruppiDaTogliere.has(o.gruppo)) && !daTogliereSenzaGruppo.has(o))
+            .map(o => rifatte.get(o) ?? o));
+    }, [rawNotes, accompanimentTracks, harmonyOverrides, etichettaPerAccordo, setHarmonyOverrides]);
 
     // Etichette ORFANE. Gli override d'analisi vivono in un elenco a parte, non appesi alle
     // note: cancellando l'intero brano le sigle restavano sullo schermo e l'unico modo di
@@ -13383,23 +13515,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Identify the chord from the union of the selected pitches. Neutralize voice/clef so
         // the GLOBALLY lowest selected pitch is taken as the bass (drives the inversion),
         // matching the same trick used in the ACC-reconcile path of useHarmonyLabels.
-        const forAnalysis = sel.map(s => ({ ...s.note, voice: 1, clef: 'treble' }));
-        const candidates = identifyChordCandidates(forAnalysis as any);
-        const chordInfo = candidates && candidates.length ? candidates[0] : null;
-        const tonicRoot = (currentTonic || keySignatureRoot || (keySignature as any).root || 'C') as string;
-        // Il romano si chiede alla STESSA funzione che scrive tutte le altre etichette.
-        // `calculateRomanFromChordInfo` lavora sul solo accordo, fuori contesto, e legge una
-        // triade maggiore sulla tonica come dominante del IV: una triade di Do in Do maggiore
-        // usciva V/IV invece di I. (Con la settima — Do7 — V/IV è giusto, e infatti le due
-        // strade concordano.) Resta come ripiego se l'analisi non riconosce nulla.
-        const romanFromAnalysis = (() => {
-            try { return getRomanAnalysis(forAnalysis as any, tonicRoot, isMinorMode)?.roman || ''; } catch { return ''; }
-        })();
-        const roman = romanFromAnalysis
-            || (chordInfo ? (calculateRomanFromChordInfo(chordInfo as any, tonicRoot, isMinorMode) || '') : '');
-        const symbol = getChordSymbol(forAnalysis as any, keySignature, tonicRoot) || '';
-        let figures: string[] = [];
-        try { figures = computeFiguredBassFromNotes(forAnalysis as any, { ...FIGURED_BASS_UI_OPTIONS, keySignature: getKeySignature(tonicRoot, isMinorMode ? 'Minor' : 'Major') }).figures || []; } catch { figures = []; }
+        const { roman, symbol, figures } = etichettaPerAccordo(sel.map(s => s.note));
 
         // Nothing recognizable — leave the score untouched.
         if (!roman && !symbol && figures.length === 0) return;
@@ -13427,6 +13543,45 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             return;
         }
 
+        // ── QUALI ATTACCHI PERDONO LA SIGLA, E QUALI NO ──────────────────────────────
+        //
+        // Svuotare gli altri attacchi serve a una cosa sola: un arpeggio non deve produrre
+        // quattro sigle per un accordo solo. Ma lo stesso comando si usa anche in un modo
+        // diverso — tenere un accordo lungo nel coro e annettergli, un movimento per volta,
+        // le note che passano nell'accompagnamento, ottenendo Do, Domaj7, Lam7, Doadd9. Li'
+        // il primo movimento NON e' un pezzo d'arpeggio: e' un'armonia che continua a
+        // suonare, e la sua sigla e' sua. Svuotarla cancellava il lavoro appena fatto.
+        //
+        // La regola che separa i due casi non chiede niente all'utente, la dice la musica:
+        // un attacco perde la sigla solo se le sue note NON STANNO PIU' SUONANDO nel punto
+        // dove si dichiara il nuovo accordo. Una nota cominciata prima e ancora in corso e'
+        // un'armonia a se'; una nota gia' finita, o non ancora cominciata, sta solo
+        // compitando l'accordo che si sta dichiarando.
+        //
+        // Nell'uso ad accordo lungo la semibreve attraversa tutti i movimenti e non viene
+        // svuotata mai. In un arpeggio le note brevi prima dell'ancora sono gia' finite e
+        // quelle dopo non sono ancora entrate: svuotate entrambe, come prima.
+        const durataInMovimenti = (n: any): number => {
+            const dt = Number(n?.durationTicks);
+            if (Number.isFinite(dt) && dt > 0) return dt / TICKS_PER_QUARTER;
+            const perFigura: Record<string, number> = {
+                whole: 4, half: 2, quarter: 1, eighth: 0.5,
+                sixteenth: 0.25, 'thirty-second': 0.125, 'sixty-fourth': 0.0625,
+            };
+            let b = perFigura[String(n?.duration)] ?? 1;
+            if (n?.isDotted) b *= 1.5;
+            if (n?.isTriplet) b *= 2 / 3;
+            if (n?.isDuplet) b *= 3 / 2;
+            return b;
+        };
+        const EPS = 1e-6;
+        const attraversaLAncora = (q: number) => sel.some(x =>
+            Math.abs(qAbsForOverrides(x.absBeat) - q) < EPS
+            && x.absBeat < anchorAbs - EPS
+            && x.absBeat + durataInMovimenti(x.note) > anchorAbs + EPS);
+        const daSvuotare = [...onsetBeats].filter(q =>
+            Math.abs(q - anchorQ) >= EPS && !attraversaLAncora(q));
+
         // ── TOGGLE anche in modo SATB ────────────────────────────────────────────────
         // Ripetere il comando sulla STESSA selezione toglie il collasso e fa tornare
         // l'analisi automatica. Prima il ritorno indietro esisteva solo per le tracce ACC
@@ -13437,25 +13592,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const hasAnchor = already.some(o => qAbsForOverrides(o.absBeat) === anchorQ
                 && String(o.roman || '') === String(roman || '')
                 && String(o.symbol || '') === String(symbol || ''));
-            const othersBlank = [...onsetBeats].every(q => Math.abs(q - anchorQ) < 1e-6
-                || already.some(o => qAbsForOverrides(o.absBeat) === q
+            // Si controllano SOLO gli attacchi che questo comando svuoterebbe: quelli
+            // lasciati intatti perche' ancora suonanti hanno la loro sigla, ed esigerli
+            // vuoti impedirebbe di tornare indietro proprio nel caso nuovo.
+            const svuotatiDaNoi = new Set(daSvuotare);
+            const othersBlank = daSvuotare.every(q =>
+                already.some(o => qAbsForOverrides(o.absBeat) === q
                     && !String(o.roman || '').trim() && !String(o.symbol || '').trim()));
             if (hasAnchor && othersBlank) {
                 setHarmonyOverrides(prev => (prev || []).filter(o => {
                     const q = qAbsForOverrides(o.absBeat);
-                    return !(Math.abs(q - anchorQ) < 1e-6 || onsetBeats.has(q));
+                    return !(Math.abs(q - anchorQ) < 1e-6 || svuotatiDaNoi.has(q));
                 }));
                 setOrnamentOverrides(prev => (prev || []).filter(o => !ids.has(o.noteId)));
                 return;
             }
         }
 
+        // Le etichette nate da QUESTO comando portano lo stesso segno e la memoria delle
+        // note dichiarate: cosi' possono rifarsi — o togliersi insieme — quando quelle note
+        // cambiano. E' la differenza fra un'etichetta scritta a mano e un accordo dichiarato.
+        const gruppo = `acc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        const idsDichiarati = sel.map(s => String(s.note.id));
+
         // 1) Pin the full chord label at the anchor beat.
-        applyHarmonyOverride(anchorQ, roman, figures, symbol);
-        // 2) Blank the other onset beats so the scattered arpeggio collapses to one label.
-        for (const q of onsetBeats) {
-            if (Math.abs(q - anchorQ) < 1e-6) continue;
-            applyHarmonyOverride(q, '', [], '');
+        applyHarmonyOverride(anchorQ, roman, figures, symbol, { noteIds: idsDichiarati, gruppo });
+        // 2) Svuota gli attacchi che stanno solo compitando questo accordo — non quelli
+        //    ancora in corso, che hanno un'armonia loro (vedi `daSvuotare`).
+        for (const q of daSvuotare) {
+            applyHarmonyOverride(q, '', [], '', { gruppo });
         }
         // 3) Mark the selected notes structural (consistent with Opt+H chord-tone marking).
         const srcById = new Map<string, any>(sel.map(s => [s.note.id, s.note]));
