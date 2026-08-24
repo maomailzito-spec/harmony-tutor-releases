@@ -315,6 +315,56 @@ const spogliaNotaCancellata = (n: any): any => ({
     isFermata: undefined,
 });
 
+/** UNA LEGATURA DI VALORE SENZA ARRIVO NON E' UNA LEGATURA.
+ *
+ *  `isTiedToNext` sta sulla nota di PARTENZA e non nomina l'arrivo: l'arrivo si trova
+ *  cercando, nella stessa voce e saltando le pause, la successiva con la STESSA altezza.
+ *  E' la regola di `tiedFromPrevNoteIds`, ed e' la stessa qui di proposito: due regole
+ *  diverse per la stessa domanda sono il modo sicuro di vederle divergere.
+ *
+ *  Cancellando la nota d'arrivo, la partenza resta a dire «io proseguo», e succede una di
+ *  due cose — la seconda peggiore della prima: o si disegna un moncone appeso al nulla, o
+ *  la legatura si AGGANCIA alla prossima nota di quella altezza, che puo' stare battute
+ *  piu' avanti, inventando un suono tenuto che nessuno ha scritto.
+ *
+ *  Qui si sciolgono quelle rimaste senza arrivo. Vale anche per le orfane di prima. */
+const sciogliLegatureSenzaArrivo = (note: any[]): any[] => {
+    const suona = (n: any) => n && !n.isRest && Number.isFinite(Number(n.midi));
+    const perVoce = new Map<number, any[]>();
+    for (const n of note) {
+        if (!suona(n)) continue;
+        const v = Number(n.voice ?? 1);
+        if (!perVoce.has(v)) perVoce.set(v, []);
+        perVoce.get(v)!.push(n);
+    }
+    const orfane = new Set<string>();
+    for (const arr of perVoce.values()) {
+        arr.sort((a, b) => {
+            const ta = a.startTick ?? 0, tb = b.startTick ?? 0;
+            if (ta !== tb) return ta - tb;
+            const ma = a.measureIndex ?? 0, mb = b.measureIndex ?? 0;
+            if (ma !== mb) return ma - mb;
+            return (a.beat ?? 1) - (b.beat ?? 1);
+        });
+        for (let i = 0; i < arr.length; i++) {
+            const cur = arr[i];
+            if (!cur?.isTiedToNext) continue;
+            let arrivo: any = null;
+            for (let j = i + 1; j < arr.length; j++) {
+                if (arr[j]?.midi === cur.midi) { arrivo = arr[j]; break; }
+            }
+            // Niente arrivo, oppure un arrivo che NON comincia dove questa finisce: non c'e'
+            // piu' un suono da prolungare. Il controllo sull'attacco e' cio' che impedisce
+            // di riagganciarsi a una nota lontana della stessa altezza.
+            const attaccata = !!arrivo
+                && Math.abs(Number(arrivo.startTick ?? 0) - (Number(cur.startTick ?? 0) + Number(cur.durationTicks ?? 0))) < 1;
+            if (!attaccata) orfane.add(String(cur.id));
+        }
+    }
+    if (orfane.size === 0) return note;
+    return note.map(n => (orfane.has(String(n.id)) ? { ...n, isTiedToNext: undefined } : n));
+};
+
 const drumPaletteFor = (t: any): DrumPiece[] => (t?.drumKit === 'rock' ? DRUM_PALETTE_ROCK : DRUM_PALETTE_ORCH);
 /** Le due tavolozze di batteria, in un oggetto SOLO. Scritte a mano nel JSX diventavano un
  *  oggetto nuovo per ogni sistema a ogni render, e finivano nella firma di ridisegno: due
@@ -13652,9 +13702,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Nell'uso ad accordo lungo la semibreve attraversa tutti i movimenti e non viene
         // svuotata mai. In un arpeggio le note brevi prima dell'ancora sono gia' finite e
         // quelle dopo non sono ancora entrate: svuotate entrambe, come prima.
-        const durataInMovimenti = (n: any): number => {
+        const ticksScritti = (n: any): number => {
             const dt = Number(n?.durationTicks);
-            if (Number.isFinite(dt) && dt > 0) return dt / TICKS_PER_QUARTER;
+            if (Number.isFinite(dt) && dt > 0) return dt;
             const perFigura: Record<string, number> = {
                 whole: 4, half: 2, quarter: 1, eighth: 0.5,
                 sixteenth: 0.25, 'thirty-second': 0.125, 'sixty-fourth': 0.0625,
@@ -13663,13 +13713,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (n?.isDotted) b *= 1.5;
             if (n?.isTriplet) b *= 2 / 3;
             if (n?.isDuplet) b *= 3 / 2;
-            return b;
+            return b * TICKS_PER_QUARTER;
         };
+
+        // ── LA LEGATURA DI VALORE E' DURATA, ANCHE SE NON E' UNA FIGURA ──
+        //
+        // Prima si guardava solo la figura scritta, e lo stesso accordo si comportava in due
+        // modi a seconda di COME era scritto: da semibreve teneva la sua sigla, da due minime
+        // legate la perdeva, perche' la prima minima «finiva» al terzo movimento. Ma il suono
+        // e' identico — e un programma di notazione non deve far pesare la grafia sull'analisi.
+        //
+        // Si segue quindi la catena: finche' la nota dice `isTiedToNext`, si cerca la
+        // continuazione — stessa voce, stessa altezza, e attacco ESATTAMENTE dove questa
+        // finisce — e la si somma. Il vincolo sull'attacco e' cio' che impedisce di agganciare
+        // una nota lontana della stessa altezza, che allungherebbe il suono a piacere.
+        // (Il motore d'analisi ragiona cosi' da tempo per i ritardi, in `musicTheory.ts`:
+        // stessa domanda, stessa risposta.)
+        const tutteLeNote: any[] = [
+            ...(latestRawNotes.current || []),
+            ...((latestAccompanimentTracks.current || []).flatMap(t => t.notes || [])),
+        ];
+        const durataSuonataInMovimenti = (n: any): number => {
+            let ticks = ticksScritti(n);
+            let cur = n;
+            const visti = new Set<string>([String(n?.id)]);
+            while (cur?.isTiedToNext) {
+                const fine = Number(cur.startTick ?? 0) + ticksScritti(cur);
+                const succ = tutteLeNote.find(x => x && !x.isRest
+                    && Number(x.midi) === Number(cur.midi)
+                    && Number(x.voice ?? 1) === Number(cur.voice ?? 1)
+                    && !visti.has(String(x.id))
+                    && Math.abs(Number(x.startTick ?? 0) - fine) < 1);
+                if (!succ) break;
+                visti.add(String(succ.id));
+                ticks += ticksScritti(succ);
+                cur = succ;
+            }
+            return ticks / TICKS_PER_QUARTER;
+        };
+
         const EPS = 1e-6;
         const attraversaLAncora = (q: number) => sel.some(x =>
             Math.abs(qAbsForOverrides(x.absBeat) - q) < EPS
             && x.absBeat < anchorAbs - EPS
-            && x.absBeat + durataInMovimenti(x.note) > anchorAbs + EPS);
+            && x.absBeat + durataSuonataInMovimenti(x.note) > anchorAbs + EPS);
         const daSvuotare = [...onsetBeats].filter(q =>
             Math.abs(q - anchorQ) >= EPS && !attraversaLAncora(q));
 
@@ -17825,7 +17912,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
 
-                setRawNotes(prev => prev.filter(n => {
+                setRawNotes(prev => sciogliLegatureSenzaArrivo(prev.filter(n => {
                     if (!selectedNoteIds.has(n.id)) return true;
                     // Se è una pausa, la cancello (non la tengo)
                     if (n.isRest) return false;
@@ -17835,7 +17922,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     if (!selectedNoteIds.has(n.id)) return n;
                     if (n.isRest) return n;
                     return spogliaNotaCancellata(n);
-                }));
+                })));
 
                 // Route Delete to ACC notes as well
                 const accTracks = latestAccompanimentTracks.current;
@@ -17844,7 +17931,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     const accIdSet = new Set(accIdsSelected);
                     setAccompanimentTracks(prev => prev.map(track => ({
                         ...track,
-                        notes: track.notes
+                        notes: sciogliLegatureSenzaArrivo(track.notes
                             .filter(n => {
                                 if (!accIdSet.has(n.id)) return true;
                                 // Remove rests outright (same as SATB behaviour)
@@ -17854,7 +17941,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 if (!accIdSet.has(n.id)) return n;
                                 // Convert note to rest — spogliata di tutto cio' che era suo
                                 return spogliaNotaCancellata(n);
-                            }),
+                            })),
                     })));
                 }
                 setSelectedNoteIds(new Set());
