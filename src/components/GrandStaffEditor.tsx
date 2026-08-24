@@ -11269,7 +11269,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // -----------------------
     // ACC triplet & duplet brackets (separate pipeline from SATB, uses ACC stave Y)
     // -----------------------
-    const accTupletGroupsBySystem = useMemo(() => {
+    const accTupletGroupsBySystem = useMemo(() => misuraCosto('parentesi dei gruppi irregolari', () => {
         const systems: {
             triplets: Array<{ id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; label: string }>;
             duplets: Array<{ id: string; x1: number; x2: number; midX: number; bracketY: number; textY: number; label: string }>;
@@ -11277,51 +11277,123 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (!layoutData) return systems;
         if (!hasVisibleAccompaniment) return systems;
 
-        const ACC_TREBLE_TOP_Y_LOCAL = (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100; // 310 grandstaff / 480 antico — first block treble top
+        // ── DOVE STA DAVVERO IL RIGO DELLA TRACCIA ──
+        //
+        // Qui l'altezza dei righi ACC veniva RICOSTRUITA a mano, e il numero che ne usciva
+        // non era quello disegnato: ottanta pixel piu' in alto del vero. Due errori
+        // sommati, tutti e due nella stessa direzione. Lo stacco fra il coro e la prima
+        // traccia e' di centoquaranta pixel, non cento (ACCOMPANIMENT_STAFF_GAP). E
+        // soprattutto: VexFlow, quando gli si dice «metti un rigo a quota y», la' non ci
+        // mette la prima riga — lascia sopra quattro interlinee di respiro
+        // (`space_above_staff_ln`), altri quaranta pixel. La ricostruzione li ignorava.
+        //
+        // Ottanta pixel su una parentesi che sta gia' trentaquattro sopra la nota vuol dire
+        // portarla via dalla sua musica e dentro il pentagramma della traccia di SOPRA — fra
+        // due righi ACC ce ne corrono sessantaquattro. Ed e' anche il motivo per cui i due
+        // fermi provati ieri non frenavano: calcolavano il soffitto con questa stessa base
+        // sbagliata, quindi lo mettevano ottanta pixel troppo in su, dove non toccava niente.
+        //
+        // La geometria vera la riporta VexFlow stesso (`onDrumStavesLayout` → `accStavesLayout`,
+        // cioe' `getYForLine`), ed e' la stessa che gia' usano le etichette d'analisi ACC: le
+        // sigle infatti si posano sul rigo giusto. Si legge quella. E' la lezione della x
+        // della linea di lettura, applicata alla y: dove sta un rigo non si deduce, si chiede.
+        //
+        // Conto di ripiego, per il solo istante prima che la misura arrivi — rifatto sui
+        // numeri veri, cosi' anche il ripiego cade nel posto giusto.
+        const ACC_TREBLE_TOP_Y_LOCAL =
+            (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y)
+            + 4 * VF_LINE_SPACING   // fondo dell'ultimo rigo del coro
+            + 140                   // stacco coro → prima traccia (ACCOMPANIMENT_STAFF_GAP)
+            + 4 * VF_LINE_SPACING;  // il respiro che VexFlow lascia sopra la prima riga
         // Diatonic position (C4=0) of each clef's TOP staff line.
         const ACC_TOP_LINE_POS: Record<ClefType, number> = { treble: 10, bass: -2, alto: 4, tenor: 2, soprano: 8 };
         const accVis = (accompanimentTracks || []).filter(t => t && t.visible);
         const accOffsets = accompanimentTrackTrebleOffsets(accVis);
+        const geometriaDelRigo = new Map<string, AccStaffLayout>();
+        for (const g of (accStavesLayout || [])) { if (g?.trackId) geometriaDelRigo.set(g.trackId, g); }
+
+        /** In che chiave e' SCRITTA davvero questa nota: sul grande rigo la decide il rigo
+         *  (violino o basso), sul rigo singolo la chiave della traccia — che puo' essere
+         *  una chiave antica, e allora la chiave scritta sulla nota non c'entra. */
+        const chiaveDiResa = (clefNota: ClefType, visIdx: number): ClefType => {
+            const traccia = accVis[visIdx];
+            const mode = traccia?.staffMode ?? 'grandstaff';
+            if (mode === 'grandstaff') return clefNota === 'bass' ? 'bass' : 'treble';
+            return ((traccia?.clef ?? 'treble') as ClefType);
+        };
 
         // Y of a note on its OWN track's block (per-track vertical stacking + clef).
         const noteYForAcc = (position: number, clef: ClefType, visIdx: number) => {
-            const trebleTop = ACC_TREBLE_TOP_Y_LOCAL + (accOffsets[visIdx] ?? 0);
-            const mode = accVis[visIdx]?.staffMode ?? 'grandstaff';
+            const traccia = accVis[visIdx];
+            const mode = traccia?.staffMode ?? 'grandstaff';
+            const misurato = traccia?.id ? geometriaDelRigo.get(traccia.id) : undefined;
+            const passo = misurato?.lineSpacing || VF_LINE_SPACING;
+            const trebleTop = misurato ? misurato.topLineY : (ACC_TREBLE_TOP_Y_LOCAL + (accOffsets[visIdx] ?? 0));
             if (mode === 'grandstaff' && clef === 'bass') {
-                const bassTop = trebleTop + 130;
-                return bassTop + (ACC_TOP_LINE_POS.bass - position) * (VF_LINE_SPACING / 2);
+                // Riga superiore del rigo di basso: quattro interlinee sopra l'ultima riga
+                // riportata, che per un grande rigo e' proprio il fondo del rigo di basso.
+                const bassTop = misurato ? (misurato.bottomLineY - 4 * passo) : (trebleTop + 130);
+                return bassTop + (ACC_TOP_LINE_POS.bass - position) * (passo / 2);
             }
-            const useClef: ClefType = mode === 'grandstaff' ? 'treble' : ((accVis[visIdx]?.clef ?? 'treble') as ClefType);
-            return trebleTop + ((ACC_TOP_LINE_POS[useClef] ?? 10) - position) * (VF_LINE_SPACING / 2);
+            const useClef = chiaveDiResa(clef, visIdx);
+            return trebleTop + ((ACC_TOP_LINE_POS[useClef] ?? 10) - position) * (passo / 2);
+        };
+
+        /** Da che parte va il gambo. Stesse priorita' del disegno (vedi `drawNotesAtX`):
+         *  prima la scelta a mano, poi la voce — 1 e 3 in su, 2 e 4 in giu' — e in mancanza
+         *  di voce decide VexFlow, che guarda la RIGA DI MEZZO: gambo in su per le note
+         *  che stanno sotto, in giu' per quelle da li' in su (`calculateOptimalStemDirection`). */
+        const gamboInSu = (n: { manualStemDirection?: string; voice?: number; position: number }, chiave: ClefType): boolean => {
+            const manuale = n.manualStemDirection;
+            if (manuale === 'up') return true;
+            if (manuale === 'down') return false;
+            const voce = Number(n.voice ?? 0);
+            if (voce) return voce === 1 || voce === 3;
+            const rigaDiMezzo = (ACC_TOP_LINE_POS[chiave] ?? 10) - 4;
+            return Number(n.position) < rigaDiMezzo;
         };
 
         const measureStartAbsBeat = (layoutData as any)?.measureStartAbsBeat ?? [];
 
-        layoutData.systemsParams.forEach((system, systemIndex) => {
-            const measureToIdx = new Map<number, number>();
-            system.measureIndices.forEach((m, i) => measureToIdx.set(m, i));
+        type AccPositioned = StaffNote & { xPosition: number; _trackIdx: number };
 
-            // Build per-system ACC note list with xPosition (matches accompanimentNotesForSystem logic)
-            type AccPositioned = StaffNote & { xPosition: number; _trackIdx: number };
-            const accNotesInSys: AccPositioned[] = [];
-            accVis.forEach((track, visIdx) => {
-                for (const n of (track.notes || [])) {
-                    if (!n.isTriplet && !n.isDuplet) continue;
-                    if (n.isRest) continue;
-                    const mi = n.measureIndex ?? -1;
-                    const idxInSys = measureToIdx.get(mi);
-                    if (idxInSys === undefined) continue;
-                    const startTick = (n as any).startTick;
-                    if (typeof startTick !== 'number') continue;
-                    const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
-                    const measureStartTick = beatsToTicks(msAbsBeat);
-                    const relativeTicks = Math.max(0, startTick - measureStartTick);
-                    const relativeX = relativeTicks * pxPerTickOfMeasure(system, idxInSys);
-                    const baseX = system.startMeasuresX[idxInSys] ?? 0;
-                    const xPosition = baseX + MEASURE_PADDING_X + relativeX;
-                    accNotesInSys.push({ ...n, xPosition, _trackIdx: visIdx });
-                }
-            });
+        // PERF — LO STESSO ROVESCIAMENTO DELLE NOTE DA DISEGNARE (stadio 2).
+        // Anche qui si girava «per ogni sistema, riscorri tutte le note di tutte le
+        // tracce»: con tredici tracce e centoquaranta sistemi sono milioni di giri per
+        // raccogliere qualche decina di terzine, e si rifanno a ogni modifica di una
+        // traccia. Le note si scorrono UNA volta e ciascuna va nel cesto del suo sistema:
+        // la misura dice il sistema. L'ordine dentro il cesto resta quello di prima —
+        // tracce in ordine, note in ordine — perche' il raggruppamento in terzine legge
+        // note CONSECUTIVE e cambiare l'ordine cambierebbe i gruppi.
+        const doveCadeLaMisura = new Map<number, { sys: number; posto: number }>();
+        layoutData.systemsParams.forEach((sp: any, si: number) => {
+            const misure: number[] = Array.isArray(sp?.measureIndices) ? sp.measureIndices : [];
+            misure.forEach((m, posto) => { if (!doveCadeLaMisura.has(m)) doveCadeLaMisura.set(m, { sys: si, posto }); });
+        });
+        const noteIrregolariPerSistema: AccPositioned[][] = layoutData.systemsParams.map(() => []);
+        accVis.forEach((track, visIdx) => {
+            for (const n of (track.notes || [])) {
+                if (!n.isTriplet && !n.isDuplet) continue;
+                if (n.isRest) continue;
+                const mi = n.measureIndex ?? -1;
+                const dove = doveCadeLaMisura.get(mi);
+                if (!dove) continue;
+                const startTick = (n as any).startTick;
+                if (typeof startTick !== 'number') continue;
+                const system: any = layoutData.systemsParams[dove.sys];
+                if (!system) continue;
+                const msAbsBeat = Number(measureStartAbsBeat[mi]) || 0;
+                const measureStartTick = beatsToTicks(msAbsBeat);
+                const relativeTicks = Math.max(0, startTick - measureStartTick);
+                const relativeX = relativeTicks * pxPerTickOfMeasure(system, dove.posto);
+                const baseX = system.startMeasuresX?.[dove.posto] ?? 0;
+                const xPosition = baseX + MEASURE_PADDING_X + relativeX;
+                noteIrregolariPerSistema[dove.sys].push({ ...n, xPosition, _trackIdx: visIdx });
+            }
+        });
+
+        layoutData.systemsParams.forEach((_system, systemIndex) => {
+            const accNotesInSys: AccPositioned[] = noteIrregolariPerSistema[systemIndex] || [];
 
             // Sort by track, measure, startTick
             accNotesInSys.sort((a, b) =>
@@ -11338,14 +11410,32 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (run.length < (kind === 'triplet' ? 3 : 2)) return null;
                 const first = run[0];
                 const last = run[run.length - 1];
-                const ys = run.map(n => noteYForAcc(n.position, (n.clef || 'treble') as ClefType, n._trackIdx));
-                const highestY = Math.min(...ys);
+                // ── LA PARENTESI STA SOPRA L'INCHIOSTRO, NON SOPRA LA TESTA ──
+                //
+                // Trentaquattro pixel sopra la nota piu' acuta: e' l'aria giusta quando i
+                // gambi vanno in GIU', perche' li' sopra la testa non c'e' nient'altro. Ma
+                // quando vanno in SU, fra la testa e quei trentaquattro pixel ci stanno il
+                // gambo e la traversa — VexFlow al gambo ne da' trentacinque
+                // (`Tables.STEM_HEIGHT`) — e la parentesi finiva appoggiata alla traversa.
+                //
+                // Quindi il conto non parte dalla testa ma dalla CIMA DELL'INCHIOSTRO del
+                // gruppo: la traversa dove i gambi vanno in su, la testa dove vanno in giu'.
+                // L'aria sopra resta quella di prima, cosi' la parentesi tiene sopra la
+                // traversa la stessa distanza che teneva sopra la testa.
+                const VF_GAMBO_PX = 35;   // Tables.STEM_HEIGHT di VexFlow
+                const ARIA_SOPRA_INCHIOSTRO = 34;
+                const cime = run.map(n => {
+                    const chiave = chiaveDiResa((n.clef || 'treble') as ClefType, n._trackIdx);
+                    const yTesta = noteYForAcc(n.position, (n.clef || 'treble') as ClefType, n._trackIdx);
+                    return gamboInSu(n as any, chiave) ? yTesta - VF_GAMBO_PX : yTesta;
+                });
+                const highestY = Math.min(...cime);
 
                 let x1 = (first.xPosition ?? 0) - 6 + TUPLET_LEFT_TRIM_PX;
                 const x2 = (last.xPosition ?? 0) + 26;
                 if (x1 > x2 - 12) x1 = x2 - 12;
                 const midX = (x1 + x2) / 2;
-                const bracketY = highestY - 34;
+                const bracketY = highestY - ARIA_SOPRA_INCHIOSTRO;
                 const textY = bracketY + 14;
 
                 return {
@@ -11407,7 +11497,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
 
         return systems;
-    }, [layoutData, accompanimentTracks, hasVisibleAccompaniment, effectiveAccStaffMode]);
+    }), [layoutData, accompanimentTracks, hasVisibleAccompaniment, effectiveAccStaffMode, accStavesLayout, staffSystemMode]);
 
     // -----------------------
     // Accidentals (apply on insertion)
@@ -11444,11 +11534,18 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             console.table(righe);
             // LA GEOMETRIA DEI PRIMI GRUPPI. Sapere che la parentesi sta a 814 non dice
             // niente finche' non si sa dove sta il rigo: il numero che conta e' la
-            // DISTANZA fra la parentesi e la riga superiore del proprio pentagramma, e
-            // quanto rigo la separa da quello di sopra.
+            // DISTANZA fra la parentesi e la riga superiore del proprio pentagramma.
+            //
+            // La cima del rigo si legge dalla MISURA che riporta VexFlow, non dal conto a
+            // mano: era il conto a mano a sbagliare di ottanta pixel, e una sonda che
+            // ripete l'errore che deve scoprire non serve a niente. Le due colonne stanno
+            // affiancate proprio per questo — se un giorno tornano a divergere, si vede.
             try {
                 const accVisD = (accompanimentTracks || []).filter(t => t && t.visible);
                 const offD = accompanimentTrackTrebleOffsets(accVisD);
+                const stimaBase =
+                    (staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y)
+                    + 4 * VF_LINE_SPACING + 140 + 4 * VF_LINE_SPACING;
                 const primi: any[] = [];
                 for (const sis of (accTupletGroupsBySystem as any[]) || []) {
                     for (const g of [...(sis?.triplets ?? []), ...(sis?.duplets ?? [])]) {
@@ -11457,12 +11554,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                     if (primi.length >= 6) break;
                 }
-                const cime = accVisD.map((t, i) => ({
-                    traccia: t.name,
-                    cima_del_rigo: Math.round(((staffSystemMode === 'satb_ancient' ? VF_SATB_BASS_Y : VF_BASS_Y) + 4 * VF_LINE_SPACING + 100) + (offD[i] ?? 0)),
-                }));
+                const cime = accVisD.map((t, i) => {
+                    const misurato = (accStavesLayout || []).find(g => g?.trackId === t.id);
+                    return {
+                        traccia: t.name,
+                        cima_misurata: misurato ? Math.round(misurato.topLineY) : '— (misura non ancora arrivata)',
+                        cima_stimata: Math.round(stimaBase + (offD[i] ?? 0)),
+                    };
+                });
                 // eslint-disable-next-line no-console
-                console.log('dove comincia ciascun rigo di traccia:');
+                console.log('dove comincia ciascun rigo di traccia (riga superiore):');
                 // eslint-disable-next-line no-console
                 console.table(cime);
                 // eslint-disable-next-line no-console
@@ -11472,7 +11573,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             console.log('quello con gruppi > 0 e\' il ramo che stai guardando; la quota minima dice quanto sale.');
             return righe;
         };
-    }, [tripletGroupsBySystem, dupletGroupsBySystem, accTupletGroupsBySystem]);
+    }, [tripletGroupsBySystem, dupletGroupsBySystem, accTupletGroupsBySystem, accStavesLayout, accompanimentTracks, staffSystemMode]);
 
     const applyAutoLeadingToneInMinor = useCallback((baseProps: any, measureIndex?: number) => {
         // Auto “sensibile” (scala minore armonica): in tonalità minore alza il VII grado
@@ -11602,6 +11703,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             justDraggedRef.current = false;
             return;
         }
+        // Cliccare una nota e' una SCELTA di selezione, anche quando e' quella appena
+        // scritta: da qui in poi i pulsanti delle voci tornano a convertire.
+        notaAppenaInseritaRef.current = null;
 
         const nInRaw = rawNotes.find(nn => nn.id === noteId);
         const n = nInRaw ?? latestAccompanimentTracks.current.flatMap(t => t.notes).find(nn => nn.id === noteId);
