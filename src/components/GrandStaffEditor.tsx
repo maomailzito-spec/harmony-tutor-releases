@@ -2908,8 +2908,35 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         }));
     }, [selectedNoteIds, clefForVoice, timeSignature, timeSignatureChanges, setRawNotes, setAccompanimentTracks]);
 
+    // ── UNA SELEZIONE PUO' ESSERE UNA SCELTA, O SOLO UN RESIDUO ──
+    //
+    // Dopo aver scritto una nota, quella nota resta selezionata: comodo, perche' i comandi
+    // che seguono (alterazione, legatura, ottava) agiscono su di lei senza doverla cliccare.
+    // Ma i pulsanti delle voci leggevano quella selezione come una richiesta di CONVERSIONE:
+    // scrivevi un basso, premevi «tenore» per proseguire in tenore, e la nota appena scritta
+    // diventava tenore invece di restare dov'era. La funzione e' giusta — convertire note da
+    // una voce all'altra serve — ma non in quel momento: li' non stavi scegliendo niente,
+    // stavi solo finendo di scrivere.
+    //
+    // La differenza non e' nel COSA e' selezionato, e' nel PERCHE': una selezione nata da un
+    // inserimento e' una conseguenza, una selezione fatta col mouse e' una scelta. Qui si
+    // annota da dove viene, e il pulsante converte solo nel secondo caso.
+    //
+    // Basta ricordare UN id, perche' un inserimento seleziona sempre e solo la nota scritta.
+    // Il segno si cancella al primo clic su una nota (vedi `handleNoteClick`): se torni su
+    // quella nota apposta, hai scelto, e il pulsante torna a convertire.
+    const notaAppenaInseritaRef = useRef<string | null>(null);
+    const selezionaNotaAppenaInserita = useCallback((id: string) => {
+        notaAppenaInseritaRef.current = id;
+        setSelectedNoteIds(new Set([id]));
+    }, [setSelectedNoteIds]);
+
     const hasReassignableSelection = useMemo(() => {
         if (selectedNoteIds.size === 0) return false;
+        // Residuo di scrittura, non una scelta: il pulsante della voce cambia solo la voce
+        // d'inserimento, e la nota appena scritta resta dov'e'.
+        if (selectedNoteIds.size === 1 && notaAppenaInseritaRef.current
+            && selectedNoteIds.has(notaAppenaInseritaRef.current)) return false;
         if (rawNotes.some(n => selectedNoteIds.has(n.id) && !n.isRest)) return true;
         return (accompanimentTracks || []).some(t =>
             (t.staffMode ?? 'grandstaff') === 'grandstaff' && t.voiced
@@ -13837,7 +13864,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)),
                     };
                 }));
-                setSelectedNoteIds(new Set([accRest.id]));
+                selezionaNotaAppenaInserita(accRest.id);
                 justInsertedNoteRef.current = accRest.id;
                 // Advance playhead to the next slot (same as ACC note insertion).
                 try {
@@ -13966,7 +13993,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)),
                     };
                 }));
-                setSelectedNoteIds(new Set([accNote.id]));
+                selezionaNotaAppenaInserita(accNote.id);
                 justInsertedNoteRef.current = accNote.id;
                 // Audition the inserted ACC note con lo strumento della traccia (kit se batteria)
                 const accClickIdx = latestAccompanimentTracks.current?.findIndex(t => t.id === targetTrackId) ?? -1;
@@ -14267,7 +14294,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 } catch (e) { /* ignore */ }
                 return next;
             });
-            setSelectedNoteIds(new Set([rest.id]));
+            selezionaNotaAppenaInserita(rest.id);
             justInsertedNoteRef.current = rest.id;
             // Auto-disarm dotted only when armed via hotkey.
             try {
@@ -14377,7 +14404,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return next;
                 });
             } else {
-                setSelectedNoteIds(new Set([existingAtSamePos.id]));
+                selezionaNotaAppenaInserita(existingAtSamePos.id);
             }
             return;
         }
@@ -14500,7 +14527,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             return finalNotes;
         });
-        setSelectedNoteIds(new Set([newNote.id]));
+        selezionaNotaAppenaInserita(newNote.id);
         justInsertedNoteRef.current = newNote.id;
         void playNote(newNote);
         // ── Advance playhead to next beat after insertion ──
@@ -14773,7 +14800,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     });
                     return { ...track, notes: [...filtered, accNoteStep].sort((a, b) => ((a as any).startTick ?? 0) - ((b as any).startTick ?? 0)) };
                 }));
-                setSelectedNoteIds(new Set([accNoteStep.id]));
+                selezionaNotaAppenaInserita(accNoteStep.id);
                 // Marca la nota come "appena inserita": così un successivo cambio di
                 // durata in toolbar NON la modifica retroattivamente (deseleziona e
                 // aggiorna solo il valore d'inserimento), come per l'inserimento col
@@ -14855,7 +14882,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     return (a.voice ?? 1) - (b.voice ?? 1);
                 });
             });
-            setSelectedNoteIds(new Set([newNote.id]));
+            selezionaNotaAppenaInserita(newNote.id);
             // Vedi ramo ACC: marca la nota come "appena inserita" così il cambio di
             // durata in toolbar non la riscrive, ma vale per il prossimo inserimento.
             justInsertedNoteRef.current = newNote.id;
@@ -15120,6 +15147,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         };
         isActuallyDraggingRef.current = false;
         justDraggedRef.current = false;
+        // Anche prendere il rigo col mouse e' una SCELTA (riquadro di selezione o clic a
+        // vuoto): il residuo dell'ultima nota scritta smette di valere. L'inserimento col
+        // clic non ne soffre — il tasto premuto viene prima, la nota viene dopo, e il segno
+        // lo rimette lei.
+        notaAppenaInseritaRef.current = null;
 
         // Don't show a rectangle until the user actually drags beyond threshold.
         setSelectionRect(prev => ({
